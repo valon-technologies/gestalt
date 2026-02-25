@@ -1,0 +1,36 @@
+name: Sync Homebrew Formula
+
+on:
+  push:
+    branches: [main]
+    paths: ['Formula/**']
+
+jobs:
+  sync:
+    name: Sync to homebrew-toolshed
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout toolshed
+        uses: actions/checkout@v4
+
+      - name: Checkout homebrew-toolshed
+        uses: actions/checkout@v4
+        with:
+          repository: valon-technologies/homebrew-toolshed
+          token: ${{ secrets.PAT_TOKEN }}
+          path: homebrew-toolshed
+
+      - name: Sync Formula directory
+        run: |
+          rsync -av --delete Formula/ homebrew-toolshed/Formula/
+          cd homebrew-toolshed
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No formula changes to sync"
+          else
+            git commit -m "Sync formula from toolshed"
+            git push
+          fi
