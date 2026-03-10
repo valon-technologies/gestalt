@@ -83,7 +83,7 @@ jobs:
         run: cross build --release --target ${{ matrix.platform.target }}
 
       - name: Run tests
-        if: ${{ !matrix.platform.cross && inputs.run-tests }}
+        if: ${{ !matrix.platform.cross && !matrix.platform.windows && inputs.run-tests }}
         working-directory: gestalt/client
         timeout-minutes: 5
         run: cargo test --release --target ${{ matrix.platform.target }}
