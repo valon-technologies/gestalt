@@ -39,6 +39,11 @@ jobs:
             target: aarch64-unknown-linux-gnu
             artifact: gestalt-linux-arm64
             cross: true
+          - name: Windows-x86_64
+            runs-on: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: gestalt-windows-x86_64
+            windows: true
 
     runs-on: ${{ matrix.platform.runs-on }}
 
@@ -83,8 +88,8 @@ jobs:
         timeout-minutes: 5
         run: cargo test --release --target ${{ matrix.platform.target }}
 
-      - name: Package binary
-        if: ${{ inputs.package }}
+      - name: Package binary (Unix)
+        if: ${{ inputs.package && !matrix.platform.windows }}
         run: |
           mkdir -p dist
           cp gestalt/client/target/${{ matrix.platform.target }}/release/gestalt dist/
@@ -92,18 +97,39 @@ jobs:
           tar -czvf ${{ matrix.platform.artifact }}.tar.gz gestalt
           shasum -a 256 ${{ matrix.platform.artifact }}.tar.gz > ${{ matrix.platform.artifact }}.tar.gz.sha256
 
+      - name: Package binary (Windows)
+        if: ${{ inputs.package && matrix.platform.windows }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item gestalt/client/target/${{ matrix.platform.target }}/release/gestalt.exe dist/
+          Set-Location dist
+          Compress-Archive -Path gestalt.exe -DestinationPath ${{ matrix.platform.artifact }}.zip
+          $hash = (Get-FileHash ${{ matrix.platform.artifact }}.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ matrix.platform.artifact }}.zip" | Out-File -Encoding ascii ${{ matrix.platform.artifact }}.zip.sha256
+
       - name: Upload packaged artifact
         if: ${{ inputs.package }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.artifact }}
-          path: dist/${{ matrix.platform.artifact }}.tar.gz*
+          path: |
+            dist/${{ matrix.platform.artifact }}.tar.gz*
+            dist/${{ matrix.platform.artifact }}.zip*
           if-no-files-found: error
 
-      - name: Upload binary
-        if: ${{ !inputs.package }}
+      - name: Upload binary (Unix)
+        if: ${{ !inputs.package && !matrix.platform.windows }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.artifact }}
           path: gestalt/client/target/${{ matrix.platform.target }}/release/gestalt
+          if-no-files-found: error
+
+      - name: Upload binary (Windows)
+        if: ${{ !inputs.package && matrix.platform.windows }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.artifact }}
+          path: gestalt/client/target/${{ matrix.platform.target }}/release/gestalt.exe
           if-no-files-found: error
