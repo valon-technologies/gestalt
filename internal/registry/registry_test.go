@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/internal/core"
-	coretesting "github.com/valon-technologies/toolshed/internal/core/testing"
+	"github.com/valon-technologies/toolshed/core"
+	coretesting "github.com/valon-technologies/toolshed/core/testing"
 )
 
 func TestPluginMapRegisterAndGet(t *testing.T) {

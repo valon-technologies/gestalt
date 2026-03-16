@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/internal/core"
+	"github.com/valon-technologies/toolshed/core"
 )
 
 // RunAuthProviderTests validates an AuthProvider implementation against the

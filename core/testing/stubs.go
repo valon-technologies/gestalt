@@ -3,7 +3,7 @@ package coretesting
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/internal/core"
+	"github.com/valon-technologies/toolshed/core"
 )
 
 // Set Fn fields to override individual methods; nil fields return zero values.

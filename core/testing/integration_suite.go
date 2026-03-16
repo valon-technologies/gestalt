@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/internal/core"
+	"github.com/valon-technologies/toolshed/core"
 )
 
 // RunIntegrationTests validates an Integration implementation against the

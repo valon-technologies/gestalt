@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/toolshed/internal/core"
+	"github.com/valon-technologies/toolshed/core"
 )
 
 // RunDatastoreTests validates a Datastore implementation against the full
