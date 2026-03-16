@@ -1,0 +1,66 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    # Bugs
+    - bodyclose        # unclosed HTTP response bodies
+    - durationcheck    # bad time.Duration multiplications
+    - nilerr           # returning nil after checking err != nil
+    - sqlclosecheck    # unclosed sql.Rows
+
+    # Testing
+    - paralleltest    # require t.Parallel() in all tests
+
+    # Style & correctness (beyond defaults)
+    - misspell
+    - unconvert        # unnecessary type conversions
+    - gocritic         # opinionated but catches real issues
+    - revive           # drop-in replacement for golint
+
+    # Defaults (enabled automatically):
+    # errcheck, govet, ineffassign, staticcheck, unused
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam       # too noisy for structs passed by value
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: unexported-return
+        - name: var-declaration
+
+    misspell:
+      locale: US
+
+  exclusions:
+    rules:
+      # Test files get relaxed style checks
+      - path: _test\.go
+        linters:
+          - gocritic
+          - revive
+      # Test helper packages: relaxed style and errcheck for deferred Close
+      - path: internal/core/testing/
+        linters:
+          - gocritic
+          - revive
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
