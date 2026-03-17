@@ -151,6 +151,21 @@ func scanAPIToken(row scanner) (*core.APIToken, error) {
 	return &t, nil
 }
 
+func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
+	var user core.User
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, email, display_name, created_at, updated_at FROM users WHERE id = ?",
+		id,
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.CreatedAt, &user.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, core.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying user by id: %w", err)
+	}
+	return &user, nil
+}
+
 func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
 	// Fast path: user already exists.
 	var user core.User

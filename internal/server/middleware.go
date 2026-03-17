@@ -11,13 +11,19 @@ import (
 
 type contextKey string
 
-const userContextKey contextKey = "user"
+const (
+	userContextKey   contextKey = "user"
+	userIDContextKey contextKey = "userID"
+)
 
-// UserFromContext returns the authenticated user from the request context,
-// or nil if no user is present.
 func UserFromContext(ctx context.Context) *core.UserIdentity {
 	u, _ := ctx.Value(userContextKey).(*core.UserIdentity)
 	return u
+}
+
+func UserIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(userIDContextKey).(string)
+	return id
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -68,8 +74,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := s.datastore.FindOrCreateUser(r.Context(), apiToken.UserID)
+		user, err := s.datastore.GetUser(r.Context(), apiToken.UserID)
 		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				writeError(w, http.StatusUnauthorized, "user not found")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
@@ -79,6 +89,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			DisplayName: user.DisplayName,
 		}
 		ctx := context.WithValue(r.Context(), userContextKey, identity)
+		ctx = context.WithValue(ctx, userIDContextKey, user.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

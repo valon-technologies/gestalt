@@ -8,7 +8,6 @@ import (
 	"github.com/valon-technologies/toolshed/internal/registry"
 )
 
-// Server is the REST API server that composes auth, datastore, and integration plugins.
 type Server struct {
 	router       chi.Router
 	auth         core.AuthProvider
@@ -17,7 +16,6 @@ type Server struct {
 	devMode      bool
 }
 
-// Config holds all dependencies required to construct a Server.
 type Config struct {
 	Auth         core.AuthProvider
 	Datastore    core.Datastore
@@ -25,7 +23,6 @@ type Config struct {
 	DevMode      bool
 }
 
-// New creates a Server with all routes registered.
 func New(cfg Config) *Server {
 	s := &Server{
 		router:       chi.NewRouter(),
@@ -45,11 +42,9 @@ func (s *Server) routes() {
 	r.Get("/health", s.healthCheck)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Public auth endpoints (no middleware).
 		r.Post("/auth/login", s.startLogin)
 		r.Get("/auth/login/callback", s.loginCallback)
 
-		// Authenticated routes.
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 

@@ -4,6 +4,7 @@ import "context"
 
 // Implementations must be safe for concurrent use.
 type Datastore interface {
+	GetUser(ctx context.Context, id string) (*User, error)
 	FindOrCreateUser(ctx context.Context, email string) (*User, error)
 
 	StoreToken(ctx context.Context, token *IntegrationToken) error

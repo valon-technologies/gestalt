@@ -8,9 +8,17 @@ import (
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
+	GetUserFn          func(context.Context, string) (*core.User, error)
 	FindOrCreateUserFn func(context.Context, string) (*core.User, error)
 	TokenFn            func(context.Context, string, string, string) (*core.IntegrationToken, error)
 	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
+}
+
+func (s *StubDatastore) GetUser(ctx context.Context, id string) (*core.User, error) {
+	if s.GetUserFn != nil {
+		return s.GetUserFn(ctx, id)
+	}
+	return nil, nil
 }
 
 func (s *StubDatastore) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {

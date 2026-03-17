@@ -107,10 +107,10 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
 			ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
-				return &core.APIToken{UserID: "user@example.com", Name: "test-key"}, nil
+				return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
 			},
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email, DisplayName: "Test User"}, nil
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "user@example.com", DisplayName: "Test User"}, nil
 			},
 		}
 	})
@@ -673,8 +673,6 @@ func TestExecuteOperation_POST(t *testing.T) {
 		t.Fatalf("expected hello, got %q", result["text"])
 	}
 }
-
-// --- Test helper types ---
 
 type stubIntegrationWithOps struct {
 	coretesting.StubIntegration

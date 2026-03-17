@@ -62,6 +62,33 @@ func testDatastoreMigrate(t *testing.T, newStore func(t *testing.T) core.Datasto
 }
 
 func testDatastoreUsers(t *testing.T, newStore func(t *testing.T) core.Datastore) {
+	t.Run("get user by id", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "getuser@example.com")
+		got, err := ds.GetUser(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetUser: %v", err)
+		}
+		if got == nil {
+			t.Fatal("GetUser returned nil")
+		}
+		if got.Email != "getuser@example.com" {
+			t.Errorf("Email: got %q, want %q", got.Email, "getuser@example.com")
+		}
+	})
+
+	t.Run("get user not found", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+		_, err := ds.GetUser(ctx, "nonexistent-id")
+		if err == nil {
+			t.Fatal("expected error for nonexistent user")
+		}
+	})
+
 	t.Run("creates a new user", func(t *testing.T) {
 		ds := newStore(t)
 		t.Cleanup(func() { ds.Close() })

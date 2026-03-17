@@ -18,8 +18,6 @@ func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// --- Discovery ---
-
 type integrationInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`
@@ -57,8 +55,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, integration.ListOperations())
 }
 
-// --- Integration operations ---
-
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	integrationName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")
@@ -92,13 +88,17 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		userID = dbUser.ID
 	}
 
-	storedToken, err := s.datastore.Token(r.Context(), dbUser.ID, integrationName, "default")
+	storedToken, err := s.datastore.Token(r.Context(), userID, integrationName, "default")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", integrationName))
@@ -139,8 +139,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(result.Status)
 	_, _ = fmt.Fprint(w, result.Body)
 }
-
-// --- Auth flows ---
 
 type loginRequest struct {
 	State string `json:"state"`
@@ -293,8 +291,6 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
 
-// --- API Token Management ---
-
 type createTokenRequest struct {
 	Name   string `json:"name"`
 	Scopes string `json:"scopes"`
@@ -409,8 +405,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
-
-// --- Helpers ---
 
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
