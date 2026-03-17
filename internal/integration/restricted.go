@@ -1,0 +1,62 @@
+package integration
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/valon-technologies/toolshed/core"
+)
+
+// Restricted wraps an Integration to expose only a subset of its operations.
+type Restricted struct {
+	inner   core.Integration
+	allowed map[string]struct{}
+}
+
+// Compile-time interface check.
+var _ core.Integration = (*Restricted)(nil)
+
+func NewRestricted(inner core.Integration, allowed []string) *Restricted {
+	m := make(map[string]struct{}, len(allowed))
+	for _, name := range allowed {
+		m[name] = struct{}{}
+	}
+	return &Restricted{inner: inner, allowed: m}
+}
+
+func (r *Restricted) Name() string        { return r.inner.Name() }
+func (r *Restricted) DisplayName() string { return r.inner.DisplayName() }
+func (r *Restricted) Description() string { return r.inner.Description() }
+func (r *Restricted) AuthorizationURL(state string, scopes []string) string {
+	return r.inner.AuthorizationURL(state, scopes)
+}
+func (r *Restricted) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return r.inner.ExchangeCode(ctx, code)
+}
+func (r *Restricted) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return r.inner.RefreshToken(ctx, refreshToken)
+}
+
+func (r *Restricted) ListOperations() []core.Operation {
+	all := r.inner.ListOperations()
+	filtered := make([]core.Operation, 0, len(r.allowed))
+	for _, op := range all {
+		if _, ok := r.allowed[op.Name]; ok {
+			filtered = append(filtered, op)
+		}
+	}
+	return filtered
+}
+
+func (r *Restricted) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	if _, ok := r.allowed[operation]; !ok {
+		return nil, fmt.Errorf("operation %q is not allowed", operation)
+	}
+	return r.inner.Execute(ctx, operation, params, token)
+}
+
+// Inner returns the unwrapped integration. Used by the proxy layer
+// to check whether the underlying integration implements Proxiable.
+func (r *Restricted) Inner() core.Integration {
+	return r.inner
+}

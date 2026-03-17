@@ -8,9 +8,14 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/integration"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"gopkg.in/yaml.v3"
 )
+
+type integrationMeta struct {
+	AllowedOperations []string `yaml:"allowed_operations"`
+}
 
 type Deps struct {
 	EncryptionKey []byte
@@ -108,15 +113,45 @@ func buildIntegrations(cfg *config.Config, factories *FactoryRegistry, deps Deps
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: unknown integration %q", name)
 		}
-		integration, err := factory(node, deps)
+		intg, err := factory(node, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: integration %q: %w", name, err)
 		}
-		if err := reg.Integrations.Register(name, integration); err != nil {
+
+		var meta integrationMeta
+		if err := node.Decode(&meta); err != nil {
+			return nil, fmt.Errorf("bootstrap: integration %q meta: %w", name, err)
+		}
+
+		if meta.AllowedOperations != nil && len(meta.AllowedOperations) == 0 {
+			return nil, fmt.Errorf("bootstrap: integration %q: allowed_operations cannot be empty; omit the field to allow all operations", name)
+		}
+
+		if allowed := meta.AllowedOperations; len(allowed) > 0 {
+			if !isWildcard(allowed) {
+				opSet := make(map[string]struct{})
+				for _, op := range intg.ListOperations() {
+					opSet[op.Name] = struct{}{}
+				}
+				for _, opName := range allowed {
+					if _, ok := opSet[opName]; !ok {
+						return nil, fmt.Errorf("bootstrap: integration %q: allowed_operations contains unknown operation %q", name, opName)
+					}
+				}
+				intg = integration.NewRestricted(intg, allowed)
+			}
+		}
+
+		if err := reg.Integrations.Register(name, intg); err != nil {
 			return nil, fmt.Errorf("bootstrap: registering integration %q: %w", name, err)
 		}
 	}
 	return &reg.Integrations, nil
+}
+
+// isWildcard returns true when the allowlist is exactly ["*"].
+func isWildcard(ops []string) bool {
+	return len(ops) == 1 && ops[0] == "*"
 }
 
 // deriveKey converts the encryption_key string to a 32-byte key for AES-256-GCM.

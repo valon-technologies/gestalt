@@ -30,6 +30,37 @@ func stubIntegrationFactory(name string) bootstrap.IntegrationFactory {
 	}
 }
 
+type stubIntegrationWithOps struct {
+	coretesting.StubIntegration
+	ops []core.Operation
+}
+
+func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
+	return s.ops
+}
+
+func stubIntegrationFactoryWithOps(name string, ops []core.Operation) bootstrap.IntegrationFactory {
+	return func(yaml.Node, bootstrap.Deps) (core.Integration, error) {
+		return &stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: name},
+			ops:             ops,
+		}, nil
+	}
+}
+
+func yamlNodeWithMeta(t *testing.T, data map[string]any) yaml.Node {
+	t.Helper()
+	b, err := yaml.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshaling yaml: %v", err)
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("unmarshaling yaml: %v", err)
+	}
+	return *doc.Content[0]
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth:      config.AuthConfig{Provider: "test-auth"},
@@ -274,4 +305,89 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 			t.Error("key derivation is not deterministic")
 		}
 	})
+}
+
+func TestBootstrapAllowedOperations(t *testing.T) {
+	t.Parallel()
+
+	allOps := []core.Operation{
+		{Name: "list_channels"},
+		{Name: "send_message"},
+		{Name: "delete_message"},
+	}
+
+	cases := []struct {
+		name      string
+		ops       []core.Operation
+		allowed   []string // nil means omit from YAML
+		wantErr   bool
+		wantCount int
+	}{
+		{
+			name:      "subset restricts operations",
+			ops:       allOps,
+			allowed:   []string{"list_channels", "send_message"},
+			wantCount: 2,
+		},
+		{
+			name:      "wildcard exposes all",
+			ops:       allOps[:2],
+			allowed:   []string{"*"},
+			wantCount: 2,
+		},
+		{
+			name:      "absent exposes all",
+			ops:       allOps[:2],
+			allowed:   nil,
+			wantCount: 2,
+		},
+		{
+			name:    "unknown operation name rejected",
+			ops:     allOps[:1],
+			allowed: []string{"nonexistent_op"},
+			wantErr: true,
+		},
+		{
+			name:    "empty allowlist rejected",
+			ops:     allOps[:1],
+			allowed: []string{},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := validConfig()
+			if tc.allowed != nil {
+				cfg.Integrations["alpha"] = yamlNodeWithMeta(t, map[string]any{
+					"allowed_operations": tc.allowed,
+				})
+			}
+
+			factories := validFactories()
+			factories.Integrations["alpha"] = stubIntegrationFactoryWithOps("alpha", tc.ops)
+
+			result, err := bootstrap.Bootstrap(cfg, factories)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+
+			intg, err := result.Integrations.Get("alpha")
+			if err != nil {
+				t.Fatalf("integration 'alpha' not found: %v", err)
+			}
+			got := intg.ListOperations()
+			if len(got) != tc.wantCount {
+				t.Fatalf("ListOperations: got %d ops, want %d", len(got), tc.wantCount)
+			}
+		})
+	}
 }
