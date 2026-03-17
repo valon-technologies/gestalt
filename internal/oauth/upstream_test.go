@@ -2,10 +2,13 @@ package oauth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -177,5 +180,226 @@ func TestResponseHook(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatal("expected error from response hook")
+	}
+}
+
+func TestPKCEGeneration(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "client-id",
+		AuthorizationURL: "https://example.com/authorize",
+		RedirectURL:      "https://app.com/callback",
+		PKCE:             true,
+	})
+
+	authURL, verifier := h.AuthorizationURLWithPKCE("state-1", []string{"read"})
+
+	if verifier == "" {
+		t.Fatal("expected non-empty verifier when PKCE is enabled")
+	}
+	if len(verifier) < 43 {
+		t.Errorf("verifier length = %d, want >= 43", len(verifier))
+	}
+
+	if !strings.Contains(authURL, "code_challenge_method=S256") {
+		t.Errorf("URL should contain code_challenge_method=S256; got %q", authURL)
+	}
+	if !strings.Contains(authURL, "code_challenge=") {
+		t.Errorf("URL should contain code_challenge; got %q", authURL)
+	}
+
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing URL: %v", err)
+	}
+	challenge := parsed.Query().Get("code_challenge")
+
+	h256 := sha256.Sum256([]byte(verifier))
+	expected := base64.RawURLEncoding.EncodeToString(h256[:])
+	if challenge != expected {
+		t.Errorf("code_challenge = %q, want SHA256 of verifier = %q", challenge, expected)
+	}
+}
+
+func TestPKCEDisabled(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "client-id",
+		AuthorizationURL: "https://example.com/authorize",
+		RedirectURL:      "https://app.com/callback",
+	})
+
+	authURL, verifier := h.AuthorizationURLWithPKCE("state-1", nil)
+
+	if verifier != "" {
+		t.Errorf("expected empty verifier when PKCE is disabled, got %q", verifier)
+	}
+	if strings.Contains(authURL, "code_challenge") {
+		t.Errorf("URL should not contain code_challenge; got %q", authURL)
+	}
+}
+
+func TestPKCEExchangeCode(t *testing.T) {
+	t.Parallel()
+
+	var receivedVerifier string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		receivedVerifier = r.FormValue("code_verifier")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "pkce-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID: "cid",
+		TokenURL: srv.URL + "/token",
+		PKCE:     true,
+	})
+
+	_, verifier := h.AuthorizationURLWithPKCE("state-1", nil)
+
+	tok, err := h.ExchangeCode(context.Background(), "code", WithPKCEVerifier(verifier))
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "pkce-token" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "pkce-token")
+	}
+	if receivedVerifier != verifier {
+		t.Errorf("server received verifier %q, want %q", receivedVerifier, verifier)
+	}
+}
+
+func TestClientAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	var gotAuth string
+	var formHasClientID bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		formHasClientID = r.FormValue("client_id") != ""
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "header-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "my-id",
+		ClientSecret:     "my-secret",
+		TokenURL:         srv.URL + "/token",
+		RedirectURL:      srv.URL + "/callback",
+		ClientAuthMethod: ClientAuthHeader,
+	})
+
+	tok, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "header-token" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "header-token")
+	}
+	if !strings.HasPrefix(gotAuth, "Basic ") {
+		t.Errorf("expected Basic auth header, got %q", gotAuth)
+	}
+	if formHasClientID {
+		t.Error("client_id should not appear in form body with ClientAuthHeader")
+	}
+}
+
+func TestClientAuthHeaderRefresh(t *testing.T) {
+	t.Parallel()
+
+	var gotAuth string
+	var formHasClientID bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		formHasClientID = r.FormValue("client_id") != ""
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "refreshed",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "my-id",
+		ClientSecret:     "my-secret",
+		TokenURL:         srv.URL + "/token",
+		ClientAuthMethod: ClientAuthHeader,
+	})
+
+	tok, err := h.RefreshToken(context.Background(), "rt")
+	if err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if tok.AccessToken != "refreshed" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "refreshed")
+	}
+	if !strings.HasPrefix(gotAuth, "Basic ") {
+		t.Errorf("expected Basic auth header, got %q", gotAuth)
+	}
+	if formHasClientID {
+		t.Error("client_id should not appear in form body with ClientAuthHeader")
+	}
+}
+
+func TestGenerateVerifier(t *testing.T) {
+	t.Parallel()
+
+	v := GenerateVerifier()
+	if len(v) != 43 {
+		t.Errorf("verifier length = %d, want 43", len(v))
+	}
+
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+	for _, c := range v {
+		if !strings.ContainsRune(charset, c) {
+			t.Errorf("verifier contains invalid character %q", c)
+		}
+	}
+
+	v2 := GenerateVerifier()
+	if v == v2 {
+		t.Error("two sequential verifiers should differ")
+	}
+}
+
+func TestComputeS256Challenge(t *testing.T) {
+	t.Parallel()
+
+	// RFC 7636 Appendix B test vector.
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	challenge := ComputeS256Challenge(verifier)
+	expected := "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+	if challenge != expected {
+		t.Errorf("challenge = %q, want %q", challenge, expected)
+	}
+	if strings.Contains(challenge, "=") {
+		t.Error("challenge should not contain padding characters")
+	}
+	if strings.Contains(challenge, "+") || strings.Contains(challenge, "/") {
+		t.Error("challenge should use URL-safe base64 encoding")
 	}
 }

@@ -2,9 +2,13 @@ package oauth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,12 +19,21 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+type ClientAuthMethod int
+
+const (
+	ClientAuthBody   ClientAuthMethod = iota // client_id/secret in POST body (default)
+	ClientAuthHeader                         // HTTP Basic Auth header
+)
+
 type UpstreamConfig struct {
 	ClientID         string
 	ClientSecret     string
 	AuthorizationURL string
 	TokenURL         string
 	RedirectURL      string
+	ClientAuthMethod ClientAuthMethod
+	PKCE             bool
 }
 
 type ResponseHook func(body []byte) error
@@ -56,27 +69,74 @@ func NewUpstream(cfg UpstreamConfig, opts ...Option) *UpstreamHandler {
 	return h
 }
 
-func (h *UpstreamHandler) AuthorizationURL(state string, scopes []string) string {
-	v := url.Values{
-		"client_id":     {h.cfg.ClientID},
-		"redirect_uri":  {h.cfg.RedirectURL},
-		"response_type": {"code"},
-		"state":         {state},
-	}
-	if len(scopes) > 0 {
-		v.Set("scope", strings.Join(scopes, " "))
-	}
-	return h.cfg.AuthorizationURL + "?" + v.Encode()
+type ExchangeOption func(*exchangeOptions)
+
+type exchangeOptions struct {
+	verifier string
 }
 
-func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	data := url.Values{
-		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"client_id":     {h.cfg.ClientID},
-		"client_secret": {h.cfg.ClientSecret},
-		"redirect_uri":  {h.cfg.RedirectURL},
+func WithPKCEVerifier(verifier string) ExchangeOption {
+	return func(o *exchangeOptions) {
+		o.verifier = verifier
 	}
+}
+
+// AuthorizationURL returns only the URL. Callers that need PKCE must use
+// AuthorizationURLWithPKCE to obtain the verifier for the token exchange.
+func (h *UpstreamHandler) AuthorizationURL(state string, scopes []string) string {
+	if h.cfg.PKCE {
+		panic("oauth: AuthorizationURL called with PKCE enabled; use AuthorizationURLWithPKCE instead")
+	}
+	authURL, _ := h.AuthorizationURLWithPKCE(state, scopes)
+	return authURL
+}
+
+func (h *UpstreamHandler) AuthorizationURLWithPKCE(state string, scopes []string) (string, string) {
+	u, err := url.Parse(h.cfg.AuthorizationURL)
+	if err != nil {
+		u = &url.URL{RawQuery: ""}
+	}
+	q := u.Query()
+	q.Set("client_id", h.cfg.ClientID)
+	q.Set("redirect_uri", h.cfg.RedirectURL)
+	q.Set("response_type", "code")
+	q.Set("state", state)
+	if len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, " "))
+	}
+
+	var verifier string
+	if h.cfg.PKCE {
+		verifier = GenerateVerifier()
+		q.Set("code_challenge", ComputeS256Challenge(verifier))
+		q.Set("code_challenge_method", "S256")
+	}
+
+	u.RawQuery = q.Encode()
+	return u.String(), verifier
+}
+
+func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ...ExchangeOption) (*core.TokenResponse, error) {
+	var eo exchangeOptions
+	for _, opt := range opts {
+		opt(&eo)
+	}
+
+	data := url.Values{
+		"grant_type":   {"authorization_code"},
+		"code":         {code},
+		"redirect_uri": {h.cfg.RedirectURL},
+	}
+
+	if h.cfg.ClientAuthMethod == ClientAuthBody {
+		data.Set("client_id", h.cfg.ClientID)
+		data.Set("client_secret", h.cfg.ClientSecret)
+	}
+
+	if eo.verifier != "" {
+		data.Set("code_verifier", eo.verifier)
+	}
+
 	return h.tokenRequest(ctx, data)
 }
 
@@ -84,9 +144,13 @@ func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string)
 	data := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
-		"client_id":     {h.cfg.ClientID},
-		"client_secret": {h.cfg.ClientSecret},
 	}
+
+	if h.cfg.ClientAuthMethod == ClientAuthBody {
+		data.Set("client_id", h.cfg.ClientID)
+		data.Set("client_secret", h.cfg.ClientSecret)
+	}
+
 	return h.tokenRequest(ctx, data)
 }
 
@@ -96,6 +160,11 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*c
 		return nil, fmt.Errorf("creating token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	if h.cfg.ClientAuthMethod == ClientAuthHeader {
+		// RFC 6749 §2.3.1: URL-encode client credentials before base64.
+		req.SetBasicAuth(url.QueryEscape(h.cfg.ClientID), url.QueryEscape(h.cfg.ClientSecret))
+	}
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -137,4 +206,24 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*c
 		ExpiresIn:    tok.ExpiresIn,
 		TokenType:    tok.TokenType,
 	}, nil
+}
+
+func GenerateVerifier() string {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+	const length = 43
+	max := big.NewInt(int64(len(charset)))
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			panic(fmt.Sprintf("crypto/rand failed: %v", err))
+		}
+		b[i] = charset[n.Int64()]
+	}
+	return string(b)
+}
+
+func ComputeS256Challenge(verifier string) string {
+	h := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(h[:])
 }
