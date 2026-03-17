@@ -3,6 +3,18 @@ name: Rust Build Matrix
 on:
   workflow_call:
     inputs:
+      working-directory:
+        description: 'Cargo workspace directory'
+        type: string
+        default: 'gestalt/client'
+      binary-name:
+        description: 'Name of the compiled binary'
+        type: string
+        default: 'gestalt'
+      artifact-prefix:
+        description: 'Prefix for artifact names (e.g., gestalt, toolshed)'
+        type: string
+        default: 'gestalt'
       package:
         description: 'Create tar.gz + sha256 packages'
         type: boolean
@@ -25,24 +37,24 @@ jobs:
           - name: macOS-ARM64
             runs-on: macos-latest
             target: aarch64-apple-darwin
-            artifact: gestalt-macos-arm64
+            suffix: macos-arm64
           - name: macOS-x86_64
             runs-on: macos-latest
             target: x86_64-apple-darwin
-            artifact: gestalt-macos-x86_64
+            suffix: macos-x86_64
           - name: Linux-x86_64
             runs-on: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: gestalt-linux-x86_64
+            suffix: linux-x86_64
           - name: Linux-ARM64
             runs-on: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact: gestalt-linux-arm64
+            suffix: linux-arm64
             cross: true
           - name: Windows-x86_64
             runs-on: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: gestalt-windows-x86_64
+            suffix: windows-x86_64
             windows: true
 
     runs-on: ${{ matrix.platform.runs-on }}
@@ -64,8 +76,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            gestalt/client/target/
-          key: ${{ runner.os }}-${{ matrix.platform.target }}-cargo-${{ hashFiles('gestalt/client/Cargo.lock') }}
+            ${{ inputs.working-directory }}/target/
+          key: ${{ runner.os }}-${{ matrix.platform.target }}-cargo-${{ inputs.artifact-prefix }}-${{ hashFiles(format('{0}/**/Cargo.toml', inputs.working-directory)) }}
 
       - name: Install cross-compilation tools
         if: matrix.platform.cross
@@ -74,17 +86,17 @@ jobs:
 
       - name: Build (native)
         if: ${{ !matrix.platform.cross }}
-        working-directory: gestalt/client
+        working-directory: ${{ inputs.working-directory }}
         run: cargo build --release --target ${{ matrix.platform.target }}
 
       - name: Build (cross)
         if: matrix.platform.cross
-        working-directory: gestalt/client
+        working-directory: ${{ inputs.working-directory }}
         run: cross build --release --target ${{ matrix.platform.target }}
 
       - name: Run tests
         if: ${{ !matrix.platform.cross && inputs.run-tests }}
-        working-directory: gestalt/client
+        working-directory: ${{ inputs.working-directory }}
         timeout-minutes: ${{ matrix.platform.windows && 15 || 5 }}
         run: cargo test --release --target ${{ matrix.platform.target }}
 
@@ -92,44 +104,44 @@ jobs:
         if: ${{ inputs.package && !matrix.platform.windows }}
         run: |
           mkdir -p dist
-          cp gestalt/client/target/${{ matrix.platform.target }}/release/gestalt dist/
+          cp ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }} dist/
           cd dist
-          tar -czvf ${{ matrix.platform.artifact }}.tar.gz gestalt
-          shasum -a 256 ${{ matrix.platform.artifact }}.tar.gz > ${{ matrix.platform.artifact }}.tar.gz.sha256
+          tar -czvf ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz ${{ inputs.binary-name }}
+          shasum -a 256 ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz > ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz.sha256
 
       - name: Package binary (Windows)
         if: ${{ inputs.package && matrix.platform.windows }}
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item gestalt/client/target/${{ matrix.platform.target }}/release/gestalt.exe dist/
+          Copy-Item ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}.exe dist/
           Set-Location dist
-          Compress-Archive -Path gestalt.exe -DestinationPath ${{ matrix.platform.artifact }}.zip
-          $hash = (Get-FileHash ${{ matrix.platform.artifact }}.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  ${{ matrix.platform.artifact }}.zip" | Out-File -Encoding ascii ${{ matrix.platform.artifact }}.zip.sha256
+          Compress-Archive -Path ${{ inputs.binary-name }}.exe -DestinationPath ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip
+          $hash = (Get-FileHash ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip" | Out-File -Encoding ascii ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip.sha256
 
       - name: Upload packaged artifact
         if: ${{ inputs.package }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform.artifact }}
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
           path: |
-            dist/${{ matrix.platform.artifact }}.tar.gz*
-            dist/${{ matrix.platform.artifact }}.zip*
+            dist/${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz*
+            dist/${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip*
           if-no-files-found: error
 
       - name: Upload binary (Unix)
         if: ${{ !inputs.package && !matrix.platform.windows }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform.artifact }}
-          path: gestalt/client/target/${{ matrix.platform.target }}/release/gestalt
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
+          path: ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}
           if-no-files-found: error
 
       - name: Upload binary (Windows)
         if: ${{ !inputs.package && matrix.platform.windows }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform.artifact }}
-          path: gestalt/client/target/${{ matrix.platform.target }}/release/gestalt.exe
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
+          path: ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}.exe
           if-no-files-found: error
