@@ -1,0 +1,108 @@
+# SQLite limits to single writer; increase for PostgreSQL.
+replicaCount: 1
+
+image:
+  repository: toolshed
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Toolshed does not need Kubernetes API access.
+  automount: false
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: toolshed.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: toolshed-tls
+  #    hosts:
+  #      - toolshed.local
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+
+# Rendered into a ConfigMap and mounted as /etc/toolshed/config.yaml.
+# Secrets use ${ENV_VAR} placeholders, injected from the Secret resource below.
+config:
+  server:
+    port: 8080
+    dev_mode: false
+    encryption_key: "${ENCRYPTION_KEY}"
+  auth:
+    provider: google
+    config:
+      client_id: "${GOOGLE_CLIENT_ID}"
+      client_secret: "${GOOGLE_CLIENT_SECRET}"
+      redirect_url: "${GOOGLE_REDIRECT_URL}"
+      session_secret: "${SESSION_SECRET}"
+  datastore:
+    provider: sqlite
+    config:
+      path: /data/toolshed.db
+  integrations:
+    - slack
+
+# Only created if at least one value is non-empty.
+secrets:
+  encryptionKey: ""
+  google:
+    clientId: ""
+    clientSecret: ""
+    sessionSecret: ""
+    redirectUrl: ""
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
