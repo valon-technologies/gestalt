@@ -54,7 +54,7 @@ linters:
           - gocritic
           - revive
       # Test helper packages: relaxed style and errcheck for deferred Close
-      - path: internal/core/testing/
+      - path: core/testing/
         linters:
           - gocritic
           - revive
