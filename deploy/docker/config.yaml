@@ -1,0 +1,40 @@
+# Environment variables are interpolated using ${VAR_NAME} syntax.
+
+server:
+  port: 8080
+  encryption_key: ${TOOLSHED_ENCRYPTION_KEY}
+  # Set dev_mode: true to skip encryption_key requirement during development.
+  # dev_mode: true
+
+auth:
+  provider: google
+  config:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: ${GOOGLE_CLIENT_SECRET}
+    redirect_url: ${GOOGLE_REDIRECT_URL}
+    session_secret: ${TOOLSHED_SESSION_SECRET}
+    # Restrict login to a specific domain (optional):
+    # allowed_domain: example.com
+
+datastore:
+  provider: sqlite
+  config:
+    path: /data/toolshed.db
+  # Future PostgreSQL support:
+  # provider: postgres
+  # config:
+  #   host: postgres
+  #   port: 5432
+  #   user: toolshed
+  #   password: ${POSTGRES_PASSWORD}
+  #   database: toolshed
+  #   sslmode: disable
+
+integrations:
+  - slack
+
+integration_config:
+  slack:
+    client_id: ${SLACK_CLIENT_ID}
+    client_secret: ${SLACK_CLIENT_SECRET}
+    redirect_url: ${SLACK_REDIRECT_URL}

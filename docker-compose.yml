@@ -1,0 +1,15 @@
+services:
+  toolshed:
+    build:
+      context: ..
+      dockerfile: toolshed/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./deploy/docker/config.yaml:/etc/toolshed/config.yaml:ro
+      - toolshed-data:/data
+    env_file:
+      - .env
+
+volumes:
+  toolshed-data:

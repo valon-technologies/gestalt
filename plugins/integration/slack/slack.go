@@ -16,10 +16,10 @@ import (
 const defaultTimeout = 10 * time.Second
 
 type Config struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-	BaseURL      string
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	RedirectURL  string `yaml:"redirect_url"`
+	BaseURL      string `yaml:"base_url"`
 }
 
 type Integration struct {

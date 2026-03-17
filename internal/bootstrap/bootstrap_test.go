@@ -63,9 +63,10 @@ func yamlNodeWithMeta(t *testing.T, data map[string]any) yaml.Node {
 
 func validConfig() *config.Config {
 	return &config.Config{
-		Auth:      config.AuthConfig{Provider: "test-auth"},
-		Datastore: config.DatastoreConfig{Provider: "test-store"},
-		Integrations: map[string]yaml.Node{
+		Auth:         config.AuthConfig{Provider: "test-auth"},
+		Datastore:    config.DatastoreConfig{Provider: "test-store"},
+		Integrations: []string{"alpha"},
+		IntegrationConfig: map[string]yaml.Node{
 			"alpha": {},
 		},
 		Server: config.ServerConfig{
@@ -109,7 +110,8 @@ func TestBootstrapMultipleIntegrations(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Integrations["beta"] = yaml.Node{}
+	cfg.Integrations = append(cfg.Integrations, "beta")
+	cfg.IntegrationConfig["beta"] = yaml.Node{}
 
 	factories := validFactories()
 	factories.Integrations["beta"] = stubIntegrationFactory("beta")
@@ -171,7 +173,7 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 		},
 		{
 			name:   "unknown integration",
-			mutate: func(c *config.Config) { c.Integrations["unknown"] = yaml.Node{} },
+			mutate: func(c *config.Config) { c.Integrations = append(c.Integrations, "unknown") },
 		},
 	}
 
@@ -361,7 +363,7 @@ func TestBootstrapAllowedOperations(t *testing.T) {
 
 			cfg := validConfig()
 			if tc.allowed != nil {
-				cfg.Integrations["alpha"] = yamlNodeWithMeta(t, map[string]any{
+				cfg.IntegrationConfig["alpha"] = yamlNodeWithMeta(t, map[string]any{
 					"allowed_operations": tc.allowed,
 				})
 			}

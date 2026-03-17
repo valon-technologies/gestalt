@@ -41,6 +41,9 @@ datastore:
   config:
     path: ./data.db
 integrations:
+  - alpha
+  - beta
+integration_config:
   alpha:
     api_key: key-1
   beta:
@@ -70,11 +73,11 @@ server:
 	if len(cfg.Integrations) != 2 {
 		t.Fatalf("Integrations: got %d items, want 2", len(cfg.Integrations))
 	}
-	if _, ok := cfg.Integrations["alpha"]; !ok {
-		t.Error("Integrations: missing 'alpha' key")
+	if cfg.Integrations[0] != "alpha" {
+		t.Errorf("Integrations[0]: got %q, want %q", cfg.Integrations[0], "alpha")
 	}
-	if _, ok := cfg.Integrations["beta"]; !ok {
-		t.Error("Integrations: missing 'beta' key")
+	if cfg.Integrations[1] != "beta" {
+		t.Errorf("Integrations[1]: got %q, want %q", cfg.Integrations[1], "beta")
 	}
 }
 
