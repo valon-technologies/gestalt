@@ -31,6 +31,18 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 	})
 
+	t.Run("DisplayName", func(t *testing.T) {
+		if integration.DisplayName() == "" {
+			t.Error("DisplayName() returned empty string")
+		}
+	})
+
+	t.Run("Description", func(t *testing.T) {
+		if integration.Description() == "" {
+			t.Error("Description() returned empty string")
+		}
+	})
+
 	t.Run("AuthorizationURL", func(t *testing.T) {
 		url := integration.AuthorizationURL("state-abc", []string{"read", "write"})
 		if url == "" {

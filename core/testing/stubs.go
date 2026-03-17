@@ -67,11 +67,15 @@ func (s *StubAuthProvider) ValidateToken(ctx context.Context, token string) (*co
 
 type StubIntegration struct {
 	N              string
+	DN             string
+	Desc           string
 	ExchangeCodeFn func(context.Context, string) (*core.TokenResponse, error)
 	ExecuteFn      func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
 
 func (s *StubIntegration) Name() string                             { return s.N }
+func (s *StubIntegration) DisplayName() string                      { return s.DN }
+func (s *StubIntegration) Description() string                      { return s.Desc }
 func (s *StubIntegration) AuthorizationURL(string, []string) string { return "" }
 func (s *StubIntegration) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
 	if s.ExchangeCodeFn != nil {
