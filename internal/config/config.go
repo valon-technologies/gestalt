@@ -8,10 +8,10 @@ import (
 )
 
 type Config struct {
-	Auth         AuthConfig      `yaml:"auth"`
-	Datastore    DatastoreConfig `yaml:"datastore"`
-	Integrations []string        `yaml:"integrations"`
-	Server       ServerConfig    `yaml:"server"`
+	Auth         AuthConfig           `yaml:"auth"`
+	Datastore    DatastoreConfig      `yaml:"datastore"`
+	Integrations map[string]yaml.Node `yaml:"integrations"`
+	Server       ServerConfig         `yaml:"server"`
 }
 
 type AuthConfig struct {

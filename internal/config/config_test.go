@@ -41,8 +41,10 @@ datastore:
   config:
     path: ./data.db
 integrations:
-  - slack
-  - pagerduty
+  alpha:
+    api_key: key-1
+  beta:
+    api_key: key-2
 server:
   port: 9090
   encryption_key: super-secret-key
@@ -68,8 +70,11 @@ server:
 	if len(cfg.Integrations) != 2 {
 		t.Fatalf("Integrations: got %d items, want 2", len(cfg.Integrations))
 	}
-	if cfg.Integrations[0] != "slack" || cfg.Integrations[1] != "pagerduty" {
-		t.Errorf("Integrations: got %v, want [slack pagerduty]", cfg.Integrations)
+	if _, ok := cfg.Integrations["alpha"]; !ok {
+		t.Error("Integrations: missing 'alpha' key")
+	}
+	if _, ok := cfg.Integrations["beta"]; !ok {
+		t.Error("Integrations: missing 'beta' key")
 	}
 }
 
