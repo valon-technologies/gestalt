@@ -464,6 +464,43 @@ func TestLoginCallback(t *testing.T) {
 	}
 }
 
+func TestLoginCallbackWithStatefulHandler(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubStatefulAuth{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		handleWithState: func(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
+			if code == "good-code" && state == "encrypted-state" {
+				return &core.UserIdentity{Email: "pkce@example.com"}, "original-state", nil
+			}
+			return nil, "", fmt.Errorf("bad code or state")
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=encrypted-state")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["email"] != "pkce@example.com" {
+		t.Fatalf("unexpected email: %v", result["email"])
+	}
+}
+
 func TestStartIntegrationOAuth(t *testing.T) {
 	t.Parallel()
 
@@ -699,4 +736,13 @@ type stubIntegrationWithAuthURL struct {
 
 func (s *stubIntegrationWithAuthURL) AuthorizationURL(_ string, _ []string) string {
 	return s.authURL
+}
+
+type stubStatefulAuth struct {
+	coretesting.StubAuthProvider
+	handleWithState func(context.Context, string, string) (*core.UserIdentity, string, error)
+}
+
+func (s *stubStatefulAuth) HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error) {
+	return s.handleWithState(ctx, code, state)
 }

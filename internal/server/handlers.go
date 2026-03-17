@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -160,6 +161,13 @@ type SessionTokenIssuer interface {
 	IssueSessionToken(identity *core.UserIdentity) (string, error)
 }
 
+// StatefulCallbackHandler is an optional interface for auth providers that need
+// the OAuth state parameter during callback (e.g., for PKCE where the
+// code_verifier is encrypted in the state).
+type StatefulCallbackHandler interface {
+	HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error)
+}
+
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -167,7 +175,15 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identity, err := s.auth.HandleCallback(r.Context(), code)
+	var identity *core.UserIdentity
+	var err error
+
+	if stateful, ok := s.auth.(StatefulCallbackHandler); ok {
+		state := r.URL.Query().Get("state")
+		identity, _, err = stateful.HandleCallbackWithState(r.Context(), code, state)
+	} else {
+		identity, err = s.auth.HandleCallback(r.Context(), code)
+	}
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, fmt.Sprintf("login failed: %v", err))
 		return

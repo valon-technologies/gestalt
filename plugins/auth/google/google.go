@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/session"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -97,7 +98,7 @@ func (p *Provider) HandleCallback(ctx context.Context, code string) (*core.UserI
 		return nil, fmt.Errorf("handle callback: %w", err)
 	}
 
-	if err := p.checkDomain(identity.Email); err != nil {
+	if err := session.CheckDomain(p.allowed, identity.Email); err != nil {
 		return nil, err
 	}
 
@@ -105,31 +106,28 @@ func (p *Provider) HandleCallback(ctx context.Context, code string) (*core.UserI
 }
 
 func (p *Provider) IssueSessionToken(identity *core.UserIdentity) (string, error) {
-	return issueSessionToken(identity, p.secret, p.ttl)
+	return session.IssueToken(identity, p.secret, p.ttl)
 }
 
 func (p *Provider) ValidateToken(ctx context.Context, token string) (*core.UserIdentity, error) {
-	identity, err := validateSessionToken(token, p.secret)
+	identity, err := session.ValidateToken(token, p.secret)
 	if err == nil {
-		if err := p.checkDomain(identity.Email); err != nil {
+		if err := session.CheckDomain(p.allowed, identity.Email); err != nil {
 			return nil, err
 		}
 		return identity, nil
 	}
 
-	// If the token has JWT structure but failed validation (bad signature,
-	// expired, etc.), don't fall through to the userinfo endpoint.
-	if !errors.Is(err, errNotJWT) {
+	if !errors.Is(err, session.ErrNotJWT) {
 		return nil, err
 	}
 
-	// Not a JWT at all; treat as an OAuth access token.
 	identity, err = p.fetchUserInfo(ctx, token)
 	if err != nil {
 		return nil, fmt.Errorf("validate token: %w", err)
 	}
 
-	if err := p.checkDomain(identity.Email); err != nil {
+	if err := session.CheckDomain(p.allowed, identity.Email); err != nil {
 		return nil, err
 	}
 
@@ -168,19 +166,4 @@ func (p *Provider) fetchUserInfo(ctx context.Context, accessToken string) (*core
 		DisplayName: info.Name,
 		AvatarURL:   info.Picture,
 	}, nil
-}
-
-func (p *Provider) checkDomain(email string) error {
-	if len(p.allowed) == 0 {
-		return nil
-	}
-	parts := strings.SplitN(email, "@", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid email: %s", email)
-	}
-	domain := strings.ToLower(parts[1])
-	if !p.allowed[domain] {
-		return fmt.Errorf("domain %q not allowed", domain)
-	}
-	return nil
 }
