@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -22,8 +23,15 @@ const defaultTimeout = 10 * time.Second
 type ClientAuthMethod int
 
 const (
-	ClientAuthBody   ClientAuthMethod = iota // client_id/secret in POST body (default)
-	ClientAuthHeader                         // HTTP Basic Auth header
+	ClientAuthBody ClientAuthMethod = iota
+	ClientAuthHeader
+)
+
+type TokenExchangeFormat string
+
+const (
+	TokenExchangeForm TokenExchangeFormat = "form"
+	TokenExchangeJSON TokenExchangeFormat = "json"
 )
 
 type UpstreamConfig struct {
@@ -39,6 +47,9 @@ type UpstreamConfig struct {
 	AuthorizationParams map[string]string
 	TokenParams         map[string]string
 	RefreshParams       map[string]string
+
+	TokenExchange TokenExchangeFormat
+	AcceptHeader  string
 }
 
 type ResponseHook func(body []byte) error
@@ -176,11 +187,36 @@ func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string)
 }
 
 func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*core.TokenResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.TokenURL, strings.NewReader(data.Encode()))
+	var reader io.Reader
+	var contentType string
+
+	if h.cfg.TokenExchange == TokenExchangeJSON {
+		m := make(map[string]string, len(data))
+		for k, vs := range data {
+			if len(vs) > 0 {
+				m[k] = vs[0]
+			}
+		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			return nil, fmt.Errorf("encoding token request as JSON: %w", err)
+		}
+		reader = bytes.NewReader(b)
+		contentType = "application/json"
+	} else {
+		reader = strings.NewReader(data.Encode())
+		contentType = "application/x-www-form-urlencoded"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.TokenURL, reader)
 	if err != nil {
 		return nil, fmt.Errorf("creating token request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
+
+	if h.cfg.AcceptHeader != "" {
+		req.Header.Set("Accept", h.cfg.AcceptHeader)
+	}
 
 	if h.cfg.ClientAuthMethod == ClientAuthHeader {
 		// RFC 6749 §2.3.1: URL-encode client credentials before base64.
