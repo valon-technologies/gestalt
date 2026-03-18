@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  publish-api:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,3 +29,24 @@ jobs:
           tags: |
             ghcr.io/valon-technologies/toolshed:latest
             ghcr.io/valon-technologies/toolshed:${{ github.sha }}
+
+  publish-web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: toolshed/web
+          file: toolshed/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/valon-technologies/toolshed-web:latest
+            ghcr.io/valon-technologies/toolshed-web:${{ github.sha }}

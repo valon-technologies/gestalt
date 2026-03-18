@@ -11,5 +11,15 @@ services:
     env_file:
       - .env
 
+  web:
+    build:
+      context: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      TOOLSHED_API_URL: http://toolshed:8080
+    depends_on:
+      - toolshed
+
 volumes:
   toolshed-data:

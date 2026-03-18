@@ -28,6 +28,29 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "toolshed.fullname" $ }}
+                port:
+                  name: http
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "toolshed.fullname" $ }}
+                port:
+                  name: http
+          {{- if $.Values.web.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "toolshed.fullname" $ }}-web
+                port:
+                  name: http
+          {{- else }}
           {{- range .paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}
@@ -36,6 +59,7 @@ spec:
                 name: {{ include "toolshed.fullname" $ }}
                 port:
                   name: http
+          {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}
