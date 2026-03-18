@@ -11,7 +11,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/oauth"
 )
 
-var _ core.Integration = (*Base)(nil)
+var _ core.OAuthProvider = (*Base)(nil)
 
 type AuthHandler interface {
 	AuthorizationURL(state string, scopes []string) string

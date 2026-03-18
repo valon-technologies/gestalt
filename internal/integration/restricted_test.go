@@ -138,11 +138,17 @@ func TestDelegationMethods(t *testing.T) {
 	if got := r.Description(); got != "A test integration" {
 		t.Errorf("Description: got %q, want %q", got, "A test integration")
 	}
-	if got := r.AuthorizationURL("state", []string{"read"}); got != "" {
+
+	oauthR, ok := r.(core.OAuthProvider)
+	if !ok {
+		t.Fatal("expected restricted wrapper to implement OAuthProvider")
+	}
+
+	if got := oauthR.AuthorizationURL("state", []string{"read"}); got != "" {
 		t.Errorf("AuthorizationURL: got %q, want empty", got)
 	}
 
-	tok, err := r.ExchangeCode(context.Background(), "code")
+	tok, err := oauthR.ExchangeCode(context.Background(), "code")
 	if err != nil {
 		t.Fatalf("ExchangeCode: %v", err)
 	}
@@ -150,7 +156,7 @@ func TestDelegationMethods(t *testing.T) {
 		t.Errorf("ExchangeCode: got %+v, want %+v", tok, exchangeResp)
 	}
 
-	refreshTok, err := r.RefreshToken(context.Background(), "refresh")
+	refreshTok, err := oauthR.RefreshToken(context.Background(), "refresh")
 	if err != nil {
 		t.Fatalf("RefreshToken: %v", err)
 	}

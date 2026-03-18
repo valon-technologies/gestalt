@@ -7,35 +7,35 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 )
 
-// Restricted wraps an Integration to expose only a subset of its operations.
+// Restricted wraps a Provider to expose only a subset of its operations.
 type Restricted struct {
-	inner   core.Integration
+	inner   core.Provider
 	allowed map[string]struct{}
 }
 
-// Compile-time interface check.
-var _ core.Integration = (*Restricted)(nil)
+// Compile-time interface checks.
+var (
+	_ core.Provider      = (*Restricted)(nil)
+	_ core.OAuthProvider = (*restrictedOAuth)(nil)
+)
 
-func NewRestricted(inner core.Integration, allowed []string) *Restricted {
+// NewRestricted returns a Provider that gates operations to the allowed set.
+// If the inner provider implements OAuthProvider, the returned value does too.
+func NewRestricted(inner core.Provider, allowed []string) core.Provider {
 	m := make(map[string]struct{}, len(allowed))
 	for _, name := range allowed {
 		m[name] = struct{}{}
 	}
-	return &Restricted{inner: inner, allowed: m}
+	r := &Restricted{inner: inner, allowed: m}
+	if oauth, ok := inner.(core.OAuthProvider); ok {
+		return &restrictedOAuth{Restricted: r, oauth: oauth}
+	}
+	return r
 }
 
 func (r *Restricted) Name() string        { return r.inner.Name() }
 func (r *Restricted) DisplayName() string { return r.inner.DisplayName() }
 func (r *Restricted) Description() string { return r.inner.Description() }
-func (r *Restricted) AuthorizationURL(state string, scopes []string) string {
-	return r.inner.AuthorizationURL(state, scopes)
-}
-func (r *Restricted) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return r.inner.ExchangeCode(ctx, code)
-}
-func (r *Restricted) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return r.inner.RefreshToken(ctx, refreshToken)
-}
 
 func (r *Restricted) ListOperations() []core.Operation {
 	all := r.inner.ListOperations()
@@ -55,8 +55,31 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	return r.inner.Execute(ctx, operation, params, token)
 }
 
-// Inner returns the unwrapped integration. Used by the proxy layer
-// to check whether the underlying integration implements Proxiable.
-func (r *Restricted) Inner() core.Integration {
+// Inner returns the unwrapped provider.
+func (r *Restricted) Inner() core.Provider {
+	return r.inner
+}
+
+// restrictedOAuth wraps a Restricted provider and delegates OAuth methods
+// to the inner OAuthProvider.
+type restrictedOAuth struct {
+	*Restricted
+	oauth core.OAuthProvider
+}
+
+func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string {
+	return r.oauth.AuthorizationURL(state, scopes)
+}
+
+func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return r.oauth.ExchangeCode(ctx, code)
+}
+
+func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return r.oauth.RefreshToken(ctx, refreshToken)
+}
+
+// Inner returns the unwrapped provider.
+func (r *restrictedOAuth) Inner() core.Provider {
 	return r.inner
 }

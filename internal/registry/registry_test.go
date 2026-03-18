@@ -33,9 +33,9 @@ func TestPluginMapRegisterAndGet(t *testing.T) {
 		{
 			name: "integration",
 			register: func(r *Registry) error {
-				return r.Integrations.Register("slack", &coretesting.StubIntegration{N: "slack"})
+				return r.Providers.Register("slack", &coretesting.StubIntegration{N: "slack"})
 			},
-			get: func(r *Registry) (any, error) { return r.Integrations.Get("slack") },
+			get: func(r *Registry) (any, error) { return r.Providers.Get("slack") },
 		},
 	}
 
@@ -77,7 +77,7 @@ func TestPluginMapDuplicateRegistration(t *testing.T) {
 		{
 			name: "integration",
 			register: func(r *Registry) error {
-				return r.Integrations.Register("slack", &coretesting.StubIntegration{N: "slack"})
+				return r.Providers.Register("slack", &coretesting.StubIntegration{N: "slack"})
 			},
 		},
 	}
@@ -109,7 +109,7 @@ func TestPluginMapNotFound(t *testing.T) {
 	}{
 		{name: "datastore", get: func(r *Registry) (any, error) { return r.Datastores.Get("nope") }},
 		{name: "auth provider", get: func(r *Registry) (any, error) { return r.AuthProviders.Get("nope") }},
-		{name: "integration", get: func(r *Registry) (any, error) { return r.Integrations.Get("nope") }},
+		{name: "integration", get: func(r *Registry) (any, error) { return r.Providers.Get("nope") }},
 	}
 
 	for _, tc := range cases {
@@ -132,15 +132,15 @@ func TestPluginMapList(t *testing.T) {
 
 	r := New()
 
-	if got := r.Integrations.List(); len(got) != 0 {
+	if got := r.Providers.List(); len(got) != 0 {
 		t.Fatalf("List on empty: got %v, want empty", got)
 	}
 
-	_ = r.Integrations.Register("slack", &coretesting.StubIntegration{N: "slack"})
-	_ = r.Integrations.Register("pagerduty", &coretesting.StubIntegration{N: "pagerduty"})
-	_ = r.Integrations.Register("datadog", &coretesting.StubIntegration{N: "datadog"})
+	_ = r.Providers.Register("slack", &coretesting.StubIntegration{N: "slack"})
+	_ = r.Providers.Register("pagerduty", &coretesting.StubIntegration{N: "pagerduty"})
+	_ = r.Providers.Register("datadog", &coretesting.StubIntegration{N: "datadog"})
 
-	got := r.Integrations.List()
+	got := r.Providers.List()
 	want := []string{"datadog", "pagerduty", "slack"}
 
 	if len(got) != len(want) {
@@ -159,9 +159,9 @@ func TestRegistryIsolation(t *testing.T) {
 	r1 := New()
 	r2 := New()
 
-	_ = r1.Integrations.Register("slack", &coretesting.StubIntegration{N: "slack"})
+	_ = r1.Providers.Register("slack", &coretesting.StubIntegration{N: "slack"})
 
-	if _, err := r2.Integrations.Get("slack"); err == nil {
+	if _, err := r2.Providers.Get("slack"); err == nil {
 		t.Fatal("registries are not isolated: r2 found r1's integration")
 	}
 }
@@ -179,15 +179,15 @@ func TestConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			name := "integration-" + strconv.Itoa(n)
-			_ = r.Integrations.Register(name, &coretesting.StubIntegration{N: name})
-			_, _ = r.Integrations.Get(name)
-			_ = r.Integrations.List()
+			_ = r.Providers.Register(name, &coretesting.StubIntegration{N: name})
+			_, _ = r.Providers.Get(name)
+			_ = r.Providers.List()
 		}(i)
 	}
 
 	wg.Wait()
 
-	if got := r.Integrations.List(); len(got) != goroutines {
+	if got := r.Providers.List(); len(got) != goroutines {
 		t.Fatalf("expected %d integrations, got %d", goroutines, len(got))
 	}
 }

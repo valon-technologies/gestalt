@@ -26,17 +26,17 @@ type integrationInfo struct {
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
-	names := s.integrations.List()
+	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
-		integration, err := s.integrations.Get(name)
+		prov, err := s.providers.Get(name)
 		if err != nil {
 			continue
 		}
 		out = append(out, integrationInfo{
 			Name:        name,
-			DisplayName: integration.DisplayName(),
-			Description: integration.Description(),
+			DisplayName: prov.DisplayName(),
+			Description: prov.Description(),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -44,7 +44,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	integration, err := s.integrations.Get(name)
+	prov, err := s.providers.Get(name)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", name))
@@ -53,24 +53,24 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to look up integration")
 		return
 	}
-	writeJSON(w, http.StatusOK, integration.ListOperations())
+	writeJSON(w, http.StatusOK, prov.ListOperations())
 }
 
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
-	integrationName := chi.URLParam(r, "integration")
+	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")
 
-	integration, err := s.integrations.Get(integrationName)
+	prov, err := s.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", integrationName))
+			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to look up integration")
 		return
 	}
 
-	ops := integration.ListOperations()
+	ops := prov.ListOperations()
 	found := false
 	for _, op := range ops {
 		if op.Name == operationName {
@@ -79,7 +79,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, integrationName))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
 		return
 	}
 
@@ -99,17 +99,17 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		userID = dbUser.ID
 	}
 
-	storedToken, err := s.datastore.Token(r.Context(), userID, integrationName, "default")
+	storedToken, err := s.datastore.Token(r.Context(), userID, providerName, "default")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", integrationName))
+			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to retrieve integration token")
 		return
 	}
 	if storedToken == nil {
-		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", integrationName))
+		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := integration.Execute(r.Context(), operationName, params, storedToken.AccessToken)
+	result, err := prov.Execute(r.Context(), operationName, params, storedToken.AccessToken)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
 		return
@@ -218,13 +218,19 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	integration, err := s.integrations.Get(req.Integration)
+	prov, err := s.providers.Get(req.Integration)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", req.Integration))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to look up integration")
+		return
+	}
+
+	oauthProv, ok := prov.(core.OAuthProvider)
+	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", req.Integration))
 		return
 	}
 
@@ -234,25 +240,17 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := integration.AuthorizationURL(state, req.Scopes)
+	url := oauthProv.AuthorizationURL(state, req.Scopes)
 	writeJSON(w, http.StatusOK, map[string]string{"url": url, "state": state})
 }
 
-type oauthCallbackRequest struct {
-	Code        string `json:"code"`
-	Integration string `json:"integration"`
-}
-
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	var req oauthCallbackRequest
 	code := r.URL.Query().Get("code")
-	integrationName := r.URL.Query().Get("integration")
-	if code == "" || integrationName == "" {
+	providerName := r.URL.Query().Get("integration")
+	if code == "" || providerName == "" {
 		writeError(w, http.StatusBadRequest, "missing code or integration parameter")
 		return
 	}
-	req.Code = code
-	req.Integration = integrationName
 
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -260,17 +258,23 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	integration, err := s.integrations.Get(req.Integration)
+	prov, err := s.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", req.Integration))
+			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to look up integration")
 		return
 	}
 
-	tokenResp, err := integration.ExchangeCode(r.Context(), req.Code)
+	oauthProv, ok := prov.(core.OAuthProvider)
+	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", providerName))
+		return
+	}
+
+	tokenResp, err := oauthProv.ExchangeCode(r.Context(), code)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
 		return
@@ -288,14 +292,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		expiresAt = &t
 	}
 
-	scopes := ""
 	tok := &core.IntegrationToken{
 		UserID:       dbUser.ID,
-		Integration:  req.Integration,
+		Integration:  providerName,
 		Instance:     "default",
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
-		Scopes:       scopes,
 		ExpiresAt:    expiresAt,
 	}
 

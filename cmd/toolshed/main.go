@@ -8,17 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
+	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/openapi"
 	"github.com/valon-technologies/toolshed/internal/provider"
-	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
@@ -44,36 +41,32 @@ func run() error {
 		return fmt.Errorf("loading config: %v", err)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
 	factories.Auth["oidc"] = oidc.Factory
 	factories.Datastores["sqlite"] = sqlite.Factory
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
+	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
 
-	result, err := bootstrap.Bootstrap(cfg, factories)
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
 		return fmt.Errorf("bootstrap: %v", err)
 	}
 	defer func() { _ = result.Datastore.Close() }()
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	if err := result.Datastore.Migrate(ctx); err != nil {
 		return fmt.Errorf("running datastore migrations: %v", err)
 	}
 
-	reg := registry.New()
-	if err := initIntegrations(ctx, cfg, reg); err != nil {
-		return fmt.Errorf("initializing integrations: %v", err)
-	}
-
 	srv := server.New(server.Config{
-		Auth:         result.Auth,
-		Datastore:    result.Datastore,
-		Integrations: &reg.Integrations,
-		DevMode:      result.DevMode,
+		Auth:      result.Auth,
+		Datastore: result.Datastore,
+		Providers: result.Providers,
+		DevMode:   result.DevMode,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -127,40 +120,14 @@ func resolveConfigPath(flagValue string) string {
 	return "/etc/toolshed/config.yaml"
 }
 
-func initIntegrations(ctx context.Context, cfg *config.Config, reg *registry.Registry) error {
-	defs := make(map[string]*provider.Definition, len(cfg.Integrations))
-	var mu sync.Mutex
-
-	g, ctx := errgroup.WithContext(ctx)
-	for name := range cfg.Integrations {
-		intgDef := cfg.Integrations[name]
-		g.Go(func() error {
-			def, err := loadDefinition(ctx, name, intgDef, cfg.ProviderDirs)
-			if err != nil {
-				return fmt.Errorf("integration %q: %w", name, err)
-			}
-			mu.Lock()
-			defs[name] = def
-			mu.Unlock()
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	for name := range cfg.Integrations {
-		intgDef := cfg.Integrations[name]
-		intg, err := provider.Build(defs[name], intgDef)
+func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
+	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		def, err := loadDefinition(ctx, name, intg, providerDirs)
 		if err != nil {
-			return fmt.Errorf("integration %q: %w", name, err)
+			return nil, err
 		}
-		if err := reg.Integrations.Register(name, intg); err != nil {
-			return fmt.Errorf("registering integration %q: %w", name, err)
-		}
-		log.Printf("loaded integration %s (%d operations)", name, len(intg.ListOperations()))
+		return provider.Build(def, intg)
 	}
-	return nil
 }
 
 func loadDefinition(ctx context.Context, name string, intgDef config.IntegrationDef, providerDirs []string) (*provider.Definition, error) {

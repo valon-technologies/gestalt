@@ -1,6 +1,7 @@
 package bootstrap_test
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -26,8 +27,8 @@ func stubDatastoreFactory() bootstrap.DatastoreFactory {
 	}
 }
 
-func stubIntegrationFactory(name string) bootstrap.IntegrationFactory {
-	return func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
+func stubProviderFactory(name string) bootstrap.ProviderFactory {
+	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		return &coretesting.StubIntegration{N: name}, nil
 	}
 }
@@ -41,8 +42,8 @@ func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 	return s.ops
 }
 
-func stubIntegrationFactoryWithOps(name string, ops []core.Operation) bootstrap.IntegrationFactory {
-	return func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
+func stubProviderFactoryWithOps(name string, ops []core.Operation) bootstrap.ProviderFactory {
+	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		return &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: name},
 			ops:             ops,
@@ -68,14 +69,15 @@ func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth["test-auth"] = stubAuthFactory("test-auth")
 	f.Datastores["test-store"] = stubDatastoreFactory()
-	f.Integrations["alpha"] = stubIntegrationFactory("alpha")
+	f.Providers["alpha"] = stubProviderFactory("alpha")
 	return f
 }
 
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
-	result, err := bootstrap.Bootstrap(validConfig(), validFactories())
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -88,53 +90,56 @@ func TestBootstrap(t *testing.T) {
 	if result.Datastore == nil {
 		t.Fatal("Datastore is nil")
 	}
-	names := result.Integrations.List()
+	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Integrations.List: got %v, want [alpha]", names)
+		t.Errorf("Providers.List: got %v, want [alpha]", names)
 	}
 }
 
-func TestBootstrapMultipleIntegrations(t *testing.T) {
+func TestBootstrapMultipleProviders(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	cfg := validConfig()
 	cfg.Integrations["beta"] = config.IntegrationDef{}
 
 	factories := validFactories()
-	factories.Integrations["beta"] = stubIntegrationFactory("beta")
+	factories.Providers["beta"] = stubProviderFactory("beta")
 
-	result, err := bootstrap.Bootstrap(cfg, factories)
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	names := result.Integrations.List()
+	names := result.Providers.List()
 	if len(names) != 2 {
-		t.Fatalf("Integrations.List: got %d items, want 2", len(names))
+		t.Fatalf("Providers.List: got %d items, want 2", len(names))
 	}
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	cfg := validConfig()
 	cfg.Integrations = nil
 
-	result, err := bootstrap.Bootstrap(cfg, validFactories())
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if len(result.Integrations.List()) != 0 {
-		t.Errorf("expected empty integrations, got %v", result.Integrations.List())
+	if got := result.Providers.List(); len(got) != 0 {
+		t.Errorf("expected empty providers, got %v", got)
 	}
 }
 
 func TestBootstrapDevMode(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	cfg := validConfig()
 	cfg.Server.DevMode = true
 
-	result, err := bootstrap.Bootstrap(cfg, validFactories())
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -143,8 +148,52 @@ func TestBootstrapDevMode(t *testing.T) {
 	}
 }
 
+func TestBootstrapDefaultProviderFactory(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
+	factories.Datastores["test-store"] = stubDatastoreFactory()
+	factories.DefaultProvider = stubProviderFactory("default-alpha")
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	names := result.Providers.List()
+	if len(names) != 1 || names[0] != "alpha" {
+		t.Errorf("Providers.List: got %v, want [alpha]", names)
+	}
+}
+
+func TestBootstrapNamedOverridesDefault(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
+	factories.Datastores["test-store"] = stubDatastoreFactory()
+	factories.DefaultProvider = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+	factories.Providers["alpha"] = stubProviderFactory("alpha")
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	names := result.Providers.List()
+	if len(names) != 1 || names[0] != "alpha" {
+		t.Errorf("Providers.List: got %v, want [alpha]", names)
+	}
+}
+
 func TestBootstrapUnknownProvider(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	cases := []struct {
 		name   string
@@ -159,7 +208,7 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 			mutate: func(c *config.Config) { c.Datastore.Provider = "unknown" },
 		},
 		{
-			name: "unknown integration",
+			name: "no factory for integration",
 			mutate: func(c *config.Config) {
 				c.Integrations["unknown"] = config.IntegrationDef{}
 			},
@@ -171,7 +220,7 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 			t.Parallel()
 			cfg := validConfig()
 			tc.mutate(cfg)
-			_, err := bootstrap.Bootstrap(cfg, validFactories())
+			_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -181,6 +230,7 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 
 func TestBootstrapFactoryError(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	cases := []struct {
 		name   string
@@ -203,10 +253,10 @@ func TestBootstrapFactoryError(t *testing.T) {
 			},
 		},
 		{
-			name: "integration factory error",
+			name: "provider factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Integrations["alpha"] = func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
-					return nil, fmt.Errorf("integration broke")
+				f.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+					return nil, fmt.Errorf("provider broke")
 				}
 			},
 		},
@@ -217,7 +267,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 			t.Parallel()
 			factories := validFactories()
 			tc.mutate(factories)
-			_, err := bootstrap.Bootstrap(validConfig(), factories)
+			_, err := bootstrap.Bootstrap(ctx, validConfig(), factories)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -227,6 +277,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 
 func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	t.Run("passphrase produces 32-byte key", func(t *testing.T) {
 		t.Parallel()
@@ -241,7 +292,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		cfg := validConfig()
 		cfg.Server.EncryptionKey = "my-passphrase"
 
-		if _, err := bootstrap.Bootstrap(cfg, factories); err != nil {
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		if len(receivedKey) != 32 {
@@ -268,7 +319,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		cfg := validConfig()
 		cfg.Server.EncryptionKey = hexKey
 
-		if _, err := bootstrap.Bootstrap(cfg, factories); err != nil {
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		if hex.EncodeToString(receivedKey) != hexKey {
@@ -288,7 +339,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 			}
 			cfg := validConfig()
 			cfg.Server.EncryptionKey = "deterministic"
-			if _, err := bootstrap.Bootstrap(cfg, factories); err != nil {
+			if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
 				t.Fatalf("Bootstrap: %v", err)
 			}
 		}
@@ -308,7 +359,7 @@ func TestBootstrapBaseURL(t *testing.T) {
 		receivedBaseURL = deps.BaseURL
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
-	factories.Integrations["alpha"] = func(def config.IntegrationDef, _ bootstrap.Deps) (core.Integration, error) {
+	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		receivedRedirectURL = def.RedirectURL
 		return &coretesting.StubIntegration{N: "alpha"}, nil
 	}
@@ -334,7 +385,7 @@ integrations:
 		t.Fatalf("config.Load: %v", err)
 	}
 
-	if _, err := bootstrap.Bootstrap(cfg, factories); err != nil {
+	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 
@@ -349,6 +400,7 @@ integrations:
 
 func TestBootstrapAllowedOperations(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 
 	allOps := []core.Operation{
 		{Name: "list_channels"},
@@ -358,18 +410,18 @@ func TestBootstrapAllowedOperations(t *testing.T) {
 
 	cfg := validConfig()
 	factories := validFactories()
-	factories.Integrations["alpha"] = stubIntegrationFactoryWithOps("alpha", allOps[:2])
+	factories.Providers["alpha"] = stubProviderFactoryWithOps("alpha", allOps[:2])
 
-	result, err := bootstrap.Bootstrap(cfg, factories)
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 
-	intg, err := result.Integrations.Get("alpha")
+	prov, err := result.Providers.Get("alpha")
 	if err != nil {
-		t.Fatalf("integration 'alpha' not found: %v", err)
+		t.Fatalf("provider 'alpha' not found: %v", err)
 	}
-	if len(intg.ListOperations()) != 2 {
-		t.Fatalf("ListOperations: got %d ops, want 2", len(intg.ListOperations()))
+	if len(prov.ListOperations()) != 2 {
+		t.Fatalf("ListOperations: got %d ops, want 2", len(prov.ListOperations()))
 	}
 }

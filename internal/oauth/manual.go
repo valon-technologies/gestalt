@@ -8,8 +8,6 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 )
 
-// ManualAuthHandler implements the non-OAuth parts of core.Integration
-// for integrations that use static API keys or tokens.
 type ManualAuthHandler struct{}
 
 func (h ManualAuthHandler) AuthorizationURL(state string, _ []string) string {

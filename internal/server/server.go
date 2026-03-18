@@ -9,27 +9,27 @@ import (
 )
 
 type Server struct {
-	router       chi.Router
-	auth         core.AuthProvider
-	datastore    core.Datastore
-	integrations *registry.PluginMap[core.Integration]
-	devMode      bool
+	router    chi.Router
+	auth      core.AuthProvider
+	datastore core.Datastore
+	providers *registry.PluginMap[core.Provider]
+	devMode   bool
 }
 
 type Config struct {
-	Auth         core.AuthProvider
-	Datastore    core.Datastore
-	Integrations *registry.PluginMap[core.Integration]
-	DevMode      bool
+	Auth      core.AuthProvider
+	Datastore core.Datastore
+	Providers *registry.PluginMap[core.Provider]
+	DevMode   bool
 }
 
 func New(cfg Config) *Server {
 	s := &Server{
-		router:       chi.NewRouter(),
-		auth:         cfg.Auth,
-		datastore:    cfg.Datastore,
-		integrations: cfg.Integrations,
-		devMode:      cfg.DevMode,
+		router:    chi.NewRouter(),
+		auth:      cfg.Auth,
+		datastore: cfg.Datastore,
+		providers: cfg.Providers,
+		devMode:   cfg.DevMode,
 	}
 
 	s.routes()

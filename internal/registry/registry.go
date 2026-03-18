@@ -55,13 +55,13 @@ func (m *PluginMap[T]) List() []string {
 type Registry struct {
 	Datastores    PluginMap[core.Datastore]
 	AuthProviders PluginMap[core.AuthProvider]
-	Integrations  PluginMap[core.Integration]
+	Providers     PluginMap[core.Provider]
 }
 
 func New() *Registry {
 	return &Registry{
 		Datastores:    newPluginMap[core.Datastore]("datastore"),
 		AuthProviders: newPluginMap[core.AuthProvider]("auth provider"),
-		Integrations:  newPluginMap[core.Integration]("integration"),
+		Providers:     newPluginMap[core.Provider]("provider"),
 	}
 }

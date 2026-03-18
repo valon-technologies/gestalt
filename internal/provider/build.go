@@ -14,7 +14,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/oauth"
 )
 
-func Build(def *Definition, intg config.IntegrationDef) (core.Integration, error) {
+func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	d := *def // shallow copy so we don't mutate the caller's definition
 	def = &d
 	applyOverrides(def, intg)
@@ -84,7 +84,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Integration, error
 		base.RequestMutator = mutator
 	}
 
-	var result core.Integration = base
+	var result core.Provider = base
 
 	if ops := intg.AllowedOperations; ops != nil {
 		if len(ops) == 0 {

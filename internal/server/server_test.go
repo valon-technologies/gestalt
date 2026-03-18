@@ -16,15 +16,15 @@ import (
 	"github.com/valon-technologies/toolshed/internal/server"
 )
 
-func newTestRegistry(t *testing.T, integrations ...core.Integration) *registry.PluginMap[core.Integration] {
+func newTestRegistry(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
 	t.Helper()
 	reg := registry.New()
-	for _, intg := range integrations {
-		if err := reg.Integrations.Register(intg.Name(), intg); err != nil {
-			t.Fatalf("registering integration: %v", err)
+	for _, prov := range providers {
+		if err := reg.Providers.Register(prov.Name(), prov); err != nil {
+			t.Fatalf("registering provider: %v", err)
 		}
 	}
-	return &reg.Integrations
+	return &reg.Providers
 }
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
@@ -32,9 +32,9 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	cfg := server.Config{
 		Auth:      &coretesting.StubAuthProvider{N: "test"},
 		Datastore: &coretesting.StubDatastore{},
-		Integrations: func() *registry.PluginMap[core.Integration] {
+		Providers: func() *registry.PluginMap[core.Provider] {
 			reg := registry.New()
-			return &reg.Integrations
+			return &reg.Providers
 		}(),
 		DevMode: false,
 	}
@@ -181,7 +181,7 @@ func TestListIntegrations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, stub)
+		cfg.Providers = newTestRegistry(t, stub)
 	})
 	defer ts.Close()
 
@@ -222,7 +222,7 @@ func TestListOperations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "test-int"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, stub)
+		cfg.Providers = newTestRegistry(t, stub)
 	})
 	defer ts.Close()
 
@@ -280,7 +280,7 @@ func TestExecuteOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, fullStub)
+		cfg.Providers = newTestRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -345,7 +345,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, fullStub)
+		cfg.Providers = newTestRegistry(t, fullStub)
 	})
 	defer ts.Close()
 
@@ -374,7 +374,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, fullStub)
+		cfg.Providers = newTestRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -512,7 +512,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, stub)
+		cfg.Providers = newTestRegistry(t, stub)
 	})
 	defer ts.Close()
 
@@ -558,7 +558,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, stub)
+		cfg.Providers = newTestRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -677,7 +677,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Integrations = newTestRegistry(t, fullStub)
+		cfg.Providers = newTestRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
