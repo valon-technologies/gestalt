@@ -22,6 +22,10 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
+
+	_ "github.com/valon-technologies/toolshed/plugins/integrations/datadog"
+	_ "github.com/valon-technologies/toolshed/plugins/integrations/hex"
+	_ "github.com/valon-technologies/toolshed/plugins/integrations/slack"
 )
 
 func main() {
