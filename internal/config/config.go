@@ -17,10 +17,16 @@ const (
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
+	Secrets      SecretsConfig             `yaml:"secrets"`
 	AuthProfiles map[string]AuthProfile    `yaml:"auth_profiles"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
 	ProviderDirs []string                  `yaml:"provider_dirs"`
 	Server       ServerConfig              `yaml:"server"`
+}
+
+type SecretsConfig struct {
+	Provider string    `yaml:"provider"`
+	Config   yaml.Node `yaml:"config"`
 }
 
 type AuthProfile struct {
@@ -123,6 +129,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Datastore.Provider == "" {
 		cfg.Datastore.Provider = "sqlite"
+	}
+	if cfg.Secrets.Provider == "" {
+		cfg.Secrets.Provider = "env"
 	}
 }
 

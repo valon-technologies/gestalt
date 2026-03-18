@@ -22,6 +22,9 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
+	secretsenv "github.com/valon-technologies/toolshed/plugins/secrets/env"
+	secretsfile "github.com/valon-technologies/toolshed/plugins/secrets/file"
+	secretsgcp "github.com/valon-technologies/toolshed/plugins/secrets/gcp"
 
 	_ "github.com/valon-technologies/toolshed/plugins/integrations/datadog"
 	_ "github.com/valon-technologies/toolshed/plugins/integrations/hex"
@@ -55,12 +58,18 @@ func run() error {
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
 	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
+	factories.Secrets["env"] = secretsenv.Factory
+	factories.Secrets["file"] = secretsfile.Factory
+	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
 		return fmt.Errorf("bootstrap: %v", err)
 	}
 	defer func() { _ = result.Datastore.Close() }()
+	if closer, ok := result.SecretManager.(interface{ Close() error }); ok {
+		defer func() { _ = closer.Close() }()
+	}
 
 	if err := result.Datastore.Migrate(ctx); err != nil {
 		return fmt.Errorf("running datastore migrations: %v", err)
