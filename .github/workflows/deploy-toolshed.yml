@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'valon-tools/**'
+      - 'toolshed/**'
       - '.github/workflows/deploy-toolshed.yml'
   workflow_dispatch:
 
@@ -72,4 +73,21 @@ jobs:
             --cpu=1 \
             --min-instances=0 \
             --max-instances=1 \
-            --port=8080
+            --port=8080 \
+            --set-secrets="\
+          BASE_URL=toolshed-base-url:latest,\
+          ENCRYPTION_KEY=gestalt-encryption-key:latest,\
+          GOOGLE_CLIENT_ID=google-oauth-client-id:latest,\
+          GOOGLE_CLIENT_SECRET=google-oauth-client-secret:latest,\
+          SLACK_CLIENT_ID=slack-client-id:latest,\
+          SLACK_CLIENT_SECRET=slack-client-secret:latest,\
+          FIGMA_CLIENT_ID=gestalt-figma-client-id:latest,\
+          FIGMA_CLIENT_SECRET=gestalt-figma-client-secret:latest,\
+          PAGERDUTY_CLIENT_ID=pagerduty-client-id:latest,\
+          PAGERDUTY_CLIENT_SECRET=pagerduty-client-secret:latest,\
+          GITLAB_CLIENT_ID=gitlab-client-id:latest,\
+          GITLAB_CLIENT_SECRET=gitlab-client-secret:latest,\
+          NOTION_CLIENT_ID=notion-client-id:latest,\
+          NOTION_CLIENT_SECRET=notion-client-secret:latest,\
+          RAMP_CLIENT_ID=ramp-client-id:latest,\
+          RAMP_CLIENT_SECRET=ramp-client-secret:latest"
