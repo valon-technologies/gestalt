@@ -229,6 +229,52 @@ func TestLoadErrors(t *testing.T) {
 	}
 }
 
+func TestHelmValuesConfigLoads(t *testing.T) {
+	t.Parallel()
+
+	helmValues, err := os.ReadFile(filepath.Join("..", "..", "deploy", "helm", "toolshed", "values.yaml"))
+	if err != nil {
+		t.Fatalf("reading helm values.yaml: %v", err)
+	}
+
+	var values struct {
+		Config yaml.Node `yaml:"config"`
+	}
+	if err := yaml.Unmarshal(helmValues, &values); err != nil {
+		t.Fatalf("parsing helm values.yaml: %v", err)
+	}
+
+	configBytes, err := yaml.Marshal(&values.Config)
+	if err != nil {
+		t.Fatalf("re-marshaling config block: %v", err)
+	}
+
+	path := mustWriteConfigFile(t, string(configBytes))
+
+	envMap := map[string]string{
+		"TOOLSHED_BASE_URL":       "https://toolshed.example.com",
+		"TOOLSHED_ENCRYPTION_KEY": "test-encryption-key-for-ci",
+		"GOOGLE_CLIENT_ID":        "test-client-id",
+		"GOOGLE_CLIENT_SECRET":    "test-client-secret",
+	}
+	getenv := func(key string) string { return envMap[key] }
+
+	cfg, err := LoadWithMapping(path, getenv)
+	if err != nil {
+		t.Fatalf("LoadWithMapping on helm values config: %v", err)
+	}
+
+	if cfg.Auth.Provider != "google" {
+		t.Errorf("Auth.Provider: got %q, want %q", cfg.Auth.Provider, "google")
+	}
+	if cfg.Server.Port != 8080 {
+		t.Errorf("Server.Port: got %d, want 8080", cfg.Server.Port)
+	}
+	if cfg.Datastore.Provider != "sqlite" {
+		t.Errorf("Datastore.Provider: got %q, want %q", cfg.Datastore.Provider, "sqlite")
+	}
+}
+
 func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 

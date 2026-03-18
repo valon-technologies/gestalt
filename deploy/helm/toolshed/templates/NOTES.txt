@@ -36,3 +36,13 @@ Verify the deployment:
 
 Health check:
   curl http://127.0.0.1:{{ .Values.service.port }}/health
+
+Required environment variables (provide via extraEnv):
+  TOOLSHED_BASE_URL        Public URL of this Toolshed instance
+  TOOLSHED_ENCRYPTION_KEY  Encryption key for token storage
+
+The default auth provider is Google. Provide these for Google OAuth:
+  GOOGLE_CLIENT_ID         Google OAuth client ID
+  GOOGLE_CLIENT_SECRET     Google OAuth client secret
+
+For OIDC, override config.auth.provider and config.auth.config in your values file.
