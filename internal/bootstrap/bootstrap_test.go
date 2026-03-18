@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
@@ -51,10 +52,17 @@ func stubProviderFactoryWithOps(name string, ops []core.Operation) bootstrap.Pro
 	}
 }
 
+func stubSecretManagerFactory() bootstrap.SecretManagerFactory {
+	return func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{}, nil
+	}
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth:      config.AuthConfig{Provider: "test-auth"},
 		Datastore: config.DatastoreConfig{Provider: "test-store"},
+		Secrets:   config.SecretsConfig{Provider: "test-secrets"},
 		Integrations: map[string]config.IntegrationDef{
 			"alpha": {},
 		},
@@ -70,6 +78,7 @@ func validFactories() *bootstrap.FactoryRegistry {
 	f.Auth["test-auth"] = stubAuthFactory("test-auth")
 	f.Datastores["test-store"] = stubDatastoreFactory()
 	f.Providers["alpha"] = stubProviderFactory("alpha")
+	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	return f
 }
 
@@ -157,6 +166,7 @@ func TestBootstrapDefaultProviderFactory(t *testing.T) {
 	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
 	factories.Datastores["test-store"] = stubDatastoreFactory()
 	factories.DefaultProvider = stubProviderFactory("default-alpha")
+	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -180,6 +190,7 @@ func TestBootstrapNamedOverridesDefault(t *testing.T) {
 		return nil, fmt.Errorf("should not be called")
 	}
 	factories.Providers["alpha"] = stubProviderFactory("alpha")
+	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -206,6 +217,10 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 		{
 			name:   "unknown datastore",
 			mutate: func(c *config.Config) { c.Datastore.Provider = "unknown" },
+		},
+		{
+			name:   "unknown secrets provider",
+			mutate: func(c *config.Config) { c.Secrets.Provider = "unknown" },
 		},
 		{
 			name: "no factory for integration",
@@ -363,6 +378,8 @@ func TestBootstrapBaseURL(t *testing.T) {
 		receivedRedirectURL = def.RedirectURL
 		return &coretesting.StubIntegration{N: "alpha"}, nil
 	}
+	// config.Load defaults secrets.provider to "env"
+	factories.Secrets["env"] = stubSecretManagerFactory()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	cfgYAML := `
@@ -424,4 +441,240 @@ func TestBootstrapAllowedOperations(t *testing.T) {
 	if len(prov.ListOperations()) != 2 {
 		t.Fatalf("ListOperations: got %d ops, want 2", len(prov.ListOperations()))
 	}
+}
+
+func TestBootstrapSecretResolution(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("resolves secret:// in encryption key", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedKey []byte
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
+			}, nil
+		}
+		factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+			receivedKey = deps.EncryptionKey
+			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Server.EncryptionKey = "secret://enc-key"
+
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if len(receivedKey) != 32 {
+			t.Errorf("key length: got %d, want 32", len(receivedKey))
+		}
+	})
+
+	t.Run("resolves secret:// in integration client_secret", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedDef config.IntegrationDef
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"slack-secret": "resolved-secret"},
+			}, nil
+		}
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+			receivedDef = intg
+			return &coretesting.StubIntegration{N: "alpha"}, nil
+		}
+
+		cfg := validConfig()
+		intg := cfg.Integrations["alpha"]
+		intg.ClientSecret = "secret://slack-secret"
+		cfg.Integrations["alpha"] = intg
+
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if receivedDef.ClientSecret != "resolved-secret" {
+			t.Errorf("ClientSecret: got %q, want %q", receivedDef.ClientSecret, "resolved-secret")
+		}
+	})
+
+	t.Run("leaves non-secret values unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Server.EncryptionKey = "plain-passphrase"
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if result.Auth == nil {
+			t.Fatal("Auth is nil")
+		}
+	})
+
+	t.Run("error on unresolvable secret", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Server.EncryptionKey = "secret://missing-key"
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing-key") {
+			t.Errorf("error should mention secret name: %v", err)
+		}
+	})
+
+	t.Run("error on empty resolved value", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"empty-secret": ""},
+			}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Server.EncryptionKey = "secret://empty-secret"
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "empty value") {
+			t.Errorf("error should mention empty value: %v", err)
+		}
+	})
+
+	t.Run("resolves secret:// in yaml.Node auth config", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"auth-secret": "resolved-auth-secret"},
+			}, nil
+		}
+
+		var receivedNode yaml.Node
+		factories.Auth["test-auth"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+			receivedNode = node
+			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+		}
+
+		cfg := validConfig()
+		// Build a yaml.Node mapping with a secret:// value.
+		cfg.Auth.Config = yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "client_secret", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "secret://auth-secret", Tag: "!!str"},
+			},
+		}
+
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+
+		// The resolved node should have the value replaced.
+		var decoded map[string]string
+		if err := receivedNode.Decode(&decoded); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if decoded["client_secret"] != "resolved-auth-secret" {
+			t.Errorf("client_secret: got %q, want %q", decoded["client_secret"], "resolved-auth-secret")
+		}
+	})
+
+	t.Run("result includes SecretManager", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if result.SecretManager == nil {
+			t.Fatal("SecretManager is nil")
+		}
+	})
+
+	t.Run("secrets factory error", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return nil, fmt.Errorf("secrets broke")
+		}
+
+		_, err := bootstrap.Bootstrap(ctx, validConfig(), factories)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "secrets broke") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("resolves secret:// in map[string]string fields", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedDef config.IntegrationDef
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"api-key": "resolved-key"},
+			}, nil
+		}
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+			receivedDef = intg
+			return &coretesting.StubIntegration{N: "alpha"}, nil
+		}
+
+		cfg := validConfig()
+		intg := cfg.Integrations["alpha"]
+		intg.Headers = map[string]string{"Authorization": "secret://api-key"}
+		cfg.Integrations["alpha"] = intg
+
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if receivedDef.Headers["Authorization"] != "resolved-key" {
+			t.Errorf("Headers[Authorization]: got %q, want %q", receivedDef.Headers["Authorization"], "resolved-key")
+		}
+	})
+
+	t.Run("resolves secret:// in []string fields", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedDef config.IntegrationDef
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"meta-val": "resolved-meta"},
+			}, nil
+		}
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+			receivedDef = intg
+			return &coretesting.StubIntegration{N: "alpha"}, nil
+		}
+
+		cfg := validConfig()
+		intg := cfg.Integrations["alpha"]
+		intg.Auth.TokenMetadata = []string{"secret://meta-val"}
+		cfg.Integrations["alpha"] = intg
+
+		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if len(receivedDef.Auth.TokenMetadata) != 1 || receivedDef.Auth.TokenMetadata[0] != "resolved-meta" {
+			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Auth.TokenMetadata)
+		}
+	})
 }

@@ -6,6 +6,17 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 )
 
+type StubSecretManager struct {
+	Secrets map[string]string
+}
+
+func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, error) {
+	if v, ok := s.Secrets[name]; ok {
+		return v, nil
+	}
+	return "", core.ErrSecretNotFound
+}
+
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
 	GetUserFn          func(context.Context, string) (*core.User, error)
