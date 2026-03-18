@@ -25,7 +25,7 @@ func stubDatastoreFactory() bootstrap.DatastoreFactory {
 }
 
 func stubIntegrationFactory(name string) bootstrap.IntegrationFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.Integration, error) {
+	return func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
 		return &coretesting.StubIntegration{N: name}, nil
 	}
 }
@@ -40,7 +40,7 @@ func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 }
 
 func stubIntegrationFactoryWithOps(name string, ops []core.Operation) bootstrap.IntegrationFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.Integration, error) {
+	return func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
 		return &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: name},
 			ops:             ops,
@@ -48,25 +48,11 @@ func stubIntegrationFactoryWithOps(name string, ops []core.Operation) bootstrap.
 	}
 }
 
-func yamlNodeWithMeta(t *testing.T, data map[string]any) yaml.Node {
-	t.Helper()
-	b, err := yaml.Marshal(data)
-	if err != nil {
-		t.Fatalf("marshaling yaml: %v", err)
-	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(b, &doc); err != nil {
-		t.Fatalf("unmarshaling yaml: %v", err)
-	}
-	return *doc.Content[0]
-}
-
 func validConfig() *config.Config {
 	return &config.Config{
-		Auth:         config.AuthConfig{Provider: "test-auth"},
-		Datastore:    config.DatastoreConfig{Provider: "test-store"},
-		Integrations: []string{"alpha"},
-		IntegrationConfig: map[string]yaml.Node{
+		Auth:      config.AuthConfig{Provider: "test-auth"},
+		Datastore: config.DatastoreConfig{Provider: "test-store"},
+		Integrations: map[string]config.IntegrationDef{
 			"alpha": {},
 		},
 		Server: config.ServerConfig{
@@ -110,8 +96,7 @@ func TestBootstrapMultipleIntegrations(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Integrations = append(cfg.Integrations, "beta")
-	cfg.IntegrationConfig["beta"] = yaml.Node{}
+	cfg.Integrations["beta"] = config.IntegrationDef{}
 
 	factories := validFactories()
 	factories.Integrations["beta"] = stubIntegrationFactory("beta")
@@ -172,8 +157,10 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 			mutate: func(c *config.Config) { c.Datastore.Provider = "unknown" },
 		},
 		{
-			name:   "unknown integration",
-			mutate: func(c *config.Config) { c.Integrations = append(c.Integrations, "unknown") },
+			name: "unknown integration",
+			mutate: func(c *config.Config) {
+				c.Integrations["unknown"] = config.IntegrationDef{}
+			},
 		},
 	}
 
@@ -216,7 +203,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "integration factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Integrations["alpha"] = func(yaml.Node, bootstrap.Deps) (core.Integration, error) {
+				f.Integrations["alpha"] = func(config.IntegrationDef, bootstrap.Deps) (core.Integration, error) {
 					return nil, fmt.Errorf("integration broke")
 				}
 			},
@@ -318,78 +305,20 @@ func TestBootstrapAllowedOperations(t *testing.T) {
 		{Name: "delete_message"},
 	}
 
-	cases := []struct {
-		name      string
-		ops       []core.Operation
-		allowed   []string // nil means omit from YAML
-		wantErr   bool
-		wantCount int
-	}{
-		{
-			name:      "subset restricts operations",
-			ops:       allOps,
-			allowed:   []string{"list_channels", "send_message"},
-			wantCount: 2,
-		},
-		{
-			name:      "wildcard exposes all",
-			ops:       allOps[:2],
-			allowed:   []string{"*"},
-			wantCount: 2,
-		},
-		{
-			name:      "absent exposes all",
-			ops:       allOps[:2],
-			allowed:   nil,
-			wantCount: 2,
-		},
-		{
-			name:    "unknown operation name rejected",
-			ops:     allOps[:1],
-			allowed: []string{"nonexistent_op"},
-			wantErr: true,
-		},
-		{
-			name:    "empty allowlist rejected",
-			ops:     allOps[:1],
-			allowed: []string{},
-			wantErr: true,
-		},
+	cfg := validConfig()
+	factories := validFactories()
+	factories.Integrations["alpha"] = stubIntegrationFactoryWithOps("alpha", allOps[:2])
+
+	result, err := bootstrap.Bootstrap(cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := validConfig()
-			if tc.allowed != nil {
-				cfg.IntegrationConfig["alpha"] = yamlNodeWithMeta(t, map[string]any{
-					"allowed_operations": tc.allowed,
-				})
-			}
-
-			factories := validFactories()
-			factories.Integrations["alpha"] = stubIntegrationFactoryWithOps("alpha", tc.ops)
-
-			result, err := bootstrap.Bootstrap(cfg, factories)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Bootstrap: %v", err)
-			}
-
-			intg, err := result.Integrations.Get("alpha")
-			if err != nil {
-				t.Fatalf("integration 'alpha' not found: %v", err)
-			}
-			got := intg.ListOperations()
-			if len(got) != tc.wantCount {
-				t.Fatalf("ListOperations: got %d ops, want %d", len(got), tc.wantCount)
-			}
-		})
+	intg, err := result.Integrations.Get("alpha")
+	if err != nil {
+		t.Fatalf("integration 'alpha' not found: %v", err)
+	}
+	if len(intg.ListOperations()) != 2 {
+		t.Fatalf("ListOperations: got %d ops, want 2", len(intg.ListOperations()))
 	}
 }

@@ -8,11 +8,19 @@ import (
 )
 
 type Config struct {
-	Auth              AuthConfig           `yaml:"auth"`
-	Datastore         DatastoreConfig      `yaml:"datastore"`
-	Integrations      []string             `yaml:"integrations"`
-	IntegrationConfig map[string]yaml.Node `yaml:"integration_config"`
-	Server            ServerConfig         `yaml:"server"`
+	Auth         AuthConfig                `yaml:"auth"`
+	Datastore    DatastoreConfig           `yaml:"datastore"`
+	AuthProfiles map[string]AuthProfile    `yaml:"auth_profiles"`
+	Integrations map[string]IntegrationDef `yaml:"integrations"`
+	ProviderDirs []string                  `yaml:"provider_dirs"`
+	Server       ServerConfig              `yaml:"server"`
+}
+
+type AuthProfile struct {
+	ClientID     string        `yaml:"client_id"`
+	ClientSecret string        `yaml:"client_secret"`
+	RedirectURL  string        `yaml:"redirect_url"`
+	Auth         AuthOverrides `yaml:"auth"`
 }
 
 type AuthConfig struct {
@@ -29,6 +37,44 @@ type ServerConfig struct {
 	Port          int    `yaml:"port"`
 	EncryptionKey string `yaml:"encryption_key"`
 	DevMode       bool   `yaml:"dev_mode"`
+}
+
+type IntegrationDef struct {
+	OpenAPI     string `yaml:"openapi"`
+	Provider    string `yaml:"provider"`
+	AuthProfile string `yaml:"auth_profile"`
+
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	RedirectURL  string `yaml:"redirect_url"`
+	BaseURL      string `yaml:"base_url"`
+
+	Auth AuthOverrides `yaml:"auth"`
+
+	ResponseCheck  string            `yaml:"response_check"`
+	TokenParser    string            `yaml:"token_parser"`
+	RequestMutator string            `yaml:"request_mutator"`
+	TokenPrefix    string            `yaml:"token_prefix"`
+	AuthStyle      string            `yaml:"auth_style"`
+	Headers        map[string]string `yaml:"headers"`
+
+	AllowedOperations map[string]string `yaml:"allowed_operations"`
+}
+
+type AuthOverrides struct {
+	Type                string            `yaml:"type"`
+	AuthorizationURL    string            `yaml:"authorization_url"`
+	TokenURL            string            `yaml:"token_url"`
+	ClientAuth          string            `yaml:"client_auth"`
+	TokenExchange       string            `yaml:"token_exchange"`
+	ScopeSeparator      string            `yaml:"scope_separator"`
+	PKCE                bool              `yaml:"pkce"`
+	AuthorizationParams map[string]string `yaml:"authorization_params"`
+	TokenParams         map[string]string `yaml:"token_params"`
+	RefreshParams       map[string]string `yaml:"refresh_params"`
+	AcceptHeader        string            `yaml:"accept_header"`
+	TokenMetadata       []string          `yaml:"token_metadata"`
+	ResponseHook        string            `yaml:"response_hook"`
 }
 
 func Load(path string) (*Config, error) {
@@ -50,6 +96,10 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 
 	applyDefaults(&cfg)
 
+	if err := resolveAuthProfiles(&cfg); err != nil {
+		return nil, err
+	}
+
 	if err := validate(&cfg); err != nil {
 		return nil, err
 	}
@@ -64,6 +114,69 @@ func applyDefaults(cfg *Config) {
 	if cfg.Datastore.Provider == "" {
 		cfg.Datastore.Provider = "sqlite"
 	}
+}
+
+func resolveAuthProfiles(cfg *Config) error {
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.AuthProfile == "" {
+			continue
+		}
+		profile, ok := cfg.AuthProfiles[intg.AuthProfile]
+		if !ok {
+			return fmt.Errorf("integration %q references unknown auth_profile %q", name, intg.AuthProfile)
+		}
+		if intg.ClientID == "" {
+			intg.ClientID = profile.ClientID
+		}
+		if intg.ClientSecret == "" {
+			intg.ClientSecret = profile.ClientSecret
+		}
+		if intg.RedirectURL == "" {
+			intg.RedirectURL = profile.RedirectURL
+		}
+		if intg.Auth.Type == "" {
+			intg.Auth.Type = profile.Auth.Type
+		}
+		if intg.Auth.AuthorizationURL == "" {
+			intg.Auth.AuthorizationURL = profile.Auth.AuthorizationURL
+		}
+		if intg.Auth.TokenURL == "" {
+			intg.Auth.TokenURL = profile.Auth.TokenURL
+		}
+		if intg.Auth.ClientAuth == "" {
+			intg.Auth.ClientAuth = profile.Auth.ClientAuth
+		}
+		if intg.Auth.TokenExchange == "" {
+			intg.Auth.TokenExchange = profile.Auth.TokenExchange
+		}
+		if !intg.Auth.PKCE && profile.Auth.PKCE {
+			intg.Auth.PKCE = true
+		}
+		if intg.Auth.AuthorizationParams == nil {
+			intg.Auth.AuthorizationParams = profile.Auth.AuthorizationParams
+		}
+		if intg.Auth.TokenParams == nil {
+			intg.Auth.TokenParams = profile.Auth.TokenParams
+		}
+		if intg.Auth.RefreshParams == nil {
+			intg.Auth.RefreshParams = profile.Auth.RefreshParams
+		}
+		if intg.Auth.ScopeSeparator == "" {
+			intg.Auth.ScopeSeparator = profile.Auth.ScopeSeparator
+		}
+		if intg.Auth.AcceptHeader == "" {
+			intg.Auth.AcceptHeader = profile.Auth.AcceptHeader
+		}
+		if intg.Auth.TokenMetadata == nil {
+			intg.Auth.TokenMetadata = profile.Auth.TokenMetadata
+		}
+		if intg.Auth.ResponseHook == "" {
+			intg.Auth.ResponseHook = profile.Auth.ResponseHook
+		}
+		cfg.Integrations[name] = intg
+	}
+	return nil
 }
 
 func validate(cfg *Config) error {

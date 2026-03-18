@@ -6,14 +6,9 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/integration"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"gopkg.in/yaml.v3"
 )
-
-type integrationMeta struct {
-	AllowedOperations []string `yaml:"allowed_operations"`
-}
 
 type Deps struct {
 	EncryptionKey []byte
@@ -21,7 +16,7 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
-type IntegrationFactory func(node yaml.Node, deps Deps) (core.Integration, error)
+type IntegrationFactory func(intg config.IntegrationDef, deps Deps) (core.Integration, error)
 
 type FactoryRegistry struct {
 	Auth         map[string]AuthFactory
@@ -59,9 +54,12 @@ func Bootstrap(cfg *config.Config, factories *FactoryRegistry) (*Result, error) 
 		return nil, err
 	}
 
-	integrations, err := buildIntegrations(cfg, factories, deps)
-	if err != nil {
-		return nil, err
+	var integrations *registry.PluginMap[core.Integration]
+	if len(factories.Integrations) > 0 {
+		integrations, err = buildIntegrations(cfg, factories, deps)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Result{
@@ -99,39 +97,15 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 func buildIntegrations(cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Integration], error) {
 	reg := registry.New()
 
-	for _, name := range cfg.Integrations {
+	for name := range cfg.Integrations {
+		intgDef := cfg.Integrations[name]
 		factory, ok := factories.Integrations[name]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: unknown integration %q", name)
 		}
-		node := cfg.IntegrationConfig[name]
-		intg, err := factory(node, deps)
+		intg, err := factory(intgDef, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: integration %q: %w", name, err)
-		}
-
-		var meta integrationMeta
-		if err := node.Decode(&meta); err != nil {
-			return nil, fmt.Errorf("bootstrap: integration %q meta: %w", name, err)
-		}
-
-		if meta.AllowedOperations != nil && len(meta.AllowedOperations) == 0 {
-			return nil, fmt.Errorf("bootstrap: integration %q: allowed_operations cannot be empty; omit the field to allow all operations", name)
-		}
-
-		if allowed := meta.AllowedOperations; len(allowed) > 0 {
-			if !isWildcard(allowed) {
-				opSet := make(map[string]struct{})
-				for _, op := range intg.ListOperations() {
-					opSet[op.Name] = struct{}{}
-				}
-				for _, opName := range allowed {
-					if _, ok := opSet[opName]; !ok {
-						return nil, fmt.Errorf("bootstrap: integration %q: allowed_operations contains unknown operation %q", name, opName)
-					}
-				}
-				intg = integration.NewRestricted(intg, allowed)
-			}
 		}
 
 		if err := reg.Integrations.Register(name, intg); err != nil {
@@ -139,9 +113,4 @@ func buildIntegrations(cfg *config.Config, factories *FactoryRegistry, deps Deps
 		}
 	}
 	return &reg.Integrations, nil
-}
-
-// isWildcard returns true when the allowlist is exactly ["*"].
-func isWildcard(ops []string) bool {
-	return len(ops) == 1 && ops[0] == "*"
 }

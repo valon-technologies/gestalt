@@ -34,6 +34,11 @@ type UpstreamConfig struct {
 	RedirectURL      string
 	ClientAuthMethod ClientAuthMethod
 	PKCE             bool
+
+	ScopeSeparator      string
+	AuthorizationParams map[string]string
+	TokenParams         map[string]string
+	RefreshParams       map[string]string
 }
 
 type ResponseHook func(body []byte) error
@@ -102,7 +107,15 @@ func (h *UpstreamHandler) AuthorizationURLWithPKCE(state string, scopes []string
 	q.Set("response_type", "code")
 	q.Set("state", state)
 	if len(scopes) > 0 {
-		q.Set("scope", strings.Join(scopes, " "))
+		sep := " "
+		if h.cfg.ScopeSeparator != "" {
+			sep = h.cfg.ScopeSeparator
+		}
+		q.Set("scope", strings.Join(scopes, sep))
+	}
+
+	for k, v := range h.cfg.AuthorizationParams {
+		q.Set(k, v)
 	}
 
 	var verifier string
@@ -137,6 +150,10 @@ func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ..
 		data.Set("code_verifier", eo.verifier)
 	}
 
+	for k, v := range h.cfg.TokenParams {
+		data.Set(k, v)
+	}
+
 	return h.tokenRequest(ctx, data)
 }
 
@@ -149,6 +166,10 @@ func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string)
 	if h.cfg.ClientAuthMethod == ClientAuthBody {
 		data.Set("client_id", h.cfg.ClientID)
 		data.Set("client_secret", h.cfg.ClientSecret)
+	}
+
+	for k, v := range h.cfg.RefreshParams {
+		data.Set(k, v)
 	}
 
 	return h.tokenRequest(ctx, data)

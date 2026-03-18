@@ -13,13 +13,15 @@ import (
 
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/openapi"
+	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
-	"github.com/valon-technologies/toolshed/plugins/integration/slack"
 )
 
 func main() {
@@ -45,7 +47,6 @@ func run() error {
 	factories.Datastores["sqlite"] = sqlite.Factory
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
-	factories.Integrations["slack"] = slack.Factory
 
 	result, err := bootstrap.Bootstrap(cfg, factories)
 	if err != nil {
@@ -60,10 +61,15 @@ func run() error {
 		return fmt.Errorf("running datastore migrations: %v", err)
 	}
 
+	reg := registry.New()
+	if err := initIntegrations(ctx, cfg, reg); err != nil {
+		return fmt.Errorf("initializing integrations: %v", err)
+	}
+
 	srv := server.New(server.Config{
 		Auth:         result.Auth,
 		Datastore:    result.Datastore,
-		Integrations: result.Integrations,
+		Integrations: &reg.Integrations,
 		DevMode:      result.DevMode,
 	})
 
@@ -110,4 +116,39 @@ func resolveConfigPath(flagValue string) string {
 		return "config.yaml"
 	}
 	return "/etc/toolshed/config.yaml"
+}
+
+func initIntegrations(ctx context.Context, cfg *config.Config, reg *registry.Registry) error {
+	for name := range cfg.Integrations {
+		intgDef := cfg.Integrations[name]
+		def, err := loadDefinition(ctx, name, intgDef, cfg.ProviderDirs)
+		if err != nil {
+			return fmt.Errorf("integration %q: %w", name, err)
+		}
+
+		intg, err := provider.Build(def, intgDef)
+		if err != nil {
+			return fmt.Errorf("integration %q: %w", name, err)
+		}
+
+		if err := reg.Integrations.Register(name, intg); err != nil {
+			return fmt.Errorf("registering integration %q: %w", name, err)
+		}
+
+		log.Printf("loaded integration %s (%d operations)", name, len(intg.ListOperations()))
+	}
+	return nil
+}
+
+func loadDefinition(ctx context.Context, name string, intgDef config.IntegrationDef, providerDirs []string) (*provider.Definition, error) {
+	switch {
+	case intgDef.OpenAPI != "":
+		return openapi.LoadDefinition(ctx, name, intgDef.OpenAPI, intgDef.AllowedOperations)
+
+	case intgDef.Provider != "":
+		return provider.LoadFile(intgDef.Provider)
+
+	default:
+		return provider.LoadFromDir(name, providerDirs)
+	}
 }

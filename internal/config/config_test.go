@@ -41,13 +41,11 @@ datastore:
   config:
     path: ./data.db
 integrations:
-  - alpha
-  - beta
-integration_config:
   alpha:
-    api_key: key-1
+    client_id: key-1
   beta:
-    api_key: key-2
+    openapi: https://example.com/spec.json
+    client_id: key-2
 server:
   port: 9090
   encryption_key: super-secret-key
@@ -73,11 +71,11 @@ server:
 	if len(cfg.Integrations) != 2 {
 		t.Fatalf("Integrations: got %d items, want 2", len(cfg.Integrations))
 	}
-	if cfg.Integrations[0] != "alpha" {
-		t.Errorf("Integrations[0]: got %q, want %q", cfg.Integrations[0], "alpha")
+	if cfg.Integrations["alpha"].ClientID != "key-1" {
+		t.Errorf("Integrations[alpha].ClientID: got %q, want %q", cfg.Integrations["alpha"].ClientID, "key-1")
 	}
-	if cfg.Integrations[1] != "beta" {
-		t.Errorf("Integrations[1]: got %q, want %q", cfg.Integrations[1], "beta")
+	if cfg.Integrations["beta"].OpenAPI != "https://example.com/spec.json" {
+		t.Errorf("Integrations[beta].OpenAPI: got %q", cfg.Integrations["beta"].OpenAPI)
 	}
 }
 
