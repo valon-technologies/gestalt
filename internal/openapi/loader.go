@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/provider"
 )
 
-const maxSpecSize = 10 << 20 // 10 MB
+const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
@@ -51,6 +52,15 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 }
 
 func fetch(ctx context.Context, specURL string) ([]byte, error) {
+	if !strings.HasPrefix(specURL, "http://") && !strings.HasPrefix(specURL, "https://") {
+		f, err := os.Open(strings.TrimPrefix(specURL, "file://"))
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = f.Close() }()
+		return io.ReadAll(io.LimitReader(f, maxSpecSize))
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, specURL, nil)
 	if err != nil {
 		return nil, err
