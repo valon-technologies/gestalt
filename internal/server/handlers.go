@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
 )
 
@@ -352,11 +353,15 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := time.Now().UTC().Truncate(time.Second)
 	apiToken := &core.APIToken{
+		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
 		Name:        req.Name,
 		HashedToken: hashed,
 		Scopes:      req.Scopes,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := s.datastore.StoreAPIToken(r.Context(), apiToken); err != nil {

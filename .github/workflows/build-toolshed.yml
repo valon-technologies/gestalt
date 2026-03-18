@@ -1,0 +1,158 @@
+name: Build Toolshed
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'toolshed/**'
+      - '.github/workflows/build-toolshed.yml'
+  pull_request:
+    paths:
+      - 'toolshed/**'
+      - '.github/workflows/build-toolshed.yml'
+
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Go Lint & Vet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toolshed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: toolshed/go.mod
+          cache-dependency-path: toolshed/go.sum
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.3
+          working-directory: toolshed
+
+  test:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toolshed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: toolshed/go.mod
+          cache-dependency-path: toolshed/go.sum
+
+      - name: Run tests
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: toolshed/coverage.out
+          fail_ci_if_error: false
+
+  web-lint:
+    name: Web Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toolshed/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: toolshed/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+  web-e2e:
+    name: Web E2E Tests (Go Server)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: toolshed/go.mod
+          cache-dependency-path: toolshed/go.sum
+
+      - name: Build Go server
+        run: go build -o ./toolshed-server ./cmd/toolshed
+        working-directory: toolshed
+
+      - name: Start Go server
+        run: |
+          ./toolshed-server -config toolshed.dev.yaml &
+          ready=false
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health; then
+              ready=true
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" != "true" ]; then
+            echo "::error::Go server did not become ready within 15 seconds"
+            exit 1
+          fi
+        working-directory: toolshed
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: toolshed/web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: toolshed/web
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+        working-directory: toolshed/web
+
+      - name: Run E2E tests against Go server
+        run: npx playwright test
+        working-directory: toolshed/web
+        env:
+          CI: true
+          TOOLSHED_API_URL: http://localhost:8080
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: toolshed-playwright-report
+          path: toolshed/web/playwright-report/
+          retention-days: 7
