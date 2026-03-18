@@ -66,21 +66,35 @@ config:
     encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
     dev_mode: false
   auth:
-    provider: "${TOOLSHED_AUTH_PROVIDER}"
-    config: {}
+    provider: google
+    config:
+      client_id: "${GOOGLE_CLIENT_ID}"
+      client_secret: "${GOOGLE_CLIENT_SECRET}"
   datastore:
     provider: sqlite
     config:
       path: /data/toolshed.db
 
-# Extra environment variables for the container.
-# ref: https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/
+# Extra environment variables for the container. These are required
+# for the ${VAR} placeholders in the config above to resolve.
 extraEnv: []
+# - name: TOOLSHED_BASE_URL
+#   value: "https://toolshed.example.com"
 # - name: TOOLSHED_ENCRYPTION_KEY
 #   valueFrom:
 #     secretKeyRef:
-#       name: my-secrets
+#       name: toolshed-secrets
 #       key: encryption-key
+# - name: GOOGLE_CLIENT_ID
+#   valueFrom:
+#     secretKeyRef:
+#       name: toolshed-secrets
+#       key: google-client-id
+# - name: GOOGLE_CLIENT_SECRET
+#   valueFrom:
+#     secretKeyRef:
+#       name: toolshed-secrets
+#       key: google-client-secret
 
 livenessProbe:
   httpGet:
