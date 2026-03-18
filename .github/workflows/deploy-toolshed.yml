@@ -79,7 +79,7 @@ jobs:
             --max-instances=1 \
             --port=8080 \
             --set-secrets="\
-          BASE_URL=toolshed-base-url:latest,\
+          TOOLSHED_BASE_URL=toolshed-base-url:latest,\
           ENCRYPTION_KEY=gestalt-encryption-key:latest,\
           GOOGLE_CLIENT_ID=google-oauth-client-id:latest,\
           GOOGLE_CLIENT_SECRET=google-oauth-client-secret:latest,\
