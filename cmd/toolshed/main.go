@@ -83,6 +83,12 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	if cfg.Server.BaseURL != "" {
+		log.Printf("toolshed base URL: %s", cfg.Server.BaseURL)
+		log.Printf("  auth callback:        %s%s", cfg.Server.BaseURL, config.AuthCallbackPath)
+		log.Printf("  integration callback: %s%s", cfg.Server.BaseURL, config.IntegrationCallbackPath)
+	}
+
 	listenErr := make(chan error, 1)
 	go func() {
 		log.Printf("toolshed listening on %s", addr)

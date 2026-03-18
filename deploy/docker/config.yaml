@@ -2,6 +2,7 @@
 
 server:
   port: 8080
+  base_url: ${TOOLSHED_BASE_URL}
   encryption_key: ${TOOLSHED_ENCRYPTION_KEY}
   # Set dev_mode: true to skip encryption_key requirement during development.
   # dev_mode: true
@@ -37,4 +38,4 @@ integration_config:
   slack:
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
-    redirect_url: ${SLACK_REDIRECT_URL}
+    # redirect_url is derived from server.base_url when omitted.

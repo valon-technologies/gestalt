@@ -3,6 +3,8 @@ package bootstrap_test
 import (
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
@@ -294,6 +296,55 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 			t.Error("key derivation is not deterministic")
 		}
 	})
+}
+
+func TestBootstrapBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var receivedBaseURL string
+	var receivedRedirectURL string
+	factories := validFactories()
+	factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		receivedBaseURL = deps.BaseURL
+		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+	}
+	factories.Integrations["alpha"] = func(def config.IntegrationDef, _ bootstrap.Deps) (core.Integration, error) {
+		receivedRedirectURL = def.RedirectURL
+		return &coretesting.StubIntegration{N: "alpha"}, nil
+	}
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	cfgYAML := `
+auth:
+  provider: test-auth
+datastore:
+  provider: test-store
+server:
+  base_url: https://toolshed.example.com
+  encryption_key: test-key
+integrations:
+  alpha:
+    client_id: cid
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	if _, err := bootstrap.Bootstrap(cfg, factories); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+
+	if receivedBaseURL != "https://toolshed.example.com" {
+		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://toolshed.example.com")
+	}
+	want := "https://toolshed.example.com" + config.IntegrationCallbackPath
+	if receivedRedirectURL != want {
+		t.Errorf("integration factory RedirectURL = %q, want %q", receivedRedirectURL, want)
+	}
 }
 
 func TestBootstrapAllowedOperations(t *testing.T) {

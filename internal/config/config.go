@@ -3,8 +3,15 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
+)
+
+// Callback paths must match the routes registered in server.go.
+const (
+	AuthCallbackPath        = "/api/v1/auth/login/callback"
+	IntegrationCallbackPath = "/api/v1/auth/callback"
 )
 
 type Config struct {
@@ -35,6 +42,7 @@ type DatastoreConfig struct {
 
 type ServerConfig struct {
 	Port          int    `yaml:"port"`
+	BaseURL       string `yaml:"base_url"`
 	EncryptionKey string `yaml:"encryption_key"`
 	DevMode       bool   `yaml:"dev_mode"`
 }
@@ -99,6 +107,8 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	if err := resolveAuthProfiles(&cfg); err != nil {
 		return nil, err
 	}
+
+	resolveBaseURL(&cfg) // after resolveAuthProfiles so inherited fields take priority
 
 	if err := validate(&cfg); err != nil {
 		return nil, err
@@ -177,6 +187,30 @@ func resolveAuthProfiles(cfg *Config) error {
 		cfg.Integrations[name] = intg
 	}
 	return nil
+}
+
+func resolveBaseURL(cfg *Config) {
+	base := strings.TrimRight(cfg.Server.BaseURL, "/")
+	if base == "" {
+		return
+	}
+	cfg.Server.BaseURL = base
+
+	for name := range cfg.AuthProfiles {
+		p := cfg.AuthProfiles[name]
+		if p.RedirectURL == "" {
+			p.RedirectURL = base + IntegrationCallbackPath
+			cfg.AuthProfiles[name] = p
+		}
+	}
+
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.RedirectURL == "" {
+			intg.RedirectURL = base + IntegrationCallbackPath
+			cfg.Integrations[name] = intg
+		}
+	}
 }
 
 func validate(cfg *Config) error {

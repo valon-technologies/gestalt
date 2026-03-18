@@ -12,6 +12,7 @@ import (
 
 type Deps struct {
 	EncryptionKey []byte
+	BaseURL       string
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -42,6 +43,7 @@ type Result struct {
 func Bootstrap(cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
 	deps := Deps{
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
+		BaseURL:       cfg.Server.BaseURL,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
+	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 )
@@ -736,6 +737,39 @@ type stubIntegrationWithAuthURL struct {
 
 func (s *stubIntegrationWithAuthURL) AuthorizationURL(_ string, _ []string) string {
 	return s.authURL
+}
+
+func TestCallbackPathConstants(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+	})
+	defer ts.Close()
+
+	// Auth login callback: should not 404 (it will return 400 for missing code,
+	// which proves the route exists).
+	resp, err := http.Get(ts.URL + config.AuthCallbackPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", config.AuthCallbackPath, err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Errorf("config.AuthCallbackPath %q is not a registered route (got 404)", config.AuthCallbackPath)
+	}
+
+	// Integration callback: requires auth, so with dev mode + header it should
+	// return 400 (missing params), not 404.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+config.IntegrationCallbackPath, nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", config.IntegrationCallbackPath, err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Errorf("config.IntegrationCallbackPath %q is not a registered route (got 404)", config.IntegrationCallbackPath)
+	}
 }
 
 type stubStatefulAuth struct {
