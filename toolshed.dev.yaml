@@ -1,0 +1,16 @@
+auth:
+  provider: google
+  config:
+    client_id: dev-placeholder
+    client_secret: dev-placeholder
+    redirect_url: http://localhost:3000/auth/callback
+
+datastore:
+  provider: sqlite
+  config:
+    path: ./toolshed.dev.db
+
+server:
+  port: 8080
+  dev_mode: true
+  encryption_key: dev-encryption-key-not-for-production
