@@ -1,0 +1,31 @@
+name: Publish Toolshed Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'toolshed/**'
+      - '.github/workflows/publish-toolshed-image.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: toolshed/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/valon-technologies/toolshed:latest
+            ghcr.io/valon-technologies/toolshed:${{ github.sha }}
