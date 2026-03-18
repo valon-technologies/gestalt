@@ -8,8 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
@@ -119,22 +122,36 @@ func resolveConfigPath(flagValue string) string {
 }
 
 func initIntegrations(ctx context.Context, cfg *config.Config, reg *registry.Registry) error {
+	defs := make(map[string]*provider.Definition, len(cfg.Integrations))
+	var mu sync.Mutex
+
+	g, ctx := errgroup.WithContext(ctx)
 	for name := range cfg.Integrations {
 		intgDef := cfg.Integrations[name]
-		def, err := loadDefinition(ctx, name, intgDef, cfg.ProviderDirs)
+		g.Go(func() error {
+			def, err := loadDefinition(ctx, name, intgDef, cfg.ProviderDirs)
+			if err != nil {
+				return fmt.Errorf("integration %q: %w", name, err)
+			}
+			mu.Lock()
+			defs[name] = def
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	for name := range cfg.Integrations {
+		intgDef := cfg.Integrations[name]
+		intg, err := provider.Build(defs[name], intgDef)
 		if err != nil {
 			return fmt.Errorf("integration %q: %w", name, err)
 		}
-
-		intg, err := provider.Build(def, intgDef)
-		if err != nil {
-			return fmt.Errorf("integration %q: %w", name, err)
-		}
-
 		if err := reg.Integrations.Register(name, intg); err != nil {
 			return fmt.Errorf("registering integration %q: %w", name, err)
 		}
-
 		log.Printf("loaded integration %s (%d operations)", name, len(intg.ListOperations()))
 	}
 	return nil
