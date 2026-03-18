@@ -69,7 +69,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 
 	var accessEnc, refreshEnc string
-	err = store.db.QueryRowContext(ctx,
+	err = store.DB.QueryRowContext(ctx,
 		"SELECT access_token_encrypted, refresh_token_encrypted FROM integration_tokens WHERE id = ?",
 		"enc-tok-1",
 	).Scan(&accessEnc, &refreshEnc)
@@ -104,7 +104,7 @@ func TestWALMode(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	var mode string
-	err := store.db.QueryRowContext(context.Background(), "PRAGMA journal_mode").Scan(&mode)
+	err := store.DB.QueryRowContext(context.Background(), "PRAGMA journal_mode").Scan(&mode)
 	if err != nil {
 		t.Fatalf("PRAGMA journal_mode: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestForeignKeyEnforcement(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().Truncate(time.Second)
-	_, err := store.db.ExecContext(ctx,
+	_, err := store.DB.ExecContext(ctx,
 		"INSERT INTO integration_tokens (id, user_id, integration, instance, access_token_encrypted, created_at, updated_at, last_refreshed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		"fk-tok", "nonexistent-user", "svc", "i1", "enc", now, now, now,
 	)
@@ -241,5 +241,3 @@ func newTestID(t *testing.T) string {
 	t.Helper()
 	return uuid.NewString()
 }
-
-var _ core.Datastore = (*Store)(nil)

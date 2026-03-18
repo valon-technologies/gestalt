@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
 )
 
@@ -290,19 +289,14 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	scopes := ""
-	now := time.Now().UTC()
 	tok := &core.IntegrationToken{
-		ID:              uuid.NewString(),
-		UserID:          dbUser.ID,
-		Integration:     req.Integration,
-		Instance:        "default",
-		AccessToken:     tokenResp.AccessToken,
-		RefreshToken:    tokenResp.RefreshToken,
-		Scopes:          scopes,
-		ExpiresAt:       expiresAt,
-		LastRefreshedAt: now,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		UserID:       dbUser.ID,
+		Integration:  req.Integration,
+		Instance:     "default",
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken,
+		Scopes:       scopes,
+		ExpiresAt:    expiresAt,
 	}
 
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
@@ -356,15 +350,11 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().UTC()
 	apiToken := &core.APIToken{
-		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
 		Name:        req.Name,
 		HashedToken: hashed,
 		Scopes:      req.Scopes,
-		CreatedAt:   now,
-		UpdatedAt:   now,
 	}
 
 	if err := s.datastore.StoreAPIToken(r.Context(), apiToken); err != nil {
