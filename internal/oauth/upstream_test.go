@@ -364,6 +364,212 @@ func TestClientAuthHeaderRefresh(t *testing.T) {
 	}
 }
 
+func TestTokenExchangeJSON(t *testing.T) {
+	t.Parallel()
+
+	var gotContentType string
+	var gotBody map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "json-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:      "cid",
+		ClientSecret:  "csecret",
+		TokenURL:      srv.URL + "/token",
+		RedirectURL:   srv.URL + "/callback",
+		TokenExchange: TokenExchangeJSON,
+	})
+
+	tok, err := h.ExchangeCode(context.Background(), "code-123")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "json-token" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "json-token")
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
+	}
+	if gotBody["grant_type"] != "authorization_code" {
+		t.Errorf("grant_type = %q, want %q", gotBody["grant_type"], "authorization_code")
+	}
+	if gotBody["code"] != "code-123" {
+		t.Errorf("code = %q, want %q", gotBody["code"], "code-123")
+	}
+	if gotBody["client_id"] != "cid" {
+		t.Errorf("client_id = %q, want %q", gotBody["client_id"], "cid")
+	}
+}
+
+func TestTokenExchangeJSONRefresh(t *testing.T) {
+	t.Parallel()
+
+	var gotContentType string
+	var gotBody map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "json-refreshed",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:      "cid",
+		ClientSecret:  "csecret",
+		TokenURL:      srv.URL + "/token",
+		TokenExchange: TokenExchangeJSON,
+	})
+
+	tok, err := h.RefreshToken(context.Background(), "rt-123")
+	if err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if tok.AccessToken != "json-refreshed" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "json-refreshed")
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
+	}
+	if gotBody["grant_type"] != "refresh_token" {
+		t.Errorf("grant_type = %q, want %q", gotBody["grant_type"], "refresh_token")
+	}
+	if gotBody["refresh_token"] != "rt-123" {
+		t.Errorf("refresh_token = %q, want %q", gotBody["refresh_token"], "rt-123")
+	}
+}
+
+func TestTokenExchangeJSONWithClientAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	var gotAuth string
+	var gotBody map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "json-header-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "my-id",
+		ClientSecret:     "my-secret",
+		TokenURL:         srv.URL + "/token",
+		RedirectURL:      srv.URL + "/callback",
+		TokenExchange:    TokenExchangeJSON,
+		ClientAuthMethod: ClientAuthHeader,
+	})
+
+	tok, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "json-header-token" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "json-header-token")
+	}
+	if !strings.HasPrefix(gotAuth, "Basic ") {
+		t.Errorf("expected Basic auth header, got %q", gotAuth)
+	}
+	if _, ok := gotBody["client_id"]; ok {
+		t.Error("client_id should not appear in JSON body with ClientAuthHeader")
+	}
+	if _, ok := gotBody["client_secret"]; ok {
+		t.Error("client_secret should not appear in JSON body with ClientAuthHeader")
+	}
+}
+
+func TestAcceptHeader(t *testing.T) {
+	t.Parallel()
+
+	var gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		_ = r.ParseForm()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "accept-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:     "cid",
+		ClientSecret: "csecret",
+		TokenURL:     srv.URL + "/token",
+		RedirectURL:  srv.URL + "/callback",
+		AcceptHeader: "application/json",
+	})
+
+	tok, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "accept-token" {
+		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "accept-token")
+	}
+	if gotAccept != "application/json" {
+		t.Errorf("Accept = %q, want %q", gotAccept, "application/json")
+	}
+}
+
+func TestDefaultFormEncoding(t *testing.T) {
+	t.Parallel()
+
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "form-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer srv.Close()
+
+	// Empty TokenExchange should default to form encoding.
+	h := NewUpstream(UpstreamConfig{
+		ClientID: "cid",
+		TokenURL: srv.URL + "/token",
+	})
+
+	_, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if gotContentType != "application/x-www-form-urlencoded" {
+		t.Errorf("Content-Type = %q, want %q", gotContentType, "application/x-www-form-urlencoded")
+	}
+}
+
 func TestGenerateVerifier(t *testing.T) {
 	t.Parallel()
 

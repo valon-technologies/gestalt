@@ -162,6 +162,16 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 		return oauth.ManualAuthHandler{}, nil
 	}
 
+	var tokenExchange oauth.TokenExchangeFormat
+	switch def.Auth.TokenExchange {
+	case "", "form":
+		tokenExchange = oauth.TokenExchangeForm
+	case "json":
+		tokenExchange = oauth.TokenExchangeJSON
+	default:
+		return nil, fmt.Errorf("unknown token_exchange %q", def.Auth.TokenExchange)
+	}
+
 	authURL := resolveURL(baseURL, def.Auth.AuthorizationURL)
 	tokenURL := resolveURL(baseURL, def.Auth.TokenURL)
 
@@ -176,6 +186,8 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 		AuthorizationParams: def.Auth.AuthorizationParams,
 		TokenParams:         def.Auth.TokenParams,
 		RefreshParams:       def.Auth.RefreshParams,
+		TokenExchange:       tokenExchange,
+		AcceptHeader:        def.Auth.AcceptHeader,
 	}
 
 	if def.Auth.ClientAuth == "header" {
