@@ -77,8 +77,8 @@ type StubAuthProvider struct {
 	ValidateTokenFn  func(context.Context, string) (*core.UserIdentity, error)
 }
 
-func (s *StubAuthProvider) Name() string           { return s.N }
-func (s *StubAuthProvider) LoginURL(string) string { return "" }
+func (s *StubAuthProvider) Name() string                    { return s.N }
+func (s *StubAuthProvider) LoginURL(string) (string, error) { return "", nil }
 func (s *StubAuthProvider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {
 	if s.HandleCallbackFn != nil {
 		return s.HandleCallbackFn(ctx, code)

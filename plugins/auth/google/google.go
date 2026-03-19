@@ -79,8 +79,8 @@ func New(cfg Config) (*Provider, error) {
 func (p *Provider) Name() string        { return "google" }
 func (p *Provider) DisplayName() string { return "Google" }
 
-func (p *Provider) LoginURL(state string) string {
-	return p.oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+func (p *Provider) LoginURL(state string) (string, error) {
+	return p.oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
 }
 
 func (p *Provider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {

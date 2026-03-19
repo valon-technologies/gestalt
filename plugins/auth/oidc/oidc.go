@@ -122,20 +122,23 @@ func New(cfg Config) (*Provider, error) {
 func (p *Provider) Name() string        { return "oidc" }
 func (p *Provider) DisplayName() string { return p.displayName }
 
-func (p *Provider) LoginURL(state string) string {
+func (p *Provider) LoginURL(state string) (string, error) {
 	if !p.pkce {
-		return p.oauth2Cfg.AuthCodeURL(state, oauth2.AccessTypeOffline)
+		return p.oauth2Cfg.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
 	}
 
 	verifier := oauth.GenerateVerifier()
 	challenge := oauth.ComputeS256Challenge(verifier)
-	encoded := p.mustEncodePKCEState(state, verifier)
+	encoded, err := p.encodePKCEState(state, verifier)
+	if err != nil {
+		return "", fmt.Errorf("encode pkce state: %w", err)
+	}
 
 	return p.oauth2Cfg.AuthCodeURL(encoded,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-	)
+	), nil
 }
 
 func (p *Provider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {
@@ -261,30 +264,30 @@ func (p *Provider) fetchUserInfo(ctx context.Context, accessToken string) (*core
 	}, nil
 }
 
-func (p *Provider) mustEncodePKCEState(state, verifier string) string {
+func (p *Provider) encodePKCEState(state, verifier string) (string, error) {
 	payload, err := json.Marshal(pkceState{State: state, Verifier: verifier})
 	if err != nil {
-		panic("oidc: marshal pkce state: " + err.Error())
+		return "", fmt.Errorf("oidc: marshal pkce state: %w", err)
 	}
 
 	key := deriveAESKey(p.secret)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic("oidc: create cipher: " + err.Error())
+		return "", fmt.Errorf("oidc: create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic("oidc: create gcm: " + err.Error())
+		return "", fmt.Errorf("oidc: create gcm: %w", err)
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		panic("oidc: generate nonce: " + err.Error())
+		return "", fmt.Errorf("oidc: generate nonce: %w", err)
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, payload, nil)
-	return base64.RawURLEncoding.EncodeToString(ciphertext)
+	return base64.RawURLEncoding.EncodeToString(ciphertext), nil
 }
 
 func (p *Provider) decodePKCEState(encoded string) (state, verifier string, err error) {

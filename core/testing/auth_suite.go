@@ -31,7 +31,10 @@ func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL s
 	})
 
 	t.Run("LoginURL", func(t *testing.T) {
-		url := provider.LoginURL("test-state-123")
+		url, err := provider.LoginURL("test-state-123")
+		if err != nil {
+			t.Fatalf("LoginURL: %v", err)
+		}
 		if url == "" {
 			t.Fatal("LoginURL returned empty string")
 		}

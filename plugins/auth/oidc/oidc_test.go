@@ -201,7 +201,10 @@ func TestLoginURL(t *testing.T) {
 	defer mockServer.Close()
 
 	p := newTestProvider(t, mockServer.URL)
-	loginURL := p.LoginURL("my-state")
+	loginURL, err := p.LoginURL("my-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
 
 	parsed, err := url.Parse(loginURL)
 	if err != nil {
@@ -231,7 +234,10 @@ func TestLoginURLWithPKCE(t *testing.T) {
 		p.pkce = true
 	})
 
-	loginURL := p.LoginURL("my-state")
+	loginURL, err := p.LoginURL("my-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
 
 	parsed, err := url.Parse(loginURL)
 	if err != nil {
@@ -475,7 +481,10 @@ func TestHandleCallbackWithState(t *testing.T) {
 		p.pkce = true
 	})
 
-	encoded := p.mustEncodePKCEState("csrf-token", "test-verifier")
+	encoded, err := p.encodePKCEState("csrf-token", "test-verifier")
+	if err != nil {
+		t.Fatalf("encodePKCEState: %v", err)
+	}
 
 	identity, origState, err := p.HandleCallbackWithState(context.Background(), "valid-code", encoded)
 	if err != nil {

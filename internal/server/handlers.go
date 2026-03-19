@@ -172,7 +172,11 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	url := s.auth.LoginURL(req.State)
+	url, err := s.auth.LoginURL(req.State)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
