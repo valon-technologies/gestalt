@@ -110,6 +110,14 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, prov.ListOperations())
 }
 
+func (s *Server) listRuntimes(w http.ResponseWriter, _ *http.Request) {
+	if s.runtimes == nil {
+		writeJSON(w, http.StatusOK, []string{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.runtimes.List())
+}
+
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")
@@ -136,7 +144,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := s.broker.Invoke(r.Context(), broker.InvokeParams{
+	result, err := s.broker.Invoke(r.Context(), core.InvocationRequest{
 		Provider:  providerName,
 		Operation: operationName,
 		UserID:    userID,

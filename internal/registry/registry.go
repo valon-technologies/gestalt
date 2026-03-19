@@ -56,6 +56,7 @@ type Registry struct {
 	Datastores    PluginMap[core.Datastore]
 	AuthProviders PluginMap[core.AuthProvider]
 	Providers     PluginMap[core.Provider]
+	Runtimes      PluginMap[core.Runtime]
 }
 
 func New() *Registry {
@@ -63,5 +64,11 @@ func New() *Registry {
 		Datastores:    newPluginMap[core.Datastore]("datastore"),
 		AuthProviders: newPluginMap[core.AuthProvider]("auth provider"),
 		Providers:     newPluginMap[core.Provider]("provider"),
+		Runtimes:      newPluginMap[core.Runtime]("runtime"),
 	}
+}
+
+func NewRuntimeMap() *PluginMap[core.Runtime] {
+	m := newPluginMap[core.Runtime]("runtime")
+	return &m
 }

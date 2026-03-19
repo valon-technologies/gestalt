@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/openapi"
 	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
@@ -24,6 +25,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
 	"github.com/valon-technologies/toolshed/plugins/providers/echo"
+	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
 	secretsenv "github.com/valon-technologies/toolshed/plugins/secrets/env"
 	secretsfile "github.com/valon-technologies/toolshed/plugins/secrets/file"
 	secretsgcp "github.com/valon-technologies/toolshed/plugins/secrets/gcp"
@@ -61,6 +63,7 @@ func run() error {
 	factories.Datastores["mysql"] = mysql.Factory
 	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
+	factories.Runtimes["echo"] = echoruntime.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory
@@ -78,10 +81,26 @@ func run() error {
 		return fmt.Errorf("running datastore migrations: %v", err)
 	}
 
+	if result.Runtimes != nil {
+		var started []string
+		for _, name := range result.Runtimes.List() {
+			rt, err := result.Runtimes.Get(name)
+			if err != nil {
+				return fmt.Errorf("getting runtime %q: %v", name, err)
+			}
+			if err := rt.Start(ctx); err != nil {
+				stopRuntimes(ctx, result.Runtimes, started)
+				return fmt.Errorf("starting runtime %q: %v", name, err)
+			}
+			started = append(started, name)
+		}
+	}
+
 	srv, err := server.New(server.Config{
 		Auth:        result.Auth,
 		Datastore:   result.Datastore,
 		Providers:   result.Providers,
+		Runtimes:    result.Runtimes,
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(cfg.Server.EncryptionKey),
 	})
@@ -123,6 +142,11 @@ func run() error {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %v", err)
 	}
+
+	if result.Runtimes != nil {
+		stopRuntimes(shutdownCtx, result.Runtimes, result.Runtimes.List())
+	}
+
 	log.Println("shutdown complete")
 	return nil
 }
@@ -147,6 +171,19 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 			return nil, err
 		}
 		return provider.Build(def, intg)
+	}
+}
+
+func stopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime], names []string) {
+	for _, name := range names {
+		rt, err := runtimes.Get(name)
+		if err != nil {
+			log.Printf("looking up runtime %q during shutdown: %v", name, err)
+			continue
+		}
+		if err := rt.Stop(ctx); err != nil {
+			log.Printf("stopping runtime %q: %v", name, err)
+		}
 	}
 }
 
