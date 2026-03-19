@@ -127,7 +127,10 @@ func TestLoginURLContainsScopes(t *testing.T) {
 	defer mockServer.Close()
 
 	p := newTestProvider(t, mockServer.URL)
-	url := p.LoginURL("my-state")
+	url, err := p.LoginURL("my-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
 	for _, scope := range []string{"openid", "email", "profile"} {
 		if !strings.Contains(url, scope) {
 			t.Errorf("LoginURL missing scope %q: %s", scope, url)

@@ -853,8 +853,8 @@ type stubAuthWithLoginURL struct {
 	loginURL string
 }
 
-func (s *stubAuthWithLoginURL) LoginURL(_ string) string {
-	return s.loginURL
+func (s *stubAuthWithLoginURL) LoginURL(_ string) (string, error) {
+	return s.loginURL, nil
 }
 
 type stubIntegrationWithAuthURL struct {
