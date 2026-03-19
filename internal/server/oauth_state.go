@@ -35,7 +35,7 @@ func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string
 	if err != nil {
 		return "", fmt.Errorf("marshal oauth state: %w", err)
 	}
-	encoded, err := c.encryptor.Encrypt(string(payload))
+	encoded, err := c.encryptor.EncryptURLSafe(string(payload))
 	if err != nil {
 		return "", fmt.Errorf("encrypt oauth state: %w", err)
 	}
@@ -43,7 +43,7 @@ func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string
 }
 
 func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*integrationOAuthState, error) {
-	plaintext, err := c.encryptor.Decrypt(encoded)
+	plaintext, err := c.encryptor.DecryptURLSafe(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt oauth state: %w", err)
 	}
