@@ -1,0 +1,58 @@
+import { Callout, Cards, Steps } from 'nextra/components'
+
+# Toolshed
+
+Toolshed is a self-serve integration platform for exposing third-party APIs as callable tool operations. Gestalt is the centrally operated service. Toolshed is the platform you can stand up yourself.
+
+<Callout>
+  Working model: treat Toolshed like a small control plane. You choose the platform auth provider, datastore, secret manager, and the integrations you want to expose. Toolshed handles token storage, OAuth handshakes, operation discovery, and request execution.
+</Callout>
+
+## What Toolshed is for
+
+Toolshed lets teams expose third-party APIs without writing bespoke glue code for each one. You declare integrations in a config file, and Toolshed takes care of authentication, token lifecycle, and operation routing so that callers get a uniform interface regardless of the upstream provider.
+
+If you want a fully hosted version where Valon manages infrastructure and upgrades, that is Gestalt. Toolshed is for teams that need to self-host, want to run inside their own network boundary, or need to extend the platform with custom plugins and hooks.
+
+## Architecture
+
+A request flows through Toolshed in four steps:
+
+<Steps>
+### Caller sends a request
+
+A caller (CLI, web UI, or external client) sends an operation invocation to the Toolshed API server.
+
+### Toolshed resolves credentials
+
+Toolshed looks up the caller's stored token for the target integration, refreshing it via the configured OAuth flow if needed.
+
+### Toolshed executes the upstream call
+
+Using the resolved credentials and the integration's OpenAPI spec, Toolshed builds and sends the request to the third-party API.
+
+### Response is returned
+
+The upstream response passes back through any configured response hooks, then is returned to the caller.
+</Steps>
+
+## What ships in this directory today
+
+- **Go API server** — the core Toolshed runtime that handles config loading, auth, token storage, and operation dispatch.
+- **Rust CLI (`tshed`)** — a lightweight client for authenticating, listing integrations, and invoking operations from the terminal.
+- **Next.js web UI** — a browser-based interface for managing integrations, connecting accounts, and invoking operations.
+- **Deployment assets** — Helm chart, Dockerfiles, and GitHub Actions workflows for running Toolshed on Kubernetes or Cloud Run.
+
+## Documentation map
+
+<Cards>
+  <Cards.Card title="Concepts" href="/concepts/platform-model">
+    Understand the primitives Toolshed exposes: auth providers, datastores, secret managers, integrations, operations, and hooks.
+  </Cards.Card>
+  <Cards.Card title="Tasks" href="/tasks/run-locally">
+    Stand up Toolshed locally, add an integration, and deploy it onto Kubernetes with the included chart.
+  </Cards.Card>
+  <Cards.Card title="Reference" href="/reference/config-file">
+    Use the config schema, HTTP API surface, CLI commands, and built-in plugin catalog as your source of truth.
+  </Cards.Card>
+</Cards>

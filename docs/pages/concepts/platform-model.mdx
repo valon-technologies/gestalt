@@ -1,0 +1,42 @@
+# Platform Model
+
+Toolshed has a small set of primitives. Once you understand how they fit together, most of the repository becomes predictable.
+
+## Core primitives
+
+| Primitive | What it does |
+|---|---|
+| Auth provider | Authenticates people to the Toolshed platform itself and can issue session tokens. |
+| Datastore | Persists users, integration tokens, and API tokens. Access and refresh tokens are encrypted before storage. |
+| Secret manager | Resolves `secret://` references inside config before auth, datastore, or integrations are built. |
+| Integration definition | Describes an upstream API: base URL, auth style, operations, and optional hooks. |
+| Provider | Runtime object that lists operations and executes them against the upstream API. |
+| Operation | A callable unit exposed by an integration. Operations are generated from OpenAPI or declared manually in YAML. |
+| Hooks | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
+
+## How a request flows through Toolshed
+
+1. The caller authenticates with Toolshed using a session token or API token. Middleware resolves the caller's identity before the request reaches any handler.
+2. Toolshed resolves the caller's identity and looks up their stored credential for the target integration.
+3. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
+4. Any configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
+5. Toolshed executes the upstream HTTP call, runs response-check hooks if configured, and returns the result to the caller.
+
+## Source of truth for an integration
+
+- **OpenAPI spec** — if the integration config includes an `openapi` field, Toolshed loads the spec at startup and generates operations from it. The spec is the canonical source for method, path, parameters, and description.
+- **Provider YAML** — a standalone YAML file in a provider directory can declare operations manually without an OpenAPI spec.
+- **Provider directory** — the `provider_dirs` config field tells Toolshed where to scan for provider YAML files at boot.
+
+## What makes Toolshed self-serve
+
+Gestalt is the managed service: Valon operates the infrastructure, ships upgrades, and controls which integrations are available. Toolshed is the kit: you assemble the pieces yourself.
+
+- You choose the auth provider (Google OAuth, any OIDC IdP).
+- You choose the datastore (SQLite for local dev, Postgres for production).
+- You choose which integrations to expose, and which operations within each integration are callable.
+- You deploy wherever you want: a laptop, a VM, Kubernetes, or Cloud Run.
+
+## Current boundaries
+
+Toolshed does not yet auto-refresh expired integration tokens on every request. Scope enforcement for API tokens is stored but not enforced by middleware. These are known gaps, not design decisions, and both are expected to close in upcoming work.

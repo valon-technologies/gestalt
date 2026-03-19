@@ -8,6 +8,7 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/integrations", label: "Integrations" },
   { href: "/tokens", label: "API Tokens" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export default function Nav() {
@@ -27,19 +28,25 @@ export default function Nav() {
             Toolshed
           </Link>
           <div className="flex gap-4">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`text-sm ${
-                  pathname === link.href
-                    ? "font-medium text-blue-600"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {links.map((link) => {
+              const className = `text-sm ${
+                pathname === link.href
+                  ? "font-medium text-blue-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`;
+              if (link.href === "/docs") {
+                return (
+                  <a key={link.href} href={link.href} className={className}>
+                    {link.label}
+                  </a>
+                );
+              }
+              return (
+                <Link key={link.href} href={link.href} className={className}>
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
         </div>
         {email && (

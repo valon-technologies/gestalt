@@ -1,0 +1,88 @@
+import { Callout } from 'nextra/components'
+
+# Deploy Toolshed to Kubernetes
+
+The repository ships a Helm chart under `deploy/helm/toolshed`. It is a practical starting point, not a fully generalized platform operator.
+
+## What the chart creates
+
+- **API Deployment** — runs the Go API server with your config.
+- **Web Deployment** — runs the Next.js web UI, proxying API requests to the API service.
+- **Services** — one for the API (port 8080) and one for the web UI (port 3000).
+- **ConfigMap** — holds your Toolshed config YAML with `${ENV_VAR}` placeholders.
+- **Ingress** — optional path-based routing (`/api/v1` to API, `/` to web).
+- **PVC** — persistent volume claim for SQLite, when persistence is enabled.
+
+<Callout>
+  The default chart values assume `sqlite` and therefore a single replica. If you want horizontal scale, move to `postgres` or `mysql` first.
+</Callout>
+
+## Minimal values example
+
+The chart uses `${ENV_VAR}` placeholders in config, injected at runtime via `extraEnv`. This keeps secrets out of the ConfigMap.
+
+```yaml
+replicaCount: 1
+
+config:
+  server:
+    port: 8080
+    base_url: "${TOOLSHED_BASE_URL}"
+    encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+  auth:
+    provider: google
+    config:
+      client_id: "${GOOGLE_CLIENT_ID}"
+      client_secret: "${GOOGLE_CLIENT_SECRET}"
+  datastore:
+    provider: sqlite
+    config:
+      path: /data/toolshed.db
+
+extraEnv:
+  - name: TOOLSHED_BASE_URL
+    value: "https://toolshed.example.com"
+  - name: TOOLSHED_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: toolshed-secrets
+        key: encryption-key
+  - name: GOOGLE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: toolshed-secrets
+        key: google-client-id
+  - name: GOOGLE_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: toolshed-secrets
+        key: google-client-secret
+
+web:
+  enabled: true
+  image:
+    repository: toolshed-web
+    tag: latest
+```
+
+## Install the chart
+
+```sh
+cd toolshed
+helm install toolshed ./deploy/helm/toolshed -f my-values.yaml
+```
+
+## Verify the deployment
+
+```sh
+kubectl get pods
+kubectl port-forward svc/toolshed-toolshed 8080:8080
+curl http://127.0.0.1:8080/health
+```
+
+## Hardening guidance
+
+- Inject secrets through `extraEnv` with `secretKeyRef` rather than inlining them in the config block.
+- Set `base_url` to a stable, externally reachable URL. OAuth callback URLs are derived from it.
+- Switch to Postgres or MySQL before running more than one replica. SQLite does not support concurrent writers.
+- Enable ingress for path-based routing: `/api/v1` routes to the API service and `/` routes to the web UI.

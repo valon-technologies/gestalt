@@ -1,0 +1,91 @@
+# Add an integration
+
+Adding an integration usually means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
+
+## 1. Decide how you will define it
+
+- **OpenAPI spec** — point Toolshed at a public or local OpenAPI document. Operations, parameters, and descriptions are generated automatically.
+- **Provider YAML** — write a standalone YAML file that declares operations manually. Use this when no spec exists or when the spec is too noisy.
+- **Manual auth** — for API-key services where there is no OAuth flow. Users paste credentials directly.
+
+## 2. Start with an OpenAPI-backed integration
+
+```yaml
+integrations:
+  slack:
+    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    client_id: ${SLACK_CLIENT_ID}
+    client_secret: ${SLACK_CLIENT_SECRET}
+    response_check: slack_ok
+    auth:
+      authorization_url: https://slack.com/oauth/v2/authorize
+      token_url: https://slack.com/api/oauth.v2.access
+      response_hook: slack_ok
+    allowed_operations:
+      conversations_list: ""
+      chat_postMessage: Send a message to a channel
+```
+
+## 3. Use a provider file when the spec is not enough
+
+```yaml
+provider: internal-api
+display_name: Internal API
+description: Purpose-built provider file for a private service
+base_url: https://internal.example.com
+
+auth:
+  type: manual
+
+operations:
+  list_jobs:
+    description: List recent jobs
+    method: GET
+    path: /api/v1/jobs
+    parameters:
+      - name: limit
+        type: integer
+        description: Maximum number of jobs
+
+  retry_job:
+    description: Retry a job
+    method: POST
+    path: /api/v1/jobs/{job_id}/retry
+    parameters:
+      - name: job_id
+        type: string
+        required: true
+        description: Job identifier
+```
+
+## 4. Use manual auth for API-key services
+
+```yaml
+integrations:
+  datadog:
+    provider: /etc/toolshed/providers/datadog.yaml
+    auth:
+      type: manual
+    token_parser: datadog_keys
+```
+
+Users paste their credentials directly into the Toolshed UI or CLI. Toolshed encrypts and stores them the same way it stores OAuth tokens.
+
+## 5. Restrict operations aggressively
+
+The `allowed_operations` map is your product design surface. Only expose what callers actually need. A tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
+
+## 6. Validate it end to end
+
+```sh
+tshed integrations list
+tshed integrations connect slack
+tshed invoke slack conversations_list
+
+curl -H "Authorization: Bearer $TOOLSHED_API_KEY" \
+  http://localhost:8080/api/v1/slack/conversations_list
+```
+
+## When to write code
+
+Most integrations need zero Go code. You only need to write a hook when the upstream API has unusual auth flows, requires request rewrites the config layer cannot express, or returns non-standard response envelopes that need validation logic.

@@ -1,0 +1,29 @@
+# Troubleshooting
+
+The most common Toolshed failures are config-shape issues, callback URL mismatches, and missing integration credentials.
+
+## The server says an integration is missing its provider
+
+Toolshed resolves integration providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server will log an error and skip the integration. Check that `provider_dirs` includes the directory containing your provider YAML files, and that the integration config includes either an `openapi` URL or a `provider` path.
+
+## OAuth redirects are wrong
+
+Set `server.base_url` explicitly in your config. Toolshed derives OAuth callback URLs from this value. If it is unset or points to the wrong host, the identity provider will reject the redirect and the OAuth flow will fail.
+
+## Login works in development but not in production
+
+When `dev_mode: true` is set, Toolshed enables a Dev Login path that bypasses real OAuth. In production, `dev_mode` must be `false` and a real auth provider must be configured. If login fails in production, verify that your auth provider config (issuer URL, client ID, client secret) is correct and that the callback URL registered with the provider matches `server.base_url`.
+
+## Invocation returns "no token stored"
+
+The calling user has not connected the target integration yet. Each user must complete the OAuth flow (or paste manual credentials) for every integration they want to invoke. Use `tshed integrations connect <name>` or the web UI to complete the connection.
+
+## API token auth fails
+
+- Ensure the `Authorization` header uses the `Bearer` prefix.
+- The token value sent by the caller must be the plaintext token returned at creation time, not the hash stored in the datastore.
+- If using the CLI, check that `TOOLSHED_API_KEY` is set to the correct value and is not being overridden by an expired session token.
+
+## The web UI does not talk to the local API
+
+The web UI needs to know where the API server lives. When running locally, either set `TOOLSHED_API_URL` or use `./dev.sh full` which starts the Go server and configures the rewrite proxy automatically.

@@ -1,0 +1,90 @@
+import { Callout } from 'nextra/components'
+
+# Stand up your first Toolshed
+
+The fastest path from zero to a working Toolshed: configure a local instance, run the API server and web UI, then invoke an integration operation from the CLI.
+
+## Before you begin
+
+- **Choose an auth provider.** Google OAuth is the simplest for local development. OIDC works if you already have an identity provider.
+- **Pick a datastore.** SQLite requires zero infrastructure and is fine for local work.
+- **Decide on dev mode.** Setting `dev_mode: true` relaxes HTTPS requirements and enables hot-reload for the web UI.
+
+## Create a local config
+
+Save the following as `toolshed.local.yaml` in the repo root:
+
+```yaml
+server:
+  port: 8080
+  base_url: http://localhost:8080
+  dev_mode: true
+  encryption_key: local-dev-key
+
+auth:
+  provider: google
+  config:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: ${GOOGLE_CLIENT_SECRET}
+
+datastore:
+  provider: sqlite
+  config:
+    path: ./toolshed.local.db
+
+integrations:
+  slack:
+    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    client_id: ${SLACK_CLIENT_ID}
+    client_secret: ${SLACK_CLIENT_SECRET}
+    response_check: slack_ok
+    auth:
+      authorization_url: https://slack.com/oauth/v2/authorize
+      token_url: https://slack.com/api/oauth.v2.access
+      response_hook: slack_ok
+    allowed_operations:
+      conversations_list: List channels the bot can access
+      chat_postMessage: Send a message to a channel
+```
+
+<Callout>
+  Setting `base_url` to `http://localhost:8080` tells Toolshed where to build OAuth callback URLs. Without it, redirect URIs will be wrong and OAuth flows will fail.
+</Callout>
+
+## Run the API
+
+```sh
+cd toolshed
+go run ./cmd/toolshed -config toolshed.local.yaml
+```
+
+## Run the web UI
+
+```sh
+cd toolshed/web
+./dev.sh full toolshed.local.yaml
+```
+
+## Sign in and connect an integration
+
+1. Open `http://localhost:3000` in your browser.
+2. Sign in with your Google account.
+3. Navigate to **Integrations** and click **Connect** next to Slack.
+4. Complete the Slack OAuth flow.
+5. Once connected, you can invoke allowed operations from the web UI.
+
+## Install and use the CLI
+
+```sh
+brew install valon-technologies/toolshed/toolshed
+tshed init
+tshed auth login
+tshed integrations list
+tshed invoke slack conversations_list
+```
+
+## What to read next
+
+- [Platform Model](/concepts/platform-model) — understand the primitives Toolshed is built on.
+- [Add an Integration](/tasks/add-an-integration) — walk through adding a new third-party API.
+- [Config File](/reference/config-file) — full reference for every config key.

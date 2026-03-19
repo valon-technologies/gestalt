@@ -1,0 +1,55 @@
+# CLI
+
+The Rust CLI binary is named `tshed`. It handles login, config, integrations, invocation, and API tokens.
+
+## Install it
+
+```sh
+brew install valon-technologies/toolshed/toolshed
+```
+
+Or build from source:
+
+```sh
+cd toolshed/client
+cargo build --release
+./target/release/tshed --version
+```
+
+## Command groups
+
+| Command | Purpose |
+|---|---|
+| `tshed auth ...` | Login, logout, and status. |
+| `tshed init` | Interactive setup wizard. |
+| `tshed config ...` | Read and write persistent CLI config values. |
+| `tshed integrations ...` | List integrations or start a connection flow. |
+| `tshed invoke ...` | Execute an integration operation. |
+| `tshed tokens ...` | Create, list, and revoke API tokens. |
+
+## URL resolution order
+
+1. `--url` flag on the command.
+2. `TOOLSHED_URL` environment variable.
+3. `.toolshed.json` in the current directory.
+4. Global config file.
+5. `credentials.json` stored by `tshed auth login`.
+6. `http://localhost:8080` as a final fallback.
+
+## Authentication behavior
+
+- If `TOOLSHED_API_KEY` is set, it is sent as the Bearer token on every request.
+- Otherwise, the CLI uses the session token stored by `tshed auth login`.
+- Credential files are written with `0600` permissions.
+
+## Common commands
+
+```sh
+tshed init
+tshed auth login
+tshed integrations list --format table
+tshed integrations connect slack
+tshed invoke slack conversations_list
+tshed invoke slack chat_postMessage -p channel=C123 -p text=hello
+tshed tokens create --name "ci-token"
+```

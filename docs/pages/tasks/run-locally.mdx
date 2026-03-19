@@ -1,0 +1,53 @@
+# Run Toolshed locally
+
+You have three useful local loops: API only, web UI with mock API, and web UI plus real local API.
+
+## API only
+
+```sh
+cd toolshed
+go run ./cmd/toolshed -config toolshed.dev.yaml
+```
+
+This is the fastest way to iterate on server behavior, config loading, datastore plugins, or integration definitions.
+
+## Web UI with mock API
+
+```sh
+cd toolshed/web
+./dev.sh web
+```
+
+This starts the Next.js app with built-in mock API routes. No Go server is involved, so you can work on the frontend without compiling anything.
+
+## Web UI plus real local API
+
+```sh
+cd toolshed/web
+./dev.sh full toolshed.dev.yaml
+```
+
+The script starts the Go server, waits for `/health` to return 200, then launches the web UI with a rewrite proxy that forwards API requests to the local server.
+
+## Use development mode intentionally
+
+- `dev_mode: true` relaxes HTTPS requirements and enables the Dev Login auth path.
+- `encryption_key` must be set even in dev mode; any stable string is fine locally.
+- The Dev Login path lets you authenticate without a real OAuth provider. Never enable it in production.
+
+## Use Docker Compose
+
+```sh
+cd toolshed
+docker compose up --build
+```
+
+The compose file runs two services: the Go API server on port 8080 and the Next.js web UI on port 3000. The web container proxies `/api/v1/*` requests to the API via `TOOLSHED_API_URL`. Config is mounted from `deploy/docker/config.yaml` and SQLite data is persisted in a named volume.
+
+## Sanity checks
+
+```sh
+curl http://localhost:8080/health
+tshed --url http://localhost:8080 auth status
+tshed --url http://localhost:8080 integrations list
+```

@@ -20,6 +20,7 @@ test.describe("Navigation", () => {
     await expect(
       nav.getByRole("link", { name: "API Tokens" }),
     ).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Docs" })).toBeVisible();
   });
 
   test("user email is displayed in nav", async ({ authenticatedPage }) => {
@@ -60,4 +61,5 @@ test.describe("Navigation", () => {
       page.getByRole("heading", { name: "API Tokens" }),
     ).toBeVisible();
   });
+
 });

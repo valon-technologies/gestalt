@@ -1,0 +1,24 @@
+{
+  "name": "toolshed-docs",
+  "version": "0.0.1-alpha.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "nextra": "^3",
+    "nextra-theme-docs": "^3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "@types/react": "18.3.28",
+    "typescript": "5.9.3"
+  }
+}

@@ -75,6 +75,13 @@ export default function LoginPage() {
         <p className="mt-2 text-center text-sm text-gray-500">
           Sign in to manage your integrations.
         </p>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          Or read the{" "}
+          <a href="/docs" className="font-medium text-blue-600 hover:text-blue-700">
+            documentation
+          </a>
+          .
+        </p>
         {error && (
           <p className="mt-4 text-center text-sm text-red-600">{error}</p>
         )}
