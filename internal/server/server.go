@@ -40,6 +40,7 @@ func (s *Server) routes() {
 	r := s.router
 
 	r.Get("/health", s.healthCheck)
+	r.Get("/ready", s.readinessCheck)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/login", s.startLogin)
