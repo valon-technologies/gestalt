@@ -22,6 +22,7 @@ type StubDatastore struct {
 	PingFn             func(context.Context) error
 	GetUserFn          func(context.Context, string) (*core.User, error)
 	FindOrCreateUserFn func(context.Context, string) (*core.User, error)
+	StoreTokenFn       func(context.Context, *core.IntegrationToken) error
 	TokenFn            func(context.Context, string, string, string) (*core.IntegrationToken, error)
 	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
 }
@@ -46,7 +47,12 @@ func (s *StubDatastore) FindOrCreateUser(ctx context.Context, email string) (*co
 	}
 	return nil, nil
 }
-func (s *StubDatastore) StoreToken(context.Context, *core.IntegrationToken) error { return nil }
+func (s *StubDatastore) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
+	if s.StoreTokenFn != nil {
+		return s.StoreTokenFn(ctx, token)
+	}
+	return nil
+}
 func (s *StubDatastore) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
 	if s.TokenFn != nil {
 		return s.TokenFn(ctx, userID, integration, instance)
