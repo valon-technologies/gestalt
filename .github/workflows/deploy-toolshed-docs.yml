@@ -56,12 +56,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Fetch IP allowlists from Secret Manager
-        id: ip-ranges
-        run: |
-          echo "office=$(gcloud secrets versions access latest --secret=valon-office-ip-ranges --project=${{ env.PROJECT_ID }})" >> "$GITHUB_OUTPUT"
-          echo "vpn=$(gcloud secrets versions access latest --secret=valon-vpn-ip-ranges --project=${{ env.PROJECT_ID }})" >> "$GITHUB_OUTPUT"
-
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
@@ -73,6 +67,4 @@ jobs:
         working-directory: toolshed/docs/terraform
         run: |
           terraform apply -auto-approve \
-            -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}' \
-            -var='valon_office_ip_ranges=${{ steps.ip-ranges.outputs.office }}' \
-            -var='valon_vpn_ip_ranges=${{ steps.ip-ranges.outputs.vpn }}'
+            -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'

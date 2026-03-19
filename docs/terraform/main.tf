@@ -54,48 +54,6 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
-# ---------- Cloud Armor ----------
-
-resource "google_compute_security_policy" "docs" {
-  name = "toolshed-docs-policy"
-
-  rule {
-    action   = "allow"
-    priority = 1000
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = var.valon_office_ip_ranges
-      }
-    }
-    description = "Allow Valon office IPs"
-  }
-
-  rule {
-    action   = "allow"
-    priority = 1100
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = var.valon_vpn_ip_ranges
-      }
-    }
-    description = "Allow Valon VPN IPs"
-  }
-
-  rule {
-    action   = "deny(403)"
-    priority = 2147483647
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    description = "Default deny"
-  }
-}
-
 # ---------- Load Balancer ----------
 
 resource "google_compute_region_network_endpoint_group" "docs" {
@@ -111,7 +69,6 @@ resource "google_compute_region_network_endpoint_group" "docs" {
 resource "google_compute_backend_service" "docs" {
   name                  = "toolshed-docs-backend"
   load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.docs.id
 
   backend {
     group = google_compute_region_network_endpoint_group.docs.id
