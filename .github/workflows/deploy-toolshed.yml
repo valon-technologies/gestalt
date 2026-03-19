@@ -20,6 +20,7 @@ env:
 jobs:
   deploy-api:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
@@ -104,6 +105,7 @@ jobs:
 
   deploy-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: deploy-api
     permissions:
       contents: read

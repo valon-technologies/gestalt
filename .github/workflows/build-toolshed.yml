@@ -18,6 +18,7 @@ jobs:
   lint:
     name: Go Lint & Vet
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: toolshed
@@ -45,6 +46,7 @@ jobs:
   test:
     name: Go Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: toolshed
@@ -70,6 +72,7 @@ jobs:
   web-lint:
     name: Web Lint & Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: toolshed/web
@@ -96,6 +99,7 @@ jobs:
   docs-build:
     name: Docs Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: toolshed/docs
@@ -119,6 +123,7 @@ jobs:
   web-e2e:
     name: Web E2E Tests (Go Server)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -183,6 +188,7 @@ jobs:
   helm-validate:
     name: Helm Chart Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -209,6 +215,7 @@ jobs:
   web-docker:
     name: Web Docker Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: docker/build-push-action@v5

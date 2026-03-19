@@ -9,6 +9,7 @@ jobs:
   sync:
     name: Sync to homebrew-toolshed
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout toolshed
