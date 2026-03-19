@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
@@ -896,6 +897,693 @@ func TestCallbackPathConstants(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		t.Errorf("config.IntegrationCallbackPath %q is not a registered route (got 404)", config.IntegrationCallbackPath)
+	}
+}
+
+type stubOAuthIntegration struct {
+	stubIntegrationWithOps
+	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)
+}
+
+func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (*core.TokenResponse, error) {
+	if s.refreshTokenFn != nil {
+		return s.refreshTokenFn(ctx, token)
+	}
+	return nil, nil
+}
+
+// stubNonOAuthProvider implements core.Provider but NOT core.OAuthProvider.
+type stubNonOAuthProvider struct {
+	name   string
+	ops    []core.Operation
+	execFn func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
+}
+
+func (s *stubNonOAuthProvider) Name() string                     { return s.name }
+func (s *stubNonOAuthProvider) DisplayName() string              { return s.name }
+func (s *stubNonOAuthProvider) Description() string              { return "" }
+func (s *stubNonOAuthProvider) ListOperations() []core.Operation { return s.ops }
+func (s *stubNonOAuthProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+	if s.execFn != nil {
+		return s.execFn(ctx, op, params, token)
+	}
+	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+}
+
+func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
+	t.Parallel()
+
+	var refreshedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					refreshedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+			if rt == "old-refresh-token" {
+				return &core.TokenResponse{AccessToken: "fresh-access-token", ExpiresIn: 3600}, nil
+			}
+			return nil, fmt.Errorf("unexpected refresh token")
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	var storedToken *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "stale-access-token",
+					RefreshToken: "old-refresh-token",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				storedToken = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if refreshedToken != "fresh-access-token" {
+		t.Fatalf("expected operation to use refreshed token, got %q", refreshedToken)
+	}
+	if storedToken == nil {
+		t.Fatal("expected token to be persisted after refresh")
+	}
+	if storedToken.AccessToken != "fresh-access-token" {
+		t.Fatalf("expected stored access token to be updated, got %q", storedToken.AccessToken)
+	}
+	if storedToken.RefreshErrorCount != 0 {
+		t.Fatalf("expected refresh error count to be 0, got %d", storedToken.RefreshErrorCount)
+	}
+	if storedToken.UpdatedAt.IsZero() {
+		t.Fatal("expected UpdatedAt to be set after refresh")
+	}
+}
+
+func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
+	t.Parallel()
+
+	var usedToken string
+	var storedToken *core.IntegrationToken
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			return nil, fmt.Errorf("upstream error")
+		},
+	}
+
+	// Token expires in 3 minutes (within threshold) but still valid
+	expiresInThree := time.Now().Add(3 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "still-valid-token",
+					RefreshToken: "rf",
+					ExpiresAt:    &expiresInThree,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				storedToken = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 (graceful degradation), got %d", resp.StatusCode)
+	}
+	if usedToken != "still-valid-token" {
+		t.Fatalf("expected operation to use old token, got %q", usedToken)
+	}
+	if storedToken == nil {
+		t.Fatal("expected token to be persisted after refresh error")
+	}
+	if storedToken.UpdatedAt.IsZero() {
+		t.Fatal("expected UpdatedAt to be set on refresh error path")
+	}
+}
+
+func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "fake"},
+			ops:             []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			return nil, fmt.Errorf("refresh token revoked")
+		},
+	}
+
+	alreadyExpired := time.Now().Add(-10 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "expired-token",
+					RefreshToken: "rf",
+					ExpiresAt:    &alreadyExpired,
+				}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502 for expired token + failed refresh, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
+	t.Parallel()
+
+	var usedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			t.Fatal("RefreshToken should not be called when no refresh token stored")
+			return nil, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken: "no-refresh-token",
+					ExpiresAt:   &expiresSoon,
+				}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if usedToken != "no-refresh-token" {
+		t.Fatalf("expected original token, got %q", usedToken)
+	}
+}
+
+func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
+	t.Parallel()
+
+	var usedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			t.Fatal("RefreshToken should not be called when no expiry info")
+			return nil, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "no-expiry-token",
+					RefreshToken: "rf",
+				}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if usedToken != "no-expiry-token" {
+		t.Fatalf("expected original token, got %q", usedToken)
+	}
+}
+
+func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
+	t.Parallel()
+
+	var usedToken string
+	stub := &stubNonOAuthProvider{
+		name: "manual-api",
+		ops:  []core.Operation{{Name: "get", Description: "Get", Method: "GET"}},
+		execFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+			usedToken = token
+			return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "manual-token",
+					RefreshToken: "rf",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/manual-api/get", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if usedToken != "manual-token" {
+		t.Fatalf("expected original token, got %q", usedToken)
+	}
+}
+
+func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+			return &core.TokenResponse{
+				AccessToken:  "new-access",
+				RefreshToken: "rotated-refresh",
+				ExpiresIn:    7200,
+			}, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	var storedToken *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "old-access",
+					RefreshToken: "old-refresh",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				storedToken = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if storedToken == nil {
+		t.Fatal("expected token to be persisted")
+	}
+	if storedToken.RefreshToken != "rotated-refresh" {
+		t.Fatalf("expected rotated refresh token, got %q", storedToken.RefreshToken)
+	}
+	if storedToken.AccessToken != "new-access" {
+		t.Fatalf("expected new access token, got %q", storedToken.AccessToken)
+	}
+}
+
+func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+			return &core.TokenResponse{AccessToken: "new-access", ExpiresIn: 0}, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	var storedToken *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "old-access",
+					RefreshToken: "rf",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				storedToken = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if storedToken == nil {
+		t.Fatal("expected token to be persisted")
+	}
+	if storedToken.AccessToken != "new-access" {
+		t.Fatalf("expected new access token, got %q", storedToken.AccessToken)
+	}
+	if storedToken.ExpiresAt != nil {
+		t.Fatalf("expected ExpiresAt to be nil when provider omits expires_in, got %v", *storedToken.ExpiresAt)
+	}
+}
+
+func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T) {
+	t.Parallel()
+
+	var usedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			return nil, fmt.Errorf("upstream error")
+		},
+	}
+
+	expiresSoon := time.Now().Add(3 * time.Minute)
+	tokenCallCount := 0
+	var storedToken *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				tokenCallCount++
+				if tokenCallCount == 1 {
+					return &core.IntegrationToken{
+						AccessToken:  "stale-token",
+						RefreshToken: "rf",
+						ExpiresAt:    &expiresSoon,
+					}, nil
+				}
+				// Simulate concurrent refresh: DB now has a fresh token.
+				return &core.IntegrationToken{
+					AccessToken:  "concurrently-refreshed-token",
+					RefreshToken: "new-rf",
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				storedToken = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if usedToken != "concurrently-refreshed-token" {
+		t.Fatalf("expected concurrently refreshed token, got %q", usedToken)
+	}
+	if storedToken != nil {
+		t.Fatal("expected StoreToken not to be called when concurrent refresh detected")
+	}
+}
+
+func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "fake"},
+			ops:             []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+			return &core.TokenResponse{
+				AccessToken:  "new-access",
+				RefreshToken: "rotated-refresh",
+				ExpiresIn:    3600,
+			}, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "old-access",
+					RefreshToken: "old-refresh",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, _ *core.IntegrationToken) error {
+				return fmt.Errorf("database unavailable")
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502 when StoreToken fails after refresh, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			return nil, fmt.Errorf("upstream error")
+		},
+	}
+
+	expiresSoon := time.Now().Add(3 * time.Minute)
+	tokenCallCount := 0
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				tokenCallCount++
+				if tokenCallCount == 1 {
+					return &core.IntegrationToken{
+						AccessToken:  "stale-token",
+						RefreshToken: "rf",
+						ExpiresAt:    &expiresSoon,
+					}, nil
+				}
+				// Token was deleted between reads.
+				return nil, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Should gracefully degrade (token still valid) instead of panicking.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 (graceful degradation), got %d", resp.StatusCode)
 	}
 }
 
