@@ -81,6 +81,7 @@ func (s *Server) routes() {
 			r.Post("/{integration}/{operation}", s.executeOperation)
 
 			r.Post("/auth/start-oauth", s.startIntegrationOAuth)
+			r.Post("/auth/connect-manual", s.connectManual)
 
 			r.Post("/tokens", s.createAPIToken)
 			r.Get("/tokens", s.listAPITokens)

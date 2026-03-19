@@ -1882,3 +1882,169 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 		t.Fatalf("expected message hello, got %v", result["message"])
 	}
 }
+
+type stubManualProvider struct {
+	coretesting.StubIntegration
+}
+
+func (s *stubManualProvider) SupportsManualAuth() bool { return true }
+
+func TestConnectManual(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+		})
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "connected" {
+		t.Fatalf("expected connected, got %q", result["status"])
+	}
+	if stored == nil {
+		t.Fatal("expected StoreToken to be called")
+	}
+	if stored.UserID != "u1" {
+		t.Fatalf("expected user u1, got %q", stored.UserID)
+	}
+	if stored.Integration != "manual-svc" {
+		t.Fatalf("expected integration manual-svc, got %q", stored.Integration)
+	}
+	if stored.AccessToken != "my-api-key" {
+		t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
+	}
+}
+
+func TestConnectManual_OAuthProviderRejected(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, &coretesting.StubIntegration{N: "slack"})
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"integration":"slack","credential":"some-key"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestConnectManual_MissingFields(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestConnectManual_UnknownIntegration(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"integration":"nonexistent","credential":"key"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestStartOAuth_ManualProviderRejected(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+		})
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"integration":"manual-svc","scopes":[]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["error"] == "" {
+		t.Fatal("expected error message in response")
+	}
+}
