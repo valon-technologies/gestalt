@@ -45,6 +45,19 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		Headers:            def.Headers,
 	}
 
+	connMode := def.ConnectionMode
+	if intg.ConnectionMode != "" {
+		connMode = intg.ConnectionMode
+	}
+	switch connMode {
+	case "", "none", "user", "identity", "either":
+		if connMode != "" {
+			base.ConnMode = core.ConnectionMode(connMode)
+		}
+	default:
+		return nil, fmt.Errorf("%s: unknown connection_mode %q", def.Provider, connMode)
+	}
+
 	switch def.AuthStyle {
 	case "", "bearer":
 	case "raw":

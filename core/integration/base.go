@@ -73,6 +73,7 @@ type Base struct {
 	IntegrationName    string
 	IntegrationDisplay string
 	IntegrationDesc    string
+	ConnMode           core.ConnectionMode
 	Auth               AuthHandler
 	BaseURL            string
 	Operations         []core.Operation
@@ -90,6 +91,13 @@ type Base struct {
 func (b *Base) Name() string        { return b.IntegrationName }
 func (b *Base) DisplayName() string { return b.IntegrationDisplay }
 func (b *Base) Description() string { return b.IntegrationDesc }
+
+func (b *Base) ConnectionMode() core.ConnectionMode {
+	if b.ConnMode == "" {
+		return core.ConnectionModeUser
+	}
+	return b.ConnMode
+}
 
 func (b *Base) AuthorizationURL(state string, scopes []string) string {
 	return b.Auth.AuthorizationURL(state, scopes)

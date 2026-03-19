@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/broker"
 	"github.com/valon-technologies/toolshed/internal/registry"
 )
 
@@ -15,6 +16,7 @@ type Server struct {
 	auth       core.AuthProvider
 	datastore  core.Datastore
 	providers  *registry.PluginMap[core.Provider]
+	broker     *broker.Broker
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
@@ -47,6 +49,7 @@ func New(cfg Config) (*Server, error) {
 		auth:       cfg.Auth,
 		datastore:  cfg.Datastore,
 		providers:  cfg.Providers,
+		broker:     broker.New(cfg.Providers, cfg.Datastore),
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
 		now:        now,

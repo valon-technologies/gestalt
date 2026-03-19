@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
+	"github.com/valon-technologies/toolshed/plugins/providers/echo"
 	secretsenv "github.com/valon-technologies/toolshed/plugins/secrets/env"
 	secretsfile "github.com/valon-technologies/toolshed/plugins/secrets/file"
 	secretsgcp "github.com/valon-technologies/toolshed/plugins/secrets/gcp"
@@ -59,6 +60,7 @@ func run() error {
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
 	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
+	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -34,6 +35,7 @@ type FactoryRegistry struct {
 	Providers       map[string]ProviderFactory
 	DefaultProvider ProviderFactory
 	Secrets         map[string]SecretManagerFactory
+	Builtins        []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
@@ -269,37 +271,34 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 }
 
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], error) {
-	if len(cfg.Integrations) == 0 {
-		reg := registry.New()
-		return &reg.Providers, nil
-	}
-
 	providers := make(map[string]core.Provider, len(cfg.Integrations))
 	var mu sync.Mutex
 
-	g, ctx := errgroup.WithContext(ctx)
-	for name := range cfg.Integrations {
-		intgDef := cfg.Integrations[name]
-		factory, ok := factories.Providers[name]
-		if !ok {
-			factory = factories.DefaultProvider
-		}
-		if factory == nil {
-			return nil, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name)
-		}
-		g.Go(func() error {
-			prov, err := factory(ctx, name, intgDef, deps)
-			if err != nil {
-				return fmt.Errorf("provider %q: %w", name, err)
+	if len(cfg.Integrations) > 0 {
+		g, ctx := errgroup.WithContext(ctx)
+		for name := range cfg.Integrations {
+			intgDef := cfg.Integrations[name]
+			factory, ok := factories.Providers[name]
+			if !ok {
+				factory = factories.DefaultProvider
 			}
-			mu.Lock()
-			providers[name] = prov
-			mu.Unlock()
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("bootstrap: %w", err)
+			if factory == nil {
+				return nil, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name)
+			}
+			g.Go(func() error {
+				prov, err := factory(ctx, name, intgDef, deps)
+				if err != nil {
+					return fmt.Errorf("provider %q: %w", name, err)
+				}
+				mu.Lock()
+				providers[name] = prov
+				mu.Unlock()
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 	}
 
 	reg := registry.New()
@@ -309,5 +308,15 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		}
 		log.Printf("loaded provider %s (%d operations)", name, len(prov.ListOperations()))
 	}
+
+	for _, builtin := range factories.Builtins {
+		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+		}
+		log.Printf("loaded builtin provider %s (%d operations)", builtin.Name(), len(builtin.ListOperations()))
+	}
+
 	return &reg.Providers, nil
 }

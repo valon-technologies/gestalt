@@ -387,6 +387,11 @@ func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -416,6 +421,11 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = newTestRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -1093,10 +1103,11 @@ type stubNonOAuthProvider struct {
 	execFn func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
 
-func (s *stubNonOAuthProvider) Name() string                     { return s.name }
-func (s *stubNonOAuthProvider) DisplayName() string              { return s.name }
-func (s *stubNonOAuthProvider) Description() string              { return "" }
-func (s *stubNonOAuthProvider) ListOperations() []core.Operation { return s.ops }
+func (s *stubNonOAuthProvider) Name() string                        { return s.name }
+func (s *stubNonOAuthProvider) DisplayName() string                 { return s.name }
+func (s *stubNonOAuthProvider) Description() string                 { return "" }
+func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
+func (s *stubNonOAuthProvider) ListOperations() []core.Operation    { return s.ops }
 func (s *stubNonOAuthProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	if s.execFn != nil {
 		return s.execFn(ctx, op, params, token)
@@ -1768,4 +1779,106 @@ type stubStatefulAuth struct {
 
 func (s *stubStatefulAuth) HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error) {
 	return s.handleWithState(ctx, code, state)
+}
+
+func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
+	t.Parallel()
+
+	tokenCalled := false
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "noop",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				if token != "" {
+					t.Errorf("expected empty token for ConnectionModeNone, got %q", token)
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "ping", Method: "GET"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				tokenCalled = true
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/noop/ping", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if tokenCalled {
+		t.Fatal("datastore.Token should not be called for ConnectionModeNone")
+	}
+}
+
+func TestExecuteOperation_EchoProvider(t *testing.T) {
+	t.Parallel()
+
+	echoProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "echo",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, params map[string]any, _ string) (*core.OperationResult, error) {
+				body, _ := json.Marshal(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "echo", Method: "POST"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, echoProvider)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"message":"hello"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/echo/echo", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["message"] != "hello" {
+		t.Fatalf("expected message hello, got %v", result["message"])
+	}
 }

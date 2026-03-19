@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/broker"
 )
 
 const defaultTokenInstance = "default"
@@ -88,45 +89,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")
 
-	prov, err := s.providers.Get(providerName)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to look up integration")
-		return
-	}
-
-	ops := prov.ListOperations()
-	found := false
-	for _, op := range ops {
-		if op.Name == operationName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
-		return
-	}
-
 	userID, ok := s.resolveUserID(w, r)
 	if !ok {
-		return
-	}
-
-	storedToken, err := s.datastore.Token(r.Context(), userID, providerName, defaultTokenInstance)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to retrieve integration token")
-		return
-	}
-	if storedToken == nil {
-		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
 		return
 	}
 
@@ -147,15 +111,23 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accessToken, err := s.refreshTokenIfNeeded(r.Context(), prov, storedToken)
+	result, err := s.broker.Invoke(r.Context(), broker.InvokeParams{
+		Provider:  providerName,
+		Operation: operationName,
+		UserID:    userID,
+		Params:    params,
+	})
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("token refresh failed for %q: %v", providerName, err))
-		return
-	}
-
-	result, err := prov.Execute(r.Context(), operationName, params, accessToken)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
+		switch err.(type) {
+		case *broker.ProviderNotFoundError:
+			writeError(w, http.StatusNotFound, err.Error())
+		case *broker.OperationNotFoundError:
+			writeError(w, http.StatusNotFound, err.Error())
+		case *broker.NoCredentialError:
+			writeError(w, http.StatusPreconditionFailed, err.Error())
+		default:
+			writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
+		}
 		return
 	}
 
@@ -504,61 +476,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
-}
-
-const tokenRefreshThreshold = 5 * time.Minute
-
-func (s *Server) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, token *core.IntegrationToken) (string, error) {
-	if token.RefreshToken == "" || token.ExpiresAt == nil {
-		return token.AccessToken, nil
-	}
-
-	if time.Until(*token.ExpiresAt) > tokenRefreshThreshold {
-		return token.AccessToken, nil
-	}
-
-	oauthProv, ok := prov.(core.OAuthProvider)
-	if !ok {
-		return token.AccessToken, nil
-	}
-
-	resp, err := oauthProv.RefreshToken(ctx, token.RefreshToken)
-	if err != nil {
-		// Re-read to avoid overwriting a concurrent successful refresh.
-		fresh, fetchErr := s.datastore.Token(ctx, token.UserID, token.Integration, token.Instance)
-		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
-			return fresh.AccessToken, nil
-		}
-
-		token.RefreshErrorCount++
-		token.UpdatedAt = time.Now()
-		_ = s.datastore.StoreToken(ctx, token)
-
-		if time.Now().Before(*token.ExpiresAt) {
-			return token.AccessToken, nil
-		}
-		return "", fmt.Errorf("token expired and refresh failed: %w", err)
-	}
-
-	now := time.Now()
-	token.AccessToken = resp.AccessToken
-	if resp.RefreshToken != "" {
-		token.RefreshToken = resp.RefreshToken
-	}
-	if resp.ExpiresIn > 0 {
-		t := now.Add(time.Duration(resp.ExpiresIn) * time.Second)
-		token.ExpiresAt = &t
-	} else {
-		token.ExpiresAt = nil
-	}
-	token.LastRefreshedAt = now
-	token.RefreshErrorCount = 0
-	token.UpdatedAt = now
-
-	if err := s.datastore.StoreToken(ctx, token); err != nil {
-		return "", fmt.Errorf("persisting refreshed token: %w", err)
-	}
-	return token.AccessToken, nil
 }
 
 func hashToken(token string) string {
