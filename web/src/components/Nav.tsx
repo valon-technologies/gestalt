@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clearSession, getUserEmail } from "@/lib/auth";
+import { LOGIN_PATH } from "@/lib/constants";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -17,7 +18,7 @@ export default function Nav() {
 
   function handleLogout() {
     clearSession();
-    window.location.href = "/login";
+    window.location.href = LOGIN_PATH;
   }
 
   return (

@@ -1,4 +1,5 @@
 import { clearSession, getSessionToken } from "./auth";
+import { HTTP_UNAUTHORIZED, LOGIN_PATH } from "./constants";
 
 export interface Integration {
   name: string;
@@ -50,10 +51,12 @@ export async function fetchAPI<T>(
     },
   });
 
-  if (res.status === 401) {
+  if (res.status === HTTP_UNAUTHORIZED) {
     clearSession();
-    window.location.href = "/login";
-    throw new APIError(401, "Session expired");
+    if (window.location.pathname !== LOGIN_PATH) {
+      window.location.href = LOGIN_PATH;
+    }
+    throw new APIError(HTTP_UNAUTHORIZED, "Session expired");
   }
 
   if (!res.ok) {
