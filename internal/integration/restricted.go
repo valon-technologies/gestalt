@@ -33,9 +33,10 @@ func NewRestricted(inner core.Provider, allowed []string) core.Provider {
 	return r
 }
 
-func (r *Restricted) Name() string        { return r.inner.Name() }
-func (r *Restricted) DisplayName() string { return r.inner.DisplayName() }
-func (r *Restricted) Description() string { return r.inner.Description() }
+func (r *Restricted) Name() string                        { return r.inner.Name() }
+func (r *Restricted) DisplayName() string                 { return r.inner.DisplayName() }
+func (r *Restricted) Description() string                 { return r.inner.Description() }
+func (r *Restricted) ConnectionMode() core.ConnectionMode { return r.inner.ConnectionMode() }
 
 func (r *Restricted) ListOperations() []core.Operation {
 	all := r.inner.ListOperations()

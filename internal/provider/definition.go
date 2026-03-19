@@ -1,14 +1,15 @@
 package provider
 
 type Definition struct {
-	Provider    string            `yaml:"provider"`
-	DisplayName string            `yaml:"display_name"`
-	Description string            `yaml:"description"`
-	BaseURL     string            `yaml:"base_url"`
-	Auth        AuthDef           `yaml:"auth"`
-	AuthStyle   string            `yaml:"auth_style"` // bearer (default), raw, none
-	TokenPrefix string            `yaml:"token_prefix"`
-	Headers     map[string]string `yaml:"headers"`
+	Provider       string            `yaml:"provider"`
+	DisplayName    string            `yaml:"display_name"`
+	Description    string            `yaml:"description"`
+	ConnectionMode string            `yaml:"connection_mode"`
+	BaseURL        string            `yaml:"base_url"`
+	Auth           AuthDef           `yaml:"auth"`
+	AuthStyle      string            `yaml:"auth_style"` // bearer (default), raw, none
+	TokenPrefix    string            `yaml:"token_prefix"`
+	Headers        map[string]string `yaml:"headers"`
 
 	ResponseCheck  string `yaml:"response_check"`
 	TokenParser    string `yaml:"token_parser"`

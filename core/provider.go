@@ -2,10 +2,20 @@ package core
 
 import "context"
 
+type ConnectionMode string
+
+const (
+	ConnectionModeNone     ConnectionMode = "none"
+	ConnectionModeUser     ConnectionMode = "user"
+	ConnectionModeIdentity ConnectionMode = "identity"
+	ConnectionModeEither   ConnectionMode = "either"
+)
+
 type Provider interface {
 	Name() string
 	DisplayName() string
 	Description() string
+	ConnectionMode() ConnectionMode
 	ListOperations() []Operation
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
