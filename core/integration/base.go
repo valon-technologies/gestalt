@@ -11,7 +11,12 @@ import (
 	"github.com/valon-technologies/toolshed/internal/oauth"
 )
 
-var _ core.OAuthProvider = (*Base)(nil)
+var (
+	_ core.OAuthProvider  = (*Base)(nil)
+	_ core.ManualProvider = (*Base)(nil)
+)
+
+type manualChecker interface{ IsManual() bool }
 
 type AuthHandler interface {
 	AuthorizationURL(state string, scopes []string) string
@@ -97,6 +102,11 @@ func (b *Base) ConnectionMode() core.ConnectionMode {
 		return core.ConnectionModeUser
 	}
 	return b.ConnMode
+}
+
+func (b *Base) SupportsManualAuth() bool {
+	mc, ok := b.Auth.(manualChecker)
+	return ok && mc.IsManual()
 }
 
 func (b *Base) AuthorizationURL(state string, scopes []string) string {

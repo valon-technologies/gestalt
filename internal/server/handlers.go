@@ -71,15 +71,40 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider, bool) {
 	prov, err := s.providers.Get(name)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", name))
-			return
+			return nil, false
 		}
 		writeError(w, http.StatusInternalServerError, "failed to look up integration")
+		return nil, false
+	}
+	return prov, true
+}
+
+func (s *Server) requireOAuthProvider(w http.ResponseWriter, name string) (core.OAuthProvider, bool) {
+	prov, ok := s.getProvider(w, name)
+	if !ok {
+		return nil, false
+	}
+	if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
+		return nil, false
+	}
+	oauthProv, ok := prov.(core.OAuthProvider)
+	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", name))
+		return nil, false
+	}
+	return oauthProv, true
+}
+
+func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
+	prov, ok := s.getProvider(w, chi.URLParam(r, "name"))
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, prov.ListOperations())
@@ -242,21 +267,12 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prov, err := s.providers.Get(req.Integration)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", req.Integration))
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to look up integration")
+	oauthProv, ok := s.requireOAuthProvider(w, req.Integration)
+	if !ok {
 		return
 	}
 
-	oauthProv, ok := prov.(core.OAuthProvider)
-	if !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", req.Integration))
-		return
-	}
+	prov, _ := s.providers.Get(req.Integration)
 
 	if s.stateCodec == nil {
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
@@ -320,21 +336,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	providerName := state.Integration
-	prov, err := s.providers.Get(providerName)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to look up integration")
+	oauthProv, ok := s.requireOAuthProvider(w, providerName)
+	if !ok {
 		return
 	}
 
-	oauthProv, ok := prov.(core.OAuthProvider)
-	if !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", providerName))
-		return
-	}
+	prov, _ := s.providers.Get(providerName)
 
 	var tokenResp *core.TokenResponse
 	if exchanger, ok := prov.(oauthVerifierExchanger); ok && state.Verifier != "" {
@@ -371,6 +378,60 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		"status":      "connected",
 		"integration": providerName,
 	})
+}
+
+type connectManualRequest struct {
+	Integration string `json:"integration"`
+	Credential  string `json:"credential"`
+}
+
+func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
+	var req connectManualRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Integration == "" || req.Credential == "" {
+		writeError(w, http.StatusBadRequest, "integration and credential are required")
+		return
+	}
+
+	prov, ok := s.getProvider(w, req.Integration)
+	if !ok {
+		return
+	}
+
+	mp, ok := prov.(core.ManualProvider)
+	if !ok || !mp.SupportsManualAuth() {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
+		return
+	}
+
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		return
+	}
+
+	tok := &core.IntegrationToken{
+		ID:          uuid.NewString(),
+		UserID:      dbUser.ID,
+		Integration: req.Integration,
+		Instance:    "default",
+		AccessToken: req.Credential,
+	}
+	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store credential")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
 
 type createTokenRequest struct {

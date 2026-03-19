@@ -10,6 +10,8 @@ import (
 
 type ManualAuthHandler struct{}
 
+func (h ManualAuthHandler) IsManual() bool { return true }
+
 func (h ManualAuthHandler) AuthorizationURL(state string, _ []string) string {
 	return "manual://configure?state=" + url.QueryEscape(state)
 }

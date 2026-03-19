@@ -26,3 +26,8 @@ type OAuthProvider interface {
 	ExchangeCode(ctx context.Context, code string) (*TokenResponse, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
 }
+
+type ManualProvider interface {
+	Provider
+	SupportsManualAuth() bool
+}

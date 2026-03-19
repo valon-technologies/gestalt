@@ -15,8 +15,10 @@ type Restricted struct {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider      = (*Restricted)(nil)
-	_ core.OAuthProvider = (*restrictedOAuth)(nil)
+	_ core.Provider       = (*Restricted)(nil)
+	_ core.ManualProvider = (*Restricted)(nil)
+	_ core.OAuthProvider  = (*restrictedOAuth)(nil)
+	_ core.ManualProvider = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -56,6 +58,13 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	return r.inner.Execute(ctx, operation, params, token)
 }
 
+func (r *Restricted) SupportsManualAuth() bool {
+	if mp, ok := r.inner.(core.ManualProvider); ok {
+		return mp.SupportsManualAuth()
+	}
+	return false
+}
+
 // Inner returns the unwrapped provider.
 func (r *Restricted) Inner() core.Provider {
 	return r.inner
@@ -78,9 +87,4 @@ func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.
 
 func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
 	return r.oauth.RefreshToken(ctx, refreshToken)
-}
-
-// Inner returns the unwrapped provider.
-func (r *restrictedOAuth) Inner() core.Provider {
-	return r.inner
 }
