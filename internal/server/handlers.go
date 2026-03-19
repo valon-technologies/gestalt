@@ -16,6 +16,25 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 )
 
+const defaultTokenInstance = "default"
+
+func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	user := UserFromContext(r.Context())
+	if user == nil || user.Email == "" {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return "", false
+	}
+	if id := UserIDFromContext(r.Context()); id != "" {
+		return id, true
+	}
+	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+	if err != nil || dbUser == nil || dbUser.ID == "" {
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		return "", false
+	}
+	return dbUser.ID, true
+}
+
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -92,23 +111,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "not authenticated")
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
 		return
 	}
 
-	userID := UserIDFromContext(r.Context())
-	if userID == "" {
-		dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to resolve user")
-			return
-		}
-		userID = dbUser.ID
-	}
-
-	storedToken, err := s.datastore.Token(r.Context(), userID, providerName, "default")
+	storedToken, err := s.datastore.Token(r.Context(), userID, providerName, defaultTokenInstance)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
@@ -247,6 +255,14 @@ type startOAuthRequest struct {
 	Scopes      []string `json:"scopes"`
 }
 
+type oauthStarter interface {
+	StartOAuth(state string, scopes []string) (authURL string, verifier string)
+}
+
+type oauthVerifierExchanger interface {
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string) (*core.TokenResponse, error)
+}
+
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -270,30 +286,68 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := generateRandomHex(16)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate state")
+	if s.stateCodec == nil {
+		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
 		return
 	}
 
-	url := oauthProv.AuthorizationURL(state, req.Scopes)
-	writeJSON(w, http.StatusOK, map[string]string{"url": url, "state": state})
+	dbUserID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var (
+		authURL  string
+		verifier string
+	)
+	// State placeholder is passed to the provider to build the URL template;
+	// setURLQueryParam below replaces it with the encrypted state token.
+	if starter, ok := prov.(oauthStarter); ok {
+		authURL, verifier = starter.StartOAuth("_", req.Scopes)
+	} else {
+		authURL = oauthProv.AuthorizationURL("_", req.Scopes)
+	}
+
+	state, err := s.stateCodec.Encode(integrationOAuthState{
+		UserID:      dbUserID,
+		Integration: req.Integration,
+		Verifier:    verifier,
+		ExpiresAt:   s.now().Add(integrationOAuthStateTTL).Unix(),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode oauth state")
+		return
+	}
+
+	authURL, err = setURLQueryParam(authURL, "state", state)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to prepare oauth URL")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"url": authURL, "state": state})
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
-	providerName := r.URL.Query().Get("integration")
-	if code == "" || providerName == "" {
-		writeError(w, http.StatusBadRequest, "missing code or integration parameter")
+	encodedState := r.URL.Query().Get("state")
+	if code == "" || encodedState == "" {
+		writeError(w, http.StatusBadRequest, "missing code or state parameter")
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "not authenticated")
+	if s.stateCodec == nil {
+		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
 		return
 	}
 
+	state, err := s.stateCodec.Decode(encodedState, s.now())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid or expired oauth state")
+		return
+	}
+
+	providerName := state.Integration
 	prov, err := s.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -310,28 +364,27 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tokenResp, err := oauthProv.ExchangeCode(r.Context(), code)
+	var tokenResp *core.TokenResponse
+	if exchanger, ok := prov.(oauthVerifierExchanger); ok && state.Verifier != "" {
+		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier)
+	} else {
+		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
 		return
 	}
 
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return
-	}
-
 	var expiresAt *time.Time
 	if tokenResp.ExpiresIn > 0 {
-		t := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		t := s.now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 		expiresAt = &t
 	}
 
 	tok := &core.IntegrationToken{
-		UserID:       dbUser.ID,
+		UserID:       state.UserID,
 		Integration:  providerName,
-		Instance:     "default",
+		Instance:     defaultTokenInstance,
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresAt:    expiresAt,
@@ -342,7 +395,10 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":      "connected",
+		"integration": providerName,
+	})
 }
 
 type createTokenRequest struct {
@@ -357,9 +413,8 @@ type createTokenResponse struct {
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "not authenticated")
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
 		return
 	}
 
@@ -382,16 +437,10 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 
 	hashed := hashToken(plaintext)
 
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return
-	}
-
-	now := time.Now().UTC().Truncate(time.Second)
+	now := s.now().UTC().Truncate(time.Second)
 	apiToken := &core.APIToken{
 		ID:          uuid.NewString(),
-		UserID:      dbUser.ID,
+		UserID:      userID,
 		Name:        req.Name,
 		HashedToken: hashed,
 		Scopes:      req.Scopes,
@@ -420,19 +469,12 @@ type apiTokenInfo struct {
 }
 
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "not authenticated")
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
 		return
 	}
 
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return
-	}
-
-	tokens, err := s.datastore.ListAPITokens(r.Context(), dbUser.ID)
+	tokens, err := s.datastore.ListAPITokens(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
