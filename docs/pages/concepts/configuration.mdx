@@ -1,0 +1,82 @@
+# Configuration
+
+Toolshed boots entirely from a YAML config file plus environment and secret resolution. The config is the contract between your deployment and the runtime.
+
+## How config files are found
+
+1. Explicit `--config` flag passed to the binary.
+2. `TOOLSHED_CONFIG` environment variable.
+3. `./config.yaml` in the current working directory.
+4. `/etc/toolshed/config.yaml` as a system-wide fallback.
+
+The first match wins. Toolshed does not merge multiple config files.
+
+## How values are resolved
+
+1. Raw YAML is parsed into the config struct.
+2. Environment variable references (`${VAR}`) are expanded from the process environment.
+3. Defaults are applied for any fields not explicitly set.
+4. `auth_profiles` entries are merged into integration configs that reference them by name.
+5. `base_url` from the server block is injected into OAuth callback URL construction.
+6. `secret://` references are resolved through the configured secret manager. This happens last so that secrets can contain values that would otherwise look like env vars.
+
+## Annotated example
+
+```yaml
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://auth.example.com
+    client_id: ${TOOLSHED_OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+    allowed_domains:
+      - example.com
+    pkce: true
+
+datastore:
+  provider: postgres
+  config:
+    dsn: secret://toolshed-postgres-dsn
+
+secrets:
+  provider: gcp_secret_manager
+  config:
+    project: platform-prod
+
+auth_profiles:
+  slack_shared:
+    client_id: secret://slack-client-id
+    client_secret: secret://slack-client-secret
+    auth:
+      authorization_url: https://slack.com/oauth/v2/authorize
+      token_url: https://slack.com/api/oauth.v2.access
+      response_hook: slack_ok
+
+provider_dirs:
+  - /etc/toolshed/providers
+
+integrations:
+  slack:
+    auth_profile: slack_shared
+    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    response_check: slack_ok
+    allowed_operations:
+      conversations_list: ""
+      chat_postMessage: Send a message to a Slack channel
+
+server:
+  port: 8080
+  base_url: https://toolshed.example.com
+  encryption_key: secret://toolshed-encryption-key
+```
+
+## Important behaviors
+
+- **auth_profiles inheritance** — when an integration references an `auth_profile`, the profile's fields are merged into the integration config. Fields set directly on the integration override the profile.
+- **base_url for OAuth** — the server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
+- **provider_dirs** — directories listed here are scanned at startup for provider YAML files. Each file becomes a registered provider whose operations are available to integrations.
+- **allowed_operations as a positive allow-list** — only operations listed in `allowed_operations` are callable. An empty map means no operations are exposed for that integration. The value is a human-readable description; an empty string means the operation is allowed but has no custom description.
+
+## Fields that exist but are not fully wired yet
+
+The config schema includes `token_exchange`, `accept_header`, and `token_metadata` fields. These are parsed and stored but not yet acted on by all code paths. They exist to support upcoming work on token exchange flows and content negotiation.

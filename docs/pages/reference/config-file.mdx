@@ -1,0 +1,45 @@
+# Config File
+
+These are the top-level keys the current server understands.
+
+## Top-level keys
+
+| Key | Meaning |
+|---|---|
+| `auth` | Platform authentication provider and provider-specific config. |
+| `datastore` | Where users, API tokens, and integration tokens are stored. |
+| `secrets` | How `secret://` references are resolved. |
+| `auth_profiles` | Reusable OAuth settings shared across integrations. |
+| `integrations` | Map of integration name to integration definition overrides. |
+| `provider_dirs` | Directories searched for provider YAML files. |
+| `server` | Port, base URL, encryption key, and development mode. |
+
+## Server block
+
+| Field | Notes |
+|---|---|
+| `port` | Defaults to `8080`. |
+| `base_url` | Used to derive missing OAuth callback URLs. |
+| `encryption_key` | Required outside dev mode. Used to derive the data-encryption key. |
+| `dev_mode` | Enables the auth bypass header and relaxes local setup. |
+
+## Integration block
+
+| Field | Notes |
+|---|---|
+| `openapi` | OpenAPI URL or local file path. |
+| `provider` | Path to a provider YAML file. |
+| `auth_profile` | Name of a reusable auth profile to inherit from. |
+| `client_id`, `client_secret` | OAuth client credentials for the upstream integration. |
+| `redirect_url` | Optional override for the integration callback URL. |
+| `base_url` | Override the base URL from the spec or provider file. |
+| `auth` | Auth overrides layered on top of the spec or provider definition. |
+| `response_check`, `token_parser`, `request_mutator` | Named hook registrations. |
+| `token_prefix`, `auth_style`, `headers` | Request-auth shaping and default upstream headers. |
+| `allowed_operations` | Positive allow-list of operation names, with optional description overrides. |
+
+## Supported provider names today
+
+- **Auth:** `google`, `oidc`
+- **Datastore:** `sqlite`, `postgres`, `mysql`
+- **Secrets:** `env`, `file`, `gcp_secret_manager`

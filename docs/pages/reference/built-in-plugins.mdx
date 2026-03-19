@@ -1,0 +1,36 @@
+# Built-in Plugins
+
+The runtime is plugin-oriented, but the current binary already registers a useful starting set.
+
+## Auth providers
+
+| Name | Notes |
+|---|---|
+| `google` | Google OAuth login plus Google userinfo validation. |
+| `oidc` | Generic OIDC discovery with optional PKCE support. |
+
+## Datastores
+
+| Name | Notes |
+|---|---|
+| `sqlite` | Default for local or single-instance deployments. |
+| `postgres` | Recommended for shared, multi-instance deployments. |
+| `mysql` | Alternative SQL backend using the shared sqlstore layer. |
+
+## Secret managers
+
+| Name | Notes |
+|---|---|
+| `env` | Resolves secrets from environment variables, optionally with a prefix. |
+| `file` | Resolves one secret per file from a base directory. |
+| `gcp_secret_manager` | Loads secrets from Google Cloud Secret Manager. |
+
+## Built-in integration hook packages
+
+- **slack** (`slack_ok`) — validates that the Slack API response body contains `"ok": true`. Used as both a `response_check` and an auth `response_hook`.
+- **datadog** (`datadog_keys`) — parses Datadog API and application keys from stored credentials and attaches them as request headers.
+- **hex** (`hex_response`) — handles Hex-specific response validation for API calls.
+
+## What is not pluginized yet
+
+The HTTP route structure, middleware chain, and operation dispatch loop are fixed in the binary. There is no generic plugin point for injecting new routes or middleware. If you need custom behavior at that layer, you are contributing to the core runtime rather than writing a plugin.

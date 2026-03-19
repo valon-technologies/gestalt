@@ -1,0 +1,49 @@
+import { Callout } from 'nextra/components'
+
+# Authentication and Tokens
+
+Toolshed manages three distinct token flows: platform identity, API tokens for callers, and per-integration credentials for upstream APIs.
+
+## Platform auth
+
+Toolshed authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token that identifies the user on subsequent requests.
+
+- **google** — uses Google OAuth 2.0. The simplest option for teams already on Google Workspace.
+- **oidc** — works with any OpenID Connect provider. Supports PKCE and domain-based allow-lists.
+
+Both providers store the authenticated user in the datastore after first login. The session token is set as an HTTP cookie and validated on every request by the auth middleware.
+
+## API tokens
+
+For programmatic access, Toolshed supports API tokens. A user generates a token through the web UI or API, and the server returns the raw token exactly once. The server stores only a SHA-256 hash of the token, so it cannot be recovered after creation.
+
+API tokens serve as a fallback authentication mechanism when session cookies are not practical, such as CLI tools or CI pipelines.
+
+The request authentication path is:
+
+1. Check for a `Bearer` token in the `Authorization` header. If present, compute its SHA-256 hash and look it up in the datastore.
+2. If no bearer token, check for a valid session token in the request cookies.
+3. If neither is found, reject the request as unauthenticated.
+
+<Callout>
+  API token scopes are stored and returned by the server, but the current middleware does not enforce them. Treat the field as metadata for now, not a complete authorization boundary.
+</Callout>
+
+## Integration tokens
+
+Integration tokens are the credentials Toolshed stores for a user's connection to an upstream API. When a user completes an OAuth flow for an integration, Toolshed encrypts the tokens and persists them in the datastore.
+
+Each stored credential includes:
+
+- **Access token** — the bearer token sent to the upstream API on each request.
+- **Refresh token** — used to obtain a new access token when the current one expires (if the upstream API provides one).
+- **Expiry time** — the timestamp at which the access token is expected to expire.
+- **Integration name** — ties the credential to a specific integration so users can have tokens for multiple integrations simultaneously.
+
+## Refresh behavior today
+
+Token refresh is not yet automatically wired into the request path. If an access token expires, the caller will receive the upstream API's error response. Manual re-authentication through the OAuth flow is currently the recovery path. Automatic refresh is planned and the plumbing exists in the token storage layer, but the middleware does not yet trigger it.
+
+## Development mode
+
+When `dev_mode` is enabled in the server config, Toolshed relaxes several restrictions to make local development easier. HTTPS is not required for OAuth callbacks, and the `X-Dev-User-Email` header can be used to impersonate a user without going through the full login flow. The `/dev-login` endpoint provides a shortcut for creating a session without an external identity provider. Development mode should never be enabled in production.
