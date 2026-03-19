@@ -118,6 +118,14 @@ func (s *Server) listRuntimes(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.runtimes.List())
 }
 
+func (s *Server) listBindings(w http.ResponseWriter, _ *http.Request) {
+	if s.bindings == nil {
+		writeJSON(w, http.StatusOK, []string{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.bindings.List())
+}
+
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")

@@ -72,3 +72,8 @@ func NewRuntimeMap() *PluginMap[core.Runtime] {
 	m := newPluginMap[core.Runtime]("runtime")
 	return &m
 }
+
+func NewBindingMap() *PluginMap[core.Binding] {
+	m := newPluginMap[core.Binding]("binding")
+	return &m
+}

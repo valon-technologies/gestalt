@@ -13,6 +13,7 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
+	"github.com/valon-technologies/toolshed/internal/broker"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
@@ -43,6 +44,9 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	if cfg.Broker == nil {
+		cfg.Broker = broker.New(cfg.Providers, cfg.Datastore)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
@@ -2110,5 +2114,118 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 	}
 	if result["error"] == "" {
 		t.Fatal("expected error message in response")
+	}
+}
+
+func TestListBindings_NoBindings(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var names []string
+	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(names) != 0 {
+		t.Fatalf("expected empty list, got %v", names)
+	}
+}
+
+func TestListBindings_WithBindings(t *testing.T) {
+	t.Parallel()
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("my-webhook", &coretesting.StubBinding{
+		N: "my-webhook",
+		K: core.BindingTrigger,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var names []string
+	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(names) != 1 || names[0] != "my-webhook" {
+		t.Fatalf("expected [my-webhook], got %v", names)
+	}
+}
+
+func TestBindingRoutesMounted(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"binding":"reached"}`))
+	})
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("my-webhook", &coretesting.StubBinding{
+		N: "my-webhook",
+		K: core.BindingTrigger,
+		R: []core.Route{
+			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+	})
+	defer ts.Close()
+
+	body := bytes.NewBufferString(`{"test":true}`)
+	resp, err := http.Post(ts.URL+"/api/v1/bindings/my-webhook/incoming", "application/json", body)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["binding"] != "reached" {
+		t.Fatalf("expected binding handler to be reached, got %v", result)
 	}
 }

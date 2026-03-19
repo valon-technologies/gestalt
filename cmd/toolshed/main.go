@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/server"
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
+	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
@@ -64,6 +65,7 @@ func run() error {
 	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Runtimes["echo"] = echoruntime.Factory
+	factories.Bindings["webhook"] = webhook.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory
@@ -96,15 +98,45 @@ func run() error {
 		}
 	}
 
+	if result.Bindings != nil {
+		var started []string
+		for _, name := range result.Bindings.List() {
+			binding, err := result.Bindings.Get(name)
+			if err != nil {
+				closeBindings(result.Bindings, started)
+				if result.Runtimes != nil {
+					stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
+				}
+				return fmt.Errorf("getting binding %q: %v", name, err)
+			}
+			if err := binding.Start(ctx); err != nil {
+				closeBindings(result.Bindings, started)
+				if result.Runtimes != nil {
+					stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
+				}
+				return fmt.Errorf("starting binding %q: %v", name, err)
+			}
+			started = append(started, name)
+		}
+	}
+
 	srv, err := server.New(server.Config{
 		Auth:        result.Auth,
 		Datastore:   result.Datastore,
 		Providers:   result.Providers,
 		Runtimes:    result.Runtimes,
+		Bindings:    result.Bindings,
+		Broker:      result.Broker,
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(cfg.Server.EncryptionKey),
 	})
 	if err != nil {
+		if result.Bindings != nil {
+			closeBindings(result.Bindings, result.Bindings.List())
+		}
+		if result.Runtimes != nil {
+			stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
+		}
 		return fmt.Errorf("creating server: %w", err)
 	}
 
@@ -147,6 +179,10 @@ func run() error {
 		stopRuntimes(shutdownCtx, result.Runtimes, result.Runtimes.List())
 	}
 
+	if result.Bindings != nil {
+		closeBindings(result.Bindings, result.Bindings.List())
+	}
+
 	log.Println("shutdown complete")
 	return nil
 }
@@ -183,6 +219,19 @@ func stopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime
 		}
 		if err := rt.Stop(ctx); err != nil {
 			log.Printf("stopping runtime %q: %v", name, err)
+		}
+	}
+}
+
+func closeBindings(bindings *registry.PluginMap[core.Binding], names []string) {
+	for _, name := range names {
+		b, err := bindings.Get(name)
+		if err != nil {
+			log.Printf("looking up binding %q during shutdown: %v", name, err)
+			continue
+		}
+		if err := b.Close(); err != nil {
+			log.Printf("closing binding %q: %v", name, err)
 		}
 	}
 }
