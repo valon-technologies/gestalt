@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"crypto/sha256"
+
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/crypto"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/oauth"
 	"golang.org/x/oauth2"
@@ -101,6 +104,13 @@ func newTestProvider(t *testing.T, mockURL string, opts ...func(*Provider)) *Pro
 		ScopesSupported:       []string{"openid", "email", "profile"},
 	}
 
+	secret := []byte("test-secret-key-32-bytes-long!!!")
+	encKey := sha256.Sum256(secret)
+	enc, err := crypto.NewAESGCM(encKey[:])
+	if err != nil {
+		t.Fatalf("init encryptor: %v", err)
+	}
+
 	p := &Provider{
 		oauth2Cfg: &oauth2.Config{
 			ClientID:     "test-client-id",
@@ -115,7 +125,8 @@ func newTestProvider(t *testing.T, mockURL string, opts ...func(*Provider)) *Pro
 		discovery:   doc,
 		httpClient:  &http.Client{},
 		allowed:     make(map[string]bool),
-		secret:      []byte("test-secret-key-32-bytes-long!!!"),
+		secret:      secret,
+		encryptor:   enc,
 		ttl:         time.Hour,
 		displayName: "SSO",
 	}

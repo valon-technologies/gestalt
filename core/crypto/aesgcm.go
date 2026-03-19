@@ -26,6 +26,22 @@ func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
 }
 
 func (e *AESGCMEncryptor) Encrypt(plaintext string) (string, error) {
+	return e.encrypt(plaintext, base64.StdEncoding)
+}
+
+func (e *AESGCMEncryptor) Decrypt(encoded string) (string, error) {
+	return e.decrypt(encoded, base64.StdEncoding)
+}
+
+func (e *AESGCMEncryptor) EncryptURLSafe(plaintext string) (string, error) {
+	return e.encrypt(plaintext, base64.RawURLEncoding)
+}
+
+func (e *AESGCMEncryptor) DecryptURLSafe(encoded string) (string, error) {
+	return e.decrypt(encoded, base64.RawURLEncoding)
+}
+
+func (e *AESGCMEncryptor) encrypt(plaintext string, enc *base64.Encoding) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
@@ -34,14 +50,14 @@ func (e *AESGCMEncryptor) Encrypt(plaintext string) (string, error) {
 		return "", fmt.Errorf("generating nonce: %w", err)
 	}
 	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return enc.EncodeToString(ciphertext), nil
 }
 
-func (e *AESGCMEncryptor) Decrypt(encoded string) (string, error) {
+func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding) (string, error) {
 	if encoded == "" {
 		return "", nil
 	}
-	data, err := base64.StdEncoding.DecodeString(encoded)
+	data, err := enc.DecodeString(encoded)
 	if err != nil {
 		return "", fmt.Errorf("base64 decode: %w", err)
 	}

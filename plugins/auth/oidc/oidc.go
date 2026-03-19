@@ -2,11 +2,7 @@ package oidc
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +12,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/core/session"
 	"github.com/valon-technologies/toolshed/internal/oauth"
 	"golang.org/x/oauth2"
@@ -45,6 +42,7 @@ type Provider struct {
 	httpClient  *http.Client
 	allowed     map[string]bool
 	secret      []byte
+	encryptor   *crypto.AESGCMEncryptor
 	ttl         time.Duration
 	pkce        bool
 	displayName string
@@ -107,12 +105,19 @@ func New(cfg Config) (*Provider, error) {
 		},
 	}
 
+	encKey := sha256.Sum256([]byte(cfg.SessionSecret))
+	enc, err := crypto.NewAESGCM(encKey[:])
+	if err != nil {
+		return nil, fmt.Errorf("oidc auth: init encryptor: %w", err)
+	}
+
 	return &Provider{
 		oauth2Cfg:   oauth2Cfg,
 		discovery:   doc,
 		httpClient:  httpClient,
 		allowed:     allowed,
 		secret:      []byte(cfg.SessionSecret),
+		encryptor:   enc,
 		ttl:         ttl,
 		pkce:        cfg.PKCE,
 		displayName: displayName,
@@ -269,64 +274,17 @@ func (p *Provider) encodePKCEState(state, verifier string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("oidc: marshal pkce state: %w", err)
 	}
-
-	key := deriveAESKey(p.secret)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("oidc: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("oidc: create gcm: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("oidc: generate nonce: %w", err)
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, payload, nil)
-	return base64.RawURLEncoding.EncodeToString(ciphertext), nil
+	return p.encryptor.EncryptURLSafe(string(payload))
 }
 
 func (p *Provider) decodePKCEState(encoded string) (state, verifier string, err error) {
-	ciphertext, err := base64.RawURLEncoding.DecodeString(encoded)
+	plaintext, err := p.encryptor.DecryptURLSafe(encoded)
 	if err != nil {
-		return "", "", fmt.Errorf("decode base64: %w", err)
+		return "", "", fmt.Errorf("oidc: decrypt pkce state: %w", err)
 	}
-
-	key := deriveAESKey(p.secret)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", "", fmt.Errorf("create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", "", fmt.Errorf("create gcm: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return "", "", errors.New("ciphertext too short")
-	}
-
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", "", fmt.Errorf("decrypt: %w", err)
-	}
-
 	var ps pkceState
-	if err := json.Unmarshal(plaintext, &ps); err != nil {
-		return "", "", fmt.Errorf("unmarshal pkce state: %w", err)
+	if err := json.Unmarshal([]byte(plaintext), &ps); err != nil {
+		return "", "", fmt.Errorf("oidc: unmarshal pkce state: %w", err)
 	}
-
 	return ps.State, ps.Verifier, nil
-}
-
-func deriveAESKey(secret []byte) []byte {
-	h := sha256.Sum256(secret)
-	return h[:]
 }
