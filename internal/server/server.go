@@ -43,6 +43,7 @@ func (s *Server) routes() {
 	r.Get("/ready", s.readinessCheck)
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/auth/info", s.authInfo)
 		r.Post("/auth/login", s.startLogin)
 		r.Get("/auth/login/callback", s.loginCallback)
 

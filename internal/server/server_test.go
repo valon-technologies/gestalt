@@ -766,6 +766,79 @@ func TestExecuteOperation_POST(t *testing.T) {
 	}
 }
 
+func TestAuthInfo(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubAuthWithDisplayName{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "google"},
+		displayName:      "Google",
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if body["provider"] != "google" {
+		t.Fatalf("expected provider google, got %q", body["provider"])
+	}
+	if body["display_name"] != "Google" {
+		t.Fatalf("expected display_name Google, got %q", body["display_name"])
+	}
+}
+
+func TestAuthInfoFallback(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "custom"}
+	})
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if body["provider"] != "custom" {
+		t.Fatalf("expected provider custom, got %q", body["provider"])
+	}
+	if body["display_name"] != "custom" {
+		t.Fatalf("expected display_name to fall back to name custom, got %q", body["display_name"])
+	}
+}
+
+type stubAuthWithDisplayName struct {
+	coretesting.StubAuthProvider
+	displayName string
+}
+
+func (s *stubAuthWithDisplayName) DisplayName() string {
+	return s.displayName
+}
+
 type stubIntegrationWithOps struct {
 	coretesting.StubIntegration
 	ops []core.Operation

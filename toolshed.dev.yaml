@@ -1,5 +1,5 @@
 auth:
-  provider: google
+  provider: google  # or "oidc" — see docs/auth.md
   config:
     client_id: dev-placeholder
     client_secret: dev-placeholder

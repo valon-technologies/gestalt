@@ -112,11 +112,12 @@ func newTestProvider(t *testing.T, mockURL string, opts ...func(*Provider)) *Pro
 				TokenURL: mockURL + "/token",
 			},
 		},
-		discovery:  doc,
-		httpClient: &http.Client{},
-		allowed:    make(map[string]bool),
-		secret:     []byte("test-secret-key-32-bytes-long!!!"),
-		ttl:        time.Hour,
+		discovery:   doc,
+		httpClient:  &http.Client{},
+		allowed:     make(map[string]bool),
+		secret:      []byte("test-secret-key-32-bytes-long!!!"),
+		ttl:         time.Hour,
+		displayName: "SSO",
 	}
 
 	for _, fn := range opts {
@@ -504,6 +505,30 @@ func TestHandleCallbackWithStateNonPKCE(t *testing.T) {
 	}
 	if identity.Email != "user@example.com" {
 		t.Errorf("email = %q, want %q", identity.Email, "user@example.com")
+	}
+}
+
+func TestDisplayNameDefault(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockOIDCServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL)
+	if p.DisplayName() != "SSO" {
+		t.Errorf("DisplayName() = %q, want %q", p.DisplayName(), "SSO")
+	}
+}
+
+func TestDisplayNameCustom(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockOIDCServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL, func(p *Provider) {
+		p.displayName = "Okta"
+	})
+	if p.DisplayName() != "Okta" {
+		t.Errorf("DisplayName() = %q, want %q", p.DisplayName(), "Okta")
 	}
 }
 

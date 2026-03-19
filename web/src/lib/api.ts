@@ -71,6 +71,15 @@ export async function fetchAPI<T>(
   return res.json() as Promise<T>;
 }
 
+export interface AuthInfo {
+  provider: string;
+  display_name: string;
+}
+
+export async function getAuthInfo(): Promise<AuthInfo> {
+  return fetchAPI("/api/v1/auth/info");
+}
+
 export async function startLogin(state: string): Promise<{ url: string }> {
   return fetchAPI("/api/v1/auth/login", {
     method: "POST",

@@ -21,7 +21,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const defaultSessionTTL = 24 * time.Hour
+const (
+	defaultSessionTTL      = 24 * time.Hour
+	defaultOIDCDisplayName = "SSO"
+)
 
 type Config struct {
 	IssuerURL      string        `yaml:"issuer_url"`
@@ -33,16 +36,18 @@ type Config struct {
 	SessionSecret  string        `yaml:"session_secret"`
 	SessionTTL     time.Duration `yaml:"session_ttl"`
 	PKCE           bool          `yaml:"pkce"`
+	DisplayName    string        `yaml:"display_name"`
 }
 
 type Provider struct {
-	oauth2Cfg  *oauth2.Config
-	discovery  *DiscoveryDocument
-	httpClient *http.Client
-	allowed    map[string]bool
-	secret     []byte
-	ttl        time.Duration
-	pkce       bool
+	oauth2Cfg   *oauth2.Config
+	discovery   *DiscoveryDocument
+	httpClient  *http.Client
+	allowed     map[string]bool
+	secret      []byte
+	ttl         time.Duration
+	pkce        bool
+	displayName string
 }
 
 type pkceState struct {
@@ -74,6 +79,11 @@ func New(cfg Config) (*Provider, error) {
 		ttl = defaultSessionTTL
 	}
 
+	displayName := cfg.DisplayName
+	if displayName == "" {
+		displayName = defaultOIDCDisplayName
+	}
+
 	allowed := make(map[string]bool, len(cfg.AllowedDomains))
 	for _, d := range cfg.AllowedDomains {
 		allowed[strings.ToLower(d)] = true
@@ -98,17 +108,19 @@ func New(cfg Config) (*Provider, error) {
 	}
 
 	return &Provider{
-		oauth2Cfg:  oauth2Cfg,
-		discovery:  doc,
-		httpClient: httpClient,
-		allowed:    allowed,
-		secret:     []byte(cfg.SessionSecret),
-		ttl:        ttl,
-		pkce:       cfg.PKCE,
+		oauth2Cfg:   oauth2Cfg,
+		discovery:   doc,
+		httpClient:  httpClient,
+		allowed:     allowed,
+		secret:      []byte(cfg.SessionSecret),
+		ttl:         ttl,
+		pkce:        cfg.PKCE,
+		displayName: displayName,
 	}, nil
 }
 
-func (p *Provider) Name() string { return "oidc" }
+func (p *Provider) Name() string        { return "oidc" }
+func (p *Provider) DisplayName() string { return p.displayName }
 
 func (p *Provider) LoginURL(state string) string {
 	if !p.pkce {
