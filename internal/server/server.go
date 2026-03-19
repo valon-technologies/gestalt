@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -17,6 +18,7 @@ type Server struct {
 	datastore  core.Datastore
 	providers  *registry.PluginMap[core.Provider]
 	runtimes   *registry.PluginMap[core.Runtime]
+	bindings   *registry.PluginMap[core.Binding]
 	broker     *broker.Broker
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
@@ -28,12 +30,17 @@ type Config struct {
 	Datastore   core.Datastore
 	Providers   *registry.PluginMap[core.Provider]
 	Runtimes    *registry.PluginMap[core.Runtime]
+	Bindings    *registry.PluginMap[core.Binding]
+	Broker      *broker.Broker
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
 }
 
 func New(cfg Config) (*Server, error) {
+	if cfg.Broker == nil {
+		return nil, fmt.Errorf("broker is required")
+	}
 	var stateCodec *integrationOAuthStateCodec
 	if len(cfg.StateSecret) > 0 {
 		codec, err := newIntegrationOAuthStateCodec(cfg.StateSecret)
@@ -52,7 +59,8 @@ func New(cfg Config) (*Server, error) {
 		datastore:  cfg.Datastore,
 		providers:  cfg.Providers,
 		runtimes:   cfg.Runtimes,
-		broker:     broker.New(cfg.Providers, cfg.Datastore),
+		bindings:   cfg.Bindings,
+		broker:     cfg.Broker,
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
 		now:        now,
@@ -74,12 +82,26 @@ func (s *Server) routes() {
 		r.Get("/auth/login/callback", s.loginCallback)
 		r.Get("/auth/callback", s.integrationOAuthCallback)
 
+		if s.bindings != nil {
+			for _, name := range s.bindings.List() {
+				binding, err := s.bindings.Get(name)
+				if err != nil {
+					log.Printf("warning: skipping binding %q routes: %v", name, err)
+					continue
+				}
+				for _, route := range binding.Routes() {
+					r.Method(route.Method, "/bindings/"+name+route.Pattern, route.Handler)
+				}
+			}
+		}
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 
 			r.Get("/integrations", s.listIntegrations)
 			r.Get("/integrations/{name}/operations", s.listOperations)
 			r.Get("/runtimes", s.listRuntimes)
+			r.Get("/bindings", s.listBindings)
 
 			r.Get("/{integration}/{operation}", s.executeOperation)
 			r.Post("/{integration}/{operation}", s.executeOperation)

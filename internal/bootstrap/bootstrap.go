@@ -30,6 +30,7 @@ type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, broker core.Broker) (core.Runtime, error)
+type BindingFactory func(ctx context.Context, name string, cfg config.BindingDef, broker core.Broker) (core.Binding, error)
 
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
@@ -38,6 +39,7 @@ type FactoryRegistry struct {
 	DefaultProvider ProviderFactory
 	Secrets         map[string]SecretManagerFactory
 	Runtimes        map[string]RuntimeFactory
+	Bindings        map[string]BindingFactory
 	Builtins        []core.Provider
 }
 
@@ -48,6 +50,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 		Providers:  make(map[string]ProviderFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
 		Runtimes:   make(map[string]RuntimeFactory),
+		Bindings:   make(map[string]BindingFactory),
 	}
 }
 
@@ -56,6 +59,8 @@ type Result struct {
 	Datastore     core.Datastore
 	Providers     *registry.PluginMap[core.Provider]
 	Runtimes      *registry.PluginMap[core.Runtime]
+	Bindings      *registry.PluginMap[core.Binding]
+	Broker        *broker.Broker
 	SecretManager core.SecretManager
 	DevMode       bool
 }
@@ -99,7 +104,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, providers, ds)
+	b := broker.New(providers, ds)
+
+	runtimes, err := buildRuntimes(ctx, cfg, factories, b)
+	if err != nil {
+		return nil, err
+	}
+
+	bindings, err := buildBindings(ctx, cfg, factories, b)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +122,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Datastore:     ds,
 		Providers:     providers,
 		Runtimes:      runtimes,
+		Bindings:      bindings,
+		Broker:        b,
 		SecretManager: sm,
 		DevMode:       cfg.Server.DevMode,
 	}, nil
@@ -185,6 +199,16 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			return err
 		}
 		cfg.Runtimes[name] = rt
+	}
+	for name := range cfg.Bindings {
+		b := cfg.Bindings[name]
+		if err := resolveStringFields(&b, resolve); err != nil {
+			return err
+		}
+		if err := resolveYAMLNode(&b.Config, resolve); err != nil {
+			return err
+		}
+		cfg.Bindings[name] = b
 	}
 
 	return nil
@@ -342,12 +366,11 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, providers *registry.PluginMap[core.Provider], creds broker.CredentialResolver) (*registry.PluginMap[core.Runtime], error) {
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
 
-	b := broker.New(providers, creds)
 	runtimes := registry.NewRuntimeMap()
 
 	for name := range cfg.Runtimes {
@@ -370,4 +393,32 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	}
 
 	return runtimes, nil
+}
+
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker) (*registry.PluginMap[core.Binding], error) {
+	if len(cfg.Bindings) == 0 {
+		return nil, nil
+	}
+
+	bindings := registry.NewBindingMap()
+
+	for name := range cfg.Bindings {
+		def := cfg.Bindings[name]
+		factory, ok := factories.Bindings[def.Type]
+		if !ok {
+			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
+		}
+
+		binding, err := factory(ctx, name, def, b)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
+		}
+
+		if err := bindings.Register(name, binding); err != nil {
+			return nil, fmt.Errorf("bootstrap: registering binding %q: %w", name, err)
+		}
+		log.Printf("loaded binding %s (type=%s)", name, def.Type)
+	}
+
+	return bindings, nil
 }

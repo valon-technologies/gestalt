@@ -735,3 +735,58 @@ func TestBootstrapUnknownRuntimeType(t *testing.T) {
 		t.Fatal("expected error for unknown runtime type")
 	}
 }
+
+func TestBootstrapWithBindings(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-webhook": {Type: "webhook"},
+	}
+
+	factories := validFactories()
+	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ core.Broker) (core.Binding, error) {
+		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if result.Bindings == nil {
+		t.Fatal("expected Bindings to be non-nil")
+	}
+	names := result.Bindings.List()
+	if len(names) != 1 || names[0] != "my-webhook" {
+		t.Fatalf("Bindings.List: got %v, want [my-webhook]", names)
+	}
+}
+
+func TestBootstrapNoBindings(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if result.Bindings != nil {
+		t.Fatalf("expected Bindings to be nil, got %v", result.Bindings.List())
+	}
+}
+
+func TestBootstrapUnknownBindingType(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Bindings = map[string]config.BindingDef{
+		"bad": {Type: "nonexistent"},
+	}
+
+	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err == nil {
+		t.Fatal("expected error for unknown binding type")
+	}
+}
