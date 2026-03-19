@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/toolshed/core"
@@ -9,31 +11,49 @@ import (
 )
 
 type Server struct {
-	router    chi.Router
-	auth      core.AuthProvider
-	datastore core.Datastore
-	providers *registry.PluginMap[core.Provider]
-	devMode   bool
+	router     chi.Router
+	auth       core.AuthProvider
+	datastore  core.Datastore
+	providers  *registry.PluginMap[core.Provider]
+	devMode    bool
+	stateCodec *integrationOAuthStateCodec
+	now        func() time.Time
 }
 
 type Config struct {
-	Auth      core.AuthProvider
-	Datastore core.Datastore
-	Providers *registry.PluginMap[core.Provider]
-	DevMode   bool
+	Auth        core.AuthProvider
+	Datastore   core.Datastore
+	Providers   *registry.PluginMap[core.Provider]
+	DevMode     bool
+	StateSecret []byte
+	Now         func() time.Time
 }
 
-func New(cfg Config) *Server {
+func New(cfg Config) (*Server, error) {
+	var stateCodec *integrationOAuthStateCodec
+	if len(cfg.StateSecret) > 0 {
+		codec, err := newIntegrationOAuthStateCodec(cfg.StateSecret)
+		if err != nil {
+			return nil, fmt.Errorf("init oauth state codec: %w", err)
+		}
+		stateCodec = codec
+	}
+	now := cfg.Now
+	if now == nil {
+		now = time.Now
+	}
 	s := &Server{
-		router:    chi.NewRouter(),
-		auth:      cfg.Auth,
-		datastore: cfg.Datastore,
-		providers: cfg.Providers,
-		devMode:   cfg.DevMode,
+		router:     chi.NewRouter(),
+		auth:       cfg.Auth,
+		datastore:  cfg.Datastore,
+		providers:  cfg.Providers,
+		devMode:    cfg.DevMode,
+		stateCodec: stateCodec,
+		now:        now,
 	}
 
 	s.routes()
-	return s
+	return s, nil
 }
 
 func (s *Server) routes() {
@@ -46,6 +66,7 @@ func (s *Server) routes() {
 		r.Get("/auth/info", s.authInfo)
 		r.Post("/auth/login", s.startLogin)
 		r.Get("/auth/login/callback", s.loginCallback)
+		r.Get("/auth/callback", s.integrationOAuthCallback)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
@@ -57,7 +78,6 @@ func (s *Server) routes() {
 			r.Post("/{integration}/{operation}", s.executeOperation)
 
 			r.Post("/auth/start-oauth", s.startIntegrationOAuth)
-			r.Get("/auth/callback", s.integrationOAuthCallback)
 
 			r.Post("/tokens", s.createAPIToken)
 			r.Get("/tokens", s.listAPITokens)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -37,12 +38,16 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 			reg := registry.New()
 			return &reg.Providers
 		}(),
-		DevMode: false,
+		DevMode:     false,
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	srv := server.New(cfg)
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("creating server: %v", err)
+	}
 	return httptest.NewServer(srv)
 }
 
@@ -237,6 +242,11 @@ func TestListIntegrations(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -278,6 +288,11 @@ func TestListOperations(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -568,6 +583,11 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -596,19 +616,30 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	if result["state"] == "" {
 		t.Fatal("expected non-empty state")
 	}
+	parsedURL, err := url.Parse(result["url"])
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	if parsedURL.Query().Get("state") != result["state"] {
+		t.Fatal("expected auth URL state to match returned state")
+	}
 }
 
 func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{
-		N: "slack",
-		ExchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
-			if code == "good-code" {
-				return &core.TokenResponse{AccessToken: "slack-token"}, nil
-			}
-			return nil, fmt.Errorf("bad code")
+	var stored *core.IntegrationToken
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{
+			N: "slack",
+			ExchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
 		},
+		authURL: "https://slack.com/oauth/v2/authorize",
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -618,12 +649,34 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
 		}
 	})
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&integration=slack", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -640,6 +693,52 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	}
 	if result["status"] != "connected" {
 		t.Fatalf("expected connected, got %q", result["status"])
+	}
+	if result["integration"] != "slack" {
+		t.Fatalf("expected integration slack, got %q", result["integration"])
+	}
+	if stored == nil {
+		t.Fatal("expected token to be stored")
+	}
+	if stored.UserID != "u1" {
+		t.Fatalf("stored token user ID = %q, want %q", stored.UserID, "u1")
+	}
+	if stored.Integration != "slack" {
+		t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
+	}
+	if stored.AccessToken != "slack-token" {
+		t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
+	}
+}
+
+func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack"}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["error"] == "" {
+		t.Fatal("expected error response")
 	}
 }
 
@@ -867,6 +966,83 @@ func (s *stubIntegrationWithAuthURL) AuthorizationURL(_ string, _ []string) stri
 	return s.authURL
 }
 
+type stubPKCEIntegration struct {
+	coretesting.StubIntegration
+	authURL      string
+	wantVerifier string
+	gotVerifier  string
+}
+
+func (s *stubPKCEIntegration) AuthorizationURL(state string, _ []string) string {
+	return s.authURL + "?state=" + url.QueryEscape(state)
+}
+
+func (s *stubPKCEIntegration) StartOAuth(state string, _ []string) (string, string) {
+	return s.AuthorizationURL(state, nil), s.wantVerifier
+}
+
+func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string) (*core.TokenResponse, error) {
+	s.gotVerifier = verifier
+	if code != "good-code" {
+		return nil, fmt.Errorf("bad code")
+	}
+	return &core.TokenResponse{AccessToken: "pkce-token"}, nil
+}
+
+func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubPKCEIntegration{
+		StubIntegration: coretesting.StubIntegration{N: "gitlab"},
+		authURL:         "https://gitlab.com/oauth/authorize",
+		wantVerifier:    "verifier-123",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	startBody := bytes.NewBufferString(`{"integration":"gitlab"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if stub.gotVerifier != stub.wantVerifier {
+		t.Fatalf("got verifier %q, want %q", stub.gotVerifier, stub.wantVerifier)
+	}
+}
+
 func TestCallbackPathConstants(t *testing.T) {
 	t.Parallel()
 
@@ -886,11 +1062,9 @@ func TestCallbackPathConstants(t *testing.T) {
 		t.Errorf("config.AuthCallbackPath %q is not a registered route (got 404)", config.AuthCallbackPath)
 	}
 
-	// Integration callback: requires auth, so with dev mode + header it should
-	// return 400 (missing params), not 404.
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+config.IntegrationCallbackPath, nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
-	resp, err = http.DefaultClient.Do(req)
+	// Integration callback: should be public and return 400 for missing params,
+	// which proves the route exists without auth middleware.
+	resp, err = http.Get(ts.URL + config.IntegrationCallbackPath)
 	if err != nil {
 		t.Fatalf("GET %s: %v", config.IntegrationCallbackPath, err)
 	}

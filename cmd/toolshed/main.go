@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/openapi"
@@ -75,12 +76,16 @@ func run() error {
 		return fmt.Errorf("running datastore migrations: %v", err)
 	}
 
-	srv := server.New(server.Config{
-		Auth:      result.Auth,
-		Datastore: result.Datastore,
-		Providers: result.Providers,
-		DevMode:   result.DevMode,
+	srv, err := server.New(server.Config{
+		Auth:        result.Auth,
+		Datastore:   result.Datastore,
+		Providers:   result.Providers,
+		DevMode:     result.DevMode,
+		StateSecret: crypto.DeriveKey(cfg.Server.EncryptionKey),
 	})
+	if err != nil {
+		return fmt.Errorf("creating server: %w", err)
+	}
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	httpServer := &http.Server{
