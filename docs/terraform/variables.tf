@@ -28,16 +28,6 @@ variable "domain" {
   default     = "docs.toolshed.peachstreet.dev"
 }
 
-variable "valon_office_ip_ranges" {
-  description = "Office CIDR ranges (NY, AZ, SF, Jacksonville). Sourced from GSM secret valon-office-ip-ranges."
-  type        = list(string)
-}
-
-variable "valon_vpn_ip_ranges" {
-  description = "NordLayer VPN egress IPs. Sourced from GSM secret valon-vpn-ip-ranges."
-  type        = list(string)
-}
-
 variable "docs_image" {
   description = "Initial container image for the docs service"
   type        = string
