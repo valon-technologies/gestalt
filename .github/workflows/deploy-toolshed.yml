@@ -68,6 +68,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Get web service URL
+        id: get-web-url
+        run: |
+          url=$(gcloud run services describe ${{ env.WEB_SERVICE }} --region=${{ env.REGION }} --format='value(status.url)')
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.API_SERVICE }} \
@@ -79,6 +85,7 @@ jobs:
             --min-instances=0 \
             --max-instances=1 \
             --port=8080 \
+            --set-env-vars="TOOLSHED_WEB_URL=${{ steps.get-web-url.outputs.url }}" \
             --set-secrets="\
           TOOLSHED_BASE_URL=toolshed-base-url:latest,\
           ENCRYPTION_KEY=gestalt-encryption-key:latest,\
