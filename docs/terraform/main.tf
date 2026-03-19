@@ -35,7 +35,7 @@ resource "google_cloud_run_v2_service" "docs" {
       resources {
         limits = {
           cpu    = "1"
-          memory = "256Mi"
+          memory = "512Mi"
         }
       }
     }
