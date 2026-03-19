@@ -10,6 +10,8 @@ import (
 	"github.com/valon-technologies/toolshed/internal/registry"
 )
 
+var _ core.Broker = (*Broker)(nil)
+
 type CredentialResolver interface {
 	Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error)
 	StoreToken(ctx context.Context, token *core.IntegrationToken) error
@@ -18,13 +20,6 @@ type CredentialResolver interface {
 type Broker struct {
 	providers *registry.PluginMap[core.Provider]
 	creds     CredentialResolver
-}
-
-type InvokeParams struct {
-	Provider  string
-	Operation string
-	UserID    string
-	Params    map[string]any
 }
 
 const (
@@ -36,43 +31,62 @@ func New(providers *registry.PluginMap[core.Provider], creds CredentialResolver)
 	return &Broker{providers: providers, creds: creds}
 }
 
-func (b *Broker) Invoke(ctx context.Context, p InvokeParams) (*core.OperationResult, error) {
-	prov, err := b.providers.Get(p.Provider)
+func (b *Broker) Invoke(ctx context.Context, req core.InvocationRequest) (*core.OperationResult, error) {
+	prov, err := b.providers.Get(req.Provider)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return nil, &ProviderNotFoundError{Name: p.Provider}
+			return nil, &ProviderNotFoundError{Name: req.Provider}
 		}
 		return nil, fmt.Errorf("looking up provider: %w", err)
 	}
 
-	if !hasOperation(prov, p.Operation) {
-		return nil, &OperationNotFoundError{Provider: p.Provider, Operation: p.Operation}
+	if !hasOperation(prov, req.Operation) {
+		return nil, &OperationNotFoundError{Provider: req.Provider, Operation: req.Operation}
 	}
 
-	token, err := b.resolveToken(ctx, prov, p)
+	token, err := b.resolveToken(ctx, prov, req)
 	if err != nil {
 		return nil, err
 	}
 
-	return prov.Execute(ctx, p.Operation, p.Params, token)
+	return prov.Execute(ctx, req.Operation, req.Params, token)
 }
 
-func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p InvokeParams) (string, error) {
+func (b *Broker) ListCapabilities() []core.Capability {
+	var caps []core.Capability
+	for _, name := range b.providers.List() {
+		prov, err := b.providers.Get(name)
+		if err != nil {
+			continue
+		}
+		for _, op := range prov.ListOperations() {
+			caps = append(caps, core.Capability{
+				Provider:    name,
+				Operation:   op.Name,
+				Description: op.Description,
+				Parameters:  op.Parameters,
+			})
+		}
+	}
+	return caps
+}
+
+func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, req core.InvocationRequest) (string, error) {
 	mode := prov.ConnectionMode()
 	switch mode {
 	case core.ConnectionModeNone:
 		return "", nil
 
 	case core.ConnectionModeUser, "":
-		tok, err := b.creds.Token(ctx, p.UserID, p.Provider, defaultInstance)
+		tok, err := b.creds.Token(ctx, req.UserID, req.Provider, defaultInstance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
-				return "", &NoCredentialError{Provider: p.Provider}
+				return "", &NoCredentialError{Provider: req.Provider}
 			}
 			return "", fmt.Errorf("retrieving credential: %w", err)
 		}
 		if tok == nil {
-			return "", &NoCredentialError{Provider: p.Provider}
+			return "", &NoCredentialError{Provider: req.Provider}
 		}
 		return b.refreshTokenIfNeeded(ctx, prov, tok)
 

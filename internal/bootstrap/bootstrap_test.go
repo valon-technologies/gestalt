@@ -13,6 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -677,4 +678,60 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Auth.TokenMetadata)
 		}
 	})
+}
+
+func TestBootstrapWithRuntimes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Runtimes = map[string]config.RuntimeDef{
+		"my-echo": {
+			Type:      "echo",
+			Providers: []string{"alpha"},
+		},
+	}
+
+	factories := validFactories()
+	factories.Runtimes["echo"] = echoruntime.Factory
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if result.Runtimes == nil {
+		t.Fatal("expected Runtimes to be non-nil")
+	}
+	names := result.Runtimes.List()
+	if len(names) != 1 || names[0] != "my-echo" {
+		t.Fatalf("Runtimes.List: got %v, want [my-echo]", names)
+	}
+}
+
+func TestBootstrapNoRuntimes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if result.Runtimes != nil {
+		t.Fatalf("expected Runtimes to be nil, got %v", result.Runtimes.List())
+	}
+}
+
+func TestBootstrapUnknownRuntimeType(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Runtimes = map[string]config.RuntimeDef{
+		"bad": {Type: "nonexistent"},
+	}
+
+	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err == nil {
+		t.Fatal("expected error for unknown runtime type")
+	}
 }

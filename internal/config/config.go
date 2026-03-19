@@ -20,8 +20,15 @@ type Config struct {
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	AuthProfiles map[string]AuthProfile    `yaml:"auth_profiles"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
+	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	ProviderDirs []string                  `yaml:"provider_dirs"`
 	Server       ServerConfig              `yaml:"server"`
+}
+
+type RuntimeDef struct {
+	Type      string    `yaml:"type"`
+	Providers []string  `yaml:"providers"`
+	Config    yaml.Node `yaml:"config"`
 }
 
 type SecretsConfig struct {

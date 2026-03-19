@@ -13,6 +13,7 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
+	"github.com/valon-technologies/toolshed/internal/broker"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"gopkg.in/yaml.v3"
@@ -28,6 +29,7 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
+type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, broker core.Broker) (core.Runtime, error)
 
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
@@ -35,6 +37,7 @@ type FactoryRegistry struct {
 	Providers       map[string]ProviderFactory
 	DefaultProvider ProviderFactory
 	Secrets         map[string]SecretManagerFactory
+	Runtimes        map[string]RuntimeFactory
 	Builtins        []core.Provider
 }
 
@@ -44,6 +47,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 		Datastores: make(map[string]DatastoreFactory),
 		Providers:  make(map[string]ProviderFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
+		Runtimes:   make(map[string]RuntimeFactory),
 	}
 }
 
@@ -51,6 +55,7 @@ type Result struct {
 	Auth          core.AuthProvider
 	Datastore     core.Datastore
 	Providers     *registry.PluginMap[core.Provider]
+	Runtimes      *registry.PluginMap[core.Runtime]
 	SecretManager core.SecretManager
 	DevMode       bool
 }
@@ -94,11 +99,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
+	runtimes, err := buildRuntimes(ctx, cfg, factories, providers, ds)
+	if err != nil {
+		return nil, err
+	}
+
 	closeSM = false
 	return &Result{
 		Auth:          auth,
 		Datastore:     ds,
 		Providers:     providers,
+		Runtimes:      runtimes,
 		SecretManager: sm,
 		DevMode:       cfg.Server.DevMode,
 	}, nil
@@ -164,6 +175,16 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	}
 	if err := resolveYAMLNode(&cfg.Datastore.Config, resolve); err != nil {
 		return err
+	}
+	for name := range cfg.Runtimes {
+		rt := cfg.Runtimes[name]
+		if err := resolveStringFields(&rt, resolve); err != nil {
+			return err
+		}
+		if err := resolveYAMLNode(&rt.Config, resolve); err != nil {
+			return err
+		}
+		cfg.Runtimes[name] = rt
 	}
 
 	return nil
@@ -319,4 +340,34 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	}
 
 	return &reg.Providers, nil
+}
+
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, providers *registry.PluginMap[core.Provider], creds broker.CredentialResolver) (*registry.PluginMap[core.Runtime], error) {
+	if len(cfg.Runtimes) == 0 {
+		return nil, nil
+	}
+
+	b := broker.New(providers, creds)
+	runtimes := registry.NewRuntimeMap()
+
+	for name := range cfg.Runtimes {
+		def := cfg.Runtimes[name]
+		factory, ok := factories.Runtimes[def.Type]
+		if !ok {
+			return nil, fmt.Errorf("bootstrap: unknown runtime type %q for runtime %q", def.Type, name)
+		}
+
+		scoped := broker.NewScoped(b, def.Providers)
+		rt, err := factory(ctx, name, def, scoped)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
+		}
+
+		if err := runtimes.Register(name, rt); err != nil {
+			return nil, fmt.Errorf("bootstrap: registering runtime %q: %w", name, err)
+		}
+		log.Printf("loaded runtime %s (type=%s, providers=%v)", name, def.Type, def.Providers)
+	}
+
+	return runtimes, nil
 }

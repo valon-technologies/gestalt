@@ -16,6 +16,7 @@ type Server struct {
 	auth       core.AuthProvider
 	datastore  core.Datastore
 	providers  *registry.PluginMap[core.Provider]
+	runtimes   *registry.PluginMap[core.Runtime]
 	broker     *broker.Broker
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
@@ -26,6 +27,7 @@ type Config struct {
 	Auth        core.AuthProvider
 	Datastore   core.Datastore
 	Providers   *registry.PluginMap[core.Provider]
+	Runtimes    *registry.PluginMap[core.Runtime]
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
@@ -49,6 +51,7 @@ func New(cfg Config) (*Server, error) {
 		auth:       cfg.Auth,
 		datastore:  cfg.Datastore,
 		providers:  cfg.Providers,
+		runtimes:   cfg.Runtimes,
 		broker:     broker.New(cfg.Providers, cfg.Datastore),
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
@@ -76,6 +79,7 @@ func (s *Server) routes() {
 
 			r.Get("/integrations", s.listIntegrations)
 			r.Get("/integrations/{name}/operations", s.listOperations)
+			r.Get("/runtimes", s.listRuntimes)
 
 			r.Get("/{integration}/{operation}", s.executeOperation)
 			r.Post("/{integration}/{operation}", s.executeOperation)
