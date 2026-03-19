@@ -20,6 +20,14 @@ func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) readinessCheck(w http.ResponseWriter, r *http.Request) {
+	if err := s.datastore.Ping(r.Context()); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 type integrationInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`

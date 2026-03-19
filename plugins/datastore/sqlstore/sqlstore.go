@@ -48,6 +48,11 @@ func New(db *sql.DB, enc *crypto.AESGCMEncryptor, dialect Dialect) *Store {
 	return &Store{DB: db, Enc: enc, Dialect: dialect}
 }
 
+// Ping verifies the database connection is alive.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.DB.PingContext(ctx)
+}
+
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	return s.DB.Close()

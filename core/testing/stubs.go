@@ -19,10 +19,18 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
+	PingFn             func(context.Context) error
 	GetUserFn          func(context.Context, string) (*core.User, error)
 	FindOrCreateUserFn func(context.Context, string) (*core.User, error)
 	TokenFn            func(context.Context, string, string, string) (*core.IntegrationToken, error)
 	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
+}
+
+func (s *StubDatastore) Ping(ctx context.Context) error {
+	if s.PingFn != nil {
+		return s.PingFn(ctx)
+	}
+	return nil
 }
 
 func (s *StubDatastore) GetUser(ctx context.Context, id string) (*core.User, error) {
