@@ -248,6 +248,17 @@ func TestDomainRestrictionOnValidateToken(t *testing.T) {
 	}
 }
 
+func TestDisplayName(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockGoogleServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL)
+	if p.DisplayName() != "Google" {
+		t.Errorf("DisplayName() = %q, want %q", p.DisplayName(), "Google")
+	}
+}
+
 func TestNewConfigValidation(t *testing.T) {
 	t.Parallel()
 

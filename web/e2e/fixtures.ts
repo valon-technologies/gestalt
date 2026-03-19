@@ -11,6 +11,15 @@ export async function mockIntegrations(page: Page, integrations: Integration[]) 
   });
 }
 
+export async function mockAuthInfo(
+  page: Page,
+  info: { provider: string; display_name: string },
+) {
+  await page.route("**/api/v1/auth/info", (route: Route) => {
+    route.fulfill({ json: info });
+  });
+}
+
 export async function mockTokens(page: Page, tokens: APIToken[]) {
   await page.route("**/api/v1/tokens", (route: Route, request) => {
     if (request.method() === "GET") {

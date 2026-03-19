@@ -1,4 +1,4 @@
-import { test, expect, mockIntegrations, mockTokens } from "./fixtures";
+import { test, expect, mockAuthInfo, mockIntegrations, mockTokens } from "./fixtures";
 
 test.describe("Authentication", () => {
   test("unauthenticated user is redirected to /login", async ({ page }) => {
@@ -6,13 +6,14 @@ test.describe("Authentication", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("login page renders with Google button", async ({ page }) => {
+  test("login page renders with provider button", async ({ page }) => {
+    await mockAuthInfo(page, { provider: "google", display_name: "Google" });
     await page.goto("/login");
     await expect(
       page.getByRole("heading", { name: "Toolshed" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Login with Google/i }),
+      page.getByRole("button", { name: /Sign in with Google/i }),
     ).toBeVisible();
   });
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { startLogin } from "@/lib/api";
+import { getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setSessionToken, setUserEmail } from "@/lib/auth";
 import Button from "@/components/Button";
 
@@ -11,12 +11,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devEmail, setDevEmail] = useState("dev@toolshed.local");
+  const [providerLabel, setProviderLabel] = useState("Sign in");
 
   useEffect(() => {
     if (isAuthenticated()) {
       router.replace("/");
     }
   }, [router]);
+
+  useEffect(() => {
+    getAuthInfo()
+      .then((info) => setProviderLabel("Sign in with " + info.display_name))
+      .catch(() => {});
+  }, []);
 
   async function handleLogin() {
     setLoading(true);
@@ -73,7 +80,7 @@ export default function LoginPage() {
         )}
         <div className="mt-6">
           <Button onClick={handleLogin} disabled={loading} className="w-full">
-            {loading ? "Redirecting..." : "Login with Google"}
+            {loading ? "Redirecting..." : providerLabel}
           </Button>
         </div>
 

@@ -154,6 +154,18 @@ type loginRequest struct {
 	State string `json:"state"`
 }
 
+func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
+	provider := s.auth.Name()
+	displayName := provider
+	if dn, ok := s.auth.(AuthProviderDisplayName); ok {
+		displayName = dn.DisplayName()
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"provider":     provider,
+		"display_name": displayName,
+	})
+}
+
 func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -162,6 +174,11 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	url := s.auth.LoginURL(req.State)
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
+// AuthProviderDisplayName is an optional interface for a human-readable login label.
+type AuthProviderDisplayName interface {
+	DisplayName() string
 }
 
 // SessionTokenIssuer is an optional interface that auth providers can implement
