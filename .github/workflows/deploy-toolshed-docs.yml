@@ -66,11 +66,5 @@ jobs:
       - name: Terraform Apply
         working-directory: toolshed/docs/terraform
         run: |
-          # TODO: Remove targeted apply after first successful deploy.
-          # GCP requires Cloud Armor policies to be detached from the backend
-          # service before they can be deleted; Terraform tries both in parallel.
-          terraform apply -auto-approve \
-            -target=google_compute_backend_service.docs \
-            -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'
           terraform apply -auto-approve \
             -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'
