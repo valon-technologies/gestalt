@@ -68,22 +68,26 @@ type Scanner interface {
 
 func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error) {
 	var t core.IntegrationToken
-	var accessEnc, refreshEnc string
+	var accessEnc, refreshEnc sql.NullString
+	var scopes, metadataJSON sql.NullString
 	var expiresAt sql.NullTime
 
 	if err := row.Scan(&t.ID, &t.UserID, &t.Integration, &t.Instance,
 		&accessEnc, &refreshEnc,
-		&t.Scopes, &expiresAt, &t.LastRefreshedAt, &t.RefreshErrorCount,
-		&t.MetadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&scopes, &expiresAt, &t.LastRefreshedAt, &t.RefreshErrorCount,
+		&metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
+
+	t.Scopes = scopes.String
+	t.MetadataJSON = metadataJSON.String
 
 	if expiresAt.Valid {
 		t.ExpiresAt = &expiresAt.Time
 	}
 
 	var err error
-	t.AccessToken, t.RefreshToken, err = s.Enc.DecryptTokenPair(accessEnc, refreshEnc)
+	t.AccessToken, t.RefreshToken, err = s.Enc.DecryptTokenPair(accessEnc.String, refreshEnc.String)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +96,14 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 
 func scanAPIToken(row Scanner) (*core.APIToken, error) {
 	var t core.APIToken
+	var scopes sql.NullString
 	var expiresAt sql.NullTime
 
 	if err := row.Scan(&t.ID, &t.UserID, &t.Name, &t.HashedToken,
-		&t.Scopes, &expiresAt, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&scopes, &expiresAt, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
+	t.Scopes = scopes.String
 	if expiresAt.Valid {
 		t.ExpiresAt = &expiresAt.Time
 	}
@@ -117,12 +123,22 @@ func NullableTime(t *time.Time) any {
 // Datastore methods
 // ---------------------------------------------------------------------------
 
+func scanUser(row Scanner) (core.User, error) {
+	var u core.User
+	var displayName sql.NullString
+	if err := row.Scan(&u.ID, &u.Email, &displayName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return u, err
+	}
+	u.DisplayName = displayName.String
+	return u, nil
+}
+
 func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
-	var user core.User
-	err := s.DB.QueryRowContext(ctx,
+	row := s.DB.QueryRowContext(ctx,
 		"SELECT id, email, display_name, created_at, updated_at FROM users WHERE id = "+s.ph(1),
 		id,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.CreatedAt, &user.UpdatedAt)
+	)
+	user, err := scanUser(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, core.ErrNotFound
 	}
@@ -133,11 +149,11 @@ func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
 }
 
 func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
-	var user core.User
-	err := s.DB.QueryRowContext(ctx,
+	row := s.DB.QueryRowContext(ctx,
 		"SELECT id, email, display_name, created_at, updated_at FROM users WHERE email = "+s.ph(1),
 		email,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.CreatedAt, &user.UpdatedAt)
+	)
+	user, err := scanUser(row)
 	if err == nil {
 		return &user, nil
 	}
@@ -160,10 +176,11 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 	)
 	if err != nil {
 		if s.Dialect.IsDuplicateKeyError(err) {
-			err2 := s.DB.QueryRowContext(ctx,
+			reRow := s.DB.QueryRowContext(ctx,
 				"SELECT id, email, display_name, created_at, updated_at FROM users WHERE email = "+s.ph(1),
 				email,
-			).Scan(&user.ID, &user.Email, &user.DisplayName, &user.CreatedAt, &user.UpdatedAt)
+			)
+			user, err2 := scanUser(reRow)
 			if err2 != nil {
 				return nil, fmt.Errorf("re-querying user after duplicate key: %w", err2)
 			}

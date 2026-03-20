@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mongodb"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
+	"github.com/valon-technologies/toolshed/plugins/datastore/oracle"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
 	"github.com/valon-technologies/toolshed/plugins/providers/echo"
@@ -91,6 +92,7 @@ func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
 	factories.Datastores["mongodb"] = mongodb.Factory
+	factories.Datastores["oracle"] = oracle.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Runtimes["echo"] = echoruntime.Factory
