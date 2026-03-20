@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/registry"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 type stubProviderWithOps struct {
@@ -21,17 +22,6 @@ type stubProviderWithOps struct {
 
 func (s *stubProviderWithOps) ListOperations() []core.Operation {
 	return s.ops
-}
-
-func newTestProviders(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
-	t.Helper()
-	reg := registry.New()
-	for _, p := range providers {
-		if err := reg.Providers.Register(p.Name(), p); err != nil {
-			t.Fatalf("registering provider: %v", err)
-		}
-	}
-	return &reg.Providers
 }
 
 func TestInvoke_Success(t *testing.T) {
@@ -56,7 +46,7 @@ func TestInvoke_Success(t *testing.T) {
 		},
 	}
 
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "user@example.com"},
 		UserID:   "u1",
@@ -99,7 +89,7 @@ func TestInvoke_OperationNotFound(t *testing.T) {
 	}
 
 	ds := &coretesting.StubDatastore{}
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "user@example.com"},
@@ -121,7 +111,7 @@ func TestInvoke_NilPrincipal(t *testing.T) {
 	}
 
 	ds := &coretesting.StubDatastore{}
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
 	_, err := b.Invoke(context.Background(), nil, "test-int", "do_thing", nil)
 	if !errors.Is(err, invocation.ErrNotAuthenticated) {
@@ -142,7 +132,7 @@ func TestInvoke_NoStoredToken(t *testing.T) {
 			return nil, core.ErrNotFound
 		},
 	}
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "user@example.com"},
@@ -176,7 +166,7 @@ func TestInvoke_UserIDResolution(t *testing.T) {
 			return &core.IntegrationToken{AccessToken: "tok"}, nil
 		},
 	}
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "user@example.com"},
@@ -205,7 +195,7 @@ func TestInvoke_NilTokenResponse(t *testing.T) {
 			return nil, nil
 		},
 	}
-	b := invocation.NewBroker(newTestProviders(t, prov), ds)
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "user@example.com"},

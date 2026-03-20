@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 type capturingSink struct {
@@ -35,7 +36,7 @@ func guardTestProvider(name string) *stubProviderWithOps {
 
 func newGuardedTestInvoker(t *testing.T, providers ...core.Provider) *invocation.Broker {
 	t.Helper()
-	return invocation.NewBroker(newTestProviders(t, providers...), &coretesting.StubDatastore{})
+	return invocation.NewBroker(testutil.NewProviderRegistry(t, providers...), &coretesting.StubDatastore{})
 }
 
 func TestGuardedInvoker_AllowedProvider(t *testing.T) {

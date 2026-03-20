@@ -11,11 +11,12 @@ import (
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 func newConnectionModeBroker(t *testing.T, prov core.Provider, ds *coretesting.StubDatastore) *invocation.Broker {
 	t.Helper()
-	return invocation.NewBroker(newTestProviders(t, prov), ds)
+	return invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 }
 
 func connectionModeProvider(name string, mode core.ConnectionMode) *stubProviderWithOps {
