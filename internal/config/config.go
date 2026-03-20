@@ -104,6 +104,7 @@ type AuthOverrides struct {
 	TokenURL            string            `yaml:"token_url"`
 	ClientAuth          string            `yaml:"client_auth"`
 	TokenExchange       string            `yaml:"token_exchange"`
+	Scopes              []string          `yaml:"scopes"`
 	ScopeSeparator      string            `yaml:"scope_separator"`
 	PKCE                bool              `yaml:"pkce"`
 	AuthorizationParams map[string]string `yaml:"authorization_params"`
@@ -203,6 +204,9 @@ func resolveAuthProfiles(cfg *Config) error {
 		}
 		if intg.Auth.RefreshParams == nil {
 			intg.Auth.RefreshParams = profile.Auth.RefreshParams
+		}
+		if intg.Auth.Scopes == nil {
+			intg.Auth.Scopes = profile.Auth.Scopes
 		}
 		if intg.Auth.ScopeSeparator == "" {
 			intg.Auth.ScopeSeparator = profile.Auth.ScopeSeparator

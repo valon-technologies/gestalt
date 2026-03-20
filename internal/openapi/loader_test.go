@@ -174,6 +174,73 @@ func TestLoadDefinitionNilAllowedOpsExposesAll(t *testing.T) {
 	}
 }
 
+func TestExtractAuthScopes(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Scoped API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"oauth2": map[string]any{
+					"type": "oauth2",
+					"flows": map[string]any{
+						"authorizationCode": map[string]any{
+							"authorizationUrl": "https://auth.example.com/authorize",
+							"tokenUrl":         "https://auth.example.com/token",
+							"scopes": map[string]string{
+								"read:data":  "Read data",
+								"write:data": "Write data",
+							},
+						},
+					},
+				},
+			},
+		},
+		"paths": map[string]any{},
+	}
+
+	srv := serveJSON(t, spec)
+	t.Cleanup(func() { srv.Close() })
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	if len(def.Auth.Scopes) != 2 {
+		t.Fatalf("got %d scopes, want 2: %v", len(def.Auth.Scopes), def.Auth.Scopes)
+	}
+
+	scopeSet := make(map[string]bool)
+	for _, s := range def.Auth.Scopes {
+		scopeSet[s] = true
+	}
+	if !scopeSet["read:data"] {
+		t.Error("missing read:data scope")
+	}
+	if !scopeSet["write:data"] {
+		t.Error("missing write:data scope")
+	}
+}
+
+func TestExtractAuthNoScopes(t *testing.T) {
+	t.Parallel()
+
+	srv := serveJSON(t, testSpec())
+	t.Cleanup(func() { srv.Close() })
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	if len(def.Auth.Scopes) != 0 {
+		t.Errorf("expected no scopes, got %v", def.Auth.Scopes)
+	}
+}
+
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 

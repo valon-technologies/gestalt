@@ -43,6 +43,7 @@ type UpstreamConfig struct {
 	ClientAuthMethod ClientAuthMethod
 	PKCE             bool
 
+	DefaultScopes       []string
 	ScopeSeparator      string
 	AuthorizationParams map[string]string
 	TokenParams         map[string]string
@@ -117,12 +118,16 @@ func (h *UpstreamHandler) AuthorizationURLWithPKCE(state string, scopes []string
 	q.Set("redirect_uri", h.cfg.RedirectURL)
 	q.Set("response_type", "code")
 	q.Set("state", state)
-	if len(scopes) > 0 {
+	effective := scopes
+	if len(effective) == 0 {
+		effective = h.cfg.DefaultScopes
+	}
+	if len(effective) > 0 {
 		sep := " "
 		if h.cfg.ScopeSeparator != "" {
 			sep = h.cfg.ScopeSeparator
 		}
-		q.Set("scope", strings.Join(scopes, sep))
+		q.Set("scope", strings.Join(effective, sep))
 	}
 
 	for k, v := range h.cfg.AuthorizationParams {
