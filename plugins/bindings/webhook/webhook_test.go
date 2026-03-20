@@ -3,10 +3,14 @@ package webhook_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
@@ -253,6 +257,214 @@ func TestWebhookFactoryValidation(t *testing.T) {
 	}
 }
 
+func TestWebhookSignedMode_ValidSignature(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	secret := "my-secret"
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", secret, "", "", brk)
+
+	payload := []byte(`{"data":"test"}`)
+	sig := computeHMAC([]byte(secret), payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Signature", sig)
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !brk.invoked {
+		t.Fatal("expected broker to be invoked")
+	}
+}
+
+func TestWebhookSignedMode_InvalidSignature(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", brk)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Signature", "deadbeef")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+	if brk.invoked {
+		t.Fatal("broker should not be invoked for invalid signature")
+	}
+}
+
+func TestWebhookSignedMode_MissingSignature(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", brk)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestWebhookTrustedUserHeader_Present(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", brk)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Email", "user@example.com")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !brk.invoked {
+		t.Fatal("expected broker to be invoked")
+	}
+	if brk.lastReq.UserID != "user@example.com" {
+		t.Errorf("expected UserID user@example.com, got %q", brk.lastReq.UserID)
+	}
+}
+
+func TestWebhookTrustedUserHeader_Missing(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", brk)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestWebhookFactoryValidation_AuthModes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		cfg     string
+		wantErr string
+	}{
+		{
+			name:    "signed without secret",
+			cfg:     "path: /hook\nprovider: echo\noperation: echo\nauth_mode: signed",
+			wantErr: "signing_secret is required",
+		},
+		{
+			name:    "trusted_user_header without user_header",
+			cfg:     "path: /hook\nprovider: echo\noperation: echo\nauth_mode: trusted_user_header",
+			wantErr: "user_header is required",
+		},
+		{
+			name:    "unknown auth_mode",
+			cfg:     "path: /hook\nprovider: echo\noperation: echo\nauth_mode: magic",
+			wantErr: "unknown auth_mode",
+		},
+		{
+			name: "signed with secret is valid",
+			cfg:  "path: /hook\nprovider: echo\noperation: echo\nauth_mode: signed\nsigning_secret: s3cret",
+		},
+		{
+			name: "trusted_user_header with header is valid",
+			cfg:  "path: /hook\nprovider: echo\noperation: echo\nauth_mode: trusted_user_header\nuser_header: X-User",
+		},
+		{
+			name: "public is valid",
+			cfg:  "path: /hook\nprovider: echo\noperation: echo\nauth_mode: public",
+		},
+		{
+			name: "empty auth_mode defaults to public",
+			cfg:  "path: /hook\nprovider: echo\noperation: echo",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var node yaml.Node
+			if err := yaml.Unmarshal([]byte(tc.cfg), &node); err != nil {
+				t.Fatal(err)
+			}
+			def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
+			_, err := webhook.Factory(context.Background(), "test", def, &stubBroker{})
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("expected error containing %q, got %q", tc.wantErr, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestWebhookFactoryRejectsUnlistedProvider(t *testing.T) {
+	t.Parallel()
+
+	cfgYAML := "path: /hook\nprovider: echo\noperation: echo"
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	def := config.BindingDef{
+		Type:      "webhook",
+		Config:    *node.Content[0],
+		Providers: []string{"slack", "github"},
+	}
+	_, err := webhook.Factory(context.Background(), "test", def, &stubBroker{})
+	if err == nil {
+		t.Fatal("expected error for unlisted provider")
+	}
+	if !strings.Contains(err.Error(), "not in the binding's allowed providers") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func makeBinding(t *testing.T, path, provider, operation string, brk core.Broker) core.Binding {
 	t.Helper()
 
@@ -279,4 +491,50 @@ func makeBinding(t *testing.T, path, provider, operation string, brk core.Broker
 		t.Fatalf("Factory: %v", err)
 	}
 	return b
+}
+
+func makeBindingWithAuth(t *testing.T, path, provider, operation, authMode, signingSecret, userHeader, sigHeader string, brk core.Broker) core.Binding {
+	t.Helper()
+
+	cfgMap := map[string]string{"path": path}
+	if provider != "" {
+		cfgMap["provider"] = provider
+	}
+	if operation != "" {
+		cfgMap["operation"] = operation
+	}
+	if authMode != "" {
+		cfgMap["auth_mode"] = authMode
+	}
+	if signingSecret != "" {
+		cfgMap["signing_secret"] = signingSecret
+	}
+	if userHeader != "" {
+		cfgMap["user_header"] = userHeader
+	}
+	if sigHeader != "" {
+		cfgMap["signature_header"] = sigHeader
+	}
+
+	cfgYAML, err := yaml.Marshal(cfgMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal(cfgYAML, &node); err != nil {
+		t.Fatal(err)
+	}
+
+	def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
+	b, err := webhook.Factory(context.Background(), "test-webhook", def, brk)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+	return b
+}
+
+func computeHMAC(secret, body []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil))
 }

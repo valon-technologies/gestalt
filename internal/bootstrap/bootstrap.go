@@ -61,6 +61,7 @@ type Result struct {
 	Runtimes      *registry.PluginMap[core.Runtime]
 	Bindings      *registry.PluginMap[core.Binding]
 	Broker        *broker.Broker
+	AuditSink     core.AuditSink
 	SecretManager core.SecretManager
 	DevMode       bool
 }
@@ -105,13 +106,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 
 	b := broker.New(providers, ds)
+	audit := core.AuditSink(broker.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, b)
+	runtimes, err := buildRuntimes(ctx, cfg, factories, b, audit)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, b)
+	bindings, err := buildBindings(ctx, cfg, factories, b, audit)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +126,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Runtimes:      runtimes,
 		Bindings:      bindings,
 		Broker:        b,
+		AuditSink:     audit,
 		SecretManager: sm,
 		DevMode:       cfg.Server.DevMode,
 	}, nil
@@ -366,7 +369,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker) (*registry.PluginMap[core.Runtime], error) {
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
@@ -380,8 +383,8 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown runtime type %q for runtime %q", def.Type, name)
 		}
 
-		scoped := broker.NewScoped(b, def.Providers)
-		rt, err := factory(ctx, name, def, scoped)
+		guarded := broker.NewGuarded(b, "runtime:"+name, audit, broker.WithAllowedProviders(def.Providers))
+		rt, err := factory(ctx, name, def, guarded)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
 		}
@@ -395,7 +398,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -409,7 +412,13 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		binding, err := factory(ctx, name, def, b)
+		var opts []broker.GuardedOption
+		if len(def.Providers) > 0 {
+			opts = append(opts, broker.WithAllowedProviders(def.Providers))
+		}
+		guarded := broker.NewGuarded(b, "binding:"+name, audit, opts...)
+
+		binding, err := factory(ctx, name, def, guarded)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
 		}
@@ -417,7 +426,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 		if err := bindings.Register(name, binding); err != nil {
 			return nil, fmt.Errorf("bootstrap: registering binding %q: %w", name, err)
 		}
-		log.Printf("loaded binding %s (type=%s)", name, def.Type)
+		log.Printf("loaded binding %s (type=%s, providers=%v)", name, def.Type, def.Providers)
 	}
 
 	return bindings, nil
