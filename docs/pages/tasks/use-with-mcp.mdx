@@ -1,0 +1,140 @@
+import { Callout } from 'nextra/components'
+
+# Use with MCP
+
+Connect Toolshed to AI assistants like Claude Code or Claude Desktop via the Model Context Protocol.
+
+## Prerequisites
+
+- A working Toolshed config with at least one integration.
+- A user account (sign in via the web UI or CLI first).
+- An API token for that user.
+
+## 1. Create an API token
+
+Using the CLI:
+
+```sh
+tshed tokens create --name "mcp-token"
+```
+
+Or via the HTTP API:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/tokens \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
+  -d '{"name": "mcp-token"}'
+```
+
+Save the returned token value. You will not be able to retrieve it again.
+
+## 2. Optionally filter providers for MCP
+
+If you want to expose only a subset of your integrations to MCP clients, add an `mcp` block to your config:
+
+```yaml
+mcp:
+  providers:
+    - linear
+    - slack
+```
+
+Omit the `mcp` block entirely to expose all configured integrations.
+
+## 3. Run the MCP server
+
+```sh
+TOOLSHED_API_KEY=your-api-token toolshed mcp -config config.yaml
+```
+
+The server communicates over stdin/stdout using the MCP stdio transport. It will log a startup message to stderr and then wait for MCP protocol messages.
+
+<Callout>
+  The `-config` flag follows the same resolution order as `toolshed serve`: explicit flag, then `TOOLSHED_CONFIG` env var, then `./config.yaml`, then `/etc/toolshed/config.yaml`.
+</Callout>
+
+## 4. Configure Claude Code
+
+Add the following to your Claude Code MCP settings (`.mcp.json` in your project root or `~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "toolshed": {
+      "command": "toolshed",
+      "args": ["mcp", "-config", "/path/to/config.yaml"],
+      "env": {
+        "TOOLSHED_API_KEY": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+Claude Code will start the MCP server process automatically and discover the available tools.
+
+## 5. Configure Claude Desktop
+
+Add the same block to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "toolshed": {
+      "command": "toolshed",
+      "args": ["mcp", "-config", "/path/to/config.yaml"],
+      "env": {
+        "TOOLSHED_API_KEY": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+## Minimal example config
+
+A complete config file for MCP with a single integration:
+
+```yaml
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://accounts.google.com
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: ${GOOGLE_CLIENT_SECRET}
+
+datastore:
+  provider: sqlite
+  config:
+    path: ./toolshed.db
+
+server:
+  dev_mode: true
+  encryption_key: ${TOOLSHED_ENCRYPTION_KEY}
+
+integrations:
+  linear:
+    openapi: https://raw.githubusercontent.com/linear/linear/master/packages/sdk/src/schema.graphql
+    client_id: ${LINEAR_CLIENT_ID}
+    client_secret: ${LINEAR_CLIENT_SECRET}
+    allowed_operations:
+      search_issues: Search issues in Linear
+      create_issue: Create a new Linear issue
+
+mcp:
+  providers:
+    - linear
+```
+
+## Verify it works
+
+Once your MCP client connects, you should see the integration operations listed as available tools. For the config above, the tools would be:
+
+- `linear_search_issues`
+- `linear_create_issue`
+
+If tools do not appear, check that:
+
+1. `TOOLSHED_API_KEY` is set and the token is valid.
+2. The user who owns the token has connected the integration (completed the OAuth flow).
+3. The integration has `allowed_operations` defined.
