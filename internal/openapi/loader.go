@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/valon-technologies/toolshed/internal/provider"
@@ -48,6 +49,10 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 
 	extractAuth(&model.Model, def)
 	extractOperations(&model.Model, def, allowedOps)
+
+	if len(def.Auth.Scopes) == 0 {
+		def.Auth.Scopes = collectOperationScopes(&model.Model, allowedOps)
+	}
 
 	return def, nil
 }
@@ -113,6 +118,49 @@ func extractScopes(scopes *orderedmap.Map[string, string]) []string {
 	var result []string
 	for pair := scopes.First(); pair != nil; pair = pair.Next() {
 		result = append(result, pair.Key())
+	}
+	return result
+}
+
+func collectOperationScopes(model *v3high.Document, allowedOps map[string]string) []string {
+	seen := make(map[string]struct{})
+	collect := func(reqs []*base.SecurityRequirement) {
+		for _, req := range reqs {
+			if req.Requirements == nil {
+				continue
+			}
+			for pair := req.Requirements.First(); pair != nil; pair = pair.Next() {
+				for _, scope := range pair.Value() {
+					seen[scope] = struct{}{}
+				}
+			}
+		}
+	}
+
+	collect(model.Security)
+
+	if model.Paths != nil && model.Paths.PathItems != nil {
+		for pair := model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+			for _, op := range pair.Value().GetOperations().FromOldest() {
+				if op.OperationId == "" {
+					continue
+				}
+				if allowedOps != nil {
+					if _, ok := allowedOps[op.OperationId]; !ok {
+						continue
+					}
+				}
+				collect(op.Security)
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(seen))
+	for scope := range seen {
+		result = append(result, scope)
 	}
 	return result
 }
