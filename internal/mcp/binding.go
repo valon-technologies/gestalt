@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/integration"
+	"github.com/valon-technologies/toolshed/core/catalog"
+	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/registry"
@@ -48,7 +49,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		}
 
 		if cp, ok := prov.(core.CatalogProvider); ok {
-			if cat, ok := cp.Catalog().(*integration.Catalog); ok && cat != nil {
+			if cat := cp.Catalog(); cat != nil {
 				addCatalogTools(srv, cfg, provName, cat)
 				continue
 			}
@@ -60,7 +61,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 	return srv
 }
 
-func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *integration.Catalog) {
+func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog) {
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		if op.Visible != nil && !*op.Visible {
@@ -93,7 +94,7 @@ func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov co
 		name := toolName(cfg.ToolNamePrefix, provName, op.Name)
 
 		opts := []mcpgo.ToolOption{mcpgo.WithDescription(op.Description)}
-		annot := mapAnnotations(integration.AnnotationsFromMethod(op.Method))
+		annot := mapAnnotations(ci.AnnotationsFromMethod(op.Method))
 		annot.Title = op.Name
 		opts = append(opts, mcpgo.WithToolAnnotation(annot))
 
@@ -131,7 +132,7 @@ func toolName(prefix, provider, operation string) string {
 	return prefix + provider + toolNameSep + operation
 }
 
-func mapAnnotations(a integration.OperationAnnotations) mcpgo.ToolAnnotation {
+func mapAnnotations(a catalog.OperationAnnotations) mcpgo.ToolAnnotation {
 	return mcpgo.ToolAnnotation{
 		ReadOnlyHint:    a.ReadOnlyHint,
 		DestructiveHint: a.DestructiveHint,
@@ -149,7 +150,7 @@ func buildPropertyOpts(param core.Parameter) []mcpgo.PropertyOption {
 }
 
 func paramToOption(param core.Parameter) mcpgo.ToolOption {
-	switch integration.NormalizeType(param.Type) {
+	switch ci.NormalizeType(param.Type) {
 	case "integer", "number":
 		return mcpgo.WithNumber(param.Name, buildPropertyOpts(param)...)
 	case "boolean":

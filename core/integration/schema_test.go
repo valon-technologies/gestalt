@@ -3,12 +3,14 @@ package integration
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/valon-technologies/toolshed/core/catalog"
 )
 
 func TestSynthesizeInputSchemaBasic(t *testing.T) {
 	t.Parallel()
 
-	params := []CatalogParameter{
+	params := []catalog.CatalogParameter{
 		{Name: "channel", Type: "string", Description: "Channel ID", Required: true},
 		{Name: "limit", Type: "integer", Description: "Max items", Default: 100},
 	}
@@ -66,7 +68,7 @@ func TestSynthesizeInputSchemaEmpty(t *testing.T) {
 	if got := SynthesizeInputSchema(nil); got != nil {
 		t.Errorf("expected nil for empty params, got %s", got)
 	}
-	if got := SynthesizeInputSchema([]CatalogParameter{}); got != nil {
+	if got := SynthesizeInputSchema([]catalog.CatalogParameter{}); got != nil {
 		t.Errorf("expected nil for zero-length params, got %s", got)
 	}
 }
@@ -74,7 +76,7 @@ func TestSynthesizeInputSchemaEmpty(t *testing.T) {
 func TestSynthesizeInputSchemaNoRequired(t *testing.T) {
 	t.Parallel()
 
-	params := []CatalogParameter{
+	params := []catalog.CatalogParameter{
 		{Name: "q", Type: "string", Description: "Search query"},
 	}
 
@@ -91,7 +93,7 @@ func TestSynthesizeInputSchemaNoRequired(t *testing.T) {
 func TestSynthesizeInputSchemaNormalizesTypes(t *testing.T) {
 	t.Parallel()
 
-	params := []CatalogParameter{
+	params := []catalog.CatalogParameter{
 		{Name: "flag", Type: "bool"},
 		{Name: "count", Type: "int"},
 		{Name: "ratio", Type: "float"},

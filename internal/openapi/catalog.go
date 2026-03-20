@@ -8,7 +8,8 @@ import (
 
 	highbase "github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/valon-technologies/toolshed/core/integration"
+	"github.com/valon-technologies/toolshed/core/catalog"
+	ci "github.com/valon-technologies/toolshed/core/integration"
 
 	"github.com/pb33f/libopenapi"
 )
@@ -19,7 +20,7 @@ const (
 
 // LoadCatalog produces a *Catalog directly from an OpenAPI spec, preserving
 // nested JSON Schema for request bodies instead of flattening to parameters.
-func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[string]string) (*integration.Catalog, error) {
+func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[string]string) (*catalog.Catalog, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -35,7 +36,7 @@ func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[strin
 		return nil, fmt.Errorf("could not build model for %s", specURL)
 	}
 
-	cat := &integration.Catalog{Name: name}
+	cat := &catalog.Catalog{Name: name}
 
 	if info := model.Model.Info; info != nil {
 		cat.DisplayName = info.Title
@@ -51,7 +52,7 @@ func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[strin
 	return cat, nil
 }
 
-func catalogExtractAuth(model *v3high.Document, cat *integration.Catalog) {
+func catalogExtractAuth(model *v3high.Document, cat *catalog.Catalog) {
 	if model.Components == nil || model.Components.SecuritySchemes == nil {
 		return
 	}
@@ -67,7 +68,7 @@ func catalogExtractAuth(model *v3high.Document, cat *integration.Catalog) {
 	}
 }
 
-func catalogExtractOperations(model *v3high.Document, cat *integration.Catalog, allowedOps map[string]string) {
+func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allowedOps map[string]string) {
 	if model.Paths == nil || model.Paths.PathItems == nil {
 		return
 	}
@@ -97,13 +98,13 @@ func catalogExtractOperations(model *v3high.Document, cat *integration.Catalog, 
 
 			upperMethod := strings.ToUpper(method)
 
-			catOp := integration.CatalogOperation{
+			catOp := catalog.CatalogOperation{
 				ID:          op.OperationId,
 				Method:      upperMethod,
 				Path:        path,
 				Title:       title,
 				Description: desc,
-				Annotations: integration.AnnotationsFromMethod(upperMethod),
+				Annotations: ci.AnnotationsFromMethod(upperMethod),
 			}
 
 			for _, p := range op.Parameters {
@@ -117,7 +118,7 @@ func catalogExtractOperations(model *v3high.Document, cat *integration.Catalog, 
 				if p.In != "" {
 					loc = p.In
 				}
-				catOp.Parameters = append(catOp.Parameters, integration.CatalogParameter{
+				catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
 					Name:        p.Name,
 					Type:        pType,
 					Location:    loc,

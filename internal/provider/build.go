@@ -32,7 +32,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 
 	cat := CatalogFromDefinition(def)
 	cat.BaseURL = baseURL
-	cat.CompileSchemas()
+	ci.CompileSchemas(cat)
 
 	base := &ci.Base{
 		IntegrationName:    def.Provider,
@@ -41,8 +41,8 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		Auth:               auth,
 		BaseURL:            baseURL,
 		HTTPClient:         client,
-		Operations:         cat.OperationsList(),
-		Endpoints:          cat.EndpointsMap(),
+		Operations:         ci.OperationsList(cat),
+		Endpoints:          ci.EndpointsMap(cat),
 		Headers:            def.Headers,
 	}
 
