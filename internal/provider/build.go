@@ -70,7 +70,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	}
 
 	if def.ResponseCheck != "" {
-		checker, ok := responseCheckers[def.ResponseCheck]
+		checker, ok := lookupResponseChecker(def.ResponseCheck)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown response_check %q", def.Provider, def.ResponseCheck)
 		}
@@ -78,7 +78,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	}
 
 	if def.TokenParser != "" {
-		parser, ok := tokenParsers[def.TokenParser]
+		parser, ok := lookupTokenParser(def.TokenParser)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown token_parser %q", def.Provider, def.TokenParser)
 		}
@@ -91,7 +91,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	}
 
 	if def.RequestMutator != "" {
-		mutator, ok := requestMutators[def.RequestMutator]
+		mutator, ok := lookupRequestMutator(def.RequestMutator)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown request_mutator %q", def.Provider, def.RequestMutator)
 		}
@@ -220,7 +220,7 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	opts = append(opts, oauth.WithHTTPClient(client))
 
 	if def.Auth.ResponseHook != "" {
-		hook, ok := responseHooks[def.Auth.ResponseHook]
+		hook, ok := lookupResponseHook(def.Auth.ResponseHook)
 		if !ok {
 			return nil, fmt.Errorf("unknown auth response_hook %q", def.Auth.ResponseHook)
 		}

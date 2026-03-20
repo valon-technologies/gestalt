@@ -2,14 +2,11 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // register database/sql driver
@@ -50,26 +47,11 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
-	db, err := sql.Open("pgx", dsn)
+	s, err := sqlstore.Open("pgx", dsn, encryptionKey, dialect{})
 	if err != nil {
-		return nil, fmt.Errorf("opening postgres: %w", err)
+		return nil, err
 	}
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	if err := db.PingContext(context.Background()); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("pinging postgres: %w", err)
-	}
-
-	enc, err := crypto.NewAESGCM(encryptionKey)
-	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("creating encryptor: %w", err)
-	}
-
-	return &Store{Store: sqlstore.New(db, enc, dialect{})}, nil
+	return &Store{Store: s}, nil
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

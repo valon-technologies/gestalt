@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"os"
@@ -15,15 +14,6 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 )
-
-func testEncryptionKey(t *testing.T) []byte {
-	t.Helper()
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		t.Fatalf("generating encryption key: %v", err)
-	}
-	return key
-}
 
 func testDSN(t *testing.T) string {
 	t.Helper()
@@ -62,7 +52,7 @@ func newTestStore(t *testing.T) *Store {
 	}
 	schemaDSN := dsn + sep + "search_path=" + schema
 
-	store, err := New(schemaDSN, testEncryptionKey(t))
+	store, err := New(schemaDSN, coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
