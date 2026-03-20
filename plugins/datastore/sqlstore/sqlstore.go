@@ -177,7 +177,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
 	accessEnc, refreshEnc, err := s.Enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypting token pair: %w", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
