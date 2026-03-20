@@ -144,6 +144,9 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) {
 	setStr(&def.Auth.TokenURL, o.TokenURL)
 	setStr(&def.Auth.ClientAuth, o.ClientAuth)
 	setStr(&def.Auth.TokenExchange, o.TokenExchange)
+	if o.Scopes != nil {
+		def.Auth.Scopes = o.Scopes
+	}
 	setStr(&def.Auth.ScopeSeparator, o.ScopeSeparator)
 	setStr(&def.Auth.AcceptHeader, o.AcceptHeader)
 	setStr(&def.Auth.ResponseHook, o.ResponseHook)
@@ -205,6 +208,7 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 		TokenURL:            tokenURL,
 		RedirectURL:         intg.RedirectURL,
 		PKCE:                def.Auth.PKCE,
+		DefaultScopes:       def.Auth.Scopes,
 		ScopeSeparator:      def.Auth.ScopeSeparator,
 		AuthorizationParams: def.Auth.AuthorizationParams,
 		TokenParams:         def.Auth.TokenParams,

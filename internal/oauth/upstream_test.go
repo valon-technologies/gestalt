@@ -593,6 +593,91 @@ func TestGenerateVerifier(t *testing.T) {
 	}
 }
 
+func TestDefaultScopesUsedWhenCallerProvidesNone(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "client-id",
+		AuthorizationURL: "https://example.com/authorize",
+		RedirectURL:      "https://app.com/callback",
+		DefaultScopes:    []string{"read:data"},
+	})
+
+	authURL := h.AuthorizationURL("state-1", nil)
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing URL: %v", err)
+	}
+	scope := parsed.Query().Get("scope")
+	if scope != "read:data" {
+		t.Errorf("scope = %q, want %q", scope, "read:data")
+	}
+}
+
+func TestDefaultScopesUsedWhenCallerProvidesEmpty(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "client-id",
+		AuthorizationURL: "https://example.com/authorize",
+		RedirectURL:      "https://app.com/callback",
+		DefaultScopes:    []string{"read", "write"},
+	})
+
+	authURL := h.AuthorizationURL("state-1", []string{})
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing URL: %v", err)
+	}
+	scope := parsed.Query().Get("scope")
+	if scope != "read write" {
+		t.Errorf("scope = %q, want %q", scope, "read write")
+	}
+}
+
+func TestExplicitScopesOverrideDefaults(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:         "client-id",
+		AuthorizationURL: "https://example.com/authorize",
+		RedirectURL:      "https://app.com/callback",
+		DefaultScopes:    []string{"default-scope"},
+	})
+
+	authURL := h.AuthorizationURL("state-1", []string{"explicit-scope"})
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing URL: %v", err)
+	}
+	scope := parsed.Query().Get("scope")
+	if scope != "explicit-scope" {
+		t.Errorf("scope = %q, want %q", scope, "explicit-scope")
+	}
+}
+
+func TestAuthorizationParamsOverrideDefaultScopes(t *testing.T) {
+	t.Parallel()
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:            "client-id",
+		AuthorizationURL:    "https://example.com/authorize",
+		RedirectURL:         "https://app.com/callback",
+		DefaultScopes:       []string{"from-spec"},
+		AuthorizationParams: map[string]string{"scope": "from-config"},
+	})
+
+	authURL := h.AuthorizationURL("state-1", nil)
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing URL: %v", err)
+	}
+	scope := parsed.Query().Get("scope")
+	if scope != "from-config" {
+		t.Errorf("scope = %q, want %q (authorization_params should override default scopes)", scope, "from-config")
+	}
+}
+
 func TestComputeS256Challenge(t *testing.T) {
 	t.Parallel()
 

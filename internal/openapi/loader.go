@@ -11,6 +11,7 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/valon-technologies/toolshed/internal/provider"
 )
 
@@ -94,13 +95,26 @@ func extractAuth(model *v3high.Document, def *provider.Definition) {
 		if flow := ss.Flows.AuthorizationCode; flow != nil {
 			def.Auth.AuthorizationURL = flow.AuthorizationUrl
 			def.Auth.TokenURL = flow.TokenUrl
+			def.Auth.Scopes = extractScopes(flow.Scopes)
 			return
 		}
 		if flow := ss.Flows.Implicit; flow != nil {
 			def.Auth.AuthorizationURL = flow.AuthorizationUrl
+			def.Auth.Scopes = extractScopes(flow.Scopes)
 			return
 		}
 	}
+}
+
+func extractScopes(scopes *orderedmap.Map[string, string]) []string {
+	if scopes == nil {
+		return nil
+	}
+	var result []string
+	for pair := scopes.First(); pair != nil; pair = pair.Next() {
+		result = append(result, pair.Key())
+	}
+	return result
 }
 
 func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]string) {
