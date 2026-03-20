@@ -74,7 +74,7 @@ func TestLoadDefinition(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, testSpec())
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	allowed := map[string]string{
 		"list_items": "List items with pagination",
@@ -131,7 +131,7 @@ func TestLoadDefinitionFiltersOperations(t *testing.T) {
 	}
 
 	srv := serveJSON(t, spec)
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]string{"op_a": "", "op_c": ""})
 	if err != nil {
@@ -160,7 +160,7 @@ func TestLoadDefinitionNilAllowedOpsExposesAll(t *testing.T) {
 	}
 
 	srv := serveJSON(t, spec)
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -187,7 +187,7 @@ paths:
       operationId: ping
       summary: Ping
 `)
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	def, err := LoadDefinition(context.Background(), "yamltest", srv.URL, nil)
 	if err != nil {

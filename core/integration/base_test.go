@@ -34,7 +34,7 @@ func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {
 			"auth": r.Header.Get("Authorization"),
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	b := &Base{
 		Auth:    mockAuth{},
@@ -71,7 +71,7 @@ func TestBaseTokenParserOverridesAuthorization(t *testing.T) {
 			"custom": r.Header.Get("X-Custom"),
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	b := &Base{
 		Auth:    mockAuth{},

@@ -65,7 +65,7 @@ func TestExchangeCode(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:         "cid",
@@ -117,7 +117,7 @@ func TestRefreshToken(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:     "cid",
@@ -153,7 +153,7 @@ func TestResponseHook(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	hookCalled := false
 	h := NewUpstream(
@@ -257,7 +257,7 @@ func TestPKCEExchangeCode(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID: "cid",
@@ -297,7 +297,7 @@ func TestClientAuthHeader(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:         "my-id",
@@ -340,7 +340,7 @@ func TestClientAuthHeaderRefresh(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:         "my-id",
@@ -381,7 +381,7 @@ func TestTokenExchangeJSON(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:      "cid",
@@ -429,7 +429,7 @@ func TestTokenExchangeJSONRefresh(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:      "cid",
@@ -473,7 +473,7 @@ func TestTokenExchangeJSONWithClientAuthHeader(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:         "my-id",
@@ -515,7 +515,7 @@ func TestAcceptHeader(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	h := NewUpstream(UpstreamConfig{
 		ClientID:     "cid",
@@ -553,7 +553,7 @@ func TestDefaultFormEncoding(t *testing.T) {
 			"token_type":   "Bearer",
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	// Empty TokenExchange should default to form encoding.
 	h := NewUpstream(UpstreamConfig{
