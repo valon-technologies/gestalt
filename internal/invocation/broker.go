@@ -13,6 +13,19 @@ import (
 
 const tokenRefreshThreshold = 5 * time.Minute
 
+type Invoker interface {
+	Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error)
+}
+
+type CapabilityLister interface {
+	ListCapabilities() []core.Capability
+}
+
+var (
+	_ Invoker          = (*Broker)(nil)
+	_ CapabilityLister = (*Broker)(nil)
+)
+
 type Broker struct {
 	providers *registry.PluginMap[core.Provider]
 	datastore core.Datastore
@@ -24,6 +37,29 @@ func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore) 
 
 func (b *Broker) ListProviders() []string {
 	return b.providers.List()
+}
+
+func (b *Broker) ListCapabilities() []core.Capability {
+	if b == nil || b.providers == nil {
+		return nil
+	}
+
+	var caps []core.Capability
+	for _, name := range b.providers.List() {
+		prov, err := b.providers.Get(name)
+		if err != nil {
+			continue
+		}
+		for _, op := range prov.ListOperations() {
+			caps = append(caps, core.Capability{
+				Provider:    name,
+				Operation:   op.Name,
+				Description: op.Description,
+				Parameters:  op.Parameters,
+			})
+		}
+	}
+	return caps
 }
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
@@ -69,38 +105,54 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	switch mode {
 	case core.ConnectionModeNone:
 		return "", nil
-	case core.ConnectionModeIdentity, core.ConnectionModeEither:
-		return "", fmt.Errorf("%w: connection mode %q not yet implemented", ErrInternal, mode)
+
 	case core.ConnectionModeUser, "":
+		if p.UserID == "" {
+			if p.Identity == nil || p.Identity.Email == "" {
+				return "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
+			}
+			dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+			if err != nil {
+				return "", fmt.Errorf("%w: %v", ErrUserResolution, err)
+			}
+			if dbUser == nil || dbUser.ID == "" {
+				return "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
+			}
+			p.UserID = dbUser.ID
+		}
+		return b.resolveUserToken(ctx, prov, p.UserID, providerName)
+
+	case core.ConnectionModeIdentity:
+		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName)
+
+	case core.ConnectionModeEither:
+		if p.UserID != "" {
+			tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName)
+			if err == nil {
+				return tok, nil
+			}
+			if !errors.Is(err, ErrNoToken) {
+				return "", err
+			}
+		}
+		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName)
+
 	default:
 		return "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
+}
 
-	if p.UserID == "" {
-		if p.Identity == nil || p.Identity.Email == "" {
-			return "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
-		}
-		dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
-		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrUserResolution, err)
-		}
-		if dbUser == nil || dbUser.ID == "" {
-			return "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
-		}
-		p.UserID = dbUser.ID
-	}
-
-	storedToken, err := b.datastore.Token(ctx, p.UserID, providerName, "default")
+func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName string) (string, error) {
+	storedToken, err := b.datastore.Token(ctx, userID, providerName, "default")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return "", fmt.Errorf("%w: no token stored for integration %q; connect via OAuth first", ErrNoToken, providerName)
+			return "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 		}
 		return "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 	}
 	if storedToken == nil {
-		return "", fmt.Errorf("%w: no token stored for integration %q; connect via OAuth first", ErrNoToken, providerName)
+		return "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 	}
-
 	return b.refreshTokenIfNeeded(ctx, prov, storedToken)
 }
 

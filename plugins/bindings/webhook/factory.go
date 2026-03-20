@@ -10,7 +10,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/config"
 )
 
-var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def config.BindingDef, broker core.Broker) (core.Binding, error) {
+var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
 	var cfg webhookConfig
 	if err := def.Config.Decode(&cfg); err != nil {
 		return nil, err
@@ -41,7 +41,10 @@ var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def 
 		cfg.SignatureHeader = DefaultSignatureHeader
 	}
 
-	if cfg.Provider != "" && len(def.Providers) > 0 {
+	if cfg.Provider != "" {
+		if len(def.Providers) == 0 {
+			return nil, fmt.Errorf("webhook %q: provider forwarding requires a non-empty binding providers allowlist", name)
+		}
 		found := false
 		for _, p := range def.Providers {
 			if p == cfg.Provider {
@@ -54,5 +57,9 @@ var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def 
 		}
 	}
 
-	return New(name, cfg, broker), nil
+	if deps.Invoker == nil {
+		return nil, fmt.Errorf("webhook %q: missing invoker", name)
+	}
+
+	return New(name, cfg, deps.Invoker), nil
 }

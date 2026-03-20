@@ -36,6 +36,19 @@ type flatProvider struct {
 
 func (p *flatProvider) ListOperations() []core.Operation { return p.ops }
 
+type stubInvoker struct {
+	invokeFn func(context.Context, *principal.Principal, string, string, map[string]any) (*core.OperationResult, error)
+}
+
+func (s *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+	if s.invokeFn != nil {
+		return s.invokeFn(ctx, p, providerName, operation, params)
+	}
+	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+}
+
+func (s *stubInvoker) ListCapabilities() []core.Capability { return nil }
+
 func newProviders(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
 	t.Helper()
 	reg := registry.New()
@@ -102,7 +115,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -151,7 +164,7 @@ func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -190,7 +203,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:         broker,
+		Invoker:        broker,
 		Providers:      providers,
 		ToolNamePrefix: "ts_",
 	})
@@ -231,7 +244,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -260,6 +273,67 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	}
 }
 
+func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	var gotProvider string
+	var gotOperation string
+	var gotParams map[string]any
+
+	prov := &flatProvider{
+		StubIntegration: coretesting.StubIntegration{N: "test"},
+		ops:             []core.Operation{{Name: "op", Method: "GET"}},
+	}
+
+	providers := newProviders(t, prov)
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Invoker: &stubInvoker{
+			invokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+				called = true
+				gotProvider = providerName
+				gotOperation = operation
+				gotParams = params
+				if p == nil || p.UserID == "" {
+					t.Fatal("expected authenticated principal")
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		Providers: providers,
+	})
+
+	tool := srv.GetTool("test_op")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	ctx := ctxWithPrincipal()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "test_op"
+	req.Params.Arguments = map[string]any{"foo": "bar"}
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected injected invoker to be called")
+	}
+	if gotProvider != "test" {
+		t.Fatalf("expected provider test, got %q", gotProvider)
+	}
+	if gotOperation != "op" {
+		t.Fatalf("expected operation op, got %q", gotOperation)
+	}
+	if gotParams["foo"] != "bar" {
+		t.Fatalf("expected params to include foo=bar, got %v", gotParams)
+	}
+	if result.IsError {
+		t.Fatalf("expected tool call to succeed, got error result: %v", result.Content)
+	}
+}
+
 func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	t.Parallel()
 
@@ -281,7 +355,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -317,7 +391,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -348,7 +422,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 
@@ -382,7 +456,7 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:           broker,
+		Invoker:          broker,
 		Providers:        providers,
 		AllowedProviders: []string{"allowed"},
 	})
@@ -419,7 +493,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   broker,
 		Providers: providers,
 	})
 

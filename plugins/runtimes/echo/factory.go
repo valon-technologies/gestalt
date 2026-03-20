@@ -8,6 +8,6 @@ import (
 	"github.com/valon-technologies/toolshed/internal/config"
 )
 
-var Factory bootstrap.RuntimeFactory = func(_ context.Context, name string, _ config.RuntimeDef, broker core.Broker) (core.Runtime, error) {
-	return New(name, broker), nil
+var Factory bootstrap.RuntimeFactory = func(_ context.Context, name string, _ config.RuntimeDef, deps bootstrap.RuntimeDeps) (core.Runtime, error) {
+	return New(name, deps), nil
 }

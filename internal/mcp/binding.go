@@ -22,7 +22,7 @@ const (
 )
 
 type Config struct {
-	Broker           *invocation.Broker
+	Invoker          invocation.Invoker
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolNamePrefix   string
@@ -84,7 +84,7 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 			tool.Annotations.Title = op.ID
 		}
 
-		handler := makeHandler(cfg.Broker, provName, op.ID)
+		handler := makeHandler(cfg.Invoker, provName, op.ID)
 		srv.AddTool(tool, handler)
 	}
 }
@@ -103,19 +103,19 @@ func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov co
 		}
 
 		tool := mcpgo.NewTool(name, opts...)
-		handler := makeHandler(cfg.Broker, provName, op.Name)
+		handler := makeHandler(cfg.Invoker, provName, op.Name)
 		srv.AddTool(tool, handler)
 	}
 }
 
-func makeHandler(broker *invocation.Broker, provName, opName string) mcpserver.ToolHandlerFunc {
+func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		p := principal.FromContext(ctx)
 		if p == nil {
 			return mcpgo.NewToolResultError("not authenticated"), nil
 		}
 
-		result, err := broker.Invoke(ctx, p, provName, opName, req.GetArguments())
+		result, err := invoker.Invoke(ctx, p, provName, opName, req.GetArguments())
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}

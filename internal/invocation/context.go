@@ -1,4 +1,4 @@
-package broker
+package invocation
 
 import (
 	"context"
@@ -15,8 +15,8 @@ type InvocationMeta struct {
 type invocationMetaKey struct{}
 
 func MetaFromContext(ctx context.Context) *InvocationMeta {
-	m, _ := ctx.Value(invocationMetaKey{}).(*InvocationMeta)
-	return m
+	meta, _ := ctx.Value(invocationMetaKey{}).(*InvocationMeta)
+	return meta
 }
 
 func ContextWithMeta(ctx context.Context, meta *InvocationMeta) context.Context {
@@ -24,10 +24,10 @@ func ContextWithMeta(ctx context.Context, meta *InvocationMeta) context.Context 
 }
 
 func ensureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
-	m := MetaFromContext(ctx)
-	if m != nil {
-		return ctx, m
+	meta := MetaFromContext(ctx)
+	if meta != nil {
+		return ctx, meta
 	}
-	m = &InvocationMeta{RequestID: uuid.NewString()}
-	return ContextWithMeta(ctx, m), m
+	meta = &InvocationMeta{RequestID: uuid.NewString()}
+	return ContextWithMeta(ctx, meta), meta
 }

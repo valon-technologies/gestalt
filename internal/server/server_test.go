@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
+	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/provider"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
@@ -49,8 +50,8 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	if cfg.Broker == nil {
-		cfg.Broker = invocation.NewBroker(cfg.Providers, cfg.Datastore)
+	if cfg.Invoker == nil {
+		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Datastore)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
@@ -58,6 +59,19 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	}
 	return httptest.NewServer(srv)
 }
+
+type stubInvoker struct {
+	invokeFn func(context.Context, *principal.Principal, string, string, map[string]any) (*core.OperationResult, error)
+}
+
+func (s *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+	if s.invokeFn != nil {
+		return s.invokeFn(ctx, p, providerName, operation, params)
+	}
+	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+}
+
+func (s *stubInvoker) ListCapabilities() []core.Capability { return nil }
 
 func TestHealthCheck(t *testing.T) {
 	t.Parallel()
@@ -441,6 +455,56 @@ func TestExecuteOperation(t *testing.T) {
 	}
 	if body["operation"] != "do_thing" {
 		t.Fatalf("expected operation do_thing, got %q", body["operation"])
+	}
+}
+
+func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	var gotProvider string
+	var gotOperation string
+	var gotParams map[string]any
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Invoker = &stubInvoker{
+			invokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+				called = true
+				gotProvider = providerName
+				gotOperation = operation
+				gotParams = params
+				if p == nil || p.Identity == nil || p.Identity.Email == "" {
+					t.Fatal("expected authenticated principal")
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		}
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/custom-provider/custom-operation", bytes.NewBufferString(`{"foo":"bar"}`))
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if !called {
+		t.Fatal("expected injected invoker to be called")
+	}
+	if gotProvider != "custom-provider" {
+		t.Fatalf("expected provider custom-provider, got %q", gotProvider)
+	}
+	if gotOperation != "custom-operation" {
+		t.Fatalf("expected operation custom-operation, got %q", gotOperation)
+	}
+	if gotParams["foo"] != "bar" {
+		t.Fatalf("expected params to include foo=bar, got %v", gotParams)
 	}
 }
 
@@ -2289,9 +2353,9 @@ func TestBindingRoutesMounted(t *testing.T) {
 
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
 	t.Helper()
-	broker := invocation.NewBroker(providers, ds)
+	invoker := invocation.NewBroker(providers, ds)
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Broker:    broker,
+		Invoker:   invoker,
 		Providers: providers,
 	})
 	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
