@@ -97,7 +97,7 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 	if req.AuthHeader != "" {
 		httpReq.Header.Set("Authorization", req.AuthHeader)
 	} else if req.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+req.Token)
+		httpReq.Header.Set("Authorization", core.BearerScheme+req.Token)
 	}
 
 	for k, v := range req.CustomHeaders {

@@ -54,7 +54,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		token := strings.TrimPrefix(header, "Bearer ")
+		token := strings.TrimPrefix(header, core.BearerScheme)
 		if token == header {
 			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
 			return
