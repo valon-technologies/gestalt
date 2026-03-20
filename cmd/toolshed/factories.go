@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
 	dynamodbstore "github.com/valon-technologies/toolshed/plugins/datastore/dynamodb"
+	"github.com/valon-technologies/toolshed/plugins/datastore/firestore"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mongodb"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/oracle"
@@ -95,6 +96,7 @@ func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
 	factories.Datastores["dynamodb"] = dynamodbstore.Factory
 	factories.Datastores["mongodb"] = mongodb.Factory
 	factories.Datastores["oracle"] = oracle.Factory
+	factories.Datastores["firestore"] = firestore.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Runtimes["echo"] = echoruntime.Factory
