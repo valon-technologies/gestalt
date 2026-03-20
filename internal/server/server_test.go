@@ -23,18 +23,8 @@ import (
 	"github.com/valon-technologies/toolshed/internal/provider"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
-
-func newTestRegistry(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
-	t.Helper()
-	reg := registry.New()
-	for _, prov := range providers {
-		if err := reg.Providers.Register(prov.Name(), prov); err != nil {
-			t.Fatalf("registering provider: %v", err)
-		}
-	}
-	return &reg.Providers
-}
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
@@ -264,7 +254,7 @@ func TestListIntegrations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -326,7 +316,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, prov)
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 	})
 	defer ts.Close()
 
@@ -363,7 +353,7 @@ func TestListOperations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "test-int"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -426,7 +416,7 @@ func TestExecuteOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, fullStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -546,7 +536,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, fullStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -580,7 +570,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, fullStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -718,7 +708,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -780,7 +770,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -854,7 +844,7 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 	})
 	t.Cleanup(func() { ts.Close() })
 
@@ -967,7 +957,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, fullStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1136,7 +1126,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1268,7 +1258,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1341,7 +1331,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	expiresInThree := time.Now().Add(3 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1399,7 +1389,7 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 	alreadyExpired := time.Now().Add(-10 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1452,7 +1442,7 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1506,7 +1496,7 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1553,7 +1543,7 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1611,7 +1601,7 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1675,7 +1665,7 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1742,7 +1732,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1809,7 +1799,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1863,7 +1853,7 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 	tokenCallCount := 0
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1929,7 +1919,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1977,7 +1967,7 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, echoProvider)
+		cfg.Providers = testutil.NewProviderRegistry(t, echoProvider)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2173,7 +2163,7 @@ func TestConnectManual(t *testing.T) {
 	var stored *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, &stubManualProvider{
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
 		cfg.Datastore = &coretesting.StubDatastore{
@@ -2228,7 +2218,7 @@ func TestConnectManual_OAuthProviderRejected(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, &coretesting.StubIntegration{N: "slack"})
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack"})
 	})
 	t.Cleanup(func() { ts.Close() })
 
@@ -2298,7 +2288,7 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Providers = newTestRegistry(t, &stubManualProvider{
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
 	})
@@ -2487,7 +2477,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 			return &core.User{ID: "u1", Email: email}, nil
 		},
 	}
-	providers := newTestRegistry(t, stub)
+	providers := testutil.NewProviderRegistry(t, stub)
 	mcpHandler := newMCPHandler(t, providers, ds)
 
 	ts := newTestServer(t, func(cfg *server.Config) {

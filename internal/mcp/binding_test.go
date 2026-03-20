@@ -15,7 +15,7 @@ import (
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
 	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/registry"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -48,17 +48,6 @@ func (s *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, provid
 }
 
 func (s *stubInvoker) ListCapabilities() []core.Capability { return nil }
-
-func newProviders(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
-	t.Helper()
-	reg := registry.New()
-	for _, p := range providers {
-		if err := reg.Providers.Register(p.Name(), p); err != nil {
-			t.Fatalf("registering provider: %v", err)
-		}
-	}
-	return &reg.Providers
-}
 
 func stubDatastoreWithToken() *coretesting.StubDatastore {
 	return &coretesting.StubDatastore{
@@ -110,7 +99,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 		catalog:         cat,
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -159,7 +148,7 @@ func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
 		},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -198,7 +187,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 		ops:             []core.Operation{{Name: "send_message", Method: "POST"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -239,7 +228,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 		ops: []core.Operation{{Name: "do_thing", Method: "POST"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -286,7 +275,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 		ops:             []core.Operation{{Name: "op", Method: "GET"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
 		Invoker: &stubInvoker{
 			invokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
@@ -350,7 +339,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 		ops: []core.Operation{{Name: "forbidden_op", Method: "GET"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -386,7 +375,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 		ops: []core.Operation{{Name: "flaky_op", Method: "GET"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -417,7 +406,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 		ops:             []core.Operation{{Name: "op", Method: "GET"}},
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -451,7 +440,7 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 		ops:             []core.Operation{{Name: "op2", Method: "GET"}},
 	}
 
-	providers := newProviders(t, prov1, prov2)
+	providers := testutil.NewProviderRegistry(t, prov1, prov2)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
@@ -488,7 +477,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 		catalog:         cat,
 	}
 
-	providers := newProviders(t, prov)
+	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
