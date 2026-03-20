@@ -286,14 +286,6 @@ func TestBootstrapFactoryError(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "provider factory error",
-			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-					return nil, fmt.Errorf("provider broke")
-				}
-			},
-		},
 	}
 
 	for _, tc := range cases {
@@ -306,6 +298,28 @@ func TestBootstrapFactoryError(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestBootstrapProviderErrorSkipsProvider(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Integrations["beta"] = config.IntegrationDef{}
+
+	factories := validFactories()
+	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		return nil, fmt.Errorf("provider broke")
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap should succeed when a provider fails: %v", err)
+	}
+	names := result.Providers.List()
+	if len(names) != 1 || names[0] != "alpha" {
+		t.Errorf("Providers.List: got %v, want [alpha] (beta should be skipped)", names)
 	}
 }
 

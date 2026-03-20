@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/config"
@@ -334,7 +332,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	var mu sync.Mutex
 
 	if len(cfg.Integrations) > 0 {
-		g, ctx := errgroup.WithContext(ctx)
+		var wg sync.WaitGroup
 		for name := range cfg.Integrations {
 			intgDef := cfg.Integrations[name]
 			factory, ok := factories.Providers[name]
@@ -344,20 +342,20 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 			if factory == nil {
 				return nil, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name)
 			}
-			g.Go(func() error {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 				prov, err := factory(ctx, name, intgDef, deps)
 				if err != nil {
-					return fmt.Errorf("provider %q: %w", name, err)
+					log.Printf("WARNING: skipping provider %q: %v", name, err)
+					return
 				}
 				mu.Lock()
 				providers[name] = prov
 				mu.Unlock()
-				return nil
-			})
+			}()
 		}
-		if err := g.Wait(); err != nil {
-			return nil, fmt.Errorf("bootstrap: %w", err)
-		}
+		wg.Wait()
 	}
 
 	reg := registry.New()
