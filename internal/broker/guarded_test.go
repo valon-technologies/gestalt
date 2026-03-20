@@ -2,6 +2,7 @@ package broker_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -106,7 +107,7 @@ func TestGuardedBroker_MaxDepthEnforced(t *testing.T) {
 		t.Fatal("expected max depth error")
 	}
 	var mde *broker.MaxDepthError
-	if !isMaxDepthError(err, &mde) {
+	if !errors.As(err, &mde) {
 		t.Fatalf("expected MaxDepthError, got %T: %v", err, err)
 	}
 	if mde.Depth != 2 || mde.Max != 2 {
@@ -135,7 +136,7 @@ func TestGuardedBroker_RecursionDetected(t *testing.T) {
 		t.Fatal("expected recursion error")
 	}
 	var re *broker.RecursionError
-	if !isRecursionError(err, &re) {
+	if !errors.As(err, &re) {
 		t.Fatalf("expected RecursionError, got %T: %v", err, err)
 	}
 }
@@ -164,7 +165,7 @@ func TestGuardedBroker_RateLimitExceeded(t *testing.T) {
 		})
 		if err != nil {
 			var rle *broker.RateLimitError
-			if isRateLimitError(err, &rle) {
+			if errors.As(err, &rle) {
 				rateLimited = true
 				break
 			}
@@ -266,52 +267,4 @@ func TestGuardedBroker_ListCapabilities(t *testing.T) {
 			t.Fatalf("expected 3 capabilities, got %d", len(caps))
 		}
 	})
-}
-
-func isMaxDepthError(err error, target **broker.MaxDepthError) bool {
-	for err != nil {
-		if e, ok := err.(*broker.MaxDepthError); ok {
-			*target = e
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
-}
-
-func isRecursionError(err error, target **broker.RecursionError) bool {
-	for err != nil {
-		if e, ok := err.(*broker.RecursionError); ok {
-			*target = e
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
-}
-
-func isRateLimitError(err error, target **broker.RateLimitError) bool {
-	for err != nil {
-		if e, ok := err.(*broker.RateLimitError); ok {
-			*target = e
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
 }

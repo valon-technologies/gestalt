@@ -161,10 +161,10 @@ func TestConcurrentReadWrite(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			tok := &core.IntegrationToken{
-				ID:          newTestID(t),
+				ID:          uuid.NewString(),
 				UserID:      user.ID,
 				Integration: "svc",
-				Instance:    newTestID(t),
+				Instance:    uuid.NewString(),
 				AccessToken: "tok",
 				CreatedAt:   now,
 				UpdatedAt:   now,
@@ -301,11 +301,6 @@ func TestForeignKeyEnforcement(t *testing.T) {
 	if !errors.As(err, &mysqlErr) || mysqlErr.Number != 1452 {
 		t.Errorf("expected MySQL error 1452 (FK violation), got: %v", err)
 	}
-}
-
-func newTestID(t *testing.T) string {
-	t.Helper()
-	return uuid.NewString()
 }
 
 func shortUUID() string {

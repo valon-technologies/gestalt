@@ -2,6 +2,7 @@ package broker_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -78,7 +79,7 @@ func TestResolveToken_Identity_NoToken(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	var nce *broker.NoCredentialError
-	if !isNoCredentialError(err, &nce) {
+	if !errors.As(err, &nce) {
 		t.Fatalf("expected NoCredentialError, got %T: %v", err, err)
 	}
 }
@@ -182,7 +183,7 @@ func TestResolveToken_Either_NoTokens(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	var nce *broker.NoCredentialError
-	if !isNoCredentialError(err, &nce) {
+	if !errors.As(err, &nce) {
 		t.Fatalf("expected NoCredentialError, got %T: %v", err, err)
 	}
 }
@@ -210,25 +211,9 @@ func TestResolveToken_User_NoPrincipal(t *testing.T) {
 		t.Error("datastore should not have been called for empty UserID")
 	}
 	var nce *broker.NoCredentialError
-	if !isNoCredentialError(err, &nce) {
+	if !errors.As(err, &nce) {
 		t.Fatalf("expected NoCredentialError, got %T: %v", err, err)
 	}
-}
-
-func isNoCredentialError(err error, target **broker.NoCredentialError) bool {
-	for err != nil {
-		if nce, ok := err.(*broker.NoCredentialError); ok {
-			*target = nce
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
 }
 
 func TestResolveToken_Either_InfraErrorNotSwallowed(t *testing.T) {
@@ -261,7 +246,7 @@ func TestResolveToken_Either_InfraErrorNotSwallowed(t *testing.T) {
 		t.Fatal("expected infrastructure error to propagate, got nil")
 	}
 	var nce *broker.NoCredentialError
-	if isNoCredentialError(err, &nce) {
+	if errors.As(err, &nce) {
 		t.Fatal("infrastructure error should not be treated as missing credential")
 	}
 }

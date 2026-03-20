@@ -159,10 +159,10 @@ func TestConcurrentReadWrite(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			tok := &core.IntegrationToken{
-				ID:          newTestID(t),
+				ID:          uuid.NewString(),
 				UserID:      user.ID,
 				Integration: "svc",
-				Instance:    newTestID(t),
+				Instance:    uuid.NewString(),
 				AccessToken: "tok",
 				CreatedAt:   now,
 				UpdatedAt:   now,
@@ -200,9 +200,4 @@ func TestForeignKeyEnforcement(t *testing.T) {
 	if err == nil {
 		t.Error("expected foreign key violation, got nil error")
 	}
-}
-
-func newTestID(t *testing.T) string {
-	t.Helper()
-	return uuid.NewString()
 }
