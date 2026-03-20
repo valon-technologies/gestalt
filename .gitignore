@@ -1,0 +1,50 @@
+# Go
+toolshed
+toolshed-server
+*.db-shm
+*.db-wal
+
+# Node.js / Frontend
+node_modules/
+.next/
+.turbo/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Rust
+target/
+Cargo.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Local config overrides
+*.local.yaml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+build/
+dist/
+
+# Exceptions
+!internal/manifest/

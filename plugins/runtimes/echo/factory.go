@@ -3,9 +3,9 @@ package echo
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/config"
 )
 
 var Factory bootstrap.RuntimeFactory = func(_ context.Context, name string, _ config.RuntimeDef, deps bootstrap.RuntimeDeps) (core.Runtime, error) {

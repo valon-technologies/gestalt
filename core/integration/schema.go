@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core/catalog"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 const (

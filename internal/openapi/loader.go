@@ -13,7 +13,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
-	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
 const maxSpecSize = 100 << 20 // 100 MB

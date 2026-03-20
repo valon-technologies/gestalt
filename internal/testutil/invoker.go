@@ -3,8 +3,8 @@ package testutil
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 // StubInvoker is a configurable test double for invocation.Invoker.

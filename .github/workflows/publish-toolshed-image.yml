@@ -3,9 +3,6 @@ name: Publish Toolshed Image
 on:
   push:
     branches: [main]
-    paths:
-      - 'toolshed/**'
-      - '.github/workflows/publish-toolshed-image.yml'
   workflow_dispatch:
 
 jobs:
@@ -25,11 +22,11 @@ jobs:
       - uses: docker/build-push-action@v5
         with:
           context: .
-          file: toolshed/Dockerfile
+          file: Dockerfile
           push: true
           tags: |
-            ghcr.io/valon-technologies/toolshed:latest
-            ghcr.io/valon-technologies/toolshed:${{ github.sha }}
+            ghcr.io/valon-technologies/gestalt:latest
+            ghcr.io/valon-technologies/gestalt:${{ github.sha }}
 
   publish-web:
     runs-on: ubuntu-latest
@@ -46,9 +43,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v5
         with:
-          context: toolshed/web
-          file: toolshed/web/Dockerfile
+          context: web
+          file: web/Dockerfile
           push: true
           tags: |
-            ghcr.io/valon-technologies/toolshed-web:latest
-            ghcr.io/valon-technologies/toolshed-web:${{ github.sha }}
+            ghcr.io/valon-technologies/gestalt-web:latest
+            ghcr.io/valon-technologies/gestalt-web:${{ github.sha }}

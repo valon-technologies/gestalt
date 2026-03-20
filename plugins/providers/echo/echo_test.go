@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/plugins/providers/echo"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/plugins/providers/echo"
 )
 
 func TestProvider(t *testing.T) {

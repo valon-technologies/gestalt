@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/internal/testutil"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
 func TestAuthorizationURL(t *testing.T) {

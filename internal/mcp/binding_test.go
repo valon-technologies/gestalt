@@ -8,14 +8,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
-	ci "github.com/valon-technologies/toolshed/core/integration"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/testutil"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
+	ci "github.com/valon-technologies/gestalt/core/integration"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )

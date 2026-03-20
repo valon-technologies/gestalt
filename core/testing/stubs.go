@@ -3,7 +3,7 @@ package coretesting
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 type StubSecretManager struct {

@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout toolshed
+      - name: Checkout gestalt
         uses: actions/checkout@v4
 
       - name: Checkout homebrew-toolshed
@@ -32,6 +32,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No formula changes to sync"
           else
-            git commit -m "Sync formula from toolshed"
+            git commit -m "Sync formula from gestalt"
             git push
           fi

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
 func init() {

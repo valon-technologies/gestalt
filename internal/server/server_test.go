@@ -14,17 +14,17 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/provider"
-	"github.com/valon-technologies/toolshed/internal/registry"
-	"github.com/valon-technologies/toolshed/internal/server"
-	"github.com/valon-technologies/toolshed/internal/testutil"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/registry"
+	"github.com/valon-technologies/gestalt/internal/server"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {

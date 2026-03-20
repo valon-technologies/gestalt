@@ -1,4 +1,4 @@
-module github.com/valon-technologies/toolshed
+module github.com/valon-technologies/gestalt
 
 go 1.26
 

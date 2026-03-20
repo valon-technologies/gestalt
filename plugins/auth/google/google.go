@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/session"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/session"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )

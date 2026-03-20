@@ -5,11 +5,11 @@ on:
     branches:
       - main
     paths:
-      - 'toolshed/client/**'
+      - 'client/**'
       - '.github/workflows/build-toolshed-cli.yml'
   pull_request:
     paths:
-      - 'toolshed/client/**'
+      - 'client/**'
 
   workflow_dispatch:
 
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: toolshed/client
+        working-directory: client
 
     steps:
       - name: Checkout repository
@@ -42,8 +42,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            toolshed/client/target/
-          key: ${{ runner.os }}-cargo-toolshed-cli-${{ hashFiles('toolshed/client/**/Cargo.toml') }}
+            client/target/
+          key: ${{ runner.os }}-cargo-toolshed-cli-${{ hashFiles('client/**/Cargo.toml') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -58,7 +58,7 @@ jobs:
     needs: lint
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
-      working-directory: toolshed/client
+      working-directory: client
       binary-name: tshed
       artifact-prefix: tshed
       run-tests: true

@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/core/catalog"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 type ConnectionMode string

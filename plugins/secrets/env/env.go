@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 type Provider struct {

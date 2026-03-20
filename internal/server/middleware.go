@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 type contextKey string
