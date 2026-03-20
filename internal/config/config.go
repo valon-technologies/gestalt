@@ -92,7 +92,7 @@ type IntegrationDef struct {
 	RequestMutator string            `yaml:"request_mutator"`
 	TokenPrefix    string            `yaml:"token_prefix"`
 	AuthStyle      string            `yaml:"auth_style"`
-	IconSVG        string            `yaml:"icon_svg"`
+	IconFile       string            `yaml:"icon_file"`
 	Headers        map[string]string `yaml:"headers"`
 
 	AllowedOperations map[string]string `yaml:"allowed_operations"`

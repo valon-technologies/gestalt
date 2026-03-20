@@ -291,12 +291,18 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 	}
 }
 
-func TestBuildAppliesIconSVGFromConfig(t *testing.T) {
+func TestBuildAppliesIconFile(t *testing.T) {
 	t.Parallel()
 
+	const svg = `<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>`
+	iconPath := filepath.Join(t.TempDir(), "test.svg")
+	if err := os.WriteFile(iconPath, []byte(svg+"\n"), 0644); err != nil {
+		t.Fatalf("writing icon file: %v", err)
+	}
+
 	def := &Definition{
-		Provider:    "test",
-		DisplayName: "Test",
+		Provider:    "fileicon",
+		DisplayName: "File Icon Test",
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
@@ -304,8 +310,7 @@ func TestBuildAppliesIconSVGFromConfig(t *testing.T) {
 		},
 	}
 
-	const svg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
-	prov, err := Build(def, config.IntegrationDef{IconSVG: svg})
+	prov, err := Build(def, config.IntegrationDef{IconFile: iconPath})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -319,7 +324,26 @@ func TestBuildAppliesIconSVGFromConfig(t *testing.T) {
 		t.Fatal("expected non-nil Catalog")
 	}
 	if cat.IconSVG != svg {
-		t.Fatalf("expected icon_svg from config override, got %q", cat.IconSVG)
+		t.Fatalf("expected icon from file, got %q", cat.IconSVG)
+	}
+}
+
+func TestBuildIconFileMissing(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "badicon",
+		DisplayName: "Bad Icon Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op": {Description: "An op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	_, err := Build(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
+	if err == nil {
+		t.Fatal("expected error for missing icon file")
 	}
 }
 
