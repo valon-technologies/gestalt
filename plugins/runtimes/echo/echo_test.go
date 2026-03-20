@@ -6,15 +6,9 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/toolshed/internal/testutil"
 	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
 )
-
-type stubInvoker struct{}
-
-func (b *stubInvoker) Invoke(_ context.Context, _ *principal.Principal, _ string, _ string, _ map[string]any) (*core.OperationResult, error) {
-	return nil, nil
-}
 
 type stubCapabilityLister struct {
 	caps  []core.Capability
@@ -36,7 +30,7 @@ func TestRuntime(t *testing.T) {
 		},
 	}
 	deps := bootstrap.RuntimeDeps{
-		Invoker:          &stubInvoker{},
+		Invoker:          &testutil.StubInvoker{},
 		CapabilityLister: lister,
 	}
 
@@ -67,7 +61,7 @@ func TestRuntime_UsesExplicitDeps(t *testing.T) {
 	}
 	lister := &stubCapabilityLister{caps: caps}
 	rt := echoruntime.New("deps-test", bootstrap.RuntimeDeps{
-		Invoker:          &stubInvoker{},
+		Invoker:          &testutil.StubInvoker{},
 		CapabilityLister: lister,
 	})
 
