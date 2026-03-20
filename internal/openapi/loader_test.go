@@ -202,7 +202,7 @@ func TestExtractAuthScopes(t *testing.T) {
 	}
 
 	srv := serveJSON(t, spec)
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestExtractAuthNoScopes(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, testSpec())
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -238,6 +238,106 @@ func TestExtractAuthNoScopes(t *testing.T) {
 
 	if len(def.Auth.Scopes) != 0 {
 		t.Errorf("expected no scopes, got %v", def.Auth.Scopes)
+	}
+}
+
+func TestCollectScopesFromOperationSecurity(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "No Scheme API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_items",
+					"summary":     "List items",
+					"security": []any{
+						map[string]any{
+							"Oauth2": []string{"read:data", "read:meta"},
+						},
+					},
+				},
+			},
+			"/items/{id}": map[string]any{
+				"post": map[string]any{
+					"operationId": "create_item",
+					"summary":     "Create item",
+					"security": []any{
+						map[string]any{
+							"Oauth2": []string{"read:data", "write:data"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	scopeSet := make(map[string]bool)
+	for _, s := range def.Auth.Scopes {
+		scopeSet[s] = true
+	}
+	if len(scopeSet) != 3 {
+		t.Fatalf("got %d unique scopes, want 3: %v", len(scopeSet), def.Auth.Scopes)
+	}
+	for _, want := range []string{"read:data", "read:meta", "write:data"} {
+		if !scopeSet[want] {
+			t.Errorf("missing scope %q", want)
+		}
+	}
+}
+
+func TestCollectScopesRespectsAllowedOps(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Filtered API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/read": map[string]any{
+				"get": map[string]any{
+					"operationId": "read_op",
+					"summary":     "Read",
+					"security": []any{
+						map[string]any{"Oauth2": []string{"read:data"}},
+					},
+				},
+			},
+			"/admin": map[string]any{
+				"post": map[string]any{
+					"operationId": "admin_op",
+					"summary":     "Admin",
+					"security": []any{
+						map[string]any{"Oauth2": []string{"admin:all"}},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]string{"read_op": ""})
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	if len(def.Auth.Scopes) != 1 {
+		t.Fatalf("got %d scopes, want 1: %v", len(def.Auth.Scopes), def.Auth.Scopes)
+	}
+	if def.Auth.Scopes[0] != "read:data" {
+		t.Errorf("scope = %q, want %q", def.Auth.Scopes[0], "read:data")
 	}
 }
 
