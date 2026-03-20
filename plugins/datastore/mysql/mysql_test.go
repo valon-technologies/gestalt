@@ -43,7 +43,7 @@ func newTestDatabase(t *testing.T) string {
 	}
 	defer func() { _ = adminDB.Close() }()
 
-	dbName := fmt.Sprintf("toolshed_test_%s", shortUUID())
+	dbName := fmt.Sprintf("gestalt_test_%s", shortUUID())
 	if _, err := adminDB.ExecContext(context.Background(), "CREATE DATABASE "+dbName); err != nil {
 		t.Fatalf("creating test database %s: %v", dbName, err)
 	}

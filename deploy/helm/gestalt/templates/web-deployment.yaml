@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "toolshed.fullname" . }}-web
+  name: {{ include "gestalt.fullname" . }}-web
   labels:
-    {{- include "toolshed.labels" . | nindent 4 }}
+    {{- include "gestalt.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
 spec:
   replicas: {{ .Values.web.replicaCount }}
   selector:
     matchLabels:
-      {{- include "toolshed.selectorLabels" . | nindent 6 }}
+      {{- include "gestalt.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: web
   template:
     metadata:
       labels:
-        {{- include "toolshed.selectorLabels" . | nindent 8 }}
+        {{- include "gestalt.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: web
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -45,8 +45,8 @@ spec:
               containerPort: 3000
               protocol: TCP
           env:
-            - name: TOOLSHED_API_URL
-              value: "http://{{ include "toolshed.fullname" . }}:{{ .Values.service.port }}"
+            - name: GESTALT_API_URL
+              value: "http://{{ include "gestalt.fullname" . }}:{{ .Values.service.port }}"
           livenessProbe:
             httpGet:
               path: /

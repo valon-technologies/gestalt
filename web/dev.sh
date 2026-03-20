@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Development server script for toolshed web UI.
+# Development server script for gestalt web UI.
 #
 # Usage:
 #   ./dev.sh [web|full] [config.yaml]
@@ -10,14 +10,14 @@
 #
 # Examples:
 #   ./dev.sh                              # mock mode
-#   ./dev.sh full                         # uses toolshed.dev.yaml (defaults)
-#   ./dev.sh full toolshed.local.yaml     # uses your custom config
+#   ./dev.sh full                         # uses gestalt.dev.yaml (defaults)
+#   ./dev.sh full gestalt.local.yaml     # uses your custom config
 #   API_PORT=9090 ./dev.sh full           # custom port
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TOOLSHED_DIR="$SCRIPT_DIR/.."
+GESTALT_DIR="$SCRIPT_DIR/.."
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-8080}"
 
@@ -51,11 +51,11 @@ if [[ ! -d node_modules ]]; then
     npm install
 fi
 
-if [[ -f "$TOOLSHED_DIR/.env" ]]; then
-    info "Loading $TOOLSHED_DIR/.env"
+if [[ -f "$GESTALT_DIR/.env" ]]; then
+    info "Loading $GESTALT_DIR/.env"
     set -a
     # shellcheck disable=SC1091
-    source "$TOOLSHED_DIR/.env"
+    source "$GESTALT_DIR/.env"
     set +a
 fi
 
@@ -68,9 +68,9 @@ case "$MODE" in
         ;;
 
     full)
-        CONFIG="${2:-${TOOLSHED_CONFIG:-$TOOLSHED_DIR/toolshed.dev.yaml}}"
+        CONFIG="${2:-${GESTALT_CONFIG:-$GESTALT_DIR/gestalt.dev.yaml}}"
         if [[ "$CONFIG" != /* ]]; then
-            CONFIG="$TOOLSHED_DIR/$CONFIG"
+            CONFIG="$GESTALT_DIR/$CONFIG"
         fi
 
         if [[ ! -f "$CONFIG" ]]; then
@@ -79,7 +79,7 @@ case "$MODE" in
             echo "Quick start options:"
             echo "  1. Use the built-in dev config:  ./dev.sh full"
             echo "  2. Use a custom config:          ./dev.sh full path/to/config.yaml"
-            echo "  3. Copy and customize:           cp toolshed.dev.yaml toolshed.local.yaml"
+            echo "  3. Copy and customize:           cp gestalt.dev.yaml gestalt.local.yaml"
             exit 1
         fi
 
@@ -91,7 +91,7 @@ case "$MODE" in
         info "Config: $CONFIG"
         info "Starting Go API server on port $API_PORT..."
         warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
-        (cd "$TOOLSHED_DIR" && go run ./cmd/toolshed -config "$CONFIG") &
+        (cd "$GESTALT_DIR" && go run ./cmd/gestalt -config "$CONFIG") &
         API_PID=$!
 
         API_READY=false
@@ -115,7 +115,7 @@ case "$MODE" in
 
         info "Starting Next.js dev server on port $WEB_PORT..."
         info "API proxy: /api/v1/* -> http://localhost:$API_PORT"
-        TOOLSHED_API_URL="http://localhost:$API_PORT" \
+        GESTALT_API_URL="http://localhost:$API_PORT" \
             npx next dev --port "$WEB_PORT" &
         WEB_PID=$!
 
@@ -136,7 +136,7 @@ case "$MODE" in
         echo "Examples:"
         echo "  ./dev.sh                              # mock mode"
         echo "  ./dev.sh full                         # default dev config"
-        echo "  ./dev.sh full toolshed.local.yaml     # custom config"
+        echo "  ./dev.sh full gestalt.local.yaml     # custom config"
         exit 1
         ;;
 esac

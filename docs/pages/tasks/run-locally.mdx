@@ -5,7 +5,7 @@ import { Callout } from 'nextra/components'
 ## Full stack (API + web UI)
 
 ```sh
-toolshed dev -config toolshed.dev.yaml
+gestalt dev -config gestalt.dev.yaml
 ```
 
 This starts the API server and the Next.js web UI in a single process. The API runs on the port in your config (default 8080), the web UI on port 3000.
@@ -13,7 +13,7 @@ This starts the API server and the Next.js web UI in a single process. The API r
 ## API only
 
 ```sh
-toolshed dev -config toolshed.dev.yaml -api-only
+gestalt dev -config gestalt.dev.yaml -api-only
 ```
 
 Fastest loop for iterating on server behavior, config, or integration definitions.
@@ -21,7 +21,7 @@ Fastest loop for iterating on server behavior, config, or integration definition
 ## Web UI with mock API
 
 ```sh
-cd toolshed/web
+cd gestalt/web
 ./dev.sh web
 ```
 
@@ -30,7 +30,7 @@ Starts the Next.js app with built-in mock API routes. No Go server involved.
 ## Override ports
 
 ```sh
-toolshed dev -config toolshed.dev.yaml -api-port 9090 -web-port 4000
+gestalt dev -config gestalt.dev.yaml -api-port 9090 -web-port 4000
 ```
 
 ## Development mode
@@ -50,7 +50,7 @@ Set `dev_mode: true` in your config to:
 ## Docker Compose
 
 ```sh
-cd toolshed
+cd gestalt
 docker compose up --build
 ```
 
@@ -59,7 +59,7 @@ Runs the API on port 8080 and the web UI on port 3000. Config is mounted from `d
 ## Validate your config
 
 ```sh
-toolshed config check -config toolshed.dev.yaml
+gestalt config check -config gestalt.dev.yaml
 ```
 
 Prints resolved server settings, auth provider, datastore, integrations, runtimes, and bindings. Exits with "config ok" if valid.
@@ -68,6 +68,6 @@ Prints resolved server settings, auth provider, datastore, integrations, runtime
 
 ```sh
 curl http://localhost:8080/health
-tshed --url http://localhost:8080 auth status
-tshed --url http://localhost:8080 integrations list
+gstl --url http://localhost:8080 auth status
+gstl --url http://localhost:8080 integrations list
 ```

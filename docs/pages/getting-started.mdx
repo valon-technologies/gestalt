@@ -2,7 +2,7 @@ import { Callout, Steps } from 'nextra/components'
 
 # Getting Started
 
-Stand up a local Toolshed instance, connect an integration, and invoke an operation from the CLI.
+Stand up a local Gestalt instance, connect an integration, and invoke an operation from the CLI.
 
 ## Before you begin
 
@@ -11,7 +11,7 @@ Stand up a local Toolshed instance, connect an integration, and invoke an operat
 
 ## Create a config file
 
-Save this as `toolshed.local.yaml` in the `toolshed/` directory:
+Save this as `gestalt.local.yaml` in the `gestalt/` directory:
 
 ```yaml
 server:
@@ -29,7 +29,7 @@ auth:
 datastore:
   provider: sqlite
   config:
-    path: ./toolshed.local.db
+    path: ./gestalt.local.db
 
 integrations:
   slack:
@@ -47,13 +47,13 @@ integrations:
 ```
 
 <Callout>
-  `base_url` tells Toolshed where to build OAuth callback URLs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
+  `base_url` tells Gestalt where to build OAuth callback URLs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 </Callout>
 
 ## Start the server
 
 ```sh
-toolshed dev -config toolshed.local.yaml
+gestalt dev -config gestalt.local.yaml
 ```
 
 This starts both the API server (port 8080) and the web UI (port 3000). When dev mode is enabled, you will see "dev mode enabled" in the output.
@@ -61,7 +61,7 @@ This starts both the API server (port 8080) and the web UI (port 3000). When dev
 To start only the API without the web UI:
 
 ```sh
-toolshed dev -config toolshed.local.yaml -api-only
+gestalt dev -config gestalt.local.yaml -api-only
 ```
 
 ## Sign in and connect Slack
@@ -83,11 +83,11 @@ Once connected, you can invoke allowed operations from the web UI or CLI.
 ## Install and use the CLI
 
 ```sh
-brew install valon-technologies/toolshed/toolshed
-tshed init
-tshed auth login
-tshed integrations list
-tshed invoke slack conversations_list
+brew install valon-technologies/gestalt/gestalt
+gstl init
+gstl auth login
+gstl integrations list
+gstl invoke slack conversations_list
 ```
 
 ## Next steps
@@ -95,4 +95,4 @@ tshed invoke slack conversations_list
 - [Platform Model](/concepts/platform-model): understand the core primitives.
 - [Add an Integration](/tasks/add-an-integration): walk through adding a new API.
 - [Config File](/reference/config-file): full reference for every config key.
-- [Use with MCP](/tasks/use-with-mcp): connect Toolshed to Claude.
+- [Use with MCP](/tasks/use-with-mcp): connect Gestalt to Claude.

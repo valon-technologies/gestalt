@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const webPort = Number(process.env.WEB_PORT) || 3000;
-const apiUrl = process.env.TOOLSHED_API_URL; // set when running against real Go server
+const apiUrl = process.env.GESTALT_API_URL; // set when running against real Go server
 
 export default defineConfig({
   testDir: "./e2e",
@@ -39,7 +39,7 @@ export default defineConfig({
 
   webServer: {
     command: apiUrl
-      ? `TOOLSHED_API_URL=${apiUrl} npm run dev -- --port ${webPort}`
+      ? `GESTALT_API_URL=${apiUrl} npm run dev -- --port ${webPort}`
       : `npm run dev -- --port ${webPort}`,
     url: `http://localhost:${webPort}`,
     reuseExistingServer: !process.env.CI,

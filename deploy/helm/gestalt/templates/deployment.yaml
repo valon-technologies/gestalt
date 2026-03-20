@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "toolshed.fullname" . }}
+  name: {{ include "gestalt.fullname" . }}
   labels:
-    {{- include "toolshed.labels" . | nindent 4 }}
+    {{- include "gestalt.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
   {{- if not .Values.autoscaling.enabled }}
@@ -13,21 +13,21 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "toolshed.selectorLabels" . | nindent 6 }}
+      {{- include "gestalt.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: api
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
-        {{- include "toolshed.selectorLabels" . | nindent 8 }}
+        {{- include "gestalt.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "toolshed.serviceAccountName" . }}
+      serviceAccountName: {{ include "gestalt.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -50,7 +50,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --config
-            - /etc/toolshed/config.yaml
+            - /etc/gestalt/config.yaml
           ports:
             - name: http
               containerPort: {{ .Values.config.server.port | default 8080 }}
@@ -73,7 +73,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/toolshed/config.yaml
+              mountPath: /etc/gestalt/config.yaml
               subPath: config.yaml
               readOnly: true
             - name: data
@@ -83,11 +83,11 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "toolshed.fullname" . }}-config
+            name: {{ include "gestalt.fullname" . }}-config
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "toolshed.fullname" . }}-data
+            claimName: {{ include "gestalt.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}
