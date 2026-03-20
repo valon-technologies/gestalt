@@ -96,6 +96,12 @@ type IntegrationDef struct {
 	Headers        map[string]string `yaml:"headers"`
 
 	AllowedOperations map[string]string `yaml:"allowed_operations"`
+
+	MCP *MCPUpstreamDef `yaml:"mcp"`
+}
+
+type MCPUpstreamDef struct {
+	URL string `yaml:"url"`
 }
 
 type AuthOverrides struct {

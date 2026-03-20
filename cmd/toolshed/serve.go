@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
@@ -37,9 +38,14 @@ func runServe(args []string) error {
 
 	var mcpHandler http.Handler
 	if env.Config.MCP.Enabled {
+		broker, ok := result.Invoker.(*invocation.Broker)
+		if !ok {
+			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
+		}
 		mcpCfg := toolshedmcp.Config{
-			Invoker:   result.Invoker,
-			Providers: result.Providers,
+			Invoker:       result.Invoker,
+			TokenResolver: broker,
+			Providers:     result.Providers,
 		}
 		if env.Config.MCP.Providers != nil {
 			mcpCfg.AllowedProviders = env.Config.MCP.Providers

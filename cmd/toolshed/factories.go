@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,8 +14,10 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/mcpupstream"
 	"github.com/valon-technologies/toolshed/internal/openapi"
 	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
@@ -174,10 +178,31 @@ func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
 	if env.Result.Runtimes != nil {
 		stopRuntimes(ctx, env.Result.Runtimes, env.Result.Runtimes.List())
 	}
+	closeProviders(env.Result.Providers)
+}
+
+func closeProviders(providers *registry.PluginMap[core.Provider]) {
+	if providers == nil {
+		return
+	}
+	for _, name := range providers.List() {
+		prov, err := providers.Get(name)
+		if err != nil {
+			continue
+		}
+		if c, ok := prov.(io.Closer); ok {
+			if err := c.Close(); err != nil {
+				log.Printf("closing provider %q: %v", name, err)
+			}
+		}
+	}
 }
 
 func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		if intg.MCP != nil {
+			return mcpupstream.New(ctx, name, intg)
+		}
 		def, err := loadDefinition(ctx, name, intg, providerDirs)
 		if err != nil {
 			return nil, err

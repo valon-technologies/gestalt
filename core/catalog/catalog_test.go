@@ -41,6 +41,21 @@ operations:
 	}
 }
 
+func TestValidateAcceptsMCPOnlyCatalog(t *testing.T) {
+	t.Parallel()
+
+	cat := &Catalog{
+		Name: "mcp-only",
+		Operations: []CatalogOperation{
+			{ID: "do_thing", Description: "Do a thing"},
+			{ID: "list_things", Description: "List things"},
+		},
+	}
+	if err := cat.Validate(); err != nil {
+		t.Fatalf("expected MCP-only catalog (no Method/Path) to be valid: %v", err)
+	}
+}
+
 func TestLoadCatalogYAMLRejectsInvalidCatalog(t *testing.T) {
 	t.Parallel()
 

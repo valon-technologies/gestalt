@@ -100,6 +100,17 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
+func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName string) (string, error) {
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return "", fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		}
+		return "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+	}
+	return b.resolveToken(ctx, prov, p, providerName)
+}
+
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName string) (string, error) {
 	mode := prov.ConnectionMode()
 	switch mode {

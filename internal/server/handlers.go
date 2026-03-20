@@ -171,6 +171,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		case errors.Is(err, invocation.ErrInternal):
 			writeError(w, http.StatusInternalServerError, "internal error")
+		case errors.Is(err, core.ErrMCPOnly):
+			writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
 		default:
 			writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
 		}

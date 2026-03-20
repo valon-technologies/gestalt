@@ -110,13 +110,6 @@ func (c *Catalog) Validate() error {
 		}
 		seen[op.ID] = struct{}{}
 
-		if strings.TrimSpace(op.Method) == "" {
-			return fmt.Errorf("catalog %q operation %q is missing method", c.Name, op.ID)
-		}
-		if strings.TrimSpace(op.Path) == "" {
-			return fmt.Errorf("catalog %q operation %q is missing path", c.Name, op.ID)
-		}
-
 		for _, param := range op.Parameters {
 			if strings.TrimSpace(param.Name) == "" {
 				return fmt.Errorf("catalog %q operation %q has parameter with empty name", c.Name, op.ID)
