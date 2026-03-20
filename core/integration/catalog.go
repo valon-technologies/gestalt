@@ -16,6 +16,7 @@ type Catalog struct {
 	Name        string             `yaml:"name"                   json:"name"`
 	DisplayName string             `yaml:"display_name"           json:"displayName"`
 	Description string             `yaml:"description"            json:"description"`
+	IconSVG     string             `yaml:"icon_svg,omitempty"     json:"iconSvg,omitempty"`
 	BaseURL     string             `yaml:"base_url,omitempty"     json:"baseUrl,omitempty"`
 	AuthStyle   string             `yaml:"auth_style,omitempty"   json:"authStyle,omitempty"`
 	Headers     map[string]string  `yaml:"headers,omitempty"      json:"headers,omitempty"`

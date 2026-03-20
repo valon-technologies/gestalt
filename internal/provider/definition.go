@@ -4,6 +4,7 @@ type Definition struct {
 	Provider       string            `yaml:"provider"`
 	DisplayName    string            `yaml:"display_name"`
 	Description    string            `yaml:"description"`
+	IconSVG        string            `yaml:"icon_svg"`
 	ConnectionMode string            `yaml:"connection_mode"`
 	BaseURL        string            `yaml:"base_url"`
 	Auth           AuthDef           `yaml:"auth"`

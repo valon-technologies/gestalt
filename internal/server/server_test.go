@@ -15,6 +15,7 @@ import (
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/provider"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 )
@@ -282,6 +283,59 @@ func TestListIntegrations(t *testing.T) {
 	}
 	if integrations[0].DisplayName != "Slack" {
 		t.Fatalf("expected display name Slack, got %q", integrations[0].DisplayName)
+	}
+}
+
+func TestListIntegrationsWithIcon(t *testing.T) {
+	t.Parallel()
+
+	const testSVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
+	def := &provider.Definition{
+		Provider:    "iconprov",
+		DisplayName: "Icon Provider",
+		Description: "Has an icon",
+		IconSVG:     testSVG,
+		BaseURL:     "https://api.example.com",
+		Auth:        provider.AuthDef{Type: "manual"},
+		Operations: map[string]provider.OperationDef{
+			"op": {Description: "An op", Method: "GET", Path: "/op"},
+		},
+	}
+	prov, err := provider.Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = newTestRegistry(t, prov)
+	})
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name    string `json:"name"`
+		IconSVG string `json:"icon_svg"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if integrations[0].IconSVG != testSVG {
+		t.Fatalf("icon_svg = %q, want %q", integrations[0].IconSVG, testSVG)
 	}
 }
 

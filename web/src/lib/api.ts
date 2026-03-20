@@ -5,6 +5,7 @@ export interface Integration {
   name: string;
   display_name?: string;
   description?: string;
+  icon_svg?: string;
   connected?: boolean;
 }
 
