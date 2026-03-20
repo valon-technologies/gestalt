@@ -1,33 +1,46 @@
 # Contributing
 
-The repository is laid out to make extension work obvious: core interfaces, internal runtime packages, plugin implementations, clients, and deployment surfaces are separated cleanly.
-
 ## Repository layout
 
-- **`cmd/toolshed`** — the main Go binary entry point. Registers all plugins and starts the server.
-- **`core`** — public interfaces for auth providers, datastores, secret managers, and integration hooks.
-- **`internal`** — runtime packages: config loading, HTTP routing, middleware, operation dispatch, and token management.
-- **`plugins`** — implementations of core interfaces: auth providers, datastores, secret managers, and integration-specific hooks.
-- **`client/cli`** — the Rust CLI source (`tshed`).
-- **`web`** — the Next.js web UI.
+| Directory | Purpose |
+|---|---|
+| `cmd/toolshed` | Main Go binary. Registers all plugins and starts the server. |
+| `core` | Public interfaces: auth providers, datastores, secret managers, providers, runtimes, bindings, hooks. |
+| `internal` | Runtime packages: config loading, HTTP routing, middleware, invocation, token management, bootstrap. |
+| `plugins` | Implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
+| `client/cli` | Rust CLI source (`tshed`). |
+| `web` | Next.js web UI. |
+| `deploy` | Helm chart, Dockerfiles, and CI workflows. |
 
-## How to add a new plugin type implementation
+## Add a new plugin
 
-1. Implement the interface defined in `core` (e.g. `core.AuthProvider`, `core.Datastore`, `core.SecretManager`).
-2. Expose a factory function that accepts the provider config map and returns an initialized instance.
-3. Register the factory in `cmd/toolshed/main.go` so the runtime can resolve it by name from config.
+1. Implement the interface from `core` (e.g. `core.AuthProvider`, `core.Datastore`, `core.SecretManager`).
+2. Expose a factory function that accepts the provider config and returns an initialized instance.
+3. Register the factory in `cmd/toolshed/factories.go` so the runtime resolves it by name from config.
 4. Add tests that exercise the plugin through the same interface the runtime uses.
 
-## How to add integration-specific behavior
+## Add integration-specific behavior
 
-Integration hooks live under `plugins/integrations`. Each package exports named hook functions that are registered in `main.go`. To add behavior for a new upstream API, create a package under `plugins/integrations`, implement the relevant hook signatures (`response_check`, `token_parser`, or `request_mutator`), and register them by name.
+Integration hooks live under `plugins/integrations`. Each package exports named hook functions registered in the factory file. To add behavior for a new upstream API:
+
+1. Create a package under `plugins/integrations/<name>`.
+2. Implement the relevant hook signatures (`response_check`, `token_parser`, or `request_mutator`).
+3. Register them by name in `cmd/toolshed/factories.go`.
 
 ## Development workflow
 
 ```sh
+# Run tests
 cd toolshed
 go test ./...
 
+# Validate config
+toolshed config check -config toolshed.dev.yaml
+
+# Run locally
+toolshed dev -config toolshed.dev.yaml
+
+# Web UI
 cd web
 npm run check
 npm run build

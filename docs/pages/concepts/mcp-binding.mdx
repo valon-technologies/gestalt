@@ -1,43 +1,50 @@
 # MCP Binding
 
-Toolshed exposes integrations to AI assistants via the Model Context Protocol (MCP). When `mcp.enabled` is set in the config, `toolshed serve` mounts a Streamable HTTP MCP endpoint at `/mcp` alongside the existing REST API. Both the HTTP API and MCP endpoint share the same config, providers, datastore, auth layer, and canonical execution path.
+When `mcp.enabled` is set in the config, Toolshed mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
 
 ## What MCP is
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls from a connected client. Toolshed's MCP binding maps each allowed integration operation to an MCP tool.
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Toolshed's MCP binding maps each allowed integration operation to an MCP tool.
 
-## How tool names are derived
+## Tool names
 
-Each MCP tool name is built from the provider name and operation ID, joined by an underscore:
+Each tool name is built from the provider name and operation ID:
 
 ```
 {provider}_{operation}
 ```
 
-For example, the `search_issues` operation on the `linear` provider becomes the tool `linear_search_issues`.
+For example, `search_issues` on the `linear` provider becomes `linear_search_issues`.
 
-If you set `tool_name_prefix` in the `mcp` config block, that string is prepended to every tool name. A prefix of `ts_` would produce `ts_linear_search_issues`.
+Set `tool_name_prefix` in the `mcp` config block to prepend a string to every tool name. A prefix of `ts_` produces `ts_linear_search_issues`.
 
-## How auth works
+## Auth
 
-MCP requests go through the same auth middleware as the REST API. Clients authenticate with a Bearer token in the `Authorization` header — the same API tokens or session tokens used for `/api/v1` endpoints.
+MCP requests use the same auth middleware as the REST API. Clients authenticate with a Bearer token in the `Authorization` header.
 
 ## Relationship to the HTTP API
 
-The MCP binding is not a replacement for the HTTP API. It is an alternative interface for the same operations:
+The MCP binding is an alternative interface, not a replacement. It shares:
 
-- Same providers and integration definitions from config.
-- Same datastore for users, tokens, and credentials.
-- Same invocation path: the shared invoker resolves the caller's stored credential for the target integration, refreshes it if expired, and executes the upstream API call.
-- Same allow-list enforcement: only operations listed in `allowed_operations` are callable.
-- Same scoping model: bindings and runtimes receive allowlisted deps from bootstrap rather than the full platform execution surface.
+- The same providers and integration definitions from config.
+- The same datastore for users, tokens, and credentials.
+- The same invoker: credential resolution, automatic token refresh, and upstream execution.
+- The same allow-list enforcement on operations.
 
-The MCP binding adds an `mcp.providers` filter so you can expose a subset of integrations to MCP clients without affecting the HTTP API.
+The `mcp.providers` filter lets you expose a subset of integrations to MCP clients without affecting the HTTP API.
 
 ## Tool metadata
 
-Toolshed populates MCP tool annotations automatically. GET and HEAD operations are marked as read-only. PUT operations are marked as idempotent. DELETE operations are marked as destructive. Input schemas from OpenAPI specs are passed through as the tool's JSON Schema, giving MCP clients type information for parameters.
+Toolshed populates MCP tool annotations automatically:
+
+| HTTP method | Annotation |
+|---|---|
+| GET, HEAD | Read-only |
+| PUT | Idempotent |
+| DELETE | Destructive |
+
+Input schemas from OpenAPI specs are passed through as JSON Schema, giving MCP clients type information for parameters. Providers that implement the catalog interface can supply richer metadata for their operations.
 
 ## Limitations
 
-- **Hot-reload** -- adding or removing integrations requires restarting the server.
+Adding or removing integrations requires restarting the server.

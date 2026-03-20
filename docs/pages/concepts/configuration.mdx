@@ -31,6 +31,7 @@ auth:
     client_secret: secret://oidc-client-secret
     allowed_domains:
       - example.com
+    session_ttl: 24h
     pkce: true
 
 datastore:
@@ -60,9 +61,15 @@ integrations:
     auth_profile: slack_shared
     openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
     response_check: slack_ok
+    connection_mode: user
     allowed_operations:
       conversations_list: ""
       chat_postMessage: Send a message to a Slack channel
+
+mcp:
+  enabled: true
+  providers:
+    - slack
 
 server:
   port: 8080
@@ -70,13 +77,14 @@ server:
   encryption_key: secret://toolshed-encryption-key
 ```
 
-## Important behaviors
+## Key behaviors
 
-- **auth_profiles inheritance** — when an integration references an `auth_profile`, the profile's fields are merged into the integration config. Fields set directly on the integration override the profile.
-- **base_url for OAuth** — the server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
-- **provider_dirs** — directories listed here are scanned at startup for provider YAML files. Each file becomes a registered provider whose operations are available to integrations.
-- **allowed_operations as a positive allow-list** — only operations listed in `allowed_operations` are callable. An empty map means no operations are exposed for that integration. The value is a human-readable description; an empty string means the operation is allowed but has no custom description.
+**auth_profiles inheritance**: When an integration references an `auth_profile`, the profile's fields are merged into the integration config. Fields set directly on the integration override the profile.
 
-## Fields that exist but are not fully wired yet
+**base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 
-The config schema includes `token_exchange`, `accept_header`, and `token_metadata` fields. These are parsed and stored but not yet acted on by all code paths. They exist to support upcoming work on token exchange flows and content negotiation.
+**provider_dirs**: Directories listed here are scanned at startup for provider YAML files. Each file becomes a registered provider whose operations are available to integrations.
+
+**allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
+
+**connection_mode**: Controls credential resolution per integration. See [Platform Model](/concepts/platform-model#connection-modes) for the available modes.

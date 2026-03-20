@@ -5,30 +5,28 @@ import { Callout } from 'nextra/components'
 Run Toolshed as a Lambda function behind API Gateway, backed by RDS Postgres.
 
 <Callout>
-  Lambda is a good fit if you already run infrastructure on AWS and want pay-per-request pricing. For simpler setups, [Fly.io](/deploy/fly-io), [Railway](/deploy/railway), or [Render](/deploy/render) involve less ceremony.
+  Lambda fits if you already run infrastructure on AWS and want pay-per-request pricing. For simpler setups, consider [Fly.io](/deploy/fly-io), [Railway](/deploy/railway), or [Render](/deploy/render).
 </Callout>
 
-## Prerequisites
+## Before you begin
 
-- An AWS account with permissions to create Lambda functions, API Gateway, and RDS instances
-- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed and configured
-- [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed
-- Go 1.26+ installed locally
+- AWS account with permissions for Lambda, API Gateway, and RDS.
+- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed and configured.
+- [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed.
+- Go 1.26+ installed locally.
 
 ## Build the binary
-
-Toolshed compiles to a statically-linked binary. Build it for the `provided.al2023` Lambda runtime:
 
 ```sh
 cd toolshed
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/toolshed
 ```
 
-The output binary must be named `bootstrap` for the `provided.al2023` runtime.
+The binary must be named `bootstrap` for the `provided.al2023` runtime.
 
 ## Provision a database
 
-Create an RDS Postgres instance. Aurora Serverless v2 is a good match for Lambda's bursty traffic pattern.
+Aurora Serverless v2 is a good match for Lambda's bursty traffic pattern.
 
 ```sh
 aws rds create-db-cluster \
@@ -48,14 +46,12 @@ aws rds create-db-instance \
 ```
 
 <Callout>
-  The Lambda function and RDS instance must be in the same VPC. Attach the Lambda to the VPC's private subnets and ensure the security group allows traffic on port 5432 between them.
+  The Lambda function and RDS instance must be in the same VPC. Attach the Lambda to private subnets and allow port 5432 between them.
 </Callout>
-
-Note the cluster endpoint — you will need it for `DATABASE_URL`.
 
 ## SAM template
 
-Create a `template.yaml` at the repository root:
+Create `template.yaml` at the repository root:
 
 ```yaml
 AWSTemplateFormatVersion: "2010-09-09"
@@ -118,7 +114,7 @@ aws secretsmanager create-secret --name toolshed/database-url \
 
 ## Configure
 
-Create a config file at `toolshed/config.lambda.yaml`:
+Create `toolshed/config.lambda.yaml`:
 
 ```yaml
 server:
@@ -131,14 +127,15 @@ auth:
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
+    session_secret: "${TOOLSHED_SESSION_SECRET}"
 
 datastore:
   provider: postgres
   config:
-    url: "${DATABASE_URL}"
+    dsn: "${DATABASE_URL}"
 ```
 
-The binary reads this config at startup. Bundle it alongside the `bootstrap` binary in the Lambda deployment package.
+Bundle this alongside the `bootstrap` binary in the Lambda deployment package.
 
 ## Deploy
 
@@ -147,7 +144,7 @@ sam build
 sam deploy --guided
 ```
 
-SAM walks you through stack name, region, and confirmation prompts on the first deploy. Subsequent deploys use the saved `samconfig.toml`:
+Subsequent deploys use the saved `samconfig.toml`:
 
 ```sh
 sam deploy
@@ -155,20 +152,18 @@ sam deploy
 
 ## Verify
 
-SAM prints the API URL in the deploy output. Test it:
+SAM prints the API URL in the deploy output.
 
 ```sh
 curl -s https://<api-id>.execute-api.<region>.amazonaws.com/health
 ```
 
-You should see `{"status":"ok"}`.
-
 ## Custom domain
 
-1. Create or import a TLS certificate in ACM for your domain.
-2. Add a custom domain name in API Gateway.
-3. Create a Route 53 alias record (or CNAME with your DNS provider) pointing to the API Gateway domain.
-4. Update `TOOLSHED_BASE_URL`:
+1. Create or import a TLS certificate in ACM.
+2. Add a custom domain in API Gateway.
+3. Create a Route 53 alias record (or CNAME) pointing to the API Gateway domain.
+4. Update the base URL secret:
 
 ```sh
 aws secretsmanager update-secret --secret-id toolshed/base-url \
@@ -177,6 +172,4 @@ aws secretsmanager update-secret --secret-id toolshed/base-url \
 
 ## Cold starts
 
-<Callout>
-  Go binaries on `provided.al2023` with ARM64 start in roughly 50–150ms. For most workloads this is negligible. If you need consistent sub-100ms latency, enable [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html) on the function.
-</Callout>
+Go on `provided.al2023` with ARM64 starts in roughly 50 to 150ms. For consistent sub-100ms latency, enable [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html).

@@ -1,15 +1,22 @@
-# Run Toolshed locally
+import { Callout } from 'nextra/components'
 
-You have three useful local loops: API only, web UI with mock API, and web UI plus real local API.
+# Run Locally
+
+## Full stack (API + web UI)
+
+```sh
+toolshed dev -config toolshed.dev.yaml
+```
+
+This starts the API server and the Next.js web UI in a single process. The API runs on the port in your config (default 8080), the web UI on port 3000.
 
 ## API only
 
 ```sh
-cd toolshed
-go run ./cmd/toolshed -config toolshed.dev.yaml
+toolshed dev -config toolshed.dev.yaml -api-only
 ```
 
-This is the fastest way to iterate on server behavior, config loading, datastore plugins, or integration definitions.
+Fastest loop for iterating on server behavior, config, or integration definitions.
 
 ## Web UI with mock API
 
@@ -18,31 +25,44 @@ cd toolshed/web
 ./dev.sh web
 ```
 
-This starts the Next.js app with built-in mock API routes. No Go server is involved, so you can work on the frontend without compiling anything.
+Starts the Next.js app with built-in mock API routes. No Go server involved.
 
-## Web UI plus real local API
+## Override ports
 
 ```sh
-cd toolshed/web
-./dev.sh full toolshed.dev.yaml
+toolshed dev -config toolshed.dev.yaml -api-port 9090 -web-port 4000
 ```
 
-The script starts the Go server, waits for `/health` to return 200, then launches the web UI with a rewrite proxy that forwards API requests to the local server.
+## Development mode
 
-## Use development mode intentionally
+Set `dev_mode: true` in your config to:
 
-- `dev_mode: true` relaxes HTTPS requirements and enables the Dev Login auth path.
-- `encryption_key` must be set even in dev mode; any stable string is fine locally.
-- The Dev Login path lets you authenticate without a real OAuth provider. Never enable it in production.
+- Relax HTTPS requirements for OAuth callbacks.
+- Enable the Dev Login auth path (no external IdP needed).
+- Enable the echo provider and echo runtime for testing.
 
-## Use Docker Compose
+`encryption_key` must be set even in dev mode. Any stable string works locally.
+
+<Callout>
+  Never enable `dev_mode` in production.
+</Callout>
+
+## Docker Compose
 
 ```sh
 cd toolshed
 docker compose up --build
 ```
 
-The compose file runs two services: the Go API server on port 8080 and the Next.js web UI on port 3000. The web container proxies `/api/v1/*` requests to the API via `TOOLSHED_API_URL`. Config is mounted from `deploy/docker/config.yaml` and SQLite data is persisted in a named volume.
+Runs the API on port 8080 and the web UI on port 3000. Config is mounted from `deploy/docker/config.yaml`. SQLite data is persisted in a named volume.
+
+## Validate your config
+
+```sh
+toolshed config check -config toolshed.dev.yaml
+```
+
+Prints resolved server settings, auth provider, datastore, integrations, runtimes, and bindings. Exits with "config ok" if valid.
 
 ## Sanity checks
 

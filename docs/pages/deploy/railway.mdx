@@ -2,59 +2,43 @@ import { Callout } from 'nextra/components'
 
 # Deploy to Railway
 
-Run Toolshed on Railway by connecting your GitHub repository. Railway detects the Dockerfile and provisions infrastructure through its dashboard.
+## Before you begin
 
-## Prerequisites
-
-- A [Railway](https://railway.app) account
-- Your Toolshed repository on GitHub
+- A [Railway](https://railway.app) account.
+- Your Toolshed repository on GitHub.
 
 ## Deploy from GitHub
 
 1. Create a new project in the Railway dashboard.
 2. Select **Deploy from GitHub repo** and connect your repository.
-3. Set the **Root Directory** to `toolshed/` so Railway finds the Dockerfile.
-4. Railway detects the Dockerfile and begins the first build automatically.
+3. Set **Root Directory** to `toolshed/`.
+4. Railway detects the Dockerfile and begins the first build.
 
 <Callout>
-  Do not deploy yet — the app will crash without a database and environment variables. Cancel the initial deploy or let it fail, then continue with the steps below.
+  The app will crash without a database and environment variables. Cancel the initial deploy or let it fail, then continue below.
 </Callout>
 
 ## Add a database
 
-1. In your Railway project, click **New** → **Database** → **PostgreSQL**.
-2. Railway creates the database and exposes a `DATABASE_URL` variable. Copy it or reference it directly from the Toolshed service.
-
-To link the variable:
-
-1. Open the Toolshed service settings.
-2. Under **Variables**, add `DATABASE_URL` and set it to `${{Postgres.DATABASE_URL}}` (Railway's variable reference syntax).
+1. In your Railway project, click **New** then **Database** then **PostgreSQL**.
+2. Link the variable: in the Toolshed service's **Variables** tab, add `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}`.
 
 ## Set environment variables
 
-Add these variables in the Toolshed service's **Variables** tab:
+Add these in the Toolshed service's **Variables** tab:
 
-```
-TOOLSHED_BASE_URL=https://<your-railway-domain>.up.railway.app
-TOOLSHED_ENCRYPTION_KEY=<openssl rand -base64 32>
-TOOLSHED_SESSION_SECRET=<openssl rand -base64 32>
-GOOGLE_CLIENT_ID=<your-google-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-client-secret>
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-```
-
-Generate the encryption and session keys locally:
-
-```sh
-openssl rand -base64 32
-openssl rand -base64 32
-```
+| Variable | Value |
+|---|---|
+| `TOOLSHED_BASE_URL` | `https://<domain>.up.railway.app` |
+| `TOOLSHED_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
+| `TOOLSHED_SESSION_SECRET` | Output of `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 
 ## Configure
 
-Railway does not support mounting config files directly. Embed the config inline using an environment variable and a startup command, or commit a production config to the repo.
-
-The simplest approach is to commit a config file at `toolshed/config.railway.yaml`:
+Commit a config file at `toolshed/config.railway.yaml`:
 
 ```yaml
 server:
@@ -67,35 +51,34 @@ auth:
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
+    session_secret: "${TOOLSHED_SESSION_SECRET}"
 
 datastore:
   provider: postgres
   config:
-    url: "${DATABASE_URL}"
+    dsn: "${DATABASE_URL}"
 ```
 
-Then override the container start command in Railway's service settings:
+Override the container start command in Railway's service settings:
 
 ```
 /toolshed --config /build/toolshed/config.railway.yaml
 ```
 
 <Callout>
-  The path depends on how Railway copies your repo into the build context. Check the build logs for the exact working directory if `/build/toolshed/` does not resolve.
+  The path depends on how Railway copies your repo into the build context. Check the build logs if `/build/toolshed/` does not resolve.
 </Callout>
 
 ## Verify
 
-Railway assigns a public URL automatically. Find it in the service's **Settings** → **Networking** → **Public Networking**.
+Find the public URL in **Settings** then **Networking** then **Public Networking**.
 
 ```sh
-curl -s https://<your-railway-domain>.up.railway.app/health
+curl -s https://<domain>.up.railway.app/health
 ```
-
-You should see `{"status":"ok"}`. Open the URL in a browser to sign in.
 
 ## Custom domain
 
-1. In the service settings, go to **Networking** → **Custom Domain**.
-2. Add your domain and follow the DNS instructions Railway provides.
+1. Go to **Networking** then **Custom Domain** in service settings.
+2. Follow the DNS instructions Railway provides.
 3. Update `TOOLSHED_BASE_URL` to the new domain.

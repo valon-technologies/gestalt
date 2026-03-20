@@ -1,18 +1,17 @@
-import { Callout } from 'nextra/components'
+import { Callout, Steps } from 'nextra/components'
 
-# Stand up your first Toolshed
+# Getting Started
 
-The fastest path from zero to a working Toolshed: configure a local instance, run the API server and web UI, then invoke an integration operation from the CLI.
+Stand up a local Toolshed instance, connect an integration, and invoke an operation from the CLI.
 
 ## Before you begin
 
-- **Choose an auth provider.** Google OAuth is the simplest for local development. OIDC works if you already have an identity provider.
-- **Pick a datastore.** SQLite requires zero infrastructure and is fine for local work.
-- **Decide on dev mode.** Setting `dev_mode: true` relaxes HTTPS requirements and enables hot-reload for the web UI.
+- Google OAuth credentials (or any OIDC provider).
+- Node.js 18+ (for the web UI).
 
-## Create a local config
+## Create a config file
 
-Save the following as `toolshed.local.yaml` in the repo root:
+Save this as `toolshed.local.yaml` in the `toolshed/` directory:
 
 ```yaml
 server:
@@ -43,35 +42,43 @@ integrations:
       token_url: https://slack.com/api/oauth.v2.access
       response_hook: slack_ok
     allowed_operations:
-      conversations_list: List channels the bot can access
-      chat_postMessage: Send a message to a channel
+      conversations_list: List channels
+      chat_postMessage: Send a message
 ```
 
 <Callout>
-  Setting `base_url` to `http://localhost:8080` tells Toolshed where to build OAuth callback URLs. Without it, redirect URIs will be wrong and OAuth flows will fail.
+  `base_url` tells Toolshed where to build OAuth callback URLs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 </Callout>
 
-## Run the API
+## Start the server
 
 ```sh
-cd toolshed
-go run ./cmd/toolshed -config toolshed.local.yaml
+toolshed dev -config toolshed.local.yaml
 ```
 
-## Run the web UI
+This starts both the API server (port 8080) and the web UI (port 3000). When dev mode is enabled, you will see "dev mode enabled" in the output.
+
+To start only the API without the web UI:
 
 ```sh
-cd toolshed/web
-./dev.sh full toolshed.local.yaml
+toolshed dev -config toolshed.local.yaml -api-only
 ```
 
-## Sign in and connect an integration
+## Sign in and connect Slack
 
-1. Open `http://localhost:3000` in your browser.
-2. Sign in with your Google account.
-3. Navigate to **Integrations** and click **Connect** next to Slack.
-4. Complete the Slack OAuth flow.
-5. Once connected, you can invoke allowed operations from the web UI.
+<Steps>
+### Open the web UI
+
+Go to `http://localhost:3000`. Sign in with your Google account, or use Dev Login in dev mode.
+
+### Connect the integration
+
+Navigate to **Integrations** and click **Connect** next to Slack. Complete the OAuth flow.
+
+### Invoke an operation
+
+Once connected, you can invoke allowed operations from the web UI or CLI.
+</Steps>
 
 ## Install and use the CLI
 
@@ -83,9 +90,9 @@ tshed integrations list
 tshed invoke slack conversations_list
 ```
 
-## What to read next
+## Next steps
 
-- [Platform Model](/concepts/platform-model) — understand the primitives Toolshed is built on.
-- [Add an Integration](/tasks/add-an-integration) — walk through adding a new third-party API.
-- [Config File](/reference/config-file) — full reference for every config key.
-- [Use with MCP](/tasks/use-with-mcp) — connect Toolshed to Claude Code or Claude Desktop.
+- [Platform Model](/concepts/platform-model): understand the core primitives.
+- [Add an Integration](/tasks/add-an-integration): walk through adding a new API.
+- [Config File](/reference/config-file): full reference for every config key.
+- [Use with MCP](/tasks/use-with-mcp): connect Toolshed to Claude.
