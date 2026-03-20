@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/toolshed/core/catalog"
 	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/mcpupstream"
 	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/registry"
 
@@ -21,8 +22,17 @@ const (
 	httpErrorMin  = 400
 )
 
+type TokenResolver interface {
+	ResolveToken(ctx context.Context, p *principal.Principal, providerName string) (string, error)
+}
+
+type directToolCaller interface {
+	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
+}
+
 type Config struct {
 	Invoker          invocation.Invoker
+	TokenResolver    TokenResolver
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolNamePrefix   string
@@ -50,7 +60,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
-				addCatalogTools(srv, cfg, provName, cat)
+				addCatalogTools(srv, cfg, provName, cat, prov)
 				continue
 			}
 		}
@@ -61,7 +71,12 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 	return srv
 }
 
-func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog) {
+func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog, prov core.Provider) {
+	caller, isDirect := unwrapDirectCaller(prov)
+	if isDirect && cfg.TokenResolver == nil {
+		isDirect = false
+	}
+
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		if op.Visible != nil && !*op.Visible {
@@ -84,7 +99,12 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 			tool.Annotations.Title = op.ID
 		}
 
-		handler := makeHandler(cfg.Invoker, provName, op.ID)
+		var handler mcpserver.ToolHandlerFunc
+		if isDirect {
+			handler = makeDirectHandler(cfg, provName, op.ID, caller)
+		} else {
+			handler = makeHandler(cfg.Invoker, provName, op.ID)
+		}
 		srv.AddTool(tool, handler)
 	}
 }
@@ -126,6 +146,35 @@ func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.
 
 		return mcpgo.NewToolResultText(result.Body), nil
 	}
+}
+
+func makeDirectHandler(cfg Config, provName, opName string, caller directToolCaller) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		p := principal.FromContext(ctx)
+		if p == nil {
+			return mcpgo.NewToolResultError("not authenticated"), nil
+		}
+
+		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+
+		ctx = mcpupstream.WithUpstreamToken(ctx, token)
+		return caller.CallTool(ctx, opName, req.GetArguments())
+	}
+}
+
+func unwrapDirectCaller(prov core.Provider) (directToolCaller, bool) {
+	if c, ok := prov.(directToolCaller); ok {
+		return c, true
+	}
+	type inner interface{ Inner() core.Provider }
+	if r, ok := prov.(inner); ok {
+		c, ok := r.Inner().(directToolCaller)
+		return c, ok
+	}
+	return nil, false
 }
 
 func toolName(prefix, provider, operation string) string {

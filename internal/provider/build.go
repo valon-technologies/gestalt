@@ -34,6 +34,11 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	cat.BaseURL = baseURL
 	ci.CompileSchemas(cat)
 
+	endpoints, err := ci.EndpointsMap(cat)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", def.Provider, err)
+	}
+
 	base := &ci.Base{
 		IntegrationName:    def.Provider,
 		IntegrationDisplay: def.DisplayName,
@@ -42,7 +47,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		BaseURL:            baseURL,
 		HTTPClient:         client,
 		Operations:         ci.OperationsList(cat),
-		Endpoints:          ci.EndpointsMap(cat),
+		Endpoints:          endpoints,
 		Headers:            def.Headers,
 	}
 

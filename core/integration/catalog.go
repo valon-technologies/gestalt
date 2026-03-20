@@ -40,16 +40,22 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 	return ops
 }
 
-func EndpointsMap(c *catalog.Catalog) map[string]Endpoint {
+func EndpointsMap(c *catalog.Catalog) (map[string]Endpoint, error) {
 	endpoints := make(map[string]Endpoint, len(c.Operations))
 	for i := range c.Operations {
 		op := &c.Operations[i]
+		if strings.TrimSpace(op.Method) == "" {
+			return nil, fmt.Errorf("catalog %q operation %q is missing method", c.Name, op.ID)
+		}
+		if strings.TrimSpace(op.Path) == "" {
+			return nil, fmt.Errorf("catalog %q operation %q is missing path", c.Name, op.ID)
+		}
 		endpoints[op.ID] = Endpoint{
 			Method: strings.ToUpper(strings.TrimSpace(op.Method)),
 			Path:   op.Path,
 		}
 	}
-	return endpoints
+	return endpoints, nil
 }
 
 func AuthStyleValue(c *catalog.Catalog) (AuthStyle, error) {
@@ -85,7 +91,11 @@ func BaseFromCatalog(cat *catalog.Catalog, runtime Base) (Base, error) {
 	}
 	base.AuthStyle = authStyle
 	base.Operations = OperationsList(cat)
-	base.Endpoints = EndpointsMap(cat)
+	endpoints, err := EndpointsMap(cat)
+	if err != nil {
+		return Base{}, err
+	}
+	base.Endpoints = endpoints
 	base.Headers = mergeHeaders(cat.Headers, runtime.Headers)
 	base.catalog = cat
 

@@ -482,4 +482,169 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	}
 }
 
+type directCallerProvider struct {
+	coretesting.StubIntegration
+	ops    []core.Operation
+	cat    *catalog.Catalog
+	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
+}
+
+func (p *directCallerProvider) ListOperations() []core.Operation { return p.ops }
+func (p *directCallerProvider) Catalog() *catalog.Catalog        { return p.cat }
+
+func (p *directCallerProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+	if p.callFn != nil {
+		return p.callFn(ctx, name, args)
+	}
+	return mcpgo.NewToolResultText("direct:" + name), nil
+}
+
+type stubTokenResolver struct {
+	token string
+	err   error
+}
+
+func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _ string) (string, error) {
+	return r.token, r.err
+}
+
+func TestNewServer_DirectCallerPassthrough(t *testing.T) {
+	t.Parallel()
+
+	var calledName string
+	var calledArgs map[string]any
+
+	cat := &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "Execute a SQL query",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+			},
+		},
+	}
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
+		ops:             []core.Operation{{Name: "run_query", Description: "Execute a SQL query"}},
+		cat:             cat,
+		callFn: func(_ context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			calledName = name
+			calledArgs = args
+			return mcpgo.NewToolResultText("query result"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "upstream-token"},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("clickhouse_run_query")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	ctx := ctxWithPrincipal()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "clickhouse_run_query"
+	req.Params.Arguments = map[string]any{"sql": "SELECT 1"}
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if calledName != "run_query" {
+		t.Fatalf("expected CallTool with name run_query, got %q", calledName)
+	}
+	if calledArgs["sql"] != "SELECT 1" {
+		t.Fatalf("expected sql=SELECT 1, got %v", calledArgs)
+	}
+
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	if text.Text != "query result" {
+		t.Fatalf("expected direct passthrough result, got %q", text.Text)
+	}
+}
+
+func TestNewServer_DirectCallerNoPrincipal(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "ch",
+		Operations: []catalog.CatalogOperation{
+			{ID: "op", Description: "op"},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "ch"},
+		ops:             []core.Operation{{Name: "op"}},
+		cat:             cat,
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "t"},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("ch_op")
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "ch_op"
+
+	result, err := tool.Handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected IsError when no principal")
+	}
+}
+
+func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "ch",
+		Operations: []catalog.CatalogOperation{
+			{ID: "op", Description: "op"},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "ch"},
+		ops:             []core.Operation{{Name: "op"}},
+		cat:             cat,
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{err: fmt.Errorf("no token stored")},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("ch_op")
+	ctx := ctxWithPrincipal()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "ch_op"
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected IsError for token resolve failure")
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }

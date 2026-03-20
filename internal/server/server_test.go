@@ -15,6 +15,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/catalog"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/invocation"
@@ -2419,10 +2420,11 @@ func TestBindingRoutesMounted(t *testing.T) {
 
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
 	t.Helper()
-	invoker := invocation.NewBroker(providers, ds)
+	broker := invocation.NewBroker(providers, ds)
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Invoker:   invoker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
 }
@@ -2555,6 +2557,127 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without auth, got %d", resp.StatusCode)
+	}
+}
+
+type mcpPassthroughProvider struct {
+	coretesting.StubIntegration
+	ops    []core.Operation
+	catVal *catalog.Catalog
+	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
+}
+
+func (p *mcpPassthroughProvider) ListOperations() []core.Operation { return p.ops }
+func (p *mcpPassthroughProvider) Catalog() *catalog.Catalog        { return p.catVal }
+func (p *mcpPassthroughProvider) SupportsManualAuth() bool         { return true }
+func (p *mcpPassthroughProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+	if p.callFn != nil {
+		return p.callFn(ctx, name, args)
+	}
+	return mcpgo.NewToolResultText("passthrough:" + name), nil
+}
+
+func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "Execute a SQL query",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+			},
+		},
+	}
+
+	var calledName string
+	prov := &mcpPassthroughProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "run_query", Description: "Execute a SQL query"}},
+		catVal:          cat,
+		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			calledName = name
+			return mcpgo.NewToolResultText("query executed"), nil
+		},
+	}
+
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, prov)
+	mcpHandler := newMCPHandler(t, providers, ds)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = providers
+		cfg.Datastore = ds
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	devHeaders := map[string]string{"X-Dev-User-Email": "dev@example.com"}
+
+	mcpJSONRPC(t, ts, devHeaders, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+
+	status, resp := mcpJSONRPC(t, ts, devHeaders, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list: expected 200, got %d", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/list: expected result, got %v", resp)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("expected tools, got %v", result)
+	}
+	firstTool := tools[0].(map[string]any)
+	if firstTool["name"] != "clickhouse_run_query" {
+		t.Fatalf("expected clickhouse_run_query, got %v", firstTool["name"])
+	}
+
+	status, resp = mcpJSONRPC(t, ts, devHeaders, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "clickhouse_run_query",
+			"arguments": map[string]any{"sql": "SELECT 1"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call: expected 200, got %d", status)
+	}
+	result, ok = resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/call: expected result, got %v", resp)
+	}
+	if calledName != "run_query" {
+		t.Fatalf("expected direct CallTool with run_query, got %q", calledName)
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("expected content in result, got %v", result)
+	}
+	textBlock := content[0].(map[string]any)
+	if textBlock["text"] != "query executed" {
+		t.Fatalf("expected passthrough result, got %v", textBlock)
 	}
 }
 
