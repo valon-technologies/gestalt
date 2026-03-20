@@ -1,0 +1,60 @@
+syntax = "proto3";
+package toolshed.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/proto/toolshed/v1;toolshedv1";
+
+import "google/protobuf/struct.proto";
+
+service ToolshedService {
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
+  rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+}
+
+message InvokeRequest {
+  string provider = 1;
+  string operation = 2;
+  google.protobuf.Struct params = 3;
+  string user_id = 4;
+  string request_id = 5;
+}
+
+message InvokeResponse {
+  int32 status = 1;
+  string body = 2;
+}
+
+message ListCapabilitiesRequest {
+  repeated string providers = 1;
+}
+
+message ListCapabilitiesResponse {
+  repeated Capability capabilities = 1;
+}
+
+message Capability {
+  string provider = 1;
+  string operation = 2;
+  string description = 3;
+  repeated Parameter parameters = 4;
+}
+
+message Parameter {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated ProviderInfo providers = 1;
+}
+
+message ProviderInfo {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  string connection_mode = 4;
+}

@@ -16,8 +16,11 @@ func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister inv
 }
 
 func bindingDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) BindingDeps {
+	guarded := guardedInvoker("binding", name, invoker, lister, providers, audit)
 	return BindingDeps{
-		Invoker: guardedInvoker("binding", name, invoker, lister, providers, audit),
+		Invoker:          guarded,
+		CapabilityLister: guarded,
+		ProviderLister:   guarded,
 	}
 }
 
@@ -30,6 +33,9 @@ func guardedInvoker(kind, name string, invoker invocation.Invoker, lister invoca
 	var opts []invocation.GuardedOption
 	if len(providers) > 0 {
 		opts = append(opts, invocation.WithAllowedProviders(providers))
+	}
+	if pl, ok := lister.(invocation.ProviderLister); ok {
+		opts = append(opts, invocation.WithProviderLister(pl))
 	}
 	return invocation.NewGuarded(invoker, lister, source, audit, opts...)
 }
