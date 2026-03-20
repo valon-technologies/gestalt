@@ -39,8 +39,9 @@ type RuntimeDef struct {
 }
 
 type BindingDef struct {
-	Type   string    `yaml:"type"`
-	Config yaml.Node `yaml:"config"`
+	Type      string    `yaml:"type"`
+	Providers []string  `yaml:"providers"`
+	Config    yaml.Node `yaml:"config"`
 }
 
 type SecretsConfig struct {

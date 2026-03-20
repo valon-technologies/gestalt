@@ -790,3 +790,41 @@ func TestBootstrapUnknownBindingType(t *testing.T) {
 		t.Fatal("expected error for unknown binding type")
 	}
 }
+
+func TestBootstrapBindingWithProviders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Integrations["beta"] = config.IntegrationDef{}
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-webhook": {
+			Type:      "webhook",
+			Providers: []string{"alpha"},
+		},
+	}
+
+	factories := validFactories()
+	factories.Providers["beta"] = stubProviderFactory("beta")
+
+	var receivedBroker core.Broker
+	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, brk core.Broker) (core.Binding, error) {
+		receivedBroker = brk
+		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if result.Bindings == nil {
+		t.Fatal("expected Bindings to be non-nil")
+	}
+
+	caps := receivedBroker.ListCapabilities()
+	for _, cap := range caps {
+		if cap.Provider != "alpha" {
+			t.Errorf("binding broker should only see alpha, got %q", cap.Provider)
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/valon-technologies/toolshed/core"
@@ -13,9 +14,13 @@ import (
 var _ core.Binding = (*Binding)(nil)
 
 type webhookConfig struct {
-	Path      string `yaml:"path"`
-	Provider  string `yaml:"provider"`
-	Operation string `yaml:"operation"`
+	Path            string `yaml:"path"`
+	Provider        string `yaml:"provider"`
+	Operation       string `yaml:"operation"`
+	AuthMode        string `yaml:"auth_mode"`
+	SigningSecret   string `yaml:"signing_secret"`
+	SignatureHeader string `yaml:"signature_header"`
+	UserHeader      string `yaml:"user_header"`
 }
 
 type Binding struct {
@@ -48,10 +53,42 @@ func (b *Binding) Routes() []core.Route {
 }
 
 func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+	defer func() { _ = r.Body.Close() }()
+
+	var userID string
+
+	switch b.cfg.AuthMode {
+	case AuthModeSigned:
+		header := b.cfg.SignatureHeader
+		if header == "" {
+			header = DefaultSignatureHeader
+		}
+		sig := r.Header.Get(header)
+		if sig == "" {
+			writeError(w, http.StatusUnauthorized, "missing signature")
+			return
+		}
+		if err := verifySignature([]byte(b.cfg.SigningSecret), rawBody, sig); err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid signature")
+			return
+		}
+
+	case AuthModeTrustedUserHeader:
+		userID = r.Header.Get(b.cfg.UserHeader)
+		if userID == "" {
+			writeError(w, http.StatusUnauthorized, "missing user header")
+			return
+		}
+	}
+
 	var body map[string]any
-	if r.Body != nil {
-		defer func() { _ = r.Body.Close() }()
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if len(rawBody) > 0 {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -68,11 +105,14 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := principal.WithPrincipal(r.Context(), p)
 
-	result, err := b.broker.Invoke(ctx, core.InvocationRequest{
+	req := core.InvocationRequest{
 		Provider:  b.cfg.Provider,
 		Operation: b.cfg.Operation,
 		Params:    body,
-	})
+		UserID:    userID,
+	}
+
+	result, err := b.broker.Invoke(ctx, req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream invocation failed")
 		return
