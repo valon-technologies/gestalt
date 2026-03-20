@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
-	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/config"
 )
 
@@ -261,10 +260,9 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		t.Fatal("Build result should satisfy CatalogProvider")
 	}
 
-	catAny := cp.Catalog()
-	cat, ok := catAny.(*ci.Catalog)
-	if !ok || cat == nil {
-		t.Fatal("Catalog() should return *integration.Catalog")
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() should return *catalog.Catalog")
 	}
 
 	if cat.Name != "catprov" {

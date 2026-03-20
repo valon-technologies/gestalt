@@ -1,6 +1,10 @@
 package core
 
-import "context"
+import (
+	"context"
+
+	"github.com/valon-technologies/toolshed/core/catalog"
+)
 
 type ConnectionMode string
 
@@ -34,7 +38,6 @@ type ManualProvider interface {
 
 // CatalogProvider is an optional interface that providers can implement to
 // expose rich MCP-facing metadata beyond the flat Operation list.
-// Returns *integration.Catalog; declared as any to avoid an import cycle.
 type CatalogProvider interface {
-	Catalog() any
+	Catalog() *catalog.Catalog
 }

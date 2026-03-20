@@ -3,12 +3,14 @@ package integration
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/valon-technologies/toolshed/core/catalog"
 )
 
 func TestLoadCatalogYAML(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := LoadCatalogYAML([]byte(`
+	cat, err := LoadCatalogYAML([]byte(`
 name: example
 display_name: Example
 description: Example integration
@@ -34,24 +36,24 @@ operations:
 		t.Fatalf("LoadCatalogYAML: %v", err)
 	}
 
-	if catalog.Name != "example" {
-		t.Fatalf("Name = %q, want example", catalog.Name)
+	if cat.Name != "example" {
+		t.Fatalf("Name = %q, want example", cat.Name)
 	}
-	if catalog.IconSVG != `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>` {
-		t.Fatalf("IconSVG = %q, want svg string", catalog.IconSVG)
+	if cat.IconSVG != `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>` {
+		t.Fatalf("IconSVG = %q, want svg string", cat.IconSVG)
 	}
-	if len(catalog.Operations) != 1 {
-		t.Fatalf("len(Operations) = %d, want 1", len(catalog.Operations))
+	if len(cat.Operations) != 1 {
+		t.Fatalf("len(Operations) = %d, want 1", len(cat.Operations))
 	}
-	if catalog.Operations[0].ID != "list_items" {
-		t.Fatalf("operation id = %q, want list_items", catalog.Operations[0].ID)
+	if cat.Operations[0].ID != "list_items" {
+		t.Fatalf("operation id = %q, want list_items", cat.Operations[0].ID)
 	}
 }
 
 func TestLoadCatalogYAMLWithoutIcon(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := LoadCatalogYAML([]byte(`
+	cat, err := LoadCatalogYAML([]byte(`
 name: no_icon
 operations:
   - id: op
@@ -61,8 +63,8 @@ operations:
 	if err != nil {
 		t.Fatalf("LoadCatalogYAML: %v", err)
 	}
-	if catalog.IconSVG != "" {
-		t.Fatalf("IconSVG = %q, want empty string", catalog.IconSVG)
+	if cat.IconSVG != "" {
+		t.Fatalf("IconSVG = %q, want empty string", cat.IconSVG)
 	}
 }
 
@@ -87,7 +89,7 @@ operations:
 func TestBaseFromCatalog(t *testing.T) {
 	t.Parallel()
 
-	catalog := MustLoadCatalogYAML([]byte(`
+	cat := MustLoadCatalogYAML([]byte(`
 name: example
 display_name: Example
 description: Example integration
@@ -106,7 +108,7 @@ operations:
         required: true
 `))
 
-	base, err := BaseFromCatalog(catalog, Base{
+	base, err := BaseFromCatalog(cat, Base{
 		BaseURL: "https://override.example.com",
 		Headers: map[string]string{"X-Override": "runtime"},
 	})
@@ -142,26 +144,26 @@ operations:
 		t.Fatalf("endpoint = %#v, want POST /items", endpoint)
 	}
 
-	cat, ok := base.Catalog().(*Catalog)
-	if !ok || cat == nil {
+	storedCat := base.Catalog()
+	if storedCat == nil {
 		t.Fatal("BaseFromCatalog should store catalog on base")
 	}
-	if cat.Name != "example" {
-		t.Errorf("stored catalog name = %q", cat.Name)
+	if storedCat.Name != "example" {
+		t.Errorf("stored catalog name = %q", storedCat.Name)
 	}
 }
 
 func TestCompileSchemasFillsInputSchema(t *testing.T) {
 	t.Parallel()
 
-	cat := &Catalog{
+	cat := &catalog.Catalog{
 		Name: "test",
-		Operations: []CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "op1",
 				Method: "GET",
 				Path:   "/test",
-				Parameters: []CatalogParameter{
+				Parameters: []catalog.CatalogParameter{
 					{Name: "q", Type: "string", Description: "Query", Required: true},
 					{Name: "limit", Type: "integer", Default: 50},
 				},
@@ -169,7 +171,7 @@ func TestCompileSchemasFillsInputSchema(t *testing.T) {
 		},
 	}
 
-	cat.CompileSchemas()
+	CompileSchemas(cat)
 
 	op := cat.Operations[0]
 	if op.InputSchema == nil {
@@ -193,22 +195,22 @@ func TestCompileSchemasPreservesExistingInputSchema(t *testing.T) {
 	t.Parallel()
 
 	existing := json.RawMessage(`{"type":"object","properties":{"custom":{"type":"string"}}}`)
-	cat := &Catalog{
+	cat := &catalog.Catalog{
 		Name: "test",
-		Operations: []CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{
 				ID:          "op1",
 				Method:      "POST",
 				Path:        "/test",
 				InputSchema: existing,
-				Parameters: []CatalogParameter{
+				Parameters: []catalog.CatalogParameter{
 					{Name: "ignored", Type: "string"},
 				},
 			},
 		},
 	}
 
-	cat.CompileSchemas()
+	CompileSchemas(cat)
 
 	if string(cat.Operations[0].InputSchema) != string(existing) {
 		t.Errorf("CompileSchemas overwrote existing InputSchema: got %s", cat.Operations[0].InputSchema)
@@ -218,16 +220,16 @@ func TestCompileSchemasPreservesExistingInputSchema(t *testing.T) {
 func TestCompileSchemasFillsAnnotations(t *testing.T) {
 	t.Parallel()
 
-	cat := &Catalog{
+	cat := &catalog.Catalog{
 		Name: "test",
-		Operations: []CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{ID: "read", Method: "GET", Path: "/read"},
 			{ID: "write", Method: "POST", Path: "/write"},
 			{ID: "remove", Method: "DELETE", Path: "/remove"},
 		},
 	}
 
-	cat.CompileSchemas()
+	CompileSchemas(cat)
 
 	if cat.Operations[0].Annotations.ReadOnlyHint == nil || !*cat.Operations[0].Annotations.ReadOnlyHint {
 		t.Error("GET should have readOnlyHint=true")
@@ -243,14 +245,14 @@ func TestCompileSchemasFillsAnnotations(t *testing.T) {
 func TestCompileSchemasPreservesExistingAnnotations(t *testing.T) {
 	t.Parallel()
 
-	cat := &Catalog{
+	cat := &catalog.Catalog{
 		Name: "test",
-		Operations: []CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "op1",
 				Method: "GET",
 				Path:   "/test",
-				Annotations: OperationAnnotations{
+				Annotations: catalog.OperationAnnotations{
 					ReadOnlyHint:  boolPtr(false),
 					OpenWorldHint: boolPtr(false),
 				},
@@ -258,7 +260,7 @@ func TestCompileSchemasPreservesExistingAnnotations(t *testing.T) {
 		},
 	}
 
-	cat.CompileSchemas()
+	CompileSchemas(cat)
 
 	a := cat.Operations[0].Annotations
 	if a.ReadOnlyHint == nil || *a.ReadOnlyHint {

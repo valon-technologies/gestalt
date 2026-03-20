@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/core/catalog"
 	"github.com/valon-technologies/toolshed/internal/apiexec"
 	"github.com/valon-technologies/toolshed/internal/oauth"
 )
 
 var (
-	_ core.OAuthProvider  = (*Base)(nil)
-	_ core.ManualProvider = (*Base)(nil)
+	_ core.OAuthProvider   = (*Base)(nil)
+	_ core.ManualProvider  = (*Base)(nil)
+	_ core.CatalogProvider = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -92,7 +94,7 @@ type Base struct {
 	RequestMutator func(operation string, req *apiexec.Request, params map[string]any) error
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
 
-	catalog *Catalog
+	catalog *catalog.Catalog
 }
 
 func (b *Base) Name() string        { return b.IntegrationName }
@@ -111,14 +113,9 @@ func (b *Base) SupportsManualAuth() bool {
 	return ok && mc.IsManual()
 }
 
-func (b *Base) SetCatalog(c *Catalog) { b.catalog = c }
+func (b *Base) SetCatalog(c *catalog.Catalog) { b.catalog = c }
 
-func (b *Base) Catalog() any {
-	if b.catalog == nil {
-		return nil
-	}
-	return b.catalog
-}
+func (b *Base) Catalog() *catalog.Catalog { return b.catalog }
 
 func (b *Base) AuthorizationURL(state string, scopes []string) string {
 	return b.Auth.AuthorizationURL(state, scopes)
@@ -214,4 +211,19 @@ func copyHeaders(h map[string]string) map[string]string {
 		c[k] = v
 	}
 	return c
+}
+
+func mergeHeaders(baseHeaders, overrideHeaders map[string]string) map[string]string {
+	if len(baseHeaders) == 0 && len(overrideHeaders) == 0 {
+		return nil
+	}
+
+	merged := copyHeaders(baseHeaders)
+	if merged == nil {
+		merged = make(map[string]string, len(overrideHeaders))
+	}
+	for key, value := range overrideHeaders {
+		merged[key] = value
+	}
+	return merged
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
-	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 )
@@ -70,7 +69,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 			Description: prov.Description(),
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
-			if cat, ok := cp.Catalog().(*ci.Catalog); ok && cat != nil {
+			if cat := cp.Catalog(); cat != nil {
 				info.IconSVG = cat.IconSVG
 			}
 		}

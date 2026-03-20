@@ -4,12 +4,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core/integration"
+	"github.com/valon-technologies/toolshed/core/catalog"
 )
 
 // CatalogFromDefinition converts a provider Definition to a Catalog.
-func CatalogFromDefinition(def *Definition) *integration.Catalog {
-	cat := &integration.Catalog{
+func CatalogFromDefinition(def *Definition) *catalog.Catalog {
+	cat := &catalog.Catalog{
 		Name:        def.Provider,
 		DisplayName: def.DisplayName,
 		Description: def.Description,
@@ -19,16 +19,16 @@ func CatalogFromDefinition(def *Definition) *integration.Catalog {
 		Headers:     def.Headers,
 	}
 
-	ops := make([]integration.CatalogOperation, 0, len(def.Operations))
+	ops := make([]catalog.CatalogOperation, 0, len(def.Operations))
 	for name, opDef := range def.Operations {
-		catOp := integration.CatalogOperation{
+		catOp := catalog.CatalogOperation{
 			ID:          name,
 			Method:      strings.ToUpper(opDef.Method),
 			Path:        opDef.Path,
 			Description: opDef.Description,
 		}
 		for _, p := range opDef.Parameters {
-			catOp.Parameters = append(catOp.Parameters, integration.CatalogParameter{
+			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
 				Name:        p.Name,
 				Type:        p.Type,
 				Description: p.Description,

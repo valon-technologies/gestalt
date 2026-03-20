@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/toolshed/core"
-	coreintegration "github.com/valon-technologies/toolshed/core/integration"
+	"github.com/valon-technologies/toolshed/core/catalog"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations.
@@ -67,13 +67,13 @@ func (r *Restricted) SupportsManualAuth() bool {
 	return false
 }
 
-func (r *Restricted) Catalog() any {
+func (r *Restricted) Catalog() *catalog.Catalog {
 	cp, ok := r.inner.(core.CatalogProvider)
 	if !ok {
 		return nil
 	}
-	cat, ok := cp.Catalog().(*coreintegration.Catalog)
-	if !ok || cat == nil {
+	cat := cp.Catalog()
+	if cat == nil {
 		return nil
 	}
 	filtered := *cat

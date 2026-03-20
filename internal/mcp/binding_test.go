@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/integration"
+	"github.com/valon-technologies/toolshed/core/catalog"
+	ci "github.com/valon-technologies/toolshed/core/integration"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
@@ -22,11 +23,11 @@ import (
 type catalogProvider struct {
 	coretesting.StubIntegration
 	ops     []core.Operation
-	catalog *integration.Catalog
+	catalog *catalog.Catalog
 }
 
 func (p *catalogProvider) ListOperations() []core.Operation { return p.ops }
-func (p *catalogProvider) Catalog() any                     { return p.catalog }
+func (p *catalogProvider) Catalog() *catalog.Catalog        { return p.catalog }
 
 type flatProvider struct {
 	coretesting.StubIntegration
@@ -66,9 +67,9 @@ func ctxWithPrincipal() context.Context {
 func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	t.Parallel()
 
-	cat := &integration.Catalog{
+	cat := &catalog.Catalog{
 		Name: "linear",
-		Operations: []integration.CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{
 				ID:          "search_issues",
 				Method:      "GET",
@@ -76,7 +77,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 				Title:       "Search Issues",
 				Description: "Search for issues",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
-				Annotations: integration.OperationAnnotations{
+				Annotations: catalog.OperationAnnotations{
 					ReadOnlyHint: boolPtr(true),
 				},
 			},
@@ -92,7 +93,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 
 	prov := &catalogProvider{
 		StubIntegration: coretesting.StubIntegration{N: "linear"},
-		ops:             cat.OperationsList(),
+		ops:             ci.OperationsList(cat),
 		catalog:         cat,
 	}
 
@@ -399,9 +400,9 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	t.Parallel()
 
 	hidden := false
-	cat := &integration.Catalog{
+	cat := &catalog.Catalog{
 		Name: "test",
-		Operations: []integration.CatalogOperation{
+		Operations: []catalog.CatalogOperation{
 			{ID: "visible_op", Method: "GET", Path: "/v"},
 			{ID: "hidden_op", Method: "GET", Path: "/h", Visible: &hidden},
 		},
@@ -409,7 +410,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 
 	prov := &catalogProvider{
 		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             cat.OperationsList(),
+		ops:             ci.OperationsList(cat),
 		catalog:         cat,
 	}
 

@@ -3,6 +3,8 @@ package integration
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/valon-technologies/toolshed/core/catalog"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 )
 
 // SynthesizeInputSchema builds a JSON Schema object from flat CatalogParameters.
-func SynthesizeInputSchema(params []CatalogParameter) json.RawMessage {
+func SynthesizeInputSchema(params []catalog.CatalogParameter) json.RawMessage {
 	if len(params) == 0 {
 		return nil
 	}
@@ -70,8 +72,8 @@ func NormalizeType(t string) string {
 }
 
 // AnnotationsFromMethod derives MCP operation annotations from an HTTP method.
-func AnnotationsFromMethod(method string) OperationAnnotations {
-	a := OperationAnnotations{
+func AnnotationsFromMethod(method string) catalog.OperationAnnotations {
+	a := catalog.OperationAnnotations{
 		OpenWorldHint: boolPtr(true),
 	}
 	switch strings.ToUpper(method) {
@@ -83,6 +85,22 @@ func AnnotationsFromMethod(method string) OperationAnnotations {
 		a.DestructiveHint = boolPtr(true)
 	}
 	return a
+}
+
+// CompileSchemas fills in InputSchema and Annotations for operations that lack them.
+func CompileSchemas(c *catalog.Catalog) {
+	if c == nil {
+		return
+	}
+	for i := range c.Operations {
+		op := &c.Operations[i]
+		if op.InputSchema == nil && len(op.Parameters) > 0 {
+			op.InputSchema = SynthesizeInputSchema(op.Parameters)
+		}
+		if op.Annotations == (catalog.OperationAnnotations{}) {
+			op.Annotations = AnnotationsFromMethod(op.Method)
+		}
+	}
 }
 
 func boolPtr(v bool) *bool { return &v }
