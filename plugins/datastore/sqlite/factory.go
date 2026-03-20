@@ -18,7 +18,7 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 		return nil, fmt.Errorf("sqlite: parsing config: %w", err)
 	}
 	if cfg.Path == "" {
-		cfg.Path = "./toolshed.db"
+		cfg.Path = "./gestalt.db"
 	}
 	return New(cfg.Path, deps.EncryptionKey)
 }

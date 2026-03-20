@@ -1,6 +1,6 @@
 # Authentication
 
-Toolshed supports pluggable user authentication. Configure your provider under `auth:` in config.yaml.
+Gestalt supports pluggable user authentication. Configure your provider under `auth:` in config.yaml.
 
 ## Google
 
@@ -34,7 +34,7 @@ auth:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
     client_secret: ${OIDC_CLIENT_SECRET}
-    session_secret: ${TOOLSHED_SESSION_SECRET}
+    session_secret: ${GESTALT_SESSION_SECRET}
     display_name: "Okta"          # shown on the login button
     scopes:                       # optional; defaults to openid, email, profile
       - openid

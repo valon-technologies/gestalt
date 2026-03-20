@@ -120,13 +120,13 @@ func resolveConfigPath(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
-	if envPath := os.Getenv("TOOLSHED_CONFIG"); envPath != "" {
+	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
 		return envPath
 	}
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
 	}
-	return "/etc/toolshed/config.yaml"
+	return "/etc/gestalt/config.yaml"
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

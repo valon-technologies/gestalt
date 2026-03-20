@@ -1,8 +1,8 @@
-Toolshed has been deployed successfully.
+Gestalt has been deployed successfully.
 
 {{- if .Values.ingress.enabled }}
 
-Access Toolshed via ingress:
+Access Gestalt via ingress:
 {{- range $host := .Values.ingress.hosts }}
   {{- range .paths }}
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
@@ -12,7 +12,7 @@ Access Toolshed via ingress:
 {{- else if contains "NodePort" .Values.service.type }}
 
 Get the application URL by running:
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "toolshed.fullname" . }})
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "gestalt.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
 
@@ -20,26 +20,26 @@ Get the application URL by running:
 
 Get the application URL by running:
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-  kubectl get --namespace {{ .Release.Namespace }} svc {{ include "toolshed.fullname" . }} -w
+  kubectl get --namespace {{ .Release.Namespace }} svc {{ include "gestalt.fullname" . }} -w
 
 {{- else if contains "ClusterIP" .Values.service.type }}
 
-Access Toolshed by running:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "toolshed.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+Access Gestalt by running:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestalt.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
 
 Then visit: http://127.0.0.1:{{ .Values.service.port }}
 
 {{- end }}
 
 Verify the deployment:
-  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "toolshed.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "gestalt.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
 
 Health check:
   curl http://127.0.0.1:{{ .Values.service.port }}/health
 
 Required environment variables (provide via extraEnv):
-  TOOLSHED_BASE_URL        Public URL of this Toolshed instance
-  TOOLSHED_ENCRYPTION_KEY  Encryption key for token storage
+  GESTALT_BASE_URL        Public URL of this Gestalt instance
+  GESTALT_ENCRYPTION_KEY  Encryption key for token storage
 
 The default auth provider is Google. Provide these for Google OAuth:
   GOOGLE_CLIENT_ID         Google OAuth client ID

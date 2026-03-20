@@ -144,7 +144,7 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
             if authenticated {
                 eprintln!("Authenticated.");
             } else {
-                eprintln!("Not authenticated. Run 'tshed auth login' or set TOOLSHED_API_KEY.");
+                eprintln!("Not authenticated. Run 'gstl auth login' or set GESTALT_API_KEY.");
             }
         }
     }

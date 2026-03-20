@@ -2,13 +2,13 @@
 
 ## Integration is missing its provider
 
-Toolshed resolves providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server logs an error and skips the integration.
+Gestalt resolves providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server logs an error and skips the integration.
 
 **Fix**: Check that `provider_dirs` includes the directory with your provider YAML files, and that the integration config includes either an `openapi` URL or a `provider` path.
 
 ## OAuth redirects are wrong
 
-Toolshed derives callback URLs from `server.base_url`. If it is unset or points to the wrong host, the identity provider rejects the redirect.
+Gestalt derives callback URLs from `server.base_url`. If it is unset or points to the wrong host, the identity provider rejects the redirect.
 
 **Fix**: Set `server.base_url` to the externally-reachable URL of your deployment.
 
@@ -22,23 +22,23 @@ Dev mode enables a bypass login path. In production, a real auth provider must b
 
 The calling user has not connected the target integration. Each user must complete the OAuth flow (or paste manual credentials) for every integration they want to invoke.
 
-**Fix**: Run `tshed integrations connect <name>` or use the web UI.
+**Fix**: Run `gstl integrations connect <name>` or use the web UI.
 
 ## API token auth fails
 
 - Verify the `Authorization` header uses the `Bearer` prefix.
 - Use the plaintext token returned at creation time, not the hash stored in the datastore.
-- If using the CLI, check that `TOOLSHED_API_KEY` is set correctly and is not overridden by an expired session token.
+- If using the CLI, check that `GESTALT_API_KEY` is set correctly and is not overridden by an expired session token.
 
 ## Web UI does not talk to the local API
 
 The web UI needs to know where the API server lives.
 
-**Fix**: Use `toolshed dev` which starts both and wires them together automatically. If running separately, set `TOOLSHED_API_URL` to point to the API server.
+**Fix**: Use `gestalt dev` which starts both and wires them together automatically. If running separately, set `GESTALT_API_URL` to point to the API server.
 
 ## Config validation fails
 
-Run `toolshed config check -config your-config.yaml` to see exactly which field is invalid. Common causes:
+Run `gestalt config check -config your-config.yaml` to see exactly which field is invalid. Common causes:
 
 - Missing `encryption_key` when `dev_mode` is not `true`.
 - Invalid provider name in `auth`, `datastore`, or `secrets`.

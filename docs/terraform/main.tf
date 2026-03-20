@@ -22,7 +22,7 @@ provider "google" {
 # ---------- Cloud Run ----------
 
 resource "google_cloud_run_v2_service" "docs" {
-  name     = "toolshed-docs"
+  name     = "gestalt-docs"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 # ---------- Load Balancer ----------
 
 resource "google_compute_region_network_endpoint_group" "docs" {
-  name                  = "toolshed-docs-neg"
+  name                  = "gestalt-docs-neg"
   region                = var.region
   network_endpoint_type = "SERVERLESS"
 
@@ -67,7 +67,7 @@ resource "google_compute_region_network_endpoint_group" "docs" {
 }
 
 resource "google_compute_backend_service" "docs" {
-  name                  = "toolshed-docs-backend"
+  name                  = "gestalt-docs-backend"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   backend {
@@ -76,12 +76,12 @@ resource "google_compute_backend_service" "docs" {
 }
 
 resource "google_compute_url_map" "docs" {
-  name            = "toolshed-docs-url-map"
+  name            = "gestalt-docs-url-map"
   default_service = google_compute_backend_service.docs.id
 }
 
 resource "google_compute_managed_ssl_certificate" "docs" {
-  name = "toolshed-docs-cert"
+  name = "gestalt-docs-cert"
 
   managed {
     domains = [var.domain]
@@ -89,17 +89,17 @@ resource "google_compute_managed_ssl_certificate" "docs" {
 }
 
 resource "google_compute_target_https_proxy" "docs" {
-  name             = "toolshed-docs-https-proxy"
+  name             = "gestalt-docs-https-proxy"
   url_map          = google_compute_url_map.docs.id
   ssl_certificates = [google_compute_managed_ssl_certificate.docs.id]
 }
 
 resource "google_compute_global_address" "docs" {
-  name = "toolshed-docs-ip"
+  name = "gestalt-docs-ip"
 }
 
 resource "google_compute_global_forwarding_rule" "docs" {
-  name                  = "toolshed-docs-forwarding-rule"
+  name                  = "gestalt-docs-forwarding-rule"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   target                = google_compute_target_https_proxy.docs.id
   port_range            = "443"

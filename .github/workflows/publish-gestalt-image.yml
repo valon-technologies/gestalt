@@ -1,4 +1,4 @@
-name: Publish Toolshed Image
+name: Publish Gestalt Image
 
 on:
   push:

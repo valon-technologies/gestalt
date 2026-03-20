@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: toolshed
+  repository: gestalt
   pullPolicy: IfNotPresent
   tag: ""
 
@@ -12,7 +12,7 @@ fullnameOverride: ""
 
 serviceAccount:
   create: true
-  # Toolshed does not need Kubernetes API access.
+  # Gestalt does not need Kubernetes API access.
   automount: false
   annotations: {}
   name: ""
@@ -26,14 +26,14 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: toolshed.local
+    - host: gestalt.local
       paths:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-  #  - secretName: toolshed-tls
+  #  - secretName: gestalt-tls
   #    hosts:
-  #      - toolshed.local
+  #      - gestalt.local
 
 resources:
   limits:
@@ -57,13 +57,13 @@ persistence:
     - ReadWriteOnce
   size: 1Gi
 
-# Mounted as /etc/toolshed/config.yaml. The app expands ${ENV_VAR}
+# Mounted as /etc/gestalt/config.yaml. The app expands ${ENV_VAR}
 # placeholders at startup, so secrets can be injected via extraEnv.
 config:
   server:
     port: 8080
-    base_url: "${TOOLSHED_BASE_URL}"
-    encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+    base_url: "${GESTALT_BASE_URL}"
+    encryption_key: "${GESTALT_ENCRYPTION_KEY}"
     dev_mode: false
   auth:
     provider: google
@@ -76,33 +76,33 @@ config:
     #   issuer_url: "${OIDC_ISSUER_URL}"
     #   client_id: "${OIDC_CLIENT_ID}"
     #   client_secret: "${OIDC_CLIENT_SECRET}"
-    #   session_secret: "${TOOLSHED_SESSION_SECRET}"
+    #   session_secret: "${GESTALT_SESSION_SECRET}"
     #   display_name: "Okta"
   datastore:
     provider: sqlite
     config:
-      path: /data/toolshed.db
+      path: /data/gestalt.db
 
 # Extra environment variables for the container. These are required
 # for the ${VAR} placeholders in the config above to resolve.
 extraEnv: []
-# - name: TOOLSHED_BASE_URL
-#   value: "https://toolshed.example.com"
-# - name: TOOLSHED_ENCRYPTION_KEY
+# - name: GESTALT_BASE_URL
+#   value: "https://gestalt.example.com"
+# - name: GESTALT_ENCRYPTION_KEY
 #   valueFrom:
 #     secretKeyRef:
-#       name: toolshed-secrets
+#       name: gestalt-secrets
 #       key: encryption-key
 # --- Google provider ---
 # - name: GOOGLE_CLIENT_ID
 #   valueFrom:
 #     secretKeyRef:
-#       name: toolshed-secrets
+#       name: gestalt-secrets
 #       key: google-client-id
 # - name: GOOGLE_CLIENT_SECRET
 #   valueFrom:
 #     secretKeyRef:
-#       name: toolshed-secrets
+#       name: gestalt-secrets
 #       key: google-client-secret
 # --- OIDC provider ---
 # - name: OIDC_ISSUER_URL
@@ -110,12 +110,12 @@ extraEnv: []
 # - name: OIDC_CLIENT_ID
 #   valueFrom:
 #     secretKeyRef:
-#       name: toolshed-secrets
+#       name: gestalt-secrets
 #       key: oidc-client-id
 # - name: OIDC_CLIENT_SECRET
 #   valueFrom:
 #     secretKeyRef:
-#       name: toolshed-secrets
+#       name: gestalt-secrets
 #       key: oidc-client-secret
 
 livenessProbe:
@@ -136,7 +136,7 @@ web:
   enabled: true
   replicaCount: 1
   image:
-    repository: toolshed-web
+    repository: gestalt-web
     pullPolicy: IfNotPresent
     tag: ""
   service:

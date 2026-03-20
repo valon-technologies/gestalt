@@ -174,7 +174,7 @@ func findWebDir() (string, error) {
 	candidates := []string{
 		filepath.Join(filepath.Dir(exe), "..", "web"),
 		"web",
-		filepath.Join("toolshed", "web"),
+		filepath.Join("gestalt", "web"),
 	}
 
 	for _, dir := range candidates {
@@ -192,7 +192,7 @@ func startWebUI(webDir string, apiPort, webUIPort int) (*exec.Cmd, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("TOOLSHED_API_URL=http://localhost:%d", apiPort),
+		fmt.Sprintf("GESTALT_API_URL=http://localhost:%d", apiPort),
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

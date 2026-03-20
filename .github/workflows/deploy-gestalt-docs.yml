@@ -1,18 +1,18 @@
-name: Deploy Toolshed Docs
+name: Deploy Gestalt Docs
 
 on:
   push:
     branches: [main]
     paths:
       - 'docs/**'
-      - '.github/workflows/deploy-toolshed-docs.yml'
+      - '.github/workflows/deploy-gestalt-docs.yml'
   workflow_dispatch:
 
 env:
   PROJECT_ID: gitlab-peach-street
   REGION: us-east4
-  SERVICE: toolshed-docs
-  IMAGE: us-east4-docker.pkg.dev/gitlab-peach-street/cloud-run-source-deploy/toolshed-docs
+  SERVICE: gestalt-docs
+  IMAGE: us-east4-docker.pkg.dev/gitlab-peach-street/cloud-run-source-deploy/gestalt-docs
 
 jobs:
   deploy:
