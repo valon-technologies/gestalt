@@ -1,0 +1,93 @@
+import { Callout, Cards } from 'nextra/components'
+
+# Deploy
+
+Toolshed compiles to a single statically-linked Go binary and ships as a minimal Docker image. It runs anywhere you can run a container or a Linux binary.
+
+## Resource requirements
+
+| | Minimum | Recommended |
+|---|---|---|
+| CPU | 1 vCPU | 2 vCPU |
+| Memory | 256 MB | 512 MB |
+| Disk | 1 GB (SQLite) | Managed database (Postgres or MySQL) |
+
+<Callout>
+  SQLite is the simplest datastore but limits you to a single instance. Switch to Postgres or MySQL if you need horizontal scaling or resilient storage.
+</Callout>
+
+## What every deployment needs
+
+1. **A Toolshed image or binary.** Build from the repo's `toolshed/Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/toolshed`.
+2. **A config YAML file.** Mounted at `/etc/toolshed/config.yaml` inside the container, or passed via `--config`. See [Config File](/reference/config-file) for the full schema.
+3. **Environment variables for secrets.** The config file supports `${VAR_NAME}` placeholders that are expanded at startup. Never hardcode secrets in the YAML.
+4. **A database.** SQLite (with a persistent volume) or a Postgres/MySQL connection string.
+5. **A stable `base_url`.** Toolshed derives OAuth callback URLs from this value. It must be the externally-reachable URL of your deployment.
+
+## Environment variables
+
+### Server
+
+| Variable | Purpose | Required |
+|---|---|---|
+| `TOOLSHED_BASE_URL` | External URL for OAuth callbacks (e.g. `https://toolshed.example.com`) | Yes |
+| `TOOLSHED_ENCRYPTION_KEY` | Symmetric key for encrypting stored tokens. Generate with `openssl rand -base64 32`. | Yes |
+| `TOOLSHED_SESSION_SECRET` | Signs session cookies. Generate with `openssl rand -base64 32`. | Yes |
+
+### Auth
+
+| Variable | Purpose | Required |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Yes (if using Google auth) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Yes (if using Google auth) |
+| `GOOGLE_REDIRECT_URL` | Override for Google OAuth callback URL | No |
+
+### Datastore
+
+| Variable | Purpose | Required |
+|---|---|---|
+| `DATABASE_URL` | Postgres or MySQL connection string (e.g. `postgres://user:pass@host:5432/toolshed`) | Yes (if using Postgres/MySQL) |
+
+### Integrations
+
+Each integration needs its own OAuth credentials. The variable names follow the pattern `<INTEGRATION>_CLIENT_ID` and `<INTEGRATION>_CLIENT_SECRET` — for example, `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`.
+
+## Minimal production config
+
+```yaml
+server:
+  port: 8080
+  base_url: "${TOOLSHED_BASE_URL}"
+  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+
+auth:
+  provider: google
+  config:
+    client_id: "${GOOGLE_CLIENT_ID}"
+    client_secret: "${GOOGLE_CLIENT_SECRET}"
+
+datastore:
+  provider: postgres
+  config:
+    url: "${DATABASE_URL}"
+```
+
+## Choose a platform
+
+<Cards>
+  <Cards.Card title="Fly.io" href="/deploy/fly-io">
+    Container PaaS with built-in Postgres and persistent volumes.
+  </Cards.Card>
+  <Cards.Card title="Railway" href="/deploy/railway">
+    Deploy from GitHub with one-click Postgres provisioning.
+  </Cards.Card>
+  <Cards.Card title="Render" href="/deploy/render">
+    Managed web services with optional persistent disks.
+  </Cards.Card>
+  <Cards.Card title="AWS Lambda" href="/deploy/aws-lambda">
+    Serverless with pay-per-request pricing and RDS Postgres.
+  </Cards.Card>
+  <Cards.Card title="Kubernetes" href="/deploy/kubernetes">
+    Helm chart for clusters you already operate.
+  </Cards.Card>
+</Cards>

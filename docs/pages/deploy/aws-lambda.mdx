@@ -1,0 +1,182 @@
+import { Callout } from 'nextra/components'
+
+# Deploy to AWS Lambda
+
+Run Toolshed as a Lambda function behind API Gateway, backed by RDS Postgres.
+
+<Callout>
+  Lambda is a good fit if you already run infrastructure on AWS and want pay-per-request pricing. For simpler setups, [Fly.io](/deploy/fly-io), [Railway](/deploy/railway), or [Render](/deploy/render) involve less ceremony.
+</Callout>
+
+## Prerequisites
+
+- An AWS account with permissions to create Lambda functions, API Gateway, and RDS instances
+- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed and configured
+- [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed
+- Go 1.26+ installed locally
+
+## Build the binary
+
+Toolshed compiles to a statically-linked binary. Build it for the `provided.al2023` Lambda runtime:
+
+```sh
+cd toolshed
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/toolshed
+```
+
+The output binary must be named `bootstrap` for the `provided.al2023` runtime.
+
+## Provision a database
+
+Create an RDS Postgres instance. Aurora Serverless v2 is a good match for Lambda's bursty traffic pattern.
+
+```sh
+aws rds create-db-cluster \
+  --db-cluster-identifier toolshed-db \
+  --engine aurora-postgresql \
+  --engine-version 16.1 \
+  --serverless-v2-scaling-configuration MinCapacity=0.5,MaxCapacity=4 \
+  --master-username toolshed \
+  --master-user-password "$(openssl rand -base64 24)" \
+  --vpc-security-group-ids sg-xxxxxxxx
+
+aws rds create-db-instance \
+  --db-instance-identifier toolshed-db-1 \
+  --db-cluster-identifier toolshed-db \
+  --db-instance-class db.serverless \
+  --engine aurora-postgresql
+```
+
+<Callout>
+  The Lambda function and RDS instance must be in the same VPC. Attach the Lambda to the VPC's private subnets and ensure the security group allows traffic on port 5432 between them.
+</Callout>
+
+Note the cluster endpoint — you will need it for `DATABASE_URL`.
+
+## SAM template
+
+Create a `template.yaml` at the repository root:
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  ToolshedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      CodeUri: toolshed/
+      Environment:
+        Variables:
+          TOOLSHED_BASE_URL: !Sub "https://${ToolshedApi}.execute-api.${AWS::Region}.amazonaws.com"
+          TOOLSHED_ENCRYPTION_KEY: "{{resolve:secretsmanager:toolshed/encryption-key}}"
+          TOOLSHED_SESSION_SECRET: "{{resolve:secretsmanager:toolshed/session-secret}}"
+          GOOGLE_CLIENT_ID: "{{resolve:secretsmanager:toolshed/google-client-id}}"
+          GOOGLE_CLIENT_SECRET: "{{resolve:secretsmanager:toolshed/google-client-secret}}"
+          DATABASE_URL: "{{resolve:secretsmanager:toolshed/database-url}}"
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-xxxxxxxx
+        SubnetIds:
+          - subnet-xxxxxxxx
+          - subnet-yyyyyyyy
+      Events:
+        Api:
+          Type: HttpApi
+
+  ToolshedApi:
+    Type: AWS::Serverless::HttpApi
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${ToolshedApi}.execute-api.${AWS::Region}.amazonaws.com"
+```
+
+## Store secrets
+
+```sh
+aws secretsmanager create-secret --name toolshed/encryption-key \
+  --secret-string "$(openssl rand -base64 32)"
+aws secretsmanager create-secret --name toolshed/session-secret \
+  --secret-string "$(openssl rand -base64 32)"
+aws secretsmanager create-secret --name toolshed/google-client-id \
+  --secret-string "your-google-client-id"
+aws secretsmanager create-secret --name toolshed/google-client-secret \
+  --secret-string "your-google-client-secret"
+aws secretsmanager create-secret --name toolshed/database-url \
+  --secret-string "postgres://toolshed:password@cluster-endpoint:5432/toolshed"
+```
+
+## Configure
+
+Create a config file at `toolshed/config.lambda.yaml`:
+
+```yaml
+server:
+  port: 8080
+  base_url: "${TOOLSHED_BASE_URL}"
+  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+
+auth:
+  provider: google
+  config:
+    client_id: "${GOOGLE_CLIENT_ID}"
+    client_secret: "${GOOGLE_CLIENT_SECRET}"
+
+datastore:
+  provider: postgres
+  config:
+    url: "${DATABASE_URL}"
+```
+
+The binary reads this config at startup. Bundle it alongside the `bootstrap` binary in the Lambda deployment package.
+
+## Deploy
+
+```sh
+sam build
+sam deploy --guided
+```
+
+SAM walks you through stack name, region, and confirmation prompts on the first deploy. Subsequent deploys use the saved `samconfig.toml`:
+
+```sh
+sam deploy
+```
+
+## Verify
+
+SAM prints the API URL in the deploy output. Test it:
+
+```sh
+curl -s https://<api-id>.execute-api.<region>.amazonaws.com/health
+```
+
+You should see `{"status":"ok"}`.
+
+## Custom domain
+
+1. Create or import a TLS certificate in ACM for your domain.
+2. Add a custom domain name in API Gateway.
+3. Create a Route 53 alias record (or CNAME with your DNS provider) pointing to the API Gateway domain.
+4. Update `TOOLSHED_BASE_URL`:
+
+```sh
+aws secretsmanager update-secret --secret-id toolshed/base-url \
+  --secret-string "https://toolshed.example.com"
+```
+
+## Cold starts
+
+<Callout>
+  Go binaries on `provided.al2023` with ARM64 start in roughly 50–150ms. For most workloads this is negligible. If you need consistent sub-100ms latency, enable [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html) on the function.
+</Callout>
