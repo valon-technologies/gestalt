@@ -1,11 +1,11 @@
 [package]
-name = "toolshed"
-description = "CLI for Toolshed API - authentication, integration management, and operation invocation"
+name = "gestalt"
+description = "CLI for Gestalt API - authentication, integration management, and operation invocation"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "tshed"
+name = "gstl"
 path = "src/main.rs"
 
 [dependencies]

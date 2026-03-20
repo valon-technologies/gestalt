@@ -2,7 +2,7 @@ import { Callout } from 'nextra/components'
 
 # Deploy to AWS Lambda
 
-Run Toolshed as a Lambda function behind API Gateway, backed by RDS Postgres.
+Run Gestalt as a Lambda function behind API Gateway, backed by RDS Postgres.
 
 <Callout>
   Lambda fits if you already run infrastructure on AWS and want pay-per-request pricing. For simpler setups, consider [Fly.io](/deploy/fly-io), [Railway](/deploy/railway), or [Render](/deploy/render).
@@ -18,8 +18,8 @@ Run Toolshed as a Lambda function behind API Gateway, backed by RDS Postgres.
 ## Build the binary
 
 ```sh
-cd toolshed
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/toolshed
+cd gestalt
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/gestalt
 ```
 
 The binary must be named `bootstrap` for the `provided.al2023` runtime.
@@ -30,17 +30,17 @@ Aurora Serverless v2 is a good match for Lambda's bursty traffic pattern.
 
 ```sh
 aws rds create-db-cluster \
-  --db-cluster-identifier toolshed-db \
+  --db-cluster-identifier gestalt-db \
   --engine aurora-postgresql \
   --engine-version 16.1 \
   --serverless-v2-scaling-configuration MinCapacity=0.5,MaxCapacity=4 \
-  --master-username toolshed \
+  --master-username gestalt \
   --master-user-password "$(openssl rand -base64 24)" \
   --vpc-security-group-ids sg-xxxxxxxx
 
 aws rds create-db-instance \
-  --db-instance-identifier toolshed-db-1 \
-  --db-cluster-identifier toolshed-db \
+  --db-instance-identifier gestalt-db-1 \
+  --db-cluster-identifier gestalt-db \
   --db-instance-class db.serverless \
   --engine aurora-postgresql
 ```
@@ -63,22 +63,22 @@ Globals:
     MemorySize: 256
 
 Resources:
-  ToolshedFunction:
+  GestaltFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
         - arm64
-      CodeUri: toolshed/
+      CodeUri: gestalt/
       Environment:
         Variables:
-          TOOLSHED_BASE_URL: !Sub "https://${ToolshedApi}.execute-api.${AWS::Region}.amazonaws.com"
-          TOOLSHED_ENCRYPTION_KEY: "{{resolve:secretsmanager:toolshed/encryption-key}}"
-          TOOLSHED_SESSION_SECRET: "{{resolve:secretsmanager:toolshed/session-secret}}"
-          GOOGLE_CLIENT_ID: "{{resolve:secretsmanager:toolshed/google-client-id}}"
-          GOOGLE_CLIENT_SECRET: "{{resolve:secretsmanager:toolshed/google-client-secret}}"
-          DATABASE_URL: "{{resolve:secretsmanager:toolshed/database-url}}"
+          GESTALT_BASE_URL: !Sub "https://${GestaltApi}.execute-api.${AWS::Region}.amazonaws.com"
+          GESTALT_ENCRYPTION_KEY: "{{resolve:secretsmanager:gestalt/encryption-key}}"
+          GESTALT_SESSION_SECRET: "{{resolve:secretsmanager:gestalt/session-secret}}"
+          GOOGLE_CLIENT_ID: "{{resolve:secretsmanager:gestalt/google-client-id}}"
+          GOOGLE_CLIENT_SECRET: "{{resolve:secretsmanager:gestalt/google-client-secret}}"
+          DATABASE_URL: "{{resolve:secretsmanager:gestalt/database-url}}"
       VpcConfig:
         SecurityGroupIds:
           - sg-xxxxxxxx
@@ -89,45 +89,45 @@ Resources:
         Api:
           Type: HttpApi
 
-  ToolshedApi:
+  GestaltApi:
     Type: AWS::Serverless::HttpApi
 
 Outputs:
   ApiUrl:
-    Value: !Sub "https://${ToolshedApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Value: !Sub "https://${GestaltApi}.execute-api.${AWS::Region}.amazonaws.com"
 ```
 
 ## Store secrets
 
 ```sh
-aws secretsmanager create-secret --name toolshed/encryption-key \
+aws secretsmanager create-secret --name gestalt/encryption-key \
   --secret-string "$(openssl rand -base64 32)"
-aws secretsmanager create-secret --name toolshed/session-secret \
+aws secretsmanager create-secret --name gestalt/session-secret \
   --secret-string "$(openssl rand -base64 32)"
-aws secretsmanager create-secret --name toolshed/google-client-id \
+aws secretsmanager create-secret --name gestalt/google-client-id \
   --secret-string "your-google-client-id"
-aws secretsmanager create-secret --name toolshed/google-client-secret \
+aws secretsmanager create-secret --name gestalt/google-client-secret \
   --secret-string "your-google-client-secret"
-aws secretsmanager create-secret --name toolshed/database-url \
-  --secret-string "postgres://toolshed:password@cluster-endpoint:5432/toolshed"
+aws secretsmanager create-secret --name gestalt/database-url \
+  --secret-string "postgres://gestalt:password@cluster-endpoint:5432/gestalt"
 ```
 
 ## Configure
 
-Create `toolshed/config.lambda.yaml`:
+Create `gestalt/config.lambda.yaml`:
 
 ```yaml
 server:
   port: 8080
-  base_url: "${TOOLSHED_BASE_URL}"
-  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+  base_url: "${GESTALT_BASE_URL}"
+  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
 
 auth:
   provider: google
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${TOOLSHED_SESSION_SECRET}"
+    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -166,8 +166,8 @@ curl -s https://<api-id>.execute-api.<region>.amazonaws.com/health
 4. Update the base URL secret:
 
 ```sh
-aws secretsmanager update-secret --secret-id toolshed/base-url \
-  --secret-string "https://toolshed.example.com"
+aws secretsmanager update-secret --secret-id gestalt/base-url \
+  --secret-string "https://gestalt.example.com"
 ```
 
 ## Cold starts

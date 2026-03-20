@@ -25,7 +25,7 @@ variable "dns_zone_name" {
 variable "domain" {
   description = "Docs site domain"
   type        = string
-  default     = "docs.toolshed.peachstreet.dev"
+  default     = "docs.gestalt.peachstreet.dev"
 }
 
 variable "docs_image" {

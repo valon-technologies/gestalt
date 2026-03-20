@@ -57,16 +57,16 @@ auth:
 datastore:
   provider: postgres   # see table below
   config:
-    dsn: postgres://user:pass@host:5432/toolshed
+    dsn: postgres://user:pass@host:5432/gestalt
 ```
 
 | Provider | Config | Notes |
 |---|---|---|
-| `sqlite` | `path: ./toolshed.db` | Default. Single-instance only. |
+| `sqlite` | `path: ./gestalt.db` | Default. Single-instance only. |
 | `postgres` | `dsn: postgres://...` | Recommended for production. |
-| `mysql` | `dsn: user:pass@tcp(host:3306)/toolshed` | Alternative SQL backend. |
+| `mysql` | `dsn: user:pass@tcp(host:3306)/gestalt` | Alternative SQL backend. |
 | `dynamodb` | `table`, `region`, optional `endpoint` | AWS DynamoDB. |
-| `mongodb` | `uri`, optional `database` (default: `toolshed`) | MongoDB. |
+| `mongodb` | `uri`, optional `database` (default: `gestalt`) | MongoDB. |
 | `firestore` | `project_id`, optional `database` | Google Cloud Firestore. |
 | `oracle` | `dsn: ...` | Oracle Database. |
 | `sqlserver` | `dsn: ...` | Microsoft SQL Server. |
@@ -77,7 +77,7 @@ datastore:
 secrets:
   provider: env      # "env", "file", or "gcp_secret_manager"
   config:
-    prefix: TOOLSHED_  # env only
+    prefix: GESTALT_  # env only
 ```
 
 | Provider | Config | Notes |
@@ -139,7 +139,7 @@ auth_profiles:
   slack_shared:
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
-    redirect_url: https://toolshed.example.com/api/v1/auth/callback
+    redirect_url: https://gestalt.example.com/api/v1/auth/callback
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access

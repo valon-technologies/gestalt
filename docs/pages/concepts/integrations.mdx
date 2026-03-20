@@ -1,6 +1,6 @@
 # Integrations
 
-Integrations are the unit of API exposure in Toolshed. Each integration declares where its definition comes from, how it authenticates, and which operations callers can invoke.
+Integrations are the unit of API exposure in Gestalt. Each integration declares where its definition comes from, how it authenticates, and which operations callers can invoke.
 
 ## Three ways to define an integration
 
@@ -23,7 +23,7 @@ Integrations are the unit of API exposure in Toolshed. Each integration declares
 
 ## How OpenAPI loading works
 
-When an integration includes an `openapi` field, Toolshed parses the spec at startup and extracts:
+When an integration includes an `openapi` field, Gestalt parses the spec at startup and extracts:
 
 - The display name from `info.title`.
 - The first server URL as the base URL.
@@ -34,9 +34,9 @@ Operations without an `operationId` are skipped. Security schemes inform the def
 
 ## Manual auth versus OAuth
 
-**OAuth**: Toolshed manages the full authorization code flow. It generates the authorization URL, handles the callback, exchanges the code for tokens, encrypts them, and stores them in the datastore. On subsequent requests, the stored access token is attached to upstream calls. If a refresh token is available and the access token is near expiry, Toolshed refreshes it automatically.
+**OAuth**: Gestalt manages the full authorization code flow. It generates the authorization URL, handles the callback, exchanges the code for tokens, encrypts them, and stores them in the datastore. On subsequent requests, the stored access token is attached to upstream calls. If a refresh token is available and the access token is near expiry, Gestalt refreshes it automatically.
 
-**Manual**: Set `auth.type` to `manual`. Users paste credentials directly through the web UI (`POST /api/v1/auth/connect-manual`) or CLI. Toolshed encrypts and stores them the same way it stores OAuth tokens.
+**Manual**: Set `auth.type` to `manual`. Users paste credentials directly through the web UI (`POST /api/v1/auth/connect-manual`) or CLI. Gestalt encrypts and stores them the same way it stores OAuth tokens.
 
 ## Connection modes
 
@@ -81,4 +81,4 @@ Hooks are registered by name in Go code and referenced by that name in config.
 
 ## Restrictions
 
-Toolshed keeps the integration model simple. There is no plugin discovery protocol, no remote registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. Adding or changing integrations requires a restart.
+Gestalt keeps the integration model simple. There is no plugin discovery protocol, no remote registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. Adding or changing integrations requires a restart.

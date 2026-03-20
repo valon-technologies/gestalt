@@ -421,7 +421,7 @@ auth:
 datastore:
   provider: test-store
 server:
-  base_url: https://toolshed.example.com
+  base_url: https://gestalt.example.com
   encryption_key: test-key
 integrations:
   alpha:
@@ -439,10 +439,10 @@ integrations:
 		t.Fatalf("Bootstrap: %v", err)
 	}
 
-	if receivedBaseURL != "https://toolshed.example.com" {
-		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://toolshed.example.com")
+	if receivedBaseURL != "https://gestalt.example.com" {
+		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://gestalt.example.com")
 	}
-	want := "https://toolshed.example.com" + config.IntegrationCallbackPath
+	want := "https://gestalt.example.com" + config.IntegrationCallbackPath
 	if receivedRedirectURL != want {
 		t.Errorf("integration factory RedirectURL = %q, want %q", receivedRedirectURL, want)
 	}

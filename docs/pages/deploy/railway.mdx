@@ -5,13 +5,13 @@ import { Callout } from 'nextra/components'
 ## Before you begin
 
 - A [Railway](https://railway.app) account.
-- Your Toolshed repository on GitHub.
+- Your Gestalt repository on GitHub.
 
 ## Deploy from GitHub
 
 1. Create a new project in the Railway dashboard.
 2. Select **Deploy from GitHub repo** and connect your repository.
-3. Set **Root Directory** to `toolshed/`.
+3. Set **Root Directory** to `gestalt/`.
 4. Railway detects the Dockerfile and begins the first build.
 
 <Callout>
@@ -21,37 +21,37 @@ import { Callout } from 'nextra/components'
 ## Add a database
 
 1. In your Railway project, click **New** then **Database** then **PostgreSQL**.
-2. Link the variable: in the Toolshed service's **Variables** tab, add `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}`.
+2. Link the variable: in the Gestalt service's **Variables** tab, add `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}`.
 
 ## Set environment variables
 
-Add these in the Toolshed service's **Variables** tab:
+Add these in the Gestalt service's **Variables** tab:
 
 | Variable | Value |
 |---|---|
-| `TOOLSHED_BASE_URL` | `https://<domain>.up.railway.app` |
-| `TOOLSHED_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
-| `TOOLSHED_SESSION_SECRET` | Output of `openssl rand -base64 32` |
+| `GESTALT_BASE_URL` | `https://<domain>.up.railway.app` |
+| `GESTALT_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
+| `GESTALT_SESSION_SECRET` | Output of `openssl rand -base64 32` |
 | `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 
 ## Configure
 
-Commit a config file at `toolshed/config.railway.yaml`:
+Commit a config file at `gestalt/config.railway.yaml`:
 
 ```yaml
 server:
   port: 8080
-  base_url: "${TOOLSHED_BASE_URL}"
-  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+  base_url: "${GESTALT_BASE_URL}"
+  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
 
 auth:
   provider: google
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${TOOLSHED_SESSION_SECRET}"
+    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -62,11 +62,11 @@ datastore:
 Override the container start command in Railway's service settings:
 
 ```
-/toolshed --config /build/toolshed/config.railway.yaml
+/gestalt --config /build/gestalt/config.railway.yaml
 ```
 
 <Callout>
-  The path depends on how Railway copies your repo into the build context. Check the build logs if `/build/toolshed/` does not resolve.
+  The path depends on how Railway copies your repo into the build context. Check the build logs if `/build/gestalt/` does not resolve.
 </Callout>
 
 ## Verify
@@ -81,4 +81,4 @@ curl -s https://<domain>.up.railway.app/health
 
 1. Go to **Networking** then **Custom Domain** in service settings.
 2. Follow the DNS instructions Railway provides.
-3. Update `TOOLSHED_BASE_URL` to the new domain.
+3. Update `GESTALT_BASE_URL` to the new domain.
