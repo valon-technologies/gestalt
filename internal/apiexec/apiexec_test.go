@@ -19,7 +19,7 @@ func TestDoGETWithQueryAndPathParams(t *testing.T) {
 			"auth":  r.Header.Get("Authorization"),
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:  http.MethodGet,
@@ -56,7 +56,7 @@ func TestDoPOSTWithJSONBody(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		_ = json.NewEncoder(w).Encode(body)
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:  http.MethodPost,
@@ -92,7 +92,7 @@ func TestDoUsesCustomAuthHeaderAndBodyOverride(t *testing.T) {
 			"body": body,
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	overrideBody, err := json.Marshal(map[string]any{
 		"query": "{ viewer { id } }",

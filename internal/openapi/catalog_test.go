@@ -84,7 +84,7 @@ func TestLoadCatalogPreservesNestedSchema(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	cat, err := LoadCatalog(context.Background(), "nested", srv.URL, nil)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestLoadCatalogAnnotationsFromMethod(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -195,7 +195,7 @@ func TestLoadCatalogAllowedOpsFiltering(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	allowed := map[string]string{
 		"list_items":  "Custom list description",
@@ -237,7 +237,7 @@ paths:
       summary: Ping
       description: Health check
 `)
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	cat, err := LoadCatalog(context.Background(), "yamlcat", srv.URL, nil)
 	if err != nil {
