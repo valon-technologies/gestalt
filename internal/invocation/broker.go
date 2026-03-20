@@ -72,7 +72,8 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	case core.ConnectionModeIdentity, core.ConnectionModeEither:
 		return "", fmt.Errorf("%w: connection mode %q not yet implemented", ErrInternal, mode)
 	case core.ConnectionModeUser, "":
-		// proceed to token resolution below
+	default:
+		return "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
 
 	if p.UserID == "" {

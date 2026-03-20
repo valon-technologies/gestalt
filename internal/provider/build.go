@@ -3,7 +3,6 @@ package provider
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -31,7 +30,9 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}
 
-	operations, endpoints := buildCatalog(def)
+	cat := CatalogFromDefinition(def)
+	cat.BaseURL = baseURL
+	cat.CompileSchemas()
 
 	base := &ci.Base{
 		IntegrationName:    def.Provider,
@@ -40,8 +41,8 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		Auth:               auth,
 		BaseURL:            baseURL,
 		HTTPClient:         client,
-		Operations:         operations,
-		Endpoints:          endpoints,
+		Operations:         cat.OperationsList(),
+		Endpoints:          cat.EndpointsMap(),
 		Headers:            def.Headers,
 	}
 
@@ -97,6 +98,8 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		base.RequestMutator = mutator
 	}
 
+	base.SetCatalog(cat)
+
 	var result core.Provider = base
 
 	if ops := intg.AllowedOperations; ops != nil {
@@ -116,6 +119,12 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 				for i := range base.Operations {
 					if base.Operations[i].Name == opName {
 						base.Operations[i].Description = desc
+						break
+					}
+				}
+				for i := range cat.Operations {
+					if cat.Operations[i].ID == opName {
+						cat.Operations[i].Description = desc
 						break
 					}
 				}
@@ -220,43 +229,6 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
 	return ci.UpstreamAuth{Handler: upstream}, nil
-}
-
-func buildCatalog(def *Definition) ([]core.Operation, map[string]ci.Endpoint) {
-	ops := make([]core.Operation, 0, len(def.Operations))
-	eps := make(map[string]ci.Endpoint, len(def.Operations))
-
-	for name, opDef := range def.Operations {
-		method := strings.ToUpper(opDef.Method)
-
-		params := make([]core.Parameter, len(opDef.Parameters))
-		for i, p := range opDef.Parameters {
-			params[i] = core.Parameter{
-				Name:        p.Name,
-				Type:        p.Type,
-				Description: p.Description,
-				Required:    p.Required,
-				Default:     p.Default,
-			}
-		}
-
-		ops = append(ops, core.Operation{
-			Name:        name,
-			Description: opDef.Description,
-			Method:      method,
-			Parameters:  params,
-		})
-		eps[name] = ci.Endpoint{
-			Method: method,
-			Path:   opDef.Path,
-		}
-	}
-
-	sort.Slice(ops, func(i, j int) bool {
-		return ops[i].Name < ops[j].Name
-	})
-
-	return ops, eps
 }
 
 func resolveURL(baseURL, u string) string {
