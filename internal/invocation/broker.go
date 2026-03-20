@@ -69,25 +69,57 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	switch mode {
 	case core.ConnectionModeNone:
 		return "", nil
-	case core.ConnectionModeIdentity, core.ConnectionModeEither:
-		return "", fmt.Errorf("%w: connection mode %q not yet implemented", ErrInternal, mode)
+
+	case core.ConnectionModeIdentity:
+		return b.resolveStoredToken(ctx, prov, principal.IdentityPrincipal, providerName)
+
+	case core.ConnectionModeEither:
+		if p.UserID != "" || (p.Identity != nil && p.Identity.Email != "") {
+			userID, err := b.resolveUserID(ctx, p)
+			if err != nil {
+				return "", err
+			}
+			tok, tokErr := b.resolveStoredToken(ctx, prov, userID, providerName)
+			if tokErr == nil {
+				return tok, nil
+			}
+			if !errors.Is(tokErr, ErrNoToken) {
+				return "", tokErr
+			}
+		}
+		return b.resolveStoredToken(ctx, prov, principal.IdentityPrincipal, providerName)
+
 	case core.ConnectionModeUser, "":
-	default:
-		return "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
-	}
-
-	if p.UserID == "" {
-		dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+		userID, err := b.resolveUserID(ctx, p)
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrUserResolution, err)
+			return "", err
 		}
-		if dbUser == nil || dbUser.ID == "" {
-			return "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
-		}
-		p.UserID = dbUser.ID
+		return b.resolveStoredToken(ctx, prov, userID, providerName)
 	}
 
-	storedToken, err := b.datastore.Token(ctx, p.UserID, providerName, "default")
+	return "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
+}
+
+func (b *Broker) resolveUserID(ctx context.Context, p *principal.Principal) (string, error) {
+	if p.UserID != "" {
+		return p.UserID, nil
+	}
+	if p.Identity == nil || p.Identity.Email == "" {
+		return "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
+	}
+	dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrUserResolution, err)
+	}
+	if dbUser == nil || dbUser.ID == "" {
+		return "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
+	}
+	p.UserID = dbUser.ID
+	return p.UserID, nil
+}
+
+func (b *Broker) resolveStoredToken(ctx context.Context, prov core.Provider, userID, providerName string) (string, error) {
+	storedToken, err := b.datastore.Token(ctx, userID, providerName, "default")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return "", fmt.Errorf("%w: no token stored for integration %q; connect via OAuth first", ErrNoToken, providerName)
@@ -97,7 +129,6 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	if storedToken == nil {
 		return "", fmt.Errorf("%w: no token stored for integration %q; connect via OAuth first", ErrNoToken, providerName)
 	}
-
 	return b.refreshTokenIfNeeded(ctx, prov, storedToken)
 }
 

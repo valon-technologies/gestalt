@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/principal"
 )
 
 var _ core.Binding = (*Binding)(nil)
@@ -61,7 +62,13 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := b.broker.Invoke(r.Context(), core.InvocationRequest{
+	p := &principal.Principal{
+		CallSource:     "binding",
+		CallSourceName: b.name,
+	}
+	ctx := principal.WithPrincipal(r.Context(), p)
+
+	result, err := b.broker.Invoke(ctx, core.InvocationRequest{
 		Provider:  b.cfg.Provider,
 		Operation: b.cfg.Operation,
 		Params:    body,
