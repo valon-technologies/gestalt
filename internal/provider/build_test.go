@@ -291,6 +291,38 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 	}
 }
 
+func TestBuildAppliesIconSVGFromConfig(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "test",
+		DisplayName: "Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op": {Description: "An op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	const svg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
+	prov, err := Build(def, config.IntegrationDef{IconSVG: svg})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cp, ok := prov.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("expected CatalogProvider")
+	}
+	cat, ok := cp.Catalog().(*ci.Catalog)
+	if !ok || cat == nil {
+		t.Fatal("expected *Catalog")
+	}
+	if cat.IconSVG != svg {
+		t.Fatalf("expected icon_svg from config override, got %q", cat.IconSVG)
+	}
+}
+
 func writeProviderYAML(t *testing.T, dir, name, displayName string) {
 	t.Helper()
 	content := fmt.Sprintf(minimalProviderYAML, name, displayName, name)
