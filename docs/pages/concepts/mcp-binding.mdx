@@ -1,6 +1,6 @@
 # MCP Binding
 
-Toolshed exposes integrations through two transport bindings: the HTTP API server (`toolshed serve`) and the MCP stdio server (`toolshed mcp`). Both bindings share the same config, providers, datastore, and auth layer. The difference is how clients connect.
+Toolshed exposes integrations to AI assistants via the Model Context Protocol (MCP). When `mcp.enabled` is set in the config, `toolshed serve` mounts a Streamable HTTP MCP endpoint at `/mcp` alongside the existing REST API.
 
 ## What MCP is
 
@@ -18,13 +18,13 @@ For example, the `search_issues` operation on the `linear` provider becomes the 
 
 If you set `tool_name_prefix` in the `mcp` config block, that string is prepended to every tool name. A prefix of `ts_` would produce `ts_linear_search_issues`.
 
-## How auth works in stdio mode
+## How auth works
 
-The HTTP API server authenticates callers via session tokens or API tokens in the `Authorization` header. The stdio MCP server cannot use HTTP headers, so it reads a `TOOLSHED_API_KEY` environment variable at startup. The API key is validated against the datastore and resolved to a user identity before any tool calls are processed. All tool invocations run as that user.
+MCP requests go through the same auth middleware as the REST API. Clients authenticate with a Bearer token in the `Authorization` header — the same API tokens or session tokens used for `/api/v1` endpoints.
 
 ## Relationship to the HTTP API
 
-The MCP binding is not a replacement for the HTTP API. It is an alternative transport for the same operations:
+The MCP binding is not a replacement for the HTTP API. It is an alternative interface for the same operations:
 
 - Same providers and integration definitions from config.
 - Same datastore for users, tokens, and credentials.
@@ -37,8 +37,6 @@ The MCP binding adds an `mcp.providers` filter so you can expose a subset of int
 
 Toolshed populates MCP tool annotations automatically. GET and HEAD operations are marked as read-only. PUT operations are marked as idempotent. DELETE operations are marked as destructive. Input schemas from OpenAPI specs are passed through as the tool's JSON Schema, giving MCP clients type information for parameters.
 
-## What is not in the MVP
+## Limitations
 
-- **Streamable HTTP transport** -- the binding uses stdio only. Streamable HTTP MCP support is planned but not yet implemented.
-- **Hot-reload** -- adding or removing integrations requires restarting the MCP server.
-- **Auto-spawning** -- Toolshed does not manage the MCP server process lifecycle. Your MCP client (Claude Code, Claude Desktop, etc.) starts and stops it.
+- **Hot-reload** -- adding or removing integrations requires restarting the server.

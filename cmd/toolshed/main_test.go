@@ -15,12 +15,3 @@ func TestRun_UnknownCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
-func TestRun_MCPSubcommand_MissingConfig(t *testing.T) {
-	t.Parallel()
-
-	err := run([]string{"mcp", "-config", "/nonexistent/config.yaml"})
-	if err == nil {
-		t.Fatal("expected error for missing config")
-	}
-}

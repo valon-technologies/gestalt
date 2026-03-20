@@ -13,7 +13,7 @@ These are the top-level keys the current server understands.
 | `integrations` | Map of integration name to integration definition overrides. |
 | `provider_dirs` | Directories searched for provider YAML files. |
 | `server` | Port, base URL, encryption key, and development mode. |
-| `mcp` | MCP binding settings: provider filter and tool name prefix. |
+| `mcp` | MCP endpoint settings: enabled flag, provider filter, and tool name prefix. |
 
 ## Server block
 
@@ -43,18 +43,18 @@ These are the top-level keys the current server understands.
 
 | Field | Notes |
 |---|---|
+| `enabled` | Set to `true` to mount the MCP endpoint at `/mcp`. Defaults to `false`. |
 | `providers` | Optional list of integration names to expose via MCP. Omit to expose all. |
 | `tool_name_prefix` | Optional string prepended to every MCP tool name. Defaults to `""`. |
 
 ```yaml
 mcp:
+  enabled: true
   providers:
     - linear
     - slack
   tool_name_prefix: ""
 ```
-
-The `mcp` block only affects the `toolshed mcp` subcommand. The HTTP API server ignores it.
 
 ## Supported provider names today
 

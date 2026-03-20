@@ -2,24 +2,13 @@
 
 ## Server binary
 
-The Go server binary is named `toolshed`. It has two subcommands:
-
-| Subcommand | Purpose |
-|---|---|
-| `toolshed serve` | Start the HTTP API server. This is the default when no subcommand is given. |
-| `toolshed mcp` | Start the stdio MCP server for AI assistant integrations. |
-
-Both subcommands accept a `-config` flag for the config file path, with the same resolution order: explicit flag, `TOOLSHED_CONFIG` env var, `./config.yaml`, `/etc/toolshed/config.yaml`.
-
-### `toolshed mcp`
-
-Starts an MCP server on stdin/stdout. Requires `TOOLSHED_API_KEY` to be set in the environment.
+The Go server binary is named `toolshed`. It accepts a `-config` flag for the config file path, with the following resolution order: explicit flag, `TOOLSHED_CONFIG` env var, `./config.yaml`, `/etc/toolshed/config.yaml`.
 
 ```sh
-TOOLSHED_API_KEY=your-token toolshed mcp -config config.yaml
+toolshed serve -config config.yaml
 ```
 
-See [Use with MCP](/tasks/use-with-mcp) for setup instructions.
+When no subcommand is given, `serve` is the default.
 
 ## Client CLI
 

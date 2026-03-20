@@ -5,16 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/invocation"
+	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
 	"github.com/valon-technologies/toolshed/internal/provider"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
@@ -2281,5 +2284,173 @@ func TestBindingRoutesMounted(t *testing.T) {
 	}
 	if result["binding"] != "reached" {
 		t.Fatalf("expected binding handler to be reached, got %v", result)
+	}
+}
+
+func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
+	t.Helper()
+	broker := invocation.NewBroker(providers, ds)
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Broker:    broker,
+		Providers: providers,
+	})
+	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
+}
+
+func mcpJSONRPC(t *testing.T, ts *httptest.Server, headers map[string]string, body map[string]any) (int, map[string]any) {
+	t.Helper()
+	payload, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var result map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &result); err != nil {
+			t.Fatalf("decoding MCP response: %v\nbody: %s", err, raw)
+		}
+	}
+	return resp.StatusCode, result
+}
+
+func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "linear"},
+		ops: []core.Operation{
+			{Name: "search_issues", Description: "Search issues", Method: "GET"},
+		},
+	}
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
+		},
+	}
+	providers := newTestRegistry(t, stub)
+	mcpHandler := newMCPHandler(t, providers, ds)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = providers
+		cfg.Datastore = ds
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	devHeaders := map[string]string{"X-Dev-User-Email": "dev@example.com"}
+
+	status, resp := mcpJSONRPC(t, ts, devHeaders, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize: expected 200, got %d", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("initialize: expected result object, got %v", resp)
+	}
+	if result["serverInfo"] == nil {
+		t.Fatal("initialize: missing serverInfo")
+	}
+
+	status, resp = mcpJSONRPC(t, ts, devHeaders, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list: expected 200, got %d", status)
+	}
+	result, ok = resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/list: expected result object, got %v", resp)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("tools/list: expected non-empty tools, got %v", result)
+	}
+	firstTool := tools[0].(map[string]any)
+	if firstTool["name"] != "linear_search_issues" {
+		t.Fatalf("expected tool linear_search_issues, got %v", firstTool["name"])
+	}
+}
+
+func TestMCPEndpoint_RequiresAuth(t *testing.T) {
+	t.Parallel()
+
+	providers := func() *registry.PluginMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	ds := &coretesting.StubDatastore{}
+	mcpHandler := newMCPHandler(t, providers, ds)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without auth, got %d", resp.StatusCode)
+	}
+}
+
+func TestMCPEndpoint_NotMountedWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+	})
+	defer ts.Close()
+
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 404/405 when MCP not enabled, got %d", resp.StatusCode)
 	}
 }
