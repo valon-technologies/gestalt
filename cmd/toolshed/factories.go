@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/datastore/oracle"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
+	"github.com/valon-technologies/toolshed/plugins/datastore/sqlserver"
 	"github.com/valon-technologies/toolshed/plugins/providers/echo"
 	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
 	secretsenv "github.com/valon-technologies/toolshed/plugins/secrets/env"
@@ -97,6 +98,7 @@ func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
 	factories.Datastores["mongodb"] = mongodb.Factory
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
+	factories.Datastores["sqlserver"] = sqlserver.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Runtimes["echo"] = echoruntime.Factory
