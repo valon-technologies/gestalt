@@ -11,24 +11,23 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
 	"gopkg.in/yaml.v3"
 )
 
 type stubBroker struct {
-	invoked   bool
-	provider  string
-	operation string
-	params    map[string]any
-	result    *core.OperationResult
-	err       error
+	invoked bool
+	lastReq core.InvocationRequest
+	lastCtx context.Context
+	result  *core.OperationResult
+	err     error
 }
 
-func (b *stubBroker) Invoke(_ context.Context, req core.InvocationRequest) (*core.OperationResult, error) {
+func (b *stubBroker) Invoke(ctx context.Context, req core.InvocationRequest) (*core.OperationResult, error) {
 	b.invoked = true
-	b.provider = req.Provider
-	b.operation = req.Operation
-	b.params = req.Params
+	b.lastReq = req
+	b.lastCtx = ctx
 	if b.err != nil {
 		return nil, b.err
 	}
@@ -109,14 +108,54 @@ func TestWebhookInvokesBroker(t *testing.T) {
 	if !brk.invoked {
 		t.Fatal("expected broker.Invoke to be called")
 	}
-	if brk.provider != "echo" {
-		t.Errorf("expected provider echo, got %q", brk.provider)
+	if brk.lastReq.Provider != "echo" {
+		t.Errorf("expected provider echo, got %q", brk.lastReq.Provider)
 	}
-	if brk.operation != "echo" {
-		t.Errorf("expected operation echo, got %q", brk.operation)
+	if brk.lastReq.Operation != "echo" {
+		t.Errorf("expected operation echo, got %q", brk.lastReq.Operation)
 	}
-	if brk.params["data"] != "test" {
-		t.Errorf("expected params data=test, got %v", brk.params["data"])
+	if brk.lastReq.Params["data"] != "test" {
+		t.Errorf("expected params data=test, got %v", brk.lastReq.Params["data"])
+	}
+}
+
+func TestWebhookInvokesBroker_Principal(t *testing.T) {
+	t.Parallel()
+
+	brk := &stubBroker{
+		result: &core.OperationResult{
+			Status: http.StatusOK,
+			Body:   `{"ok":true}`,
+		},
+	}
+	b := makeBinding(t, "/incoming", "echo", "echo", brk)
+	if err := b.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	body := bytes.NewBufferString(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !brk.invoked {
+		t.Fatal("expected broker.Invoke to be called")
+	}
+
+	p := principal.FromContext(brk.lastCtx)
+	if p == nil {
+		t.Fatal("expected principal in context")
+	}
+	if p.CallSource != "binding" {
+		t.Errorf("expected CallSource binding, got %q", p.CallSource)
+	}
+	if p.CallSourceName != "test-webhook" {
+		t.Errorf("expected CallSourceName test-webhook, got %q", p.CallSourceName)
 	}
 }
 
