@@ -1,20 +1,55 @@
 # CLI
 
-## Server binary
+Toolshed ships two binaries: the Go server (`toolshed`) and the Rust client (`tshed`).
 
-The Go server binary is named `toolshed`. It accepts a `-config` flag for the config file path, with the following resolution order: explicit flag, `TOOLSHED_CONFIG` env var, `./config.yaml`, `/etc/toolshed/config.yaml`.
+## Server commands
+
+### `toolshed serve`
+
+Start the API server. This is the default command when no subcommand is given.
 
 ```sh
 toolshed serve -config config.yaml
+toolshed -config config.yaml          # equivalent
 ```
 
-When no subcommand is given, `serve` is the default.
+### `toolshed dev`
 
-## Client CLI
+Start the API server and web UI together for local development.
 
-The Rust CLI binary is named `tshed`. It handles login, config, integrations, invocation, and API tokens.
+```sh
+toolshed dev -config config.yaml
+```
 
-## Install it
+| Flag | Default | Purpose |
+|---|---|---|
+| `-config` | (see resolution order) | Path to config file. |
+| `-api-port` | from config | Override API server port. |
+| `-web-port` | `3000` | Web UI port. |
+| `-api-only` | `false` | Start only the API server, skip the web UI. |
+
+When dev mode is enabled in config, prints "dev mode enabled" on startup.
+
+### `toolshed config check`
+
+Validate configuration and print resolved values.
+
+```sh
+toolshed config check -config config.yaml
+```
+
+Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
+
+### Config file resolution
+
+1. `-config` flag.
+2. `TOOLSHED_CONFIG` environment variable.
+3. `./config.yaml` in the current directory.
+4. `/etc/toolshed/config.yaml`.
+
+## Client CLI (`tshed`)
+
+### Install
 
 ```sh
 brew install valon-technologies/toolshed/toolshed
@@ -23,45 +58,61 @@ brew install valon-technologies/toolshed/toolshed
 Or build from source:
 
 ```sh
-cd toolshed/client
+cd toolshed/client/cli
 cargo build --release
 ./target/release/tshed --version
 ```
 
-## Command groups
+### Commands
 
 | Command | Purpose |
 |---|---|
-| `tshed auth ...` | Login, logout, and status. |
 | `tshed init` | Interactive setup wizard. |
-| `tshed config ...` | Read and write persistent CLI config values. |
-| `tshed integrations ...` | List integrations or start a connection flow. |
-| `tshed invoke ...` | Execute an integration operation. |
-| `tshed tokens ...` | Create, list, and revoke API tokens. |
+| `tshed auth login` | Open browser for OAuth login. |
+| `tshed auth logout` | Clear stored credentials. |
+| `tshed auth status` | Show authentication status. |
+| `tshed config get <key>` | Read a config value. |
+| `tshed config set <key> <value>` | Write a config value. |
+| `tshed config unset <key>` | Remove a config value. |
+| `tshed config list` | List all config values. |
+| `tshed integrations list` | List available integrations. |
+| `tshed integrations connect <name>` | Start an OAuth connection flow. |
+| `tshed invoke <integration> <operation> -p key=value` | Execute an operation. |
+| `tshed tokens create [--name <name>]` | Create an API token. |
+| `tshed tokens list` | List API tokens. |
+| `tshed tokens revoke <id>` | Revoke an API token. |
 
-## URL resolution order
+### URL resolution order
 
-1. `--url` flag on the command.
+1. `--url` flag.
 2. `TOOLSHED_URL` environment variable.
 3. `.toolshed.json` in the current directory.
 4. Global config file.
 5. `credentials.json` stored by `tshed auth login`.
-6. `http://localhost:8080` as a final fallback.
+6. `http://localhost:8080` as fallback.
 
-## Authentication behavior
+### Authentication
 
 - If `TOOLSHED_API_KEY` is set, it is sent as the Bearer token on every request.
 - Otherwise, the CLI uses the session token stored by `tshed auth login`.
 - Credential files are written with `0600` permissions.
+- Output formats: `--format json` (default) or `--format table`.
 
-## Common commands
+### Common workflows
 
 ```sh
+# Initial setup
 tshed init
 tshed auth login
+
+# Browse and connect
 tshed integrations list --format table
 tshed integrations connect slack
+
+# Invoke operations
 tshed invoke slack conversations_list
 tshed invoke slack chat_postMessage -p channel=C123 -p text=hello
+
+# API tokens for CI
 tshed tokens create --name "ci-token"
 ```

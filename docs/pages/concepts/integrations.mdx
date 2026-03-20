@@ -1,54 +1,84 @@
 # Integrations
 
-Integrations are the unit of API exposure in Toolshed. Each integration declares where its definition comes from, how it authenticates, and which operations are allowed to execute.
+Integrations are the unit of API exposure in Toolshed. Each integration declares where its definition comes from, how it authenticates, and which operations callers can invoke.
 
 ## Three ways to define an integration
 
-1. **OpenAPI spec** — set the `openapi` field to a URL or local path. Toolshed loads the spec at startup, extracts operations, and builds the provider automatically.
-2. **Provider file** — write a standalone YAML file that declares the base URL, auth style, and operations manually. Place it in a directory listed in `provider_dirs`.
-3. **Provider directory** — point `provider_dirs` at a directory containing multiple provider YAML files. Each file is registered as a separate provider at startup.
+| Source | Config field | When to use |
+|---|---|---|
+| OpenAPI spec | `openapi` | Point at a URL or local file. Operations, parameters, and descriptions are generated automatically. |
+| Provider file | `provider` | Write a standalone YAML file. Use when no spec exists or the spec is too noisy. |
+| Provider directory | `provider_dirs` | Scan a directory for multiple provider YAML files. Each file becomes a separate provider. |
 
 ## What an operation looks like
 
-- **Operation name** — the unique identifier used to invoke the operation. For OpenAPI-sourced operations, this is the `operationId` from the spec.
-- **Description** — a human-readable summary. Comes from the OpenAPI `summary` field or the `allowed_operations` map value in config.
-- **HTTP method and path** — the verb and URL path template for the upstream API call.
-- **Parameters** — query parameters, path parameters, headers, and request body fields extracted from the spec or declared in the provider YAML.
+| Field | Description |
+|---|---|
+| Name | Unique identifier. For OpenAPI sources, this is the `operationId` from the spec. |
+| Description | Human-readable summary from the spec or `allowed_operations` config. |
+| Method and path | HTTP verb and URL path template for the upstream call. |
+| Parameters | Query parameters, path parameters, headers, and body fields. |
+| Input schema | JSON Schema for parameters, passed to MCP clients for type information. |
+| Annotations | Automatic hints: GET/HEAD are read-only, PUT is idempotent, DELETE is destructive. |
 
 ## How OpenAPI loading works
 
-When an integration includes an `openapi` field, Toolshed uses libopenapi to parse the spec and extract:
+When an integration includes an `openapi` field, Toolshed parses the spec at startup and extracts:
 
-- The display name from the `info.title` field.
-- The first server URL as the base URL for upstream requests.
-- OAuth authorization and token URLs from the security scheme definitions.
-- Operations by iterating every path and method, using the `operationId` as the operation name.
+- The display name from `info.title`.
+- The first server URL as the base URL.
+- OAuth authorization and token URLs from security scheme definitions.
+- Operations by iterating every path and method, keyed by `operationId`.
 
-Operations without an `operationId` are skipped. If the spec includes security schemes, they inform the default auth configuration but can be overridden in the integration config.
+Operations without an `operationId` are skipped. Security schemes inform the default auth configuration but can be overridden in the integration config.
 
 ## Manual auth versus OAuth
 
-When `auth.type` is set to `manual`, the integration expects the caller to provide credentials directly. Toolshed stores them as-is and attaches them to upstream requests using the configured token parser hook. This is useful for APIs that use static API keys or other non-OAuth credentials.
+**OAuth**: Toolshed manages the full authorization code flow. It generates the authorization URL, handles the callback, exchanges the code for tokens, encrypts them, and stores them in the datastore. On subsequent requests, the stored access token is attached to upstream calls. If a refresh token is available and the access token is near expiry, Toolshed refreshes it automatically.
 
-For OAuth integrations, Toolshed manages the full authorization code flow. It generates the authorization URL, handles the callback, exchanges the code for tokens, encrypts them, and stores them in the datastore. On subsequent requests, the stored access token is attached to upstream calls.
+**Manual**: Set `auth.type` to `manual`. Users paste credentials directly through the web UI (`POST /api/v1/auth/connect-manual`) or CLI. Toolshed encrypts and stores them the same way it stores OAuth tokens.
 
-## Hooks are where API-specific behavior lives
+## Connection modes
 
-| Hook type | Purpose |
+Each integration has a `connection_mode` that controls how credentials are resolved at invocation time:
+
+| Mode | Behavior |
 |---|---|
-| `response_check` | Validate a successful-looking response body. |
-| `token_parser` | Turn the stored token into auth headers. |
-| `request_mutator` | Rewrite or augment outgoing requests before execution. |
-| auth `response_hook` | Validate token exchange responses from OAuth providers. |
+| `user` | Resolve the calling user's personal token. Default. |
+| `identity` | Resolve a shared org-level or app-level token. |
+| `either` | Try the user's token first, fall back to the identity token. |
+| `none` | No credentials needed. |
 
-Hooks are registered by name in Go code and referenced by that name in config. They let you handle the quirks of individual APIs without changing the core Toolshed runtime.
+## Hooks
 
-## Current built-in hook registrations
+Hooks handle the quirks of individual APIs without changing the core runtime.
 
-- **slack_ok** — checks that the Slack API response body contains `"ok": true`. Used as both a `response_check` and an auth `response_hook`.
-- **datadog_keys** — parses Datadog API and application keys from stored credentials and attaches them as request headers.
-- **hex_response** — handles Hex-specific response validation for API calls.
+| Hook type | Config field | Purpose |
+|---|---|---|
+| Response check | `response_check` | Validate a successful-looking response body. |
+| Token parser | `token_parser` | Turn the stored token into auth headers. |
+| Request mutator | `request_mutator` | Rewrite or augment outgoing requests before execution. |
+| Auth response hook | `auth.response_hook` | Validate token exchange responses from OAuth providers. |
 
-## Restrictions and tradeoffs
+Hooks are registered by name in Go code and referenced by that name in config.
 
-Toolshed intentionally keeps the integration model simple. There is no plugin discovery protocol, no remote provider registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. This makes the system predictable and auditable at the cost of requiring a restart to add or change integrations.
+## Built-in hooks
+
+| Name | Integration | Behavior |
+|---|---|---|
+| `slack_ok` | Slack | Checks `"ok": true` in response body. Used as both `response_check` and `response_hook`. |
+| `datadog_keys` | Datadog | Parses API and application keys from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
+| `hex_response` | Hex | Validates Hex-specific response format. |
+
+## Additional integration config fields
+
+| Field | Purpose |
+|---|---|
+| `icon_svg` | SVG icon displayed in the web UI. |
+| `token_prefix` | Prefix for the Authorization header value (e.g. `Bot` for Discord). |
+| `auth_style` | How the token is sent: `bearer`, `raw`, or `none`. |
+| `headers` | Default headers sent with every upstream request. |
+
+## Restrictions
+
+Toolshed keeps the integration model simple. There is no plugin discovery protocol, no remote registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. Adding or changing integrations requires a restart.

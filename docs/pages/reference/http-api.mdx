@@ -1,41 +1,70 @@
 # HTTP API
 
-The server surface is intentionally small. Most of the power comes from the integrations you load into it.
-
 ## Unauthenticated endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Health check. |
-| POST | `/api/v1/auth/login` | Start platform login and receive a browser URL. |
-| GET | `/api/v1/auth/login/callback` | Complete platform login and optionally issue a session token. |
+| GET | `/health` | Health check. Returns `{"status":"ok"}`. |
+| POST | `/api/v1/auth/login` | Start platform login. Returns a browser redirect URL. |
+| GET | `/api/v1/auth/login/callback` | Complete platform login. Issues a session token. |
+| GET | `/api/v1/auth/info` | Returns the auth provider name and display label. |
 
 ## Authenticated endpoints
 
+All authenticated endpoints require an `Authorization: Bearer <token>` header or a valid session cookie.
+
+### Integrations
+
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/v1/integrations` | List integrations currently loaded into the server. |
-| GET | `/api/v1/integrations/{name}/operations` | List the operations exposed by an integration. |
+| GET | `/api/v1/integrations` | List loaded integrations with metadata (name, display name, description, icon, connection status). |
+| GET | `/api/v1/integrations/{name}/operations` | List operations exposed by an integration. |
 | GET or POST | `/api/v1/{integration}/{operation}` | Execute an integration operation. |
-| POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. |
-| GET | `/api/v1/auth/callback` | Complete integration OAuth and store the resulting token. |
-| POST | `/api/v1/tokens` | Create an API token for the current user. |
+
+### Auth flows
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. Returns the provider's authorization URL. |
+| GET | `/api/v1/auth/callback` | Complete integration OAuth. Exchanges code for tokens and stores them. |
+| POST | `/api/v1/auth/connect-manual` | Submit manual credentials for non-OAuth integrations. |
+
+### API tokens
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/tokens` | Create an API token. Returns the plaintext token once. |
 | GET | `/api/v1/tokens` | List API tokens for the current user. |
 | DELETE | `/api/v1/tokens/{id}` | Revoke an API token. |
+
+### Runtimes and bindings
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/runtimes` | List configured runtimes. |
+| GET | `/api/v1/bindings` | List configured bindings. |
+
+Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their config.
+
+### MCP
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET or POST | `/mcp` | Model Context Protocol endpoint (when `mcp.enabled: true`). |
 
 ## Execution semantics
 
 - **GET** requests pass parameters as query string key-value pairs.
 - **POST** requests pass parameters as a JSON body.
-- Path placeholders like `{integration}` and `{operation}` are resolved from the URL. Any remaining parameters declared by the operation are sent as query or body values depending on the method.
+- Path placeholders like `{integration}` and `{operation}` are resolved from the URL. Remaining parameters are sent as query or body values depending on the method.
 
-## Authentication header
+## Authentication
 
 ```
 Authorization: Bearer <session-token-or-api-token>
 ```
 
-## Example request
+## Example
 
 ```sh
 curl -X POST http://localhost:8080/api/v1/slack/chat_postMessage \

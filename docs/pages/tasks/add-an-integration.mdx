@@ -1,14 +1,16 @@
-# Add an integration
+# Add an Integration
 
-Adding an integration usually means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
+Adding an integration means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
 
-## 1. Decide how you will define it
+## 1. Decide how to define it
 
-- **OpenAPI spec** — point Toolshed at a public or local OpenAPI document. Operations, parameters, and descriptions are generated automatically.
-- **Provider YAML** — write a standalone YAML file that declares operations manually. Use this when no spec exists or when the spec is too noisy.
-- **Manual auth** — for API-key services where there is no OAuth flow. Users paste credentials directly.
+| Approach | When to use |
+|---|---|
+| OpenAPI spec | Public or local OpenAPI document exists. Operations generated automatically. |
+| Provider YAML | No spec exists, or the spec is too noisy. Declare operations manually. |
+| Manual auth | API-key service with no OAuth flow. Users paste credentials directly. |
 
-## 2. Start with an OpenAPI-backed integration
+## 2. OpenAPI-backed integration
 
 ```yaml
 integrations:
@@ -26,7 +28,9 @@ integrations:
       chat_postMessage: Send a message to a channel
 ```
 
-## 3. Use a provider file when the spec is not enough
+## 3. Provider file
+
+Use when the OpenAPI spec does not exist or does not fit.
 
 ```yaml
 provider: internal-api
@@ -58,7 +62,7 @@ operations:
         description: Job identifier
 ```
 
-## 4. Use manual auth for API-key services
+## 4. Manual auth for API-key services
 
 ```yaml
 integrations:
@@ -69,15 +73,30 @@ integrations:
     token_parser: datadog_keys
 ```
 
-Users paste their credentials directly into the Toolshed UI or CLI. Toolshed encrypts and stores them the same way it stores OAuth tokens.
+Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Toolshed encrypts and stores them the same way it stores OAuth tokens.
 
-## 5. Restrict operations aggressively
+## 5. Restrict operations
 
-The `allowed_operations` map is your product design surface. Only expose what callers actually need. A tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
+The `allowed_operations` map is your product design surface. Only expose what callers need. A tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
 
-## 6. Validate it end to end
+## 6. Set the connection mode
+
+Control how credentials are resolved per integration:
+
+```yaml
+integrations:
+  slack:
+    connection_mode: user    # each user connects independently (default)
+  shared-service:
+    connection_mode: identity # single shared credential
+```
+
+See [Connection Modes](/concepts/platform-model#connection-modes) for all options.
+
+## 7. Validate end to end
 
 ```sh
+toolshed config check -config your-config.yaml
 tshed integrations list
 tshed integrations connect slack
 tshed invoke slack conversations_list
@@ -88,4 +107,4 @@ curl -H "Authorization: Bearer $TOOLSHED_API_KEY" \
 
 ## When to write code
 
-Most integrations need zero Go code. You only need to write a hook when the upstream API has unusual auth flows, requires request rewrites the config layer cannot express, or returns non-standard response envelopes that need validation logic.
+Most integrations need zero Go code. Write a hook only when the upstream API has unusual auth flows, requires request rewrites the config cannot express, or returns non-standard response envelopes that need validation logic.

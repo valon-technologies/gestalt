@@ -1,36 +1,63 @@
 # Built-in Plugins
 
-The runtime is plugin-oriented, but the current binary already registers a useful starting set. Bootstrap now builds one shared invoker and passes scoped deps to runtimes and bindings, so plugins do not need to construct their own execution path.
+The Toolshed binary registers all plugins at startup. Bootstrap builds one shared invoker and passes scoped deps to runtimes and bindings.
 
 ## Auth providers
 
 | Name | Notes |
 |---|---|
-| `google` | Google OAuth login plus Google userinfo validation. |
-| `oidc` | Generic OIDC discovery with optional PKCE support. |
+| `google` | Google OAuth 2.0 with userinfo validation. Supports `allowed_domains` and `session_ttl`. |
+| `oidc` | Generic OIDC discovery. Supports Okta, Azure AD, Auth0, Keycloak, Firebase, OneLogin, Rippling, and Google. Optional PKCE, domain allow-lists, custom scopes, configurable display name. |
 
 ## Datastores
 
 | Name | Notes |
 |---|---|
-| `sqlite` | Default for local or single-instance deployments. |
-| `postgres` | Recommended for shared, multi-instance deployments. |
+| `sqlite` | File-based. Default for local development and single-instance deployments. |
+| `postgres` | Recommended for production and multi-instance deployments. |
 | `mysql` | Alternative SQL backend using the shared sqlstore layer. |
+| `dynamodb` | AWS DynamoDB. Configurable table name, region, and optional custom endpoint. |
+| `mongodb` | MongoDB with configurable database name (default: `toolshed`). |
+| `firestore` | Google Cloud Firestore with configurable project and database. |
+| `oracle` | Oracle Database via shared sqlstore layer. |
+| `sqlserver` | Microsoft SQL Server via shared sqlstore layer. |
+
+All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common implementation layer with automatic schema migration on startup.
 
 ## Secret managers
 
 | Name | Notes |
 |---|---|
-| `env` | Resolves secrets from environment variables, optionally with a prefix. |
-| `file` | Resolves one secret per file from a base directory. |
-| `gcp_secret_manager` | Loads secrets from Google Cloud Secret Manager. |
+| `env` | Resolves from environment variables. Optional prefix. Converts names to uppercase, replaces hyphens with underscores. |
+| `file` | One secret per file from a base directory. Path traversal protected. Trims trailing newlines. |
+| `gcp_secret_manager` | Google Cloud Secret Manager. Configurable project and version (default: `latest`). 10-second timeout per access. |
 
-## Built-in integration hook packages
+## Integration hooks
 
-- **slack** (`slack_ok`) — validates that the Slack API response body contains `"ok": true`. Used as both a `response_check` and an auth `response_hook`.
-- **datadog** (`datadog_keys`) — parses Datadog API and application keys from stored credentials and attaches them as request headers.
-- **hex** (`hex_response`) — handles Hex-specific response validation for API calls.
+| Name | Hook type | Behavior |
+|---|---|---|
+| `slack_ok` | `response_check`, `response_hook` | Validates `"ok": true` in Slack API responses. |
+| `datadog_keys` | `token_parser` | Parses `api_key` and `app_key` from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
+| `hex_response` | `response_check` | Validates Hex-specific response format. |
 
-## What is not pluginized yet
+## Bindings
 
-The HTTP route structure, middleware chain, and operation dispatch loop are fixed in the binary. There is no generic plugin point for injecting new routes or middleware. If you need custom behavior at that layer, you are contributing to the core runtime rather than writing a plugin.
+| Name | Notes |
+|---|---|
+| `webhook` | Exposes HTTP endpoints that forward to provider operations. Supports `public`, `signed` (HMAC-SHA256), and `trusted_user_header` auth modes. Configurable path, provider, operation, and signature headers. |
+
+## Runtimes
+
+| Name | Notes |
+|---|---|
+| `echo` | Dev-only test runtime. Logs startup/shutdown and lists available capabilities. Enabled only when `dev_mode: true`. |
+
+## Built-in providers
+
+| Name | Notes |
+|---|---|
+| `echo` | Dev-only provider that echoes input parameters as JSON. Single `echo` operation. Enabled only when `dev_mode: true`. |
+
+## What is not pluginized
+
+The HTTP route structure, middleware chain, and operation dispatch loop are fixed in the binary. There is no plugin point for injecting custom routes or middleware. Custom behavior at that layer means contributing to the core runtime.

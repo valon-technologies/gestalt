@@ -1,58 +1,54 @@
-import { Callout, Cards, Steps } from 'nextra/components'
+import { Cards, Steps } from 'nextra/components'
 
 # Toolshed
 
-Toolshed is a self-serve integration platform for exposing third-party APIs as callable tool operations. Gestalt is the centrally operated service. Toolshed is the platform you can stand up yourself.
+Toolshed is a self-serve integration platform. Declare third-party APIs in a config file. Toolshed handles OAuth, token storage, and request execution so callers get a uniform interface regardless of the upstream provider.
 
-<Callout>
-  Working model: treat Toolshed like a small control plane. You choose the platform auth provider, datastore, secret manager, and the integrations you want to expose. Toolshed handles token storage, OAuth handshakes, operation discovery, and request execution.
-</Callout>
-
-## What Toolshed is for
-
-Toolshed lets teams expose third-party APIs without writing bespoke glue code for each one. You declare integrations in a config file, and Toolshed takes care of authentication, token lifecycle, and operation routing so that callers get a uniform interface regardless of the upstream provider.
-
-If you want a fully hosted version where Valon manages infrastructure and upgrades, that is Gestalt. Toolshed is for teams that need to self-host, want to run inside their own network boundary, or need to extend the platform with custom plugins and hooks.
-
-## Architecture
-
-A request flows through Toolshed in four steps:
+## How it works
 
 <Steps>
 ### Caller sends a request
 
-A caller (CLI, web UI, or external client) sends an operation invocation to the Toolshed API server.
+A caller (CLI, web UI, MCP client, or webhook) sends an operation invocation to the Toolshed API server.
 
 ### Toolshed resolves credentials
 
-Toolshed looks up the caller's stored token for the target integration, refreshing it via the configured OAuth flow if needed.
+Toolshed looks up the caller's stored token for the target integration, refreshing it automatically if expired.
 
 ### Toolshed executes the upstream call
 
-Using the resolved credentials and the integration's OpenAPI spec, Toolshed builds and sends the request to the third-party API.
+Using the resolved credentials and the integration's definition, Toolshed builds and sends the request to the third-party API.
 
 ### Response is returned
 
-The upstream response passes back through any configured response hooks, then is returned to the caller.
+The upstream response passes through any configured hooks, then returns to the caller.
 </Steps>
 
-## What ships in this directory today
+## What ships
 
-- **Go API server** — the core Toolshed runtime that handles config loading, auth, token storage, and operation dispatch.
-- **Rust CLI (`tshed`)** — a lightweight client for authenticating, listing integrations, and invoking operations from the terminal.
-- **Next.js web UI** — a browser-based interface for managing integrations, connecting accounts, and invoking operations.
-- **Deployment assets** — Helm chart, Dockerfiles, and GitHub Actions workflows for running Toolshed on Kubernetes or Cloud Run.
+| Component | What it does |
+|---|---|
+| **Go API server** | Config loading, auth, token storage, operation dispatch, MCP endpoint, webhook bindings. |
+| **Rust CLI (`tshed`)** | Authenticate, list integrations, invoke operations, manage API tokens. |
+| **Next.js web UI** | Browse integrations, connect accounts, create API tokens. |
+| **Deployment assets** | Helm chart, Dockerfiles, and CI workflows for Kubernetes, Fly.io, Railway, Render, and AWS Lambda. |
 
-## Documentation map
+## Documentation
 
 <Cards>
+  <Cards.Card title="Getting Started" href="/getting-started">
+    Stand up a local instance in under five minutes.
+  </Cards.Card>
   <Cards.Card title="Concepts" href="/concepts/platform-model">
-    Understand the primitives Toolshed exposes: auth providers, datastores, secret managers, integrations, operations, and hooks.
+    Auth providers, datastores, integrations, operations, hooks, bindings, and runtimes.
   </Cards.Card>
   <Cards.Card title="Tasks" href="/tasks/run-locally">
-    Stand up Toolshed locally, add an integration, and deploy it onto Kubernetes with the included chart.
+    Run locally, add integrations, connect MCP clients.
+  </Cards.Card>
+  <Cards.Card title="Deploy" href="/deploy">
+    Ship to Fly.io, Railway, Render, AWS Lambda, or Kubernetes.
   </Cards.Card>
   <Cards.Card title="Reference" href="/reference/config-file">
-    Use the config schema, HTTP API surface, CLI commands, and built-in plugin catalog as your source of truth.
+    Config schema, HTTP API, CLI commands, and built-in plugins.
   </Cards.Card>
 </Cards>

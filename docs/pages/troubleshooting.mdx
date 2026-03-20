@@ -1,29 +1,53 @@
 # Troubleshooting
 
-The most common Toolshed failures are config-shape issues, callback URL mismatches, and missing integration credentials.
+## Integration is missing its provider
 
-## The server says an integration is missing its provider
+Toolshed resolves providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server logs an error and skips the integration.
 
-Toolshed resolves integration providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server will log an error and skip the integration. Check that `provider_dirs` includes the directory containing your provider YAML files, and that the integration config includes either an `openapi` URL or a `provider` path.
+**Fix**: Check that `provider_dirs` includes the directory with your provider YAML files, and that the integration config includes either an `openapi` URL or a `provider` path.
 
 ## OAuth redirects are wrong
 
-Set `server.base_url` explicitly in your config. Toolshed derives OAuth callback URLs from this value. If it is unset or points to the wrong host, the identity provider will reject the redirect and the OAuth flow will fail.
+Toolshed derives callback URLs from `server.base_url`. If it is unset or points to the wrong host, the identity provider rejects the redirect.
 
-## Login works in development but not in production
+**Fix**: Set `server.base_url` to the externally-reachable URL of your deployment.
 
-When `dev_mode: true` is set, Toolshed enables a Dev Login path that bypasses real OAuth. In production, `dev_mode` must be `false` and a real auth provider must be configured. If login fails in production, verify that your auth provider config (issuer URL, client ID, client secret) is correct and that the callback URL registered with the provider matches `server.base_url`.
+## Login works in dev but not production
 
-## Invocation returns "no token stored"
+Dev mode enables a bypass login path. In production, a real auth provider must be configured.
 
-The calling user has not connected the target integration yet. Each user must complete the OAuth flow (or paste manual credentials) for every integration they want to invoke. Use `tshed integrations connect <name>` or the web UI to complete the connection.
+**Fix**: Verify `dev_mode: false`, and that your auth provider config (issuer URL, client ID, client secret) is correct. Confirm the callback URL registered with your identity provider matches `server.base_url`.
+
+## "No token stored" on invocation
+
+The calling user has not connected the target integration. Each user must complete the OAuth flow (or paste manual credentials) for every integration they want to invoke.
+
+**Fix**: Run `tshed integrations connect <name>` or use the web UI.
 
 ## API token auth fails
 
-- Ensure the `Authorization` header uses the `Bearer` prefix.
-- The token value sent by the caller must be the plaintext token returned at creation time, not the hash stored in the datastore.
-- If using the CLI, check that `TOOLSHED_API_KEY` is set to the correct value and is not being overridden by an expired session token.
+- Verify the `Authorization` header uses the `Bearer` prefix.
+- Use the plaintext token returned at creation time, not the hash stored in the datastore.
+- If using the CLI, check that `TOOLSHED_API_KEY` is set correctly and is not overridden by an expired session token.
 
-## The web UI does not talk to the local API
+## Web UI does not talk to the local API
 
-The web UI needs to know where the API server lives. When running locally, either set `TOOLSHED_API_URL` or use `./dev.sh full` which starts the Go server and configures the rewrite proxy automatically.
+The web UI needs to know where the API server lives.
+
+**Fix**: Use `toolshed dev` which starts both and wires them together automatically. If running separately, set `TOOLSHED_API_URL` to point to the API server.
+
+## Config validation fails
+
+Run `toolshed config check -config your-config.yaml` to see exactly which field is invalid. Common causes:
+
+- Missing `encryption_key` when `dev_mode` is not `true`.
+- Invalid provider name in `auth`, `datastore`, or `secrets`.
+- Integration references an `auth_profile` that does not exist.
+
+## MCP tools do not appear
+
+1. Verify `mcp.enabled: true` in config.
+2. Check that your API token is valid.
+3. Confirm the token's owner has connected the integration.
+4. Verify `allowed_operations` is defined for the integration.
+5. If using `mcp.providers`, confirm the integration is in the list.

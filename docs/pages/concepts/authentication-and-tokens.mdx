@@ -2,48 +2,63 @@ import { Callout } from 'nextra/components'
 
 # Authentication and Tokens
 
-Toolshed manages three distinct token flows: platform identity, API tokens for callers, and per-integration credentials for upstream APIs.
+Toolshed manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
 
 ## Platform auth
 
-Toolshed authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token that identifies the user on subsequent requests.
+Toolshed authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token.
 
-- **google** — uses Google OAuth 2.0. The simplest option for teams already on Google Workspace.
-- **oidc** — works with any OpenID Connect provider. Supports PKCE and domain-based allow-lists.
+| Provider | Notes |
+|---|---|
+| `google` | Google OAuth 2.0. Simplest option for teams on Google Workspace. |
+| `oidc` | Any OpenID Connect provider: Okta, Azure AD, Auth0, Keycloak, Firebase, OneLogin, Rippling, or Google via OIDC discovery. Supports PKCE. |
 
-Both providers store the authenticated user in the datastore after first login. The session token is set as an HTTP cookie and validated on every request by the auth middleware.
+Both providers support:
+
+- **Domain allow-lists**: Set `allowed_domains` to restrict which email domains can sign in.
+- **Session TTL**: Set `session_ttl` to control how long sessions last (default: 24 hours).
+- **Session secret**: Set `session_secret` to sign session JWTs.
+
+After first login, the user record is created in the datastore. The session token is set as an HTTP cookie and validated on every request.
 
 ## API tokens
 
-For programmatic access, Toolshed supports API tokens. A user generates a token through the web UI or API, and the server returns the raw token exactly once. The server stores only a SHA-256 hash of the token, so it cannot be recovered after creation.
+For programmatic access (CLI tools, CI pipelines, MCP clients), users generate API tokens through the web UI or API. The server returns the raw token exactly once. Only a SHA-256 hash is stored, so the token cannot be recovered after creation.
 
-API tokens serve as a fallback authentication mechanism when session cookies are not practical, such as CLI tools or CI pipelines.
+The authentication path on every request:
 
-The request authentication path is:
-
-1. Check for a `Bearer` token in the `Authorization` header. If present, compute its SHA-256 hash and look it up in the datastore.
-2. If no bearer token, check for a valid session token in the request cookies.
-3. If neither is found, reject the request as unauthenticated.
+1. Check for a `Bearer` token in the `Authorization` header. If present, hash it and look it up in the datastore.
+2. If no bearer token, check for a valid session cookie.
+3. If neither is found, reject the request.
 
 <Callout>
-  API token scopes are stored and returned by the server, but the current middleware does not enforce them. Treat the field as metadata for now, not a complete authorization boundary.
+  API token scopes are stored but not yet enforced by middleware. Treat the scopes field as metadata for now.
 </Callout>
 
 ## Integration tokens
 
-Integration tokens are the credentials Toolshed stores for a user's connection to an upstream API. When a user completes an OAuth flow for an integration, Toolshed encrypts the tokens and persists them in the datastore.
+Integration tokens are the credentials Toolshed stores for a user's connection to an upstream API. When a user completes an OAuth flow (or pastes manual credentials), Toolshed encrypts the tokens and persists them in the datastore.
 
 Each stored credential includes:
 
-- **Access token** — the bearer token sent to the upstream API on each request.
-- **Refresh token** — used to obtain a new access token when the current one expires (if the upstream API provides one).
-- **Expiry time** — the timestamp at which the access token is expected to expire.
-- **Integration name** — ties the credential to a specific integration so users can have tokens for multiple integrations simultaneously.
+| Field | Purpose |
+|---|---|
+| Access token | Sent to the upstream API on each request. |
+| Refresh token | Used to obtain a new access token when the current one expires. |
+| Expiry time | Timestamp at which the access token expires. |
+| Integration name | Ties the credential to a specific integration. |
+| Metadata | Additional fields extracted from the token response (if `token_metadata` is configured). |
 
-## Refresh behavior today
+## Token refresh
 
-Token refresh is not yet automatically wired into the request path. If an access token expires, the caller will receive the upstream API's error response. Manual re-authentication through the OAuth flow is currently the recovery path. Automatic refresh is planned and the plumbing exists in the token storage layer, but the middleware does not yet trigger it.
+When the invoker resolves a credential and finds the access token within 5 minutes of expiry, it automatically refreshes it using the stored refresh token. The new tokens are encrypted and persisted before the upstream call proceeds. If refresh fails, the caller receives an error indicating re-authentication is needed.
 
 ## Development mode
 
-When `dev_mode` is enabled in the server config, Toolshed relaxes several restrictions to make local development easier. HTTPS is not required for OAuth callbacks, and the `X-Dev-User-Email` header can be used to impersonate a user without going through the full login flow. The `/dev-login` endpoint provides a shortcut for creating a session without an external identity provider. Development mode should never be enabled in production.
+When `dev_mode: true` is set in the server config:
+
+- HTTPS is not required for OAuth callbacks.
+- The `X-Dev-User-Email` header impersonates a user without the full login flow.
+- The `/dev-login` endpoint creates a session without an external identity provider.
+
+Never enable dev mode in production.

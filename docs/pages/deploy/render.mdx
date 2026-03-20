@@ -2,34 +2,32 @@ import { Callout } from 'nextra/components'
 
 # Deploy to Render
 
-Run Toolshed on Render as a Docker-based web service with a managed Postgres database.
+## Before you begin
 
-## Prerequisites
-
-- A [Render](https://render.com) account
-- Your Toolshed repository on GitHub or GitLab
+- A [Render](https://render.com) account.
+- Your Toolshed repository on GitHub or GitLab.
 
 ## Create a web service
 
-1. In the Render dashboard, click **New** → **Web Service**.
+1. Click **New** then **Web Service** in the Render dashboard.
 2. Connect your repository.
 3. Set **Root Directory** to `toolshed/`.
 4. Render detects the Dockerfile. Set **Environment** to **Docker**.
-5. Under **Instance Type**, select at least the **Starter** plan (512 MB RAM).
+5. Select at least the **Starter** plan (512 MB RAM).
 
 ## Add a database
 
-1. Click **New** → **PostgreSQL** in the Render dashboard.
-2. Choose a plan and region that matches your web service.
-3. Copy the **Internal Database URL** from the Postgres dashboard — it stays within Render's private network.
+1. Click **New** then **PostgreSQL**.
+2. Choose a plan and region matching your web service.
+3. Copy the **Internal Database URL** (stays within Render's private network).
 
 ## Set environment variables
 
-In the web service's **Environment** tab, add:
+In the web service's **Environment** tab:
 
 | Key | Value |
 |---|---|
-| `TOOLSHED_BASE_URL` | `https://<your-service>.onrender.com` |
+| `TOOLSHED_BASE_URL` | `https://<service>.onrender.com` |
 | `TOOLSHED_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
 | `TOOLSHED_SESSION_SECRET` | Output of `openssl rand -base64 32` |
 | `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
@@ -37,12 +35,12 @@ In the web service's **Environment** tab, add:
 | `DATABASE_URL` | Internal Database URL from the Postgres dashboard |
 
 <Callout>
-  Use the **Internal** Database URL (starts with `postgres://...`) to keep traffic on Render's private network. The external URL works but adds latency.
+  Use the **Internal** Database URL (starts with `postgres://`) to keep traffic on Render's private network. The external URL works but adds latency.
 </Callout>
 
 ## Configure
 
-Commit a config file at `toolshed/config.render.yaml`:
+Commit `toolshed/config.render.yaml`:
 
 ```yaml
 server:
@@ -55,20 +53,15 @@ auth:
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
+    session_secret: "${TOOLSHED_SESSION_SECRET}"
 
 datastore:
   provider: postgres
   config:
-    url: "${DATABASE_URL}"
+    dsn: "${DATABASE_URL}"
 ```
 
-In the web service settings, set the **Docker Command** override:
-
-```
-/toolshed --config /etc/toolshed/config.yaml
-```
-
-Or, if Render copies the repo into the image at build time, point at the committed config:
+Set the **Docker Command** override:
 
 ```
 /toolshed --config config.render.yaml
@@ -76,11 +69,11 @@ Or, if Render copies the repo into the image at build time, point at the committ
 
 ## Using SQLite instead
 
-If you prefer SQLite over Postgres, attach a **Persistent Disk** to the web service:
+Attach a **Persistent Disk** to the web service:
 
-1. In the web service settings, go to **Disks**.
+1. Go to **Disks** in service settings.
 2. Add a disk with mount path `/data` and at least 1 GB.
-3. Set the datastore config to:
+3. Set the datastore config:
 
 ```yaml
 datastore:
@@ -95,16 +88,12 @@ datastore:
 
 ## Verify
 
-Render assigns a `.onrender.com` URL to your service. Find it in the service dashboard.
-
 ```sh
-curl -s https://<your-service>.onrender.com/health
+curl -s https://<service>.onrender.com/health
 ```
-
-You should see `{"status":"ok"}`. Open the URL in a browser to sign in.
 
 ## Custom domain
 
-1. In the web service settings, go to **Custom Domains**.
-2. Add your domain and configure DNS as Render instructs.
-3. Update `TOOLSHED_BASE_URL` to match the new domain.
+1. Go to **Custom Domains** in service settings.
+2. Configure DNS as Render instructs.
+3. Update `TOOLSHED_BASE_URL` to the new domain.

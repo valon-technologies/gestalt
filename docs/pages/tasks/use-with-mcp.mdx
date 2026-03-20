@@ -4,15 +4,13 @@ import { Callout } from 'nextra/components'
 
 Connect Toolshed to AI assistants like Claude Code or Claude Desktop via the Model Context Protocol.
 
-## Prerequisites
+## Before you begin
 
 - A running Toolshed server with at least one integration.
-- A user account (sign in via the web UI or CLI first).
+- A user account (sign in via the web UI or CLI).
 - An API token for that user.
 
 ## 1. Create an API token
-
-Using the CLI:
 
 ```sh
 tshed tokens create --name "mcp-token"
@@ -26,18 +24,16 @@ curl -X POST http://localhost:8080/api/v1/tokens \
   -d '{"name": "mcp-token"}'
 ```
 
-Save the returned token value. You will not be able to retrieve it again.
+Save the returned token. It cannot be retrieved again.
 
 ## 2. Enable MCP in your config
-
-Add an `mcp` block to your YAML config:
 
 ```yaml
 mcp:
   enabled: true
 ```
 
-To expose only a subset of integrations, add a `providers` list:
+To expose only specific integrations:
 
 ```yaml
 mcp:
@@ -52,14 +48,14 @@ Omit `providers` to expose all configured integrations.
 ## 3. Start the server
 
 ```sh
-toolshed serve -config config.yaml
+toolshed dev -config config.yaml -api-only
 ```
 
-The MCP endpoint is available at `/mcp` on the same HTTP server as the rest of the API.
+The MCP endpoint is available at `/mcp` on the same server as the REST API.
 
 ## 4. Configure Claude Code
 
-Add the following to your Claude Code MCP settings (`.mcp.json` in your project root or `~/.claude.json`):
+Add to `.mcp.json` in your project root or `~/.claude.json`:
 
 ```json
 {
@@ -74,11 +70,9 @@ Add the following to your Claude Code MCP settings (`.mcp.json` in your project 
 }
 ```
 
-Claude Code will connect to the MCP endpoint and discover the available tools.
-
 ## 5. Configure Claude Desktop
 
-Add the same block to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
@@ -95,7 +89,7 @@ Add the same block to your Claude Desktop config (`~/Library/Application Support
 
 ## Minimal example config
 
-A complete config file with MCP enabled for a single integration:
+A complete config with MCP enabled for a single integration:
 
 ```yaml
 auth:
@@ -129,16 +123,11 @@ mcp:
     - linear
 ```
 
-## Verify it works
+## Troubleshooting
 
-Once your MCP client connects, you should see the integration operations listed as available tools. For the config above, the tools would be:
+If tools do not appear in your MCP client:
 
-- `linear_search_issues`
-- `linear_create_issue`
-
-If tools do not appear, check that:
-
-1. The server is running with `mcp.enabled: true` in the config.
-2. Your API token is valid and included in the `Authorization` header.
-3. The user who owns the token has connected the integration (completed the OAuth flow).
-4. The integration has `allowed_operations` defined.
+1. Verify the server is running with `mcp.enabled: true`.
+2. Check that your API token is valid (`tshed auth status`).
+3. Confirm the token's owner has connected the integration (completed the OAuth flow).
+4. Verify `allowed_operations` is defined for the integration.

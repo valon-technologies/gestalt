@@ -1,55 +1,68 @@
 # Platform Model
 
-Toolshed has a small set of primitives. Once you understand how they fit together, most of the repository becomes predictable.
+Toolshed has a small set of primitives. Once you understand how they fit together, the rest of the system is predictable.
 
 ## Core primitives
 
 | Primitive | What it does |
 |---|---|
-| Auth provider | Authenticates people to the Toolshed platform itself and can issue session tokens. |
-| Datastore | Persists users, integration tokens, and API tokens. Access and refresh tokens are encrypted before storage. |
-| Secret manager | Resolves `secret://` references inside config before auth, datastore, or integrations are built. |
+| Auth provider | Authenticates users to the Toolshed platform and issues session tokens. |
+| Datastore | Persists users, integration tokens (encrypted), and API tokens. |
+| Secret manager | Resolves `secret://` references in config before other components are built. |
 | Integration definition | Describes an upstream API: base URL, auth style, operations, and optional hooks. |
 | Provider | Runtime object that lists operations and executes them against the upstream API. |
-| Operation | A callable unit exposed by an integration. Operations are generated from OpenAPI or declared manually in YAML. |
+| Operation | A callable unit exposed by an integration. Generated from OpenAPI or declared in YAML. |
 | Hooks | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
+| Runtime | A background process that boots alongside the server and receives scoped access to a subset of providers. |
+| Binding | An alternative request surface (e.g. webhooks) that forwards calls through the shared invoker. |
 
 ## Execution model
 
-AIT-209 split Toolshed into one canonical execution path and several thin surfaces around it:
+All request surfaces share a single invoker built once at startup:
 
 | Piece | What it does |
 |---|---|
-| Shared invoker | Built once in bootstrap and used by HTTP, MCP, bindings, and runtimes. |
-| Runtime deps | A runtime receives a scoped invoker plus a scoped capability lister for the providers it is allowed to see. |
-| Binding deps | A binding receives a scoped invoker so it can forward calls without getting the full platform-wide execution surface. |
-| Allowlists | Binding and runtime configs can narrow which providers they may call. |
+| Shared invoker | Built in bootstrap. Used by HTTP handlers, MCP endpoint, bindings, and runtimes. |
+| Runtime deps | A runtime receives a scoped invoker plus a capability lister, limited to its allowed providers. |
+| Binding deps | A binding receives a scoped invoker so it can forward calls without accessing the full platform surface. |
+| Allowlists | Binding and runtime configs narrow which providers they can reach. |
 
-The old `core.Broker` surface is gone. Execution now goes through `internal/invocation`, while discovery/listing stays separate through the capability lister interface.
+## How a request flows
 
-## How a request flows through Toolshed
+1. The caller authenticates with a session token or API token. Middleware resolves the caller's identity before the request reaches any handler.
+2. The shared invoker resolves the caller's stored credential for the target integration.
+3. If the access token is within 5 minutes of expiry, the invoker refreshes it automatically using the stored refresh token.
+4. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
+5. Configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
+6. Toolshed executes the upstream HTTP call, runs response-check hooks if configured, and returns the result.
 
-1. The caller authenticates with Toolshed using a session token or API token. Middleware resolves the caller's identity before the request reaches any handler.
-2. Bootstrap wires the request through the shared invoker, which resolves the caller's stored credential for the target integration.
-3. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
-4. Any configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
-5. Toolshed executes the upstream HTTP call, runs response-check hooks if configured, and returns the result to the caller.
+## Connection modes
+
+Each integration has a connection mode that controls how credentials are resolved:
+
+| Mode | Behavior |
+|---|---|
+| `user` | Resolve the calling user's token. Each user connects independently. |
+| `identity` | Resolve a shared org-level or app-level token. |
+| `either` | Try the user's token first, fall back to the identity token. |
+| `none` | No credentials needed. The integration does not require authentication. |
+
+Set `connection_mode` on the integration config. Default is `user`.
 
 ## Source of truth for an integration
 
-- **OpenAPI spec** — if the integration config includes an `openapi` field, Toolshed loads the spec at startup and generates operations from it. The spec is the canonical source for method, path, parameters, and description.
-- **Provider YAML** — a standalone YAML file in a provider directory can declare operations manually without an OpenAPI spec.
-- **Provider directory** — the `provider_dirs` config field tells Toolshed where to scan for provider YAML files at boot.
+| Source | When to use |
+|---|---|
+| OpenAPI spec | Set the `openapi` field to a URL or local path. Operations, parameters, and descriptions are generated automatically. |
+| Provider YAML | A standalone file that declares operations manually. Use when no spec exists or when the spec is too noisy. |
+| Provider directory | The `provider_dirs` config field tells Toolshed where to scan for provider YAML files at boot. |
 
-## What makes Toolshed self-serve
+## Self-serve model
 
-Gestalt is the managed service: Valon operates the infrastructure, ships upgrades, and controls which integrations are available. Toolshed is the kit: you assemble the pieces yourself.
+You choose every component:
 
-- You choose the auth provider (Google OAuth, any OIDC IdP).
-- You choose the datastore (SQLite for local dev, Postgres for production).
-- You choose which integrations to expose, and which operations within each integration are callable.
-- You deploy wherever you want: a laptop, a VM, Kubernetes, or Cloud Run.
-
-## Current boundaries
-
-Toolshed does not yet auto-refresh expired integration tokens on every request. Scope enforcement for API tokens is stored but not enforced by middleware. These are known gaps, not design decisions, and both are expected to close in upcoming work.
+- **Auth provider**: Google OAuth or any OIDC provider (Okta, Azure AD, Auth0, Keycloak, and others).
+- **Datastore**: SQLite for local dev, Postgres or MySQL for production, or DynamoDB, MongoDB, Firestore, Oracle, SQL Server for specialized environments.
+- **Secret manager**: environment variables, files, or Google Cloud Secret Manager.
+- **Integrations**: which upstream APIs to expose and which operations within each are callable.
+- **Deployment**: laptop, VM, Kubernetes, Fly.io, Railway, Render, or AWS Lambda.

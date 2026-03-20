@@ -1,53 +1,199 @@
 # Config File
 
-These are the top-level keys the current server understands.
-
 ## Top-level keys
 
-| Key | Meaning |
+| Key | Purpose |
 |---|---|
 | `auth` | Platform authentication provider and provider-specific config. |
 | `datastore` | Where users, API tokens, and integration tokens are stored. |
 | `secrets` | How `secret://` references are resolved. |
 | `auth_profiles` | Reusable OAuth settings shared across integrations. |
-| `integrations` | Map of integration name to integration definition overrides. |
-| `runtimes` | Optional runtime definitions that boot alongside the server and receive scoped execution deps. |
-| `bindings` | Optional binding definitions that expose alternate surfaces such as webhooks or other triggers. |
-| `provider_dirs` | Directories searched for provider YAML files. |
+| `integrations` | Map of integration name to definition. |
+| `runtimes` | Background processes that boot alongside the server with scoped provider access. |
+| `bindings` | Alternative request surfaces such as webhooks. |
+| `provider_dirs` | Directories searched for provider YAML files at startup. |
 | `server` | Port, base URL, encryption key, and development mode. |
 | `mcp` | MCP endpoint settings: enabled flag, provider filter, and tool name prefix. |
 
 ## Server block
 
+| Field | Default | Notes |
+|---|---|---|
+| `port` | `8080` | HTTP listen port. |
+| `base_url` | | Used to derive missing OAuth callback URLs. Required in production. |
+| `encryption_key` | | Required outside dev mode. Derives the data-encryption key for stored tokens. |
+| `dev_mode` | `false` | Enables auth bypass header, Dev Login endpoint, and echo runtime. |
+
+## Auth block
+
+```yaml
+auth:
+  provider: oidc     # "google" or "oidc"
+  config:
+    issuer_url: https://auth.example.com
+    client_id: ${CLIENT_ID}
+    client_secret: ${CLIENT_SECRET}
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
+    allowed_domains: [example.com]
+    session_secret: ${SESSION_SECRET}
+    session_ttl: 24h
+    display_name: "Okta"
+    scopes: [openid, email, profile]
+    pkce: false
+```
+
 | Field | Notes |
 |---|---|
-| `port` | Defaults to `8080`. |
-| `base_url` | Used to derive missing OAuth callback URLs. |
-| `encryption_key` | Required outside dev mode. Used to derive the data-encryption key. |
-| `dev_mode` | Enables the auth bypass header and relaxes local setup. |
+| `allowed_domains` | Restrict sign-in to specific email domains. |
+| `session_ttl` | Session duration. Default: `24h`. |
+| `session_secret` | Signs session JWTs. |
+| `display_name` | Label shown on the login button (OIDC only). |
+| `scopes` | OIDC scopes. Default: `openid, email, profile`. |
+| `pkce` | Enable PKCE for public clients (OIDC only). |
+
+## Datastore block
+
+```yaml
+datastore:
+  provider: postgres   # see table below
+  config:
+    dsn: postgres://user:pass@host:5432/toolshed
+```
+
+| Provider | Config | Notes |
+|---|---|---|
+| `sqlite` | `path: ./toolshed.db` | Default. Single-instance only. |
+| `postgres` | `dsn: postgres://...` | Recommended for production. |
+| `mysql` | `dsn: user:pass@tcp(host:3306)/toolshed` | Alternative SQL backend. |
+| `dynamodb` | `table`, `region`, optional `endpoint` | AWS DynamoDB. |
+| `mongodb` | `uri`, optional `database` (default: `toolshed`) | MongoDB. |
+| `firestore` | `project_id`, optional `database` | Google Cloud Firestore. |
+| `oracle` | `dsn: ...` | Oracle Database. |
+| `sqlserver` | `dsn: ...` | Microsoft SQL Server. |
+
+## Secrets block
+
+```yaml
+secrets:
+  provider: env      # "env", "file", or "gcp_secret_manager"
+  config:
+    prefix: TOOLSHED_  # env only
+```
+
+| Provider | Config | Notes |
+|---|---|---|
+| `env` | Optional `prefix` | Resolves from environment variables. Converts names to uppercase, replaces hyphens with underscores. |
+| `file` | `path: /etc/secrets` | One secret per file. Path traversal protected. |
+| `gcp_secret_manager` | `project_id`, optional `version` (default: `latest`) | Google Cloud Secret Manager. |
 
 ## Integration block
 
 | Field | Notes |
 |---|---|
-| `openapi` | OpenAPI URL or local file path. |
+| `openapi` | OpenAPI spec URL or local file path. |
 | `provider` | Path to a provider YAML file. |
 | `auth_profile` | Name of a reusable auth profile to inherit from. |
 | `client_id`, `client_secret` | OAuth client credentials for the upstream integration. |
-| `redirect_url` | Optional override for the integration callback URL. |
+| `redirect_url` | Override the integration callback URL. |
 | `base_url` | Override the base URL from the spec or provider file. |
-| `auth` | Auth overrides layered on top of the spec or provider definition. |
-| `response_check`, `token_parser`, `request_mutator` | Named hook registrations. |
-| `token_prefix`, `auth_style`, `headers` | Request-auth shaping and default upstream headers. |
-| `allowed_operations` | Positive allow-list of operation names, with optional description overrides. |
+| `connection_mode` | `user` (default), `identity`, `either`, or `none`. See [Connection Modes](/concepts/platform-model#connection-modes). |
+| `auth` | Auth overrides (see below). |
+| `response_check` | Named hook to validate responses. |
+| `token_parser` | Named hook to transform stored tokens into auth headers. |
+| `request_mutator` | Named hook to rewrite outgoing requests. |
+| `token_prefix` | Prefix for the Authorization header value. |
+| `auth_style` | How the token is sent: `bearer`, `raw`, or `none`. |
+| `headers` | Default headers sent with every upstream request. |
+| `icon_svg` | SVG icon displayed in the web UI. |
+| `allowed_operations` | Positive allow-list of operation names with optional description overrides. |
+
+### Auth overrides
+
+```yaml
+auth:
+  type: oauth2              # or "manual"
+  authorization_url: https://provider.com/authorize
+  token_url: https://provider.com/token
+  client_auth: body          # or "header"
+  scope_separator: ","
+  pkce: true
+  authorization_params:
+    audience: https://api.example.com
+  token_params:
+    grant_type: authorization_code
+  refresh_params: {}
+  token_exchange: form       # or "json"
+  accept_header: application/json
+  token_metadata:
+    - team_id
+    - team_name
+  response_hook: slack_ok
+```
+
+## Auth profiles
+
+Reusable OAuth config referenced by `auth_profile` in integrations:
+
+```yaml
+auth_profiles:
+  slack_shared:
+    client_id: ${SLACK_CLIENT_ID}
+    client_secret: ${SLACK_CLIENT_SECRET}
+    redirect_url: https://toolshed.example.com/api/v1/auth/callback
+    auth:
+      authorization_url: https://slack.com/oauth/v2/authorize
+      token_url: https://slack.com/api/oauth.v2.access
+      response_hook: slack_ok
+```
+
+Fields set directly on the integration override the profile.
+
+## Runtimes block
+
+Background processes that boot alongside the server with scoped provider access.
+
+```yaml
+runtimes:
+  my-runtime:
+    type: echo             # runtime type (registered in binary)
+    providers:
+      - slack
+      - linear
+    config: {}             # type-specific configuration
+```
+
+The `providers` list scopes which integrations the runtime can invoke. The runtime receives a scoped invoker and capability lister.
+
+## Bindings block
+
+Alternative request surfaces that forward calls through the shared invoker.
+
+```yaml
+bindings:
+  slack-webhook:
+    type: webhook
+    providers:
+      - slack
+    config:
+      path: /webhooks/slack
+      provider: slack
+      operation: chat_postMessage
+      auth_mode: signed           # "public", "signed", or "trusted_user_header"
+      signing_secret: ${WEBHOOK_SECRET}
+      signature_header: X-Signature
+```
+
+| Config field | Default | Notes |
+|---|---|---|
+| `path` | | HTTP path for the webhook endpoint. Must start with `/`. |
+| `provider` | | Target provider to forward requests to. |
+| `operation` | | Target operation to invoke. |
+| `auth_mode` | `public` | `public` (no auth), `signed` (HMAC-SHA256), or `trusted_user_header`. |
+| `signing_secret` | | Required when `auth_mode` is `signed`. |
+| `signature_header` | `X-Signature` | Header containing the HMAC signature. |
+| `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
 
 ## MCP block
-
-| Field | Notes |
-|---|---|
-| `enabled` | Set to `true` to mount the MCP endpoint at `/mcp`. Defaults to `false`. |
-| `providers` | Optional list of integration names to expose via MCP. Omit to expose all. |
-| `tool_name_prefix` | Optional string prepended to every MCP tool name. Defaults to `""`. |
 
 ```yaml
 mcp:
@@ -58,8 +204,18 @@ mcp:
   tool_name_prefix: ""
 ```
 
-## Supported provider names today
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `false` | Mount the MCP endpoint at `/mcp`. |
+| `providers` | all | Restrict which integrations are exposed to MCP clients. |
+| `tool_name_prefix` | `""` | String prepended to every MCP tool name. |
 
-- **Auth:** `google`, `oidc`
-- **Datastore:** `sqlite`, `postgres`, `mysql`
-- **Secrets:** `env`, `file`, `gcp_secret_manager`
+## Supported providers
+
+| Category | Providers |
+|---|---|
+| Auth | `google`, `oidc` |
+| Datastore | `sqlite`, `postgres`, `mysql`, `dynamodb`, `mongodb`, `firestore`, `oracle`, `sqlserver` |
+| Secrets | `env`, `file`, `gcp_secret_manager` |
+| Bindings | `webhook` |
+| Runtimes | `echo` (dev mode only) |
