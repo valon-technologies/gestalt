@@ -168,6 +168,7 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) {
 	setStr(&def.RequestMutator, intg.RequestMutator)
 	setStr(&def.TokenPrefix, intg.TokenPrefix)
 	setStr(&def.AuthStyle, intg.AuthStyle)
+	setStr(&def.IconSVG, intg.IconSVG)
 	if intg.Headers != nil {
 		def.Headers = intg.Headers
 	}
