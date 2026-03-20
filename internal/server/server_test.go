@@ -13,8 +13,8 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/broker"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
 )
@@ -46,7 +46,7 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 		opt(&cfg)
 	}
 	if cfg.Broker == nil {
-		cfg.Broker = broker.New(cfg.Providers, cfg.Datastore)
+		cfg.Broker = invocation.NewBroker(cfg.Providers, cfg.Datastore)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {

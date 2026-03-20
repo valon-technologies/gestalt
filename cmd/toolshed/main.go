@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/openapi"
 	"github.com/valon-technologies/toolshed/internal/provider"
 	"github.com/valon-technologies/toolshed/internal/registry"
@@ -126,7 +127,7 @@ func run() error {
 		Providers:   result.Providers,
 		Runtimes:    result.Runtimes,
 		Bindings:    result.Bindings,
-		Broker:      result.Broker,
+		Broker:      invocation.NewBroker(result.Providers, result.Datastore),
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(cfg.Server.EncryptionKey),
 	})

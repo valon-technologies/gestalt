@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/principal"
 )
 
 type contextKey string
@@ -17,22 +18,31 @@ const (
 )
 
 func UserFromContext(ctx context.Context) *core.UserIdentity {
+	if p := principal.FromContext(ctx); p != nil {
+		return p.Identity
+	}
 	u, _ := ctx.Value(userContextKey).(*core.UserIdentity)
 	return u
 }
 
 func UserIDFromContext(ctx context.Context) string {
+	if p := principal.FromContext(ctx); p != nil {
+		return p.UserID
+	}
 	id, _ := ctx.Value(userIDContextKey).(string)
 	return id
 }
 
+func PrincipalFromContext(ctx context.Context) *principal.Principal {
+	return principal.FromContext(ctx)
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Dev mode bypass: trust the X-Dev-User-Email header.
 		if s.devMode {
 			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
-				identity := &core.UserIdentity{Email: email}
-				ctx := context.WithValue(r.Context(), userContextKey, identity)
+				p := s.resolver.ResolveEmail(email)
+				ctx := principal.WithPrincipal(r.Context(), p)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -50,46 +60,17 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Try session token first.
-		identity, err := s.auth.ValidateToken(r.Context(), token)
-		if err == nil && identity != nil {
-			ctx := context.WithValue(r.Context(), userContextKey, identity)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
-		// Fall back to API token: hash and look up.
-		hashed := hashToken(token)
-		apiToken, err := s.datastore.ValidateAPIToken(r.Context(), hashed)
+		p, err := s.resolver.ResolveToken(r.Context(), token)
 		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
+			if errors.Is(err, principal.ErrInvalidToken) {
 				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "token validation failed")
 			return
 		}
-		if apiToken == nil {
-			writeError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
 
-		user, err := s.datastore.GetUser(r.Context(), apiToken.UserID)
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				writeError(w, http.StatusUnauthorized, "user not found")
-				return
-			}
-			writeError(w, http.StatusInternalServerError, "failed to resolve user")
-			return
-		}
-
-		identity = &core.UserIdentity{
-			Email:       user.Email,
-			DisplayName: user.DisplayName,
-		}
-		ctx := context.WithValue(r.Context(), userContextKey, identity)
-		ctx = context.WithValue(ctx, userIDContextKey, user.ID)
+		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

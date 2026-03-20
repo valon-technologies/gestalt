@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,7 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/broker"
+	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/principal"
 )
 
 const defaultTokenInstance = "default"
@@ -130,10 +130,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")
 
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
-		return
-	}
+	p := PrincipalFromContext(r.Context())
 
 	params := make(map[string]any)
 	if r.Method == http.MethodPost {
@@ -152,20 +149,21 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := s.broker.Invoke(r.Context(), core.InvocationRequest{
-		Provider:  providerName,
-		Operation: operationName,
-		UserID:    userID,
-		Params:    params,
-	})
+	result, err := s.broker.Invoke(r.Context(), p, providerName, operationName, params)
 	if err != nil {
-		switch err.(type) {
-		case *broker.ProviderNotFoundError:
-			writeError(w, http.StatusNotFound, err.Error())
-		case *broker.OperationNotFoundError:
-			writeError(w, http.StatusNotFound, err.Error())
-		case *broker.NoCredentialError:
-			writeError(w, http.StatusPreconditionFailed, err.Error())
+		switch {
+		case errors.Is(err, invocation.ErrProviderNotFound):
+			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
+		case errors.Is(err, invocation.ErrOperationNotFound):
+			writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
+		case errors.Is(err, invocation.ErrNotAuthenticated):
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+		case errors.Is(err, invocation.ErrNoToken):
+			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
+		case errors.Is(err, invocation.ErrUserResolution):
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		case errors.Is(err, invocation.ErrInternal):
+			writeError(w, http.StatusInternalServerError, "internal error")
 		default:
 			writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
 		}
@@ -304,8 +302,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL  string
 		verifier string
 	)
-	// State placeholder is passed to the provider to build the URL template;
-	// setURLQueryParam below replaces it with the encrypted state token.
 	if starter, ok := prov.(oauthStarter); ok {
 		authURL, verifier = starter.StartOAuth("_", req.Scopes)
 	} else {
@@ -484,7 +480,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashed := hashToken(plaintext)
+	hashed := principal.HashToken(plaintext)
 
 	now := s.now().UTC().Truncate(time.Second)
 	apiToken := &core.APIToken{
@@ -553,11 +549,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
-}
-
-func hashToken(token string) string {
-	h := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(h[:])
 }
 
 func generateRandomHex(n int) (string, error) {

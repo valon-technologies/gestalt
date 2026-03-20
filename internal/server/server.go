@@ -8,7 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/broker"
+	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/registry"
 )
 
@@ -19,7 +20,8 @@ type Server struct {
 	providers  *registry.PluginMap[core.Provider]
 	runtimes   *registry.PluginMap[core.Runtime]
 	bindings   *registry.PluginMap[core.Binding]
-	broker     *broker.Broker
+	resolver   *principal.Resolver
+	broker     *invocation.Broker
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
@@ -31,7 +33,7 @@ type Config struct {
 	Providers   *registry.PluginMap[core.Provider]
 	Runtimes    *registry.PluginMap[core.Runtime]
 	Bindings    *registry.PluginMap[core.Binding]
-	Broker      *broker.Broker
+	Broker      *invocation.Broker
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
@@ -60,6 +62,7 @@ func New(cfg Config) (*Server, error) {
 		providers:  cfg.Providers,
 		runtimes:   cfg.Runtimes,
 		bindings:   cfg.Bindings,
+		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore),
 		broker:     cfg.Broker,
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
