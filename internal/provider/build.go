@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	d := *def // shallow copy so we don't mutate the caller's definition
 	def = &d
-	applyOverrides(def, intg)
+	if err := applyOverrides(def, intg); err != nil {
+		return nil, fmt.Errorf("%s: %w", def.Provider, err)
+	}
 
 	baseURL := def.BaseURL
 	if intg.BaseURL != "" {
@@ -142,7 +145,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 	return result, nil
 }
 
-func applyOverrides(def *Definition, intg config.IntegrationDef) {
+func applyOverrides(def *Definition, intg config.IntegrationDef) error {
 	o := intg.Auth
 	setStr(&def.Auth.Type, o.Type)
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
@@ -176,10 +179,17 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) {
 	setStr(&def.RequestMutator, intg.RequestMutator)
 	setStr(&def.TokenPrefix, intg.TokenPrefix)
 	setStr(&def.AuthStyle, intg.AuthStyle)
-	setStr(&def.IconSVG, intg.IconSVG)
+	if intg.IconFile != "" {
+		data, err := os.ReadFile(intg.IconFile)
+		if err != nil {
+			return fmt.Errorf("reading icon_file %q: %w", intg.IconFile, err)
+		}
+		def.IconSVG = strings.TrimSpace(string(data))
+	}
 	if intg.Headers != nil {
 		def.Headers = intg.Headers
 	}
+	return nil
 }
 
 func setStr(dst *string, val string) {
