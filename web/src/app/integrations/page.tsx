@@ -1,10 +1,51 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getIntegrations, Integration } from "@/lib/api";
 import Nav from "@/components/Nav";
 import IntegrationCard from "@/components/IntegrationCard";
 import AuthGuard from "@/components/AuthGuard";
+
+function OAuthFlashBanner() {
+  const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const oauthError = searchParams.get("error");
+    if (connected) {
+      setFlash({ type: "success", message: `${connected} connected successfully.` });
+      router.replace("/integrations", { scroll: false });
+    } else if (oauthError) {
+      setFlash({ type: "error", message: oauthError });
+      router.replace("/integrations", { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  if (!flash) return null;
+
+  return (
+    <div
+      className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+        flash.type === "success"
+          ? "border-grove-200 bg-grove-50 text-grove-700"
+          : "border-ember-200 bg-ember-50 text-ember-700"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span>{flash.message}</span>
+        <button
+          onClick={() => setFlash(null)}
+          className="ml-4 text-current opacity-50 hover:opacity-100"
+        >
+          &times;
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -33,6 +74,10 @@ export default function IntegrationsPage() {
           <p className="mt-1 text-sm text-stone-500">
             Browse and connect third-party services.
           </p>
+
+          <Suspense>
+            <OAuthFlashBanner />
+          </Suspense>
 
           {loading && (
             <p className="mt-8 text-sm text-stone-400">Loading...</p>

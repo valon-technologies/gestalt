@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +18,12 @@ import (
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
-const defaultTokenInstance = "default"
+const (
+	defaultTokenInstance = "default"
+	integrationsPagePath = "/integrations"
+	oauthConnectedParam  = "connected"
+	oauthErrorParam      = "error"
+)
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	user := UserFromContext(r.Context())
@@ -317,10 +323,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL = oauthProv.AuthorizationURL("_", req.Scopes)
 	}
 
+	redirectURL := requestOrigin(r)
+
 	state, err := s.stateCodec.Encode(integrationOAuthState{
 		UserID:      dbUserID,
 		Integration: req.Integration,
 		Verifier:    verifier,
+		RedirectURL: redirectURL,
 		ExpiresAt:   s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
 	if err != nil {
@@ -371,7 +380,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
 	}
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
+		s.oauthCallbackError(w, r, state.RedirectURL, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
 		return
 	}
 
@@ -391,10 +400,15 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store token")
+		s.oauthCallbackError(w, r, state.RedirectURL, http.StatusInternalServerError, "failed to store token")
 		return
 	}
 
+	if state.RedirectURL != "" {
+		target := state.RedirectURL + integrationsPagePath + "?" + oauthConnectedParam + "=" + url.QueryEscape(providerName)
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":      "connected",
 		"integration": providerName,
@@ -558,6 +572,43 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+func requestOrigin(r *http.Request) string {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if sanitized := sanitizeRedirectOrigin(origin); sanitized != "" {
+			return sanitized
+		}
+	}
+	if ref := r.Header.Get("Referer"); ref != "" {
+		if u, err := url.Parse(ref); err == nil {
+			return sanitizeRedirectOrigin(u.Scheme + "://" + u.Host)
+		}
+	}
+	return ""
+}
+
+func sanitizeRedirectOrigin(origin string) string {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return ""
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return ""
+	}
+	if u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+func (s *Server) oauthCallbackError(w http.ResponseWriter, r *http.Request, redirectURL string, status int, msg string) {
+	if redirectURL != "" {
+		target := redirectURL + integrationsPagePath + "?" + oauthErrorParam + "=" + url.QueryEscape(msg)
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
+	writeError(w, status, msg)
 }
 
 func generateRandomHex(n int) (string, error) {
