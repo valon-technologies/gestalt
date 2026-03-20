@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/toolshed/core"
+	coreintegration "github.com/valon-technologies/toolshed/core/integration"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations.
@@ -15,10 +16,11 @@ type Restricted struct {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider       = (*Restricted)(nil)
-	_ core.ManualProvider = (*Restricted)(nil)
-	_ core.OAuthProvider  = (*restrictedOAuth)(nil)
-	_ core.ManualProvider = (*restrictedOAuth)(nil)
+	_ core.Provider        = (*Restricted)(nil)
+	_ core.ManualProvider  = (*Restricted)(nil)
+	_ core.CatalogProvider = (*Restricted)(nil)
+	_ core.OAuthProvider   = (*restrictedOAuth)(nil)
+	_ core.ManualProvider  = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -63,6 +65,25 @@ func (r *Restricted) SupportsManualAuth() bool {
 		return mp.SupportsManualAuth()
 	}
 	return false
+}
+
+func (r *Restricted) Catalog() any {
+	cp, ok := r.inner.(core.CatalogProvider)
+	if !ok {
+		return nil
+	}
+	cat, ok := cp.Catalog().(*coreintegration.Catalog)
+	if !ok || cat == nil {
+		return nil
+	}
+	filtered := *cat
+	filtered.Operations = nil
+	for i := range cat.Operations {
+		if _, ok := r.allowed[cat.Operations[i].ID]; ok {
+			filtered.Operations = append(filtered.Operations, cat.Operations[i])
+		}
+	}
+	return &filtered
 }
 
 // Inner returns the unwrapped provider.

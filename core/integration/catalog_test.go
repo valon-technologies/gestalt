@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -117,5 +118,131 @@ operations:
 	}
 	if endpoint := base.Endpoints["create_item"]; endpoint.Path != "/items" || endpoint.Method != "POST" {
 		t.Fatalf("endpoint = %#v, want POST /items", endpoint)
+	}
+
+	cat, ok := base.Catalog().(*Catalog)
+	if !ok || cat == nil {
+		t.Fatal("BaseFromCatalog should store catalog on base")
+	}
+	if cat.Name != "example" {
+		t.Errorf("stored catalog name = %q", cat.Name)
+	}
+}
+
+func TestCompileSchemasFillsInputSchema(t *testing.T) {
+	t.Parallel()
+
+	cat := &Catalog{
+		Name: "test",
+		Operations: []CatalogOperation{
+			{
+				ID:     "op1",
+				Method: "GET",
+				Path:   "/test",
+				Parameters: []CatalogParameter{
+					{Name: "q", Type: "string", Description: "Query", Required: true},
+					{Name: "limit", Type: "integer", Default: 50},
+				},
+			},
+		},
+	}
+
+	cat.CompileSchemas()
+
+	op := cat.Operations[0]
+	if op.InputSchema == nil {
+		t.Fatal("CompileSchemas should synthesize InputSchema from Parameters")
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(op.InputSchema, &schema); err != nil {
+		t.Fatalf("unmarshal InputSchema: %v", err)
+	}
+	if schema["type"] != "object" {
+		t.Errorf("schema type = %v", schema["type"])
+	}
+	props := schema["properties"].(map[string]any)
+	if len(props) != 2 {
+		t.Errorf("got %d properties, want 2", len(props))
+	}
+}
+
+func TestCompileSchemasPreservesExistingInputSchema(t *testing.T) {
+	t.Parallel()
+
+	existing := json.RawMessage(`{"type":"object","properties":{"custom":{"type":"string"}}}`)
+	cat := &Catalog{
+		Name: "test",
+		Operations: []CatalogOperation{
+			{
+				ID:          "op1",
+				Method:      "POST",
+				Path:        "/test",
+				InputSchema: existing,
+				Parameters: []CatalogParameter{
+					{Name: "ignored", Type: "string"},
+				},
+			},
+		},
+	}
+
+	cat.CompileSchemas()
+
+	if string(cat.Operations[0].InputSchema) != string(existing) {
+		t.Errorf("CompileSchemas overwrote existing InputSchema: got %s", cat.Operations[0].InputSchema)
+	}
+}
+
+func TestCompileSchemasFillsAnnotations(t *testing.T) {
+	t.Parallel()
+
+	cat := &Catalog{
+		Name: "test",
+		Operations: []CatalogOperation{
+			{ID: "read", Method: "GET", Path: "/read"},
+			{ID: "write", Method: "POST", Path: "/write"},
+			{ID: "remove", Method: "DELETE", Path: "/remove"},
+		},
+	}
+
+	cat.CompileSchemas()
+
+	if cat.Operations[0].Annotations.ReadOnlyHint == nil || !*cat.Operations[0].Annotations.ReadOnlyHint {
+		t.Error("GET should have readOnlyHint=true")
+	}
+	if cat.Operations[1].Annotations.OpenWorldHint == nil || !*cat.Operations[1].Annotations.OpenWorldHint {
+		t.Error("POST should have openWorldHint=true")
+	}
+	if cat.Operations[2].Annotations.DestructiveHint == nil || !*cat.Operations[2].Annotations.DestructiveHint {
+		t.Error("DELETE should have destructiveHint=true")
+	}
+}
+
+func TestCompileSchemasPreservesExistingAnnotations(t *testing.T) {
+	t.Parallel()
+
+	cat := &Catalog{
+		Name: "test",
+		Operations: []CatalogOperation{
+			{
+				ID:     "op1",
+				Method: "GET",
+				Path:   "/test",
+				Annotations: OperationAnnotations{
+					ReadOnlyHint:  boolPtr(false),
+					OpenWorldHint: boolPtr(false),
+				},
+			},
+		},
+	}
+
+	cat.CompileSchemas()
+
+	a := cat.Operations[0].Annotations
+	if a.ReadOnlyHint == nil || *a.ReadOnlyHint {
+		t.Error("should preserve existing readOnlyHint=false")
+	}
+	if a.OpenWorldHint == nil || *a.OpenWorldHint {
+		t.Error("should preserve existing openWorldHint=false")
 	}
 }

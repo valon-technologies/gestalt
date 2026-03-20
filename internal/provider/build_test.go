@@ -1,11 +1,14 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/valon-technologies/toolshed/core"
+	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/config"
 )
 
@@ -215,6 +218,74 @@ func TestLoadFromDir_NilDirs(t *testing.T) {
 	_, err := LoadFromDir("anything", nil)
 	if err == nil {
 		t.Fatal("expected error for nil dirs")
+	}
+}
+
+func TestBuildSatisfiesCatalogProvider(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "catprov",
+		DisplayName: "Catalog Provider",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"list": {
+				Description: "List things",
+				Method:      "GET",
+				Path:        "/things",
+				Parameters: []ParameterDef{
+					{Name: "limit", Type: "integer", Description: "Max results", Default: 25},
+					{Name: "cursor", Type: "string", Description: "Pagination cursor"},
+				},
+			},
+			"create": {
+				Description: "Create a thing",
+				Method:      "POST",
+				Path:        "/things",
+				Parameters: []ParameterDef{
+					{Name: "name", Type: "string", Required: true},
+				},
+			},
+		},
+	}
+
+	provider, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cp, ok := provider.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("Build result should satisfy CatalogProvider")
+	}
+
+	catAny := cp.Catalog()
+	cat, ok := catAny.(*ci.Catalog)
+	if !ok || cat == nil {
+		t.Fatal("Catalog() should return *integration.Catalog")
+	}
+
+	if cat.Name != "catprov" {
+		t.Errorf("catalog Name = %q", cat.Name)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("got %d catalog operations, want 2", len(cat.Operations))
+	}
+
+	for _, op := range cat.Operations {
+		if op.InputSchema == nil {
+			t.Errorf("operation %q should have synthesized InputSchema", op.ID)
+			continue
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(op.InputSchema, &schema); err != nil {
+			t.Errorf("operation %q InputSchema unmarshal: %v", op.ID, err)
+			continue
+		}
+		if schema["type"] != "object" {
+			t.Errorf("operation %q schema type = %v", op.ID, schema["type"])
+		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -12,35 +13,45 @@ import (
 // It is intentionally richer than core.Operation so Toolshed can compile AI-facing
 // metadata while still exposing the current operation contract.
 type Catalog struct {
-	Name        string             `yaml:"name"`
-	DisplayName string             `yaml:"display_name"`
-	Description string             `yaml:"description"`
-	BaseURL     string             `yaml:"base_url,omitempty"`
-	AuthStyle   string             `yaml:"auth_style,omitempty"`
-	Headers     map[string]string  `yaml:"headers,omitempty"`
-	Operations  []CatalogOperation `yaml:"operations"`
+	Name        string             `yaml:"name"                   json:"name"`
+	DisplayName string             `yaml:"display_name"           json:"displayName"`
+	Description string             `yaml:"description"            json:"description"`
+	BaseURL     string             `yaml:"base_url,omitempty"     json:"baseUrl,omitempty"`
+	AuthStyle   string             `yaml:"auth_style,omitempty"   json:"authStyle,omitempty"`
+	Headers     map[string]string  `yaml:"headers,omitempty"      json:"headers,omitempty"`
+	Operations  []CatalogOperation `yaml:"operations"             json:"operations"`
 }
 
 type CatalogOperation struct {
-	ID             string             `yaml:"id"`
-	ProviderID     string             `yaml:"provider_id,omitempty"`
-	Method         string             `yaml:"method"`
-	Path           string             `yaml:"path"`
-	Description    string             `yaml:"description,omitempty"`
-	Parameters     []CatalogParameter `yaml:"parameters,omitempty"`
-	RequiredScopes []string           `yaml:"required_scopes,omitempty"`
-	Tags           []string           `yaml:"tags,omitempty"`
-	ReadOnly       bool               `yaml:"read_only,omitempty"`
-	Visible        *bool              `yaml:"visible,omitempty"`
+	ID             string               `yaml:"id"                       json:"id"`
+	ProviderID     string               `yaml:"provider_id,omitempty"    json:"providerId,omitempty"`
+	Method         string               `yaml:"method"                   json:"method"`
+	Path           string               `yaml:"path"                     json:"path"`
+	Title          string               `yaml:"title,omitempty"          json:"title,omitempty"`
+	Description    string               `yaml:"description,omitempty"    json:"description,omitempty"`
+	InputSchema    json.RawMessage      `yaml:"-"                        json:"inputSchema,omitempty"`
+	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
+	RequiredScopes []string             `yaml:"required_scopes,omitempty" json:"requiredScopes,omitempty"`
+	Tags           []string             `yaml:"tags,omitempty"           json:"tags,omitempty"`
+	ReadOnly       bool                 `yaml:"read_only,omitempty"      json:"readOnly,omitempty"`
+	Visible        *bool                `yaml:"visible,omitempty"        json:"visible,omitempty"`
+}
+
+type OperationAnnotations struct {
+	ReadOnlyHint    *bool `yaml:"read_only_hint,omitempty"    json:"readOnlyHint,omitempty"`
+	IdempotentHint  *bool `yaml:"idempotent_hint,omitempty"   json:"idempotentHint,omitempty"`
+	DestructiveHint *bool `yaml:"destructive_hint,omitempty"  json:"destructiveHint,omitempty"`
+	OpenWorldHint   *bool `yaml:"open_world_hint,omitempty"   json:"openWorldHint,omitempty"`
 }
 
 type CatalogParameter struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	Location    string `yaml:"location,omitempty"`
-	Description string `yaml:"description,omitempty"`
-	Required    bool   `yaml:"required,omitempty"`
-	Default     any    `yaml:"default,omitempty"`
+	Name        string `yaml:"name"                 json:"name"`
+	Type        string `yaml:"type"                 json:"type"`
+	Location    string `yaml:"location,omitempty"   json:"location,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	Required    bool   `yaml:"required,omitempty"   json:"required,omitempty"`
+	Default     any    `yaml:"default,omitempty"    json:"default,omitempty"`
 }
 
 func LoadCatalogYAML(data []byte) (*Catalog, error) {
@@ -156,6 +167,19 @@ func (c *Catalog) AuthStyleValue() (AuthStyle, error) {
 	}
 }
 
+// CompileSchemas fills in InputSchema and Annotations for operations that lack them.
+func (c *Catalog) CompileSchemas() {
+	for i := range c.Operations {
+		op := &c.Operations[i]
+		if op.InputSchema == nil && len(op.Parameters) > 0 {
+			op.InputSchema = SynthesizeInputSchema(op.Parameters)
+		}
+		if op.Annotations == (OperationAnnotations{}) {
+			op.Annotations = AnnotationsFromMethod(op.Method)
+		}
+	}
+}
+
 func BaseFromCatalog(catalog *Catalog, runtime Base) (Base, error) {
 	if err := catalog.Validate(); err != nil {
 		return Base{}, err
@@ -177,6 +201,7 @@ func BaseFromCatalog(catalog *Catalog, runtime Base) (Base, error) {
 	base.Operations = catalog.OperationsList()
 	base.Endpoints = catalog.EndpointsMap()
 	base.Headers = mergeHeaders(catalog.Headers, runtime.Headers)
+	base.catalog = catalog
 
 	return base, nil
 }

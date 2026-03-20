@@ -91,6 +91,8 @@ type Base struct {
 	CheckResponse  apiexec.ResponseChecker
 	RequestMutator func(operation string, req *apiexec.Request, params map[string]any) error
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
+
+	catalog *Catalog
 }
 
 func (b *Base) Name() string        { return b.IntegrationName }
@@ -107,6 +109,15 @@ func (b *Base) ConnectionMode() core.ConnectionMode {
 func (b *Base) SupportsManualAuth() bool {
 	mc, ok := b.Auth.(manualChecker)
 	return ok && mc.IsManual()
+}
+
+func (b *Base) SetCatalog(c *Catalog) { b.catalog = c }
+
+func (b *Base) Catalog() any {
+	if b.catalog == nil {
+		return nil
+	}
+	return b.catalog
 }
 
 func (b *Base) AuthorizationURL(state string, scopes []string) string {
