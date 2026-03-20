@@ -2018,7 +2018,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 		ops: []core.Operation{{Name: "search", Method: "GET"}},
 	}
 
-	providers := newTestRegistry(t, echoProvider)
+	providers := testutil.NewProviderRegistry(t, echoProvider)
 	ds := &coretesting.StubDatastore{
 		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 			return &core.User{ID: "u1", Email: email}, nil
