@@ -44,7 +44,6 @@ cargo build --release
 | Command | Purpose |
 |---|---|
 | `tshed auth ...` | Login, logout, and status. |
-| `tshed health` | Check server health and readiness. |
 | `tshed init` | Interactive setup wizard. |
 | `tshed config ...` | Read and write persistent CLI config values. |
 | `tshed integrations ...` | List integrations or start a connection flow. |
@@ -69,8 +68,6 @@ cargo build --release
 ## Common commands
 
 ```sh
-tshed health
-tshed health --format table
 tshed init
 tshed auth login
 tshed integrations list --format table
