@@ -145,3 +145,60 @@ fn test_start_oauth() {
     assert_eq!(resp["url"], "https://example.com/oauth");
     assert_eq!(resp["state"], "abc123");
 }
+
+#[test]
+fn test_health_both_ok() {
+    let mut server = Server::new();
+    let health_mock = server
+        .mock("GET", "/health")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"ok"}"#)
+        .create();
+    let ready_mock = server
+        .mock("GET", "/ready")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"ok"}"#)
+        .create();
+
+    let result =
+        toolshed::commands::health::check(Some(&server.url()), toolshed::output::Format::Json);
+
+    health_mock.assert();
+    ready_mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_health_ready_unavailable() {
+    let mut server = Server::new();
+    let health_mock = server
+        .mock("GET", "/health")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"ok"}"#)
+        .create();
+    let ready_mock = server
+        .mock("GET", "/ready")
+        .with_status(503)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"unavailable"}"#)
+        .create();
+
+    let result =
+        toolshed::commands::health::check(Some(&server.url()), toolshed::output::Format::Json);
+
+    health_mock.assert();
+    ready_mock.assert();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_health_server_unreachable() {
+    let result = toolshed::commands::health::check(
+        Some("http://127.0.0.1:1"),
+        toolshed::output::Format::Json,
+    );
+    assert!(result.is_err());
+}
