@@ -12,6 +12,7 @@ func TestLoadCatalogYAML(t *testing.T) {
 name: example
 display_name: Example
 description: Example integration
+icon_svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>'
 base_url: https://api.example.com
 auth_style: bearer
 headers:
@@ -36,11 +37,32 @@ operations:
 	if catalog.Name != "example" {
 		t.Fatalf("Name = %q, want example", catalog.Name)
 	}
+	if catalog.IconSVG != `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>` {
+		t.Fatalf("IconSVG = %q, want svg string", catalog.IconSVG)
+	}
 	if len(catalog.Operations) != 1 {
 		t.Fatalf("len(Operations) = %d, want 1", len(catalog.Operations))
 	}
 	if catalog.Operations[0].ID != "list_items" {
 		t.Fatalf("operation id = %q, want list_items", catalog.Operations[0].ID)
+	}
+}
+
+func TestLoadCatalogYAMLWithoutIcon(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := LoadCatalogYAML([]byte(`
+name: no_icon
+operations:
+  - id: op
+    method: GET
+    path: /op
+`))
+	if err != nil {
+		t.Fatalf("LoadCatalogYAML: %v", err)
+	}
+	if catalog.IconSVG != "" {
+		t.Fatalf("IconSVG = %q, want empty string", catalog.IconSVG)
 	}
 }
 

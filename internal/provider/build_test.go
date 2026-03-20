@@ -227,6 +227,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 	def := &Definition{
 		Provider:    "catprov",
 		DisplayName: "Catalog Provider",
+		IconSVG:     `<svg viewBox="0 0 24 24"><path d="M12 2L2 22h20z"/></svg>`,
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
@@ -268,6 +269,9 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 
 	if cat.Name != "catprov" {
 		t.Errorf("catalog Name = %q", cat.Name)
+	}
+	if cat.IconSVG != `<svg viewBox="0 0 24 24"><path d="M12 2L2 22h20z"/></svg>` {
+		t.Errorf("catalog IconSVG = %q", cat.IconSVG)
 	}
 	if len(cat.Operations) != 2 {
 		t.Fatalf("got %d catalog operations, want 2", len(cat.Operations))

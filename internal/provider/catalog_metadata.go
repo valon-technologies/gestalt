@@ -13,6 +13,7 @@ func CatalogFromDefinition(def *Definition) *integration.Catalog {
 		Name:        def.Provider,
 		DisplayName: def.DisplayName,
 		Description: def.Description,
+		IconSVG:     def.IconSVG,
 		BaseURL:     def.BaseURL,
 		AuthStyle:   def.AuthStyle,
 		Headers:     def.Headers,

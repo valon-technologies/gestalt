@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
+	ci "github.com/valon-technologies/toolshed/core/integration"
 	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 )
@@ -52,6 +53,7 @@ type integrationInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`
 	Description string `json:"description,omitempty"`
+	IconSVG     string `json:"icon_svg,omitempty"`
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
@@ -62,11 +64,17 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 		if err != nil {
 			continue
 		}
-		out = append(out, integrationInfo{
+		info := integrationInfo{
 			Name:        name,
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
-		})
+		}
+		if cp, ok := prov.(core.CatalogProvider); ok {
+			if cat, ok := cp.Catalog().(*ci.Catalog); ok && cat != nil {
+				info.IconSVG = cat.IconSVG
+			}
+		}
+		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
