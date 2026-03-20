@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/core/session"
-	"github.com/valon-technologies/toolshed/internal/oauth"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/core/session"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 	"golang.org/x/oauth2"
 )
 

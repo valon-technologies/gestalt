@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
 )
 
 // Dialect captures the SQL differences between database engines.

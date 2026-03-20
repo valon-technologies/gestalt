@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"fmt"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/invocation"
 )
 
 func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) RuntimeDeps {

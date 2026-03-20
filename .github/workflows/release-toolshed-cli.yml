@@ -3,7 +3,7 @@ name: Release Toolshed CLI
 on:
   push:
     tags:
-      - 'toolshed-cli-v*'
+      - 'v*'
 
 permissions:
   contents: write
@@ -15,7 +15,7 @@ jobs:
   build:
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
-      working-directory: toolshed/client
+      working-directory: client
       binary-name: tshed
       artifact-prefix: tshed
       run-tests: true

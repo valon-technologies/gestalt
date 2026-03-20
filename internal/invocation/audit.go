@@ -3,7 +3,7 @@ package invocation
 import (
 	"log"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 var _ core.AuditSink = LogAuditSink{}

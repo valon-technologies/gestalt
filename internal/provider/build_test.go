@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/config"
 )
 
 const minimalProviderYAML = `

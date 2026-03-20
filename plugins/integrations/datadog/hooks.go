@@ -3,8 +3,8 @@ package datadog
 import (
 	"fmt"
 
-	"github.com/valon-technologies/toolshed/internal/apiexec"
-	"github.com/valon-technologies/toolshed/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
 func init() {

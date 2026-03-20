@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	mssql "github.com/microsoft/go-mssqldb"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 )
 
 const (

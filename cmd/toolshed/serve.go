@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
-	"github.com/valon-technologies/toolshed/internal/registry"
-	"github.com/valon-technologies/toolshed/internal/server"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/registry"
+	"github.com/valon-technologies/gestalt/internal/server"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/integration"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/integration"
 )
 
 // stubWithOps extends StubIntegration with concrete operations.

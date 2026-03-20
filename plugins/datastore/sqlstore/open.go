@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core/crypto"
+	"github.com/valon-technologies/gestalt/core/crypto"
 )
 
 const (

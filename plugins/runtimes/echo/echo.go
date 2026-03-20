@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
 )
 
 var _ core.Runtime = (*Runtime)(nil)

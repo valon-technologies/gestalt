@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 func LoadCatalogYAML(data []byte) (*catalog.Catalog, error) {

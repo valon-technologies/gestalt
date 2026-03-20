@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/internal/testutil"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
 func TestDoGETWithQueryAndPathParams(t *testing.T) {

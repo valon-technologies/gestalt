@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 
 	_ "modernc.org/sqlite" // register database/sql driver
 )

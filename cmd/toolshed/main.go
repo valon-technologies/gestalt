@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	_ "github.com/valon-technologies/toolshed/plugins/integrations/datadog"
-	_ "github.com/valon-technologies/toolshed/plugins/integrations/hex"
-	_ "github.com/valon-technologies/toolshed/plugins/integrations/slack"
+	_ "github.com/valon-technologies/gestalt/plugins/integrations/datadog"
+	_ "github.com/valon-technologies/gestalt/plugins/integrations/hex"
+	_ "github.com/valon-technologies/gestalt/plugins/integrations/slack"
 )
 
 func main() {

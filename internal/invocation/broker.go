@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/registry"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/registry"
 )
 
 const tokenRefreshThreshold = 5 * time.Minute

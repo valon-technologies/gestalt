@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
 )
 
 func newTestStore(t *testing.T) *Store {

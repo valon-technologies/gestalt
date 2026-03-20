@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/plugins/datastore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/plugins/datastore"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"

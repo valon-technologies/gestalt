@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core/catalog"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 // CatalogFromDefinition converts a provider Definition to a Catalog.

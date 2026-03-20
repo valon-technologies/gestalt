@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/testutil"
-	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/testutil"
+	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
 )
 
 type stubCapabilityLister struct {

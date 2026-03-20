@@ -12,9 +12,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 const defaultTokenInstance = "default"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 
 	_ "github.com/sijms/go-ora/v2" // register database/sql driver
 )

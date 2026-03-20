@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/internal/server"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/internal/server"
 )
 
 const (

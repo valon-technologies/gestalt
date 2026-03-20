@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // register database/sql driver
 )

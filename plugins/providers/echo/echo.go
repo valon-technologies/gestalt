@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 const (

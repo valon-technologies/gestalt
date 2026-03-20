@@ -1,9 +1,9 @@
 package sqlserver
 
 import (
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 )
 
 var Factory bootstrap.DatastoreFactory = sqlstore.NewDSNFactory("sqlserver", func(dsn string, encryptionKey []byte) (core.Datastore, error) {

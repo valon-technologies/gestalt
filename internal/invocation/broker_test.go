@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/registry"
-	"github.com/valon-technologies/toolshed/internal/testutil"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/registry"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
 type stubProviderWithOps struct {

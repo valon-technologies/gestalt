@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/gestalt/internal/config"
 )
 
 func runConfigCheck(args []string) error {

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	ci "github.com/valon-technologies/toolshed/core/integration"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/integration"
-	"github.com/valon-technologies/toolshed/internal/oauth"
+	"github.com/valon-technologies/gestalt/core"
+	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/integration"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
 func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {

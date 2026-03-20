@@ -13,13 +13,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/testutil"
-	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/testutil"
+	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
 	"gopkg.in/yaml.v3"
 )
 

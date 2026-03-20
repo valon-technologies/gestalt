@@ -9,9 +9,9 @@ import (
 
 	gcpfirestore "cloud.google.com/go/firestore"
 	"github.com/google/uuid"
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/plugins/datastore"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/plugins/datastore"
 	"google.golang.org/api/iterator"
 )
 

@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"time"
 
-	cryptoutil "github.com/valon-technologies/toolshed/core/crypto"
+	cryptoutil "github.com/valon-technologies/gestalt/core/crypto"
 )
 
 const integrationOAuthStateTTL = 10 * time.Minute

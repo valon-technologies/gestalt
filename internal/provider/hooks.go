@@ -3,8 +3,8 @@ package provider
 import (
 	"sync"
 
-	"github.com/valon-technologies/toolshed/internal/apiexec"
-	"github.com/valon-technologies/toolshed/internal/oauth"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
 var (

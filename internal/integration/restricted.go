@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations.

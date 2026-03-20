@@ -3,13 +3,13 @@ package mcp
 import (
 	"context"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
-	ci "github.com/valon-technologies/toolshed/core/integration"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	"github.com/valon-technologies/toolshed/internal/mcpupstream"
-	"github.com/valon-technologies/toolshed/internal/principal"
-	"github.com/valon-technologies/toolshed/internal/registry"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
+	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/mcpupstream"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/registry"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"

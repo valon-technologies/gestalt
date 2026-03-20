@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 const defaultTimeout = 10 * time.Second

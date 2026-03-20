@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/gestalt/core"
 )
 
 // PluginMap is a thread-safe, named collection of plugins of a single type.

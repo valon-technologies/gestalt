@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/principal"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 func TestResolveToken_ValidSession(t *testing.T) {

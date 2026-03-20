@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/catalog"
-	"github.com/valon-technologies/toolshed/internal/apiexec"
-	"github.com/valon-technologies/toolshed/internal/oauth"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
 var (

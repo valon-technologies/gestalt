@@ -3,8 +3,8 @@ package testutil
 import (
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/registry"
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/registry"
 )
 
 // NewProviderRegistry creates a PluginMap populated with the given providers.

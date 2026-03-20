@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/toolshed/core"
-	coretesting "github.com/valon-technologies/toolshed/core/testing"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
+	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/invocation"
+	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
 	"gopkg.in/yaml.v3"
 )
 

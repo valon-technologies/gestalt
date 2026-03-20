@@ -4,13 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'toolshed/**'
-      - '.github/workflows/build-toolshed.yml'
   pull_request:
-    paths:
-      - 'toolshed/**'
-      - '.github/workflows/build-toolshed.yml'
 
   workflow_dispatch:
 
@@ -19,9 +13,6 @@ jobs:
     name: Go Lint & Vet
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: toolshed
 
     steps:
       - uses: actions/checkout@v4
@@ -29,8 +20,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: toolshed/go.mod
-          cache-dependency-path: toolshed/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Check go mod tidy
         run: |
@@ -41,15 +32,11 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.3
-          working-directory: toolshed
 
   test:
     name: Go Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: toolshed
 
     steps:
       - uses: actions/checkout@v4
@@ -57,8 +44,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: toolshed/go.mod
-          cache-dependency-path: toolshed/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Run tests
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -66,7 +53,7 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
-          files: toolshed/coverage.out
+          files: coverage.out
           fail_ci_if_error: false
 
   web-lint:
@@ -75,7 +62,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: toolshed/web
+        working-directory: web
 
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +72,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: toolshed/web/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -102,7 +89,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: toolshed/docs
+        working-directory: docs
 
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +99,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: toolshed/docs/package-lock.json
+          cache-dependency-path: docs/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -131,12 +118,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: toolshed/go.mod
-          cache-dependency-path: toolshed/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Build Go server
         run: go build -o ./toolshed-server ./cmd/toolshed
-        working-directory: toolshed
 
       - name: Start Go server
         run: |
@@ -153,26 +139,25 @@ jobs:
             echo "::error::Go server did not become ready within 15 seconds"
             exit 1
           fi
-        working-directory: toolshed
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: toolshed/web/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install web dependencies
         run: npm ci
-        working-directory: toolshed/web
+        working-directory: web
 
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
-        working-directory: toolshed/web
+        working-directory: web
 
       - name: Run E2E tests against Go server
         run: npx playwright test
-        working-directory: toolshed/web
+        working-directory: web
         env:
           CI: true
           TOOLSHED_API_URL: http://localhost:8080
@@ -182,7 +167,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: toolshed-playwright-report
-          path: toolshed/web/playwright-report/
+          path: web/playwright-report/
           retention-days: 7
 
   helm-validate:
@@ -196,12 +181,12 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Helm lint
-        run: helm lint toolshed/deploy/helm/toolshed
+        run: helm lint deploy/helm/toolshed
 
       - name: Helm template
         run: |
-          helm template test-release toolshed/deploy/helm/toolshed \
-            -f toolshed/deploy/helm/toolshed/ci-values.yaml \
+          helm template test-release deploy/helm/toolshed \
+            -f deploy/helm/toolshed/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform
@@ -220,6 +205,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/build-push-action@v5
         with:
-          context: toolshed/web
-          file: toolshed/web/Dockerfile
+          context: web
+          file: web/Dockerfile
           push: false
