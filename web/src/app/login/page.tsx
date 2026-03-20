@@ -68,22 +68,22 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8">
-        <h1 className="text-center text-2xl font-semibold text-gray-900">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm">
+        <h1 className="text-center text-2xl font-heading font-bold text-timber-800">
           Toolshed
         </h1>
-        <p className="mt-2 text-center text-sm text-gray-500">
+        <p className="mt-2 text-center text-sm text-stone-500">
           Sign in to manage your integrations.
         </p>
-        <p className="mt-2 text-center text-sm text-gray-500">
+        <p className="mt-2 text-center text-sm text-stone-500">
           Or read the{" "}
-          <a href="/docs" className="font-medium text-blue-600 hover:text-blue-700">
+          <a href="/docs" className="font-medium text-timber-600 hover:text-timber-700">
             documentation
           </a>
           .
         </p>
         {error && (
-          <p className="mt-4 text-center text-sm text-red-600">{error}</p>
+          <p className="mt-4 text-center text-sm text-ember-500">{error}</p>
         )}
         <div className="mt-6">
           <Button onClick={handleLogin} disabled={loading} className="w-full">
@@ -94,9 +94,9 @@ export default function LoginPage() {
         {isDev && (
           <>
             <div className="mt-6 flex items-center gap-2">
-              <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs text-gray-400">dev mode</span>
-              <div className="h-px flex-1 bg-gray-200" />
+              <div className="h-px flex-1 bg-stone-200" />
+              <span className="text-xs text-stone-400">dev mode</span>
+              <div className="h-px flex-1 bg-stone-200" />
             </div>
             <div className="mt-4">
               <input
@@ -104,7 +104,7 @@ export default function LoginPage() {
                 value={devEmail}
                 onChange={(e) => setDevEmail(e.target.value)}
                 placeholder="dev@toolshed.local"
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
               />
               <Button
                 onClick={handleDevLogin}

@@ -40,7 +40,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
         <div>
           <label
             htmlFor="token-name"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-stone-700"
           >
             Token name
           </label>
@@ -50,7 +50,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. ci-pipeline"
-            className="mt-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
           />
         </div>
         <Button type="submit" disabled={creating || !name.trim()}>
@@ -59,17 +59,17 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
       </form>
 
       {plaintext && (
-        <div className="mt-4 rounded border border-yellow-300 bg-yellow-50 p-4">
-          <p className="text-sm font-medium text-yellow-800">
+        <div className="mt-4 rounded-lg border border-harvest-300 bg-harvest-50 p-4">
+          <p className="text-sm font-medium text-harvest-700">
             Copy this token now. It will not be shown again.
           </p>
-          <code className="mt-2 block break-all rounded bg-white p-2 text-sm text-gray-900">
+          <code className="mt-2 block break-all rounded-md bg-stone-100 p-2 font-mono text-sm text-stone-900">
             {plaintext}
           </code>
         </div>
       )}
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-4 text-sm text-ember-500">{error}</p>}
     </>
   );
 }
