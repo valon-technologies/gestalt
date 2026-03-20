@@ -9,17 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
+	"github.com/valon-technologies/toolshed/plugins/datastore"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const (
-	usersCollection             = "users"
-	usersByEmailCollection      = "users_by_email"
-	integrationTokensCollection = "integration_tokens"
-	apiTokensCollection         = "api_tokens"
-)
+const usersByEmailCollection = "users_by_email"
 
 type Store struct {
 	client *gcpfirestore.Client
@@ -53,7 +49,7 @@ func New(projectID, database string, encryptionKey []byte) (*Store, error) {
 }
 
 func (s *Store) Ping(ctx context.Context) error {
-	iter := s.client.Collection(usersCollection).Limit(1).Documents(ctx)
+	iter := s.client.Collection(datastore.UsersCollection).Limit(1).Documents(ctx)
 	defer iter.Stop()
 	_, err := iter.Next()
 	if err == iterator.Done {
@@ -82,7 +78,7 @@ type userDoc struct {
 }
 
 func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
-	snap, err := s.client.Collection(usersCollection).Doc(id).Get(ctx)
+	snap, err := s.client.Collection(datastore.UsersCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, core.ErrNotFound
@@ -115,7 +111,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 	// by email. The transaction atomically checks-then-creates both
 	// the lookup doc and the real user doc.
 	lookupRef := s.client.Collection(usersByEmailCollection).Doc(email)
-	userRef := s.client.Collection(usersCollection).Doc(id)
+	userRef := s.client.Collection(datastore.UsersCollection).Doc(id)
 
 	var created bool
 	err = s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
@@ -163,7 +159,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 }
 
 func (s *Store) findUserByEmail(ctx context.Context, email string) (*core.User, error) {
-	iter := s.client.Collection(usersCollection).Where("email", "==", email).Limit(1).Documents(ctx)
+	iter := s.client.Collection(datastore.UsersCollection).Where("email", "==", email).Limit(1).Documents(ctx)
 	defer iter.Stop()
 
 	snap, err := iter.Next()
@@ -232,7 +228,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	// (user_id, integration, instance) triple, then write the new one.
 	// This mirrors the INSERT ... ON CONFLICT behavior of the SQL stores.
 	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
-		query := s.client.Collection(integrationTokensCollection).
+		query := s.client.Collection(datastore.IntegrationTokensCollection).
 			Where("user_id", "==", token.UserID).
 			Where("integration", "==", token.Integration).
 			Where("instance", "==", token.Instance).
@@ -249,12 +245,12 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 				return fmt.Errorf("deleting stale integration token: %w", err)
 			}
 		}
-		return tx.Set(s.client.Collection(integrationTokensCollection).Doc(token.ID), doc)
+		return tx.Set(s.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID), doc)
 	})
 }
 
 func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
-	iter := s.client.Collection(integrationTokensCollection).
+	iter := s.client.Collection(datastore.IntegrationTokensCollection).
 		Where("user_id", "==", userID).
 		Where("integration", "==", integration).
 		Where("instance", "==", instance).
@@ -273,7 +269,7 @@ func (s *Store) Token(ctx context.Context, userID, integration, instance string)
 }
 
 func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
-	iter := s.client.Collection(integrationTokensCollection).
+	iter := s.client.Collection(datastore.IntegrationTokensCollection).
 		Where("user_id", "==", userID).
 		Documents(ctx)
 	defer iter.Stop()
@@ -297,7 +293,7 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 }
 
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
-	_, err := s.client.Collection(integrationTokensCollection).Doc(id).Delete(ctx)
+	_, err := s.client.Collection(datastore.IntegrationTokensCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("firestore: deleting token: %w", err)
 	}
@@ -354,7 +350,7 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 		CreatedAt:   token.CreatedAt,
 		UpdatedAt:   token.UpdatedAt,
 	}
-	_, err := s.client.Collection(apiTokensCollection).Doc(token.ID).Set(ctx, doc)
+	_, err := s.client.Collection(datastore.APITokensCollection).Doc(token.ID).Set(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("firestore: storing api token: %w", err)
 	}
@@ -362,7 +358,7 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 }
 
 func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
-	iter := s.client.Collection(apiTokensCollection).
+	iter := s.client.Collection(datastore.APITokensCollection).
 		Where("hashed_token", "==", hashedToken).
 		Limit(1).
 		Documents(ctx)
@@ -379,7 +375,7 @@ func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core
 }
 
 func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
-	iter := s.client.Collection(apiTokensCollection).
+	iter := s.client.Collection(datastore.APITokensCollection).
 		Where("user_id", "==", userID).
 		Documents(ctx)
 	defer iter.Stop()
@@ -403,7 +399,7 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 }
 
 func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	_, err := s.client.Collection(apiTokensCollection).Doc(id).Delete(ctx)
+	_, err := s.client.Collection(datastore.APITokensCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("firestore: revoking api token: %w", err)
 	}

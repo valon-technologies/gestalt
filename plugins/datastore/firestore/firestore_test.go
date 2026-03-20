@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
+	"github.com/valon-technologies/toolshed/plugins/datastore"
 	"google.golang.org/api/iterator"
 )
 
@@ -38,10 +39,10 @@ func newTestStore(t *testing.T) *Store {
 	}
 
 	t.Cleanup(func() {
-		deleteAllDocs(t, store.client, usersCollection)
+		deleteAllDocs(t, store.client, datastore.UsersCollection)
 		deleteAllDocs(t, store.client, usersByEmailCollection)
-		deleteAllDocs(t, store.client, integrationTokensCollection)
-		deleteAllDocs(t, store.client, apiTokensCollection)
+		deleteAllDocs(t, store.client, datastore.IntegrationTokensCollection)
+		deleteAllDocs(t, store.client, datastore.APITokensCollection)
 		_ = store.Close()
 	})
 
@@ -99,7 +100,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 
 	// Verify the raw document stores encrypted values.
-	snap, err := store.client.Collection(integrationTokensCollection).Doc(token.ID).Get(ctx)
+	snap, err := store.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID).Get(ctx)
 	if err != nil {
 		t.Fatalf("raw Get: %v", err)
 	}
