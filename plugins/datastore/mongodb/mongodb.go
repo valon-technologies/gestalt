@@ -9,15 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
+	"github.com/valon-technologies/toolshed/plugins/datastore"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-)
-
-const (
-	usersCollection             = "users"
-	integrationTokensCollection = "integration_tokens"
-	apiTokensCollection         = "api_tokens"
 )
 
 type Store struct {
@@ -89,7 +84,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	_, err := s.db.Collection(usersCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
+	_, err := s.db.Collection(datastore.UsersCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
@@ -97,7 +92,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("mongodb: creating users email index: %w", err)
 	}
 
-	_, err = s.db.Collection(integrationTokensCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
+	_, err = s.db.Collection(datastore.IntegrationTokensCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "user_id", Value: 1}, {Key: "integration", Value: 1}, {Key: "instance", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
@@ -105,7 +100,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("mongodb: creating integration_tokens compound index: %w", err)
 	}
 
-	_, err = s.db.Collection(apiTokensCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
+	_, err = s.db.Collection(datastore.APITokensCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "hashed_token", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
@@ -122,7 +117,7 @@ func (s *Store) Close() error {
 
 func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
 	var doc userDoc
-	err := s.db.Collection(usersCollection).FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
+	err := s.db.Collection(datastore.UsersCollection).FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, core.ErrNotFound
 	}
@@ -134,7 +129,7 @@ func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
 
 func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
 	var doc userDoc
-	err := s.db.Collection(usersCollection).FindOne(ctx, bson.M{"email": email}).Decode(&doc)
+	err := s.db.Collection(datastore.UsersCollection).FindOne(ctx, bson.M{"email": email}).Decode(&doc)
 	if err == nil {
 		return userFromDoc(&doc), nil
 	}
@@ -150,10 +145,10 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 		UpdatedAt: now,
 	}
 
-	_, err = s.db.Collection(usersCollection).InsertOne(ctx, doc)
+	_, err = s.db.Collection(datastore.UsersCollection).InsertOne(ctx, doc)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			err2 := s.db.Collection(usersCollection).FindOne(ctx, bson.M{"email": email}).Decode(&doc)
+			err2 := s.db.Collection(datastore.UsersCollection).FindOne(ctx, bson.M{"email": email}).Decode(&doc)
 			if err2 != nil {
 				return nil, fmt.Errorf("mongodb: re-querying user after duplicate key: %w", err2)
 			}
@@ -191,7 +186,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		},
 	}
 	opts := options.UpdateOne().SetUpsert(true)
-	_, err = s.db.Collection(integrationTokensCollection).UpdateOne(ctx, filter, update, opts)
+	_, err = s.db.Collection(datastore.IntegrationTokensCollection).UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return fmt.Errorf("mongodb: upserting integration token: %w", err)
 	}
@@ -201,7 +196,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
 	filter := bson.M{"user_id": userID, "integration": integration, "instance": instance}
 	var doc integrationTokenDoc
-	err := s.db.Collection(integrationTokensCollection).FindOne(ctx, filter).Decode(&doc)
+	err := s.db.Collection(datastore.IntegrationTokensCollection).FindOne(ctx, filter).Decode(&doc)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, nil
 	}
@@ -212,7 +207,7 @@ func (s *Store) Token(ctx context.Context, userID, integration, instance string)
 }
 
 func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
-	cursor, err := s.db.Collection(integrationTokensCollection).Find(ctx, bson.M{"user_id": userID})
+	cursor, err := s.db.Collection(datastore.IntegrationTokensCollection).Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return nil, fmt.Errorf("mongodb: listing tokens: %w", err)
 	}
@@ -234,7 +229,7 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 }
 
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
-	_, err := s.db.Collection(integrationTokensCollection).DeleteOne(ctx, bson.M{"_id": id})
+	_, err := s.db.Collection(datastore.IntegrationTokensCollection).DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return fmt.Errorf("mongodb: deleting token: %w", err)
 	}
@@ -252,7 +247,7 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 		CreatedAt:   token.CreatedAt,
 		UpdatedAt:   token.UpdatedAt,
 	}
-	_, err := s.db.Collection(apiTokensCollection).InsertOne(ctx, doc)
+	_, err := s.db.Collection(datastore.APITokensCollection).InsertOne(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("mongodb: inserting api token: %w", err)
 	}
@@ -261,7 +256,7 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 
 func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	var doc apiTokenDoc
-	err := s.db.Collection(apiTokensCollection).FindOne(ctx, bson.M{"hashed_token": hashedToken}).Decode(&doc)
+	err := s.db.Collection(datastore.APITokensCollection).FindOne(ctx, bson.M{"hashed_token": hashedToken}).Decode(&doc)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, nil
 	}
@@ -272,7 +267,7 @@ func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core
 }
 
 func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
-	cursor, err := s.db.Collection(apiTokensCollection).Find(ctx, bson.M{"user_id": userID})
+	cursor, err := s.db.Collection(datastore.APITokensCollection).Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return nil, fmt.Errorf("mongodb: listing api tokens: %w", err)
 	}
@@ -290,7 +285,7 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 }
 
 func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	_, err := s.db.Collection(apiTokensCollection).DeleteOne(ctx, bson.M{"_id": id})
+	_, err := s.db.Collection(datastore.APITokensCollection).DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return fmt.Errorf("mongodb: revoking api token: %w", err)
 	}
