@@ -11,6 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/pb33f/libopenapi v0.34.3
+	github.com/sijms/go-ora/v2 v2.9.0
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
