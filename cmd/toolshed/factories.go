@@ -54,7 +54,7 @@ func setupBootstrap(cmdName string, args []string) (*bootstrapEnv, error) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
-	factories := buildFactories(cfg.ProviderDirs)
+	factories := buildFactories(cfg.ProviderDirs, cfg.Server.DevMode)
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -87,7 +87,7 @@ func (e *bootstrapEnv) Close() {
 	}
 }
 
-func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
+func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
 	factories.Auth["oidc"] = oidc.Factory
@@ -100,8 +100,10 @@ func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
-	factories.Builtins = append(factories.Builtins, echo.New())
-	factories.Runtimes["echo"] = echoruntime.Factory
+	if devMode {
+		factories.Builtins = append(factories.Builtins, echo.New())
+		factories.Runtimes["echo"] = echoruntime.Factory
+	}
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
