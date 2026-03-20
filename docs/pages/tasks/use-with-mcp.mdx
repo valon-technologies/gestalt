@@ -6,7 +6,7 @@ Connect Toolshed to AI assistants like Claude Code or Claude Desktop via the Mod
 
 ## Prerequisites
 
-- A working Toolshed config with at least one integration.
+- A running Toolshed server with at least one integration.
 - A user account (sign in via the web UI or CLI first).
 - An API token for that user.
 
@@ -28,30 +28,34 @@ curl -X POST http://localhost:8080/api/v1/tokens \
 
 Save the returned token value. You will not be able to retrieve it again.
 
-## 2. Optionally filter providers for MCP
+## 2. Enable MCP in your config
 
-If you want to expose only a subset of your integrations to MCP clients, add an `mcp` block to your config:
+Add an `mcp` block to your YAML config:
 
 ```yaml
 mcp:
+  enabled: true
+```
+
+To expose only a subset of integrations, add a `providers` list:
+
+```yaml
+mcp:
+  enabled: true
   providers:
     - linear
     - slack
 ```
 
-Omit the `mcp` block entirely to expose all configured integrations.
+Omit `providers` to expose all configured integrations.
 
-## 3. Run the MCP server
+## 3. Start the server
 
 ```sh
-TOOLSHED_API_KEY=your-api-token toolshed mcp -config config.yaml
+toolshed serve -config config.yaml
 ```
 
-The server communicates over stdin/stdout using the MCP stdio transport. It will log a startup message to stderr and then wait for MCP protocol messages.
-
-<Callout>
-  The `-config` flag follows the same resolution order as `toolshed serve`: explicit flag, then `TOOLSHED_CONFIG` env var, then `./config.yaml`, then `/etc/toolshed/config.yaml`.
-</Callout>
+The MCP endpoint is available at `/mcp` on the same HTTP server as the rest of the API.
 
 ## 4. Configure Claude Code
 
@@ -61,17 +65,16 @@ Add the following to your Claude Code MCP settings (`.mcp.json` in your project 
 {
   "mcpServers": {
     "toolshed": {
-      "command": "toolshed",
-      "args": ["mcp", "-config", "/path/to/config.yaml"],
-      "env": {
-        "TOOLSHED_API_KEY": "your-api-token"
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-token"
       }
     }
   }
 }
 ```
 
-Claude Code will start the MCP server process automatically and discover the available tools.
+Claude Code will connect to the MCP endpoint and discover the available tools.
 
 ## 5. Configure Claude Desktop
 
@@ -81,10 +84,9 @@ Add the same block to your Claude Desktop config (`~/Library/Application Support
 {
   "mcpServers": {
     "toolshed": {
-      "command": "toolshed",
-      "args": ["mcp", "-config", "/path/to/config.yaml"],
-      "env": {
-        "TOOLSHED_API_KEY": "your-api-token"
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-token"
       }
     }
   }
@@ -93,7 +95,7 @@ Add the same block to your Claude Desktop config (`~/Library/Application Support
 
 ## Minimal example config
 
-A complete config file for MCP with a single integration:
+A complete config file with MCP enabled for a single integration:
 
 ```yaml
 auth:
@@ -122,6 +124,7 @@ integrations:
       create_issue: Create a new Linear issue
 
 mcp:
+  enabled: true
   providers:
     - linear
 ```
@@ -135,6 +138,7 @@ Once your MCP client connects, you should see the integration operations listed 
 
 If tools do not appear, check that:
 
-1. `TOOLSHED_API_KEY` is set and the token is valid.
-2. The user who owns the token has connected the integration (completed the OAuth flow).
-3. The integration has `allowed_operations` defined.
+1. The server is running with `mcp.enabled: true` in the config.
+2. Your API token is valid and included in the `Authorization` header.
+3. The user who owns the token has connected the integration (completed the OAuth flow).
+4. The integration has `allowed_operations` defined.

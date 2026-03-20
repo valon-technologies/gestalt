@@ -24,8 +24,6 @@ func run(args []string) error {
 	switch args[0] {
 	case "serve":
 		return runServe(args[1:])
-	case "mcp":
-		return runMCP(args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}

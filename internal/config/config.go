@@ -28,6 +28,7 @@ type Config struct {
 }
 
 type MCPConfig struct {
+	Enabled        bool     `yaml:"enabled"`
 	Providers      []string `yaml:"providers"`
 	ToolNamePrefix string   `yaml:"tool_name_prefix"`
 }

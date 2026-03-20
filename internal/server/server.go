@@ -25,6 +25,7 @@ type Server struct {
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
+	mcpHandler http.Handler
 }
 
 type Config struct {
@@ -37,6 +38,7 @@ type Config struct {
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
+	MCPHandler  http.Handler
 }
 
 func New(cfg Config) (*Server, error) {
@@ -67,6 +69,7 @@ func New(cfg Config) (*Server, error) {
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
 		now:        now,
+		mcpHandler: cfg.MCPHandler,
 	}
 
 	s.routes()
@@ -78,6 +81,13 @@ func (s *Server) routes() {
 
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
+
+	if s.mcpHandler != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			r.Handle("/mcp", s.mcpHandler)
+		})
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/auth/info", s.authInfo)

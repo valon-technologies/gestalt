@@ -11,8 +11,11 @@ import (
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/config"
 	"github.com/valon-technologies/toolshed/internal/invocation"
+	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
+
+	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 func runServe(args []string) error {
@@ -61,15 +64,37 @@ func runServe(args []string) error {
 		}
 	}
 
+	broker := invocation.NewBroker(result.Providers, result.Datastore)
+
+	var mcpHandler http.Handler
+	if env.Config.MCP.Enabled {
+		mcpCfg := toolshedmcp.Config{
+			Broker:    broker,
+			Providers: result.Providers,
+		}
+		if env.Config.MCP.Providers != nil {
+			mcpCfg.AllowedProviders = env.Config.MCP.Providers
+		}
+		if env.Config.MCP.ToolNamePrefix != "" {
+			mcpCfg.ToolNamePrefix = env.Config.MCP.ToolNamePrefix
+		}
+		mcpHandler = mcpserver.NewStreamableHTTPServer(
+			toolshedmcp.NewServer(mcpCfg),
+			mcpserver.WithStateLess(true),
+		)
+		log.Println("MCP endpoint enabled at /mcp")
+	}
+
 	srv, err := server.New(server.Config{
 		Auth:        result.Auth,
 		Datastore:   result.Datastore,
 		Providers:   result.Providers,
 		Runtimes:    result.Runtimes,
 		Bindings:    result.Bindings,
-		Broker:      invocation.NewBroker(result.Providers, result.Datastore),
+		Broker:      broker,
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(env.Config.Server.EncryptionKey),
+		MCPHandler:  mcpHandler,
 	})
 	if err != nil {
 		if result.Bindings != nil {
