@@ -14,14 +14,10 @@ const (
 	SourceEnv
 )
 
-const IdentityPrincipal = "__identity__"
-
 type Principal struct {
-	Identity       *core.UserIdentity
-	UserID         string
-	Source         Source
-	CallSource     string
-	CallSourceName string
+	Identity *core.UserIdentity
+	UserID   string
+	Source   Source
 }
 
 type contextKey struct{}

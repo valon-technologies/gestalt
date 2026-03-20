@@ -155,12 +155,6 @@ func TestWebhookInvokesBroker_Principal(t *testing.T) {
 	if p == nil {
 		t.Fatal("expected principal in context")
 	}
-	if p.CallSource != "binding" {
-		t.Errorf("expected CallSource binding, got %q", p.CallSource)
-	}
-	if p.CallSourceName != "test-webhook" {
-		t.Errorf("expected CallSourceName test-webhook, got %q", p.CallSourceName)
-	}
 }
 
 func TestWebhookBrokerError(t *testing.T) {

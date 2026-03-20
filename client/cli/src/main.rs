@@ -30,9 +30,6 @@ enum Commands {
     /// Interactive setup wizard
     Init,
 
-    /// Check server health and readiness
-    Health,
-
     /// Manage persistent configuration
     Config {
         #[command(subcommand)]
@@ -145,7 +142,6 @@ fn main() {
             AuthCommands::Status => commands::auth::status(url, format),
         },
         Commands::Init => commands::init::run(url),
-        Commands::Health => commands::health::check(url, format),
         Commands::Config { command } => match command {
             ConfigCommands::Get { key } => commands::config::get(&key, format),
             ConfigCommands::Set { key, value } => commands::config::set(&key, &value),

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/internal/registry"
 )
 
@@ -79,44 +78,24 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, req core.
 		return "", nil
 
 	case core.ConnectionModeUser, "":
-		if req.UserID == "" {
+		tok, err := b.creds.Token(ctx, req.UserID, req.Provider, defaultInstance)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return "", &NoCredentialError{Provider: req.Provider}
+			}
+			return "", fmt.Errorf("retrieving credential: %w", err)
+		}
+		if tok == nil {
 			return "", &NoCredentialError{Provider: req.Provider}
 		}
-		return b.resolveUserToken(ctx, prov, req.UserID, req.Provider)
+		return b.refreshTokenIfNeeded(ctx, prov, tok)
 
-	case core.ConnectionModeIdentity:
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, req.Provider)
-
-	case core.ConnectionModeEither:
-		if req.UserID != "" {
-			tok, err := b.resolveUserToken(ctx, prov, req.UserID, req.Provider)
-			if err == nil {
-				return tok, nil
-			}
-			var nce *NoCredentialError
-			if !errors.As(err, &nce) {
-				return "", err
-			}
-		}
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, req.Provider)
+	case core.ConnectionModeIdentity, core.ConnectionModeEither:
+		return "", fmt.Errorf("connection mode %q not yet implemented", mode)
 
 	default:
 		return "", fmt.Errorf("unknown connection mode %q", mode)
 	}
-}
-
-func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, provider string) (string, error) {
-	tok, err := b.creds.Token(ctx, userID, provider, defaultInstance)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return "", &NoCredentialError{Provider: provider}
-		}
-		return "", fmt.Errorf("retrieving credential: %w", err)
-	}
-	if tok == nil {
-		return "", &NoCredentialError{Provider: provider}
-	}
-	return b.refreshTokenIfNeeded(ctx, prov, tok)
 }
 
 func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, token *core.IntegrationToken) (string, error) {

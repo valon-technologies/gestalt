@@ -99,10 +99,7 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &principal.Principal{
-		CallSource:     "binding",
-		CallSourceName: b.name,
-	}
+	p := &principal.Principal{}
 	ctx := principal.WithPrincipal(r.Context(), p)
 
 	req := core.InvocationRequest{
