@@ -3,11 +3,24 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 36 33% 97%;
+    --surface: 36 40% 99%;
+    --surface-raised: 36 28% 93%;
+    --border: 33 20% 86%;
+    --foreground: 30 28% 11%;
+    --radius: 0.5rem;
+  }
+
   html {
     scroll-behavior: smooth;
   }
 
+  * {
+    @apply border-border;
+  }
+
   body {
-    @apply bg-slate-50 text-slate-950;
+    @apply bg-background text-foreground;
   }
 }

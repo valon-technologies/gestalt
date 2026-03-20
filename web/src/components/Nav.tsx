@@ -22,18 +22,18 @@ export default function Nav() {
   }
 
   return (
-    <nav className="border-b border-gray-200 bg-white px-6 py-3">
+    <nav className="border-b border-border bg-surface px-6 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-lg font-semibold text-gray-900">
+          <Link href="/" className="text-lg font-heading font-bold text-timber-800">
             Toolshed
           </Link>
           <div className="flex gap-4">
             {links.map((link) => {
               const className = `text-sm ${
                 pathname === link.href
-                  ? "font-medium text-blue-600"
-                  : "text-gray-600 hover:text-gray-900"
+                  ? "font-medium text-timber-600"
+                  : "text-stone-500 hover:text-stone-800"
               }`;
               if (link.href === "/docs") {
                 return (
@@ -52,10 +52,10 @@ export default function Nav() {
         </div>
         {email && (
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500">{email}</span>
+            <span className="text-sm text-stone-400">{email}</span>
             <button
               onClick={handleLogout}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-sm text-stone-400 hover:text-stone-600"
             >
               Logout
             </button>

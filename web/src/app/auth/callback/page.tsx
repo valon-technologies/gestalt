@@ -45,9 +45,9 @@ function CallbackHandler() {
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 text-center">
-          <p className="text-sm text-red-600">{error}</p>
-          <a href="/login" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+        <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm text-center">
+          <p className="text-sm text-ember-500">{error}</p>
+          <a href="/login" className="mt-4 inline-block text-sm text-timber-600 hover:underline">
             Back to login
           </a>
         </div>
@@ -57,14 +57,14 @@ function CallbackHandler() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <p className="text-sm text-gray-500">Completing login...</p>
+      <p className="text-sm text-stone-400">Completing login...</p>
     </div>
   );
 }
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p className="text-sm text-gray-500">Loading...</p></div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p className="text-sm text-stone-400">Loading...</p></div>}>
       <CallbackHandler />
     </Suspense>
   );
