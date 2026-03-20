@@ -1,0 +1,132 @@
+import { Callout } from 'nextra/components'
+
+# Deploy to Fly.io
+
+Run Toolshed on Fly.io using the Docker image and a managed Postgres database.
+
+## Prerequisites
+
+- A [Fly.io](https://fly.io) account
+- [`flyctl`](https://fly.io/docs/flyctl/install/) installed and authenticated (`fly auth login`)
+
+## Create the app
+
+From the repository root:
+
+```sh
+fly launch --no-deploy \
+  --name toolshed \
+  --region iad \
+  --dockerfile toolshed/Dockerfile
+```
+
+This creates a `fly.toml` without deploying. Edit it to expose port 8080 and configure the health check:
+
+```toml
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "2s"
+```
+
+## Provision a database
+
+### Option A: Fly Postgres (recommended)
+
+```sh
+fly postgres create --name toolshed-db --region iad
+fly postgres attach toolshed-db --app toolshed
+```
+
+This sets `DATABASE_URL` automatically on the app.
+
+### Option B: SQLite with a persistent volume
+
+```sh
+fly volumes create toolshed_data --region iad --size 1
+```
+
+Add a mount in `fly.toml`:
+
+```toml
+[mounts]
+  source = "toolshed_data"
+  destination = "/data"
+```
+
+<Callout>
+  SQLite limits you to a single instance. If you use a volume, set `fly scale count 1` to prevent multiple machines from competing for the same file.
+</Callout>
+
+## Configure
+
+Generate secrets and set them on the app:
+
+```sh
+fly secrets set \
+  TOOLSHED_BASE_URL="https://toolshed.fly.dev" \
+  TOOLSHED_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  TOOLSHED_SESSION_SECRET="$(openssl rand -base64 32)" \
+  GOOGLE_CLIENT_ID="your-google-client-id" \
+  GOOGLE_CLIENT_SECRET="your-google-client-secret"
+```
+
+Create a config file at `toolshed/config.fly.yaml`:
+
+```yaml
+server:
+  port: 8080
+  base_url: "${TOOLSHED_BASE_URL}"
+  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+
+auth:
+  provider: google
+  config:
+    client_id: "${GOOGLE_CLIENT_ID}"
+    client_secret: "${GOOGLE_CLIENT_SECRET}"
+
+datastore:
+  provider: postgres
+  config:
+    url: "${DATABASE_URL}"
+```
+
+Update the `Dockerfile` CMD or add a `[processes]` section in `fly.toml` to point at this config:
+
+```toml
+[processes]
+  app = "/toolshed --config /etc/toolshed/config.yaml"
+```
+
+## Deploy
+
+```sh
+fly deploy
+```
+
+## Verify
+
+```sh
+fly status
+curl -s https://toolshed.fly.dev/health
+```
+
+You should see `{"status":"ok"}`. Open `https://toolshed.fly.dev` in a browser to sign in.
+
+## Custom domain
+
+```sh
+fly certs add toolshed.example.com
+```
+
+Then create a CNAME record pointing `toolshed.example.com` to `toolshed.fly.dev`. Update `TOOLSHED_BASE_URL` to match:
+
+```sh
+fly secrets set TOOLSHED_BASE_URL="https://toolshed.example.com"
+```
