@@ -47,7 +47,7 @@ The compose file runs two services: the Go API server on port 8080 and the Next.
 ## Sanity checks
 
 ```sh
-curl http://localhost:8080/health
+tshed --url http://localhost:8080 health
 tshed --url http://localhost:8080 auth status
 tshed --url http://localhost:8080 integrations list
 ```
