@@ -15,6 +15,7 @@ type integrationOAuthState struct {
 	UserID      string `json:"uid"`
 	Integration string `json:"int"`
 	Verifier    string `json:"ver,omitempty"`
+	RedirectURL string `json:"ret,omitempty"`
 	ExpiresAt   int64  `json:"exp"`
 }
 
