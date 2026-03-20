@@ -24,44 +24,16 @@ func runServe(args []string) error {
 	}
 	defer env.Close()
 
+	if err := startPlugins(env); err != nil {
+		return err
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+		defer cancel()
+		shutdownPlugins(ctx, env)
+	}()
+
 	result := env.Result
-
-	if result.Runtimes != nil {
-		var started []string
-		for _, name := range result.Runtimes.List() {
-			rt, err := result.Runtimes.Get(name)
-			if err != nil {
-				return fmt.Errorf("getting runtime %q: %v", name, err)
-			}
-			if err := rt.Start(env.Ctx); err != nil {
-				stopRuntimes(env.Ctx, result.Runtimes, started)
-				return fmt.Errorf("starting runtime %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
-
-	if result.Bindings != nil {
-		var started []string
-		for _, name := range result.Bindings.List() {
-			binding, err := result.Bindings.Get(name)
-			if err != nil {
-				closeBindings(result.Bindings, started)
-				if result.Runtimes != nil {
-					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
-				}
-				return fmt.Errorf("getting binding %q: %v", name, err)
-			}
-			if err := binding.Start(env.Ctx); err != nil {
-				closeBindings(result.Bindings, started)
-				if result.Runtimes != nil {
-					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
-				}
-				return fmt.Errorf("starting binding %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
 
 	var mcpHandler http.Handler
 	if env.Config.MCP.Enabled {
@@ -94,12 +66,6 @@ func runServe(args []string) error {
 		MCPHandler:  mcpHandler,
 	})
 	if err != nil {
-		if result.Bindings != nil {
-			closeBindings(result.Bindings, result.Bindings.List())
-		}
-		if result.Runtimes != nil {
-			stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
-		}
 		return fmt.Errorf("creating server: %w", err)
 	}
 
@@ -131,19 +97,11 @@ func runServe(args []string) error {
 	}
 	log.Println("shutting down...")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 	defer cancel()
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("server shutdown: %v", err)
-	}
-
-	if result.Runtimes != nil {
-		stopRuntimes(shutdownCtx, result.Runtimes, result.Runtimes.List())
-	}
-
-	if result.Bindings != nil {
-		closeBindings(result.Bindings, result.Bindings.List())
+		log.Printf("server shutdown: %v", err)
 	}
 
 	log.Println("shutdown complete")
