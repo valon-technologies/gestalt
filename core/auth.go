@@ -2,6 +2,8 @@ package core
 
 import "context"
 
+const BearerScheme = "Bearer "
+
 type AuthProvider interface {
 	Name() string
 	LoginURL(state string) (string, error)

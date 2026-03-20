@@ -228,7 +228,7 @@ func (p *Provider) fetchUserInfo(ctx context.Context, accessToken string) (*core
 	if err != nil {
 		return nil, fmt.Errorf("create userinfo request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Authorization", core.BearerScheme+accessToken)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
