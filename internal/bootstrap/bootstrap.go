@@ -13,8 +13,8 @@ import (
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/internal/broker"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"gopkg.in/yaml.v3"
 )
@@ -29,8 +29,17 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
-type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, broker core.Broker) (core.Runtime, error)
-type BindingFactory func(ctx context.Context, name string, cfg config.BindingDef, broker core.Broker) (core.Binding, error)
+type BindingDeps struct {
+	Invoker invocation.Invoker
+}
+
+type RuntimeDeps struct {
+	Invoker          invocation.Invoker
+	CapabilityLister invocation.CapabilityLister
+}
+
+type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, deps RuntimeDeps) (core.Runtime, error)
+type BindingFactory func(ctx context.Context, name string, cfg config.BindingDef, deps BindingDeps) (core.Binding, error)
 
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
@@ -55,15 +64,16 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth          core.AuthProvider
-	Datastore     core.Datastore
-	Providers     *registry.PluginMap[core.Provider]
-	Runtimes      *registry.PluginMap[core.Runtime]
-	Bindings      *registry.PluginMap[core.Binding]
-	Broker        *broker.Broker
-	AuditSink     core.AuditSink
-	SecretManager core.SecretManager
-	DevMode       bool
+	Auth             core.AuthProvider
+	Datastore        core.Datastore
+	Providers        *registry.PluginMap[core.Provider]
+	Runtimes         *registry.PluginMap[core.Runtime]
+	Bindings         *registry.PluginMap[core.Binding]
+	Invoker          invocation.Invoker
+	CapabilityLister invocation.CapabilityLister
+	AuditSink        core.AuditSink
+	SecretManager    core.SecretManager
+	DevMode          bool
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -105,30 +115,31 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
-	b := broker.New(providers, ds)
-	audit := core.AuditSink(broker.LogAuditSink{})
+	sharedInvoker := invocation.NewBroker(providers, ds)
+	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, b, audit)
+	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, b, audit)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
 	if err != nil {
 		return nil, err
 	}
 
 	closeSM = false
 	return &Result{
-		Auth:          auth,
-		Datastore:     ds,
-		Providers:     providers,
-		Runtimes:      runtimes,
-		Bindings:      bindings,
-		Broker:        b,
-		AuditSink:     audit,
-		SecretManager: sm,
-		DevMode:       cfg.Server.DevMode,
+		Auth:             auth,
+		Datastore:        ds,
+		Providers:        providers,
+		Runtimes:         runtimes,
+		Bindings:         bindings,
+		Invoker:          sharedInvoker,
+		CapabilityLister: sharedInvoker,
+		AuditSink:        audit,
+		SecretManager:    sm,
+		DevMode:          cfg.Server.DevMode,
 	}, nil
 }
 
@@ -369,7 +380,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
@@ -383,8 +394,8 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown runtime type %q for runtime %q", def.Type, name)
 		}
 
-		guarded := broker.NewGuarded(b, "runtime:"+name, audit, broker.WithAllowedProviders(def.Providers))
-		rt, err := factory(ctx, name, def, guarded)
+		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit)
+		rt, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
 		}
@@ -398,7 +409,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, b *broker.Broker, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -412,13 +423,8 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		var opts []broker.GuardedOption
-		if len(def.Providers) > 0 {
-			opts = append(opts, broker.WithAllowedProviders(def.Providers))
-		}
-		guarded := broker.NewGuarded(b, "binding:"+name, audit, opts...)
-
-		binding, err := factory(ctx, name, def, guarded)
+		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit)
+		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
 		}

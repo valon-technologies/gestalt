@@ -13,6 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
 	"gopkg.in/yaml.v3"
 )
@@ -99,6 +100,23 @@ func TestBootstrap(t *testing.T) {
 	}
 	if result.Datastore == nil {
 		t.Fatal("Datastore is nil")
+	}
+	if result.Invoker == nil {
+		t.Fatal("Invoker is nil")
+	}
+	if result.CapabilityLister == nil {
+		t.Fatal("CapabilityLister is nil")
+	}
+	invoker, ok := result.Invoker.(*invocation.Broker)
+	if !ok {
+		t.Fatalf("Invoker should be *invocation.Broker, got %T", result.Invoker)
+	}
+	lister, ok := result.CapabilityLister.(*invocation.Broker)
+	if !ok {
+		t.Fatalf("CapabilityLister should be *invocation.Broker, got %T", result.CapabilityLister)
+	}
+	if invoker != lister {
+		t.Fatal("expected shared invoker and capability lister to be the same instance")
 	}
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
@@ -746,7 +764,7 @@ func TestBootstrapWithBindings(t *testing.T) {
 	}
 
 	factories := validFactories()
-	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ core.Broker) (core.Binding, error) {
+	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ bootstrap.BindingDeps) (core.Binding, error) {
 		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
 	}
 
@@ -807,9 +825,9 @@ func TestBootstrapBindingWithProviders(t *testing.T) {
 	factories := validFactories()
 	factories.Providers["beta"] = stubProviderFactory("beta")
 
-	var receivedBroker core.Broker
-	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, brk core.Broker) (core.Binding, error) {
-		receivedBroker = brk
+	var receivedDeps bootstrap.BindingDeps
+	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedDeps = deps
 		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
 	}
 
@@ -821,10 +839,10 @@ func TestBootstrapBindingWithProviders(t *testing.T) {
 		t.Fatal("expected Bindings to be non-nil")
 	}
 
-	caps := receivedBroker.ListCapabilities()
-	for _, cap := range caps {
-		if cap.Provider != "alpha" {
-			t.Errorf("binding broker should only see alpha, got %q", cap.Provider)
-		}
+	if receivedDeps.Invoker == nil {
+		t.Fatal("expected binding deps to carry an invoker")
+	}
+	if receivedDeps.Invoker == result.Invoker {
+		t.Fatal("expected binding deps to be scoped rather than reusing the shared bootstrap invoker directly")
 	}
 }

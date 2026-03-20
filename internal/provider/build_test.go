@@ -314,9 +314,9 @@ func TestBuildAppliesIconSVGFromConfig(t *testing.T) {
 	if !ok {
 		t.Fatal("expected CatalogProvider")
 	}
-	cat, ok := cp.Catalog().(*ci.Catalog)
-	if !ok || cat == nil {
-		t.Fatal("expected *Catalog")
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil Catalog")
 	}
 	if cat.IconSVG != svg {
 		t.Fatalf("expected icon_svg from config override, got %q", cat.IconSVG)

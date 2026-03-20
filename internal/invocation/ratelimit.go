@@ -1,4 +1,4 @@
-package broker
+package invocation
 
 import (
 	"sync"
@@ -24,10 +24,11 @@ func newRateLimiter(rps, burst int) *rateLimiter {
 func (r *rateLimiter) Allow(provider string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	lim, ok := r.limiters[provider]
+
+	limiter, ok := r.limiters[provider]
 	if !ok {
-		lim = rate.NewLimiter(r.rps, r.burst)
-		r.limiters[provider] = lim
+		limiter = rate.NewLimiter(r.rps, r.burst)
+		r.limiters[provider] = limiter
 	}
-	return lim.Allow()
+	return limiter.Allow()
 }

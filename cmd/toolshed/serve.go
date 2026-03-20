@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
 	toolshedmcp "github.com/valon-technologies/toolshed/internal/mcp"
 	"github.com/valon-technologies/toolshed/internal/registry"
 	"github.com/valon-technologies/toolshed/internal/server"
@@ -64,12 +63,10 @@ func runServe(args []string) error {
 		}
 	}
 
-	broker := invocation.NewBroker(result.Providers, result.Datastore)
-
 	var mcpHandler http.Handler
 	if env.Config.MCP.Enabled {
 		mcpCfg := toolshedmcp.Config{
-			Broker:    broker,
+			Invoker:   result.Invoker,
 			Providers: result.Providers,
 		}
 		if env.Config.MCP.Providers != nil {
@@ -91,7 +88,7 @@ func runServe(args []string) error {
 		Providers:   result.Providers,
 		Runtimes:    result.Runtimes,
 		Bindings:    result.Bindings,
-		Broker:      broker,
+		Invoker:     result.Invoker,
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		MCPHandler:  mcpHandler,

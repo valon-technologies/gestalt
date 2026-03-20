@@ -3,12 +3,15 @@ package bootstrap_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
+	"github.com/valon-technologies/toolshed/internal/principal"
 )
 
 func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
@@ -23,8 +26,22 @@ func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if result.Broker == nil {
-		t.Fatal("expected Broker to be non-nil")
+	if result.Invoker == nil {
+		t.Fatal("expected Invoker to be non-nil")
+	}
+	if result.CapabilityLister == nil {
+		t.Fatal("expected CapabilityLister to be non-nil")
+	}
+	invoker, ok := result.Invoker.(*invocation.Broker)
+	if !ok {
+		t.Fatalf("expected Invoker to be *invocation.Broker, got %T", result.Invoker)
+	}
+	lister, ok := result.CapabilityLister.(*invocation.Broker)
+	if !ok {
+		t.Fatalf("expected CapabilityLister to be *invocation.Broker, got %T", result.CapabilityLister)
+	}
+	if invoker != lister {
+		t.Fatal("expected Invoker and CapabilityLister to reference the same shared instance")
 	}
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
@@ -59,6 +76,18 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	}
 
 	factories := validFactories()
+	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		return &stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "alpha",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "do"}},
+		}, nil
+	}
 	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		return &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
@@ -72,15 +101,15 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 		}, nil
 	}
 
-	var runtimeBroker core.Broker
-	factories.Runtimes["echo"] = func(_ context.Context, name string, _ config.RuntimeDef, brk core.Broker) (core.Runtime, error) {
-		runtimeBroker = brk
+	var runtimeDeps bootstrap.RuntimeDeps
+	factories.Runtimes["echo"] = func(_ context.Context, name string, _ config.RuntimeDef, deps bootstrap.RuntimeDeps) (core.Runtime, error) {
+		runtimeDeps = deps
 		return &coretesting.StubRuntime{N: name}, nil
 	}
 
-	var bindingBroker core.Broker
-	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, brk core.Broker) (core.Binding, error) {
-		bindingBroker = brk
+	var bindingDeps bootstrap.BindingDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		bindingDeps = deps
 		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
 	}
 
@@ -92,17 +121,40 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 		t.Fatal("expected AuditSink to be non-nil")
 	}
 
-	rtCaps := runtimeBroker.ListCapabilities()
+	if runtimeDeps.Invoker == nil {
+		t.Fatal("expected runtime invoker to be non-nil")
+	}
+	if runtimeDeps.CapabilityLister == nil {
+		t.Fatal("expected runtime capability lister to be non-nil")
+	}
+	if any(runtimeDeps.Invoker) != any(runtimeDeps.CapabilityLister) {
+		t.Fatal("expected runtime invoker and capability lister to be the same scoped instance")
+	}
+
+	rtCaps := runtimeDeps.CapabilityLister.ListCapabilities()
 	for _, cap := range rtCaps {
 		if cap.Provider != "alpha" {
 			t.Errorf("runtime broker should only see alpha, got %q", cap.Provider)
 		}
 	}
 
-	bndCaps := bindingBroker.ListCapabilities()
-	for _, cap := range bndCaps {
-		if cap.Provider != "beta" {
-			t.Errorf("binding broker should only see beta, got %q", cap.Provider)
-		}
+	if bindingDeps.Invoker == nil {
+		t.Fatal("expected binding deps to carry an invoker")
+	}
+	if bindingDeps.Invoker == result.Invoker {
+		t.Fatal("expected binding deps to be scoped, not the shared invoker")
+	}
+
+	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "alpha", "do", nil)
+	if err == nil || !strings.Contains(err.Error(), "not available in this scope") {
+		t.Fatalf("expected scoped binding invoker to reject alpha, got %v", err)
+	}
+
+	resultOp, err := bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "do", nil)
+	if err != nil {
+		t.Fatalf("expected scoped binding invoker to allow beta: %v", err)
+	}
+	if resultOp.Status != http.StatusOK {
+		t.Fatalf("expected binding invoke status 200, got %d", resultOp.Status)
 	}
 }

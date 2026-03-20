@@ -14,36 +14,42 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/bootstrap"
 	"github.com/valon-technologies/toolshed/internal/config"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
 	"gopkg.in/yaml.v3"
 )
 
-type stubBroker struct {
-	invoked bool
-	lastReq core.InvocationRequest
-	lastCtx context.Context
-	result  *core.OperationResult
-	err     error
+type stubInvoker struct {
+	invoked   bool
+	lastCtx   context.Context
+	lastP     *principal.Principal
+	provider  string
+	operation string
+	params    map[string]any
+	result    *core.OperationResult
+	err       error
 }
 
-func (b *stubBroker) Invoke(ctx context.Context, req core.InvocationRequest) (*core.OperationResult, error) {
-	b.invoked = true
-	b.lastReq = req
-	b.lastCtx = ctx
-	if b.err != nil {
-		return nil, b.err
+func (i *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+	i.invoked = true
+	i.lastCtx = ctx
+	i.lastP = p
+	i.provider = providerName
+	i.operation = operation
+	i.params = params
+	if i.err != nil {
+		return nil, i.err
 	}
-	return b.result, nil
+	return i.result, nil
 }
-
-func (b *stubBroker) ListCapabilities() []core.Capability { return nil }
 
 func TestWebhookRoutes(t *testing.T) {
 	t.Parallel()
 
-	b := makeBinding(t, "/incoming", "", "", &stubBroker{})
+	b := makeBinding(t, "/incoming", "", "", &stubInvoker{})
 
 	routes := b.Routes()
 	if len(routes) != 1 {
@@ -60,7 +66,7 @@ func TestWebhookRoutes(t *testing.T) {
 func TestWebhookEcho(t *testing.T) {
 	t.Parallel()
 
-	b := makeBinding(t, "/incoming", "", "", &stubBroker{})
+	b := makeBinding(t, "/incoming", "", "", &stubInvoker{})
 	if err := b.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -85,16 +91,16 @@ func TestWebhookEcho(t *testing.T) {
 	}
 }
 
-func TestWebhookInvokesBroker(t *testing.T) {
+func TestWebhookInvokesInvoker(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{
 			Status: http.StatusOK,
 			Body:   `{"echoed":true}`,
 		},
 	}
-	b := makeBinding(t, "/incoming", "echo", "echo", brk)
+	b := makeBinding(t, "/incoming", "echo", "echo", invoker)
 	if err := b.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -109,30 +115,30 @@ func TestWebhookInvokesBroker(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	if !brk.invoked {
-		t.Fatal("expected broker.Invoke to be called")
+	if !invoker.invoked {
+		t.Fatal("expected invoker.Invoke to be called")
 	}
-	if brk.lastReq.Provider != "echo" {
-		t.Errorf("expected provider echo, got %q", brk.lastReq.Provider)
+	if invoker.provider != "echo" {
+		t.Errorf("expected provider echo, got %q", invoker.provider)
 	}
-	if brk.lastReq.Operation != "echo" {
-		t.Errorf("expected operation echo, got %q", brk.lastReq.Operation)
+	if invoker.operation != "echo" {
+		t.Errorf("expected operation echo, got %q", invoker.operation)
 	}
-	if brk.lastReq.Params["data"] != "test" {
-		t.Errorf("expected params data=test, got %v", brk.lastReq.Params["data"])
+	if invoker.params["data"] != "test" {
+		t.Errorf("expected params data=test, got %v", invoker.params["data"])
 	}
 }
 
-func TestWebhookInvokesBroker_Principal(t *testing.T) {
+func TestWebhookInvokesInvoker_Principal(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{
 			Status: http.StatusOK,
 			Body:   `{"ok":true}`,
 		},
 	}
-	b := makeBinding(t, "/incoming", "echo", "echo", brk)
+	b := makeBinding(t, "/incoming", "echo", "echo", invoker)
 	if err := b.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -147,21 +153,21 @@ func TestWebhookInvokesBroker_Principal(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	if !brk.invoked {
-		t.Fatal("expected broker.Invoke to be called")
+	if !invoker.invoked {
+		t.Fatal("expected invoker.Invoke to be called")
 	}
 
-	p := principal.FromContext(brk.lastCtx)
+	p := principal.FromContext(invoker.lastCtx)
 	if p == nil {
 		t.Fatal("expected principal in context")
 	}
 }
 
-func TestWebhookBrokerError(t *testing.T) {
+func TestWebhookInvokerError(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{err: fmt.Errorf("provider not available")}
-	b := makeBinding(t, "/incoming", "echo", "echo", brk)
+	invoker := &stubInvoker{err: fmt.Errorf("provider not available")}
+	b := makeBinding(t, "/incoming", "echo", "echo", invoker)
 	if err := b.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +187,7 @@ func TestWebhookBrokerError(t *testing.T) {
 func TestWebhookKind(t *testing.T) {
 	t.Parallel()
 
-	b := makeBinding(t, "/incoming", "", "", &stubBroker{})
+	b := makeBinding(t, "/incoming", "", "", &stubInvoker{})
 	if b.Kind() != core.BindingTrigger {
 		t.Fatalf("expected BindingTrigger, got %d", b.Kind())
 	}
@@ -199,11 +205,12 @@ operation: echo`
 	}
 
 	def := config.BindingDef{
-		Type:   "webhook",
-		Config: *node.Content[0],
+		Type:      "webhook",
+		Config:    *node.Content[0],
+		Providers: []string{"echo"},
 	}
 
-	binding, err := webhook.Factory(context.Background(), "test-hook", def, &stubBroker{})
+	binding, err := webhook.Factory(context.Background(), "test-hook", def, bootstrap.BindingDeps{Invoker: &stubInvoker{}})
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -243,7 +250,7 @@ func TestWebhookFactoryValidation(t *testing.T) {
 				t.Fatal(err)
 			}
 			def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
-			_, err = webhook.Factory(context.Background(), "bad", def, &stubBroker{})
+			_, err = webhook.Factory(context.Background(), "bad", def, bootstrap.BindingDeps{Invoker: &stubInvoker{}})
 			if err == nil {
 				t.Fatal("expected error for invalid path")
 			}
@@ -254,11 +261,11 @@ func TestWebhookFactoryValidation(t *testing.T) {
 func TestWebhookSignedMode_ValidSignature(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
 	}
 	secret := "my-secret"
-	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", secret, "", "", brk)
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", secret, "", "", invoker)
 
 	payload := []byte(`{"data":"test"}`)
 	sig := computeHMAC([]byte(secret), payload)
@@ -273,18 +280,18 @@ func TestWebhookSignedMode_ValidSignature(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if !brk.invoked {
-		t.Fatal("expected broker to be invoked")
+	if !invoker.invoked {
+		t.Fatal("expected invoker to be invoked")
 	}
 }
 
 func TestWebhookSignedMode_InvalidSignature(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
 	}
-	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", brk)
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", invoker)
 
 	payload := []byte(`{"data":"test"}`)
 	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
@@ -297,18 +304,18 @@ func TestWebhookSignedMode_InvalidSignature(t *testing.T) {
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", w.Code)
 	}
-	if brk.invoked {
-		t.Fatal("broker should not be invoked for invalid signature")
+	if invoker.invoked {
+		t.Fatal("invoker should not be invoked for invalid signature")
 	}
 }
 
 func TestWebhookSignedMode_MissingSignature(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
 	}
-	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", brk)
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "signed", "my-secret", "", "", invoker)
 
 	payload := []byte(`{"data":"test"}`)
 	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
@@ -325,10 +332,10 @@ func TestWebhookSignedMode_MissingSignature(t *testing.T) {
 func TestWebhookTrustedUserHeader_Present(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
 	}
-	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", brk)
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", invoker)
 
 	payload := []byte(`{"data":"test"}`)
 	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
@@ -341,21 +348,24 @@ func TestWebhookTrustedUserHeader_Present(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	if !brk.invoked {
-		t.Fatal("expected broker to be invoked")
+	if !invoker.invoked {
+		t.Fatal("expected invoker to be invoked")
 	}
-	if brk.lastReq.UserID != "user@example.com" {
-		t.Errorf("expected UserID user@example.com, got %q", brk.lastReq.UserID)
+	if invoker.lastP == nil {
+		t.Fatal("expected principal to be passed to invoker")
+	}
+	if invoker.lastP.UserID != "user@example.com" {
+		t.Errorf("expected UserID user@example.com, got %q", invoker.lastP.UserID)
 	}
 }
 
 func TestWebhookTrustedUserHeader_Missing(t *testing.T) {
 	t.Parallel()
 
-	brk := &stubBroker{
+	invoker := &stubInvoker{
 		result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
 	}
-	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", brk)
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", invoker)
 
 	payload := []byte(`{"data":"test"}`)
 	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
@@ -418,8 +428,8 @@ func TestWebhookFactoryValidation_AuthModes(t *testing.T) {
 			if err := yaml.Unmarshal([]byte(tc.cfg), &node); err != nil {
 				t.Fatal(err)
 			}
-			def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
-			_, err := webhook.Factory(context.Background(), "test", def, &stubBroker{})
+			def := config.BindingDef{Type: "webhook", Config: *node.Content[0], Providers: []string{"echo"}}
+			_, err := webhook.Factory(context.Background(), "test", def, bootstrap.BindingDeps{Invoker: &stubInvoker{}})
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -450,7 +460,7 @@ func TestWebhookFactoryRejectsUnlistedProvider(t *testing.T) {
 		Config:    *node.Content[0],
 		Providers: []string{"slack", "github"},
 	}
-	_, err := webhook.Factory(context.Background(), "test", def, &stubBroker{})
+	_, err := webhook.Factory(context.Background(), "test", def, bootstrap.BindingDeps{Invoker: &stubInvoker{}})
 	if err == nil {
 		t.Fatal("expected error for unlisted provider")
 	}
@@ -459,7 +469,29 @@ func TestWebhookFactoryRejectsUnlistedProvider(t *testing.T) {
 	}
 }
 
-func makeBinding(t *testing.T, path, provider, operation string, brk core.Broker) core.Binding {
+func TestWebhookFactoryRequiresAllowlistForForwarding(t *testing.T) {
+	t.Parallel()
+
+	cfgYAML := "path: /hook\nprovider: echo\noperation: echo"
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	def := config.BindingDef{
+		Type:   "webhook",
+		Config: *node.Content[0],
+	}
+	_, err := webhook.Factory(context.Background(), "test", def, bootstrap.BindingDeps{Invoker: &stubInvoker{}})
+	if err == nil {
+		t.Fatal("expected error for missing allowlist")
+	}
+	if !strings.Contains(err.Error(), "requires a non-empty binding providers allowlist") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func makeBinding(t *testing.T, path, provider, operation string, invoker invocation.Invoker) core.Binding {
 	t.Helper()
 
 	cfgMap := map[string]string{"path": path}
@@ -480,14 +512,17 @@ func makeBinding(t *testing.T, path, provider, operation string, brk core.Broker
 	}
 
 	def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
-	b, err := webhook.Factory(context.Background(), "test-webhook", def, brk)
+	if provider != "" {
+		def.Providers = []string{provider}
+	}
+	b, err := webhook.Factory(context.Background(), "test-webhook", def, bootstrap.BindingDeps{Invoker: invoker})
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
 	return b
 }
 
-func makeBindingWithAuth(t *testing.T, path, provider, operation, authMode, signingSecret, userHeader, sigHeader string, brk core.Broker) core.Binding {
+func makeBindingWithAuth(t *testing.T, path, provider, operation, authMode, signingSecret, userHeader, sigHeader string, invoker invocation.Invoker) core.Binding {
 	t.Helper()
 
 	cfgMap := map[string]string{"path": path}
@@ -520,7 +555,10 @@ func makeBindingWithAuth(t *testing.T, path, provider, operation, authMode, sign
 	}
 
 	def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
-	b, err := webhook.Factory(context.Background(), "test-webhook", def, brk)
+	if provider != "" {
+		def.Providers = []string{provider}
+	}
+	b, err := webhook.Factory(context.Background(), "test-webhook", def, bootstrap.BindingDeps{Invoker: invoker})
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/invocation"
 	"github.com/valon-technologies/toolshed/internal/principal"
 )
 
@@ -24,13 +25,13 @@ type webhookConfig struct {
 }
 
 type Binding struct {
-	name   string
-	cfg    webhookConfig
-	broker core.Broker
+	name    string
+	cfg     webhookConfig
+	invoker invocation.Invoker
 }
 
-func New(name string, cfg webhookConfig, broker core.Broker) *Binding {
-	return &Binding{name: name, cfg: cfg, broker: broker}
+func New(name string, cfg webhookConfig, invoker invocation.Invoker) *Binding {
+	return &Binding{name: name, cfg: cfg, invoker: invoker}
 }
 
 func (b *Binding) Name() string           { return b.name }
@@ -99,17 +100,12 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &principal.Principal{}
+	p := &principal.Principal{
+		UserID: userID,
+	}
 	ctx := principal.WithPrincipal(r.Context(), p)
 
-	req := core.InvocationRequest{
-		Provider:  b.cfg.Provider,
-		Operation: b.cfg.Operation,
-		Params:    body,
-		UserID:    userID,
-	}
-
-	result, err := b.broker.Invoke(ctx, req)
+	result, err := b.invoker.Invoke(ctx, p, b.cfg.Provider, b.cfg.Operation, body)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream invocation failed")
 		return

@@ -156,7 +156,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := s.broker.Invoke(r.Context(), p, providerName, operationName, params)
+	result, err := s.invoker.Invoke(r.Context(), p, providerName, operationName, params)
 	if err != nil {
 		switch {
 		case errors.Is(err, invocation.ErrProviderNotFound):

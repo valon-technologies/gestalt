@@ -21,7 +21,7 @@ type Server struct {
 	runtimes   *registry.PluginMap[core.Runtime]
 	bindings   *registry.PluginMap[core.Binding]
 	resolver   *principal.Resolver
-	broker     *invocation.Broker
+	invoker    invocation.Invoker
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
@@ -34,7 +34,7 @@ type Config struct {
 	Providers   *registry.PluginMap[core.Provider]
 	Runtimes    *registry.PluginMap[core.Runtime]
 	Bindings    *registry.PluginMap[core.Binding]
-	Broker      *invocation.Broker
+	Invoker     invocation.Invoker
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
@@ -42,8 +42,8 @@ type Config struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Broker == nil {
-		return nil, fmt.Errorf("broker is required")
+	if cfg.Invoker == nil {
+		return nil, fmt.Errorf("invoker is required")
 	}
 	var stateCodec *integrationOAuthStateCodec
 	if len(cfg.StateSecret) > 0 {
@@ -65,7 +65,7 @@ func New(cfg Config) (*Server, error) {
 		runtimes:   cfg.Runtimes,
 		bindings:   cfg.Bindings,
 		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore),
-		broker:     cfg.Broker,
+		invoker:    cfg.Invoker,
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
 		now:        now,

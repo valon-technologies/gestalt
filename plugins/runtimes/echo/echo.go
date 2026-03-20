@@ -5,23 +5,27 @@ import (
 	"log"
 
 	"github.com/valon-technologies/toolshed/core"
+	"github.com/valon-technologies/toolshed/internal/bootstrap"
 )
 
 var _ core.Runtime = (*Runtime)(nil)
 
 type Runtime struct {
-	name   string
-	broker core.Broker
+	name string
+	deps bootstrap.RuntimeDeps
 }
 
-func New(name string, broker core.Broker) *Runtime {
-	return &Runtime{name: name, broker: broker}
+func New(name string, deps bootstrap.RuntimeDeps) *Runtime {
+	return &Runtime{name: name, deps: deps}
 }
 
 func (r *Runtime) Name() string { return r.name }
 
 func (r *Runtime) Start(_ context.Context) error {
-	caps := r.broker.ListCapabilities()
+	caps := []core.Capability(nil)
+	if r.deps.CapabilityLister != nil {
+		caps = r.deps.CapabilityLister.ListCapabilities()
+	}
 	log.Printf("echo runtime %q started with %d capabilities", r.name, len(caps))
 	return nil
 }
@@ -30,5 +34,3 @@ func (r *Runtime) Stop(_ context.Context) error {
 	log.Printf("echo runtime %q stopped", r.name)
 	return nil
 }
-
-func (r *Runtime) Broker() core.Broker { return r.broker }
