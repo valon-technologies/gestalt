@@ -24,6 +24,12 @@ type Config struct {
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	ProviderDirs []string                  `yaml:"provider_dirs"`
 	Server       ServerConfig              `yaml:"server"`
+	MCP          MCPConfig                 `yaml:"mcp"`
+}
+
+type MCPConfig struct {
+	Providers      []string `yaml:"providers"`
+	ToolNamePrefix string   `yaml:"tool_name_prefix"`
 }
 
 type RuntimeDef struct {

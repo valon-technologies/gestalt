@@ -1,36 +1,10 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
-	"github.com/valon-technologies/toolshed/internal/bootstrap"
-	"github.com/valon-technologies/toolshed/internal/config"
-	"github.com/valon-technologies/toolshed/internal/invocation"
-	"github.com/valon-technologies/toolshed/internal/openapi"
-	"github.com/valon-technologies/toolshed/internal/provider"
-	"github.com/valon-technologies/toolshed/internal/registry"
-	"github.com/valon-technologies/toolshed/internal/server"
-	"github.com/valon-technologies/toolshed/plugins/auth/google"
-	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
-	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
-	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
-	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
-	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
-	"github.com/valon-technologies/toolshed/plugins/providers/echo"
-	echoruntime "github.com/valon-technologies/toolshed/plugins/runtimes/echo"
-	secretsenv "github.com/valon-technologies/toolshed/plugins/secrets/env"
-	secretsfile "github.com/valon-technologies/toolshed/plugins/secrets/file"
-	secretsgcp "github.com/valon-technologies/toolshed/plugins/secrets/gcp"
+	"strings"
 
 	_ "github.com/valon-technologies/toolshed/plugins/integrations/datadog"
 	_ "github.com/valon-technologies/toolshed/plugins/integrations/hex"
@@ -38,214 +12,21 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() error {
-	configPath := flag.String("config", "", "path to config file")
-	flag.Parse()
-
-	path := resolveConfigPath(*configPath)
-
-	cfg, err := config.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading config: %v", err)
+func run(args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return runServe(args)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	factories := bootstrap.NewFactoryRegistry()
-	factories.Auth["google"] = google.Factory
-	factories.Auth["oidc"] = oidc.Factory
-	factories.Datastores["sqlite"] = sqlite.Factory
-	factories.Datastores["postgres"] = postgres.Factory
-	factories.Datastores["mysql"] = mysql.Factory
-	factories.DefaultProvider = defaultProviderFactory(cfg.ProviderDirs)
-	factories.Builtins = append(factories.Builtins, echo.New())
-	factories.Runtimes["echo"] = echoruntime.Factory
-	factories.Bindings["webhook"] = webhook.Factory
-	factories.Secrets["env"] = secretsenv.Factory
-	factories.Secrets["file"] = secretsfile.Factory
-	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		return fmt.Errorf("bootstrap: %v", err)
-	}
-	defer func() { _ = result.Datastore.Close() }()
-	if closer, ok := result.SecretManager.(interface{ Close() error }); ok {
-		defer func() { _ = closer.Close() }()
-	}
-
-	if err := result.Datastore.Migrate(ctx); err != nil {
-		return fmt.Errorf("running datastore migrations: %v", err)
-	}
-
-	if result.Runtimes != nil {
-		var started []string
-		for _, name := range result.Runtimes.List() {
-			rt, err := result.Runtimes.Get(name)
-			if err != nil {
-				return fmt.Errorf("getting runtime %q: %v", name, err)
-			}
-			if err := rt.Start(ctx); err != nil {
-				stopRuntimes(ctx, result.Runtimes, started)
-				return fmt.Errorf("starting runtime %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
-
-	if result.Bindings != nil {
-		var started []string
-		for _, name := range result.Bindings.List() {
-			binding, err := result.Bindings.Get(name)
-			if err != nil {
-				closeBindings(result.Bindings, started)
-				if result.Runtimes != nil {
-					stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
-				}
-				return fmt.Errorf("getting binding %q: %v", name, err)
-			}
-			if err := binding.Start(ctx); err != nil {
-				closeBindings(result.Bindings, started)
-				if result.Runtimes != nil {
-					stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
-				}
-				return fmt.Errorf("starting binding %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
-
-	srv, err := server.New(server.Config{
-		Auth:        result.Auth,
-		Datastore:   result.Datastore,
-		Providers:   result.Providers,
-		Runtimes:    result.Runtimes,
-		Bindings:    result.Bindings,
-		Broker:      invocation.NewBroker(result.Providers, result.Datastore),
-		DevMode:     result.DevMode,
-		StateSecret: crypto.DeriveKey(cfg.Server.EncryptionKey),
-	})
-	if err != nil {
-		if result.Bindings != nil {
-			closeBindings(result.Bindings, result.Bindings.List())
-		}
-		if result.Runtimes != nil {
-			stopRuntimes(ctx, result.Runtimes, result.Runtimes.List())
-		}
-		return fmt.Errorf("creating server: %w", err)
-	}
-
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           srv,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-
-	if cfg.Server.BaseURL != "" {
-		log.Printf("toolshed base URL: %s", cfg.Server.BaseURL)
-		log.Printf("  auth callback:        %s%s", cfg.Server.BaseURL, config.AuthCallbackPath)
-		log.Printf("  integration callback: %s%s", cfg.Server.BaseURL, config.IntegrationCallbackPath)
-	}
-
-	listenErr := make(chan error, 1)
-	go func() {
-		log.Printf("toolshed listening on %s", addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			listenErr <- err
-		}
-	}()
-
-	select {
-	case err := <-listenErr:
-		return fmt.Errorf("http server: %v", err)
-	case <-ctx.Done():
-	}
-	log.Println("shutting down...")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("server shutdown: %v", err)
-	}
-
-	if result.Runtimes != nil {
-		stopRuntimes(shutdownCtx, result.Runtimes, result.Runtimes.List())
-	}
-
-	if result.Bindings != nil {
-		closeBindings(result.Bindings, result.Bindings.List())
-	}
-
-	log.Println("shutdown complete")
-	return nil
-}
-
-func resolveConfigPath(flagValue string) string {
-	if flagValue != "" {
-		return flagValue
-	}
-	if envPath := os.Getenv("TOOLSHED_CONFIG"); envPath != "" {
-		return envPath
-	}
-	if _, err := os.Stat("config.yaml"); err == nil {
-		return "config.yaml"
-	}
-	return "/etc/toolshed/config.yaml"
-}
-
-func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
-	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		def, err := loadDefinition(ctx, name, intg, providerDirs)
-		if err != nil {
-			return nil, err
-		}
-		return provider.Build(def, intg)
-	}
-}
-
-func stopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime], names []string) {
-	for _, name := range names {
-		rt, err := runtimes.Get(name)
-		if err != nil {
-			log.Printf("looking up runtime %q during shutdown: %v", name, err)
-			continue
-		}
-		if err := rt.Stop(ctx); err != nil {
-			log.Printf("stopping runtime %q: %v", name, err)
-		}
-	}
-}
-
-func closeBindings(bindings *registry.PluginMap[core.Binding], names []string) {
-	for _, name := range names {
-		b, err := bindings.Get(name)
-		if err != nil {
-			log.Printf("looking up binding %q during shutdown: %v", name, err)
-			continue
-		}
-		if err := b.Close(); err != nil {
-			log.Printf("closing binding %q: %v", name, err)
-		}
-	}
-}
-
-func loadDefinition(ctx context.Context, name string, intgDef config.IntegrationDef, providerDirs []string) (*provider.Definition, error) {
-	switch {
-	case intgDef.OpenAPI != "":
-		return openapi.LoadDefinition(ctx, name, intgDef.OpenAPI, intgDef.AllowedOperations)
-
-	case intgDef.Provider != "":
-		return provider.LoadFile(intgDef.Provider)
-
+	switch args[0] {
+	case "serve":
+		return runServe(args[1:])
+	case "mcp":
+		return runMCP(args[1:])
 	default:
-		return provider.LoadFromDir(name, providerDirs)
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
 }

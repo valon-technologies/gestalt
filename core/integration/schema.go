@@ -25,7 +25,7 @@ func SynthesizeInputSchema(params []CatalogParameter) json.RawMessage {
 
 	for _, p := range params {
 		prop := map[string]any{
-			"type": normalizeType(p.Type),
+			"type": NormalizeType(p.Type),
 		}
 		if p.Description != "" {
 			prop["description"] = p.Description
@@ -52,7 +52,7 @@ func SynthesizeInputSchema(params []CatalogParameter) json.RawMessage {
 	return data
 }
 
-func normalizeType(t string) string {
+func NormalizeType(t string) string {
 	switch strings.ToLower(t) {
 	case schemaTypeInteger, "int":
 		return schemaTypeInteger
