@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 func nestedBodySpec() map[string]any {
@@ -84,7 +86,7 @@ func TestLoadCatalogPreservesNestedSchema(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	cat, err := LoadCatalog(context.Background(), "nested", srv.URL, nil)
 	if err != nil {
@@ -162,7 +164,7 @@ func TestLoadCatalogAnnotationsFromMethod(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -195,7 +197,7 @@ func TestLoadCatalogAllowedOpsFiltering(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, nestedBodySpec())
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	allowed := map[string]string{
 		"list_items":  "Custom list description",
@@ -237,7 +239,7 @@ paths:
       summary: Ping
       description: Health check
 `)
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	cat, err := LoadCatalog(context.Background(), "yamlcat", srv.URL, nil)
 	if err != nil {

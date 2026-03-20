@@ -51,23 +51,10 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	return httptest.NewServer(srv)
 }
 
-type stubInvoker struct {
-	invokeFn func(context.Context, *principal.Principal, string, string, map[string]any) (*core.OperationResult, error)
-}
-
-func (s *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
-	if s.invokeFn != nil {
-		return s.invokeFn(ctx, p, providerName, operation, params)
-	}
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-}
-
-func (s *stubInvoker) ListCapabilities() []core.Capability { return nil }
-
 func TestHealthCheck(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t)
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/health")
 	if err != nil {
@@ -91,7 +78,7 @@ func TestHealthCheck(t *testing.T) {
 func TestReadinessCheck(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t)
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/ready")
 	if err != nil {
@@ -121,7 +108,7 @@ func TestReadinessCheck_DatastoreDown(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/ready")
 	if err != nil {
@@ -155,7 +142,7 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.Header.Set("Authorization", "Bearer valid-session")
@@ -188,7 +175,7 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.Header.Set("Authorization", "Bearer some-api-key")
@@ -206,7 +193,7 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 func TestAuthMiddleware_NoAuth(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t)
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -233,7 +220,7 @@ func TestAuthMiddleware_DevMode(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -261,7 +248,7 @@ func TestListIntegrations(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -360,7 +347,7 @@ func TestListOperations(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -380,7 +367,7 @@ func TestListOperations_NotFound(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/nonexistent/operations", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -426,7 +413,7 @@ func TestExecuteOperation(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing?foo=bar", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -459,8 +446,8 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
-		cfg.Invoker = &stubInvoker{
-			invokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+		cfg.Invoker = &testutil.StubInvoker{
+			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
 				gotProvider = providerName
 				gotOperation = operation
@@ -509,7 +496,7 @@ func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/nonexistent/some_op", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -543,7 +530,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/nonexistent", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -580,7 +567,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -604,7 +591,7 @@ func TestStartLogin(t *testing.T) {
 			loginURL:         "https://auth.example.com/login?state=abc",
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"state":"abc"}`)
 	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
@@ -640,7 +627,7 @@ func TestLoginCallback(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code")
 	if err != nil {
@@ -677,7 +664,7 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=encrypted-state")
 	if err != nil {
@@ -715,7 +702,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
@@ -781,7 +768,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	startBody := bytes.NewBufferString(`{"integration":"slack"}`)
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
@@ -846,7 +833,7 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -879,7 +866,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"name":"my-token","scopes":"read"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
@@ -913,7 +900,7 @@ func TestRevokeAPIToken(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens/tok-123", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -967,7 +954,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"text":"hello"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/send", body)
@@ -1002,7 +989,7 @@ func TestAuthInfo(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
 	if err != nil {
@@ -1032,7 +1019,7 @@ func TestAuthInfoFallback(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "custom"}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
 	if err != nil {
@@ -1133,7 +1120,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	startBody := bytes.NewBufferString(`{"integration":"gitlab"}`)
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
@@ -1175,7 +1162,7 @@ func TestCallbackPathConstants(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	// Auth login callback: should not 404 (it will return 400 for missing code,
 	// which proves the route exists).
@@ -1276,7 +1263,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1349,7 +1336,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1403,7 +1390,7 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1455,7 +1442,7 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1509,7 +1496,7 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1557,7 +1544,7 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/manual-api/get", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1619,7 +1606,7 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1683,7 +1670,7 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1758,7 +1745,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1816,7 +1803,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1872,7 +1859,7 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1930,7 +1917,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/noop/ping", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -1974,7 +1961,7 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"message":"hello"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/echo/echo", body)
@@ -2093,7 +2080,7 @@ func TestListRuntimes_NoRuntimes(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -2128,7 +2115,7 @@ func TestListRuntimes_WithRuntimes(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Runtimes = runtimes
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -2176,7 +2163,7 @@ func TestConnectManual(t *testing.T) {
 			},
 		}
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
@@ -2220,7 +2207,7 @@ func TestConnectManual_OAuthProviderRejected(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack"})
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"slack","credential":"some-key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
@@ -2243,7 +2230,7 @@ func TestConnectManual_MissingFields(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
@@ -2266,7 +2253,7 @@ func TestConnectManual_UnknownIntegration(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"nonexistent","credential":"key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
@@ -2292,7 +2279,7 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"manual-svc","scopes":[]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
@@ -2323,7 +2310,7 @@ func TestListBindings_NoBindings(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -2361,7 +2348,7 @@ func TestListBindings_WithBindings(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Bindings = bindings
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
@@ -2408,7 +2395,7 @@ func TestBindingRoutesMounted(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Bindings = bindings
 	})
-	t.Cleanup(func() { ts.Close() })
+	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"test":true}`)
 	resp, err := http.Post(ts.URL+"/api/v1/bindings/my-webhook/incoming", "application/json", body)

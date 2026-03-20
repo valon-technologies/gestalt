@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 func serveJSON(t *testing.T, spec any) *httptest.Server {
@@ -74,7 +76,7 @@ func TestLoadDefinition(t *testing.T) {
 	t.Parallel()
 
 	srv := serveJSON(t, testSpec())
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	allowed := map[string]string{
 		"list_items": "List items with pagination",
@@ -131,7 +133,7 @@ func TestLoadDefinitionFiltersOperations(t *testing.T) {
 	}
 
 	srv := serveJSON(t, spec)
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]string{"op_a": "", "op_c": ""})
 	if err != nil {
@@ -160,7 +162,7 @@ func TestLoadDefinitionNilAllowedOpsExposesAll(t *testing.T) {
 	}
 
 	srv := serveJSON(t, spec)
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
 	if err != nil {
@@ -187,7 +189,7 @@ paths:
       operationId: ping
       summary: Ping
 `)
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	def, err := LoadDefinition(context.Background(), "yamltest", srv.URL, nil)
 	if err != nil {

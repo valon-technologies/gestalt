@@ -36,19 +36,6 @@ type flatProvider struct {
 
 func (p *flatProvider) ListOperations() []core.Operation { return p.ops }
 
-type stubInvoker struct {
-	invokeFn func(context.Context, *principal.Principal, string, string, map[string]any) (*core.OperationResult, error)
-}
-
-func (s *stubInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
-	if s.invokeFn != nil {
-		return s.invokeFn(ctx, p, providerName, operation, params)
-	}
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-}
-
-func (s *stubInvoker) ListCapabilities() []core.Capability { return nil }
-
 func stubDatastoreWithToken() *coretesting.StubDatastore {
 	return &coretesting.StubDatastore{
 		TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
@@ -277,8 +264,8 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := toolshedmcp.NewServer(toolshedmcp.Config{
-		Invoker: &stubInvoker{
-			invokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
 				gotProvider = providerName
 				gotOperation = operation

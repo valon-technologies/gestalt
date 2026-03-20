@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/valon-technologies/toolshed/internal/testutil"
 )
 
 func TestDoGETWithQueryAndPathParams(t *testing.T) {
@@ -19,7 +21,7 @@ func TestDoGETWithQueryAndPathParams(t *testing.T) {
 			"auth":  r.Header.Get("Authorization"),
 		})
 	}))
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:  http.MethodGet,
@@ -56,7 +58,7 @@ func TestDoPOSTWithJSONBody(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		_ = json.NewEncoder(w).Encode(body)
 	}))
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:  http.MethodPost,
@@ -92,7 +94,7 @@ func TestDoUsesCustomAuthHeaderAndBodyOverride(t *testing.T) {
 			"body": body,
 		})
 	}))
-	t.Cleanup(func() { srv.Close() })
+	testutil.CloseOnCleanup(t, srv)
 
 	overrideBody, err := json.Marshal(map[string]any{
 		"query": "{ viewer { id } }",
