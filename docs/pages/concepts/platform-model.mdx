@@ -14,10 +14,23 @@ Toolshed has a small set of primitives. Once you understand how they fit togethe
 | Operation | A callable unit exposed by an integration. Operations are generated from OpenAPI or declared manually in YAML. |
 | Hooks | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
 
+## Execution model
+
+AIT-209 split Toolshed into one canonical execution path and several thin surfaces around it:
+
+| Piece | What it does |
+|---|---|
+| Shared invoker | Built once in bootstrap and used by HTTP, MCP, bindings, and runtimes. |
+| Runtime deps | A runtime receives a scoped invoker plus a scoped capability lister for the providers it is allowed to see. |
+| Binding deps | A binding receives a scoped invoker so it can forward calls without getting the full platform-wide execution surface. |
+| Allowlists | Binding and runtime configs can narrow which providers they may call. |
+
+The old `core.Broker` surface is gone. Execution now goes through `internal/invocation`, while discovery/listing stays separate through the capability lister interface.
+
 ## How a request flows through Toolshed
 
 1. The caller authenticates with Toolshed using a session token or API token. Middleware resolves the caller's identity before the request reaches any handler.
-2. Toolshed resolves the caller's identity and looks up their stored credential for the target integration.
+2. Bootstrap wires the request through the shared invoker, which resolves the caller's stored credential for the target integration.
 3. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
 4. Any configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
 5. Toolshed executes the upstream HTTP call, runs response-check hooks if configured, and returns the result to the caller.

@@ -1,6 +1,6 @@
 # MCP Binding
 
-Toolshed exposes integrations to AI assistants via the Model Context Protocol (MCP). When `mcp.enabled` is set in the config, `toolshed serve` mounts a Streamable HTTP MCP endpoint at `/mcp` alongside the existing REST API.
+Toolshed exposes integrations to AI assistants via the Model Context Protocol (MCP). When `mcp.enabled` is set in the config, `toolshed serve` mounts a Streamable HTTP MCP endpoint at `/mcp` alongside the existing REST API. Both the HTTP API and MCP endpoint share the same config, providers, datastore, auth layer, and canonical execution path.
 
 ## What MCP is
 
@@ -28,8 +28,9 @@ The MCP binding is not a replacement for the HTTP API. It is an alternative inte
 
 - Same providers and integration definitions from config.
 - Same datastore for users, tokens, and credentials.
-- Same invocation path: the broker resolves the caller's stored credential for the target integration, refreshes it if expired, and executes the upstream API call.
+- Same invocation path: the shared invoker resolves the caller's stored credential for the target integration, refreshes it if expired, and executes the upstream API call.
 - Same allow-list enforcement: only operations listed in `allowed_operations` are callable.
+- Same scoping model: bindings and runtimes receive allowlisted deps from bootstrap rather than the full platform execution surface.
 
 The MCP binding adds an `mcp.providers` filter so you can expose a subset of integrations to MCP clients without affecting the HTTP API.
 

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
@@ -2005,6 +2006,94 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 	}
 	if result["message"] != "hello" {
 		t.Fatalf("expected message hello, got %v", result["message"])
+	}
+}
+
+func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
+	t.Parallel()
+
+	echoProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "echo",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+				body, _ := json.Marshal(map[string]any{
+					"op":    op,
+					"query": params["q"],
+					"token": token,
+				})
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "search", Method: "GET"}},
+	}
+
+	providers := newTestRegistry(t, echoProvider)
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
+		},
+	}
+
+	httpSrv := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = providers
+		cfg.Datastore = ds
+	})
+	defer httpSrv.Close()
+
+	httpReq, _ := http.NewRequest(http.MethodGet, httpSrv.URL+"/api/v1/echo/search?q=hello", nil)
+	httpReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	httpResp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		t.Fatalf("HTTP request: %v", err)
+	}
+	defer func() { _ = httpResp.Body.Close() }()
+	if httpResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", httpResp.StatusCode)
+	}
+	var httpBody map[string]any
+	if err := json.NewDecoder(httpResp.Body).Decode(&httpBody); err != nil {
+		t.Fatalf("decode HTTP body: %v", err)
+	}
+
+	invoker := invocation.NewBroker(providers, ds)
+	mcpSrv := toolshedmcp.NewServer(toolshedmcp.Config{
+		Invoker:   invoker,
+		Providers: providers,
+	})
+	tool := mcpSrv.GetTool("echo_search")
+	if tool == nil {
+		t.Fatal("expected echo_search tool")
+	}
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		Identity: &core.UserIdentity{Email: "dev@example.com"},
+		UserID:   "u1",
+		Source:   principal.SourceSession,
+	})
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "echo_search"
+	req.Params.Arguments = map[string]any{"q": "hello"}
+
+	mcpResult, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("MCP tool call: %v", err)
+	}
+	if mcpResult.IsError {
+		t.Fatalf("unexpected MCP error result: %v", mcpResult.Content)
+	}
+	if len(mcpResult.Content) != 1 {
+		t.Fatalf("expected one MCP content item, got %d", len(mcpResult.Content))
+	}
+	text, ok := mcpgo.AsTextContent(mcpResult.Content[0])
+	if !ok {
+		t.Fatalf("expected MCP text content, got %T", mcpResult.Content[0])
+	}
+
+	httpJSON, _ := json.Marshal(httpBody)
+	if text.Text != string(httpJSON) {
+		t.Fatalf("expected MCP body %s to match HTTP body %s", text.Text, string(httpJSON))
 	}
 }
 

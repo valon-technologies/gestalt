@@ -11,6 +11,8 @@ These are the top-level keys the current server understands.
 | `secrets` | How `secret://` references are resolved. |
 | `auth_profiles` | Reusable OAuth settings shared across integrations. |
 | `integrations` | Map of integration name to integration definition overrides. |
+| `runtimes` | Optional runtime definitions that boot alongside the server and receive scoped execution deps. |
+| `bindings` | Optional binding definitions that expose alternate surfaces such as webhooks or other triggers. |
 | `provider_dirs` | Directories searched for provider YAML files. |
 | `server` | Port, base URL, encryption key, and development mode. |
 | `mcp` | MCP endpoint settings: enabled flag, provider filter, and tool name prefix. |
