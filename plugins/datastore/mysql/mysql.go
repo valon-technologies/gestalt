@@ -6,11 +6,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/valon-technologies/toolshed/core"
-	"github.com/valon-technologies/toolshed/core/crypto"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlstore"
 )
 
@@ -54,29 +52,17 @@ func New(dsn string, encryptionKey []byte) (*Store, error) {
 		return nil, fmt.Errorf("parsing dsn: %w", err)
 	}
 	cfg.ParseTime = true
-	finalDSN := cfg.FormatDSN()
 
-	db, err := sql.Open("mysql", finalDSN)
+	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
 		return nil, fmt.Errorf("opening mysql: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	enc, err := crypto.NewAESGCM(encryptionKey)
+	s, err := sqlstore.OpenDB(db, "mysql", encryptionKey, dialect{})
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("creating encryptor: %w", err)
+		return nil, err
 	}
-
-	if err := db.PingContext(context.Background()); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("pinging mysql: %w", err)
-	}
-
-	return &Store{Store: sqlstore.New(db, enc, dialect{})}, nil
+	return &Store{Store: s}, nil
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

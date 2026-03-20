@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"crypto/rand"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -13,19 +12,10 @@ import (
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 )
 
-func testEncryptionKey(t *testing.T) []byte {
-	t.Helper()
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		t.Fatalf("generating encryption key: %v", err)
-	}
-	return key
-}
-
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	store, err := New(dbPath, testEncryptionKey(t))
+	store, err := New(dbPath, coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

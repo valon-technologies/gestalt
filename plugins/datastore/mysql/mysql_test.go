@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -16,15 +15,6 @@ import (
 	"github.com/valon-technologies/toolshed/core"
 	coretesting "github.com/valon-technologies/toolshed/core/testing"
 )
-
-func testEncryptionKey(t *testing.T) []byte {
-	t.Helper()
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		t.Fatalf("generating encryption key: %v", err)
-	}
-	return key
-}
 
 func testDSN(t *testing.T) string {
 	t.Helper()
@@ -77,7 +67,7 @@ func newTestDatabase(t *testing.T) string {
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := newTestDatabase(t)
-	store, err := New(dsn, testEncryptionKey(t))
+	store, err := New(dsn, coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

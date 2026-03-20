@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/toolshed/plugins/auth/google"
 	"github.com/valon-technologies/toolshed/plugins/auth/oidc"
 	"github.com/valon-technologies/toolshed/plugins/bindings/webhook"
+	"github.com/valon-technologies/toolshed/plugins/datastore/mongodb"
 	"github.com/valon-technologies/toolshed/plugins/datastore/mysql"
 	"github.com/valon-technologies/toolshed/plugins/datastore/postgres"
 	"github.com/valon-technologies/toolshed/plugins/datastore/sqlite"
@@ -89,6 +90,7 @@ func buildFactories(providerDirs []string) *bootstrap.FactoryRegistry {
 	factories.Datastores["sqlite"] = sqlite.Factory
 	factories.Datastores["postgres"] = postgres.Factory
 	factories.Datastores["mysql"] = mysql.Factory
+	factories.Datastores["mongodb"] = mongodb.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
 	factories.Builtins = append(factories.Builtins, echo.New())
 	factories.Runtimes["echo"] = echoruntime.Factory

@@ -83,13 +83,9 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 	}
 
 	var err error
-	t.AccessToken, err = s.Enc.Decrypt(accessEnc)
+	t.AccessToken, t.RefreshToken, err = s.Enc.DecryptTokenPair(accessEnc, refreshEnc)
 	if err != nil {
-		return nil, fmt.Errorf("decrypting access token: %w", err)
-	}
-	t.RefreshToken, err = s.Enc.Decrypt(refreshEnc)
-	if err != nil {
-		return nil, fmt.Errorf("decrypting refresh token: %w", err)
+		return nil, err
 	}
 	return &t, nil
 }
@@ -179,13 +175,9 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 }
 
 func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
-	accessEnc, err := s.Enc.Encrypt(token.AccessToken)
+	accessEnc, refreshEnc, err := s.Enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
 	if err != nil {
-		return fmt.Errorf("encrypting access token: %w", err)
-	}
-	refreshEnc, err := s.Enc.Encrypt(token.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("encrypting refresh token: %w", err)
+		return err
 	}
 
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
