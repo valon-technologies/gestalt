@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/valon-technologies/toolshed/core"
 	"github.com/valon-technologies/toolshed/internal/bootstrap"
@@ -122,6 +123,57 @@ func resolveConfigPath(flagValue string) string {
 		return "config.yaml"
 	}
 	return "/etc/toolshed/config.yaml"
+}
+
+const gracefulShutdownTimeout = 15 * time.Second
+
+func startPlugins(env *bootstrapEnv) error {
+	result := env.Result
+	if result.Runtimes != nil {
+		var started []string
+		for _, name := range result.Runtimes.List() {
+			rt, err := result.Runtimes.Get(name)
+			if err != nil {
+				return fmt.Errorf("getting runtime %q: %v", name, err)
+			}
+			if err := rt.Start(env.Ctx); err != nil {
+				stopRuntimes(env.Ctx, result.Runtimes, started)
+				return fmt.Errorf("starting runtime %q: %v", name, err)
+			}
+			started = append(started, name)
+		}
+	}
+	if result.Bindings != nil {
+		var started []string
+		for _, name := range result.Bindings.List() {
+			binding, err := result.Bindings.Get(name)
+			if err != nil {
+				closeBindings(result.Bindings, started)
+				if result.Runtimes != nil {
+					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
+				}
+				return fmt.Errorf("getting binding %q: %v", name, err)
+			}
+			if err := binding.Start(env.Ctx); err != nil {
+				closeBindings(result.Bindings, started)
+				if result.Runtimes != nil {
+					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
+				}
+				return fmt.Errorf("starting binding %q: %v", name, err)
+			}
+			started = append(started, name)
+		}
+	}
+	return nil
+}
+
+func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
+	if env.Result.Bindings != nil {
+		closeBindings(env.Result.Bindings, env.Result.Bindings.List())
+	}
+	if env.Result.Runtimes != nil {
+		stopRuntimes(ctx, env.Result.Runtimes, env.Result.Runtimes.List())
+	}
 }
 
 func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
