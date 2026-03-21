@@ -8,7 +8,8 @@ type Definition struct {
 	ConnectionMode string            `yaml:"connection_mode"`
 	BaseURL        string            `yaml:"base_url"`
 	Auth           AuthDef           `yaml:"auth"`
-	AuthStyle      string            `yaml:"auth_style"` // bearer (default), raw, none
+	AuthStyle      string            `yaml:"auth_style"` // bearer (default), raw, none, basic
+	AuthHeader     string            `yaml:"auth_header"`
 	TokenPrefix    string            `yaml:"token_prefix"`
 	Headers        map[string]string `yaml:"headers"`
 

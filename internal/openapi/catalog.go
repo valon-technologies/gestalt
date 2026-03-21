@@ -58,11 +58,29 @@ func catalogExtractAuth(model *v3high.Document, cat *catalog.Catalog) {
 	}
 	for pair := model.Components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
 		ss := pair.Value()
-		if ss.Type != "oauth2" || ss.Flows == nil {
+
+		switch ss.Type {
+		case secTypeOAuth2:
+			if ss.Flows == nil {
+				continue
+			}
+			if ss.Flows.AuthorizationCode != nil || ss.Flows.Implicit != nil {
+				cat.AuthStyle = "bearer"
+				return
+			}
 			continue
-		}
-		cat.AuthStyle = "bearer"
-		if flow := ss.Flows.AuthorizationCode; flow != nil {
+
+		case secTypeAPIKey:
+			switch ss.In {
+			case secInHeader, secInQuery:
+				cat.AuthStyle = "raw"
+			default:
+				continue
+			}
+			return
+
+		case secTypeHTTP:
+			cat.AuthStyle = "bearer"
 			return
 		}
 	}
