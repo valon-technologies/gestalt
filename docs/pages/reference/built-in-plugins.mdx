@@ -1,6 +1,6 @@
 # Built-in Plugins
 
-The Gestalt binary registers all plugins at startup. Bootstrap builds one shared invoker and passes scoped deps to runtimes and bindings.
+The Toolshed binary registers all plugins at startup. Bootstrap builds one shared invoker and passes scoped deps to runtimes and bindings.
 
 ## Auth providers
 
@@ -17,7 +17,7 @@ The Gestalt binary registers all plugins at startup. Bootstrap builds one shared
 | `postgres` | Recommended for production and multi-instance deployments. |
 | `mysql` | Alternative SQL backend using the shared sqlstore layer. |
 | `dynamodb` | AWS DynamoDB. Configurable table name, region, and optional custom endpoint. |
-| `mongodb` | MongoDB with configurable database name (default: `gestalt`). |
+| `mongodb` | MongoDB with configurable database name (default: `toolshed`). |
 | `firestore` | Google Cloud Firestore with configurable project and database. |
 | `oracle` | Oracle Database via shared sqlstore layer. |
 | `sqlserver` | Microsoft SQL Server via shared sqlstore layer. |

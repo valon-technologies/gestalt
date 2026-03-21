@@ -29,7 +29,7 @@ test.describe("Navigation", () => {
     await mockTokens(page, []);
 
     await page.goto("/");
-    await expect(page.getByText("test@gestalt.dev")).toBeVisible();
+    await expect(page.getByText("test@toolshed.dev")).toBeVisible();
   });
 
   test("navigating to /integrations works", async ({ authenticatedPage }) => {

@@ -26,7 +26,7 @@ export default function Nav() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="text-lg font-heading font-bold text-timber-800">
-            Gestalt
+            Toolshed
           </Link>
           <div className="flex gap-4">
             {links.map((link) => {

@@ -28,9 +28,7 @@ type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type BindingDeps struct {
-	Invoker          invocation.Invoker
-	CapabilityLister invocation.CapabilityLister
-	ProviderLister   invocation.ProviderLister
+	Invoker invocation.Invoker
 }
 
 type RuntimeDeps struct {

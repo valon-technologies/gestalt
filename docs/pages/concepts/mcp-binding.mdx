@@ -1,10 +1,10 @@
 # MCP Binding
 
-When `mcp.enabled` is set in the config, Gestalt mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
+When `mcp.enabled` is set in the config, Toolshed mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
 
 ## What MCP is
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Gestalt's MCP binding maps each allowed integration operation to an MCP tool.
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Toolshed's MCP binding maps each allowed integration operation to an MCP tool.
 
 ## Tool names
 
@@ -35,7 +35,7 @@ The `mcp.providers` filter lets you expose a subset of integrations to MCP clien
 
 ## Tool metadata
 
-Gestalt populates MCP tool annotations automatically:
+Toolshed populates MCP tool annotations automatically:
 
 | HTTP method | Annotation |
 |---|---|

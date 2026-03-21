@@ -43,6 +43,17 @@ type OperationDef struct {
 	Parameters  []ParameterDef `yaml:"parameters"`
 	Query       string         `yaml:"query"`     // GraphQL query/mutation template
 	Transport   string         `yaml:"transport"` // "rest" (default) or "graphql"
+	Pagination  *PaginationDef `yaml:"pagination"`
+}
+
+type PaginationDef struct {
+	Style        string `yaml:"style"`
+	CursorParam  string `yaml:"cursor_param"`
+	CursorPath   string `yaml:"cursor_path"`
+	LimitParam   string `yaml:"limit_param"`
+	DefaultLimit int    `yaml:"default_limit"`
+	ResultsPath  string `yaml:"results_path"`
+	MaxPages     int    `yaml:"max_pages"`
 }
 
 type ParameterDef struct {

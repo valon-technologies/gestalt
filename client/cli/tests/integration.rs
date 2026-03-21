@@ -1,7 +1,7 @@
 use mockito::{Matcher, Server};
 
-fn create_client(server: &Server) -> gestalt::api::ApiClient {
-    gestalt::api::ApiClient::new(&server.url(), "test-token").unwrap()
+fn create_client(server: &Server) -> toolshed::api::ApiClient {
+    toolshed::api::ApiClient::new(&server.url(), "test-token").unwrap()
 }
 
 #[test]

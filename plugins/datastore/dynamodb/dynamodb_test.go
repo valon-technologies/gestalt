@@ -14,9 +14,9 @@ import (
 
 func testEndpoint(t *testing.T) string {
 	t.Helper()
-	ep := os.Getenv("GESTALT_TEST_DYNAMODB_ENDPOINT")
+	ep := os.Getenv("TOOLSHED_TEST_DYNAMODB_ENDPOINT")
 	if ep == "" {
-		t.Skip("GESTALT_TEST_DYNAMODB_ENDPOINT not set")
+		t.Skip("TOOLSHED_TEST_DYNAMODB_ENDPOINT not set")
 	}
 	return ep
 }

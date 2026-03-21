@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/integration"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -54,6 +55,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		Endpoints:          endpoints,
 		Queries:            ci.QueriesMap(cat),
 		Headers:            def.Headers,
+		Pagination:         buildPaginationConfigs(def),
 	}
 
 	connMode := def.ConnectionMode
@@ -252,6 +254,29 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
 	return ci.UpstreamAuth{Handler: upstream}, nil
+}
+
+func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig {
+	var configs map[string]apiexec.PaginationConfig
+	for name, opDef := range def.Operations {
+		if opDef.Pagination == nil {
+			continue
+		}
+		if configs == nil {
+			configs = make(map[string]apiexec.PaginationConfig)
+		}
+		p := opDef.Pagination
+		configs[name] = apiexec.PaginationConfig{
+			Style:        p.Style,
+			CursorParam:  p.CursorParam,
+			CursorPath:   p.CursorPath,
+			LimitParam:   p.LimitParam,
+			DefaultLimit: p.DefaultLimit,
+			ResultsPath:  p.ResultsPath,
+			MaxPages:     p.MaxPages,
+		}
+	}
+	return configs
 }
 
 func resolveURL(baseURL, u string) string {

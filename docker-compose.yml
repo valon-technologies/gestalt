@@ -1,13 +1,13 @@
 services:
-  gestalt:
+  toolshed:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:
-      - ./deploy/docker/config.yaml:/etc/gestalt/config.yaml:ro
-      - gestalt-data:/data
+      - ./deploy/docker/config.yaml:/etc/toolshed/config.yaml:ro
+      - toolshed-data:/data
     env_file:
       - .env
 
@@ -17,9 +17,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GESTALT_API_URL: http://gestalt:8080
+      TOOLSHED_API_URL: http://toolshed:8080
     depends_on:
-      - gestalt
+      - toolshed
 
 volumes:
-  gestalt-data:
+  toolshed-data:

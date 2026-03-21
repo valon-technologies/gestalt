@@ -10,7 +10,7 @@ import (
 
 // Catalog is the normalized on-disk representation for a provider's tool
 // surface. It intentionally carries richer metadata than core.Operation so the
-// rest of Gestalt can derive runtime and MCP views from a single source.
+// rest of Toolshed can derive runtime and MCP views from a single source.
 type Catalog struct {
 	Name        string             `yaml:"name"                   json:"name"`
 	DisplayName string             `yaml:"display_name"           json:"displayName"`

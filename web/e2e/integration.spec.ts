@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-const hasBackend = !!process.env.GESTALT_API_URL;
+const hasBackend = !!process.env.TOOLSHED_API_URL;
 
 test.describe("Integration: Go server contract", () => {
-  test.skip(!hasBackend, "Requires GESTALT_API_URL (real Go server)");
+  test.skip(!hasBackend, "Requires TOOLSHED_API_URL (real Go server)");
 
   test.describe.configure({ mode: "serial" });
 
@@ -11,7 +11,7 @@ test.describe("Integration: Go server contract", () => {
 
   async function devLogin(
     baseURL: string,
-    email = "e2e@gestalt.dev",
+    email = "e2e@toolshed.dev",
     retries = 3,
   ): Promise<string> {
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -41,7 +41,7 @@ test.describe("Integration: Go server contract", () => {
     return page.addInitScript(
       ({ token }) => {
         localStorage.setItem("session_token", token);
-        localStorage.setItem("user_email", "e2e@gestalt.dev");
+        localStorage.setItem("user_email", "e2e@toolshed.dev");
       },
       { token: authToken },
     );
