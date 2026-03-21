@@ -20,7 +20,7 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 		return nil, fmt.Errorf("dynamodb: parsing config: %w", err)
 	}
 	if cfg.Table == "" {
-		cfg.Table = "gestalt"
+		cfg.Table = "toolshed"
 	}
 	return New(Config{
 		Table:         cfg.Table,

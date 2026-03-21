@@ -21,8 +21,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gestalt",
-  description: "Integration management for Gestalt",
+  title: "Toolshed",
+  description: "Integration management for Toolshed",
 };
 
 export default function RootLayout({

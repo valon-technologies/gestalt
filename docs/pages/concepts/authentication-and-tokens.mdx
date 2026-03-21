@@ -2,11 +2,11 @@ import { Callout } from 'nextra/components'
 
 # Authentication and Tokens
 
-Gestalt manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
+Toolshed manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
 
 ## Platform auth
 
-Gestalt authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token.
+Toolshed authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token.
 
 | Provider | Notes |
 |---|---|
@@ -37,7 +37,7 @@ The authentication path on every request:
 
 ## Integration tokens
 
-Integration tokens are the credentials Gestalt stores for a user's connection to an upstream API. When a user completes an OAuth flow (or pastes manual credentials), Gestalt encrypts the tokens and persists them in the datastore.
+Integration tokens are the credentials Toolshed stores for a user's connection to an upstream API. When a user completes an OAuth flow (or pastes manual credentials), Toolshed encrypts the tokens and persists them in the datastore.
 
 Each stored credential includes:
 

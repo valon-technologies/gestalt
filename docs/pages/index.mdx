@@ -1,23 +1,23 @@
 import { Cards, Steps } from 'nextra/components'
 
-# Gestalt
+# Toolshed
 
-Gestalt is a self-serve integration platform. Declare third-party APIs in a config file. Gestalt handles OAuth, token storage, and request execution so callers get a uniform interface regardless of the upstream provider.
+Toolshed is a self-serve integration platform. Declare third-party APIs in a config file. Toolshed handles OAuth, token storage, and request execution so callers get a uniform interface regardless of the upstream provider.
 
 ## How it works
 
 <Steps>
 ### Caller sends a request
 
-A caller (CLI, web UI, MCP client, or webhook) sends an operation invocation to the Gestalt API server.
+A caller (CLI, web UI, MCP client, or webhook) sends an operation invocation to the Toolshed API server.
 
-### Gestalt resolves credentials
+### Toolshed resolves credentials
 
-Gestalt looks up the caller's stored token for the target integration, refreshing it automatically if expired.
+Toolshed looks up the caller's stored token for the target integration, refreshing it automatically if expired.
 
-### Gestalt executes the upstream call
+### Toolshed executes the upstream call
 
-Using the resolved credentials and the integration's definition, Gestalt builds and sends the request to the third-party API.
+Using the resolved credentials and the integration's definition, Toolshed builds and sends the request to the third-party API.
 
 ### Response is returned
 
@@ -29,7 +29,7 @@ The upstream response passes through any configured hooks, then returns to the c
 | Component | What it does |
 |---|---|
 | **Go API server** | Config loading, auth, token storage, operation dispatch, MCP endpoint, webhook bindings. |
-| **Rust CLI (`gstl`)** | Authenticate, list integrations, invoke operations, manage API tokens. |
+| **Rust CLI (`tshed`)** | Authenticate, list integrations, invoke operations, manage API tokens. |
 | **Next.js web UI** | Browse integrations, connect accounts, create API tokens. |
 | **Deployment assets** | Helm chart, Dockerfiles, and CI workflows for Kubernetes, Fly.io, Railway, Render, and AWS Lambda. |
 

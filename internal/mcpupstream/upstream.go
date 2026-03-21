@@ -58,7 +58,7 @@ func New(ctx context.Context, name string, intg config.IntegrationDef) (*Upstrea
 
 	initReq := mcpgo.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "gestalt", Version: "0.1.0"}
+	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "toolshed", Version: "0.1.0"}
 	if _, err := client.Initialize(ctx, initReq); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("mcpupstream %s: initialize: %w", name, err)

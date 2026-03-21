@@ -13,7 +13,7 @@ type yamlConfig struct {
 	Database string `yaml:"database"`
 }
 
-const defaultDatabase = "gestalt"
+const defaultDatabase = "toolshed"
 
 var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
 	var cfg yamlConfig

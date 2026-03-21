@@ -11,9 +11,9 @@ import { Callout } from 'nextra/components'
 
 ```sh
 fly launch --no-deploy \
-  --name gestalt \
+  --name toolshed \
   --region iad \
-  --dockerfile gestalt/Dockerfile
+  --dockerfile toolshed/Dockerfile
 ```
 
 Edit `fly.toml` to expose port 8080 and configure the health check:
@@ -36,8 +36,8 @@ Edit `fly.toml` to expose port 8080 and configure the health check:
 ### Option A: Fly Postgres (recommended)
 
 ```sh
-fly postgres create --name gestalt-db --region iad
-fly postgres attach gestalt-db --app gestalt
+fly postgres create --name toolshed-db --region iad
+fly postgres attach toolshed-db --app toolshed
 ```
 
 This sets `DATABASE_URL` automatically.
@@ -45,14 +45,14 @@ This sets `DATABASE_URL` automatically.
 ### Option B: SQLite with a persistent volume
 
 ```sh
-fly volumes create gestalt_data --region iad --size 1
+fly volumes create toolshed_data --region iad --size 1
 ```
 
 Add a mount in `fly.toml`:
 
 ```toml
 [mounts]
-  source = "gestalt_data"
+  source = "toolshed_data"
   destination = "/data"
 ```
 
@@ -64,27 +64,27 @@ Add a mount in `fly.toml`:
 
 ```sh
 fly secrets set \
-  GESTALT_BASE_URL="https://gestalt.fly.dev" \
-  GESTALT_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  GESTALT_SESSION_SECRET="$(openssl rand -base64 32)" \
+  TOOLSHED_BASE_URL="https://toolshed.fly.dev" \
+  TOOLSHED_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  TOOLSHED_SESSION_SECRET="$(openssl rand -base64 32)" \
   GOOGLE_CLIENT_ID="your-google-client-id" \
   GOOGLE_CLIENT_SECRET="your-google-client-secret"
 ```
 
-Create `gestalt/config.fly.yaml`:
+Create `toolshed/config.fly.yaml`:
 
 ```yaml
 server:
   port: 8080
-  base_url: "${GESTALT_BASE_URL}"
-  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
+  base_url: "${TOOLSHED_BASE_URL}"
+  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
 
 auth:
   provider: google
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${GESTALT_SESSION_SECRET}"
+    session_secret: "${TOOLSHED_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -96,7 +96,7 @@ Point the process at the config in `fly.toml`:
 
 ```toml
 [processes]
-  app = "/gestalt --config /etc/gestalt/config.yaml"
+  app = "/toolshed --config /etc/toolshed/config.yaml"
 ```
 
 ## Deploy
@@ -109,7 +109,7 @@ fly deploy
 
 ```sh
 fly status
-curl -s https://gestalt.fly.dev/health
+curl -s https://toolshed.fly.dev/health
 ```
 
 You should see `{"status":"ok"}`.
@@ -117,11 +117,11 @@ You should see `{"status":"ok"}`.
 ## Custom domain
 
 ```sh
-fly certs add gestalt.example.com
+fly certs add toolshed.example.com
 ```
 
-Create a CNAME record pointing `gestalt.example.com` to `gestalt.fly.dev`, then update the base URL:
+Create a CNAME record pointing `toolshed.example.com` to `toolshed.fly.dev`, then update the base URL:
 
 ```sh
-fly secrets set GESTALT_BASE_URL="https://gestalt.example.com"
+fly secrets set TOOLSHED_BASE_URL="https://toolshed.example.com"
 ```

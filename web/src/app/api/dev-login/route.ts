@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const email = body.email || "dev@gestalt.local";
+  const email = body.email || "dev@toolshed.local";
 
-  const backend = process.env.GESTALT_API_URL;
+  const backend = process.env.TOOLSHED_API_URL;
   if (!backend) {
     return NextResponse.json({ email, token: "mock-dev-token" });
   }

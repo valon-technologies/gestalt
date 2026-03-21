@@ -12,7 +12,7 @@ impl ConfigStore {
     pub fn new() -> Result<Self> {
         let config_dir = dirs::config_dir()
             .context("could not determine config directory")?
-            .join("gestalt");
+            .join("toolshed");
         Ok(Self {
             path: config_dir.join("config.json"),
         })

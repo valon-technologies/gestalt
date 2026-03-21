@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	serverName    = "gestalt"
+	serverName    = "toolshed"
 	serverVersion = "0.1.0"
 	toolNameSep   = "_"
 	httpErrorMin  = 400

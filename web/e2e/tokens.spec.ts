@@ -65,7 +65,7 @@ test.describe("Token Management", () => {
         ];
         route.fulfill({
           status: 201,
-          json: { id: "tok-new", name: "my-new-token", token: "gstl_abc123secret" },
+          json: { id: "tok-new", name: "my-new-token", token: "tshed_abc123secret" },
         });
       } else {
         route.continue();
@@ -80,7 +80,7 @@ test.describe("Token Management", () => {
     await expect(
       page.getByText("Copy this token now"),
     ).toBeVisible();
-    await expect(page.getByText("gstl_abc123secret")).toBeVisible();
+    await expect(page.getByText("tshed_abc123secret")).toBeVisible();
     await expect(page.getByText("my-new-token")).toBeVisible();
   });
 

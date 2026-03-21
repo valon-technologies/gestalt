@@ -38,7 +38,7 @@ export const test = base.extend<CustomFixtures>({
   authenticatedPage: async ({ page }, use) => {
     await page.addInitScript(() => {
       localStorage.setItem("session_token", "test-session-token");
-      localStorage.setItem("user_email", "test@gestalt.dev");
+      localStorage.setItem("user_email", "test@toolshed.dev");
     });
     await use(page);
   },

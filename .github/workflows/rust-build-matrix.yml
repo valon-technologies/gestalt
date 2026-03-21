@@ -12,7 +12,7 @@ on:
         type: string
         default: 'gestalt'
       artifact-prefix:
-        description: 'Prefix for artifact names (e.g., gestalt, gstl)'
+        description: 'Prefix for artifact names (e.g., gestalt, toolshed)'
         type: string
         default: 'gestalt'
       package:
