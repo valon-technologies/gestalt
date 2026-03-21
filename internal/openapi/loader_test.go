@@ -341,6 +341,162 @@ func TestCollectScopesRespectsAllowedOps(t *testing.T) {
 	}
 }
 
+func TestExtractAuthAPIKeyHeader(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "API Key API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"apiKey": map[string]any{
+					"type": "apiKey",
+					"in":   "header",
+					"name": "X-API-Key",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if def.Auth.Type != "manual" {
+		t.Errorf("Auth.Type = %q, want manual", def.Auth.Type)
+	}
+	if def.AuthStyle != "raw" {
+		t.Errorf("AuthStyle = %q, want raw", def.AuthStyle)
+	}
+	if def.AuthHeader != "X-API-Key" {
+		t.Errorf("AuthHeader = %q, want X-API-Key", def.AuthHeader)
+	}
+}
+
+func TestExtractAuthAPIKeyQuery(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Query Key API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"apiKey": map[string]any{
+					"type": "apiKey",
+					"in":   "query",
+					"name": "api_key",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if def.Auth.Type != "manual" {
+		t.Errorf("Auth.Type = %q, want manual", def.Auth.Type)
+	}
+	if def.AuthStyle != "raw" {
+		t.Errorf("AuthStyle = %q, want raw", def.AuthStyle)
+	}
+	if def.AuthHeader != "" {
+		t.Errorf("AuthHeader = %q, want empty for query auth", def.AuthHeader)
+	}
+}
+
+func TestExtractAuthHTTPBearer(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Bearer API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"bearerAuth": map[string]any{
+					"type":   "http",
+					"scheme": "bearer",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if def.Auth.Type != "manual" {
+		t.Errorf("Auth.Type = %q, want manual", def.Auth.Type)
+	}
+	if def.AuthStyle != "" {
+		t.Errorf("AuthStyle = %q, want empty (bearer is default)", def.AuthStyle)
+	}
+}
+
+func TestExtractAuthHTTPBasic(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Basic API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"basicAuth": map[string]any{
+					"type":   "http",
+					"scheme": "basic",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if def.Auth.Type != "manual" {
+		t.Errorf("Auth.Type = %q, want manual", def.Auth.Type)
+	}
+	if def.AuthStyle != "" {
+		t.Errorf("AuthStyle = %q, want empty (basic deferred to Phase 2)", def.AuthStyle)
+	}
+}
+
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 

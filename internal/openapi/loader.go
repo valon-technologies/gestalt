@@ -85,27 +85,56 @@ func fetch(ctx context.Context, specURL string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, maxSpecSize))
 }
 
+const (
+	secTypeOAuth2 = "oauth2"
+	secTypeAPIKey = "apiKey"
+	secTypeHTTP   = "http"
+
+	secInHeader = "header"
+	secInQuery  = "query"
+)
+
 func extractAuth(model *v3high.Document, def *provider.Definition) {
 	if model.Components == nil || model.Components.SecuritySchemes == nil {
 		return
 	}
 	for pair := model.Components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
 		ss := pair.Value()
-		if ss.Type != "oauth2" || ss.Flows == nil {
-			continue
-		}
 
-		def.Auth.Type = "oauth2"
+		switch ss.Type {
+		case secTypeOAuth2:
+			if ss.Flows == nil {
+				continue
+			}
+			def.Auth.Type = "oauth2"
+			if flow := ss.Flows.AuthorizationCode; flow != nil {
+				def.Auth.AuthorizationURL = flow.AuthorizationUrl
+				def.Auth.TokenURL = flow.TokenUrl
+				def.Auth.Scopes = extractScopes(flow.Scopes)
+				return
+			}
+			if flow := ss.Flows.Implicit; flow != nil {
+				def.Auth.AuthorizationURL = flow.AuthorizationUrl
+				def.Auth.Scopes = extractScopes(flow.Scopes)
+				return
+			}
 
-		if flow := ss.Flows.AuthorizationCode; flow != nil {
-			def.Auth.AuthorizationURL = flow.AuthorizationUrl
-			def.Auth.TokenURL = flow.TokenUrl
-			def.Auth.Scopes = extractScopes(flow.Scopes)
+		case secTypeAPIKey:
+			switch ss.In {
+			case secInHeader:
+				def.Auth.Type = "manual"
+				def.AuthStyle = "raw"
+				def.AuthHeader = ss.Name
+			case secInQuery:
+				def.Auth.Type = "manual"
+				def.AuthStyle = "raw"
+			default:
+				continue
+			}
 			return
-		}
-		if flow := ss.Flows.Implicit; flow != nil {
-			def.Auth.AuthorizationURL = flow.AuthorizationUrl
-			def.Auth.Scopes = extractScopes(flow.Scopes)
+
+		case secTypeHTTP:
+			def.Auth.Type = "manual"
 			return
 		}
 	}
