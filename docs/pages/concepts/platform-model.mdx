@@ -1,20 +1,20 @@
 # Platform Model
 
-Toolshed has a small set of primitives. Once you understand how they fit together, the rest of the system is predictable.
+Gestalt has a small set of primitives that compose into a complete API gateway for AI assistants and programmatic callers. Once you understand how they fit together, the rest of the system is predictable.
 
 ## Core primitives
 
 | Primitive | What it does |
 |---|---|
-| Auth provider | Authenticates users to the Toolshed platform and issues session tokens. |
-| Datastore | Persists users, integration tokens (encrypted), and API tokens. |
-| Secret manager | Resolves `secret://` references in config before other components are built. |
-| Integration definition | Describes an upstream API: base URL, auth style, operations, and optional hooks. |
-| Provider | Runtime object that lists operations and executes them against the upstream API. |
-| Operation | A callable unit exposed by an integration. Generated from OpenAPI or declared in YAML. |
-| Hooks | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
-| Runtime | A background process that boots alongside the server and receives scoped access to a subset of providers. |
-| Binding | An alternative request surface (e.g. webhooks) that forwards calls through the shared invoker. |
+| **Auth provider** | Authenticates users to the Gestalt platform and issues session tokens. |
+| **Datastore** | Persists users, integration tokens (encrypted), and API tokens in a pluggable backend such as Postgres, SQLite, or DynamoDB. |
+| **Secret manager** | Resolves `secret://` references in config before other components are built, keeping sensitive values out of plain-text YAML. |
+| **Integration definition** | Describes an upstream API: base URL, auth style, operations, and optional hooks; for example, Slack, Linear, or Datadog. |
+| **Provider** | Runtime object that lists operations and executes them against the upstream API. |
+| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec or declared in YAML. |
+| **Hooks** | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
+| **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
+| **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
 
 ## Execution model
 
@@ -34,7 +34,7 @@ All request surfaces share a single invoker built once at startup:
 3. If the access token is within 5 minutes of expiry, the invoker refreshes it automatically using the stored refresh token.
 4. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
 5. Configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
-6. Toolshed executes the upstream HTTP call, runs response-check hooks if configured, and returns the result.
+6. Gestalt executes the upstream HTTP call, runs response-check hooks if configured, and returns the result.
 
 ## Connection modes
 
@@ -55,7 +55,7 @@ Set `connection_mode` on the integration config. Default is `user`.
 |---|---|
 | OpenAPI spec | Set the `openapi` field to a URL or local path. Operations, parameters, and descriptions are generated automatically. |
 | Provider YAML | A standalone file that declares operations manually. Use when no spec exists or when the spec is too noisy. |
-| Provider directory | The `provider_dirs` config field tells Toolshed where to scan for provider YAML files at boot. |
+| Provider directory | The `provider_dirs` config field tells Gestalt where to scan for provider YAML files at boot. |
 
 ## Self-serve model
 
@@ -64,5 +64,5 @@ You choose every component:
 - **Auth provider**: Google OAuth or any OIDC provider (Okta, Azure AD, Auth0, Keycloak, and others).
 - **Datastore**: SQLite for local dev, Postgres or MySQL for production, or DynamoDB, MongoDB, Firestore, Oracle, SQL Server for specialized environments.
 - **Secret manager**: environment variables, files, or Google Cloud Secret Manager.
-- **Integrations**: which upstream APIs to expose and which operations within each are callable.
+- **Integrations**: which upstream APIs to expose (Slack, Linear, Datadog, and others) and which operations within each are callable.
 - **Deployment**: laptop, VM, Kubernetes, Fly.io, Railway, Render, or AWS Lambda.

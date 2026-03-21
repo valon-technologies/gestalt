@@ -1,18 +1,18 @@
-name: Deploy Toolshed to Cloud Run
+name: Deploy Gestalt Server to Cloud Run
 
 on:
   push:
     branches: [main]
     paths:
       - 'web/**'
-      - '.github/workflows/deploy-toolshed.yml'
+      - '.github/workflows/deploy-gestalt-server.yml'
   workflow_dispatch:
 
 env:
   PROJECT_ID: REDACTED_GCP_PROJECT
   REGION: us-east4
-  WEB_SERVICE: toolshed-test-web
-  WEB_IMAGE: us-east4-docker.pkg.dev/REDACTED_GCP_PROJECT/cloud-run-source-deploy/toolshed-test-web
+  WEB_SERVICE: gestalt-test-web
+  WEB_IMAGE: us-east4-docker.pkg.dev/REDACTED_GCP_PROJECT/cloud-run-source-deploy/gestalt-test-web
 
 jobs:
   deploy-web:
@@ -67,4 +67,4 @@ jobs:
             --min-instances=0 \
             --max-instances=1 \
             --port=3000 \
-            --set-env-vars=TOOLSHED_API_URL=${{ vars.TOOLSHED_API_URL }}
+            --set-env-vars=GESTALT_API_URL=${{ vars.GESTALT_API_URL }}

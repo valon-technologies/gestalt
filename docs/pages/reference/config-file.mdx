@@ -10,10 +10,10 @@
 | `auth_profiles` | Reusable OAuth settings shared across integrations. |
 | `integrations` | Map of integration name to definition. |
 | `runtimes` | Background processes that boot alongside the server with scoped provider access. |
-| `bindings` | Alternative request surfaces such as webhooks. |
+| `bindings` | Alternative request surfaces such as webhooks and gRPC. |
 | `provider_dirs` | Directories searched for provider YAML files at startup. |
 | `server` | Port, base URL, encryption key, and development mode. |
-| `mcp` | MCP endpoint settings: enabled flag, provider filter, and tool name prefix. |
+| `mcp` | MCP endpoint settings: enabled flag, provider filter, tool name prefix. Integration-level `mcp.url` enables upstream MCP proxying. |
 
 ## Server block
 
@@ -57,16 +57,16 @@ auth:
 datastore:
   provider: postgres   # see table below
   config:
-    dsn: postgres://user:pass@host:5432/toolshed
+    dsn: postgres://user:pass@host:5432/gestalt
 ```
 
 | Provider | Config | Notes |
 |---|---|---|
-| `sqlite` | `path: ./toolshed.db` | Default. Single-instance only. |
+| `sqlite` | `path: ./gestalt.db` | Default. Single-instance only. |
 | `postgres` | `dsn: postgres://...` | Recommended for production. |
-| `mysql` | `dsn: user:pass@tcp(host:3306)/toolshed` | Alternative SQL backend. |
+| `mysql` | `dsn: user:pass@tcp(host:3306)/gestalt` | Alternative SQL backend. |
 | `dynamodb` | `table`, `region`, optional `endpoint` | AWS DynamoDB. |
-| `mongodb` | `uri`, optional `database` (default: `toolshed`) | MongoDB. |
+| `mongodb` | `uri`, optional `database` (default: `gestalt`) | MongoDB. |
 | `firestore` | `project_id`, optional `database` | Google Cloud Firestore. |
 | `oracle` | `dsn: ...` | Oracle Database. |
 | `sqlserver` | `dsn: ...` | Microsoft SQL Server. |
@@ -77,7 +77,7 @@ datastore:
 secrets:
   provider: env      # "env", "file", or "gcp_secret_manager"
   config:
-    prefix: TOOLSHED_  # env only
+    prefix: GESTALT_  # env only
 ```
 
 | Provider | Config | Notes |
@@ -104,8 +104,12 @@ secrets:
 | `token_prefix` | Prefix for the Authorization header value. |
 | `auth_style` | How the token is sent: `bearer`, `raw`, or `none`. |
 | `headers` | Default headers sent with every upstream request. |
+| `auth_headers` | YAML map of declarative auth headers injected into upstream requests. |
 | `icon_svg` | SVG icon displayed in the web UI. |
+| `icon_file` | Path to an SVG file used as the integration icon. |
+| `error_message_path` | JSONPath expression for extracting error messages from upstream responses. |
 | `allowed_operations` | Positive allow-list of operation names with optional description overrides. |
+| `mcp` | MCP proxying config. Subfield `url` sets the upstream MCP server URL for passthrough proxying. |
 
 ### Auth overrides
 
@@ -139,7 +143,7 @@ auth_profiles:
   slack_shared:
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
-    redirect_url: https://toolshed.example.com/api/v1/auth/callback
+    redirect_url: https://gestalt.example.com/api/v1/auth/callback
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
@@ -181,7 +185,18 @@ bindings:
       auth_mode: signed           # "public", "signed", or "trusted_user_header"
       signing_secret: ${WEBHOOK_SECRET}
       signature_header: X-Signature
+
+  linear-grpc:
+    type: grpc
+    providers:
+      - linear
+    config:
+      port: 9090
+      providers:
+        - linear
 ```
+
+### Webhook config
 
 | Config field | Default | Notes |
 |---|---|---|
@@ -192,6 +207,13 @@ bindings:
 | `signing_secret` | | Required when `auth_mode` is `signed`. |
 | `signature_header` | `X-Signature` | Header containing the HMAC signature. |
 | `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
+
+### gRPC config
+
+| Config field | Default | Notes |
+|---|---|---|
+| `port` | | Listen port for the gRPC server. |
+| `providers` | | Allowed providers for this binding. |
 
 ## MCP block
 
@@ -210,6 +232,8 @@ mcp:
 | `providers` | all | Restrict which integrations are exposed to MCP clients. |
 | `tool_name_prefix` | `""` | String prepended to every MCP tool name. |
 
+When an integration defines `mcp.url`, Gestalt proxies MCP requests to that upstream server, enabling MCP-to-MCP passthrough without additional configuration in this block.
+
 ## Supported providers
 
 | Category | Providers |
@@ -217,5 +241,5 @@ mcp:
 | Auth | `google`, `oidc` |
 | Datastore | `sqlite`, `postgres`, `mysql`, `dynamodb`, `mongodb`, `firestore`, `oracle`, `sqlserver` |
 | Secrets | `env`, `file`, `gcp_secret_manager` |
-| Bindings | `webhook` |
+| Bindings | `webhook`, `grpc` |
 | Runtimes | `echo` (dev mode only) |

@@ -2,7 +2,7 @@ import { Callout } from 'nextra/components'
 
 # Deploy to Kubernetes
 
-The repository ships a Helm chart at `deploy/helm/toolshed`.
+The repository ships a Helm chart at `deploy/helm/gestalt`.
 
 ## What the chart creates
 
@@ -11,7 +11,7 @@ The repository ships a Helm chart at `deploy/helm/toolshed`.
 | API Deployment | Runs the Go API server. |
 | Web Deployment | Runs the Next.js web UI, proxying API requests to the API service. |
 | Services | One for the API (port 8080), one for the web UI (port 3000). |
-| ConfigMap | Holds Toolshed config YAML with `${ENV_VAR}` placeholders. |
+| ConfigMap | Holds Gestalt config YAML with `${ENV_VAR}` placeholders. |
 | Ingress | Optional path-based routing (`/api/v1` to API, `/` to web). |
 | PVC | Persistent volume for SQLite when persistence is enabled. |
 
@@ -29,62 +29,61 @@ replicaCount: 1
 config:
   server:
     port: 8080
-    base_url: "${TOOLSHED_BASE_URL}"
-    encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+    base_url: "${GESTALT_BASE_URL}"
+    encryption_key: "${GESTALT_ENCRYPTION_KEY}"
   auth:
     provider: google
     config:
       client_id: "${GOOGLE_CLIENT_ID}"
       client_secret: "${GOOGLE_CLIENT_SECRET}"
-      session_secret: "${TOOLSHED_SESSION_SECRET}"
+      session_secret: "${GESTALT_SESSION_SECRET}"
   datastore:
     provider: sqlite
     config:
-      path: /data/toolshed.db
+      path: /data/gestalt.db
 
 extraEnv:
-  - name: TOOLSHED_BASE_URL
-    value: "https://toolshed.example.com"
-  - name: TOOLSHED_ENCRYPTION_KEY
+  - name: GESTALT_BASE_URL
+    value: "https://gestalt.example.com"
+  - name: GESTALT_ENCRYPTION_KEY
     valueFrom:
       secretKeyRef:
-        name: toolshed-secrets
+        name: gestalt-secrets
         key: encryption-key
-  - name: TOOLSHED_SESSION_SECRET
+  - name: GESTALT_SESSION_SECRET
     valueFrom:
       secretKeyRef:
-        name: toolshed-secrets
+        name: gestalt-secrets
         key: session-secret
   - name: GOOGLE_CLIENT_ID
     valueFrom:
       secretKeyRef:
-        name: toolshed-secrets
+        name: gestalt-secrets
         key: google-client-id
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
-        name: toolshed-secrets
+        name: gestalt-secrets
         key: google-client-secret
 
 web:
   enabled: true
   image:
-    repository: toolshed-web
+    repository: gestalt-web
     tag: latest
 ```
 
 ## Install
 
 ```sh
-cd toolshed
-helm install toolshed ./deploy/helm/toolshed -f my-values.yaml
+helm install gestalt ./deploy/helm/gestalt -f my-values.yaml
 ```
 
 ## Verify
 
 ```sh
 kubectl get pods
-kubectl port-forward svc/toolshed-toolshed 8080:8080
+kubectl port-forward svc/gestalt 8080:8080
 curl http://127.0.0.1:8080/health
 ```
 

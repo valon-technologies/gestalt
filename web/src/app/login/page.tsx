@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [devEmail, setDevEmail] = useState("dev@toolshed.local");
+  const [devEmail, setDevEmail] = useState("dev@gestalt.local");
   const [providerLabel, setProviderLabel] = useState("Sign in");
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm">
         <h1 className="text-center text-2xl font-heading font-bold text-timber-800">
-          Toolshed
+          Gestalt
         </h1>
         <p className="mt-2 text-center text-sm text-stone-500">
           Sign in to manage your integrations.
@@ -103,7 +103,7 @@ export default function LoginPage() {
                 type="email"
                 value={devEmail}
                 onChange={(e) => setDevEmail(e.target.value)}
-                placeholder="dev@toolshed.local"
+                placeholder="dev@gestalt.local"
                 className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
               />
               <Button

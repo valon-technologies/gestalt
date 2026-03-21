@@ -12,9 +12,9 @@ import (
 
 func testURI(t *testing.T) string {
 	t.Helper()
-	uri := os.Getenv("TOOLSHED_TEST_MONGODB_URI")
+	uri := os.Getenv("GESTALT_TEST_MONGODB_URI")
 	if uri == "" {
-		t.Skip("TOOLSHED_TEST_MONGODB_URI not set")
+		t.Skip("GESTALT_TEST_MONGODB_URI not set")
 	}
 	return uri
 }
@@ -22,7 +22,7 @@ func testURI(t *testing.T) string {
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	uri := testURI(t)
-	database := "toolshed_test_" + uuid.NewString()
+	database := "gestalt_test_" + uuid.NewString()
 
 	store, err := New(uri, database, coretesting.EncryptionKey(t))
 	if err != nil {

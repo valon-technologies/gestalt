@@ -8,7 +8,7 @@ auth:
 datastore:
   provider: sqlite
   config:
-    path: ./toolshed.dev.db
+    path: ./gestalt.dev.db
 
 server:
   port: 8080

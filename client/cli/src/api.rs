@@ -20,7 +20,7 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     if let Some(url) = url_override {
         return Ok(url.to_string());
     }
-    if let Ok(url) = std::env::var("TOOLSHED_URL") {
+    if let Ok(url) = std::env::var("GESTALT_URL") {
         return Ok(url);
     }
     if let Some(url) = find_project_config_value("url") {
@@ -35,7 +35,7 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     Ok(DEFAULT_URL.to_string())
 }
 
-pub const PROJECT_CONFIG_FILE: &str = ".toolshed.json";
+pub const PROJECT_CONFIG_FILE: &str = ".gestalt.json";
 
 fn find_project_config_value(key: &str) -> Option<String> {
     let mut dir = std::env::current_dir().ok()?;
@@ -61,14 +61,14 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        let token = if let Ok(key) = std::env::var("TOOLSHED_API_KEY") {
+        let token = if let Ok(key) = std::env::var("GESTALT_API_KEY") {
             key
         } else {
             let store = CredentialStore::new()?;
             match store.load()? {
                 Some(creds) => creds.session_token,
                 None => {
-                    bail!("not authenticated: set TOOLSHED_API_KEY or run 'tshed auth login'")
+                    bail!("not authenticated: set GESTALT_API_KEY or run 'gestalt auth login'")
                 }
             }
         };

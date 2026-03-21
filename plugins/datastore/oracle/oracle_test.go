@@ -11,9 +11,9 @@ import (
 
 func testDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("TOOLSHED_TEST_ORACLE_DSN")
+	dsn := os.Getenv("GESTALT_TEST_ORACLE_DSN")
 	if dsn == "" {
-		t.Skip("TOOLSHED_TEST_ORACLE_DSN not set")
+		t.Skip("GESTALT_TEST_ORACLE_DSN not set")
 	}
 	return dsn
 }

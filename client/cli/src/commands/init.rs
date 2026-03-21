@@ -11,7 +11,7 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
 
-    eprintln!("Welcome to Toolshed! Let's get you set up.\n");
+    eprintln!("Welcome to Gestalt! Let's get you set up.\n");
 
     let current_url = api::resolve_url(url_override).unwrap_or_default();
     let url = api::normalize_url(&prompt(&mut lines, "API server URL", &current_url)?);
@@ -28,18 +28,18 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
 
     if confirm(
         &mut lines,
-        "Create .toolshed.json in current directory?",
+        "Create .gestalt.json in current directory?",
         false,
     )? {
         let config = serde_json::json!({"url": url});
         let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
         std::fs::write(PROJECT_CONFIG_FILE, format!("{json}\n"))
-            .context("failed to write .toolshed.json")?;
+            .context("failed to write .gestalt.json")?;
         output::print_success(&format!("Created {}", PROJECT_CONFIG_FILE));
     }
 
     eprintln!();
-    output::print_success("You're all set! Run 'tshed --help' to see available commands.");
+    output::print_success("You're all set! Run 'gestalt --help' to see available commands.");
     Ok(())
 }
 

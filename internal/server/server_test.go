@@ -19,7 +19,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -2036,7 +2036,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 
 	invoker := invocation.NewBroker(providers, ds)
-	mcpSrv := toolshedmcp.NewServer(toolshedmcp.Config{
+	mcpSrv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   invoker,
 		Providers: providers,
 	})
@@ -2421,7 +2421,7 @@ func TestBindingRoutesMounted(t *testing.T) {
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, ds)
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
 		Providers:     providers,
