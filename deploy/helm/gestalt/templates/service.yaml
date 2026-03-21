@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "toolshed.fullname" . }}
+  name: {{ include "gestalt.fullname" . }}
   labels:
-    {{- include "toolshed.labels" . | nindent 4 }}
+    {{- include "gestalt.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,5 +12,5 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "toolshed.selectorLabels" . | nindent 4 }}
+    {{- include "gestalt.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: api

@@ -10,7 +10,7 @@ test.describe("Authentication", () => {
     await mockAuthInfo(page, { provider: "google", display_name: "Google" });
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { name: "Toolshed" }),
+      page.getByRole("heading", { name: "Gestalt" }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Sign in with Google/i }),
@@ -43,7 +43,7 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.evaluate(() => {
       localStorage.setItem("session_token", "test-session-token");
-      localStorage.setItem("user_email", "test@toolshed.dev");
+      localStorage.setItem("user_email", "test@gestalt.dev");
     });
     await mockIntegrations(page, []);
     await mockTokens(page, []);

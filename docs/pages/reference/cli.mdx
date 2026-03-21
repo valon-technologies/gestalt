@@ -1,24 +1,24 @@
 # CLI
 
-Toolshed ships two binaries: the Go server (`toolshed`) and the Rust client (`tshed`).
+Gestalt ships two binaries: the Go server (`gestalt-server`) and the Rust client (`gestalt`).
 
 ## Server commands
 
-### `toolshed serve`
+### `gestalt-server serve`
 
 Start the API server. This is the default command when no subcommand is given.
 
 ```sh
-toolshed serve -config config.yaml
-toolshed -config config.yaml          # equivalent
+gestalt-server serve -config config.yaml
+gestalt-server -config config.yaml          # equivalent
 ```
 
-### `toolshed dev`
+### `gestalt-server dev`
 
 Start the API server and web UI together for local development.
 
 ```sh
-toolshed dev -config config.yaml
+gestalt-server dev -config config.yaml
 ```
 
 | Flag | Default | Purpose |
@@ -30,12 +30,12 @@ toolshed dev -config config.yaml
 
 When dev mode is enabled in config, prints "dev mode enabled" on startup.
 
-### `toolshed config check`
+### `gestalt-server config check`
 
 Validate configuration and print resolved values.
 
 ```sh
-toolshed config check -config config.yaml
+gestalt-server config check -config config.yaml
 ```
 
 Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
@@ -43,58 +43,58 @@ Prints: config file path, server settings, auth provider, datastore, secrets pro
 ### Config file resolution
 
 1. `-config` flag.
-2. `TOOLSHED_CONFIG` environment variable.
+2. `GESTALT_CONFIG` environment variable.
 3. `./config.yaml` in the current directory.
-4. `/etc/toolshed/config.yaml`.
+4. `/etc/gestalt/config.yaml`.
 
-## Client CLI (`tshed`)
+## Client CLI (`gestalt`)
 
 ### Install
 
 ```sh
-brew install valon-technologies/toolshed/toolshed
+brew install valon-technologies/toolshed/gestalt
 ```
 
 Or build from source:
 
 ```sh
-cd toolshed/client/cli
+cd client/cli
 cargo build --release
-./target/release/tshed --version
+./target/release/gestalt --version
 ```
 
 ### Commands
 
 | Command | Purpose |
 |---|---|
-| `tshed init` | Interactive setup wizard. |
-| `tshed auth login` | Open browser for OAuth login. |
-| `tshed auth logout` | Clear stored credentials. |
-| `tshed auth status` | Show authentication status. |
-| `tshed config get <key>` | Read a config value. |
-| `tshed config set <key> <value>` | Write a config value. |
-| `tshed config unset <key>` | Remove a config value. |
-| `tshed config list` | List all config values. |
-| `tshed integrations list` | List available integrations. |
-| `tshed integrations connect <name>` | Start an OAuth connection flow. |
-| `tshed invoke <integration> <operation> -p key=value` | Execute an operation. |
-| `tshed tokens create [--name <name>]` | Create an API token. |
-| `tshed tokens list` | List API tokens. |
-| `tshed tokens revoke <id>` | Revoke an API token. |
+| `gestalt init` | Interactive setup wizard. |
+| `gestalt auth login` | Open browser for OAuth login. |
+| `gestalt auth logout` | Clear stored credentials. |
+| `gestalt auth status` | Show authentication status. |
+| `gestalt config get <key>` | Read a config value. |
+| `gestalt config set <key> <value>` | Write a config value. |
+| `gestalt config unset <key>` | Remove a config value. |
+| `gestalt config list` | List all config values. |
+| `gestalt integrations list` | List available integrations. |
+| `gestalt integrations connect <name>` | Start an OAuth connection flow. |
+| `gestalt invoke <integration> <operation> -p key=value` | Execute an operation. |
+| `gestalt tokens create [--name <name>]` | Create an API token. |
+| `gestalt tokens list` | List API tokens. |
+| `gestalt tokens revoke <id>` | Revoke an API token. |
 
 ### URL resolution order
 
 1. `--url` flag.
-2. `TOOLSHED_URL` environment variable.
-3. `.toolshed.json` in the current directory.
+2. `GESTALT_URL` environment variable.
+3. `.gestalt.json` in the current directory.
 4. Global config file.
-5. `credentials.json` stored by `tshed auth login`.
+5. `credentials.json` stored by `gestalt auth login`.
 6. `http://localhost:8080` as fallback.
 
 ### Authentication
 
-- If `TOOLSHED_API_KEY` is set, it is sent as the Bearer token on every request.
-- Otherwise, the CLI uses the session token stored by `tshed auth login`.
+- If `GESTALT_API_KEY` is set, it is sent as the Bearer token on every request.
+- Otherwise, the CLI uses the session token stored by `gestalt auth login`.
 - Credential files are written with `0600` permissions.
 - Output formats: `--format json` (default) or `--format table`.
 
@@ -102,17 +102,17 @@ cargo build --release
 
 ```sh
 # Initial setup
-tshed init
-tshed auth login
+gestalt init
+gestalt auth login
 
 # Browse and connect
-tshed integrations list --format table
-tshed integrations connect slack
+gestalt integrations list --format table
+gestalt integrations connect slack
 
 # Invoke operations
-tshed invoke slack conversations_list
-tshed invoke slack chat_postMessage -p channel=C123 -p text=hello
+gestalt invoke slack conversations_list
+gestalt invoke slack chat_postMessage -p channel=C123 -p text=hello
 
 # API tokens for CI
-tshed tokens create --name "ci-token"
+gestalt tokens create --name "ci-token"
 ```

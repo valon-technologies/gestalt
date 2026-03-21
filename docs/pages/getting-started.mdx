@@ -2,7 +2,7 @@ import { Callout, Steps } from 'nextra/components'
 
 # Getting Started
 
-Stand up a local Toolshed instance, connect an integration, and invoke an operation from the CLI.
+This guide walks you through standing up a local Gestalt instance, connecting a Slack integration, and invoking your first operation from the CLI. You will have a working setup in under five minutes.
 
 ## Before you begin
 
@@ -11,7 +11,7 @@ Stand up a local Toolshed instance, connect an integration, and invoke an operat
 
 ## Create a config file
 
-Save this as `toolshed.local.yaml` in the `toolshed/` directory:
+Save the following as `gestalt.local.yaml` in the project root. This file defines the server, auth provider, datastore, and one integration (Slack) with two allowed operations.
 
 ```yaml
 server:
@@ -29,7 +29,7 @@ auth:
 datastore:
   provider: sqlite
   config:
-    path: ./toolshed.local.db
+    path: ./gestalt.local.db
 
 integrations:
   slack:
@@ -47,21 +47,21 @@ integrations:
 ```
 
 <Callout>
-  `base_url` tells Toolshed where to build OAuth callback URLs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
+  `base_url` tells Gestalt where to build OAuth callback URLs. If this value is wrong or missing, every OAuth flow will fail with a redirect mismatch error. For local development, `http://localhost:8080` is the correct value.
 </Callout>
 
 ## Start the server
 
 ```sh
-toolshed dev -config toolshed.local.yaml
+gestalt-server dev -config gestalt.local.yaml
 ```
 
-This starts both the API server (port 8080) and the web UI (port 3000). When dev mode is enabled, you will see "dev mode enabled" in the output.
+This starts both the API server (port 8080) and the web UI (port 3000). When dev mode is enabled, you will see "dev mode enabled" in the output; this confirms that dev login and relaxed CORS are active.
 
 To start only the API without the web UI:
 
 ```sh
-toolshed dev -config toolshed.local.yaml -api-only
+gestalt-server dev -config gestalt.local.yaml -api-only
 ```
 
 ## Sign in and connect Slack
@@ -69,30 +69,34 @@ toolshed dev -config toolshed.local.yaml -api-only
 <Steps>
 ### Open the web UI
 
-Go to `http://localhost:3000`. Sign in with your Google account, or use Dev Login in dev mode.
+Go to `http://localhost:3000`. Sign in with your Google account, or use **Dev Login** if you are running in dev mode.
 
 ### Connect the integration
 
-Navigate to **Integrations** and click **Connect** next to Slack. Complete the OAuth flow.
+Navigate to **Integrations** and click **Connect** next to Slack. Complete the OAuth flow in your browser; Gestalt stores the resulting token and refreshes it automatically on future requests.
 
 ### Invoke an operation
 
-Once connected, you can invoke allowed operations from the web UI or CLI.
+Once connected, you can invoke any allowed operation from the web UI or the CLI. The next section covers CLI setup.
 </Steps>
 
 ## Install and use the CLI
 
+Install the `gestalt` CLI via Homebrew, then authenticate against your local server:
+
 ```sh
-brew install valon-technologies/toolshed/toolshed
-tshed init
-tshed auth login
-tshed integrations list
-tshed invoke slack conversations_list
+brew install valon-technologies/toolshed/gestalt
+gestalt init
+gestalt auth login
+gestalt integrations list
+gestalt invoke slack conversations_list
 ```
+
+`gestalt init` creates a `.gestalt.json` file in your home directory that stores the server URL and session credentials. You can override the server URL at any time by setting the `GESTALT_SERVER_URL` environment variable.
 
 ## Next steps
 
-- [Platform Model](/concepts/platform-model): understand the core primitives.
-- [Add an Integration](/tasks/add-an-integration): walk through adding a new API.
-- [Config File](/reference/config-file): full reference for every config key.
-- [Use with MCP](/tasks/use-with-mcp): connect Toolshed to Claude.
+- [Platform Model](/concepts/platform-model): understand the core primitives that Gestalt builds on.
+- [Add an Integration](/tasks/add-an-integration): walk through adding a new API from scratch.
+- [Config File](/reference/config-file): full reference for every configuration key.
+- [Use with MCP](/tasks/use-with-mcp): connect Gestalt to Claude or any MCP-compatible client.

@@ -11,7 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/internal/server"
 
@@ -42,7 +42,7 @@ func runServe(args []string) error {
 		if !ok {
 			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 		}
-		mcpCfg := toolshedmcp.Config{
+		mcpCfg := gestaltmcp.Config{
 			Invoker:       result.Invoker,
 			TokenResolver: broker,
 			Providers:     result.Providers,
@@ -54,7 +54,7 @@ func runServe(args []string) error {
 			mcpCfg.ToolNamePrefix = env.Config.MCP.ToolNamePrefix
 		}
 		mcpHandler = mcpserver.NewStreamableHTTPServer(
-			toolshedmcp.NewServer(mcpCfg),
+			gestaltmcp.NewServer(mcpCfg),
 			mcpserver.WithStateLess(true),
 		)
 		log.Println("MCP endpoint enabled at /mcp")
@@ -83,14 +83,14 @@ func runServe(args []string) error {
 	}
 
 	if env.Config.Server.BaseURL != "" {
-		log.Printf("toolshed base URL: %s", env.Config.Server.BaseURL)
+		log.Printf("gestalt-server base URL: %s", env.Config.Server.BaseURL)
 		log.Printf("  auth callback:        %s%s", env.Config.Server.BaseURL, config.AuthCallbackPath)
 		log.Printf("  integration callback: %s%s", env.Config.Server.BaseURL, config.IntegrationCallbackPath)
 	}
 
 	listenErr := make(chan error, 1)
 	go func() {
-		log.Printf("toolshed listening on %s", addr)
+		log.Printf("gestalt-server listening on %s", addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			listenErr <- err
 		}

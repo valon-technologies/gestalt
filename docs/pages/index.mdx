@@ -1,36 +1,36 @@
 import { Cards, Steps } from 'nextra/components'
 
-# Toolshed
+# Gestalt
 
-Toolshed is a self-serve integration platform. Declare third-party APIs in a config file. Toolshed handles OAuth, token storage, and request execution so callers get a uniform interface regardless of the upstream provider.
+Gestalt is a self-hosted integration platform that provides a uniform interface to third-party APIs. You declare integrations in a configuration file; Gestalt handles OAuth, token storage, credential refresh, and request execution on your behalf. The result is a single API surface for every upstream provider, whether that provider is Slack, Linear, GitHub, or any service with an OpenAPI spec.
 
 ## How it works
 
 <Steps>
 ### Caller sends a request
 
-A caller (CLI, web UI, MCP client, or webhook) sends an operation invocation to the Toolshed API server.
+A caller (the CLI, a web UI session, an MCP client, or a webhook) sends an **operation invocation** to the Gestalt API server. An operation invocation names the target integration and the action to perform, along with any required parameters.
 
-### Toolshed resolves credentials
+### Gestalt resolves credentials
 
-Toolshed looks up the caller's stored token for the target integration, refreshing it automatically if expired.
+Gestalt looks up the caller's stored token for the target integration and refreshes it automatically if it has expired. If no token exists, Gestalt returns an error directing the caller to complete an OAuth flow first.
 
-### Toolshed executes the upstream call
+### Gestalt executes the upstream call
 
-Using the resolved credentials and the integration's definition, Toolshed builds and sends the request to the third-party API.
+Using the resolved credentials and the integration's OpenAPI definition, Gestalt builds the HTTP request and sends it to the third-party API. You do not construct provider-specific headers, query parameters, or authentication schemes yourself.
 
 ### Response is returned
 
-The upstream response passes through any configured hooks, then returns to the caller.
+The upstream response passes through any configured **hooks** (response validators, field extractors, or error mappers) and then returns to the caller in a normalized format.
 </Steps>
 
 ## What ships
 
-| Component | What it does |
+| Component | Description |
 |---|---|
-| **Go API server** | Config loading, auth, token storage, operation dispatch, MCP endpoint, webhook bindings. |
-| **Rust CLI (`tshed`)** | Authenticate, list integrations, invoke operations, manage API tokens. |
-| **Next.js web UI** | Browse integrations, connect accounts, create API tokens. |
+| **Go API server (`gestalt-server`)** | Configuration loading, auth provider management, token storage, operation dispatch, MCP endpoint, and webhook bindings. |
+| **Rust CLI (`gestalt`)** | Authenticate, list integrations, invoke operations, and manage API tokens from the terminal. |
+| **Next.js web UI** | Browse integrations, connect accounts, invoke operations interactively, and create API tokens. |
 | **Deployment assets** | Helm chart, Dockerfiles, and CI workflows for Kubernetes, Fly.io, Railway, Render, and AWS Lambda. |
 
 ## Documentation

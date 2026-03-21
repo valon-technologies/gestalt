@@ -2,7 +2,7 @@ import { Callout, Cards } from 'nextra/components'
 
 # Deploy
 
-Toolshed compiles to a single statically-linked Go binary and ships as a minimal Docker image. It runs anywhere you can run a container or a Linux binary.
+Gestalt compiles to a single statically-linked Go binary and ships as a minimal Docker image. It runs anywhere you can run a container or a Linux binary.
 
 ## Resource requirements
 
@@ -14,11 +14,11 @@ Toolshed compiles to a single statically-linked Go binary and ships as a minimal
 
 ## What every deployment needs
 
-1. **Toolshed image or binary.** Build from `toolshed/Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/toolshed`.
+1. **Gestalt image or binary.** Build from `Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/gestalt-server`.
 2. **Config YAML file.** Mounted or bundled. See [Config File](/reference/config-file) for the schema.
 3. **Environment variables for secrets.** The config supports `${VAR}` placeholders expanded at startup. Never hardcode secrets.
 4. **A database.** SQLite with a persistent volume, Postgres, MySQL, or any [supported datastore](/reference/built-in-plugins#datastores).
-5. **A stable `base_url`.** Toolshed derives OAuth callback URLs from this. It must be the externally-reachable URL.
+5. **A stable `base_url`.** Gestalt derives OAuth callback URLs from this. It must be the externally-reachable URL.
 
 ## Environment variables
 
@@ -26,9 +26,9 @@ Toolshed compiles to a single statically-linked Go binary and ships as a minimal
 
 | Variable | Purpose | Required |
 |---|---|---|
-| `TOOLSHED_BASE_URL` | External URL for OAuth callbacks | Yes |
-| `TOOLSHED_ENCRYPTION_KEY` | Symmetric key for encrypting stored tokens. Generate: `openssl rand -base64 32` | Yes |
-| `TOOLSHED_SESSION_SECRET` | Signs session cookies. Generate: `openssl rand -base64 32` | Yes |
+| `GESTALT_BASE_URL` | External URL for OAuth callbacks | Yes |
+| `GESTALT_ENCRYPTION_KEY` | Symmetric key for encrypting stored tokens. Generate: `openssl rand -base64 32` | Yes |
+| `GESTALT_SESSION_SECRET` | Signs session cookies. Generate: `openssl rand -base64 32` | Yes |
 
 ### Auth
 
@@ -52,15 +52,15 @@ Each integration needs its own OAuth credentials. Follow the pattern `<INTEGRATI
 ```yaml
 server:
   port: 8080
-  base_url: "${TOOLSHED_BASE_URL}"
-  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+  base_url: "${GESTALT_BASE_URL}"
+  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
 
 auth:
   provider: google
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${TOOLSHED_SESSION_SECRET}"
+    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -71,7 +71,7 @@ datastore:
 ## Validate before deploying
 
 ```sh
-toolshed config check -config your-config.yaml
+gestalt config check -config your-config.yaml
 ```
 
 ## Choose a platform

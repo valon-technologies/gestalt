@@ -2,11 +2,11 @@ import { Callout } from 'nextra/components'
 
 # Authentication and Tokens
 
-Toolshed manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
+Gestalt manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
 
 ## Platform auth
 
-Toolshed authenticates users through a configurable auth provider. The provider handles the login flow and issues a session token.
+**Platform auth** is the login flow that establishes a user's identity within Gestalt. You configure a single auth provider, and Gestalt handles the rest: redirects, token exchange, session creation, and session validation on every subsequent request.
 
 | Provider | Notes |
 |---|---|
@@ -23,7 +23,7 @@ After first login, the user record is created in the datastore. The session toke
 
 ## API tokens
 
-For programmatic access (CLI tools, CI pipelines, MCP clients), users generate API tokens through the web UI or API. The server returns the raw token exactly once. Only a SHA-256 hash is stored, so the token cannot be recovered after creation.
+**API tokens** give programmatic callers (CLI tools, CI pipelines, MCP clients) persistent access without a browser-based login flow. Users generate API tokens through the web UI or API; the server returns the raw token exactly once. Only a SHA-256 hash is stored, so the token cannot be recovered after creation.
 
 The authentication path on every request:
 
@@ -37,7 +37,7 @@ The authentication path on every request:
 
 ## Integration tokens
 
-Integration tokens are the credentials Toolshed stores for a user's connection to an upstream API. When a user completes an OAuth flow (or pastes manual credentials), Toolshed encrypts the tokens and persists them in the datastore.
+**Integration tokens** are the credentials Gestalt stores for a user's connection to an upstream API such as Slack, Linear, or Datadog. When a user completes an OAuth flow (or pastes manual credentials), Gestalt encrypts the tokens and persists them in the datastore.
 
 Each stored credential includes:
 

@@ -5,6 +5,7 @@
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Health check. Returns `{"status":"ok"}`. |
+| GET | `/ready` | Readiness check. Returns `{"status":"ready"}` when the server can accept traffic. |
 | POST | `/api/v1/auth/login` | Start platform login. Returns a browser redirect URL. |
 | GET | `/api/v1/auth/login/callback` | Complete platform login. Issues a session token. |
 | GET | `/api/v1/auth/info` | Returns the auth provider name and display label. |
@@ -68,7 +69,7 @@ Authorization: Bearer <session-token-or-api-token>
 
 ```sh
 curl -X POST http://localhost:8080/api/v1/slack/chat_postMessage \
-  -H "Authorization: Bearer $TOOLSHED_API_KEY" \
+  -H "Authorization: Bearer $GESTALT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"channel":"C123","text":"hello from toolshed"}'
+  -d '{"channel":"C123","text":"hello from gestalt"}'
 ```

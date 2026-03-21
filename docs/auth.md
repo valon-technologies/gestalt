@@ -1,6 +1,6 @@
 # Authentication
 
-Toolshed supports pluggable user authentication. Configure your provider under `auth:` in config.yaml.
+Gestalt supports pluggable user authentication. Configure your provider under `auth:` in config.yaml.
 
 ## Google
 
@@ -34,7 +34,7 @@ auth:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
     client_secret: ${OIDC_CLIENT_SECRET}
-    session_secret: ${TOOLSHED_SESSION_SECRET}
+    session_secret: ${GESTALT_SESSION_SECRET}
     display_name: "Okta"          # shown on the login button
     scopes:                       # optional; defaults to openid, email, profile
       - openid
@@ -69,10 +69,10 @@ auth:
 
 | Field            | Required | Default                     | Description                                     |
 |------------------|----------|-----------------------------|-------------------------------------------------|
-| `provider`       | yes      | —                           | `google` or `oidc`                              |
-| `client_id`      | yes      | —                           | OAuth client ID                                 |
-| `client_secret`  | yes*     | —                           | OAuth client secret (*not needed with PKCE)     |
-| `issuer_url`     | oidc     | —                           | OIDC discovery base URL                         |
+| `provider`       | yes      |                             | `google` or `oidc`                              |
+| `client_id`      | yes      |                             | OAuth client ID                                 |
+| `client_secret`  | yes*     |                             | OAuth client secret (*not needed with PKCE)     |
+| `issuer_url`     | oidc     |                             | OIDC discovery base URL                         |
 | `redirect_url`   | no       | derived from `base_url`     | OAuth callback URL                              |
 | `display_name`   | no       | `SSO`                       | Label on the login button (OIDC only)           |
 | `allowed_domains`| no       | allow all                   | Restrict login to these email domains           |
@@ -83,4 +83,4 @@ auth:
 
 ## Domain restriction
 
-Both providers support `allowed_domains` to restrict which email domains can log in. When set, only users with an email address matching one of the listed domains will be allowed to authenticate. An empty list (or omitting the field) allows all domains.
+Both providers support `allowed_domains` to restrict which email domains can log in. When set, only users with an email address matching one of the listed domains are allowed to authenticate. An empty list (or omitting the field) allows all domains.

@@ -13,7 +13,7 @@ import (
 	ci "github.com/valon-technologies/gestalt/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/invocation"
-	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 
@@ -90,7 +90,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -139,7 +139,7 @@ func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -178,7 +178,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:        broker,
 		Providers:      providers,
 		ToolNamePrefix: "ts_",
@@ -219,7 +219,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -263,7 +263,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker: &testutil.StubInvoker{
 			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
@@ -330,7 +330,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -366,7 +366,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -397,7 +397,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -431,7 +431,7 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:          broker,
 		Providers:        providers,
 		AllowedProviders: []string{"allowed"},
@@ -468,7 +468,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
 
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
 		Providers: providers,
 	})
@@ -537,7 +537,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       &testutil.StubInvoker{},
 		TokenResolver: &stubTokenResolver{token: "upstream-token"},
 		Providers:     providers,
@@ -592,7 +592,7 @@ func TestNewServer_DirectCallerNoPrincipal(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       &testutil.StubInvoker{},
 		TokenResolver: &stubTokenResolver{token: "t"},
 		Providers:     providers,
@@ -627,7 +627,7 @@ func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	srv := toolshedmcp.NewServer(toolshedmcp.Config{
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       &testutil.StubInvoker{},
 		TokenResolver: &stubTokenResolver{err: fmt.Errorf("no token stored")},
 		Providers:     providers,

@@ -1,14 +1,14 @@
 import type { DocsThemeConfig } from "nextra-theme-docs";
 
 const config: DocsThemeConfig = {
-  logo: <strong>Toolshed</strong>,
+  logo: <strong>Gestalt</strong>,
   project: {
     link: "https://github.com/valon-technologies/toolshed",
   },
   docsRepositoryBase:
     "https://github.com/valon-technologies/toolshed/tree/main/toolshed/docs",
   footer: {
-    content: <span>Toolshed — self-serve integration platform</span>,
+    content: <span>Gestalt, a self-hosted integration platform</span>,
   },
   sidebar: {
     defaultMenuCollapseLevel: 1,

@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use toolshed::commands;
-use toolshed::output::{self, Format};
+use gestalt::commands;
+use gestalt::output::{self, Format};
 
 #[derive(Parser)]
-#[command(name = "tshed")]
-#[command(about = "CLI for Toolshed API - authentication, integrations, and operations")]
+#[command(name = "gestalt")]
+#[command(about = "CLI for Gestalt API - authentication, integrations, and operations")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]

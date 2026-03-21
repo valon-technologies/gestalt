@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const backend = process.env.TOOLSHED_API_URL;
+  const backend = process.env.GESTALT_API_URL;
   if (!backend) return NextResponse.next();
 
   const url = new URL(request.url);
