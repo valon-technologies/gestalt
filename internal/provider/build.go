@@ -51,6 +51,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 		HTTPClient:         client,
 		Operations:         ci.OperationsList(cat),
 		Endpoints:          endpoints,
+		Queries:            ci.QueriesMap(cat),
 		Headers:            def.Headers,
 	}
 

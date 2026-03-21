@@ -20,6 +20,9 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 	ops := make([]core.Operation, 0, len(c.Operations))
 	for i := range c.Operations {
 		op := &c.Operations[i]
+		if op.Transport == transportGraphQL && op.Query == "" {
+			continue
+		}
 		params := make([]core.Parameter, 0, len(op.Parameters))
 		for _, param := range op.Parameters {
 			params = append(params, core.Parameter{
@@ -30,10 +33,14 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 				Default:     param.Default,
 			})
 		}
+		method := strings.ToUpper(strings.TrimSpace(op.Method))
+		if method == "" && op.Query != "" {
+			method = "POST"
+		}
 		ops = append(ops, core.Operation{
 			Name:        op.ID,
 			Description: op.Description,
-			Method:      strings.ToUpper(strings.TrimSpace(op.Method)),
+			Method:      method,
 			Parameters:  params,
 		})
 	}
@@ -44,6 +51,9 @@ func EndpointsMap(c *catalog.Catalog) (map[string]Endpoint, error) {
 	endpoints := make(map[string]Endpoint, len(c.Operations))
 	for i := range c.Operations {
 		op := &c.Operations[i]
+		if op.Transport == transportGraphQL || op.Query != "" {
+			continue
+		}
 		if strings.TrimSpace(op.Method) == "" {
 			return nil, fmt.Errorf("catalog %q operation %q is missing method", c.Name, op.ID)
 		}
@@ -56,6 +66,22 @@ func EndpointsMap(c *catalog.Catalog) (map[string]Endpoint, error) {
 		}
 	}
 	return endpoints, nil
+}
+
+const transportGraphQL = "graphql"
+
+func QueriesMap(c *catalog.Catalog) map[string]string {
+	queries := make(map[string]string)
+	for i := range c.Operations {
+		op := &c.Operations[i]
+		if op.Query != "" {
+			queries[op.ID] = op.Query
+		}
+	}
+	if len(queries) == 0 {
+		return nil
+	}
+	return queries
 }
 
 func AuthStyleValue(c *catalog.Catalog) (AuthStyle, error) {
@@ -96,6 +122,7 @@ func BaseFromCatalog(cat *catalog.Catalog, runtime Base) (Base, error) {
 		return Base{}, err
 	}
 	base.Endpoints = endpoints
+	base.Queries = QueriesMap(cat)
 	base.Headers = mergeHeaders(cat.Headers, runtime.Headers)
 	base.catalog = cat
 
