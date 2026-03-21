@@ -222,6 +222,109 @@ func TestLoadCatalogAllowedOpsFiltering(t *testing.T) {
 	}
 }
 
+func TestCatalogExtractAuthAPIKeyHeader(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "API Key API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"apiKey": map[string]any{
+					"type": "apiKey",
+					"in":   "header",
+					"name": "X-API-Key",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	if cat.AuthStyle != "raw" {
+		t.Errorf("AuthStyle = %q, want raw", cat.AuthStyle)
+	}
+}
+
+func TestCatalogExtractAuthHTTPBearer(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Bearer API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"bearerAuth": map[string]any{
+					"type":   "http",
+					"scheme": "bearer",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	if cat.AuthStyle != "bearer" {
+		t.Errorf("AuthStyle = %q, want bearer", cat.AuthStyle)
+	}
+}
+
+func TestCatalogExtractAuthHTTPBasic(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Basic API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"basicAuth": map[string]any{
+					"type":   "http",
+					"scheme": "basic",
+				},
+			},
+		},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"get": map[string]any{"operationId": "list_items", "summary": "List items"},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	if cat.AuthStyle != "bearer" {
+		t.Errorf("AuthStyle = %q, want bearer (basic deferred to Phase 2)", cat.AuthStyle)
+	}
+}
+
 func TestLoadCatalogYAMLSpec(t *testing.T) {
 	t.Parallel()
 
