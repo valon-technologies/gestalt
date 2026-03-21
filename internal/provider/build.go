@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -183,9 +184,10 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) error {
 	if intg.IconFile != "" {
 		data, err := os.ReadFile(intg.IconFile)
 		if err != nil {
-			return fmt.Errorf("reading icon_file %q: %w", intg.IconFile, err)
+			log.Printf("WARNING: could not read icon_file %q: %v", intg.IconFile, err)
+		} else {
+			def.IconSVG = strings.TrimSpace(string(data))
 		}
-		def.IconSVG = strings.TrimSpace(string(data))
 	}
 	if intg.Headers != nil {
 		def.Headers = intg.Headers

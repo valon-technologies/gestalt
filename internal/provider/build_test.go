@@ -341,9 +341,16 @@ func TestBuildIconFileMissing(t *testing.T) {
 		},
 	}
 
-	_, err := Build(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
-	if err == nil {
-		t.Fatal("expected error for missing icon file")
+	prov, err := Build(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
+	if err != nil {
+		t.Fatalf("Build should succeed with missing icon: %v", err)
+	}
+	cp, ok := prov.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("expected CatalogProvider")
+	}
+	if cat := cp.Catalog(); cat != nil && cat.IconSVG != "" {
+		t.Errorf("expected empty IconSVG, got %q", cat.IconSVG)
 	}
 }
 
