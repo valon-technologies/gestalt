@@ -1,17 +1,19 @@
 package provider
 
 type Definition struct {
-	Provider       string            `yaml:"provider"`
-	DisplayName    string            `yaml:"display_name"`
-	Description    string            `yaml:"description"`
-	IconSVG        string            `yaml:"icon_svg"`
-	ConnectionMode string            `yaml:"connection_mode"`
-	BaseURL        string            `yaml:"base_url"`
-	Auth           AuthDef           `yaml:"auth"`
-	AuthStyle      string            `yaml:"auth_style"` // bearer (default), raw, none, basic
-	AuthHeader     string            `yaml:"auth_header"`
-	TokenPrefix    string            `yaml:"token_prefix"`
-	Headers        map[string]string `yaml:"headers"`
+	Provider         string            `yaml:"provider"`
+	DisplayName      string            `yaml:"display_name"`
+	Description      string            `yaml:"description"`
+	IconSVG          string            `yaml:"icon_svg"`
+	ConnectionMode   string            `yaml:"connection_mode"`
+	BaseURL          string            `yaml:"base_url"`
+	Auth             AuthDef           `yaml:"auth"`
+	AuthStyle        string            `yaml:"auth_style"` // bearer (default), raw, none, basic
+	AuthHeader       string            `yaml:"auth_header"`
+	TokenPrefix      string            `yaml:"token_prefix"`
+	Headers          map[string]string `yaml:"headers"`
+	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping"`
+	ErrorMessagePath string            `yaml:"error_message_path"`
 
 	ResponseCheck  string `yaml:"response_check"`
 	TokenParser    string `yaml:"token_parser"`
@@ -45,6 +47,10 @@ type OperationDef struct {
 	Query       string         `yaml:"query"`     // GraphQL query/mutation template
 	Transport   string         `yaml:"transport"` // "rest" (default) or "graphql"
 	Pagination  *PaginationDef `yaml:"pagination"`
+}
+
+type AuthMappingDef struct {
+	Headers map[string]string `yaml:"headers"`
 }
 
 type PaginationDef struct {
