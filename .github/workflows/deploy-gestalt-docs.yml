@@ -1,27 +1,27 @@
-name: Deploy Toolshed to Cloud Run
+name: Deploy Gestalt Docs
 
 on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - '.github/workflows/deploy-toolshed.yml'
+      - 'docs/**'
+      - '.github/workflows/deploy-gestalt-docs.yml'
   workflow_dispatch:
 
 env:
   PROJECT_ID: gitlab-peach-street
   REGION: us-east4
-  WEB_SERVICE: toolshed-test-web
-  WEB_IMAGE: us-east4-docker.pkg.dev/gitlab-peach-street/cloud-run-source-deploy/toolshed-test-web
+  SERVICE: gestalt-docs
+  IMAGE: us-east4-docker.pkg.dev/gitlab-peach-street/cloud-run-source-deploy/gestalt-docs
 
 jobs:
-  deploy-web:
+  deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
-      packages: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -49,22 +49,22 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
-          context: web
-          file: web/Dockerfile
+          context: docs
+          file: docs/Dockerfile
           push: true
-          tags: ${{ env.WEB_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Cloud Run
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: docs/terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: docs/terraform
         run: |
-          gcloud run deploy ${{ env.WEB_SERVICE }} \
-            --image=${{ env.WEB_IMAGE }}:${{ github.sha }} \
-            --region=${{ env.REGION }} \
-            --allow-unauthenticated \
-            --memory=512Mi \
-            --cpu=1 \
-            --min-instances=0 \
-            --max-instances=1 \
-            --port=3000 \
-            --set-env-vars=TOOLSHED_API_URL=${{ vars.TOOLSHED_API_URL }}
+          terraform apply -auto-approve \
+            -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'

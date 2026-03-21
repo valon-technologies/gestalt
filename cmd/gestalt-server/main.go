@@ -17,14 +17,14 @@ func main() {
 	}
 }
 
-const usage = `Usage: toolshed <command> [flags]
+const usage = `Usage: gestalt-server <command> [flags]
 
 Commands:
   serve     Start the API server (default)
   dev       Start API server + web UI for local development
   config    Validate configuration and print resolved values
 
-Run 'toolshed <command> -help' for command-specific flags.
+Run 'gestalt-server <command> -help' for command-specific flags.
 `
 
 func run(args []string) error {

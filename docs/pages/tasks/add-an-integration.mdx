@@ -1,6 +1,6 @@
 # Add an Integration
 
-Adding an integration means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
+Adding an **integration** means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
 
 ## 1. Decide how to define it
 
@@ -18,15 +18,21 @@ integrations:
     openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
+    icon_file: slack.svg
     response_check: slack_ok
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
       response_hook: slack_ok
+      auth_headers:
+        Accept: application/json
+    error_message_path: $.error
     allowed_operations:
       conversations_list: ""
       chat_postMessage: Send a message to a channel
 ```
+
+The `icon_file` field sets the icon displayed in the web UI. The `auth_headers` map adds static headers to token exchange requests. The `error_message_path` field is a JSONPath expression that extracts a human-readable error from upstream error responses.
 
 ## 3. Provider file
 
@@ -67,13 +73,13 @@ operations:
 ```yaml
 integrations:
   datadog:
-    provider: /etc/toolshed/providers/datadog.yaml
+    provider: /etc/gestalt/providers/datadog.yaml
     auth:
       type: manual
     token_parser: datadog_keys
 ```
 
-Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Toolshed encrypts and stores them the same way it stores OAuth tokens.
+Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Gestalt encrypts and stores them the same way it stores OAuth tokens.
 
 ## 5. Restrict operations
 
@@ -96,14 +102,16 @@ See [Connection Modes](/concepts/platform-model#connection-modes) for all option
 ## 7. Validate end to end
 
 ```sh
-toolshed config check -config your-config.yaml
-tshed integrations list
-tshed integrations connect slack
-tshed invoke slack conversations_list
+gestalt-server config check -config your-config.yaml
+gestalt integrations list
+gestalt integrations connect slack
+gestalt invoke slack conversations_list
 
-curl -H "Authorization: Bearer $TOOLSHED_API_KEY" \
+curl -H "Authorization: Bearer $GESTALT_API_KEY" \
   http://localhost:8080/api/v1/slack/conversations_list
 ```
+
+During validation, confirm that `icon_file`, `auth_headers`, and `error_message_path` resolve correctly in the config check output if you have set them.
 
 ## When to write code
 

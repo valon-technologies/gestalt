@@ -5,7 +5,7 @@ import { Callout } from 'nextra/components'
 ## Before you begin
 
 - A [Render](https://render.com) account.
-- Your Toolshed repository on GitHub or GitLab.
+- Your Gestalt repository on GitHub or GitLab.
 
 ## Create a web service
 
@@ -27,9 +27,9 @@ In the web service's **Environment** tab:
 
 | Key | Value |
 |---|---|
-| `TOOLSHED_BASE_URL` | `https://<service>.onrender.com` |
-| `TOOLSHED_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
-| `TOOLSHED_SESSION_SECRET` | Output of `openssl rand -base64 32` |
+| `GESTALT_BASE_URL` | `https://<service>.onrender.com` |
+| `GESTALT_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
+| `GESTALT_SESSION_SECRET` | Output of `openssl rand -base64 32` |
 | `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
 | `DATABASE_URL` | Internal Database URL from the Postgres dashboard |
@@ -40,20 +40,20 @@ In the web service's **Environment** tab:
 
 ## Configure
 
-Commit `toolshed/config.render.yaml`:
+Commit `config.render.yaml`:
 
 ```yaml
 server:
   port: 8080
-  base_url: "${TOOLSHED_BASE_URL}"
-  encryption_key: "${TOOLSHED_ENCRYPTION_KEY}"
+  base_url: "${GESTALT_BASE_URL}"
+  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
 
 auth:
   provider: google
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${TOOLSHED_SESSION_SECRET}"
+    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -64,7 +64,7 @@ datastore:
 Set the **Docker Command** override:
 
 ```
-/toolshed --config config.render.yaml
+/gestalt-server --config config.render.yaml
 ```
 
 ## Using SQLite instead
@@ -79,7 +79,7 @@ Attach a **Persistent Disk** to the web service:
 datastore:
   provider: sqlite
   config:
-    path: /data/toolshed.db
+    path: /data/gestalt.db
 ```
 
 <Callout>
@@ -96,4 +96,4 @@ curl -s https://<service>.onrender.com/health
 
 1. Go to **Custom Domains** in service settings.
 2. Configure DNS as Render instructs.
-3. Update `TOOLSHED_BASE_URL` to the new domain.
+3. Update `GESTALT_BASE_URL` to the new domain.

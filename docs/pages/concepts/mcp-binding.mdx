@@ -1,10 +1,10 @@
 # MCP Binding
 
-When `mcp.enabled` is set in the config, Toolshed mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
+When `mcp.enabled` is set in the config, Gestalt mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
 
 ## What MCP is
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Toolshed's MCP binding maps each allowed integration operation to an MCP tool.
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Gestalt's MCP binding maps each allowed integration operation to an MCP tool.
 
 ## Tool names
 
@@ -16,7 +16,7 @@ Each tool name is built from the provider name and operation ID:
 
 For example, `search_issues` on the `linear` provider becomes `linear_search_issues`.
 
-Set `tool_name_prefix` in the `mcp` config block to prepend a string to every tool name. A prefix of `ts_` produces `ts_linear_search_issues`.
+Set `tool_name_prefix` in the `mcp` config block to prepend a string to every tool name. A prefix of `gs_` produces `gs_linear_search_issues`.
 
 ## Auth
 
@@ -35,7 +35,7 @@ The `mcp.providers` filter lets you expose a subset of integrations to MCP clien
 
 ## Tool metadata
 
-Toolshed populates MCP tool annotations automatically:
+Gestalt populates MCP tool annotations automatically:
 
 | HTTP method | Annotation |
 |---|---|
@@ -48,3 +48,7 @@ Input schemas from OpenAPI specs are passed through as JSON Schema, giving MCP c
 ## Limitations
 
 Adding or removing integrations requires restarting the server.
+
+## MCP upstream proxying
+
+Integrations can proxy requests to an upstream MCP server by setting `mcp.url` in the integration config block. When configured, Gestalt forwards tool calls to the upstream MCP server instead of executing HTTP operations. This allows Gestalt to act as a unified gateway for both REST and MCP-native providers; you expose a single MCP endpoint to your AI assistants, and Gestalt routes each tool call to the correct backend regardless of whether the upstream speaks REST or MCP.

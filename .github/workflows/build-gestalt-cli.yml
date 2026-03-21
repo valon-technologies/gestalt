@@ -1,4 +1,4 @@
-name: Build Toolshed CLI
+name: Build Gestalt CLI
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'client/**'
-      - '.github/workflows/build-toolshed-cli.yml'
+      - '.github/workflows/build-gestalt-cli.yml'
   pull_request:
     paths:
       - 'client/**'
@@ -43,7 +43,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             client/target/
-          key: ${{ runner.os }}-cargo-toolshed-cli-${{ hashFiles('client/**/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-gestalt-cli-${{ hashFiles('client/**/Cargo.toml') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -59,7 +59,7 @@ jobs:
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
       working-directory: client
-      binary-name: tshed
-      artifact-prefix: tshed
+      binary-name: gestalt
+      artifact-prefix: gestalt
       run-tests: true
       package: false

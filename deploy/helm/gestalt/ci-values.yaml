@@ -1,6 +1,6 @@
 config:
   server:
-    base_url: "https://toolshed.example.com"
+    base_url: "https://gestalt.example.com"
     encryption_key: "ci-test-encryption-key"
   auth:
     config:

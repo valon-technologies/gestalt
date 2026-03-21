@@ -1,4 +1,4 @@
-name: Release Toolshed CLI
+name: Release Gestalt CLI
 
 on:
   push:
@@ -16,8 +16,8 @@ jobs:
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
       working-directory: client
-      binary-name: tshed
-      artifact-prefix: tshed
+      binary-name: gestalt
+      artifact-prefix: gestalt
       run-tests: true
       package: true
 

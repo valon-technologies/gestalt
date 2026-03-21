@@ -1,4 +1,4 @@
-name: Build Toolshed
+name: Build Gestalt Server
 
 on:
   push:
@@ -122,11 +122,11 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Build Go server
-        run: go build -o ./toolshed-server ./cmd/toolshed
+        run: go build -o ./gestalt-server ./cmd/gestalt-server
 
       - name: Start Go server
         run: |
-          ./toolshed-server -config toolshed.dev.yaml &
+          ./gestalt-server -config gestalt.dev.yaml &
           ready=false
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health; then
@@ -160,13 +160,13 @@ jobs:
         working-directory: web
         env:
           CI: true
-          TOOLSHED_API_URL: http://localhost:8080
+          GESTALT_API_URL: http://localhost:8080
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: toolshed-playwright-report
+          name: gestalt-playwright-report
           path: web/playwright-report/
           retention-days: 7
 
@@ -181,12 +181,12 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Helm lint
-        run: helm lint deploy/helm/toolshed
+        run: helm lint deploy/helm/gestalt
 
       - name: Helm template
         run: |
-          helm template test-release deploy/helm/toolshed \
-            -f deploy/helm/toolshed/ci-values.yaml \
+          helm template test-release deploy/helm/gestalt \
+            -f deploy/helm/gestalt/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform

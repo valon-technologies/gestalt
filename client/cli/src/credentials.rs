@@ -18,7 +18,7 @@ impl CredentialStore {
     pub fn new() -> Result<Self> {
         let config_dir = dirs::config_dir()
             .context("could not determine config directory")?
-            .join("toolshed");
+            .join("gestalt");
         Ok(Self {
             path: config_dir.join("credentials.json"),
         })
