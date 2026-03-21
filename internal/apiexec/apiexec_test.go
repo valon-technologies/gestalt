@@ -3,10 +3,13 @@ package apiexec
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/internal/testutil"
 )
@@ -306,4 +309,232 @@ func TestDoGraphQLAuthHeaders(t *testing.T) {
 			t.Fatalf("key = %v, want key-123", data["key"])
 		}
 	})
+}
+
+func TestRetryOn429ThenSuccess(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte("rate limited"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	result, err := Do(context.Background(), srv.Client(), Request{
+		Method:     http.MethodGet,
+		BaseURL:    srv.URL,
+		Path:       "/test",
+		MaxRetries: 2,
+	})
+	if err != nil {
+		t.Fatalf("expected success after retry, got: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("attempts = %d, want 2", got)
+	}
+}
+
+func TestRetryOn503WithBackoff(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("unavailable"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "recovered"})
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	start := time.Now()
+	result, err := Do(context.Background(), srv.Client(), Request{
+		Method:     http.MethodGet,
+		BaseURL:    srv.URL,
+		Path:       "/test",
+		MaxRetries: 3,
+	})
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected success after retries, got: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Fatalf("attempts = %d, want 3", got)
+	}
+	// Two retries: 1s + 2s = 3s minimum backoff
+	if elapsed < 3*time.Second {
+		t.Fatalf("elapsed = %v, expected at least 3s of backoff", elapsed)
+	}
+}
+
+func TestRetryAfterHeaderRespected(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte("rate limited"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	start := time.Now()
+	result, err := Do(context.Background(), srv.Client(), Request{
+		Method:     http.MethodGet,
+		BaseURL:    srv.URL,
+		Path:       "/test",
+		MaxRetries: 2,
+	})
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if elapsed < 2*time.Second {
+		t.Fatalf("elapsed = %v, expected at least 2s from Retry-After", elapsed)
+	}
+}
+
+func TestNoRetryDisablesRetry(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("rate limited"))
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	_, err := Do(context.Background(), srv.Client(), Request{
+		Method:  http.MethodGet,
+		BaseURL: srv.URL,
+		Path:    "/test",
+		NoRetry: true,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("attempts = %d, want 1 (no retry)", got)
+	}
+}
+
+func TestRetriesStopAfterMaxRetries(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("bad gateway"))
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	_, err := Do(context.Background(), srv.Client(), Request{
+		Method:     http.MethodGet,
+		BaseURL:    srv.URL,
+		Path:       "/test",
+		MaxRetries: 2,
+	})
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	// 1 initial + 2 retries = 3 total
+	if got := attempts.Load(); got != 3 {
+		t.Fatalf("attempts = %d, want 3", got)
+	}
+}
+
+func TestContextCancellationStopsRetries(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("unavailable"))
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err := Do(ctx, srv.Client(), Request{
+		Method:     http.MethodGet,
+		BaseURL:    srv.URL,
+		Path:       "/test",
+		MaxRetries: 5,
+	})
+	if err == nil {
+		t.Fatal("expected error from context cancellation")
+	}
+	if err != context.Canceled {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if got := attempts.Load(); got > 2 {
+		t.Fatalf("attempts = %d, want at most 2", got)
+	}
+}
+
+func TestNonRetryableErrorsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []int{
+		http.StatusBadRequest,
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusNotFound,
+		http.StatusInternalServerError,
+	} {
+		t.Run(fmt.Sprintf("HTTP_%d", code), func(t *testing.T) {
+			t.Parallel()
+
+			var attempts atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				attempts.Add(1)
+				w.WriteHeader(code)
+				_, _ = fmt.Fprintf(w, "error %d", code)
+			}))
+			testutil.CloseOnCleanup(t, srv)
+
+			_, err := Do(context.Background(), srv.Client(), Request{
+				Method:  http.MethodGet,
+				BaseURL: srv.URL,
+				Path:    "/test",
+			})
+			if err == nil {
+				t.Fatalf("expected error for HTTP %d", code)
+			}
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("attempts = %d, want 1 (no retry for HTTP %d)", got, code)
+			}
+		})
+	}
 }
