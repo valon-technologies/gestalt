@@ -29,8 +29,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/hughhan/gestalt:latest
-            ghcr.io/hughhan/gestalt:${{ github.sha }}
+            ghcr.io/valon-technologies/gestalt:latest
+            ghcr.io/valon-technologies/gestalt:${{ github.sha }}
             hughhan/gestalt:latest
             hughhan/gestalt:${{ github.sha }}
 
@@ -53,5 +53,5 @@ jobs:
           file: web/Dockerfile
           push: true
           tags: |
-            ghcr.io/hughhan/gestalt-web:latest
-            ghcr.io/hughhan/gestalt-web:${{ github.sha }}
+            ghcr.io/valon-technologies/gestalt-web:latest
+            ghcr.io/valon-technologies/gestalt-web:${{ github.sha }}
