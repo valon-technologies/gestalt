@@ -1,15 +1,15 @@
 # Configuration
 
-Gestalt boots entirely from a YAML config file plus environment and secret resolution. The config is the contract between your deployment and the runtime.
+Toolshed boots entirely from a YAML config file plus environment and secret resolution. The config is the contract between your deployment and the runtime.
 
 ## How config files are found
 
 1. Explicit `--config` flag passed to the binary.
-2. `GESTALT_CONFIG` environment variable.
+2. `TOOLSHED_CONFIG` environment variable.
 3. `./config.yaml` in the current working directory.
-4. `/etc/gestalt/config.yaml` as a system-wide fallback.
+4. `/etc/toolshed/config.yaml` as a system-wide fallback.
 
-The first match wins. Gestalt does not merge multiple config files.
+The first match wins. Toolshed does not merge multiple config files.
 
 ## How values are resolved
 
@@ -27,7 +27,7 @@ auth:
   provider: oidc
   config:
     issuer_url: https://auth.example.com
-    client_id: ${GESTALT_OIDC_CLIENT_ID}
+    client_id: ${TOOLSHED_OIDC_CLIENT_ID}
     client_secret: secret://oidc-client-secret
     allowed_domains:
       - example.com
@@ -37,7 +37,7 @@ auth:
 datastore:
   provider: postgres
   config:
-    dsn: secret://gestalt-postgres-dsn
+    dsn: secret://toolshed-postgres-dsn
 
 secrets:
   provider: gcp_secret_manager
@@ -54,7 +54,7 @@ auth_profiles:
       response_hook: slack_ok
 
 provider_dirs:
-  - /etc/gestalt/providers
+  - /etc/toolshed/providers
 
 integrations:
   slack:
@@ -73,8 +73,8 @@ mcp:
 
 server:
   port: 8080
-  base_url: https://gestalt.example.com
-  encryption_key: secret://gestalt-encryption-key
+  base_url: https://toolshed.example.com
+  encryption_key: secret://toolshed-encryption-key
 ```
 
 ## Key behaviors

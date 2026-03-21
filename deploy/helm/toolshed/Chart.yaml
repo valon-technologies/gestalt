@@ -1,0 +1,6 @@
+apiVersion: v2
+name: toolshed
+description: Toolshed - OAuth token management proxy with pluggable integrations
+type: application
+version: 0.0.1-alpha.1
+appVersion: "0.0.1-alpha.1"

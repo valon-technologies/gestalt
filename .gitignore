@@ -1,6 +1,6 @@
 # Go
-/gestalt
-/gestalt-server
+toolshed
+toolshed-server
 *.db-shm
 *.db-wal
 

@@ -18,7 +18,7 @@ export const mockTokens: MockToken[] = [
 export function createMockToken(name: string, scopes: string): { id: string; token: string } {
   const id = `tok-${nextTokenId++}`;
   mockTokens.push({ id, name, scopes: scopes || "", created_at: new Date().toISOString() });
-  return { id, token: `gstl_mock_${id}` };
+  return { id, token: `tshed_mock_${id}` };
 }
 
 export function revokeMockToken(id: string): boolean {

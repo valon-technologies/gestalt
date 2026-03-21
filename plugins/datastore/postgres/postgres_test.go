@@ -17,9 +17,9 @@ import (
 
 func testDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("GESTALT_TEST_POSTGRES_DSN")
+	dsn := os.Getenv("TOOLSHED_TEST_POSTGRES_DSN")
 	if dsn == "" {
-		t.Skip("GESTALT_TEST_POSTGRES_DSN not set")
+		t.Skip("TOOLSHED_TEST_POSTGRES_DSN not set")
 	}
 	return dsn
 }

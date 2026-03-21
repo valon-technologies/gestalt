@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = "gestalt-terraform-state"
-    prefix = "gestalt-docs"
+    bucket = "toolshed-terraform-state"
+    prefix = "toolshed-docs"
   }
 }

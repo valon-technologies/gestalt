@@ -3,10 +3,10 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /gestalt ./cmd/gestalt
+RUN CGO_ENABLED=0 GOOS=linux go build -o /toolshed ./cmd/toolshed
 
 FROM gcr.io/distroless/static-debian12
-COPY --from=builder /gestalt /gestalt
+COPY --from=builder /toolshed /toolshed
 EXPOSE 8080
-ENTRYPOINT ["/gestalt"]
-CMD ["--config", "/etc/gestalt/config.yaml"]
+ENTRYPOINT ["/toolshed"]
+CMD ["--config", "/etc/toolshed/config.yaml"]

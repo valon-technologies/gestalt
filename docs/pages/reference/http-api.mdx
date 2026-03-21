@@ -68,7 +68,7 @@ Authorization: Bearer <session-token-or-api-token>
 
 ```sh
 curl -X POST http://localhost:8080/api/v1/slack/chat_postMessage \
-  -H "Authorization: Bearer $GESTALT_API_KEY" \
+  -H "Authorization: Bearer $TOOLSHED_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"channel":"C123","text":"hello from gestalt"}'
+  -d '{"channel":"C123","text":"hello from toolshed"}'
 ```

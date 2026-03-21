@@ -4,11 +4,11 @@
 
 | Directory | Purpose |
 |---|---|
-| `cmd/gestalt` | Main Go binary. Registers all plugins and starts the server. |
+| `cmd/toolshed` | Main Go binary. Registers all plugins and starts the server. |
 | `core` | Public interfaces: auth providers, datastores, secret managers, providers, runtimes, bindings, hooks. |
 | `internal` | Runtime packages: config loading, HTTP routing, middleware, invocation, token management, bootstrap. |
 | `plugins` | Implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
-| `client/cli` | Rust CLI source (`gstl`). |
+| `client/cli` | Rust CLI source (`tshed`). |
 | `web` | Next.js web UI. |
 | `deploy` | Helm chart, Dockerfiles, and CI workflows. |
 
@@ -16,7 +16,7 @@
 
 1. Implement the interface from `core` (e.g. `core.AuthProvider`, `core.Datastore`, `core.SecretManager`).
 2. Expose a factory function that accepts the provider config and returns an initialized instance.
-3. Register the factory in `cmd/gestalt/factories.go` so the runtime resolves it by name from config.
+3. Register the factory in `cmd/toolshed/factories.go` so the runtime resolves it by name from config.
 4. Add tests that exercise the plugin through the same interface the runtime uses.
 
 ## Add integration-specific behavior
@@ -25,20 +25,20 @@ Integration hooks live under `plugins/integrations`. Each package exports named 
 
 1. Create a package under `plugins/integrations/<name>`.
 2. Implement the relevant hook signatures (`response_check`, `token_parser`, or `request_mutator`).
-3. Register them by name in `cmd/gestalt/factories.go`.
+3. Register them by name in `cmd/toolshed/factories.go`.
 
 ## Development workflow
 
 ```sh
 # Run tests
-cd gestalt
+cd toolshed
 go test ./...
 
 # Validate config
-gestalt config check -config gestalt.dev.yaml
+toolshed config check -config toolshed.dev.yaml
 
 # Run locally
-gestalt dev -config gestalt.dev.yaml
+toolshed dev -config toolshed.dev.yaml
 
 # Web UI
 cd web

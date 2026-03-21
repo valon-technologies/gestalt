@@ -29,7 +29,7 @@ export default function DashboardPage() {
         <main className="mx-auto max-w-5xl px-6 py-8">
           <h1 className="text-2xl font-heading font-bold text-stone-900">Dashboard</h1>
           <p className="mt-1 text-sm text-stone-500">
-            Your Gestalt overview at a glance.
+            Your Toolshed overview at a glance.
           </p>
 
           {error && <p className="mt-8 text-sm text-ember-500">{error}</p>}

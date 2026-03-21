@@ -89,6 +89,7 @@ type Base struct {
 	Headers            map[string]string
 	AuthStyle          AuthStyle
 	HTTPClient         *http.Client
+	Pagination         map[string]apiexec.PaginationConfig
 
 	TokenParser    func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse  apiexec.ResponseChecker
@@ -184,6 +185,10 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		if err := b.RequestMutator(operation, &req, params); err != nil {
 			return nil, err
 		}
+	}
+
+	if pgn, ok := b.Pagination[operation]; ok {
+		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
 	}
 
 	return apiexec.Do(ctx, b.httpClient(), req)

@@ -18,18 +18,16 @@ const (
 var (
 	_ Invoker          = (*GuardedInvoker)(nil)
 	_ CapabilityLister = (*GuardedInvoker)(nil)
-	_ ProviderLister   = (*GuardedInvoker)(nil)
 )
 
 type GuardedInvoker struct {
-	inner          Invoker
-	lister         CapabilityLister
-	providerLister ProviderLister
-	allowed        map[string]struct{} // nil = allow all
-	source         string
-	maxDepth       int
-	audit          core.AuditSink
-	limiter        *rateLimiter
+	inner    Invoker
+	lister   CapabilityLister
+	allowed  map[string]struct{} // nil = allow all
+	source   string
+	maxDepth int
+	audit    core.AuditSink
+	limiter  *rateLimiter
 }
 
 type GuardedOption func(*GuardedInvoker)
@@ -53,10 +51,6 @@ func WithRateLimit(rps, burst int) GuardedOption {
 
 func WithoutRateLimit() GuardedOption {
 	return func(g *GuardedInvoker) { g.limiter = nil }
-}
-
-func WithProviderLister(lister ProviderLister) GuardedOption {
-	return func(g *GuardedInvoker) { g.providerLister = lister }
 }
 
 func NewGuarded(inner Invoker, lister CapabilityLister, source string, audit core.AuditSink, opts ...GuardedOption) *GuardedInvoker {
@@ -131,23 +125,6 @@ func (g *GuardedInvoker) ListCapabilities() []core.Capability {
 	for _, cap := range caps {
 		if _, ok := g.allowed[cap.Provider]; ok {
 			filtered = append(filtered, cap)
-		}
-	}
-	return filtered
-}
-
-func (g *GuardedInvoker) ListProviderInfos() []core.ProviderInfo {
-	if g.providerLister == nil {
-		return nil
-	}
-	infos := g.providerLister.ListProviderInfos()
-	if g.allowed == nil {
-		return infos
-	}
-	filtered := make([]core.ProviderInfo, 0, len(infos))
-	for _, info := range infos {
-		if _, ok := g.allowed[info.Name]; ok {
-			filtered = append(filtered, info)
 		}
 	}
 	return filtered

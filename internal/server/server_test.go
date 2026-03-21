@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +19,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
-	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	toolshedmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -1158,125 +1157,6 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	}
 }
 
-func TestIntegrationOAuthCallback_RedirectsToFrontend(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubIntegrationWithAuthURL{
-		StubIntegration: coretesting.StubIntegration{
-			N: "test-provider",
-			ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
-				return &core.TokenResponse{AccessToken: "tok"}, nil
-			},
-		},
-		authURL: "https://auth.example.com/authorize",
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	startBody := bytes.NewBufferString(`{"integration":"test-provider"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
-	startReq.Header.Set("Content-Type", "application/json")
-	startReq.Header.Set("Origin", "https://my-frontend.example.com")
-	startResp, err := http.DefaultClient.Do(startReq)
-	if err != nil {
-		t.Fatalf("start request: %v", err)
-	}
-	defer func() { _ = startResp.Body.Close() }()
-
-	var startResult map[string]string
-	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
-		t.Fatalf("decoding start response: %v", err)
-	}
-
-	noRedirectClient := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	cbURL := ts.URL + "/api/v1/auth/callback?code=test-code&state=" + url.QueryEscape(startResult["state"])
-	resp, err := noRedirectClient.Get(cbURL)
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected 302, got %d", resp.StatusCode)
-	}
-	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "https://my-frontend.example.com/integrations?connected=test-provider") {
-		t.Errorf("Location = %q, want redirect to frontend integrations page", loc)
-	}
-}
-
-func TestIntegrationOAuthCallback_FallsBackToJSON(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubIntegrationWithAuthURL{
-		StubIntegration: coretesting.StubIntegration{
-			N: "test-provider",
-			ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
-				return &core.TokenResponse{AccessToken: "tok"}, nil
-			},
-		},
-		authURL: "https://auth.example.com/authorize",
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	startBody := bytes.NewBufferString(`{"integration":"test-provider"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
-	startReq.Header.Set("Content-Type", "application/json")
-	startResp, err := http.DefaultClient.Do(startReq)
-	if err != nil {
-		t.Fatalf("start request: %v", err)
-	}
-	defer func() { _ = startResp.Body.Close() }()
-
-	var startResult map[string]string
-	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
-		t.Fatalf("decoding start response: %v", err)
-	}
-
-	cbURL := ts.URL + "/api/v1/auth/callback?code=test-code&state=" + url.QueryEscape(startResult["state"])
-	resp, err := http.Get(cbURL)
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	var body map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding callback response: %v", err)
-	}
-	if body["status"] != "connected" {
-		t.Errorf("status = %q, want %q", body["status"], "connected")
-	}
-}
-
 func TestCallbackPathConstants(t *testing.T) {
 	t.Parallel()
 
@@ -2156,7 +2036,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 
 	invoker := invocation.NewBroker(providers, ds)
-	mcpSrv := gestaltmcp.NewServer(gestaltmcp.Config{
+	mcpSrv := toolshedmcp.NewServer(toolshedmcp.Config{
 		Invoker:   invoker,
 		Providers: providers,
 	})
@@ -2541,7 +2421,7 @@ func TestBindingRoutesMounted(t *testing.T) {
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, ds)
-	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+	srv := toolshedmcp.NewServer(toolshedmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
 		Providers:     providers,

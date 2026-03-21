@@ -69,10 +69,3 @@ type OperationResult struct {
 	Status int
 	Body   string
 }
-
-type ProviderInfo struct {
-	Name           string
-	DisplayName    string
-	Description    string
-	ConnectionMode ConnectionMode
-}

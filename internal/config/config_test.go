@@ -20,7 +20,7 @@ func mustDecodeNode(t *testing.T, node yaml.Node) map[string]string {
 func mustWriteConfigFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "gestalt.yaml")
+	path := filepath.Join(dir, "toolshed.yaml")
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("writing temp config: %v", err)
 	}
@@ -107,8 +107,8 @@ func TestEnvVarResolution(t *testing.T) {
 
 	getenv := func(key string) string {
 		return map[string]string{
-			"GESTALT_TEST_CLIENT_ID": "env-client-id",
-			"GESTALT_TEST_ENC_KEY":   "env-encryption-key",
+			"TOOLSHED_TEST_CLIENT_ID": "env-client-id",
+			"TOOLSHED_TEST_ENC_KEY":   "env-encryption-key",
 		}[key]
 	}
 
@@ -116,9 +116,9 @@ func TestEnvVarResolution(t *testing.T) {
 auth:
   provider: google
   config:
-    client_id: ${GESTALT_TEST_CLIENT_ID}
+    client_id: ${TOOLSHED_TEST_CLIENT_ID}
 server:
-  encryption_key: ${GESTALT_TEST_ENC_KEY}
+  encryption_key: ${TOOLSHED_TEST_ENC_KEY}
 `
 	path := mustWriteConfigFile(t, yaml)
 	cfg, err := LoadWithMapping(path, getenv)
@@ -145,7 +145,7 @@ auth:
   provider: google
 server:
   dev_mode: true
-  encryption_key: ${GESTALT_TEST_NONEXISTENT}
+  encryption_key: ${TOOLSHED_TEST_NONEXISTENT}
 `
 	path := mustWriteConfigFile(t, yaml)
 	cfg, err := LoadWithMapping(path, getenv)
@@ -207,7 +207,7 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{
 			name: "nonexistent file",
-			path: "/tmp/this-file-does-not-exist-gestalt.yaml",
+			path: "/tmp/this-file-does-not-exist-toolshed.yaml",
 		},
 		{
 			name: "invalid YAML",
@@ -232,7 +232,7 @@ func TestLoadErrors(t *testing.T) {
 func TestHelmValuesConfigLoads(t *testing.T) {
 	t.Parallel()
 
-	helmValues, err := os.ReadFile(filepath.Join("..", "..", "deploy", "helm", "gestalt", "values.yaml"))
+	helmValues, err := os.ReadFile(filepath.Join("..", "..", "deploy", "helm", "toolshed", "values.yaml"))
 	if err != nil {
 		t.Fatalf("reading helm values.yaml: %v", err)
 	}
@@ -252,10 +252,10 @@ func TestHelmValuesConfigLoads(t *testing.T) {
 	path := mustWriteConfigFile(t, string(configBytes))
 
 	envMap := map[string]string{
-		"GESTALT_BASE_URL":       "https://gestalt.example.com",
-		"GESTALT_ENCRYPTION_KEY": "test-encryption-key-for-ci",
-		"GOOGLE_CLIENT_ID":       "test-client-id",
-		"GOOGLE_CLIENT_SECRET":   "test-client-secret",
+		"TOOLSHED_BASE_URL":       "https://toolshed.example.com",
+		"TOOLSHED_ENCRYPTION_KEY": "test-encryption-key-for-ci",
+		"GOOGLE_CLIENT_ID":        "test-client-id",
+		"GOOGLE_CLIENT_SECRET":    "test-client-secret",
 	}
 	getenv := func(key string) string { return envMap[key] }
 

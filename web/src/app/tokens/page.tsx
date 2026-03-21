@@ -34,7 +34,7 @@ export default function TokensPage() {
         <main className="mx-auto max-w-5xl px-6 py-8">
           <h1 className="text-2xl font-heading font-bold text-stone-900">API Tokens</h1>
           <p className="mt-1 text-sm text-stone-500">
-            Manage tokens for programmatic access to the Gestalt API.
+            Manage tokens for programmatic access to the Toolshed API.
           </p>
 
           <TokenCreateForm onCreated={loadTokens} />
