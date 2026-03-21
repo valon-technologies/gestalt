@@ -114,6 +114,14 @@ export async function startIntegrationOAuth(
   });
 }
 
+export async function disconnectIntegration(
+  name: string,
+): Promise<void> {
+  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getTokens(): Promise<APIToken[]> {
   return fetchAPI("/api/v1/tokens");
 }

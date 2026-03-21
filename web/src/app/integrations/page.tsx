@@ -54,6 +54,7 @@ export default function IntegrationsPage() {
                 <IntegrationCard
                   key={integration.name}
                   integration={integration}
+                  onDisconnected={loadIntegrations}
                 />
               ))}
             </div>
