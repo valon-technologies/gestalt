@@ -26,6 +26,8 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 			Method:      strings.ToUpper(opDef.Method),
 			Path:        opDef.Path,
 			Description: opDef.Description,
+			Transport:   opDef.Transport,
+			Query:       opDef.Query,
 		}
 		for _, p := range opDef.Parameters {
 			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{

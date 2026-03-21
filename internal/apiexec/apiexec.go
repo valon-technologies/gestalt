@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/core"
 )
@@ -126,6 +127,100 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 	return &core.OperationResult{
 		Status: resp.StatusCode,
 		Body:   string(respBody),
+	}, nil
+}
+
+// GraphQLRequest describes a GraphQL API call.
+type GraphQLRequest struct {
+	URL           string
+	Query         string
+	Variables     map[string]any
+	Token         string
+	AuthHeader    string
+	CustomHeaders map[string]string
+}
+
+const (
+	graphqlBodyKeyQuery     = "query"
+	graphqlBodyKeyVariables = "variables"
+	graphqlRespKeyData      = "data"
+	graphqlRespKeyErrors    = "errors"
+)
+
+type graphqlError struct {
+	Message string `json:"message"`
+}
+
+// DoGraphQL executes a GraphQL operation. The query is sent as a JSON POST body
+// with the variables. If the response contains errors, they are returned as an error.
+func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*core.OperationResult, error) {
+	payload := map[string]any{
+		graphqlBodyKeyQuery: req.Query,
+	}
+	if len(req.Variables) > 0 {
+		payload[graphqlBodyKeyVariables] = req.Variables
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling graphql body: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, req.URL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating graphql request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	if req.AuthHeader != "" {
+		httpReq.Header.Set("Authorization", req.AuthHeader)
+	} else if req.Token != "" {
+		httpReq.Header.Set("Authorization", core.BearerScheme+req.Token)
+	}
+
+	for k, v := range req.CustomHeaders {
+		httpReq.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("executing graphql request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading graphql response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
+	}
+
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("parsing graphql response: %w", err)
+	}
+
+	if raw, ok := parsed[graphqlRespKeyErrors]; ok {
+		var gqlErrs []graphqlError
+		if err := json.Unmarshal(raw, &gqlErrs); err == nil && len(gqlErrs) > 0 {
+			msgs := make([]string, len(gqlErrs))
+			for i, e := range gqlErrs {
+				msgs[i] = e.Message
+			}
+			return nil, fmt.Errorf("graphql: %s", strings.Join(msgs, "; "))
+		}
+	}
+
+	resultBody := string(respBody)
+	if raw, ok := parsed[graphqlRespKeyData]; ok {
+		resultBody = string(raw)
+	}
+
+	return &core.OperationResult{
+		Status: resp.StatusCode,
+		Body:   resultBody,
 	}, nil
 }
 

@@ -41,6 +41,8 @@ type OperationDef struct {
 	Method      string         `yaml:"method"`
 	Path        string         `yaml:"path"`
 	Parameters  []ParameterDef `yaml:"parameters"`
+	Query       string         `yaml:"query"`     // GraphQL query/mutation template
+	Transport   string         `yaml:"transport"` // "rest" (default) or "graphql"
 }
 
 type ParameterDef struct {

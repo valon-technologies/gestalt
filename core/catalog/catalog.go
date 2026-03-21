@@ -36,6 +36,8 @@ type CatalogOperation struct {
 	Tags           []string             `yaml:"tags,omitempty"           json:"tags,omitempty"`
 	ReadOnly       bool                 `yaml:"read_only,omitempty"      json:"readOnly,omitempty"`
 	Visible        *bool                `yaml:"visible,omitempty"        json:"visible,omitempty"`
+	Transport      string               `yaml:"transport,omitempty"      json:"transport,omitempty"`
+	Query          string               `yaml:"query,omitempty"          json:"query,omitempty"`
 }
 
 type OperationAnnotations struct {
