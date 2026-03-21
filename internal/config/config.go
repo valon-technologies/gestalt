@@ -87,13 +87,16 @@ type IntegrationDef struct {
 
 	Auth AuthOverrides `yaml:"auth"`
 
-	ResponseCheck  string            `yaml:"response_check"`
-	TokenParser    string            `yaml:"token_parser"`
-	RequestMutator string            `yaml:"request_mutator"`
-	TokenPrefix    string            `yaml:"token_prefix"`
-	AuthStyle      string            `yaml:"auth_style"`
-	IconFile       string            `yaml:"icon_file"`
-	Headers        map[string]string `yaml:"headers"`
+	AuthHeader       string            `yaml:"auth_header"`
+	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping"`
+	ErrorMessagePath string            `yaml:"error_message_path"`
+	ResponseCheck    string            `yaml:"response_check"`
+	TokenParser      string            `yaml:"token_parser"`
+	RequestMutator   string            `yaml:"request_mutator"`
+	TokenPrefix      string            `yaml:"token_prefix"`
+	AuthStyle        string            `yaml:"auth_style"`
+	IconFile         string            `yaml:"icon_file"`
+	Headers          map[string]string `yaml:"headers"`
 
 	AllowedOperations map[string]string `yaml:"allowed_operations"`
 
@@ -119,6 +122,11 @@ type AuthOverrides struct {
 	AcceptHeader        string            `yaml:"accept_header"`
 	TokenMetadata       []string          `yaml:"token_metadata"`
 	ResponseHook        string            `yaml:"response_hook"`
+	AuthHeader          string            `yaml:"auth_header"`
+}
+
+type AuthMappingDef struct {
+	Headers map[string]string `yaml:"headers"`
 }
 
 func Load(path string) (*Config, error) {
@@ -225,6 +233,9 @@ func resolveAuthProfiles(cfg *Config) error {
 		}
 		if intg.Auth.ResponseHook == "" {
 			intg.Auth.ResponseHook = profile.Auth.ResponseHook
+		}
+		if intg.Auth.AuthHeader == "" {
+			intg.Auth.AuthHeader = profile.Auth.AuthHeader
 		}
 		cfg.Integrations[name] = intg
 	}

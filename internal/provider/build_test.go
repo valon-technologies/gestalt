@@ -1,10 +1,14 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -351,6 +355,266 @@ func TestBuildIconFileMissing(t *testing.T) {
 	}
 	if cat := cp.Catalog(); cat != nil && cat.IconSVG != "" {
 		t.Errorf("expected empty IconSVG, got %q", cat.IconSVG)
+	}
+}
+
+func TestBuildAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":      r.Header.Get("Authorization"),
+			"x_api_key": r.Header.Get("X-API-Key"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "custom_header",
+		DisplayName: "Custom Header API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		AuthHeader:  "X-API-Key",
+		Operations: map[string]OperationDef{
+			"list": {Description: "List items", Method: "GET", Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "list", nil, "my-secret-key")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["x_api_key"] != "my-secret-key" {
+		t.Errorf("X-API-Key = %v, want my-secret-key", resp["x_api_key"])
+	}
+	if resp["auth"] != "" {
+		t.Errorf("Authorization should be empty, got %v", resp["auth"])
+	}
+}
+
+func TestBuildAuthMapping(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":    r.Header.Get("Authorization"),
+			"api_key": r.Header.Get("DD-API-KEY"),
+			"app_key": r.Header.Get("DD-APPLICATION-KEY"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "multi_header",
+		DisplayName: "Multi Header API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		AuthMapping: &AuthMappingDef{
+			Headers: map[string]string{
+				"DD-API-KEY":         "api_key",
+				"DD-APPLICATION-KEY": "app_key",
+			},
+		},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List items", Method: "GET", Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	token := `{"api_key":"k1","app_key":"k2"}`
+	result, err := prov.Execute(context.Background(), "list", nil, token)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["api_key"] != "k1" {
+		t.Errorf("DD-API-KEY = %v, want k1", resp["api_key"])
+	}
+	if resp["app_key"] != "k2" {
+		t.Errorf("DD-APPLICATION-KEY = %v, want k2", resp["app_key"])
+	}
+	if resp["auth"] != "" {
+		t.Errorf("Authorization should be empty, got %v", resp["auth"])
+	}
+}
+
+func TestBuildAuthMappingMissingField(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "bad_mapping",
+		DisplayName: "Bad Mapping API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		AuthMapping: &AuthMappingDef{
+			Headers: map[string]string{"X-Key": "missing_field"},
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "op", nil, `{"other":"val"}`)
+	if err == nil {
+		t.Fatal("expected error for missing JSON field in auth_mapping")
+	}
+	if !strings.Contains(err.Error(), "missing_field") {
+		t.Errorf("error should mention missing field, got: %v", err)
+	}
+}
+
+func TestBuildErrorMessagePath(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "invalid parameter: limit",
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:         "error_path",
+		DisplayName:      "Error Path API",
+		BaseURL:          srv.URL,
+		Auth:             AuthDef{Type: "manual"},
+		ErrorMessagePath: "error.message",
+		Operations: map[string]OperationDef{
+			"list": {Description: "List", Method: "GET", Path: "/list"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "list", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error for 400 response")
+	}
+	if !strings.Contains(err.Error(), "invalid parameter: limit") {
+		t.Errorf("error should contain extracted message, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "400") {
+		t.Errorf("error should contain status code, got: %v", err)
+	}
+}
+
+func TestBuildErrorMessagePathSuccessPassthrough(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:         "error_path_ok",
+		DisplayName:      "Error Path OK API",
+		BaseURL:          srv.URL,
+		Auth:             AuthDef{Type: "manual"},
+		ErrorMessagePath: "error.message",
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "op", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute should succeed for 200: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Errorf("status = %d, want 200", result.Status)
+	}
+}
+
+func TestBuildConfigOverridesAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"custom_header": r.Header.Get("X-Override-Key"),
+			"def_header":    r.Header.Get("X-Original-Key"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "override_test",
+		DisplayName: "Override Test API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		AuthHeader:  "X-Original-Key",
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	intg := config.IntegrationDef{
+		AuthHeader: "X-Override-Key",
+	}
+
+	prov, err := Build(def, intg)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "op", nil, "secret")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["custom_header"] != "secret" {
+		t.Errorf("X-Override-Key = %v, want secret", resp["custom_header"])
+	}
+	if resp["def_header"] != "" {
+		t.Errorf("X-Original-Key should be empty, got %v", resp["def_header"])
 	}
 }
 

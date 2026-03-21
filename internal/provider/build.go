@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -87,15 +88,52 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 			return nil, fmt.Errorf("%s: unknown response_check %q", def.Provider, def.ResponseCheck)
 		}
 		base.CheckResponse = checker
+	} else if def.ErrorMessagePath != "" {
+		msgPath := def.ErrorMessagePath
+		base.CheckResponse = func(status int, body []byte) error {
+			if status < 400 {
+				return nil
+			}
+			var data map[string]any
+			if err := json.Unmarshal(body, &data); err == nil {
+				if msg, ok := extractJSONPath(data, msgPath); ok {
+					return fmt.Errorf("HTTP %d: %s", status, msg)
+				}
+			}
+			return fmt.Errorf("HTTP %d: %s", status, body)
+		}
 	}
 
-	if def.TokenParser != "" {
+	switch {
+	case def.TokenParser != "":
 		parser, ok := lookupTokenParser(def.TokenParser)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown token_parser %q", def.Provider, def.TokenParser)
 		}
 		base.TokenParser = parser
-	} else if def.TokenPrefix != "" {
+	case def.AuthMapping != nil && len(def.AuthMapping.Headers) > 0:
+		mapping := def.AuthMapping.Headers
+		base.TokenParser = func(token string) (string, map[string]string, error) {
+			var tokenData map[string]any
+			if err := json.Unmarshal([]byte(token), &tokenData); err != nil {
+				return "", nil, fmt.Errorf("parsing token as JSON for auth_mapping: %w", err)
+			}
+			headers := make(map[string]string, len(mapping))
+			for headerName, jsonField := range mapping {
+				val, ok := tokenData[jsonField]
+				if !ok || val == nil {
+					return "", nil, fmt.Errorf("auth_mapping: token field %q for header %q is missing or null", jsonField, headerName)
+				}
+				headers[headerName] = fmt.Sprintf("%v", val)
+			}
+			return "", headers, nil
+		}
+	case def.AuthHeader != "":
+		headerName := def.AuthHeader
+		base.TokenParser = func(token string) (string, map[string]string, error) {
+			return "", map[string]string{headerName: token}, nil
+		}
+	case def.TokenPrefix != "":
 		prefix := def.TokenPrefix
 		base.TokenParser = func(token string) (string, map[string]string, error) {
 			return prefix + token, nil, nil
@@ -178,6 +216,12 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) error {
 		def.Auth.TokenMetadata = o.TokenMetadata
 	}
 
+	setStr(&def.AuthHeader, intg.Auth.AuthHeader)
+	setStr(&def.AuthHeader, intg.AuthHeader)
+	if intg.AuthMapping != nil {
+		def.AuthMapping = &AuthMappingDef{Headers: intg.AuthMapping.Headers}
+	}
+	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
 	setStr(&def.ResponseCheck, intg.ResponseCheck)
 	setStr(&def.TokenParser, intg.TokenParser)
 	setStr(&def.RequestMutator, intg.RequestMutator)
@@ -254,6 +298,22 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
 	return ci.UpstreamAuth{Handler: upstream}, nil
+}
+
+func extractJSONPath(data map[string]any, path string) (string, bool) {
+	parts := strings.Split(path, ".")
+	var current any = data
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		current, ok = m[part]
+		if !ok {
+			return "", false
+		}
+	}
+	return fmt.Sprintf("%v", current), true
 }
 
 func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig {
