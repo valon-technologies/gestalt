@@ -21,9 +21,14 @@ type CapabilityLister interface {
 	ListCapabilities() []core.Capability
 }
 
+type ProviderLister interface {
+	ListProviderInfos() []core.ProviderInfo
+}
+
 var (
 	_ Invoker          = (*Broker)(nil)
 	_ CapabilityLister = (*Broker)(nil)
+	_ ProviderLister   = (*Broker)(nil)
 )
 
 type Broker struct {
@@ -60,6 +65,26 @@ func (b *Broker) ListCapabilities() []core.Capability {
 		}
 	}
 	return caps
+}
+
+func (b *Broker) ListProviderInfos() []core.ProviderInfo {
+	if b == nil || b.providers == nil {
+		return nil
+	}
+	var infos []core.ProviderInfo
+	for _, name := range b.providers.List() {
+		prov, err := b.providers.Get(name)
+		if err != nil {
+			continue
+		}
+		infos = append(infos, core.ProviderInfo{
+			Name:           name,
+			DisplayName:    prov.DisplayName(),
+			Description:    prov.Description(),
+			ConnectionMode: prov.ConnectionMode(),
+		})
+	}
+	return infos
 }
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {

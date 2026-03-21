@@ -1,6 +1,6 @@
 # Go
-gestalt
-gestalt-server
+/gestalt
+/gestalt-server
 *.db-shm
 *.db-wal
 
