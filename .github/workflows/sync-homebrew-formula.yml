@@ -7,7 +7,7 @@ on:
 
 jobs:
   sync:
-    name: Sync to homebrew-toolshed
+    name: Sync to homebrew-gestalt
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -15,17 +15,17 @@ jobs:
       - name: Checkout gestalt
         uses: actions/checkout@v4
 
-      - name: Checkout homebrew-toolshed
+      - name: Checkout homebrew-gestalt
         uses: actions/checkout@v4
         with:
-          repository: valon-technologies/homebrew-toolshed
+          repository: valon-technologies/homebrew-gestalt
           token: ${{ secrets.PAT_TOKEN }}
-          path: homebrew-toolshed
+          path: homebrew-gestalt
 
       - name: Sync Formula directory
         run: |
-          rsync -av --delete Formula/ homebrew-toolshed/Formula/
-          cd homebrew-toolshed
+          rsync -av --delete Formula/ homebrew-gestalt/Formula/
+          cd homebrew-gestalt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A

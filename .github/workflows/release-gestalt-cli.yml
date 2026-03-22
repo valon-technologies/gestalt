@@ -45,3 +45,96 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+
+  update-formula:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download SHA256 files from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p checksums
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.sha256" \
+            --dir checksums
+
+      - name: Parse checksums
+        id: checksums
+        run: |
+          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-x86_64; do
+            hash=$(awk '{print $1}' "checksums/gestalt-${platform}.tar.gz.sha256")
+            echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos-arm64 }}
+          SHA_MACOS_X86: ${{ steps.checksums.outputs.macos-x86_64 }}
+          SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
+          SHA_LINUX_X86: ${{ steps.checksums.outputs.linux-x86_64 }}
+        run: |
+          FORMULA="Formula/gestalt.rb"
+          OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
+
+          # Update version
+          sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
+
+          # Update download URLs (version appears in the URL path)
+          sed -i "s|/download/v${OLD_VERSION}/|/download/v${VERSION}/|g" "$FORMULA"
+
+          # Update SHA256 for each platform by matching the URL above it
+          awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
+              -v sha_macos_x86="$SHA_MACOS_X86" \
+              -v sha_linux_arm64="$SHA_LINUX_ARM64" \
+              -v sha_linux_x86="$SHA_LINUX_X86" \
+          '
+          /gestalt-macos-arm64\.tar\.gz/ { found="macos-arm64" }
+          /gestalt-macos-x86_64\.tar\.gz/ { found="macos-x86" }
+          /gestalt-linux-arm64\.tar\.gz/ { found="linux-arm64" }
+          /gestalt-linux-x86_64\.tar\.gz/ { found="linux-x86" }
+          /sha256 "/ {
+            if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
+            if (found == "macos-x86") { sub(/"[^"]*"/, "\"" sha_macos_x86 "\"") }
+            if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
+            if (found == "linux-x86") { sub(/"[^"]*"/, "\"" sha_linux_x86 "\"") }
+            found=""
+          }
+          { print }
+          ' "$FORMULA" > "${FORMULA}.tmp" && mv "${FORMULA}.tmp" "$FORMULA"
+
+      - name: Verify formula was updated
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "=== Updated formula ==="
+          cat Formula/gestalt.rb
+          echo ""
+          echo "=== Verification ==="
+          grep -q "version \"${VERSION}\"" Formula/gestalt.rb || { echo "ERROR: version not updated"; exit 1; }
+          grep -q "PLACEHOLDER" Formula/gestalt.rb && { echo "ERROR: PLACEHOLDER still present"; exit 1; }
+          echo "Formula verified successfully"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gestalt.rb
+          git diff --cached --quiet && { echo "No formula changes to commit"; exit 0; }
+          git commit -m "Update gestalt formula to v${{ steps.version.outputs.version }}"
+          git push
