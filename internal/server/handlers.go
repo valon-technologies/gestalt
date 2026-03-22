@@ -21,6 +21,9 @@ import (
 
 const defaultTokenInstance = "default"
 
+const cliStatePrefix = "cli:"
+const maxPort = 65535
+
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -254,7 +257,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginRequest struct {
-	State string `json:"state"`
+	State        string `json:"state"`
+	CallbackPort int    `json:"callback_port,omitempty"`
 }
 
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
@@ -275,7 +279,11 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	url, err := s.auth.LoginURL(req.State)
+	state := req.State
+	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
+		state = fmt.Sprintf("%s%d:%s", cliStatePrefix, req.CallbackPort, req.State)
+	}
+	url, err := s.auth.LoginURL(state)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
 		return
