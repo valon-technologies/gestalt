@@ -15,7 +15,7 @@ type Datastore interface {
 	StoreAPIToken(ctx context.Context, token *APIToken) error
 	ValidateAPIToken(ctx context.Context, hashedToken string) (*APIToken, error)
 	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
-	RevokeAPIToken(ctx context.Context, id string) error
+	RevokeAPIToken(ctx context.Context, userID, id string) error
 
 	Ping(ctx context.Context) error
 	Migrate(ctx context.Context) error

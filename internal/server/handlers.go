@@ -525,9 +525,10 @@ type createTokenRequest struct {
 }
 
 type createTokenResponse struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Token string `json:"token"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Token     string     `json:"token"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -556,12 +557,14 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	hashed := principal.HashToken(plaintext)
 
 	now := s.now().UTC().Truncate(time.Second)
+	defaultExpiry := now.Add(90 * 24 * time.Hour)
 	apiToken := &core.APIToken{
 		ID:          uuid.NewString(),
 		UserID:      userID,
 		Name:        req.Name,
 		HashedToken: hashed,
 		Scopes:      req.Scopes,
+		ExpiresAt:   &defaultExpiry,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -572,9 +575,10 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, createTokenResponse{
-		ID:    apiToken.ID,
-		Name:  apiToken.Name,
-		Token: plaintext,
+		ID:        apiToken.ID,
+		Name:      apiToken.Name,
+		Token:     plaintext,
+		ExpiresAt: apiToken.ExpiresAt,
 	})
 }
 
@@ -612,8 +616,13 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
 	id := chi.URLParam(r, "id")
-	if err := s.datastore.RevokeAPIToken(r.Context(), id); err != nil {
+	if err := s.datastore.RevokeAPIToken(r.Context(), userID, id); err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "token not found")
 			return
