@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -15,13 +17,14 @@ import (
 var _ core.Binding = (*Binding)(nil)
 
 type webhookConfig struct {
-	Path            string `yaml:"path"`
-	Provider        string `yaml:"provider"`
-	Operation       string `yaml:"operation"`
-	AuthMode        string `yaml:"auth_mode"`
-	SigningSecret   string `yaml:"signing_secret"`
-	SignatureHeader string `yaml:"signature_header"`
-	UserHeader      string `yaml:"user_header"`
+	Path            string   `yaml:"path"`
+	Provider        string   `yaml:"provider"`
+	Operation       string   `yaml:"operation"`
+	AuthMode        string   `yaml:"auth_mode"`
+	SigningSecret   string   `yaml:"signing_secret"`
+	SignatureHeader string   `yaml:"signature_header"`
+	UserHeader      string   `yaml:"user_header"`
+	TrustedSources  []string `yaml:"trusted_sources"`
 }
 
 type Binding struct {
@@ -31,6 +34,9 @@ type Binding struct {
 }
 
 func New(name string, cfg webhookConfig, invoker invocation.Invoker) *Binding {
+	if cfg.AuthMode == AuthModeTrustedUserHeader && len(cfg.TrustedSources) == 0 {
+		log.Printf("warning: webhook binding %q uses trusted_user_header auth without trusted_sources; any client can set the user header", name)
+	}
 	return &Binding{name: name, cfg: cfg, invoker: invoker}
 }
 
@@ -80,6 +86,24 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case AuthModeTrustedUserHeader:
+		if len(b.cfg.TrustedSources) > 0 {
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			if host == "" {
+				host = r.RemoteAddr
+			}
+			remoteIP := net.ParseIP(host)
+			trusted := false
+			for _, src := range b.cfg.TrustedSources {
+				if srcIP := net.ParseIP(src); srcIP != nil && remoteIP != nil && srcIP.Equal(remoteIP) {
+					trusted = true
+					break
+				}
+			}
+			if !trusted {
+				writeError(w, http.StatusForbidden, "untrusted source")
+				return
+			}
+		}
 		userID = r.Header.Get(b.cfg.UserHeader)
 		if userID == "" {
 			writeError(w, http.StatusUnauthorized, "missing user header")

@@ -40,8 +40,8 @@ test.describe("Integration: Go server contract", () => {
   function injectAuth(page: import("@playwright/test").Page) {
     return page.addInitScript(
       ({ token }) => {
-        localStorage.setItem("session_token", token);
-        localStorage.setItem("user_email", "e2e@gestalt.dev");
+        sessionStorage.setItem("session_token", token);
+        sessionStorage.setItem("user_email", "e2e@gestalt.dev");
       },
       { token: authToken },
     );
