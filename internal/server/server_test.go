@@ -142,6 +142,11 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 				return nil, fmt.Errorf("invalid token")
 			},
 		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -220,6 +225,11 @@ func TestAuthMiddleware_DevMode(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -267,6 +277,7 @@ func TestListIntegrations(t *testing.T) {
 		Name        string `json:"name"`
 		DisplayName string `json:"display_name"`
 		Description string `json:"description"`
+		Connected   bool   `json:"connected"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -279,6 +290,56 @@ func TestListIntegrations(t *testing.T) {
 	}
 	if integrations[0].DisplayName != "Slack" {
 		t.Fatalf("expected display name Slack, got %q", integrations[0].DisplayName)
+	}
+	if integrations[0].Connected {
+		t.Fatal("expected connected=false when no tokens stored")
+	}
+}
+
+func TestListIntegrationsShowsConnected(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			ListTokensFn: func(_ context.Context, userID string) ([]*core.IntegrationToken, error) {
+				return []*core.IntegrationToken{
+					{UserID: userID, Integration: "slack", Instance: "default", AccessToken: "tok"},
+				}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name      string `json:"name"`
+		Connected bool   `json:"connected"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if !integrations[0].Connected {
+		t.Fatal("expected connected=true when token exists")
 	}
 }
 
@@ -305,6 +366,11 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
 	})
 	defer ts.Close()
 
@@ -922,26 +988,24 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		t.Fatalf("decoding start response: %v", err)
 	}
 
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := noRedirect.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", resp.StatusCode)
 	}
-
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["status"] != "connected" {
-		t.Fatalf("expected connected, got %q", result["status"])
-	}
-	if result["integration"] != "slack" {
-		t.Fatalf("expected integration slack, got %q", result["integration"])
+	loc := resp.Header.Get("Location")
+	if loc != "/integrations?connected=slack" {
+		t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
 	}
 	if stored == nil {
 		t.Fatal("expected token to be stored")
@@ -1274,15 +1338,20 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 		t.Fatalf("decoding start response: %v", err)
 	}
 
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := noRedirect.Do(req)
 	if err != nil {
 		t.Fatalf("callback request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", resp.StatusCode)
 	}
 	if stub.gotVerifier != stub.wantVerifier {
 		t.Fatalf("got verifier %q, want %q", stub.gotVerifier, stub.wantVerifier)
