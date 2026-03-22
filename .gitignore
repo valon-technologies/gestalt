@@ -1,5 +1,5 @@
 # Go
-gestalt-server
+/gestaltd
 *.db-shm
 *.db-wal
 

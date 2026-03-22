@@ -1,5 +1,5 @@
 services:
-  gestalt-server:
+  gestaltd:
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,9 +17,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GESTALT_API_URL: http://gestalt-server:8080
+      GESTALT_API_URL: http://gestaltd:8080
     depends_on:
-      - gestalt-server
+      - gestaltd
 
 volumes:
   gestalt-data:

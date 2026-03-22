@@ -14,7 +14,7 @@ Gestalt compiles to a single statically-linked Go binary and ships as a minimal 
 
 ## What every deployment needs
 
-1. **Gestalt image or binary.** Build from `Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/gestalt-server`.
+1. **Gestalt image or binary.** Build from `Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/gestaltd`.
 2. **Config YAML file.** Mounted or bundled. See [Config File](/reference/config-file) for the schema.
 3. **Environment variables for secrets.** The config supports `${VAR}` placeholders expanded at startup. Never hardcode secrets.
 4. **A database.** SQLite with a persistent volume, Postgres, MySQL, or any [supported datastore](/reference/built-in-plugins#datastores).
@@ -71,7 +71,7 @@ datastore:
 ## Validate before deploying
 
 ```sh
-gestalt config check -config your-config.yaml
+gestaltd --check --config your-config.yaml
 ```
 
 ## Choose a platform
