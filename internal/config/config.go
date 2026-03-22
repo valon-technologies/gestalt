@@ -77,6 +77,8 @@ type ServerConfig struct {
 type IntegrationDef struct {
 	OpenAPI        string `yaml:"openapi"`
 	Provider       string `yaml:"provider"`
+	DisplayName    string `yaml:"display_name"`
+	Description    string `yaml:"description"`
 	AuthProfile    string `yaml:"auth_profile"`
 	ConnectionMode string `yaml:"connection_mode"`
 
