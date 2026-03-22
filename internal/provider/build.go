@@ -17,7 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
-func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
+func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string) (core.Provider, error) {
 	d := *def // shallow copy so we don't mutate the caller's definition
 	def = &d
 	if err := applyOverrides(def, intg); err != nil {
@@ -152,7 +152,7 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 
 	var result core.Provider = base
 
-	if ops := intg.AllowedOperations; ops != nil {
+	if ops := allowedOperations; ops != nil {
 		if len(ops) == 0 {
 			return nil, fmt.Errorf("%s: allowed_operations cannot be empty; omit the field to allow all", def.Provider)
 		}

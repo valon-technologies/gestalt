@@ -12,6 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/openapi"
@@ -193,23 +194,80 @@ func closeProviders(providers *registry.PluginMap[core.Provider]) {
 
 func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		if intg.MCP != nil {
-			return mcpupstream.New(ctx, name, intg)
+		var apiProv core.Provider
+		var mcpUp *mcpupstream.Upstream
+		var mcpFromAPI bool
+
+		connMode := core.ConnectionModeUser
+		switch core.ConnectionMode(intg.ConnectionMode) {
+		case "", core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModeIdentity, core.ConnectionModeEither:
+			if intg.ConnectionMode != "" {
+				connMode = core.ConnectionMode(intg.ConnectionMode)
+			}
+		default:
+			return nil, fmt.Errorf("integration %s: unknown connection_mode %q", name, intg.ConnectionMode)
 		}
-		def, err := loadDefinition(ctx, name, intg, providerDirs)
-		if err != nil {
-			return nil, err
+
+		cleanup := func() {
+			if mcpUp != nil {
+				_ = mcpUp.Close()
+			}
 		}
-		return provider.Build(def, intg)
+
+		for _, us := range intg.Upstreams {
+			switch us.Type {
+			case config.UpstreamTypeHTTP:
+				if apiProv != nil {
+					cleanup()
+					return nil, fmt.Errorf("integration %s: multiple http upstreams not supported", name)
+				}
+				def, err := loadHTTPUpstream(ctx, name, us, providerDirs)
+				if err != nil {
+					cleanup()
+					return nil, err
+				}
+				p, err := provider.Build(def, intg, us.AllowedOperations)
+				if err != nil {
+					cleanup()
+					return nil, err
+				}
+				apiProv = p
+				mcpFromAPI = us.MCP
+			case config.UpstreamTypeMCP:
+				if mcpUp != nil {
+					cleanup()
+					return nil, fmt.Errorf("integration %s: multiple mcp upstreams not supported", name)
+				}
+				up, err := mcpupstream.New(ctx, name, us.URL, connMode)
+				if err != nil {
+					return nil, err
+				}
+				mcpUp = up
+			default:
+				cleanup()
+				return nil, fmt.Errorf("integration %s: unknown upstream type %q", name, us.Type)
+			}
+		}
+
+		switch {
+		case apiProv != nil && mcpUp != nil:
+			return composite.New(name, apiProv, mcpUp, mcpFromAPI), nil
+		case apiProv != nil:
+			return apiProv, nil
+		case mcpUp != nil:
+			return mcpUp, nil
+		default:
+			return nil, fmt.Errorf("integration %s: no upstreams configured", name)
+		}
 	}
 }
 
-func loadDefinition(ctx context.Context, name string, intgDef config.IntegrationDef, providerDirs []string) (*provider.Definition, error) {
+func loadHTTPUpstream(ctx context.Context, name string, us config.UpstreamDef, providerDirs []string) (*provider.Definition, error) {
 	switch {
-	case intgDef.OpenAPI != "":
-		return openapi.LoadDefinition(ctx, name, intgDef.OpenAPI, intgDef.AllowedOperations)
-	case intgDef.Provider != "":
-		return provider.LoadFile(intgDef.Provider)
+	case us.URL != "":
+		return openapi.LoadDefinition(ctx, name, us.URL, us.AllowedOperations)
+	case us.Provider != "":
+		return provider.LoadFile(us.Provider)
 	default:
 		return provider.LoadFromDir(name, providerDirs)
 	}

@@ -100,7 +100,7 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 		}
 
 		var handler mcpserver.ToolHandlerFunc
-		if isDirect {
+		if isDirect && op.Transport != catalog.TransportHTTP {
 			handler = makeDirectHandler(cfg, provName, op.ID, caller)
 		} else {
 			handler = makeHandler(cfg.Invoker, provName, op.ID)

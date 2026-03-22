@@ -152,21 +152,15 @@ func runCheck(configFlag string) error {
 		log.Printf("integrations: %d", len(cfg.Integrations))
 		for name := range cfg.Integrations {
 			intg := cfg.Integrations[name]
-			source := "provider-dir"
-			if intg.OpenAPI != "" {
-				source = "openapi"
-			} else if intg.Provider != "" {
-				source = "provider-file"
+			var sources []string
+			for _, us := range intg.Upstreams {
+				sources = append(sources, us.Type)
 			}
 			auth := "oauth"
 			if intg.Auth.Type == "manual" || intg.ConnectionMode == "manual" {
 				auth = "manual"
 			}
-			ops := "all"
-			if len(intg.AllowedOperations) > 0 {
-				ops = fmt.Sprintf("%d allowed", len(intg.AllowedOperations))
-			}
-			log.Printf("  %s: source=%s auth=%s ops=%s", name, source, auth, ops)
+			log.Printf("  %s: upstreams=[%s] auth=%s", name, strings.Join(sources, ","), auth)
 		}
 	}
 

@@ -75,12 +75,11 @@ type ServerConfig struct {
 }
 
 type IntegrationDef struct {
-	OpenAPI        string `yaml:"openapi"`
-	Provider       string `yaml:"provider"`
-	DisplayName    string `yaml:"display_name"`
-	Description    string `yaml:"description"`
-	AuthProfile    string `yaml:"auth_profile"`
-	ConnectionMode string `yaml:"connection_mode"`
+	Upstreams      []UpstreamDef `yaml:"upstreams"`
+	DisplayName    string        `yaml:"display_name"`
+	Description    string        `yaml:"description"`
+	AuthProfile    string        `yaml:"auth_profile"`
+	ConnectionMode string        `yaml:"connection_mode"`
 
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
@@ -99,14 +98,19 @@ type IntegrationDef struct {
 	AuthStyle        string            `yaml:"auth_style"`
 	IconFile         string            `yaml:"icon_file"`
 	Headers          map[string]string `yaml:"headers"`
-
-	AllowedOperations map[string]string `yaml:"allowed_operations"`
-
-	MCP *MCPUpstreamDef `yaml:"mcp"`
 }
 
-type MCPUpstreamDef struct {
-	URL string `yaml:"url"`
+const (
+	UpstreamTypeHTTP = "http"
+	UpstreamTypeMCP  = "mcp"
+)
+
+type UpstreamDef struct {
+	Type              string            `yaml:"type"`
+	URL               string            `yaml:"url"`
+	Provider          string            `yaml:"provider"`
+	MCP               bool              `yaml:"mcp"`
+	AllowedOperations map[string]string `yaml:"allowed_operations"`
 }
 
 type AuthOverrides struct {
