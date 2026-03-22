@@ -542,6 +542,123 @@ func makeBindingWithAuth(t *testing.T, path, provider, operation, authMode, sign
 	return b
 }
 
+func makeBindingFromYAML(t *testing.T, cfgYAML string, invoker invocation.Invoker) core.Binding {
+	t.Helper()
+
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(cfgYAML), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	def := config.BindingDef{Type: "webhook", Config: *node.Content[0]}
+	if p, ok := parsed["provider"].(string); ok && p != "" {
+		def.Providers = []string{p}
+	}
+
+	b, err := webhook.Factory(context.Background(), "test-webhook", def, bootstrap.BindingDeps{Invoker: invoker})
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+	return b
+}
+
+func TestTrustedUserHeader_UntrustedSource(t *testing.T) {
+	t.Parallel()
+
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	cfgYAML := `
+path: /incoming
+provider: echo
+operation: echo
+auth_mode: trusted_user_header
+user_header: X-User-Email
+trusted_sources:
+  - "10.0.0.1"
+`
+	b := makeBindingFromYAML(t, cfgYAML, invoker)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Email", "user@example.com")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	if invoker.Invoked {
+		t.Fatal("invoker should not be invoked for untrusted source")
+	}
+}
+
+func TestTrustedUserHeader_AllowedSource(t *testing.T) {
+	t.Parallel()
+
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	cfgYAML := `
+path: /incoming
+provider: echo
+operation: echo
+auth_mode: trusted_user_header
+user_header: X-User-Email
+trusted_sources:
+  - "192.0.2.1"
+`
+	b := makeBindingFromYAML(t, cfgYAML, invoker)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Email", "user@example.com")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !invoker.Invoked {
+		t.Fatal("expected invoker to be invoked")
+	}
+	if invoker.LastP == nil || invoker.LastP.UserID != "user@example.com" {
+		t.Errorf("expected UserID user@example.com, got %v", invoker.LastP)
+	}
+}
+
+func TestTrustedUserHeader_NoAllowlist(t *testing.T) {
+	t.Parallel()
+
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`},
+	}
+	b := makeBindingWithAuth(t, "/incoming", "echo", "echo", "trusted_user_header", "", "X-User-Email", "", invoker)
+
+	payload := []byte(`{"data":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/incoming", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Email", "user@example.com")
+	w := httptest.NewRecorder()
+
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !invoker.Invoked {
+		t.Fatal("expected invoker to be invoked")
+	}
+}
+
 func computeHMAC(secret, body []byte) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write(body)

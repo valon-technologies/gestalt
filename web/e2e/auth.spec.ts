@@ -42,8 +42,8 @@ test.describe("Authentication", () => {
   test("logout clears session and redirects to login", async ({ page }) => {
     await page.goto("/login");
     await page.evaluate(() => {
-      localStorage.setItem("session_token", "test-session-token");
-      localStorage.setItem("user_email", "test@gestalt.dev");
+      sessionStorage.setItem("session_token", "test-session-token");
+      sessionStorage.setItem("user_email", "test@gestalt.dev");
     });
     await mockIntegrations(page, []);
     await mockTokens(page, []);
@@ -51,7 +51,7 @@ test.describe("Authentication", () => {
     await page.goto("/");
     await page.getByRole("button", { name: /Logout/i }).click();
     await expect(page).toHaveURL(/\/login/);
-    const token = await page.evaluate(() => localStorage.getItem("session_token"));
+    const token = await page.evaluate(() => sessionStorage.getItem("session_token"));
     expect(token).toBeNull();
   });
 
