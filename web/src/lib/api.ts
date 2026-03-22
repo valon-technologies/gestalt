@@ -7,6 +7,7 @@ export interface Integration {
   description?: string;
   icon_svg?: string;
   connected?: boolean;
+  auth_type?: "oauth" | "manual";
 }
 
 export interface APIToken {
@@ -111,6 +112,16 @@ export async function startIntegrationOAuth(
   return fetchAPI("/api/v1/auth/start-oauth", {
     method: "POST",
     body: JSON.stringify({ integration, scopes: scopes || [] }),
+  });
+}
+
+export async function connectManualIntegration(
+  integration: string,
+  credential: string,
+): Promise<{ status: string }> {
+  return fetchAPI("/api/v1/auth/connect-manual", {
+    method: "POST",
+    body: JSON.stringify({ integration, credential }),
   });
 }
 
