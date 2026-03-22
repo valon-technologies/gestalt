@@ -188,6 +188,8 @@ func Build(def *Definition, intg config.IntegrationDef) (core.Provider, error) {
 }
 
 func applyOverrides(def *Definition, intg config.IntegrationDef) error {
+	setStr(&def.DisplayName, intg.DisplayName)
+	setStr(&def.Description, intg.Description)
 	o := intg.Auth
 	setStr(&def.Auth.Type, o.Type)
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
