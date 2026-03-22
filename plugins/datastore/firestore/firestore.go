@@ -371,7 +371,14 @@ func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core
 	if err != nil {
 		return nil, fmt.Errorf("firestore: validating api token: %w", err)
 	}
-	return snapToAPIToken(snap)
+	token, err := snapToAPIToken(snap)
+	if err != nil {
+		return nil, err
+	}
+	if token.ExpiresAt != nil && time.Now().After(*token.ExpiresAt) {
+		return nil, nil
+	}
+	return token, nil
 }
 
 func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
@@ -398,8 +405,22 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 	return tokens, nil
 }
 
-func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	_, err := s.client.Collection(datastore.APITokensCollection).Doc(id).Delete(ctx)
+func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
+	snap, err := s.client.Collection(datastore.APITokensCollection).Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return core.ErrNotFound
+		}
+		return fmt.Errorf("firestore: revoking api token: %w", err)
+	}
+	var doc apiTokenDoc
+	if err := snap.DataTo(&doc); err != nil {
+		return fmt.Errorf("firestore: unmarshalling api token: %w", err)
+	}
+	if doc.UserID != userID {
+		return core.ErrNotFound
+	}
+	_, err = s.client.Collection(datastore.APITokensCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("firestore: revoking api token: %w", err)
 	}

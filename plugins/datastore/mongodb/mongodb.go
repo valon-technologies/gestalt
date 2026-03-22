@@ -255,8 +255,16 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 }
 
 func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
+	now := time.Now()
+	filter := bson.M{
+		"hashed_token": hashedToken,
+		"$or": bson.A{
+			bson.M{"expires_at": nil},
+			bson.M{"expires_at": bson.M{"$gt": now}},
+		},
+	}
 	var doc apiTokenDoc
-	err := s.db.Collection(datastore.APITokensCollection).FindOne(ctx, bson.M{"hashed_token": hashedToken}).Decode(&doc)
+	err := s.db.Collection(datastore.APITokensCollection).FindOne(ctx, filter).Decode(&doc)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, nil
 	}
@@ -284,10 +292,13 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 	return tokens, cursor.Err()
 }
 
-func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	_, err := s.db.Collection(datastore.APITokensCollection).DeleteOne(ctx, bson.M{"_id": id})
+func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
+	result, err := s.db.Collection(datastore.APITokensCollection).DeleteOne(ctx, bson.M{"_id": id, "user_id": userID})
 	if err != nil {
 		return fmt.Errorf("mongodb: revoking api token: %w", err)
+	}
+	if result.DeletedCount == 0 {
+		return core.ErrNotFound
 	}
 	return nil
 }

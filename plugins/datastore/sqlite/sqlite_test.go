@@ -201,13 +201,13 @@ func TestDeleteNonexistentTokenNoError(t *testing.T) {
 	}
 }
 
-func TestRevokeNonexistentAPITokenNoError(t *testing.T) {
+func TestRevokeNonexistentAPITokenReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
 	t.Cleanup(func() { _ = store.Close() })
 
-	if err := store.RevokeAPIToken(context.Background(), "does-not-exist"); err != nil {
-		t.Fatalf("RevokeAPIToken for nonexistent: %v", err)
+	if err := store.RevokeAPIToken(context.Background(), "no-user", "does-not-exist"); err != core.ErrNotFound {
+		t.Fatalf("RevokeAPIToken for nonexistent: expected ErrNotFound, got %v", err)
 	}
 }
 

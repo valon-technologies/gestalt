@@ -1096,6 +1096,17 @@ func TestRevokeAPIToken(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			RevokeAPITokenFn: func(_ context.Context, userID, id string) error {
+				if userID == "u1" && id == "tok-123" {
+					return nil
+				}
+				return core.ErrNotFound
+			},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -1117,6 +1128,94 @@ func TestRevokeAPIToken(t *testing.T) {
 	}
 	if result["status"] != "revoked" {
 		t.Fatalf("expected revoked, got %q", result["status"])
+	}
+}
+
+func TestRevokeAPIToken_WrongUser(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				if email == "owner@example.com" {
+					return &core.User{ID: "u-owner", Email: email}, nil
+				}
+				return &core.User{ID: "u-other", Email: email}, nil
+			},
+			RevokeAPITokenFn: func(_ context.Context, userID, id string) error {
+				if userID == "u-owner" {
+					return nil
+				}
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens/tok-owned-by-a", nil)
+	req.Header.Set("X-Dev-User-Email", "attacker@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Now = func() time.Time { return fixedNow }
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"expiry-test","scopes":"read"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	expiresAtRaw, ok := result["expires_at"]
+	if !ok || expiresAtRaw == nil {
+		t.Fatal("expected expires_at in response, got nil")
+	}
+	expiresAtStr, ok := expiresAtRaw.(string)
+	if !ok {
+		t.Fatalf("expected expires_at to be a string, got %T", expiresAtRaw)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
+	if err != nil {
+		t.Fatalf("parsing expires_at: %v", err)
+	}
+	expected := fixedNow.Add(90 * 24 * time.Hour).UTC().Truncate(time.Second)
+	if !expiresAt.Equal(expected) {
+		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
 	}
 }
 
