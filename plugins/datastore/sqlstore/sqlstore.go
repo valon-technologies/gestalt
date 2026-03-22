@@ -272,8 +272,9 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	row := s.DB.QueryRowContext(ctx, `
 		SELECT id, user_id, name, hashed_token, scopes, expires_at, created_at, updated_at
-		FROM api_tokens WHERE hashed_token = `+s.ph(1),
-		hashedToken,
+		FROM api_tokens WHERE hashed_token = `+s.ph(1)+`
+		AND (expires_at IS NULL OR expires_at > `+s.ph(2)+`)`,
+		hashedToken, time.Now(),
 	)
 	t, err := scanAPIToken(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -305,10 +306,17 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 	return tokens, rows.Err()
 }
 
-func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	_, err := s.DB.ExecContext(ctx, "DELETE FROM api_tokens WHERE id = "+s.ph(1), id)
+func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
+	result, err := s.DB.ExecContext(ctx, "DELETE FROM api_tokens WHERE id = "+s.ph(1)+" AND user_id = "+s.ph(2), id, userID)
 	if err != nil {
 		return fmt.Errorf("revoking api token: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoking api token: %w", err)
+	}
+	if n == 0 {
+		return core.ErrNotFound
 	}
 	return nil
 }

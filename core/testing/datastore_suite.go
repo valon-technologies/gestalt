@@ -2,6 +2,7 @@ package coretesting
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -317,7 +318,7 @@ func testDatastoreAPITokens(t *testing.T, newStore func(t *testing.T) core.Datas
 			HashedToken: "sha256:revme", CreatedAt: now, UpdatedAt: now,
 		})
 
-		if err := ds.RevokeAPIToken(ctx, "api-rev"); err != nil {
+		if err := ds.RevokeAPIToken(ctx, user.ID, "api-rev"); err != nil {
 			t.Fatalf("RevokeAPIToken: %v", err)
 		}
 
@@ -341,6 +342,58 @@ func testDatastoreAPITokens(t *testing.T, newStore func(t *testing.T) core.Datas
 		}
 		if got != nil {
 			t.Errorf("ValidateAPIToken for nonexistent: expected nil, got %+v", got)
+		}
+	})
+
+	t.Run("revoke with wrong user_id returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+
+		userA := mustCreateUser(t, ctx, ds, "revoke-owner-a@example.com")
+		userB := mustCreateUser(t, ctx, ds, "revoke-owner-b@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		mustStoreAPIToken(t, ctx, ds, &core.APIToken{
+			ID: "api-owner-check", UserID: userA.ID, Name: "owned-by-a",
+			HashedToken: "sha256:ownercheck", CreatedAt: now, UpdatedAt: now,
+		})
+
+		err := ds.RevokeAPIToken(ctx, userB.ID, "api-owner-check")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("RevokeAPIToken with wrong user: expected ErrNotFound, got %v", err)
+		}
+
+		got, err := ds.ValidateAPIToken(ctx, "sha256:ownercheck")
+		if err != nil {
+			t.Fatalf("ValidateAPIToken after failed revoke: %v", err)
+		}
+		if got == nil {
+			t.Fatal("token should still exist after revoke with wrong user_id")
+		}
+	})
+
+	t.Run("validate expired token returns nil", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+
+		user := mustCreateUser(t, ctx, ds, "expired-token@example.com")
+		now := time.Now().Truncate(time.Second)
+		pastExpiry := now.Add(-1 * time.Hour)
+
+		mustStoreAPIToken(t, ctx, ds, &core.APIToken{
+			ID: "api-expired", UserID: user.ID, Name: "expired",
+			HashedToken: "sha256:expired", ExpiresAt: &pastExpiry,
+			CreatedAt: now, UpdatedAt: now,
+		})
+
+		got, err := ds.ValidateAPIToken(ctx, "sha256:expired")
+		if err != nil {
+			t.Fatalf("ValidateAPIToken for expired: unexpected error: %v", err)
+		}
+		if got != nil {
+			t.Errorf("ValidateAPIToken for expired: expected nil, got %+v", got)
 		}
 	})
 }

@@ -27,6 +27,7 @@ type StubDatastore struct {
 	ListTokensFn       func(context.Context, string) ([]*core.IntegrationToken, error)
 	DeleteTokenFn      func(context.Context, string) error
 	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
+	RevokeAPITokenFn   func(context.Context, string, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -83,9 +84,14 @@ func (s *StubDatastore) ValidateAPIToken(ctx context.Context, hashedToken string
 func (s *StubDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken, error) {
 	return nil, nil
 }
-func (s *StubDatastore) RevokeAPIToken(context.Context, string) error { return nil }
-func (s *StubDatastore) Migrate(context.Context) error                { return nil }
-func (s *StubDatastore) Close() error                                 { return nil }
+func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {
+	if s.RevokeAPITokenFn != nil {
+		return s.RevokeAPITokenFn(ctx, userID, id)
+	}
+	return nil
+}
+func (s *StubDatastore) Migrate(context.Context) error { return nil }
+func (s *StubDatastore) Close() error                  { return nil }
 
 type StubAuthProvider struct {
 	N                string

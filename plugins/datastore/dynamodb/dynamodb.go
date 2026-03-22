@@ -346,7 +346,14 @@ func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core
 	if len(out.Items) == 0 {
 		return nil, nil
 	}
-	return unmarshalAPIToken(out.Items[0])
+	token, err := unmarshalAPIToken(out.Items[0])
+	if err != nil {
+		return nil, err
+	}
+	if token.ExpiresAt != nil && time.Now().After(*token.ExpiresAt) {
+		return nil, nil
+	}
+	return token, nil
 }
 
 func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
@@ -379,22 +386,31 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 	return tokens, nil
 }
 
-func (s *Store) RevokeAPIToken(ctx context.Context, id string) error {
-	pk, sk, err := s.lookupKeysByGSI(ctx, gsiID, attrID, id, apiTokenSKPrefix)
+func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
+	pk := userPKPrefix + userID
+	sk := apiTokenSKPrefix + id
+
+	cond := expression.Name(attrPK).AttributeExists()
+	condExpr, err := expression.NewBuilder().WithCondition(cond).Build()
 	if err != nil {
-		return fmt.Errorf("dynamodb: looking up api token for revoke: %w", err)
+		return fmt.Errorf("dynamodb: building condition: %w", err)
 	}
-	if pk == "" {
-		return nil
-	}
+
 	_, err = s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]ddbtypes.AttributeValue{
 			attrPK: &ddbtypes.AttributeValueMemberS{Value: pk},
 			attrSK: &ddbtypes.AttributeValueMemberS{Value: sk},
 		},
+		ConditionExpression:       condExpr.Condition(),
+		ExpressionAttributeNames:  condExpr.Names(),
+		ExpressionAttributeValues: condExpr.Values(),
 	})
 	if err != nil {
+		var condErr *ddbtypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return core.ErrNotFound
+		}
 		return fmt.Errorf("dynamodb: revoking api token: %w", err)
 	}
 	return nil
