@@ -63,7 +63,7 @@ test.describe("Integrations", () => {
     ).toBeVisible();
   });
 
-  test("connected integration shows badge, Reconnect, and Disconnect", async ({
+  test("connected integration shows check icon and settings gear", async ({
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
@@ -75,10 +75,83 @@ test.describe("Integrations", () => {
     await page.goto("/integrations");
     await expect(page.getByText(OAUTH_INTEGRATION.display_name!)).toBeVisible();
     await expect(page.getByText(MANUAL_INTEGRATION.display_name!)).toBeVisible();
-    await expect(page.getByText("Connected")).toBeVisible();
+    await expect(page.getByRole("button", { name: "OAuth Service settings" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect", exact: true })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Disconnect", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Disconnect", exact: true })).toHaveCount(0);
+  });
+
+  test("settings modal opens and shows connected status", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, [
+      { ...OAUTH_INTEGRATION, connected: true },
+    ]);
+
+    await page.goto("/integrations");
+    await page.getByRole("button", { name: "OAuth Service settings" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("OAuth Service")).toBeVisible();
+    await expect(dialog.getByText("Connected")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Disconnect" })).toBeVisible();
+  });
+
+  test("settings modal closes on backdrop click", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, [
+      { ...OAUTH_INTEGRATION, connected: true },
+    ]);
+
+    await page.goto("/integrations");
+    await page.getByRole("button", { name: "OAuth Service settings" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    // Click outside the centered modal panel
+    await page.mouse.click(10, 10);
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+  });
+
+  test("settings modal closes on ESC", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, [
+      { ...OAUTH_INTEGRATION, connected: true },
+    ]);
+
+    await page.goto("/integrations");
+    await page.getByRole("button", { name: "OAuth Service settings" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+  });
+
+  test("disconnect confirmation shows warning and allows cancel", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, [
+      { ...OAUTH_INTEGRATION, connected: true },
+    ]);
+
+    await page.goto("/integrations");
+    await page.getByRole("button", { name: "OAuth Service settings" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Disconnect" }).click();
+
+    await expect(dialog.getByText("Disconnect OAuth Service?")).toBeVisible();
+    await expect(dialog.getByText("This will remove your OAuth Service integration.")).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog.getByRole("button", { name: "Reconnect" })).toBeVisible();
   });
 
   test("disconnect calls API and refreshes list", async ({
@@ -95,9 +168,9 @@ test.describe("Integrations", () => {
     });
 
     await page.goto("/integrations");
-    await expect(page.getByText("Connected")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Disconnect" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "OAuth Service settings" })).toBeVisible();
 
+    // Re-mock so GET returns disconnected state after DELETE fires
     await page.route("**/api/v1/integrations", (route, request) => {
       if (request.method() === "GET") {
         route.fulfill({ json: disconnected ? disconnectedList : connectedList });
@@ -106,9 +179,15 @@ test.describe("Integrations", () => {
       }
     });
 
-    await page.getByRole("button", { name: "Disconnect" }).click();
+    await page.getByRole("button", { name: "OAuth Service settings" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Disconnect" }).click();
+    // Confirm the disconnect
+    await dialog.getByRole("button", { name: "Disconnect" }).click();
+
+    await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
-    await expect(page.getByText("Connected")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "OAuth Service settings" })).not.toBeVisible();
   });
 
   test("manual auth shows token input on Connect click", async ({
@@ -155,7 +234,7 @@ test.describe("Integrations", () => {
     });
 
     await page.getByRole("button", { name: "Submit" }).click();
-    await expect(page.getByText("Connected")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
     expect(receivedCredential).toBe("test-api-key-123");
   });
 
@@ -173,15 +252,19 @@ test.describe("Integrations", () => {
     await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
   });
 
-  test("manual auth reconnect opens token form", async ({
+  test("manual auth reconnect opens token form via settings modal", async ({
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [{ ...MANUAL_INTEGRATION, connected: true }]);
 
     await page.goto("/integrations");
-    await expect(page.getByText("Connected")).toBeVisible();
-    await page.getByRole("button", { name: "Reconnect" }).click();
+    await page.getByRole("button", { name: "Manual Service settings" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Connected")).toBeVisible();
+    await dialog.getByRole("button", { name: "Reconnect" }).click();
+    // Modal must close so the token form isn't trapped behind the overlay
+    await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(page.getByLabel("API Token")).toBeVisible();
   });
 });
