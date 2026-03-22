@@ -1,6 +1,6 @@
 "use client";
 
-import { Integration, startIntegrationOAuth } from "@/lib/api";
+import { Integration, startIntegrationOAuth, disconnectIntegration } from "@/lib/api";
 import Button from "./Button";
 import { useMemo, useState } from "react";
 
@@ -47,10 +47,13 @@ function DefaultIcon() {
 
 export default function IntegrationCard({
   integration,
+  onDisconnected,
 }: {
   integration: Integration;
+  onDisconnected?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const safeIconSVG = useMemo(
     () => (integration.icon_svg ? sanitizeSVG(integration.icon_svg) : ""),
@@ -67,6 +70,19 @@ export default function IntegrationCard({
       setError(err instanceof Error ? err.message : "Failed to start OAuth");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      await disconnectIntegration(integration.name);
+      onDisconnected?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -99,7 +115,16 @@ export default function IntegrationCard({
         )}
       </div>
       {error && <p className="mt-2 text-sm text-ember-500">{error}</p>}
-      {!integration.connected && (
+      {integration.connected ? (
+        <div className="mt-4 flex gap-2">
+          <Button onClick={handleConnect} disabled={loading}>
+            {loading ? "Connecting..." : "Reconnect"}
+          </Button>
+          <Button variant="danger" onClick={handleDisconnect} disabled={disconnecting}>
+            {disconnecting ? "Disconnecting..." : "Disconnect"}
+          </Button>
+        </div>
+      ) : (
         <div className="mt-4">
           <Button onClick={handleConnect} disabled={loading}>
             {loading ? "Connecting..." : "Connect"}

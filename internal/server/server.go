@@ -112,6 +112,7 @@ func (s *Server) routes() {
 			r.Use(s.authMiddleware)
 
 			r.Get("/integrations", s.listIntegrations)
+			r.Delete("/integrations/{name}", s.disconnectIntegration)
 			r.Get("/integrations/{name}/operations", s.listOperations)
 			r.Get("/runtimes", s.listRuntimes)
 			r.Get("/bindings", s.listBindings)

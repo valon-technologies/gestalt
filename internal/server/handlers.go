@@ -53,9 +53,12 @@ type integrationInfo struct {
 	DisplayName string `json:"display_name,omitempty"`
 	Description string `json:"description,omitempty"`
 	IconSVG     string `json:"icon_svg,omitempty"`
+	Connected   bool   `json:"connected"`
 }
 
-func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
+	connected := s.userConnectedIntegrations(r)
+
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
@@ -67,6 +70,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 			Name:        name,
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
+			Connected:   connected[name],
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
@@ -76,6 +80,68 @@ func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) userConnectedIntegrations(r *http.Request) map[string]bool {
+	user := UserFromContext(r.Context())
+	if user == nil || user.Email == "" {
+		return nil
+	}
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+		if err != nil || dbUser == nil || dbUser.ID == "" {
+			return nil
+		}
+		userID = dbUser.ID
+	}
+	tokens, err := s.datastore.ListTokens(r.Context(), userID)
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]bool, len(tokens))
+	for _, tok := range tokens {
+		m[tok.Integration] = true
+	}
+	return m
+}
+
+func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
+	name := chi.URLParam(r, "name")
+	if _, ok := s.getProvider(w, name); !ok {
+		return
+	}
+
+	tokens, err := s.datastore.ListTokens(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+		return
+	}
+
+	var tokenID string
+	for _, tok := range tokens {
+		if tok.Integration == name {
+			tokenID = tok.ID
+			break
+		}
+	}
+
+	if tokenID == "" {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
+		return
+	}
+
+	if err := s.datastore.DeleteToken(r.Context(), tokenID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
 func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider, bool) {
