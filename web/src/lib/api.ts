@@ -40,11 +40,13 @@ function getAuthHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
 export async function fetchAPI<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -79,6 +81,7 @@ export async function fetchAPI<T>(
 export interface AuthInfo {
   provider: string;
   display_name: string;
+  dev_mode: boolean;
 }
 
 export async function getAuthInfo(): Promise<AuthInfo> {

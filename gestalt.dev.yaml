@@ -3,7 +3,7 @@ auth:
   config:
     client_id: dev-placeholder
     client_secret: dev-placeholder
-    redirect_url: http://localhost:3000/auth/callback
+    redirect_url: http://localhost:8080/auth/callback
 
 datastore:
   provider: sqlite
