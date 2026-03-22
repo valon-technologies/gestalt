@@ -538,3 +538,41 @@ func TestNonRetryableErrorsNotRetried(t *testing.T) {
 		})
 	}
 }
+
+func TestResponseBodySizeLimit(t *testing.T) {
+	t.Parallel()
+
+	oversized := int64(maxResponseBodySize + 1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		buf := make([]byte, 32*1024)
+		var written int64
+		for written < oversized {
+			n := int64(len(buf))
+			if remaining := oversized - written; remaining < n {
+				n = remaining
+			}
+			nn, err := w.Write(buf[:n])
+			if err != nil {
+				return
+			}
+			written += int64(nn)
+		}
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	result, err := Do(context.Background(), srv.Client(), Request{
+		Method:  http.MethodGet,
+		BaseURL: srv.URL,
+		Path:    "/large",
+		NoRetry: true,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+
+	if got := int64(len(result.Body)); got != maxResponseBodySize {
+		t.Fatalf("response body size = %d, want %d (truncated at limit)", got, maxResponseBodySize)
+	}
+}
