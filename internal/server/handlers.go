@@ -63,7 +63,12 @@ type integrationInfo struct {
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	connected := s.userConnectedIntegrations(r)
+	connected, err := s.userConnectedIntegrations(r)
+	if err != nil {
+		log.Printf("listing integrations: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to check integration status")
+		return
+	}
 
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
@@ -93,28 +98,31 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) userConnectedIntegrations(r *http.Request) map[string]bool {
+func (s *Server) userConnectedIntegrations(r *http.Request) (map[string]bool, error) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
-		return nil
+		return nil, nil
 	}
 	userID := UserIDFromContext(r.Context())
 	if userID == "" {
 		dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-		if err != nil || dbUser == nil || dbUser.ID == "" {
-			return nil
+		if err != nil {
+			return nil, fmt.Errorf("resolving user: %w", err)
+		}
+		if dbUser == nil || dbUser.ID == "" {
+			return nil, fmt.Errorf("resolving user: empty result")
 		}
 		userID = dbUser.ID
 	}
 	tokens, err := s.datastore.ListTokens(r.Context(), userID)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("listing tokens: %w", err)
 	}
 	m := make(map[string]bool, len(tokens))
 	for _, tok := range tokens {
 		m[tok.Integration] = true
 	}
-	return m
+	return m, nil
 }
 
 func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
