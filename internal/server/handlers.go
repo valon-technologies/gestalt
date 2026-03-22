@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -240,7 +241,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, core.ErrMCPOnly):
 			writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
 		default:
-			writeError(w, http.StatusBadGateway, fmt.Sprintf("operation failed: %v", err))
+			log.Printf("operation %s/%s failed: %v", providerName, operationName, err)
+			writeError(w, http.StatusBadGateway, "operation failed")
 		}
 		return
 	}
@@ -315,7 +317,8 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		identity, err = s.auth.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, fmt.Sprintf("login failed: %v", err))
+		log.Printf("login callback failed: %v", err)
+		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
 
@@ -437,7 +440,8 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
 	}
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
+		log.Printf("token exchange failed for %s: %v", providerName, err)
+		writeError(w, http.StatusBadGateway, "token exchange failed")
 		return
 	}
 
