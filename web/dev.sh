@@ -91,7 +91,7 @@ case "$MODE" in
         info "Config: $CONFIG"
         info "Starting Go API server on port $API_PORT..."
         warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
-        (cd "$GESTALT_DIR" && go run ./cmd/gestalt-server -config "$CONFIG") &
+        (cd "$GESTALT_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
         API_PID=$!
 
         API_READY=false

@@ -1,4 +1,4 @@
-name: Build Gestalt Server
+name: Build Gestaltd
 
 on:
   push:
@@ -122,11 +122,11 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Build Go server
-        run: go build -o ./gestalt-server ./cmd/gestalt-server
+        run: go build -o ./gestaltd ./cmd/gestaltd
 
       - name: Start Go server
         run: |
-          ./gestalt-server -config gestalt.dev.yaml &
+          ./gestaltd --config gestalt.dev.yaml &
           ready=false
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health; then

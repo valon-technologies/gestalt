@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: gestalt-server
+  repository: gestaltd
   pullPolicy: IfNotPresent
   tag: ""
 

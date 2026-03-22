@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -43,14 +42,8 @@ type bootstrapEnv struct {
 	Result *bootstrap.Result
 }
 
-func setupBootstrap(cmdName string, args []string) (*bootstrapEnv, error) {
-	fs := flag.NewFlagSet(cmdName, flag.ExitOnError)
-	configPath := fs.String("config", "", "path to config file")
-	if err := fs.Parse(args); err != nil {
-		return nil, err
-	}
-
-	path := resolveConfigPath(*configPath)
+func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
+	path := resolveConfigPath(configFlag)
 
 	cfg, err := config.Load(path)
 	if err != nil {

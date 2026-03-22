@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'web/**'
-      - '.github/workflows/deploy-gestalt-server.yml'
+      - '.github/workflows/deploy-gestaltd.yml'
   workflow_dispatch:
 
 env:
