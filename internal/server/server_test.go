@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -3005,5 +3006,102 @@ func TestMCPEndpoint_NotMountedWhenDisabled(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 404/405 when MCP not enabled, got %d", resp.StatusCode)
+	}
+}
+
+func TestMaxBodySize(t *testing.T) {
+	t.Parallel()
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test-int",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: "POST"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: "tok"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	largeBody := bytes.NewReader(bytes.Repeat([]byte("A"), (1<<20)+1))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/do_thing", largeBody)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestErrorSanitization(t *testing.T) {
+	t.Parallel()
+
+	sensitiveMsg := "secret-internal-db-password-leaked"
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test-int",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return nil, fmt.Errorf("upstream broke: %s", sensitiveMsg)
+			},
+		},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: "tok"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), sensitiveMsg) {
+		t.Fatalf("response body contains sensitive error details: %s", body)
+	}
+
+	var errResp map[string]string
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp["error"] != "operation failed" {
+		t.Fatalf("expected generic error message, got %q", errResp["error"])
 	}
 }

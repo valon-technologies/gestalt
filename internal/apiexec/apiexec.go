@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	defaultMaxRetries = 3
-	baseRetryDelay    = 1 * time.Second
+	defaultMaxRetries   = 3
+	baseRetryDelay      = 1 * time.Second
+	maxResponseBodySize = 50 << 20 // 50 MB
 )
 
 var retryableStatusCodes = map[int]bool{
@@ -185,7 +186,7 @@ func doOnce(
 	}
 
 	retryAfter := resp.Header.Get("Retry-After")
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	_ = resp.Body.Close()
 	if err != nil {
 		return nil, 0, "", false, fmt.Errorf("reading response: %w", err)
@@ -276,7 +277,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
 		return nil, fmt.Errorf("reading graphql response: %w", err)
 	}

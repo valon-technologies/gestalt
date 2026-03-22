@@ -78,6 +78,7 @@ func New(cfg Config) (*Server, error) {
 
 func (s *Server) routes() {
 	r := s.router
+	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
