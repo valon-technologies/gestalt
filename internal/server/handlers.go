@@ -56,6 +56,7 @@ type integrationInfo struct {
 	Description string `json:"description,omitempty"`
 	IconSVG     string `json:"icon_svg,omitempty"`
 	Connected   bool   `json:"connected"`
+	AuthType    string `json:"auth_type"`
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
@@ -68,11 +69,16 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		authType := "oauth"
+		if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+			authType = "manual"
+		}
 		info := integrationInfo{
 			Name:        name,
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
 			Connected:   connected[name],
+			AuthType:    authType,
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {

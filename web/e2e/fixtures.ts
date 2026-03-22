@@ -26,6 +26,21 @@ export async function mockIntegrations(
   });
 }
 
+export async function mockManualConnect(
+  page: Page,
+  opts?: { onConnect?: (integration: string, credential: string) => void },
+) {
+  await page.route("**/api/v1/auth/connect-manual", async (route: Route, request) => {
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as { integration: string; credential: string };
+      opts?.onConnect?.(body.integration, body.credential);
+      await route.fulfill({ json: { status: "connected" } });
+    } else {
+      await route.fallback();
+    }
+  });
+}
+
 export async function mockAuthInfo(
   page: Page,
   info: { provider: string; display_name: string },
