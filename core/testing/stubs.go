@@ -24,6 +24,8 @@ type StubDatastore struct {
 	FindOrCreateUserFn func(context.Context, string) (*core.User, error)
 	StoreTokenFn       func(context.Context, *core.IntegrationToken) error
 	TokenFn            func(context.Context, string, string, string) (*core.IntegrationToken, error)
+	ListTokensFn       func(context.Context, string) ([]*core.IntegrationToken, error)
+	DeleteTokenFn      func(context.Context, string) error
 	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
 }
 
@@ -59,10 +61,18 @@ func (s *StubDatastore) Token(ctx context.Context, userID, integration, instance
 	}
 	return nil, nil
 }
-func (s *StubDatastore) ListTokens(context.Context, string) ([]*core.IntegrationToken, error) {
+func (s *StubDatastore) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
+	if s.ListTokensFn != nil {
+		return s.ListTokensFn(ctx, userID)
+	}
 	return nil, nil
 }
-func (s *StubDatastore) DeleteToken(context.Context, string) error           { return nil }
+func (s *StubDatastore) DeleteToken(ctx context.Context, id string) error {
+	if s.DeleteTokenFn != nil {
+		return s.DeleteTokenFn(ctx, id)
+	}
+	return nil
+}
 func (s *StubDatastore) StoreAPIToken(context.Context, *core.APIToken) error { return nil }
 func (s *StubDatastore) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	if s.ValidateAPITokenFn != nil {

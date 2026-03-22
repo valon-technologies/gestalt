@@ -1,10 +1,25 @@
 import { test as base, expect, type Page, type Route } from "@playwright/test";
 import type { Integration, APIToken } from "../src/lib/api";
 
-export async function mockIntegrations(page: Page, integrations: Integration[]) {
+export async function mockIntegrations(
+  page: Page,
+  integrations: Integration[],
+  opts?: { onDisconnect?: (name: string) => void },
+) {
   await page.route("**/api/v1/integrations", (route: Route, request) => {
     if (request.method() === "GET") {
       route.fulfill({ json: integrations });
+    } else {
+      route.fallback();
+    }
+  });
+
+  await page.route("**/api/v1/integrations/*", (route: Route, request) => {
+    if (request.method() === "DELETE") {
+      const url = new URL(request.url());
+      const name = url.pathname.split("/").pop() || "";
+      opts?.onDisconnect?.(name);
+      route.fulfill({ json: { status: "disconnected" } });
     } else {
       route.fallback();
     }

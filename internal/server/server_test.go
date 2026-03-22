@@ -335,6 +335,138 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	stub2 := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+			},
+			ListTokensFn: func(_ context.Context, userID string) ([]*core.IntegrationToken, error) {
+				if userID == "u1" {
+					return []*core.IntegrationToken{
+						{ID: "tok-1", UserID: "u1", Integration: "slack"},
+					}, nil
+				}
+				return nil, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name      string `json:"name"`
+		Connected bool   `json:"connected"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 2 {
+		t.Fatalf("expected 2 integrations, got %d", len(integrations))
+	}
+
+	connected := make(map[string]bool)
+	for _, i := range integrations {
+		connected[i.Name] = i.Connected
+	}
+	if !connected["slack"] {
+		t.Fatal("expected slack to be connected")
+	}
+	if connected["github"] {
+		t.Fatal("expected github to be disconnected")
+	}
+}
+
+func TestDisconnectIntegration(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	var deletedID string
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+			},
+			ListTokensFn: func(_ context.Context, _ string) ([]*core.IntegrationToken, error) {
+				return []*core.IntegrationToken{
+					{ID: "tok-1", UserID: "u1", Integration: "slack"},
+				}, nil
+			},
+			DeleteTokenFn: func(_ context.Context, id string) error {
+				deletedID = id
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if deletedID != "tok-1" {
+		t.Fatalf("expected token tok-1 to be deleted, got %q", deletedID)
+	}
+}
+
+func TestDisconnectIntegration_NotConnected(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+			},
+			ListTokensFn: func(_ context.Context, _ string) ([]*core.IntegrationToken, error) {
+				return nil, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestListOperations(t *testing.T) {
 	t.Parallel()
 

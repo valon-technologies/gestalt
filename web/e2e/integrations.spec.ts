@@ -38,7 +38,7 @@ test.describe("Integrations", () => {
     await mockTokens(page, []);
 
     await page.goto("/integrations");
-    const connectButtons = page.getByRole("button", { name: "Connect" });
+    const connectButtons = page.getByRole("button", { name: "Connect", exact: true });
     await expect(connectButtons).toHaveCount(3);
   });
 
@@ -55,7 +55,7 @@ test.describe("Integrations", () => {
     ).toBeVisible();
   });
 
-  test("connected integration shows badge and hides Connect button", async ({
+  test("connected integration shows badge, Reconnect, and Disconnect", async ({
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
@@ -68,7 +68,43 @@ test.describe("Integrations", () => {
     await expect(page.getByText("Slack")).toBeVisible();
     await expect(page.getByText("GitHub")).toBeVisible();
     await expect(page.getByText("Connected")).toBeVisible();
-    // Only the unconnected integration should have a Connect button.
-    await expect(page.getByRole("button", { name: "Connect" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Connect", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Disconnect", exact: true })).toHaveCount(1);
+  });
+
+  test("disconnect calls API and refreshes list", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    let disconnected = false;
+
+    const connectedList = [
+      { name: "slack", display_name: "Slack", description: "Messaging", connected: true },
+    ];
+    const disconnectedList = [
+      { name: "slack", display_name: "Slack", description: "Messaging", connected: false },
+    ];
+
+    await mockIntegrations(page, connectedList, {
+      onDisconnect: () => { disconnected = true; },
+    });
+
+    await page.goto("/integrations");
+    await expect(page.getByText("Connected")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disconnect" })).toBeVisible();
+
+    // After disconnect, re-mock to return disconnected state
+    await page.route("**/api/v1/integrations", (route, request) => {
+      if (request.method() === "GET") {
+        route.fulfill({ json: disconnected ? disconnectedList : connectedList });
+      } else {
+        route.fallback();
+      }
+    });
+
+    await page.getByRole("button", { name: "Disconnect" }).click();
+    await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    await expect(page.getByText("Connected")).not.toBeVisible();
   });
 });
