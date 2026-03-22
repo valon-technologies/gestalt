@@ -102,7 +102,7 @@ export default function IntegrationCard({
               {integration.display_name || integration.name}
             </h3>
             {integration.description && (
-              <p className="mt-1 text-sm text-stone-500">
+              <p className="mt-1 line-clamp-2 text-sm text-stone-500">
                 {integration.description}
               </p>
             )}
