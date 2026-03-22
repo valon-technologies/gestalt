@@ -18,7 +18,7 @@ Run Gestalt as a Lambda function behind API Gateway, backed by RDS Postgres.
 ## Build the binary
 
 ```sh
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/gestalt-server
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap ./cmd/gestaltd
 ```
 
 The binary must be named `bootstrap` for the `provided.al2023` runtime.

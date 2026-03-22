@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -18,8 +20,19 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-func runServe(args []string) error {
-	env, err := setupBootstrap("serve", args)
+func run(args []string) error {
+	fs := flag.NewFlagSet("gestaltd", flag.ContinueOnError)
+	configPath := fs.String("config", "", "path to config file")
+	check := fs.Bool("check", false, "validate configuration and exit")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *check {
+		return runCheck(*configPath)
+	}
+
+	env, err := setupBootstrap(*configPath)
 	if err != nil {
 		return err
 	}
@@ -83,14 +96,14 @@ func runServe(args []string) error {
 	}
 
 	if env.Config.Server.BaseURL != "" {
-		log.Printf("gestalt-server base URL: %s", env.Config.Server.BaseURL)
+		log.Printf("gestaltd base URL: %s", env.Config.Server.BaseURL)
 		log.Printf("  auth callback:        %s%s", env.Config.Server.BaseURL, config.AuthCallbackPath)
 		log.Printf("  integration callback: %s%s", env.Config.Server.BaseURL, config.IntegrationCallbackPath)
 	}
 
 	listenErr := make(chan error, 1)
 	go func() {
-		log.Printf("gestalt-server listening on %s", addr)
+		log.Printf("gestaltd listening on %s", addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			listenErr <- err
 		}
@@ -112,6 +125,83 @@ func runServe(args []string) error {
 
 	log.Println("shutdown complete")
 	return nil
+}
+
+func runCheck(configFlag string) error {
+	path := resolveConfigPath(configFlag)
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		return fmt.Errorf("config invalid: %v", err)
+	}
+
+	log.Printf("config file: %s", path)
+	log.Printf("server:")
+	log.Printf("  port:       %d", cfg.Server.Port)
+	log.Printf("  base_url:   %s", maskEmpty(cfg.Server.BaseURL))
+	log.Printf("  dev_mode:   %t", cfg.Server.DevMode)
+	log.Printf("  encryption: %s", maskSecret(cfg.Server.EncryptionKey))
+	log.Printf("auth:")
+	log.Printf("  provider:   %s", cfg.Auth.Provider)
+	log.Printf("datastore:")
+	log.Printf("  provider:   %s", cfg.Datastore.Provider)
+	log.Printf("secrets:")
+	log.Printf("  provider:   %s", cfg.Secrets.Provider)
+
+	if len(cfg.Integrations) > 0 {
+		log.Printf("integrations: %d", len(cfg.Integrations))
+		for name := range cfg.Integrations {
+			intg := cfg.Integrations[name]
+			source := "provider-dir"
+			if intg.OpenAPI != "" {
+				source = "openapi"
+			} else if intg.Provider != "" {
+				source = "provider-file"
+			}
+			auth := "oauth"
+			if intg.Auth.Type == "manual" || intg.ConnectionMode == "manual" {
+				auth = "manual"
+			}
+			ops := "all"
+			if len(intg.AllowedOperations) > 0 {
+				ops = fmt.Sprintf("%d allowed", len(intg.AllowedOperations))
+			}
+			log.Printf("  %s: source=%s auth=%s ops=%s", name, source, auth, ops)
+		}
+	}
+
+	if len(cfg.Runtimes) > 0 {
+		log.Printf("runtimes: %d", len(cfg.Runtimes))
+		for name := range cfg.Runtimes {
+			rt := cfg.Runtimes[name]
+			log.Printf("  %s: type=%s providers=%s", name, rt.Type, strings.Join(rt.Providers, ","))
+		}
+	}
+
+	if len(cfg.Bindings) > 0 {
+		log.Printf("bindings: %d", len(cfg.Bindings))
+		for name := range cfg.Bindings {
+			b := cfg.Bindings[name]
+			log.Printf("  %s: type=%s", name, b.Type)
+		}
+	}
+
+	log.Printf("config ok")
+	return nil
+}
+
+func maskSecret(s string) string {
+	if s == "" {
+		return "(not set)"
+	}
+	return "***"
+}
+
+func maskEmpty(s string) string {
+	if s == "" {
+		return "(not set)"
+	}
+	return s
 }
 
 func closeBindings(bindings *registry.PluginMap[core.Binding], names []string) {

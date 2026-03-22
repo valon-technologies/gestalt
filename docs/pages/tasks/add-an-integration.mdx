@@ -102,7 +102,7 @@ See [Connection Modes](/concepts/platform-model#connection-modes) for all option
 ## 7. Validate end to end
 
 ```sh
-gestalt-server config check -config your-config.yaml
+gestaltd --check --config your-config.yaml
 gestalt integrations list
 gestalt integrations connect slack
 gestalt invoke slack conversations_list

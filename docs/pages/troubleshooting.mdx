@@ -34,11 +34,11 @@ The calling user has not connected the target integration. Each user must comple
 
 The web UI needs to know where the API server lives.
 
-**Fix**: Use `gestalt-server dev` which starts both and wires them together automatically. If running separately, set `GESTALT_API_URL` to point to the API server.
+**Fix**: Use `gestaltd` which starts both and wires them together automatically. If running separately, set `GESTALT_API_URL` to point to the API server.
 
 ## Config validation fails
 
-Run `gestalt-server config check -config your-config.yaml` to see exactly which field is invalid. Common causes:
+Run `gestaltd --check --config your-config.yaml` to see exactly which field is invalid. Common causes:
 
 - Missing `encryption_key` when `dev_mode` is not `true`.
 - Invalid provider name in `auth`, `datastore`, or `secrets`.

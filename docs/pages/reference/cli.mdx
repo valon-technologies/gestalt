@@ -1,48 +1,35 @@
 # CLI
 
-Gestalt ships two binaries: the Go server (`gestalt-server`) and the Rust client (`gestalt`).
+Gestalt ships two binaries: the Go server (`gestaltd`) and the Rust client (`gestalt`).
 
-## Server commands
+## Server (`gestaltd`)
 
-### `gestalt-server serve`
+`gestaltd` is the Gestalt API server. It loads configuration, manages auth providers and token storage, dispatches operations, and serves the MCP endpoint and webhook bindings.
 
-Start the API server. This is the default command when no subcommand is given.
-
-```sh
-gestalt-server serve -config config.yaml
-gestalt-server -config config.yaml          # equivalent
-```
-
-### `gestalt-server dev`
-
-Start the API server and web UI together for local development.
+### Usage
 
 ```sh
-gestalt-server dev -config config.yaml
+gestaltd --config config.yaml
 ```
+
+### Flags
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `-config` | (see resolution order) | Path to config file. |
-| `-api-port` | from config | Override API server port. |
-| `-web-port` | `3000` | Web UI port. |
-| `-api-only` | `false` | Start only the API server, skip the web UI. |
+| `--config` | (see resolution order) | Path to config file. |
+| `--check` | `false` | Validate configuration, print resolved values, and exit. |
 
-When dev mode is enabled in config, prints "dev mode enabled" on startup.
-
-### `gestalt-server config check`
-
-Validate configuration and print resolved values.
+### Validate configuration
 
 ```sh
-gestalt-server config check -config config.yaml
+gestaltd --check --config config.yaml
 ```
 
 Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
 
 ### Config file resolution
 
-1. `-config` flag.
+1. `--config` flag.
 2. `GESTALT_CONFIG` environment variable.
 3. `./config.yaml` in the current directory.
 4. `/etc/gestalt/config.yaml`.
