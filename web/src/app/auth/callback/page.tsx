@@ -20,6 +20,24 @@ function CallbackHandler() {
       return;
     }
 
+    // CLI-initiated login encodes callback port in state as "cli:{port}:{original_state}".
+    const CLI_STATE_PREFIX = "cli:";
+    const MAX_PORT = 65535;
+    if (returnedState?.startsWith(CLI_STATE_PREFIX)) {
+      const parts = returnedState.split(":");
+      if (parts.length >= 3) {
+        const port = parseInt(parts[1], 10);
+        const originalState = parts.slice(2).join(":");
+        if (port > 0 && port <= MAX_PORT) {
+          const params = new URLSearchParams({ state: originalState, code });
+          window.location.href = `http://127.0.0.1:${port}/?${params}`;
+          return;
+        }
+      }
+      setError("Invalid CLI callback state");
+      return;
+    }
+
     if (!savedState || returnedState !== savedState) {
       setError("Invalid OAuth state — possible CSRF attack");
       return;

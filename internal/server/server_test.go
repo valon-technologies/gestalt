@@ -866,6 +866,62 @@ func TestStartLogin(t *testing.T) {
 	}
 }
 
+func TestStartLoginWithCallbackPort(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubAuthWithLoginURL{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		loginURL:         "https://auth.example.com/login",
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"state":"abc","callback_port":12345}`)
+	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	if stub.capturedState != "cli:12345:abc" {
+		t.Fatalf("expected state 'cli:12345:abc', got %q", stub.capturedState)
+	}
+}
+
+func TestStartLoginWithInvalidCallbackPort(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubAuthWithLoginURL{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		loginURL:         "https://auth.example.com/login",
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"state":"abc","callback_port":99999}`)
+	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	if stub.capturedState != "abc" {
+		t.Fatalf("expected state 'abc', got %q", stub.capturedState)
+	}
+}
+
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
@@ -1413,10 +1469,12 @@ func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 
 type stubAuthWithLoginURL struct {
 	coretesting.StubAuthProvider
-	loginURL string
+	loginURL      string
+	capturedState string
 }
 
-func (s *stubAuthWithLoginURL) LoginURL(_ string) (string, error) {
+func (s *stubAuthWithLoginURL) LoginURL(state string) (string, error) {
+	s.capturedState = state
 	return s.loginURL, nil
 }
 
