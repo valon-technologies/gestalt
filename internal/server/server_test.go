@@ -344,6 +344,59 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_AuthType(t *testing.T) {
+	t.Parallel()
+
+	oauthStub := &coretesting.StubIntegration{N: "oauth-svc", DN: "OAuth Service"}
+	manualStub := &stubManualProvider{
+		StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name     string `json:"name"`
+		AuthType string `json:"auth_type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 2 {
+		t.Fatalf("expected 2 integrations, got %d", len(integrations))
+	}
+
+	authTypes := make(map[string]string)
+	for _, i := range integrations {
+		authTypes[i.Name] = i.AuthType
+	}
+	if authTypes["manual-svc"] != "manual" {
+		t.Fatalf("expected manual-svc auth_type=manual, got %q", authTypes["manual-svc"])
+	}
+	if authTypes["oauth-svc"] != "oauth" {
+		t.Fatalf("expected oauth-svc auth_type=oauth, got %q", authTypes["oauth-svc"])
+	}
+}
+
 func TestListIntegrationsWithIcon(t *testing.T) {
 	t.Parallel()
 

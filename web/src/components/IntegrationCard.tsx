@@ -1,6 +1,6 @@
 "use client";
 
-import { Integration, startIntegrationOAuth, disconnectIntegration } from "@/lib/api";
+import { Integration, startIntegrationOAuth, connectManualIntegration, disconnectIntegration } from "@/lib/api";
 import Button from "./Button";
 import { useMemo, useState } from "react";
 
@@ -47,20 +47,32 @@ function DefaultIcon() {
 
 export default function IntegrationCard({
   integration,
+  onConnected,
   onDisconnected,
 }: {
   integration: Integration;
+  onConnected?: () => void;
   onDisconnected?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTokenForm, setShowTokenForm] = useState(false);
+  const [credential, setCredential] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const safeIconSVG = useMemo(
     () => (integration.icon_svg ? sanitizeSVG(integration.icon_svg) : ""),
     [integration.icon_svg],
   );
 
+  const isManual = integration.auth_type === "manual";
+
   async function handleConnect() {
+    if (isManual) {
+      setShowTokenForm(true);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -71,6 +83,29 @@ export default function IntegrationCard({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSubmitManual(e: React.FormEvent) {
+    e.preventDefault();
+    if (!credential.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await connectManualIntegration(integration.name, credential.trim());
+      setShowTokenForm(false);
+      setCredential("");
+      onConnected?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleCancelManual() {
+    setShowTokenForm(false);
+    setCredential("");
+    setError(null);
   }
 
   async function handleDisconnect() {
@@ -115,21 +150,47 @@ export default function IntegrationCard({
         )}
       </div>
       {error && <p className="mt-2 text-sm text-ember-500">{error}</p>}
-      {integration.connected ? (
-        <div className="mt-4 flex gap-2">
-          <Button onClick={handleConnect} disabled={loading}>
-            {loading ? "Connecting..." : "Reconnect"}
-          </Button>
-          <Button variant="danger" onClick={handleDisconnect} disabled={disconnecting}>
-            {disconnecting ? "Disconnecting..." : "Disconnect"}
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <Button onClick={handleConnect} disabled={loading}>
-            {loading ? "Connecting..." : "Connect"}
-          </Button>
-        </div>
+      {showTokenForm && (
+        <form onSubmit={handleSubmitManual} className="mt-3">
+          <label htmlFor={`credential-${integration.name}`} className="block text-sm font-medium text-stone-700">
+            API Token
+          </label>
+          <input
+            id={`credential-${integration.name}`}
+            type="password"
+            value={credential}
+            onChange={(e) => setCredential(e.target.value)}
+            placeholder="Paste your API token"
+            autoFocus
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button type="submit" disabled={submitting || !credential.trim()}>
+              {submitting ? "Connecting..." : "Submit"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleCancelManual} disabled={submitting}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+      {!showTokenForm && (
+        integration.connected ? (
+          <div className="mt-4 flex gap-2">
+            <Button onClick={handleConnect} disabled={loading}>
+              {loading ? "Connecting..." : "Reconnect"}
+            </Button>
+            <Button variant="danger" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <Button onClick={handleConnect} disabled={loading}>
+              {loading ? "Connecting..." : "Connect"}
+            </Button>
+          </div>
+        )
       )}
     </div>
   );

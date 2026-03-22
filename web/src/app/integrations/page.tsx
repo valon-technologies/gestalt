@@ -78,6 +78,7 @@ function IntegrationsContent() {
               <IntegrationCard
                 key={integration.name}
                 integration={integration}
+                onConnected={loadIntegrations}
                 onDisconnected={loadIntegrations}
               />
             ))}
