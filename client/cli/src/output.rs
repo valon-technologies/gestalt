@@ -119,6 +119,23 @@ pub(crate) fn format_table(headers: &[&str], rows: &[Vec<String>], term_width: u
         }
     }
 
+    let total_content: usize = widths.iter().sum();
+    let slack = available.saturating_sub(total_content);
+    if slack > 0 && !widths.is_empty() {
+        let max_width = *widths.iter().max().unwrap_or(&0);
+        let max_indices: Vec<usize> = widths
+            .iter()
+            .enumerate()
+            .filter(|&(_, &w)| w == max_width)
+            .map(|(i, _)| i)
+            .collect();
+        let per_col = slack / max_indices.len();
+        let remainder = slack % max_indices.len();
+        for (j, &i) in max_indices.iter().enumerate() {
+            widths[i] += per_col + if j < remainder { 1 } else { 0 };
+        }
+    }
+
     let mut out = String::new();
 
     for (i, h) in headers.iter().enumerate() {

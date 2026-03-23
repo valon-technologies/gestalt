@@ -1,3 +1,4 @@
+use gestalt::output::Format;
 use mockito::{Matcher, Server};
 
 fn create_client(server: &Server) -> gestalt::api::ApiClient {
@@ -108,6 +109,29 @@ fn test_execute_operation() {
 }
 
 #[test]
+fn test_list_integrations_table_format() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("GET", "/api/v1/integrations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[
+                {"name": "test_svc", "description": "A short description", "connected": true},
+                {"name": "other_svc", "description": "Another service", "connected": false}
+            ]"#,
+        )
+        .create();
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result = gestalt::commands::integrations::list(Some(&server.url()), Format::Table);
+    std::env::remove_var("GESTALT_API_KEY");
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
 fn test_error_response() {
     let mut server = Server::new();
     let mock = server
@@ -124,6 +148,82 @@ fn test_error_response() {
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("missing authorization header"));
+}
+
+#[test]
+fn test_list_operations_formats_parameters() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "Name": "do_thing",
+                "Description": "Does a thing",
+                "Method": "POST",
+                "Parameters": [
+                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"},
+                    {"Name": "mode", "Type": "string", "Required": false, "Default": null, "Description": "Mode"}
+                ]
+            }]"#,
+        )
+        .create();
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result =
+        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
+    std::env::remove_var("GESTALT_API_KEY");
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_list_operations_json_format() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "Name": "do_thing",
+                "Description": "Does a thing",
+                "Method": "POST",
+                "Parameters": [
+                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"}
+                ]
+            }]"#,
+        )
+        .create();
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result =
+        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Json);
+    std::env::remove_var("GESTALT_API_KEY");
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_list_operations_empty_parameters() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"Name": "list_items", "Description": "Lists items", "Method": "GET", "Parameters": []}]"#)
+        .create();
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result =
+        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
+    std::env::remove_var("GESTALT_API_KEY");
+
+    mock.assert();
+    assert!(result.is_ok());
 }
 
 #[test]
