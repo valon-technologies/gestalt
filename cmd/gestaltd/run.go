@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -42,39 +43,13 @@ func run(args []string) error {
 	}
 	defer env.Close()
 
-	if err := startPlugins(env); err != nil {
-		return err
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-		defer cancel()
-		shutdownPlugins(ctx, env)
-	}()
-
 	result := env.Result
 
+	var mcpSlot *lateHandler
 	var mcpHandler http.Handler
 	if env.Config.MCP.Enabled {
-		broker, ok := result.Invoker.(*invocation.Broker)
-		if !ok {
-			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
-		}
-		mcpCfg := gestaltmcp.Config{
-			Invoker:       result.Invoker,
-			TokenResolver: broker,
-			Providers:     result.Providers,
-		}
-		if env.Config.MCP.Providers != nil {
-			mcpCfg.AllowedProviders = env.Config.MCP.Providers
-		}
-		if env.Config.MCP.ToolNamePrefix != "" {
-			mcpCfg.ToolNamePrefix = env.Config.MCP.ToolNamePrefix
-		}
-		mcpHandler = mcpserver.NewStreamableHTTPServer(
-			gestaltmcp.NewServer(mcpCfg),
-			mcpserver.WithStateLess(true),
-		)
-		log.Println("MCP endpoint enabled at /mcp")
+		mcpSlot = &lateHandler{}
+		mcpHandler = mcpSlot
 	}
 
 	srv, err := server.New(server.Config{
@@ -114,21 +89,63 @@ func run(args []string) error {
 		}
 	}()
 
+	pluginsStarted := false
+	defer func() {
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+		defer drainCancel()
+		if err := httpServer.Shutdown(drainCtx); err != nil {
+			log.Printf("server shutdown: %v", err)
+		}
+		if pluginsStarted {
+			pluginCtx, pluginCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+			defer pluginCancel()
+			shutdownPlugins(pluginCtx, env)
+		}
+	}()
+
+	select {
+	case <-result.ProvidersReady:
+		log.Printf("all providers ready (%d loaded)", len(result.Providers.List()))
+	case err := <-listenErr:
+		return fmt.Errorf("http server: %v", err)
+	case <-env.Ctx.Done():
+		return nil
+	}
+
+	if err := startPlugins(env); err != nil {
+		return err
+	}
+	pluginsStarted = true
+
+	if mcpSlot != nil {
+		broker, ok := result.Invoker.(*invocation.Broker)
+		if !ok {
+			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
+		}
+		mcpCfg := gestaltmcp.Config{
+			Invoker:       result.Invoker,
+			TokenResolver: broker,
+			Providers:     result.Providers,
+		}
+		if env.Config.MCP.Providers != nil {
+			mcpCfg.AllowedProviders = env.Config.MCP.Providers
+		}
+		if env.Config.MCP.ToolNamePrefix != "" {
+			mcpCfg.ToolNamePrefix = env.Config.MCP.ToolNamePrefix
+		}
+		mcpSlot.Set(mcpserver.NewStreamableHTTPServer(
+			gestaltmcp.NewServer(mcpCfg),
+			mcpserver.WithStateLess(true),
+		))
+		log.Println("MCP endpoint enabled at /mcp")
+	}
+
 	select {
 	case err := <-listenErr:
 		return fmt.Errorf("http server: %v", err)
 	case <-env.Ctx.Done():
 	}
-	log.Println("shutting down...")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-	defer cancel()
-
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("server shutdown: %v", err)
-	}
-
-	log.Println("shutdown complete")
 	return nil
 }
 
@@ -227,4 +244,26 @@ func stopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime
 			log.Printf("stopping runtime %q: %v", name, err)
 		}
 	}
+}
+
+type lateHandler struct {
+	mu      sync.RWMutex
+	handler http.Handler
+}
+
+func (h *lateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mu.RLock()
+	inner := h.handler
+	h.mu.RUnlock()
+	if inner == nil {
+		http.Error(w, "service starting", http.StatusServiceUnavailable)
+		return
+	}
+	inner.ServeHTTP(w, r)
+}
+
+func (h *lateHandler) Set(handler http.Handler) {
+	h.mu.Lock()
+	h.handler = handler
+	h.mu.Unlock()
 }
