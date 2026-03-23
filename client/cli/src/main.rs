@@ -11,7 +11,7 @@ struct Cli {
     command: Commands,
 
     /// Output format
-    #[arg(long, global = true, value_enum, default_value_t = Format::Json)]
+    #[arg(long, global = true, value_enum, default_value_t = Format::Table)]
     format: Format,
 
     /// API server URL (overrides config and env)
