@@ -1,5 +1,7 @@
 package provider
 
+import "encoding/json"
+
 type Definition struct {
 	Provider         string            `yaml:"provider"`
 	DisplayName      string            `yaml:"display_name"`
@@ -40,13 +42,14 @@ type AuthDef struct {
 }
 
 type OperationDef struct {
-	Description string         `yaml:"description"`
-	Method      string         `yaml:"method"`
-	Path        string         `yaml:"path"`
-	Parameters  []ParameterDef `yaml:"parameters"`
-	Query       string         `yaml:"query"`     // GraphQL query/mutation template
-	Transport   string         `yaml:"transport"` // "rest" (default) or "graphql"
-	Pagination  *PaginationDef `yaml:"pagination"`
+	Description string          `yaml:"description"`
+	Method      string          `yaml:"method"`
+	Path        string          `yaml:"path"`
+	Parameters  []ParameterDef  `yaml:"parameters"`
+	Query       string          `yaml:"query"`        // GraphQL query/mutation template
+	Transport   string          `yaml:"transport"`    // "rest" (default) or "graphql"
+	InputSchema json.RawMessage `yaml:"input_schema"` // pre-built JSON Schema (skips synthesis)
+	Pagination  *PaginationDef  `yaml:"pagination"`
 }
 
 type AuthMappingDef struct {

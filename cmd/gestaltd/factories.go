@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
+	graphqlupstream "github.com/valon-technologies/gestalt/internal/graphql"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
@@ -222,6 +223,23 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					return nil, fmt.Errorf("integration %s: multiple rest upstreams not supported", name)
 				}
 				def, err := loadHTTPUpstream(ctx, name, us, providerDirs)
+				if err != nil {
+					cleanup()
+					return nil, err
+				}
+				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations))
+				if err != nil {
+					cleanup()
+					return nil, err
+				}
+				apiProv = p
+				mcpFromAPI = us.MCP
+			case config.UpstreamTypeGraphQL:
+				if apiProv != nil {
+					cleanup()
+					return nil, fmt.Errorf("integration %s: multiple api upstreams not supported", name)
+				}
+				def, err := graphqlupstream.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
 				if err != nil {
 					cleanup()
 					return nil, err
