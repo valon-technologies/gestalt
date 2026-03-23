@@ -101,8 +101,9 @@ type IntegrationDef struct {
 }
 
 const (
-	UpstreamTypeREST = "rest"
-	UpstreamTypeMCP  = "mcp"
+	UpstreamTypeREST    = "rest"
+	UpstreamTypeGraphQL = "graphql"
+	UpstreamTypeMCP     = "mcp"
 )
 
 type UpstreamDef struct {

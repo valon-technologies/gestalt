@@ -16,10 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
-const (
-	maxSpecSize       = 100 << 20 // 100 MB
-	maxDescriptionLen = 200
-)
+const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
@@ -43,7 +40,7 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 
 	if info := model.Model.Info; info != nil {
 		def.DisplayName = info.Title
-		def.Description = truncateDescription(info.Description)
+		def.Description = provider.TruncateDescription(info.Description)
 	}
 
 	if len(model.Model.Servers) > 0 {
@@ -285,20 +282,4 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			}
 		}
 	}
-}
-
-func truncateDescription(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = strings.TrimSpace(s[:i])
-	}
-	runes := []rune(s)
-	if len(runes) <= maxDescriptionLen {
-		return s
-	}
-	truncated := string(runes[:maxDescriptionLen])
-	if i := strings.LastIndexByte(truncated, ' '); i > len(truncated)/2 {
-		truncated = truncated[:i]
-	}
-	return truncated + "..."
 }
