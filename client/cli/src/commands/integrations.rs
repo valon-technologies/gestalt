@@ -12,8 +12,9 @@ pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
     match format {
         Format::Json => output::print_json(&resp),
         Format::Table => {
-            let items = resp.as_array().unwrap_or(&Vec::new()).clone();
-            let rows: Vec<Vec<String>> = items
+            let rows: Vec<Vec<String>> = resp
+                .as_array()
+                .unwrap_or(&Vec::new())
                 .iter()
                 .map(|item| {
                     let connected = match item["connected"].as_bool() {
@@ -22,23 +23,12 @@ pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
                     };
                     vec![
                         item["name"].as_str().unwrap_or("-").to_string(),
-                        item["display_name"].as_str().unwrap_or("-").to_string(),
-                        item["auth_type"].as_str().unwrap_or("-").to_string(),
-                        connected.into(),
                         item["description"].as_str().unwrap_or("-").to_string(),
+                        connected.into(),
                     ]
                 })
                 .collect();
-            output::print_table(
-                &[
-                    "Name",
-                    "Display Name",
-                    "Auth Type",
-                    "Connected",
-                    "Description",
-                ],
-                &rows,
-            );
+            output::print_table(&["Name", "Description", "Connected"], &rows);
         }
     }
     Ok(())
