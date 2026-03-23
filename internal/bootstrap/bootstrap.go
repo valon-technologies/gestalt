@@ -133,7 +133,18 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, cs)
+	var chatDispatcher core.ChatDispatcher
+	if runtimes != nil {
+		for _, name := range runtimes.List() {
+			rt, _ := runtimes.Get(name)
+			if cd, ok := rt.(core.ChatDispatcher); ok {
+				chatDispatcher = cd
+				break
+			}
+		}
+	}
+
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, cs, chatDispatcher)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +456,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, chatStore core.ChatStore) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, chatStore core.ChatStore, chatDispatcher core.ChatDispatcher) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -459,7 +470,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, chatStore, nil)
+		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, chatStore, chatDispatcher)
 		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
