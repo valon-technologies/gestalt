@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package gestalt.sandbox.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/internal/sandbox/pb";
+
+service SandboxService {
+  rpc Converse(ConversationRequest) returns (stream ConversationEvent);
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+service ToolService {
+  rpc ExecuteTool(ToolRequest) returns (ToolResponse);
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+}
+
+// --- Conversation messages (Go -> Python) ---
+
+message ConversationRequest {
+  string conversation_id = 1;
+  string user_message = 2;
+  string user_id = 3;
+  string session_id = 4;
+  string model = 5;
+  string system_prompt = 6;
+  repeated string allowed_tools = 7;
+  AgentSettings settings = 8;
+}
+
+message AgentSettings {
+  int32 max_turns = 1;
+  double temperature = 2;
+  int32 max_tokens = 3;
+}
+
+// --- Conversation events (Python -> Go, streamed) ---
+
+message ConversationEvent {
+  string conversation_id = 1;
+  oneof event {
+    TextDelta text_delta = 2;
+    ThinkingDelta thinking_delta = 3;
+    ToolUse tool_use = 4;
+    ToolResult tool_result = 5;
+    TurnComplete turn_complete = 6;
+    ErrorEvent error = 7;
+  }
+}
+
+message TextDelta {
+  string content = 1;
+}
+
+message ThinkingDelta {
+  string content = 1;
+}
+
+message ToolUse {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  string input_json = 3;
+}
+
+message ToolResult {
+  string tool_call_id = 1;
+  string content_json = 2;
+  bool is_error = 3;
+}
+
+message TurnComplete {
+  string session_id = 1;
+  string model = 2;
+  int64 input_tokens = 3;
+  int64 output_tokens = 4;
+  double cost_usd = 5;
+  int64 duration_ms = 6;
+  int32 num_turns = 7;
+  string full_text = 8;
+}
+
+message ErrorEvent {
+  string message = 1;
+  string code = 2;
+  bool recoverable = 3;
+}
+
+// --- Tool messages (Python -> Go) ---
+
+message ToolRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+  string provider = 3;
+  string operation = 4;
+  string params_json = 5;
+}
+
+message ToolResponse {
+  string result_json = 1;
+  int32 status = 2;
+  string error = 3;
+}
+
+message ListToolsRequest {
+  repeated string providers = 1;
+}
+
+message ListToolsResponse {
+  repeated ToolDefinition tools = 1;
+}
+
+message ToolDefinition {
+  string name = 1;
+  string provider = 2;
+  string operation = 3;
+  string description = 4;
+  string input_schema_json = 5;
+  bool read_only = 6;
+  bool destructive = 7;
+}
+
+// --- Lifecycle messages ---
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+  string status = 2;
+}
+
+message ShutdownRequest {
+  int32 timeout_seconds = 1;
+}
+
+message ShutdownResponse {
+  bool clean = 1;
+}
