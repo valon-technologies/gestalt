@@ -562,6 +562,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tok := &core.IntegrationToken{
+		ID:           uuid.NewString(),
 		UserID:       state.UserID,
 		Integration:  providerName,
 		Instance:     defaultTokenInstance,
@@ -572,6 +573,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
+		log.Printf("failed to store token for %s: %v", providerName, err)
 		writeError(w, http.StatusInternalServerError, "failed to store token")
 		return
 	}
@@ -633,7 +635,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
 		Integration: req.Integration,
-		Instance:    "default",
+		Instance:    defaultTokenInstance,
 		AccessToken: req.Credential,
 	}
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
@@ -643,6 +645,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	tok.MetadataJSON = manualMeta
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
+		log.Printf("failed to store credential for %s: %v", req.Integration, err)
 		writeError(w, http.StatusInternalServerError, "failed to store credential")
 		return
 	}
