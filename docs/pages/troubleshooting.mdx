@@ -38,7 +38,7 @@ The web UI needs to know where the API server lives.
 
 ## Config validation fails
 
-Run `gestaltd --check --config your-config.yaml` to see exactly which field is invalid. Common causes:
+Run `gestaltd validate --config your-config.yaml` to see exactly which field is invalid. Common causes:
 
 - Missing `encryption_key` when `dev_mode` is not `true`.
 - Invalid provider name in `auth`, `datastore`, or `secrets`.

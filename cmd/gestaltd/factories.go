@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -18,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
-	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
@@ -136,7 +134,9 @@ func startPlugins(env *bootstrapEnv) error {
 				return fmt.Errorf("getting runtime %q: %v", name, err)
 			}
 			if err := rt.Start(env.Ctx); err != nil {
-				stopRuntimes(env.Ctx, result.Runtimes, started)
+				if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, started); stopErr != nil {
+					log.Printf("stopping runtimes after startup failure: %v", stopErr)
+				}
 				return fmt.Errorf("starting runtime %q: %v", name, err)
 			}
 			started = append(started, name)
@@ -147,16 +147,24 @@ func startPlugins(env *bootstrapEnv) error {
 		for _, name := range result.Bindings.List() {
 			binding, err := result.Bindings.Get(name)
 			if err != nil {
-				closeBindings(result.Bindings, started)
+				if closeErr := bootstrap.CloseBindings(result.Bindings, started); closeErr != nil {
+					log.Printf("closing bindings after startup failure: %v", closeErr)
+				}
 				if result.Runtimes != nil {
-					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
+					if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List()); stopErr != nil {
+						log.Printf("stopping runtimes after startup failure: %v", stopErr)
+					}
 				}
 				return fmt.Errorf("getting binding %q: %v", name, err)
 			}
 			if err := binding.Start(env.Ctx); err != nil {
-				closeBindings(result.Bindings, started)
+				if closeErr := bootstrap.CloseBindings(result.Bindings, started); closeErr != nil {
+					log.Printf("closing bindings after startup failure: %v", closeErr)
+				}
 				if result.Runtimes != nil {
-					stopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List())
+					if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List()); stopErr != nil {
+						log.Printf("stopping runtimes after startup failure: %v", stopErr)
+					}
 				}
 				return fmt.Errorf("starting binding %q: %v", name, err)
 			}
@@ -168,28 +176,17 @@ func startPlugins(env *bootstrapEnv) error {
 
 func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
 	if env.Result.Bindings != nil {
-		closeBindings(env.Result.Bindings, env.Result.Bindings.List())
+		if err := bootstrap.CloseBindings(env.Result.Bindings, env.Result.Bindings.List()); err != nil {
+			log.Printf("closing bindings: %v", err)
+		}
 	}
 	if env.Result.Runtimes != nil {
-		stopRuntimes(ctx, env.Result.Runtimes, env.Result.Runtimes.List())
-	}
-	closeProviders(env.Result.Providers)
-}
-
-func closeProviders(providers *registry.PluginMap[core.Provider]) {
-	if providers == nil {
-		return
-	}
-	for _, name := range providers.List() {
-		prov, err := providers.Get(name)
-		if err != nil {
-			continue
+		if err := bootstrap.StopRuntimes(ctx, env.Result.Runtimes, env.Result.Runtimes.List()); err != nil {
+			log.Printf("stopping runtimes: %v", err)
 		}
-		if c, ok := prov.(io.Closer); ok {
-			if err := c.Close(); err != nil {
-				log.Printf("closing provider %q: %v", name, err)
-			}
-		}
+	}
+	if err := bootstrap.CloseProviders(env.Result.Providers); err != nil {
+		log.Printf("closing providers: %v", err)
 	}
 }
 
@@ -205,7 +202,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 				connMode = core.ConnectionMode(intg.ConnectionMode)
 			}
 		default:
-			return nil, fmt.Errorf("integration %s: unknown connection_mode %q", name, intg.ConnectionMode)
+			return nil, fmt.Errorf("unknown connection_mode %q", intg.ConnectionMode)
 		}
 
 		cleanup := func() {
@@ -219,7 +216,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 			case config.UpstreamTypeREST:
 				if apiProv != nil {
 					cleanup()
-					return nil, fmt.Errorf("integration %s: multiple rest upstreams not supported", name)
+					return nil, fmt.Errorf("multiple rest upstreams not supported")
 				}
 				def, err := loadHTTPUpstream(ctx, name, us, providerDirs)
 				if err != nil {
@@ -235,7 +232,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 			case config.UpstreamTypeGraphQL:
 				if apiProv != nil {
 					cleanup()
-					return nil, fmt.Errorf("integration %s: multiple api upstreams not supported", name)
+					return nil, fmt.Errorf("multiple api upstreams not supported")
 				}
 				def, err := graphqlupstream.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
 				if err != nil {
@@ -251,7 +248,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 			case config.UpstreamTypeMCP:
 				if mcpUp != nil {
 					cleanup()
-					return nil, fmt.Errorf("integration %s: multiple mcp upstreams not supported", name)
+					return nil, fmt.Errorf("multiple mcp upstreams not supported")
 				}
 				up, err := mcpupstream.New(ctx, name, us.URL, connMode)
 				if err != nil {
@@ -260,13 +257,13 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 				if us.AllowedOperations != nil {
 					if err := up.FilterOperations(map[string]string(us.AllowedOperations)); err != nil {
 						_ = up.Close()
-						return nil, fmt.Errorf("integration %s: %w", name, err)
+						return nil, err
 					}
 				}
 				mcpUp = up
 			default:
 				cleanup()
-				return nil, fmt.Errorf("integration %s: unknown upstream type %q", name, us.Type)
+				return nil, fmt.Errorf("unknown upstream type %q", us.Type)
 			}
 		}
 
@@ -278,7 +275,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 		case mcpUp != nil:
 			return mcpUp, nil
 		default:
-			return nil, fmt.Errorf("integration %s: no upstreams configured", name)
+			return nil, fmt.Errorf("no upstreams configured")
 		}
 	}
 }

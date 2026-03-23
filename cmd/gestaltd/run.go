@@ -4,18 +4,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
-	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/internal/server"
 	"github.com/valon-technologies/gestalt/internal/webui"
 
@@ -23,18 +24,28 @@ import (
 )
 
 func run(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "-h", "--help", "help":
+			printMainUsage(os.Stderr)
+			return flag.ErrHelp
+		case "validate":
+			return runValidate(args[1:])
+		}
+	}
+
+	return runServe(args)
+}
+
+func runServe(args []string) error {
 	fs := flag.NewFlagSet("gestaltd", flag.ContinueOnError)
+	fs.Usage = func() { printMainUsage(fs.Output()) }
 	configPath := fs.String("config", "", "path to config file")
-	check := fs.Bool("check", false, "validate configuration and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-
-	if *check {
-		return runCheck(*configPath)
 	}
 
 	env, err := setupBootstrap(*configPath)
@@ -157,7 +168,21 @@ func run(args []string) error {
 	return nil
 }
 
-func runCheck(configFlag string) error {
+func runValidate(args []string) error {
+	fs := flag.NewFlagSet("gestaltd validate", flag.ContinueOnError)
+	fs.Usage = func() { printValidateUsage(fs.Output()) }
+	configPath := fs.String("config", "", "path to config file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+
+	return validateConfig(*configPath)
+}
+
+func validateConfig(configFlag string) error {
 	path := resolveConfigPath(configFlag)
 
 	cfg, err := config.Load(path)
@@ -165,6 +190,16 @@ func runCheck(configFlag string) error {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
+	if err := bootstrap.Validate(context.Background(), cfg, buildFactories(cfg.ProviderDirs, cfg.Server.DevMode)); err != nil {
+		return fmt.Errorf("config invalid: %v", err)
+	}
+
+	logConfigSummary(path, cfg)
+	log.Printf("config ok")
+	return nil
+}
+
+func logConfigSummary(path string, cfg *config.Config) {
 	log.Printf("config file: %s", path)
 	log.Printf("server:")
 	log.Printf("  port:       %d", cfg.Server.Port)
@@ -209,9 +244,6 @@ func runCheck(configFlag string) error {
 			log.Printf("  %s: type=%s", name, b.Type)
 		}
 	}
-
-	log.Printf("config ok")
-	return nil
 }
 
 func maskSecret(s string) string {
@@ -228,30 +260,28 @@ func maskEmpty(s string) string {
 	return s
 }
 
-func closeBindings(bindings *registry.PluginMap[core.Binding], names []string) {
-	for _, name := range names {
-		b, err := bindings.Get(name)
-		if err != nil {
-			log.Printf("looking up binding %q during shutdown: %v", name, err)
-			continue
-		}
-		if err := b.Close(); err != nil {
-			log.Printf("closing binding %q: %v", name, err)
-		}
-	}
+func printMainUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd [--config PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  validate    Load and validate configuration, then exit")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Flags:")
+	writeUsageLine(w, "  --config    Path to the config file")
 }
 
-func stopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime], names []string) {
-	for _, name := range names {
-		rt, err := runtimes.Get(name)
-		if err != nil {
-			log.Printf("looking up runtime %q during shutdown: %v", name, err)
-			continue
-		}
-		if err := rt.Stop(ctx); err != nil {
-			log.Printf("stopping runtime %q: %v", name, err)
-		}
-	}
+func printValidateUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Validate the configuration using the daemon's full bootstrap path,")
+	writeUsageLine(w, "without starting the server or running datastore migrations.")
+}
+
+func writeUsageLine(w io.Writer, line string) {
+	_, _ = fmt.Fprintln(w, line)
 }
 
 type lateHandler struct {
