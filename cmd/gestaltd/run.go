@@ -45,9 +45,21 @@ func run(args []string) error {
 
 	result := env.Result
 
+	var mcpProviders []string
+	mcpPrefixes := make(map[string]string)
+	for name := range env.Config.Integrations {
+		intg := env.Config.Integrations[name]
+		if intg.MCP {
+			mcpProviders = append(mcpProviders, name)
+			if intg.MCPToolPrefix != "" {
+				mcpPrefixes[name] = intg.MCPToolPrefix
+			}
+		}
+	}
+
 	var mcpSlot *lateHandler
 	var mcpHandler http.Handler
-	if env.Config.MCP.Enabled {
+	if len(mcpProviders) > 0 {
 		mcpSlot = &lateHandler{}
 		mcpHandler = mcpSlot
 	}
@@ -123,15 +135,11 @@ func run(args []string) error {
 			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 		}
 		mcpCfg := gestaltmcp.Config{
-			Invoker:       result.Invoker,
-			TokenResolver: broker,
-			Providers:     result.Providers,
-		}
-		if env.Config.MCP.Providers != nil {
-			mcpCfg.AllowedProviders = env.Config.MCP.Providers
-		}
-		if env.Config.MCP.ToolNamePrefix != "" {
-			mcpCfg.ToolNamePrefix = env.Config.MCP.ToolNamePrefix
+			Invoker:          result.Invoker,
+			TokenResolver:    broker,
+			Providers:        result.Providers,
+			AllowedProviders: mcpProviders,
+			ToolPrefixes:     mcpPrefixes,
 		}
 		mcpSlot.Set(mcpserver.NewStreamableHTTPServer(
 			gestaltmcp.NewServer(mcpCfg),

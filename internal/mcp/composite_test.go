@@ -71,7 +71,7 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 		},
 	}
 
-	comp := composite.New("notion", apiProv, mcpUp, false)
+	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       &testutil.StubInvoker{},
@@ -83,8 +83,8 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	if tools["notion_search"] == nil {
 		t.Fatal("expected notion_search tool from MCP upstream")
 	}
-	if tools["notion_list_pages"] != nil {
-		t.Fatal("API tool should not appear when mcpFromAPI=false")
+	if tools["notion_list_pages"] == nil {
+		t.Fatal("expected notion_list_pages tool from API upstream")
 	}
 
 	tool := srv.GetTool("notion_search")
@@ -144,7 +144,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 		},
 	}
 
-	comp := composite.New("notion", apiProv, mcpUp, true)
+	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
 	ds := stubDatastoreWithToken()
 	broker := invocation.NewBroker(providers, ds)
@@ -218,7 +218,7 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 		},
 	}
 
-	comp := composite.New("notion", apiProv, mcpUp, false)
+	comp := composite.New("notion", apiProv, mcpUp)
 
 	result, err := comp.Execute(context.Background(), "get_page", map[string]any{"id": "page1"}, "token")
 	if err != nil {
