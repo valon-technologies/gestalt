@@ -24,13 +24,6 @@ type Config struct {
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	ProviderDirs []string                  `yaml:"provider_dirs"`
 	Server       ServerConfig              `yaml:"server"`
-	MCP          MCPConfig                 `yaml:"mcp"`
-}
-
-type MCPConfig struct {
-	Enabled        bool     `yaml:"enabled"`
-	Providers      []string `yaml:"providers"`
-	ToolNamePrefix string   `yaml:"tool_name_prefix"`
 }
 
 type RuntimeDef struct {
@@ -80,6 +73,8 @@ type IntegrationDef struct {
 	Description    string        `yaml:"description"`
 	AuthProfile    string        `yaml:"auth_profile"`
 	ConnectionMode string        `yaml:"connection_mode"`
+	MCP            bool          `yaml:"mcp"`
+	MCPToolPrefix  string        `yaml:"mcp_tool_prefix"`
 
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
@@ -110,7 +105,6 @@ type UpstreamDef struct {
 	Type              string     `yaml:"type"`
 	URL               string     `yaml:"url"`
 	Provider          string     `yaml:"provider"`
-	MCP               bool       `yaml:"mcp"`
 	AllowedOperations AllowedOps `yaml:"allowed_operations"`
 }
 

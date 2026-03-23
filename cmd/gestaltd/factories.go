@@ -197,7 +197,6 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		var apiProv core.Provider
 		var mcpUp *mcpupstream.Upstream
-		var mcpFromAPI bool
 
 		connMode := core.ConnectionModeUser
 		switch core.ConnectionMode(intg.ConnectionMode) {
@@ -233,7 +232,6 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					return nil, err
 				}
 				apiProv = p
-				mcpFromAPI = us.MCP
 			case config.UpstreamTypeGraphQL:
 				if apiProv != nil {
 					cleanup()
@@ -250,7 +248,6 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					return nil, err
 				}
 				apiProv = p
-				mcpFromAPI = us.MCP
 			case config.UpstreamTypeMCP:
 				if mcpUp != nil {
 					cleanup()
@@ -275,7 +272,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 
 		switch {
 		case apiProv != nil && mcpUp != nil:
-			return composite.New(name, apiProv, mcpUp, mcpFromAPI), nil
+			return composite.New(name, apiProv, mcpUp), nil
 		case apiProv != nil:
 			return apiProv, nil
 		case mcpUp != nil:
