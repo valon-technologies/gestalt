@@ -9,9 +9,9 @@ Gestalt has a small set of primitives that compose into a complete API gateway f
 | **Auth provider** | Authenticates users to the Gestalt platform and issues session tokens. |
 | **Datastore** | Persists users, integration tokens (encrypted), and API tokens in a pluggable backend such as Postgres, SQLite, or DynamoDB. |
 | **Secret manager** | Resolves `secret://` references in config before other components are built, keeping sensitive values out of plain-text YAML. |
-| **Integration definition** | Describes an upstream API: base URL, auth style, operations, and optional hooks; for example, Slack, Linear, or Datadog. |
-| **Provider** | Runtime object that lists operations and executes them against the upstream API. |
-| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec or declared in YAML. |
+| **Integration definition** | Describes one or more upstreams (REST, GraphQL, or MCP) with their auth style, operations, and optional hooks. |
+| **Provider** | Runtime object that lists operations and executes them against upstream APIs. Built from the integration's upstreams at startup. |
+| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec, GraphQL introspection, MCP tool listing, or declared in YAML. |
 | **Hooks** | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
 | **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
 | **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
@@ -49,13 +49,35 @@ Each integration has a connection mode that controls how credentials are resolve
 
 Set `connection_mode` on the integration config. Default is `user`.
 
-## Source of truth for an integration
+## Upstream types
 
-| Source | When to use |
+Each integration declares one or more upstreams that define where operations come from:
+
+| Upstream type | When to use |
 |---|---|
-| OpenAPI spec | Set the `openapi` field to a URL or local path. Operations, parameters, and descriptions are generated automatically. |
-| Provider YAML | A standalone file that declares operations manually. Use when no spec exists or when the spec is too noisy. |
-| Provider directory | The `provider_dirs` config field tells Gestalt where to scan for provider YAML files at boot. |
+| `rest` | Load operations from an OpenAPI spec URL, a provider YAML file, or a provider directory scan. |
+| `graphql` | Introspect a GraphQL endpoint and generate operations from queries and mutations. |
+| `mcp` | Connect to an upstream MCP server and import its tools as operations. |
+
+An integration can combine multiple upstream types (e.g. REST + MCP) to create a composite provider.
+
+## Extension interfaces
+
+Gestalt's plugin system is built on interfaces defined in the `core/` package:
+
+| Interface | Package | Purpose |
+|---|---|---|
+| `AuthProvider` | `core/auth.go` | Authenticates users and issues session tokens. |
+| `Datastore` | `core/datastore.go` | Persists users, integration tokens, and API tokens. |
+| `SecretManager` | `core/secrets.go` | Resolves secret values by name. |
+| `Provider` | `core/provider.go` | Lists and executes operations against an upstream API. |
+| `OAuthProvider` | `core/provider.go` | Extends `Provider` with OAuth authorization and token exchange. |
+| `ManualProvider` | `core/provider.go` | Extends `Provider` for API-key services with no OAuth flow. |
+| `CatalogProvider` | `core/provider.go` | Exposes rich metadata (JSON Schema inputs, annotations) for MCP tool generation. |
+| `Runtime` | `core/runtime.go` | Background process with lifecycle management (`Start`/`Stop`). |
+| `Binding` | `core/binding.go` | Alternative request surface (triggers or surfaces) with HTTP routes. |
+| `Invoker` | `internal/invocation/broker.go` | Dispatches operations with credential resolution and token refresh. |
+| `CapabilityLister` | `internal/invocation/broker.go` | Lists all available operations across providers. |
 
 ## Self-serve model
 

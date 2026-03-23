@@ -6,6 +6,16 @@ When `mcp.enabled` is set in the config, Gestalt mounts a Streamable HTTP MCP en
 
 The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard for connecting AI assistants to external tools. An MCP server advertises a list of tools and handles tool calls. Gestalt's MCP binding maps each allowed integration operation to an MCP tool.
 
+## Tool generation
+
+Gestalt generates MCP tools from provider catalogs. Providers that implement the `CatalogProvider` interface (including all REST, GraphQL, and MCP upstream providers) supply rich metadata for their operations:
+
+- **JSON Schema inputs** from OpenAPI specs and GraphQL introspection are passed through directly, giving MCP clients full type information.
+- **Tool annotations** (read-only, destructive, idempotent) are set automatically from HTTP methods for REST operations, and preserved from the upstream server for MCP operations.
+- **Operation titles** come from the catalog when available, falling back to the operation ID.
+
+Providers without a catalog fall back to flat tool generation from the operation list with parameter-level type hints.
+
 ## Tool names
 
 Each tool name is built from the provider name and operation ID:
@@ -33,22 +43,20 @@ The MCP binding is an alternative interface, not a replacement. It shares:
 
 The `mcp.providers` filter lets you expose a subset of integrations to MCP clients without affecting the HTTP API.
 
-## Tool metadata
+## MCP upstream passthrough
 
-Gestalt populates MCP tool annotations automatically:
+When an integration includes a `type: mcp` upstream, those operations are proxied directly to the upstream MCP server rather than going through the HTTP invocation path. Gestalt resolves the user's stored credential, injects it as a Bearer token on the upstream request, and forwards the tool call. This avoids the HTTP serialization round-trip and preserves the full MCP protocol semantics.
 
-| HTTP method | Annotation |
-|---|---|
-| GET, HEAD | Read-only |
-| PUT | Idempotent |
-| DELETE | Destructive |
+For composite integrations (REST/GraphQL + MCP), REST operations go through the standard invoker while MCP operations use direct passthrough.
 
-Input schemas from OpenAPI specs are passed through as JSON Schema, giving MCP clients type information for parameters. Providers that implement the catalog interface can supply richer metadata for their operations.
+## Mixed transport catalogs
+
+A composite integration can expose operations from different transports under a single provider name. For example, an integration with both a REST upstream and an MCP upstream presents all operations in one unified tool list. The MCP binding routes each tool call to the correct backend based on the operation's transport type.
+
+## MCP-only integrations
+
+Integrations with only a `type: mcp` upstream cannot be invoked over the HTTP API. Calling their operations via `GET/POST /api/v1/{integration}/{operation}` returns a 400 error indicating the integration is accessible only via MCP.
 
 ## Limitations
 
 Adding or removing integrations requires restarting the server.
-
-## MCP upstream proxying
-
-Integrations can proxy requests to an upstream MCP server by setting `mcp.url` in the integration config block. When configured, Gestalt forwards tool calls to the upstream MCP server instead of executing HTTP operations. This allows Gestalt to act as a unified gateway for both REST and MCP-native providers; you expose a single MCP endpoint to your AI assistants, and Gestalt routes each tool call to the correct backend regardless of whether the upstream speaks REST or MCP.

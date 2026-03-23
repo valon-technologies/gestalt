@@ -55,14 +55,14 @@ cargo build --release
 | Command | Purpose |
 |---|---|
 | `gestalt init` | Interactive setup wizard. |
-| `gestalt auth login` | Open browser for OAuth login. |
+| `gestalt auth login` | Open browser for OAuth login. Refuses if `GESTALT_API_KEY` is set (unset it first or use the key directly). |
 | `gestalt auth logout` | Clear stored credentials. |
-| `gestalt auth status` | Show authentication status. |
+| `gestalt auth status` | Show authentication status and credential source. |
 | `gestalt config get <key>` | Read a config value. |
 | `gestalt config set <key> <value>` | Write a config value. |
 | `gestalt config unset <key>` | Remove a config value. |
 | `gestalt config list` | List all config values. |
-| `gestalt integrations list` | List available integrations. |
+| `gestalt integrations list` | List available integrations with name, display name, auth type, connected status, and description. |
 | `gestalt integrations connect <name>` | Start an OAuth connection flow. |
 | `gestalt invoke <integration> <operation> -p key=value` | Execute an operation. |
 | `gestalt tokens create [--name <name>]` | Create an API token. |
@@ -73,18 +73,26 @@ cargo build --release
 
 1. `--url` flag.
 2. `GESTALT_URL` environment variable.
-3. `.gestalt.json` in the current directory.
+3. `.gestalt.json` in the current or ancestor directory.
 4. Global config file.
 5. `credentials.json` stored by `gestalt auth login`.
 6. `http://localhost:8080` as fallback.
 
 ### Authentication
 
-- If `GESTALT_API_KEY` is set, it is sent as the Bearer token on every request, overriding any session token.
-- Otherwise, the CLI uses the session token stored by `gestalt auth login`.
-- Run `gestalt auth status` to see which credential source is active.
-- Credential files are written with `0600` permissions.
-- Output formats: `--format json` (default) or `--format table`.
+The CLI resolves credentials in this order:
+
+1. **`GESTALT_API_KEY` environment variable** — if set and non-empty, used as the Bearer token on every request, overriding any session token. When active, `gestalt auth login` refuses to run and prints a message to unset the variable first.
+2. **Session token** — stored by `gestalt auth login` in the local credential store.
+
+`gestalt auth status` reports which source is active:
+
+- **`--format json`** returns `{"authenticated": bool, "source": "env"|"session"|"none", "env_var_set": bool, "session_stored": bool}`.
+- **`--format table`** prints a human-readable summary. If both `GESTALT_API_KEY` and a session token exist, it warns that the session token is being ignored.
+
+If a request fails with 401 while using `GESTALT_API_KEY`, the error message notes that the key came from the environment and suggests unsetting it.
+
+Credential files are written with `0600` permissions. Output formats: `--format json` (default) or `--format table`.
 
 ### Common workflows
 
