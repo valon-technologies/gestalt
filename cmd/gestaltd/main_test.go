@@ -35,3 +35,19 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 		t.Fatalf("expected usage output containing '-config', got: %s", out)
 	}
 }
+
+func TestRun_RejectsPositionalArgs(t *testing.T) {
+	t.Parallel()
+	err := run([]string{"serve", "--config", "foo.yaml"})
+	if err == nil {
+		t.Fatal("expected error for positional arguments")
+	}
+}
+
+func TestRun_RejectsTrailingArgs(t *testing.T) {
+	t.Parallel()
+	err := run([]string{"--config", "foo.yaml", "extra"})
+	if err == nil {
+		t.Fatal("expected error for trailing arguments")
+	}
+}
