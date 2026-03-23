@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
+	chatbinding "github.com/valon-technologies/gestalt/plugins/bindings/chat"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
 	dynamodbstore "github.com/valon-technologies/gestalt/plugins/datastore/dynamodb"
 	"github.com/valon-technologies/gestalt/plugins/datastore/firestore"
@@ -122,6 +123,7 @@ func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegis
 		factories.Runtimes["echo"] = echoruntime.Factory
 	}
 	factories.Runtimes["sandbox"] = sandboxruntime.Factory
+	factories.Bindings["chat"] = chatbinding.Factory
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
