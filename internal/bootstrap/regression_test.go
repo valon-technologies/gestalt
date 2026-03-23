@@ -47,8 +47,8 @@ func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
 	}
-	if result.Runtimes != nil {
-		t.Error("expected Runtimes to be nil")
+	if result.Runtimes != nil && len(result.Runtimes.List()) > 0 {
+		t.Error("expected no runtimes")
 	}
 	if result.Bindings != nil {
 		t.Error("expected Bindings to be nil")

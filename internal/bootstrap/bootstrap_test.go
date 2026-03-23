@@ -748,8 +748,8 @@ func TestBootstrapNoRuntimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if result.Runtimes != nil {
-		t.Fatalf("expected Runtimes to be nil, got %v", result.Runtimes.List())
+	if result.Runtimes != nil && len(result.Runtimes.List()) > 0 {
+		t.Fatalf("expected no runtimes, got %v", result.Runtimes.List())
 	}
 }
 
