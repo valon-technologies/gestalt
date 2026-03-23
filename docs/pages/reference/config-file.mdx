@@ -13,7 +13,7 @@
 | `bindings` | Alternative request surfaces such as webhooks and gRPC. |
 | `provider_dirs` | Directories searched for provider YAML files at startup. |
 | `server` | Port, base URL, encryption key, and development mode. |
-| `mcp` | MCP endpoint settings: enabled flag, provider filter, tool name prefix. Integration-level `mcp.url` enables upstream MCP proxying. |
+| `mcp` | MCP endpoint settings: enabled flag, provider filter, tool name prefix. |
 
 ## Server block
 
@@ -88,28 +88,65 @@ secrets:
 
 ## Integration block
 
+Each integration is defined under `integrations.<name>` and contains one or more `upstreams` entries plus integration-level settings for auth, display, and hooks.
+
 | Field | Notes |
 |---|---|
-| `openapi` | OpenAPI spec URL or local file path. |
-| `provider` | Path to a provider YAML file. |
+| `upstreams` | List of upstream definitions (see below). At least one is required. |
+| `display_name` | Human-readable label for the integration. |
+| `description` | Short description shown in the web UI and CLI. |
 | `auth_profile` | Name of a reusable auth profile to inherit from. |
 | `client_id`, `client_secret` | OAuth client credentials for the upstream integration. |
 | `redirect_url` | Override the integration callback URL. |
 | `base_url` | Override the base URL from the spec or provider file. |
 | `connection_mode` | `user` (default), `identity`, `either`, or `none`. See [Connection Modes](/concepts/platform-model#connection-modes). |
 | `auth` | Auth overrides (see below). |
+| `auth_header` | Custom header name for sending the token (instead of `Authorization`). |
+| `auth_mapping` | Map of header names to JSON fields, for structured token-to-headers mapping. |
 | `response_check` | Named hook to validate responses. |
 | `token_parser` | Named hook to transform stored tokens into auth headers. |
 | `request_mutator` | Named hook to rewrite outgoing requests. |
 | `token_prefix` | Prefix for the Authorization header value. |
-| `auth_style` | How the token is sent: `bearer`, `raw`, or `none`. |
+| `auth_style` | How the token is sent: `bearer` (default), `raw`, `basic`, or `none`. |
 | `headers` | Default headers sent with every upstream request. |
-| `auth_headers` | YAML map of declarative auth headers injected into upstream requests. |
-| `icon_svg` | SVG icon displayed in the web UI. |
 | `icon_file` | Path to an SVG file used as the integration icon. |
-| `error_message_path` | JSONPath expression for extracting error messages from upstream responses. |
-| `allowed_operations` | Positive allow-list of operation names with optional description overrides. |
-| `mcp` | MCP proxying config. Subfield `url` sets the upstream MCP server URL for passthrough proxying. |
+| `error_message_path` | Dot-delimited path for extracting error messages from upstream JSON responses. |
+
+### Upstreams
+
+Each upstream declares a type and source:
+
+| Field | Notes |
+|---|---|
+| `type` | `rest`, `graphql`, or `mcp`. |
+| `url` | For `rest`: OpenAPI spec URL. For `graphql`: the GraphQL endpoint (introspected at startup). For `mcp`: the upstream MCP server URL. |
+| `provider` | (`rest` only) Path to a provider YAML file. Used instead of `url`. |
+| `mcp` | (`rest` and `graphql` only) Boolean. When `true` and combined with a `type: mcp` upstream, this upstream's operations are also exposed as MCP tools. |
+| `allowed_operations` | Positive allow-list. Can be a YAML list (names only) or a map (names to description overrides). Omit to allow all operations. An empty value is invalid. |
+
+If a `rest` upstream has neither `url` nor `provider`, Gestalt falls back to searching `provider_dirs` for a matching YAML file.
+
+Example with multiple upstreams:
+
+```yaml
+integrations:
+  slack:
+    upstreams:
+      - type: rest
+        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
+        allowed_operations:
+          conversations_list: List channels
+          chat_postMessage: Send a message
+      - type: mcp
+        url: https://mcp.slack.com/sse
+    client_id: ${SLACK_CLIENT_ID}
+    client_secret: ${SLACK_CLIENT_SECRET}
+    auth_style: bearer
+    auth:
+      authorization_url: https://slack.com/oauth/v2/authorize
+      token_url: https://slack.com/api/oauth.v2.access
+      response_hook: slack_ok
+```
 
 ### Auth overrides
 
@@ -185,15 +222,6 @@ bindings:
       auth_mode: signed           # "public", "signed", or "trusted_user_header"
       signing_secret: ${WEBHOOK_SECRET}
       signature_header: X-Signature
-
-  linear-grpc:
-    type: grpc
-    providers:
-      - linear
-    config:
-      port: 9090
-      providers:
-        - linear
 ```
 
 ### Webhook config
@@ -207,13 +235,6 @@ bindings:
 | `signing_secret` | | Required when `auth_mode` is `signed`. |
 | `signature_header` | `X-Signature` | Header containing the HMAC signature. |
 | `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
-
-### gRPC config
-
-| Config field | Default | Notes |
-|---|---|---|
-| `port` | | Listen port for the gRPC server. |
-| `providers` | | Allowed providers for this binding. |
 
 ## MCP block
 
@@ -232,8 +253,6 @@ mcp:
 | `providers` | all | Restrict which integrations are exposed to MCP clients. |
 | `tool_name_prefix` | `""` | String prepended to every MCP tool name. |
 
-When an integration defines `mcp.url`, Gestalt proxies MCP requests to that upstream server, enabling MCP-to-MCP passthrough without additional configuration in this block.
-
 ## Supported providers
 
 | Category | Providers |
@@ -241,5 +260,5 @@ When an integration defines `mcp.url`, Gestalt proxies MCP requests to that upst
 | Auth | `google`, `oidc` |
 | Datastore | `sqlite`, `postgres`, `mysql`, `dynamodb`, `mongodb`, `firestore`, `oracle`, `sqlserver` |
 | Secrets | `env`, `file`, `gcp_secret_manager` |
-| Bindings | `webhook`, `grpc` |
+| Bindings | `webhook` |
 | Runtimes | `echo` (dev mode only) |

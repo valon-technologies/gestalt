@@ -2,9 +2,9 @@
 
 ## Integration is missing its provider
 
-Gestalt resolves providers at startup. If neither `openapi` nor `provider` is set on an integration entry, and no matching file exists in `provider_dirs`, the server logs an error and skips the integration.
+Gestalt resolves providers at startup from the `upstreams` list. If no upstreams are configured, or a REST upstream has no `url`, `provider`, or matching file in `provider_dirs`, the server logs an error and skips the integration.
 
-**Fix**: Check that `provider_dirs` includes the directory with your provider YAML files, and that the integration config includes either an `openapi` URL or a `provider` path.
+**Fix**: Ensure each integration has at least one entry in its `upstreams` list with a valid `type` and source (`url` or `provider`).
 
 ## OAuth redirects are wrong
 
@@ -34,7 +34,7 @@ The calling user has not connected the target integration. Each user must comple
 
 The web UI needs to know where the API server lives.
 
-**Fix**: Use `gestaltd` which starts both and wires them together automatically. If running separately, set `GESTALT_API_URL` to point to the API server.
+**Fix**: Use `gestaltd` which starts both and wires them together automatically. If running separately, set `GESTALT_URL` to point to the API server.
 
 ## Config validation fails
 
@@ -49,5 +49,5 @@ Run `gestaltd --check --config your-config.yaml` to see exactly which field is i
 1. Verify `mcp.enabled: true` in config.
 2. Check that your API token is valid.
 3. Confirm the token's owner has connected the integration.
-4. Verify `allowed_operations` is defined for the integration.
-5. If using `mcp.providers`, confirm the integration is in the list.
+4. If using `mcp.providers`, confirm the integration is in the list.
+5. For MCP-only integrations, remember they only appear in the MCP endpoint, not the HTTP API.

@@ -33,7 +33,12 @@ datastore:
 
 integrations:
   slack:
-    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    upstreams:
+      - type: rest
+        url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+        allowed_operations:
+          conversations_list: List channels
+          chat_postMessage: Send a message
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
     response_check: slack_ok
@@ -41,9 +46,6 @@ integrations:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
       response_hook: slack_ok
-    allowed_operations:
-      conversations_list: List channels
-      chat_postMessage: Send a message
 ```
 
 <Callout>
@@ -86,7 +88,7 @@ gestalt integrations list
 gestalt invoke slack conversations_list
 ```
 
-`gestalt init` creates a `.gestalt.json` file in your home directory that stores the server URL and session credentials. You can override the server URL at any time by setting the `GESTALT_SERVER_URL` environment variable.
+`gestalt init` creates a `.gestalt.json` file in your home directory that stores the server URL and session credentials. You can override the server URL at any time by setting the `GESTALT_URL` environment variable.
 
 ## Next steps
 
