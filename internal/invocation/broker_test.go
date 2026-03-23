@@ -207,3 +207,52 @@ func TestInvoke_NilTokenResponse(t *testing.T) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
 }
+
+func TestInvoke_MetadataJSONFlowsToContext(t *testing.T) {
+	t.Parallel()
+
+	var gotCtx context.Context
+
+	prov := &stubProviderWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "shopify",
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				gotCtx = ctx
+				return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "list_products"}},
+	}
+
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+			return &core.User{ID: "u1"}, nil
+		},
+		TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			return &core.IntegrationToken{
+				AccessToken:  "tok",
+				MetadataJSON: `{"subdomain":"cool-store","region":"us"}`,
+			}, nil
+		},
+	}
+
+	reg := testutil.NewProviderRegistry(t, prov)
+	b := invocation.NewBroker(reg, ds)
+
+	p := &principal.Principal{UserID: "u1"}
+	_, err := b.Invoke(context.Background(), p, "shopify", "list_products", nil)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	cp := core.ConnectionParams(gotCtx)
+	if cp == nil {
+		t.Fatal("expected connection params in context")
+	}
+	if cp["subdomain"] != "cool-store" {
+		t.Errorf("subdomain = %q, want cool-store", cp["subdomain"])
+	}
+	if cp["region"] != "us" {
+		t.Errorf("region = %q, want us", cp["region"])
+	}
+}

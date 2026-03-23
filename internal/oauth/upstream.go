@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +76,9 @@ func WithResponseHook(hook ResponseHook) Option {
 	}
 }
 
+func (h *UpstreamHandler) TokenURL() string             { return h.cfg.TokenURL }
+func (h *UpstreamHandler) AuthorizationBaseURL() string { return h.cfg.AuthorizationURL }
+
 func NewUpstream(cfg UpstreamConfig, opts ...Option) *UpstreamHandler {
 	h := &UpstreamHandler{
 		cfg:        cfg,
@@ -90,11 +94,18 @@ type ExchangeOption func(*exchangeOptions)
 
 type exchangeOptions struct {
 	verifier string
+	tokenURL string
 }
 
 func WithPKCEVerifier(verifier string) ExchangeOption {
 	return func(o *exchangeOptions) {
 		o.verifier = verifier
+	}
+}
+
+func WithTokenURL(url string) ExchangeOption {
+	return func(o *exchangeOptions) {
+		o.tokenURL = url
 	}
 }
 
@@ -109,7 +120,15 @@ func (h *UpstreamHandler) AuthorizationURL(state string, scopes []string) string
 }
 
 func (h *UpstreamHandler) AuthorizationURLWithPKCE(state string, scopes []string) (string, string) {
-	u, err := url.Parse(h.cfg.AuthorizationURL)
+	return h.authorizationURL(h.cfg.AuthorizationURL, state, scopes)
+}
+
+func (h *UpstreamHandler) AuthorizationURLWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	return h.authorizationURL(authBaseURL, state, scopes)
+}
+
+func (h *UpstreamHandler) authorizationURL(baseURL, state string, scopes []string) (string, string) {
+	u, err := url.Parse(baseURL)
 	if err != nil {
 		u = &url.URL{RawQuery: ""}
 	}
@@ -170,10 +189,14 @@ func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ..
 		data.Set(k, v)
 	}
 
-	return h.tokenRequest(ctx, data)
+	return h.tokenRequest(ctx, data, eo.tokenURL)
 }
 
 func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return h.RefreshTokenWithURL(ctx, refreshToken, "")
+}
+
+func (h *UpstreamHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURLOverride string) (*core.TokenResponse, error) {
 	data := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
@@ -188,10 +211,10 @@ func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string)
 		data.Set(k, v)
 	}
 
-	return h.tokenRequest(ctx, data)
+	return h.tokenRequest(ctx, data, tokenURLOverride)
 }
 
-func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*core.TokenResponse, error) {
+func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tokenURLOverride string) (*core.TokenResponse, error) {
 	var reader io.Reader
 	var contentType string
 
@@ -213,7 +236,12 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*c
 		contentType = "application/x-www-form-urlencoded"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.TokenURL, reader)
+	tokenURL := h.cfg.TokenURL
+	if tokenURLOverride != "" {
+		tokenURL = tokenURLOverride
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, reader)
 	if err != nil {
 		return nil, fmt.Errorf("creating token request: %w", err)
 	}
@@ -249,24 +277,31 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values) (*c
 		return nil, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, body)
 	}
 
-	var tok struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-		TokenType    string `json:"token_type"`
-	}
-	if err := json.Unmarshal(body, &tok); err != nil {
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decoding token response: %w", err)
 	}
-	if tok.AccessToken == "" {
+	accessToken, _ := raw["access_token"].(string)
+	if accessToken == "" {
 		return nil, fmt.Errorf("token response missing access_token")
 	}
+	refreshToken, _ := raw["refresh_token"].(string)
+	var expiresIn float64
+	switch v := raw["expires_in"].(type) {
+	case float64:
+		expiresIn = v
+	case string:
+		n, _ := strconv.Atoi(v)
+		expiresIn = float64(n)
+	}
+	tokenType, _ := raw["token_type"].(string)
 
 	return &core.TokenResponse{
-		AccessToken:  tok.AccessToken,
-		RefreshToken: tok.RefreshToken,
-		ExpiresIn:    tok.ExpiresIn,
-		TokenType:    tok.TokenType,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int(expiresIn),
+		TokenType:    tokenType,
+		Extra:        raw,
 	}, nil
 }
 

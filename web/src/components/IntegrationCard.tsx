@@ -47,6 +47,13 @@ function sanitizeSVG(raw: string): string {
   return svg.outerHTML;
 }
 
+function hasConnectionParams(integration: Integration): boolean {
+  return (
+    !!integration.connection_params &&
+    Object.keys(integration.connection_params).length > 0
+  );
+}
+
 export default function IntegrationCard({
   integration,
   onConnected,
@@ -61,17 +68,37 @@ export default function IntegrationCard({
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showTokenForm, setShowTokenForm] = useState(false);
+  const [showParamForm, setShowParamForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const safeIconSVG = integration.icon_svg
     ? sanitizeSVG(integration.icon_svg)
     : "";
   const isManual = integration.auth_type === "manual";
+  const needsParams = hasConnectionParams(integration);
+
+  function collectConnectionParams(
+    form: HTMLFormElement,
+  ): Record<string, string> {
+    const params: Record<string, string> = {};
+    if (!integration.connection_params) return params;
+    for (const name of Object.keys(integration.connection_params)) {
+      const val = (new FormData(form).get(`cp_${name}`) as string)?.trim();
+      if (val) params[name] = val;
+    }
+    return params;
+  }
 
   async function handleConnect() {
     if (isManual) {
       setSettingsOpen(false);
       setShowTokenForm(true);
+      setError(null);
+      return;
+    }
+    if (needsParams && !showParamForm) {
+      setSettingsOpen(false);
+      setShowParamForm(true);
       setError(null);
       return;
     }
@@ -87,16 +114,38 @@ export default function IntegrationCard({
     }
   }
 
+  async function handleParamSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const params = collectConnectionParams(e.currentTarget);
+    setLoading(true);
+    setError(null);
+    try {
+      const { url } = await startIntegrationOAuth(
+        integration.name,
+        undefined,
+        params,
+      );
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start OAuth");
+      setLoading(false);
+    }
+  }
+
   async function handleSubmitManual(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const credential = (
-      new FormData(e.currentTarget).get("credential") as string
-    )?.trim();
+    const fd = new FormData(e.currentTarget);
+    const credential = (fd.get("credential") as string)?.trim();
     if (!credential) return;
+    const params = collectConnectionParams(e.currentTarget);
     setSubmitting(true);
     setError(null);
     try {
-      await connectManualIntegration(integration.name, credential);
+      await connectManualIntegration(
+        integration.name,
+        credential,
+        Object.keys(params).length > 0 ? params : undefined,
+      );
       setShowTokenForm(false);
       onConnected?.();
     } catch (err) {
@@ -106,8 +155,9 @@ export default function IntegrationCard({
     }
   }
 
-  function handleCancelManual() {
+  function handleCancelForm() {
     setShowTokenForm(false);
+    setShowParamForm(false);
     setError(null);
   }
 
@@ -128,6 +178,29 @@ export default function IntegrationCard({
   function handleSettingsClose() {
     setSettingsOpen(false);
     setError(null);
+  }
+
+  function renderConnectionParamFields() {
+    if (!integration.connection_params) return null;
+    return Object.entries(integration.connection_params).map(([name, def]) => (
+      <div key={name} className="mt-2">
+        <label
+          htmlFor={`cp_${name}-${integration.name}`}
+          className="block text-sm font-medium text-stone-700"
+        >
+          {def.description || name}
+        </label>
+        <input
+          id={`cp_${name}-${integration.name}`}
+          name={`cp_${name}`}
+          type="text"
+          required={def.required}
+          defaultValue={def.default}
+          placeholder={name}
+          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+        />
+      </div>
+    ));
   }
 
   return (
@@ -171,11 +244,30 @@ export default function IntegrationCard({
       {error && !settingsOpen && (
         <p className="mt-2 text-sm text-ember-500">{error}</p>
       )}
+      {showParamForm && !isManual && (
+        <form onSubmit={handleParamSubmit} className="mt-3">
+          {renderConnectionParamFields()}
+          <div className="mt-3 flex gap-2">
+            <Button type="submit" disabled={loading}>
+              {loading ? "Connecting..." : "Connect"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCancelForm}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
       {showTokenForm && (
         <form onSubmit={handleSubmitManual} className="mt-3">
+          {needsParams && renderConnectionParamFields()}
           <label
             htmlFor={`credential-${integration.name}`}
-            className="block text-sm font-medium text-stone-700"
+            className="mt-2 block text-sm font-medium text-stone-700"
           >
             API Token
           </label>
@@ -185,7 +277,7 @@ export default function IntegrationCard({
             type="password"
             required
             placeholder="Paste your API token"
-            autoFocus
+            autoFocus={!needsParams}
             className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
           />
           <div className="mt-2 flex gap-2">
@@ -195,7 +287,7 @@ export default function IntegrationCard({
             <Button
               type="button"
               variant="secondary"
-              onClick={handleCancelManual}
+              onClick={handleCancelForm}
               disabled={submitting}
             >
               Cancel
@@ -203,7 +295,7 @@ export default function IntegrationCard({
           </div>
         </form>
       )}
-      {!showTokenForm && !integration.connected && (
+      {!showTokenForm && !showParamForm && !integration.connected && (
         <div className="mt-4">
           <Button onClick={handleConnect} disabled={loading}>
             {loading ? "Connecting..." : "Connect"}

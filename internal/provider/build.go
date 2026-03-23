@@ -150,6 +150,19 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		base.RequestMutator = mutator
 	}
 
+	if len(def.Connection) > 0 {
+		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(def.Connection))
+		for name, cpd := range def.Connection {
+			base.ConnectionDefs[name] = core.ConnectionParamDef{
+				Required:    cpd.Required,
+				Description: cpd.Description,
+				Default:     cpd.Default,
+				From:        cpd.From,
+				Field:       cpd.Field,
+			}
+		}
+	}
+
 	base.SetCatalog(cat)
 
 	var result core.Provider = base

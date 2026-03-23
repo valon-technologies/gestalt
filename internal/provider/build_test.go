@@ -635,6 +635,85 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 	}
 }
 
+func TestBuildConnectionParams(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "shopify_test",
+		DisplayName: "Shopify Test",
+		BaseURL:     "https://{subdomain}.myshopify.com",
+		Auth:        AuthDef{Type: "manual"},
+		Connection: map[string]ConnectionParamDef{
+			"subdomain": {Required: true, Description: "Store subdomain"},
+			"instance_url": {
+				From:  "token_response",
+				Field: "instance_url",
+			},
+		},
+		Operations: map[string]OperationDef{
+			"list_products": {Description: "List products", Method: "GET", Path: "/products"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cpp, ok := prov.(core.ConnectionParamProvider)
+	if !ok {
+		t.Fatal("provider does not implement ConnectionParamProvider")
+	}
+
+	defs := cpp.ConnectionParamDefs()
+	if len(defs) != 2 {
+		t.Fatalf("expected 2 connection params, got %d", len(defs))
+	}
+	if !defs["subdomain"].Required {
+		t.Error("subdomain should be required")
+	}
+	if defs["instance_url"].From != "token_response" {
+		t.Errorf("instance_url.From = %q, want token_response", defs["instance_url"].From)
+	}
+}
+
+func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"host": r.Host, "path": r.URL.Path})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "dynamic_url_test",
+		DisplayName: "Dynamic URL Test",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		Connection: map[string]ConnectionParamDef{
+			"subdomain": {Required: true},
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ctx := core.WithConnectionParams(context.Background(), map[string]string{"subdomain": "test-store"})
+	result, err := prov.Execute(ctx, "op", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Status != 200 {
+		t.Fatalf("unexpected status %d, body: %s", result.Status, result.Body)
+	}
+}
+
 func writeProviderYAML(t *testing.T, dir, name, displayName string) {
 	t.Helper()
 	content := fmt.Sprintf(minimalProviderYAML, name, displayName, name)
