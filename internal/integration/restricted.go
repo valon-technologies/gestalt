@@ -17,11 +17,12 @@ type Restricted struct {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider        = (*Restricted)(nil)
-	_ core.ManualProvider  = (*Restricted)(nil)
-	_ core.CatalogProvider = (*Restricted)(nil)
-	_ core.OAuthProvider   = (*restrictedOAuth)(nil)
-	_ core.ManualProvider  = (*restrictedOAuth)(nil)
+	_ core.Provider            = (*Restricted)(nil)
+	_ core.ManualProvider      = (*Restricted)(nil)
+	_ core.CatalogProvider     = (*Restricted)(nil)
+	_ core.PostConnectProvider = (*Restricted)(nil)
+	_ core.OAuthProvider       = (*restrictedOAuth)(nil)
+	_ core.ManualProvider      = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -161,6 +162,13 @@ func (r *restrictedOAuth) StartOAuthWithOverride(authBaseURL, state string, scop
 func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	if cpp, ok := r.inner.(core.ConnectionParamProvider); ok {
 		return cpp.ConnectionParamDefs()
+	}
+	return nil
+}
+
+func (r *Restricted) PostConnectHook() core.PostConnectHook {
+	if pcp, ok := r.inner.(core.PostConnectProvider); ok {
+		return pcp.PostConnectHook()
 	}
 	return nil
 }
