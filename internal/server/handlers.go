@@ -578,6 +578,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if err := s.runPostConnectHook(r.Context(), prov, tok); err != nil {
+		log.Printf("post_connect hook failed for %s: %v", providerName, err)
+		writeError(w, http.StatusBadGateway, "connection setup failed")
+		return
+	}
+
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }
 
@@ -647,6 +653,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
 		log.Printf("failed to store credential for %s: %v", req.Integration, err)
 		writeError(w, http.StatusInternalServerError, "failed to store credential")
+		return
+	}
+
+	if err := s.runPostConnectHook(r.Context(), prov, tok); err != nil {
+		log.Printf("post_connect hook failed for %s: %v", req.Integration, err)
+		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
 
@@ -881,4 +893,69 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 	}
 	b, _ := json.Marshal(metadata)
 	return string(b), nil
+}
+
+type bearerTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("Authorization") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("Authorization", "Bearer "+t.token)
+	}
+	return t.base.RoundTrip(req)
+}
+
+func (s *Server) runPostConnectHook(ctx context.Context, prov core.Provider, tok *core.IntegrationToken) error {
+	pcp, ok := prov.(core.PostConnectProvider)
+	if !ok {
+		return nil
+	}
+	hookFn := pcp.PostConnectHook()
+	if hookFn == nil {
+		return nil
+	}
+
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: &bearerTransport{token: tok.AccessToken, base: http.DefaultTransport},
+	}
+	extra, err := hookFn(ctx, tok, client)
+	if err != nil {
+		_ = s.datastore.DeleteToken(ctx, tok.ID)
+		return fmt.Errorf("post_connect: %w", err)
+	}
+
+	if len(extra) == 0 {
+		return nil
+	}
+
+	for k, v := range extra {
+		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
+			_ = s.datastore.DeleteToken(ctx, tok.ID)
+			return fmt.Errorf("post_connect returned invalid key or value for %q", k)
+		}
+	}
+
+	existing := make(map[string]string)
+	if tok.MetadataJSON != "" {
+		if err := json.Unmarshal([]byte(tok.MetadataJSON), &existing); err != nil {
+			_ = s.datastore.DeleteToken(ctx, tok.ID)
+			return fmt.Errorf("post_connect: corrupt MetadataJSON: %w", err)
+		}
+	}
+	for k, v := range extra {
+		existing[k] = v
+	}
+	b, _ := json.Marshal(existing)
+	tok.MetadataJSON = string(b)
+
+	if err := s.datastore.StoreToken(ctx, tok); err != nil {
+		_ = s.datastore.DeleteToken(ctx, tok.ID)
+		return fmt.Errorf("post_connect: failed to update metadata: %w", err)
+	}
+
+	return nil
 }

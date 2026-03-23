@@ -89,6 +89,7 @@ type IntegrationDef struct {
 	ResponseCheck    string            `yaml:"response_check"`
 	TokenParser      string            `yaml:"token_parser"`
 	RequestMutator   string            `yaml:"request_mutator"`
+	PostConnect      string            `yaml:"post_connect"`
 	TokenPrefix      string            `yaml:"token_prefix"`
 	AuthStyle        string            `yaml:"auth_style"`
 	IconFile         string            `yaml:"icon_file"`

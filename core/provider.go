@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/valon-technologies/gestalt/core/catalog"
 )
@@ -52,4 +53,10 @@ type ConnectionParamDef struct {
 
 type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
+}
+
+type PostConnectHook func(ctx context.Context, token *IntegrationToken, client *http.Client) (map[string]string, error)
+
+type PostConnectProvider interface {
+	PostConnectHook() PostConnectHook
 }

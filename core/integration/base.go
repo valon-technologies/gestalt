@@ -19,6 +19,7 @@ var (
 	_ core.ManualProvider          = (*Base)(nil)
 	_ core.CatalogProvider         = (*Base)(nil)
 	_ core.ConnectionParamProvider = (*Base)(nil)
+	_ core.PostConnectProvider     = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -112,7 +113,8 @@ type Base struct {
 	RequestMutator func(operation string, req *apiexec.Request, params map[string]any) error
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
 
-	ConnectionDefs map[string]core.ConnectionParamDef
+	ConnectionDefs    map[string]core.ConnectionParamDef
+	PostConnectHookFn core.PostConnectHook
 
 	catalog *catalog.Catalog
 }
@@ -135,6 +137,10 @@ func (b *Base) SupportsManualAuth() bool {
 
 func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return b.ConnectionDefs
+}
+
+func (b *Base) PostConnectHook() core.PostConnectHook {
+	return b.PostConnectHookFn
 }
 
 func (b *Base) TokenURL() string {

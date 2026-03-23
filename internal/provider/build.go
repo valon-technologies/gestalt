@@ -150,6 +150,14 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		base.RequestMutator = mutator
 	}
 
+	if def.PostConnect != "" {
+		hook, ok := lookupPostConnectHook(def.PostConnect)
+		if !ok {
+			return nil, fmt.Errorf("%s: unknown post_connect %q", def.Provider, def.PostConnect)
+		}
+		base.PostConnectHookFn = hook
+	}
+
 	if len(def.Connection) > 0 {
 		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(def.Connection))
 		for name, cpd := range def.Connection {
@@ -242,6 +250,7 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) error {
 	setStr(&def.ResponseCheck, intg.ResponseCheck)
 	setStr(&def.TokenParser, intg.TokenParser)
 	setStr(&def.RequestMutator, intg.RequestMutator)
+	setStr(&def.PostConnect, intg.PostConnect)
 	setStr(&def.TokenPrefix, intg.TokenPrefix)
 	setStr(&def.AuthStyle, intg.AuthStyle)
 	if intg.IconFile != "" {
