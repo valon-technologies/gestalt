@@ -43,6 +43,7 @@ func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
 	if invoker != lister {
 		t.Fatal("expected Invoker and CapabilityLister to reference the same shared instance")
 	}
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
@@ -117,6 +118,7 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.AuditSink == nil {
 		t.Fatal("expected AuditSink to be non-nil")
 	}

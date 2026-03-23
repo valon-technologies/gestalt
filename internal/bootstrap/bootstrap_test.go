@@ -92,6 +92,7 @@ func TestBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Auth == nil {
 		t.Fatal("Auth is nil")
 	}
@@ -118,6 +119,7 @@ func TestBootstrap(t *testing.T) {
 	if invoker != lister {
 		t.Fatal("expected shared invoker and capability lister to be the same instance")
 	}
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
@@ -138,6 +140,8 @@ func TestBootstrapMultipleProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 2 {
 		t.Fatalf("Providers.List: got %d items, want 2", len(names))
@@ -155,6 +159,8 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
+	<-result.ProvidersReady
 	if got := result.Providers.List(); len(got) != 0 {
 		t.Errorf("expected empty providers, got %v", got)
 	}
@@ -171,6 +177,7 @@ func TestBootstrapDevMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if !result.DevMode {
 		t.Error("DevMode: got false, want true")
 	}
@@ -191,6 +198,8 @@ func TestBootstrapDefaultProviderFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
@@ -215,6 +224,8 @@ func TestBootstrapNamedOverridesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
@@ -317,6 +328,8 @@ func TestBootstrapProviderErrorSkipsProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap should succeed when a provider fails: %v", err)
 	}
+	<-result.ProvidersReady
+	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha] (beta should be skipped)", names)
@@ -340,9 +353,11 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		cfg := validConfig()
 		cfg.Server.EncryptionKey = "my-passphrase"
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if len(receivedKey) != 32 {
 			t.Errorf("key length: got %d, want 32", len(receivedKey))
 		}
@@ -367,9 +382,11 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		cfg := validConfig()
 		cfg.Server.EncryptionKey = hexKey
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if hex.EncodeToString(receivedKey) != hexKey {
 			t.Errorf("hex key not decoded: got %x, want %x", receivedKey, want)
 		}
@@ -387,9 +404,11 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 			}
 			cfg := validConfig()
 			cfg.Server.EncryptionKey = "deterministic"
-			if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+			if err != nil {
 				t.Fatalf("Bootstrap: %v", err)
 			}
+			<-result.ProvidersReady
 		}
 		if hex.EncodeToString(keys[0]) != hex.EncodeToString(keys[1]) {
 			t.Error("key derivation is not deterministic")
@@ -435,9 +454,11 @@ integrations:
 		t.Fatalf("config.Load: %v", err)
 	}
 
-	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 
 	if receivedBaseURL != "https://gestalt.example.com" {
 		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://gestalt.example.com")
@@ -466,7 +487,9 @@ func TestBootstrapAllowedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 
+	<-result.ProvidersReady
 	prov, err := result.Providers.Get("alpha")
 	if err != nil {
 		t.Fatalf("provider 'alpha' not found: %v", err)
@@ -498,9 +521,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg := validConfig()
 		cfg.Server.EncryptionKey = "secret://enc-key"
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if len(receivedKey) != 32 {
 			t.Errorf("key length: got %d, want 32", len(receivedKey))
 		}
@@ -526,9 +551,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		intg.ClientSecret = "secret://slack-secret"
 		cfg.Integrations["alpha"] = intg
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if receivedDef.ClientSecret != "resolved-secret" {
 			t.Errorf("ClientSecret: got %q, want %q", receivedDef.ClientSecret, "resolved-secret")
 		}
@@ -544,6 +571,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if result.Auth == nil {
 			t.Fatal("Auth is nil")
 		}
@@ -612,9 +640,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			},
 		}
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 
 		// The resolved node should have the value replaced.
 		var decoded map[string]string
@@ -633,6 +663,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if result.SecretManager == nil {
 			t.Fatal("SecretManager is nil")
 		}
@@ -675,9 +706,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		intg.Headers = map[string]string{"Authorization": "secret://api-key"}
 		cfg.Integrations["alpha"] = intg
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if receivedDef.Headers["Authorization"] != "resolved-key" {
 			t.Errorf("Headers[Authorization]: got %q, want %q", receivedDef.Headers["Authorization"], "resolved-key")
 		}
@@ -703,9 +736,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		intg.Auth.TokenMetadata = []string{"secret://meta-val"}
 		cfg.Integrations["alpha"] = intg
 
-		if _, err := bootstrap.Bootstrap(ctx, cfg, factories); err != nil {
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
+		<-result.ProvidersReady
 		if len(receivedDef.Auth.TokenMetadata) != 1 || receivedDef.Auth.TokenMetadata[0] != "resolved-meta" {
 			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Auth.TokenMetadata)
 		}
@@ -731,6 +766,7 @@ func TestBootstrapWithRuntimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Runtimes == nil {
 		t.Fatal("expected Runtimes to be non-nil")
 	}
@@ -748,6 +784,7 @@ func TestBootstrapNoRuntimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Runtimes != nil {
 		t.Fatalf("expected Runtimes to be nil, got %v", result.Runtimes.List())
 	}
@@ -786,6 +823,7 @@ func TestBootstrapWithBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Bindings == nil {
 		t.Fatal("expected Bindings to be non-nil")
 	}
@@ -803,6 +841,7 @@ func TestBootstrapNoBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Bindings != nil {
 		t.Fatalf("expected Bindings to be nil, got %v", result.Bindings.List())
 	}
@@ -849,6 +888,7 @@ func TestBootstrapBindingWithProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	<-result.ProvidersReady
 	if result.Bindings == nil {
 		t.Fatal("expected Bindings to be non-nil")
 	}
