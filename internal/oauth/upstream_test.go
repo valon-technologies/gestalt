@@ -696,3 +696,70 @@ func TestComputeS256Challenge(t *testing.T) {
 		t.Error("challenge should use URL-safe base64 encoding")
 	}
 }
+
+func TestWithTokenURLOverride(t *testing.T) {
+	t.Parallel()
+
+	var gotURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURL = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"bearer"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:     "cid",
+		ClientSecret: "csec",
+		TokenURL:     srv.URL + "/default-token",
+		RedirectURL:  "http://localhost/cb",
+	})
+
+	_, err := h.ExchangeCode(context.Background(), "code", WithTokenURL(srv.URL+"/override-token"))
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if gotURL != "/override-token" {
+		t.Errorf("token request went to %q, want /override-token", gotURL)
+	}
+}
+
+func TestTokenResponseExtra(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"access_token": "at",
+			"refresh_token": "rt",
+			"expires_in": 3600,
+			"instance_url": "https://na85.salesforce.com",
+			"custom_field": "custom_value"
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:     "cid",
+		ClientSecret: "csec",
+		TokenURL:     srv.URL + "/token",
+		RedirectURL:  "http://localhost/cb",
+	})
+
+	resp, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if resp.AccessToken != "at" {
+		t.Errorf("AccessToken = %q, want at", resp.AccessToken)
+	}
+	if resp.Extra == nil {
+		t.Fatal("Extra should not be nil")
+	}
+	if resp.Extra["instance_url"] != "https://na85.salesforce.com" {
+		t.Errorf("Extra[instance_url] = %v, want https://na85.salesforce.com", resp.Extra["instance_url"])
+	}
+	if resp.Extra["custom_field"] != "custom_value" {
+		t.Errorf("Extra[custom_field] = %v, want custom_value", resp.Extra["custom_field"])
+	}
+}

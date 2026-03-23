@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations.
@@ -108,4 +109,58 @@ func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.
 
 func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
 	return r.oauth.RefreshToken(ctx, refreshToken)
+}
+
+func (r *restrictedOAuth) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	type refresher interface {
+		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	}
+	if rw, ok := r.oauth.(refresher); ok {
+		return rw.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
+	}
+	return r.oauth.RefreshToken(ctx, refreshToken)
+}
+
+type oauthVerifierExchanger interface {
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+}
+
+func (r *restrictedOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	if exchanger, ok := r.oauth.(oauthVerifierExchanger); ok {
+		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
+	}
+	return r.oauth.ExchangeCode(ctx, code)
+}
+
+func (r *restrictedOAuth) TokenURL() string {
+	type tokenURLer interface{ TokenURL() string }
+	if tu, ok := r.oauth.(tokenURLer); ok {
+		return tu.TokenURL()
+	}
+	return ""
+}
+
+func (r *restrictedOAuth) AuthorizationBaseURL() string {
+	type authBaseURLer interface{ AuthorizationBaseURL() string }
+	if abu, ok := r.oauth.(authBaseURLer); ok {
+		return abu.AuthorizationBaseURL()
+	}
+	return ""
+}
+
+func (r *restrictedOAuth) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	type overrider interface {
+		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
+	}
+	if ov, ok := r.oauth.(overrider); ok {
+		return ov.StartOAuthWithOverride(authBaseURL, state, scopes)
+	}
+	return r.oauth.AuthorizationURL(state, scopes), ""
+}
+
+func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	if cpp, ok := r.inner.(core.ConnectionParamProvider); ok {
+		return cpp.ConnectionParamDefs()
+	}
+	return nil
 }

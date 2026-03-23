@@ -1,6 +1,12 @@
 import { clearSession, getSessionToken } from "./auth";
 import { HTTP_UNAUTHORIZED, LOGIN_PATH } from "./constants";
 
+export interface ConnectionParamDef {
+  required?: boolean;
+  description?: string;
+  default?: string;
+}
+
 export interface Integration {
   name: string;
   display_name?: string;
@@ -8,6 +14,7 @@ export interface Integration {
   icon_svg?: string;
   connected?: boolean;
   auth_type?: "oauth" | "manual";
+  connection_params?: Record<string, ConnectionParamDef>;
 }
 
 export interface APIToken {
@@ -111,20 +118,30 @@ export async function getIntegrations(): Promise<Integration[]> {
 export async function startIntegrationOAuth(
   integration: string,
   scopes?: string[],
+  connectionParams?: Record<string, string>,
 ): Promise<{ url: string; state: string }> {
   return fetchAPI("/api/v1/auth/start-oauth", {
     method: "POST",
-    body: JSON.stringify({ integration, scopes: scopes || [] }),
+    body: JSON.stringify({
+      integration,
+      scopes: scopes || [],
+      connection_params: connectionParams,
+    }),
   });
 }
 
 export async function connectManualIntegration(
   integration: string,
   credential: string,
+  connectionParams?: Record<string, string>,
 ): Promise<{ status: string }> {
   return fetchAPI("/api/v1/auth/connect-manual", {
     method: "POST",
-    body: JSON.stringify({ integration, credential }),
+    body: JSON.stringify({
+      integration,
+      credential,
+      connection_params: connectionParams,
+    }),
   });
 }
 
