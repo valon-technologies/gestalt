@@ -258,7 +258,8 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 				}
 			}
 		case reflect.Slice:
-			if field.Type().Elem().Kind() == reflect.String {
+			switch field.Type().Elem().Kind() {
+			case reflect.String:
 				for j := 0; j < field.Len(); j++ {
 					elem := field.Index(j)
 					resolved, err := resolve(elem.String())
@@ -266,6 +267,12 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 						return err
 					}
 					elem.SetString(resolved)
+				}
+			case reflect.Struct:
+				for j := 0; j < field.Len(); j++ {
+					if err := resolveStringFields(field.Index(j).Addr().Interface(), resolve); err != nil {
+						return err
+					}
 				}
 			}
 		}
