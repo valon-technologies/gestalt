@@ -10,12 +10,15 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/oauth"
+	"github.com/valon-technologies/gestalt/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
@@ -54,12 +57,19 @@ func (s *Server) readinessCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 type integrationInfo struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name,omitempty"`
+	Name             string                         `json:"name"`
+	DisplayName      string                         `json:"display_name,omitempty"`
+	Description      string                         `json:"description,omitempty"`
+	IconSVG          string                         `json:"icon_svg,omitempty"`
+	Connected        bool                           `json:"connected"`
+	AuthType         string                         `json:"auth_type"`
+	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
+}
+
+type connectionParamInfo struct {
+	Required    bool   `json:"required,omitempty"`
 	Description string `json:"description,omitempty"`
-	IconSVG     string `json:"icon_svg,omitempty"`
-	Connected   bool   `json:"connected"`
-	AuthType    string `json:"auth_type"`
+	Default     string `json:"default,omitempty"`
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +101,22 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
 				info.IconSVG = cat.IconSVG
+			}
+		}
+		if cpp, ok := prov.(core.ConnectionParamProvider); ok {
+			defs := cpp.ConnectionParamDefs()
+			userParams := make(map[string]connectionParamInfo)
+			for name, def := range defs {
+				if def.From == "" {
+					userParams[name] = connectionParamInfo{
+						Required:    def.Required,
+						Description: def.Description,
+						Default:     def.Default,
+					}
+				}
+			}
+			if len(userParams) > 0 {
+				info.ConnectionParams = userParams
 			}
 		}
 		out = append(out, info)
@@ -370,8 +396,9 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 type startOAuthRequest struct {
-	Integration string   `json:"integration"`
-	Scopes      []string `json:"scopes"`
+	Integration      string            `json:"integration"`
+	Scopes           []string          `json:"scopes"`
+	ConnectionParams map[string]string `json:"connection_params"`
 }
 
 type oauthStarter interface {
@@ -379,7 +406,7 @@ type oauthStarter interface {
 }
 
 type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string) (*core.TokenResponse, error)
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
 }
 
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
@@ -406,21 +433,51 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var connParams map[string]string
+	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
+		var valErr error
+		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
+		if valErr != nil {
+			writeError(w, http.StatusBadRequest, valErr.Error())
+			return
+		}
+	}
+
 	var (
 		authURL  string
 		verifier string
 	)
-	if starter, ok := prov.(oauthStarter); ok {
-		authURL, verifier = starter.StartOAuth("_", req.Scopes)
-	} else {
-		authURL = oauthProv.AuthorizationURL("_", req.Scopes)
+
+	type authURLOverrider interface {
+		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
+	}
+	type authBaseURLer interface{ AuthorizationBaseURL() string }
+
+	if len(connParams) > 0 {
+		if abu, ok := prov.(authBaseURLer); ok {
+			rawAuthURL := abu.AuthorizationBaseURL()
+			resolvedAuthURL := paraminterp.Interpolate(rawAuthURL, connParams)
+			if resolvedAuthURL != rawAuthURL {
+				if ov, ok := prov.(authURLOverrider); ok {
+					authURL, verifier = ov.StartOAuthWithOverride(resolvedAuthURL, "_", req.Scopes)
+				}
+			}
+		}
+	}
+	if authURL == "" {
+		if starter, ok := prov.(oauthStarter); ok {
+			authURL, verifier = starter.StartOAuth("_", req.Scopes)
+		} else {
+			authURL = oauthProv.AuthorizationURL("_", req.Scopes)
+		}
 	}
 
 	state, err := s.stateCodec.Encode(integrationOAuthState{
-		UserID:      dbUserID,
-		Integration: req.Integration,
-		Verifier:    verifier,
-		ExpiresAt:   s.now().Add(integrationOAuthStateTTL).Unix(),
+		UserID:           dbUserID,
+		Integration:      req.Integration,
+		Verifier:         verifier,
+		ConnectionParams: connParams,
+		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to encode oauth state")
@@ -463,15 +520,38 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	prov, _ := s.providers.Get(providerName)
 
+	var exchangeOpts []oauth.ExchangeOption
+	connParams := state.ConnectionParams
+	if len(connParams) > 0 {
+		type tokenURLer interface{ TokenURL() string }
+		if tup, ok := prov.(tokenURLer); ok {
+			rawURL := tup.TokenURL()
+			resolved := paraminterp.Interpolate(rawURL, connParams)
+			if resolved != rawURL {
+				exchangeOpts = append(exchangeOpts, oauth.WithTokenURL(resolved))
+			}
+		}
+	}
+
 	var tokenResp *core.TokenResponse
-	if exchanger, ok := prov.(oauthVerifierExchanger); ok && state.Verifier != "" {
-		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier)
+	if exchanger, ok := prov.(oauthVerifierExchanger); ok {
+		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	} else {
+		if len(exchangeOpts) > 0 {
+			log.Printf("WARNING: %s does not support exchange options (e.g. token URL override); connection params may not apply to token exchange", providerName)
+		}
 		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
 	}
 	if err != nil {
 		log.Printf("token exchange failed for %s: %v", providerName, err)
 		writeError(w, http.StatusBadGateway, "token exchange failed")
+		return
+	}
+
+	metadata, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
+	if metaErr != nil {
+		log.Printf("connection metadata extraction failed for %s: %v", providerName, metaErr)
+		writeError(w, http.StatusBadGateway, "failed to extract connection metadata from token response")
 		return
 	}
 
@@ -488,6 +568,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresAt:    expiresAt,
+		MetadataJSON: metadata,
 	}
 
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
@@ -499,8 +580,9 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 }
 
 type connectManualRequest struct {
-	Integration string `json:"integration"`
-	Credential  string `json:"credential"`
+	Integration      string            `json:"integration"`
+	Credential       string            `json:"credential"`
+	ConnectionParams map[string]string `json:"connection_params"`
 }
 
 func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
@@ -537,6 +619,16 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var connParams map[string]string
+	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
+		var valErr error
+		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
+		if valErr != nil {
+			writeError(w, http.StatusBadRequest, valErr.Error())
+			return
+		}
+	}
+
 	tok := &core.IntegrationToken{
 		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
@@ -544,6 +636,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		Instance:    "default",
 		AccessToken: req.Credential,
 	}
+	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
+	if metaErr != nil {
+		writeError(w, http.StatusBadRequest, metaErr.Error())
+		return
+	}
+	tok.MetadataJSON = manualMeta
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to store credential")
 		return
@@ -708,4 +806,76 @@ func generateRandomHex(n int) (string, error) {
 		return "", fmt.Errorf("generating random bytes: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+var (
+	safeParamValue         = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	safeTokenResponseValue = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
+)
+
+func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, error) {
+	if len(defs) == 0 {
+		return nil, nil
+	}
+	for key := range provided {
+		if _, ok := defs[key]; !ok {
+			return nil, fmt.Errorf("unknown connection parameter: %s", key)
+		}
+	}
+	result := make(map[string]string)
+	for name, def := range defs {
+		if def.From != "" {
+			continue
+		}
+		if v, ok := provided[name]; ok && v != "" {
+			if !safeParamValue.MatchString(v) {
+				return nil, fmt.Errorf("connection parameter %q contains invalid characters (allowed: letters, digits, hyphens, dots, underscores)", name)
+			}
+			result[name] = v
+		} else if def.Default != "" {
+			result[name] = def.Default
+		} else if def.Required {
+			return nil, fmt.Errorf("missing required connection parameter: %s", name)
+		}
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
+}
+
+func buildConnectionMetadata(prov core.Provider, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
+	metadata := make(map[string]string)
+	for k, v := range userParams {
+		metadata[k] = v
+	}
+
+	if cpp, ok := prov.(core.ConnectionParamProvider); ok && tokenResp != nil && tokenResp.Extra != nil {
+		for name, def := range cpp.ConnectionParamDefs() {
+			if def.From == "token_response" {
+				field := def.Field
+				if field == "" {
+					field = name
+				}
+				val, ok := tokenResp.Extra[field]
+				if !ok {
+					if def.Required {
+						return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
+					}
+					continue
+				}
+				s := fmt.Sprintf("%v", val)
+				if !safeTokenResponseValue.MatchString(s) {
+					return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
+				}
+				metadata[name] = s
+			}
+		}
+	}
+
+	if len(metadata) == 0 {
+		return "", nil
+	}
+	b, _ := json.Marshal(metadata)
+	return string(b), nil
 }

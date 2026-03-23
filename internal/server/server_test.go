@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -1561,7 +1562,7 @@ func (s *stubPKCEIntegration) StartOAuth(state string, _ []string) (string, stri
 	return s.AuthorizationURL(state, nil), s.wantVerifier
 }
 
-func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string) (*core.TokenResponse, error) {
+func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
 	s.gotVerifier = verifier
 	if code != "good-code" {
 		return nil, fmt.Errorf("bad code")

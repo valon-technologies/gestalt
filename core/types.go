@@ -48,6 +48,7 @@ type TokenResponse struct {
 	RefreshToken string
 	ExpiresIn    int
 	TokenType    string
+	Extra        map[string]any // all fields from the token endpoint response
 }
 
 type Operation struct {

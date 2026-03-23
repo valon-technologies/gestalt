@@ -12,10 +12,11 @@ import (
 const integrationOAuthStateTTL = 10 * time.Minute
 
 type integrationOAuthState struct {
-	UserID      string `json:"uid"`
-	Integration string `json:"int"`
-	Verifier    string `json:"ver,omitempty"`
-	ExpiresAt   int64  `json:"exp"`
+	UserID           string            `json:"uid"`
+	Integration      string            `json:"int"`
+	Verifier         string            `json:"ver,omitempty"`
+	ConnectionParams map[string]string `json:"cp,omitempty"`
+	ExpiresAt        int64             `json:"exp"`
 }
 
 type integrationOAuthStateCodec struct {

@@ -19,7 +19,16 @@ type Definition struct {
 	TokenParser    string `yaml:"token_parser"`
 	RequestMutator string `yaml:"request_mutator"`
 
-	Operations map[string]OperationDef `yaml:"operations"`
+	Connection map[string]ConnectionParamDef `yaml:"connection"`
+	Operations map[string]OperationDef       `yaml:"operations"`
+}
+
+type ConnectionParamDef struct {
+	Required    bool   `yaml:"required"`
+	Description string `yaml:"description"`
+	Default     string `yaml:"default"`
+	From        string `yaml:"from"`  // "" = user-provided, "token_response" = from OAuth response
+	Field       string `yaml:"field"` // JSON field name for token_response extraction
 }
 
 type AuthDef struct {

@@ -41,3 +41,15 @@ type ManualProvider interface {
 type CatalogProvider interface {
 	Catalog() *catalog.Catalog
 }
+
+type ConnectionParamDef struct {
+	Required    bool
+	Description string
+	Default     string
+	From        string // "" = user-provided, "token_response" = extracted from OAuth response
+	Field       string // JSON field name for token_response extraction
+}
+
+type ConnectionParamProvider interface {
+	ConnectionParamDefs() map[string]ConnectionParamDef
+}

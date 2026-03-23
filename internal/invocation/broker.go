@@ -2,11 +2,14 @@ package invocation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/registry"
 )
@@ -87,7 +90,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return nil, ErrNotAuthenticated
 	}
 
-	accessToken, err := b.resolveToken(ctx, prov, p, providerName)
+	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -108,26 +111,27 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		}
 		return "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	return b.resolveToken(ctx, prov, p, providerName)
+	_, tok, resolveErr := b.resolveToken(ctx, prov, p, providerName)
+	return tok, resolveErr
 }
 
-func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName string) (string, error) {
+func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName string) (context.Context, string, error) {
 	mode := prov.ConnectionMode()
 	switch mode {
 	case core.ConnectionModeNone:
-		return "", nil
+		return ctx, "", nil
 
 	case core.ConnectionModeUser, "":
 		if p.UserID == "" {
 			if p.Identity == nil || p.Identity.Email == "" {
-				return "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
+				return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
 			}
 			dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
 			if err != nil {
-				return "", fmt.Errorf("%w: %v", ErrUserResolution, err)
+				return ctx, "", fmt.Errorf("%w: %v", ErrUserResolution, err)
 			}
 			if dbUser == nil || dbUser.ID == "" {
-				return "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
+				return ctx, "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
 			}
 			p.UserID = dbUser.ID
 		}
@@ -138,33 +142,44 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 
 	case core.ConnectionModeEither:
 		if p.UserID != "" {
-			tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName)
+			enrichedCtx, tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName)
 			if err == nil {
-				return tok, nil
+				return enrichedCtx, tok, nil
 			}
 			if !errors.Is(err, ErrNoToken) {
-				return "", err
+				return ctx, "", err
 			}
 		}
 		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName)
 
 	default:
-		return "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
+		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
 }
 
-func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName string) (string, error) {
+func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName string) (context.Context, string, error) {
 	storedToken, err := b.datastore.Token(ctx, userID, providerName, "default")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+			return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 		}
-		return "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
+		return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 	}
 	if storedToken == nil {
-		return "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+		return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 	}
-	return b.refreshTokenIfNeeded(ctx, prov, storedToken)
+
+	if storedToken.MetadataJSON != "" {
+		var connParams map[string]string
+		if err := json.Unmarshal([]byte(storedToken.MetadataJSON), &connParams); err != nil {
+			log.Printf("WARNING: malformed MetadataJSON for %s: %v", providerName, err)
+		} else if len(connParams) > 0 {
+			ctx = core.WithConnectionParams(ctx, connParams)
+		}
+	}
+
+	accessToken, err := b.refreshTokenIfNeeded(ctx, prov, storedToken)
+	return ctx, accessToken, err
 }
 
 func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, token *core.IntegrationToken) (string, error) {
@@ -180,7 +195,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, t
 		return token.AccessToken, nil
 	}
 
-	resp, err := oauthProv.RefreshToken(ctx, token.RefreshToken)
+	resp, err := b.refreshOAuth(ctx, oauthProv, prov, token.RefreshToken)
 	if err != nil {
 		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
@@ -214,4 +229,24 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, t
 		return "", fmt.Errorf("persisting refreshed token: %w", err)
 	}
 	return token.AccessToken, nil
+}
+
+func (b *Broker) refreshOAuth(ctx context.Context, oauthProv core.OAuthProvider, prov core.Provider, refreshToken string) (*core.TokenResponse, error) {
+	type refreshWithURL interface {
+		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	}
+	type tokenURLer interface{ TokenURL() string }
+
+	if cp := core.ConnectionParams(ctx); cp != nil {
+		if tu, ok := prov.(tokenURLer); ok {
+			raw := tu.TokenURL()
+			resolved := paraminterp.Interpolate(raw, cp)
+			if resolved != raw {
+				if rw, ok := prov.(refreshWithURL); ok {
+					return rw.RefreshTokenWithURL(ctx, refreshToken, resolved)
+				}
+			}
+		}
+	}
+	return oauthProv.RefreshToken(ctx, refreshToken)
 }
