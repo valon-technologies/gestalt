@@ -5,6 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/registry"
 )
 
 func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) RuntimeDeps {
@@ -15,9 +16,10 @@ func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister inv
 	}
 }
 
-func bindingDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) BindingDeps {
+func bindingDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink, runtimes *registry.PluginMap[core.Runtime]) BindingDeps {
 	return BindingDeps{
-		Invoker: guardedInvoker("binding", name, invoker, lister, providers, audit),
+		Invoker:  guardedInvoker("binding", name, invoker, lister, providers, audit),
+		Runtimes: runtimes,
 	}
 }
 

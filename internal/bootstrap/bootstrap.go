@@ -28,7 +28,8 @@ type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type BindingDeps struct {
-	Invoker invocation.Invoker
+	Invoker  invocation.Invoker
+	Runtimes *registry.PluginMap[core.Runtime]
 }
 
 type RuntimeDeps struct {
@@ -120,8 +121,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	if runtimes == nil {
+		runtimes = registry.NewRuntimeMap()
+	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, runtimes)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +418,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, runtimes *registry.PluginMap[core.Runtime]) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -428,7 +432,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit)
+		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, runtimes)
 		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
