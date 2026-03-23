@@ -16,14 +16,29 @@ pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
             let rows: Vec<Vec<String>> = items
                 .iter()
                 .map(|item| {
+                    let connected = match item["connected"].as_bool() {
+                        Some(true) => "yes",
+                        _ => "no",
+                    };
                     vec![
                         item["name"].as_str().unwrap_or("-").to_string(),
                         item["display_name"].as_str().unwrap_or("-").to_string(),
+                        item["auth_type"].as_str().unwrap_or("-").to_string(),
+                        connected.into(),
                         item["description"].as_str().unwrap_or("-").to_string(),
                     ]
                 })
                 .collect();
-            output::print_table(&["Name", "Display Name", "Description"], &rows);
+            output::print_table(
+                &[
+                    "Name",
+                    "Display Name",
+                    "Auth Type",
+                    "Connected",
+                    "Description",
+                ],
+                &rows,
+            );
         }
     }
     Ok(())
