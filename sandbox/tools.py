@@ -34,10 +34,10 @@ class ToolClient:
         self._tools_cache = tools
         return tools
 
-    def execute(self, conversation_id: str, user_id: str, tool_name: str, params: dict) -> dict:
+    def execute(self, conversation_id: str, user_id: str, tool_name: str, params: dict) -> tuple[dict, bool]:
         provider, operation = self._tool_map.get(tool_name, ("", ""))
         if not provider:
-            return {"error": f"unknown tool: {tool_name}"}
+            return {"error": f"unknown tool: {tool_name}"}, True
 
         try:
             resp = self._stub.ExecuteTool(sandbox_pb2.ToolRequest(
@@ -49,11 +49,12 @@ class ToolClient:
             ))
         except grpc.RpcError as e:
             log.error("tool execute failed: %s", e)
-            return {"error": str(e)}
+            return {"error": str(e)}, True
 
         if resp.is_error:
-            return {"error": resp.error_message}
-        return json.loads(resp.result_json) if resp.result_json else {}
+            return {"error": resp.error_message}, True
+        result = json.loads(resp.result_json) if resp.result_json else {}
+        return result, False
 
     def close(self):
         self._channel.close()

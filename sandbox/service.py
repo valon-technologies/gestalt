@@ -52,12 +52,12 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
 
         input_tokens = 0
         output_tokens = 0
-        full_text = ""
+        text_parts: list[str] = []
         num_turns = 0
         start_time = time.monotonic()
 
         try:
-            for turn in range(max_turns):
+            for _ in range(max_turns):
                 if not context.is_active():
                     return
 
@@ -81,7 +81,7 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
 
                         if event.type == "content_block_delta":
                             if event.delta.type == "text_delta":
-                                full_text += event.delta.text
+                                text_parts.append(event.delta.text)
                                 yield sandbox_pb2.ConversationEvent(
                                     conversation_id=conversation_id,
                                     text_delta=sandbox_pb2.TextDelta(content=event.delta.text),
@@ -117,13 +117,12 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
                         ),
                     )
 
-                    result = self._tool_client.execute(
+                    result, is_error = self._tool_client.execute(
                         conversation_id=conversation_id,
                         user_id=request.user_id,
                         tool_name=block.name,
                         params=block.input,
                     )
-                    is_error = "error" in result
 
                     yield sandbox_pb2.ConversationEvent(
                         conversation_id=conversation_id,
@@ -161,6 +160,6 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
                 output_tokens=output_tokens,
                 duration_ms=duration_ms,
                 num_turns=num_turns,
-                full_text=full_text,
+                full_text="".join(text_parts),
             ),
         )
