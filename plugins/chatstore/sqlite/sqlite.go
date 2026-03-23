@@ -61,7 +61,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 			input_tokens INTEGER NOT NULL DEFAULT 0,
 			output_tokens INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL
-		)
+		);
+		CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_id);
+		CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id, updated_at);
+		CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at)
 	`)
 	return err
 }

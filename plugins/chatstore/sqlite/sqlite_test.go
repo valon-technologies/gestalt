@@ -300,7 +300,7 @@ func TestListAgentsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAgents: %v", err)
 	}
-	if agents != nil {
-		t.Errorf("expected nil for empty list, got %v", agents)
+	if len(agents) != 0 {
+		t.Errorf("expected empty list, got %v", agents)
 	}
 }

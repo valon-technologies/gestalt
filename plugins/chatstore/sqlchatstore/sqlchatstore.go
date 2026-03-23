@@ -98,22 +98,33 @@ func (s *Store) ListAgents(ctx context.Context, ownerID string) ([]*core.Agent, 
 	return agents, rows.Err()
 }
 
+func marshalProviders(providers []string) (string, error) {
+	if providers == nil {
+		providers = []string{}
+	}
+	b, err := json.Marshal(providers)
+	if err != nil {
+		return "", fmt.Errorf("marshaling agent providers: %w", err)
+	}
+	return string(b), nil
+}
+
 func (s *Store) CreateAgent(ctx context.Context, agent *core.Agent) error {
 	now := time.Now().UTC().Truncate(time.Second)
 	agent.ID = uuid.NewString()
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
 
-	providersJSON, err := json.Marshal(agent.Providers)
+	providersJSON, err := marshalProviders(agent.Providers)
 	if err != nil {
-		return fmt.Errorf("marshaling agent providers: %w", err)
+		return err
 	}
 
 	_, err = s.DB.ExecContext(ctx,
 		`INSERT INTO agents (id, owner_id, name, system_prompt, model, providers, temperature, max_tokens, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		agent.ID, agent.OwnerID, agent.Name, agent.SystemPrompt, agent.Model,
-		string(providersJSON), agent.Temperature, agent.MaxTokens, agent.CreatedAt, agent.UpdatedAt)
+		providersJSON, agent.Temperature, agent.MaxTokens, agent.CreatedAt, agent.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("inserting agent: %w", err)
 	}
@@ -123,15 +134,15 @@ func (s *Store) CreateAgent(ctx context.Context, agent *core.Agent) error {
 func (s *Store) UpdateAgent(ctx context.Context, agent *core.Agent) error {
 	agent.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 
-	providersJSON, err := json.Marshal(agent.Providers)
+	providersJSON, err := marshalProviders(agent.Providers)
 	if err != nil {
-		return fmt.Errorf("marshaling agent providers: %w", err)
+		return err
 	}
 
 	result, err := s.DB.ExecContext(ctx,
 		`UPDATE agents SET name = ?, system_prompt = ?, model = ?, providers = ?, temperature = ?, max_tokens = ?, updated_at = ?
 		WHERE id = ?`,
-		agent.Name, agent.SystemPrompt, agent.Model, string(providersJSON),
+		agent.Name, agent.SystemPrompt, agent.Model, providersJSON,
 		agent.Temperature, agent.MaxTokens, agent.UpdatedAt, agent.ID)
 	if err != nil {
 		return fmt.Errorf("updating agent: %w", err)
