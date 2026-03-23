@@ -20,11 +20,10 @@ type MCPUpstream interface {
 // Provider wraps an HTTP API provider and an MCP upstream for a single
 // integration. Execute goes to the API; CallTool goes to the upstream.
 type Provider struct {
-	name       string
-	api        core.Provider
-	mcp        MCPUpstream
-	mcpFromAPI bool
-	cat        *catalog.Catalog
+	name string
+	api  core.Provider
+	mcp  MCPUpstream
+	cat  *catalog.Catalog
 }
 
 var (
@@ -34,12 +33,11 @@ var (
 
 // New creates a composite provider. If the API provider implements
 // OAuthProvider, the returned provider does too.
-func New(name string, apiProv core.Provider, mcpUp MCPUpstream, mcpFromAPI bool) core.Provider {
+func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
 	p := &Provider{
-		name:       name,
-		api:        apiProv,
-		mcp:        mcpUp,
-		mcpFromAPI: mcpFromAPI,
+		name: name,
+		api:  apiProv,
+		mcp:  mcpUp,
 	}
 	p.cat = p.buildCatalog()
 	if oauth, ok := apiProv.(core.OAuthProvider); ok {
@@ -109,10 +107,6 @@ func (o *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (
 
 func (p *Provider) buildCatalog() *catalog.Catalog {
 	mcpCat := p.mcp.Catalog()
-
-	if !p.mcpFromAPI {
-		return tagMCPCatalog(mcpCat)
-	}
 
 	var apiCat *catalog.Catalog
 	if cp, ok := p.api.(core.CatalogProvider); ok {

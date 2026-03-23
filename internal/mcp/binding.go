@@ -35,7 +35,7 @@ type Config struct {
 	TokenResolver    TokenResolver
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
-	ToolNamePrefix   string
+	ToolPrefixes     map[string]string
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
@@ -83,7 +83,7 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 			continue
 		}
 
-		name := toolName(cfg.ToolNamePrefix, provName, op.ID)
+		name := toolName(cfg.ToolPrefixes, provName, op.ID)
 
 		var tool mcpgo.Tool
 		if len(op.InputSchema) > 0 {
@@ -111,7 +111,7 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 
 func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov core.Provider) {
 	for _, op := range prov.ListOperations() {
-		name := toolName(cfg.ToolNamePrefix, provName, op.Name)
+		name := toolName(cfg.ToolPrefixes, provName, op.Name)
 
 		opts := []mcpgo.ToolOption{mcpgo.WithDescription(op.Description)}
 		annot := mapAnnotations(ci.AnnotationsFromMethod(op.Method))
@@ -177,8 +177,8 @@ func unwrapDirectCaller(prov core.Provider) (directToolCaller, bool) {
 	return nil, false
 }
 
-func toolName(prefix, provider, operation string) string {
-	return prefix + provider + toolNameSep + operation
+func toolName(prefixes map[string]string, provider, operation string) string {
+	return prefixes[provider] + provider + toolNameSep + operation
 }
 
 func mapAnnotations(a catalog.OperationAnnotations) mcpgo.ToolAnnotation {

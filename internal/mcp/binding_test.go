@@ -179,9 +179,9 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:        broker,
-		Providers:      providers,
-		ToolNamePrefix: "ts_",
+		Invoker:      broker,
+		Providers:    providers,
+		ToolPrefixes: map[string]string{"slack": "ts_"},
 	})
 
 	tools := srv.ListTools()
