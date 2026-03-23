@@ -714,6 +714,59 @@ func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
 	}
 }
 
+func TestBuildWithPostConnectHook(t *testing.T) {
+	t.Parallel()
+
+	RegisterPostConnectHook("test_discovery", func(_ context.Context, _ *core.IntegrationToken, _ *http.Client) (map[string]string, error) {
+		return map[string]string{"cloud_id": "abc123"}, nil
+	})
+	t.Cleanup(func() {
+		hooksMu.Lock()
+		delete(postConnectHooks, "test_discovery")
+		hooksMu.Unlock()
+	})
+
+	def := &Definition{
+		Provider:    "pc_hook_test",
+		DisplayName: "PostConnect Hook Test",
+		BaseURL:     "https://example.com",
+		Auth:        AuthDef{Type: "manual"},
+		PostConnect: "test_discovery",
+		Operations:  map[string]OperationDef{"op": {Description: "Op", Method: "GET", Path: "/op"}},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	pcp, ok := prov.(core.PostConnectProvider)
+	if !ok {
+		t.Fatal("provider does not implement PostConnectProvider")
+	}
+	if pcp.PostConnectHook() == nil {
+		t.Fatal("PostConnectHook() returned nil")
+	}
+}
+
+func TestBuildUnknownPostConnectHook(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "bad_hook_test",
+		DisplayName: "Bad Hook Test",
+		BaseURL:     "https://example.com",
+		Auth:        AuthDef{Type: "manual"},
+		PostConnect: "nonexistent_hook",
+		Operations:  map[string]OperationDef{"op": {Description: "Op", Method: "GET", Path: "/op"}},
+	}
+
+	_, err := Build(def, config.IntegrationDef{}, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown post_connect hook")
+	}
+}
+
 func writeProviderYAML(t *testing.T, dir, name, displayName string) {
 	t.Helper()
 	content := fmt.Sprintf(minimalProviderYAML, name, displayName, name)

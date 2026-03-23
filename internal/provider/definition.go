@@ -20,6 +20,7 @@ type Definition struct {
 	ResponseCheck  string `yaml:"response_check"`
 	TokenParser    string `yaml:"token_parser"`
 	RequestMutator string `yaml:"request_mutator"`
+	PostConnect    string `yaml:"post_connect"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations"`

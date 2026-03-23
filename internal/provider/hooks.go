@@ -3,6 +3,7 @@ package provider
 import (
 	"sync"
 
+	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
@@ -13,6 +14,7 @@ var (
 	tokenParsers     = map[string]func(string) (string, map[string]string, error){}
 	requestMutators  = map[string]func(string, *apiexec.Request, map[string]any) error{}
 	responseHooks    = map[string]oauth.ResponseHook{}
+	postConnectHooks = map[string]core.PostConnectHook{}
 )
 
 func RegisterResponseChecker(name string, fn apiexec.ResponseChecker) {
@@ -64,5 +66,18 @@ func lookupResponseHook(name string) (oauth.ResponseHook, bool) {
 	hooksMu.RLock()
 	defer hooksMu.RUnlock()
 	fn, ok := responseHooks[name]
+	return fn, ok
+}
+
+func RegisterPostConnectHook(name string, fn core.PostConnectHook) {
+	hooksMu.Lock()
+	defer hooksMu.Unlock()
+	postConnectHooks[name] = fn
+}
+
+func lookupPostConnectHook(name string) (core.PostConnectHook, bool) {
+	hooksMu.RLock()
+	defer hooksMu.RUnlock()
+	fn, ok := postConnectHooks[name]
 	return fn, ok
 }
