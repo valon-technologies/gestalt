@@ -7,19 +7,19 @@ test.describe("Authentication", () => {
   });
 
   test("login page renders with provider button", async ({ page }) => {
-    await mockAuthInfo(page, { provider: "google", display_name: "Google" });
+    await mockAuthInfo(page, { provider: "test-sso", display_name: "Test SSO" });
     await page.goto("/login");
     await expect(
       page.getByRole("heading", { name: "Gestalt" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Sign in with Google/i }),
+      page.getByRole("button", { name: /Sign in with Test SSO/i }),
     ).toBeVisible();
   });
 
   test("authenticated user sees dashboard", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
-    await mockIntegrations(page, [{ name: "slack", display_name: "Slack" }]);
+    await mockIntegrations(page, [{ name: "test-svc", display_name: "Test Service" }]);
     await mockTokens(page, []);
 
     await page.goto("/");

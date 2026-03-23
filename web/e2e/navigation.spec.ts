@@ -6,7 +6,7 @@ test.describe("Navigation", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { name: "slack", display_name: "Slack", description: "Team messaging" },
+      { name: "test-svc", display_name: "Test Service", description: "A test integration" },
     ]);
     await mockTokens(page, []);
 
@@ -35,7 +35,7 @@ test.describe("Navigation", () => {
   test("navigating to /integrations works", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { name: "slack", display_name: "Slack", description: "Team messaging" },
+      { name: "test-svc", display_name: "Test Service", description: "A test integration" },
     ]);
     await mockTokens(page, []);
 
