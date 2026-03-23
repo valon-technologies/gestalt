@@ -30,3 +30,22 @@ pub fn invoke(
 
     Ok(())
 }
+
+pub fn list_operations(
+    url_override: Option<&str>,
+    integration: &str,
+    format: Format,
+) -> Result<()> {
+    let client = ApiClient::from_env(url_override)?;
+    let path = format!("/api/v1/integrations/{}/operations", integration);
+    let resp = client
+        .get(&path)
+        .with_context(|| format!("failed to list operations for {}", integration))?;
+
+    match format {
+        Format::Json => output::print_json(&resp),
+        Format::Table => output::print_json_table(&resp),
+    }
+
+    Ok(())
+}

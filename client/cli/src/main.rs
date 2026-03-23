@@ -47,8 +47,8 @@ enum Commands {
         /// Integration name (e.g., github, slack)
         integration: String,
 
-        /// Operation name (e.g., search_code, list_channels)
-        operation: String,
+        /// Operation name (e.g., search_code, list_channels). Omit to list available operations.
+        operation: Option<String>,
 
         /// Parameters as key=value pairs
         #[arg(short = 'p', long = "param", value_parser = parse_key_val)]
@@ -156,7 +156,15 @@ fn main() {
             integration,
             operation,
             params,
-        } => commands::invoke::invoke(url, &integration, &operation, &params, format),
+        } => match operation {
+            Some(op) => commands::invoke::invoke(url, &integration, &op, &params, format),
+            None => {
+                if !params.is_empty() {
+                    output::print_warning("parameters ignored; no operation specified");
+                }
+                commands::invoke::list_operations(url, &integration, format)
+            }
+        },
         Commands::Tokens { command } => match command {
             TokenCommands::Create { name } => {
                 commands::tokens::create(url, name.as_deref(), format)
