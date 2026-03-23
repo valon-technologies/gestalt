@@ -216,10 +216,10 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 
 		for _, us := range intg.Upstreams {
 			switch us.Type {
-			case config.UpstreamTypeHTTP:
+			case config.UpstreamTypeREST:
 				if apiProv != nil {
 					cleanup()
-					return nil, fmt.Errorf("integration %s: multiple http upstreams not supported", name)
+					return nil, fmt.Errorf("integration %s: multiple rest upstreams not supported", name)
 				}
 				def, err := loadHTTPUpstream(ctx, name, us, providerDirs)
 				if err != nil {

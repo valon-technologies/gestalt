@@ -45,7 +45,7 @@ integrations:
     client_id: key-1
   beta:
     upstreams:
-      - type: http
+      - type: rest
         url: https://example.com/spec.json
     client_id: key-2
 server:
@@ -288,7 +288,7 @@ server:
 integrations:
   test_api:
     upstreams:
-      - type: http
+      - type: rest
         url: https://example.com/spec.json
         allowed_operations:
           - list_items
@@ -323,7 +323,7 @@ server:
 integrations:
   test_api:
     upstreams:
-      - type: http
+      - type: rest
         url: https://example.com/spec.json
         allowed_operations:
           list_items: List all items
@@ -358,7 +358,7 @@ server:
 integrations:
   test_api:
     upstreams:
-      - type: http
+      - type: rest
         url: https://example.com/spec.json
 `
 	path := mustWriteConfigFile(t, yaml)

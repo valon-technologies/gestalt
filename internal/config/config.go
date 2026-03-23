@@ -101,7 +101,7 @@ type IntegrationDef struct {
 }
 
 const (
-	UpstreamTypeHTTP = "http"
+	UpstreamTypeREST = "rest"
 	UpstreamTypeMCP  = "mcp"
 )
 
