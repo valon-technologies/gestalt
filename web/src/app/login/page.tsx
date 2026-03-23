@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthInfo, startLogin } from "@/lib/api";
+import { fetchAPI, getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setSessionToken, setUserEmail } from "@/lib/auth";
 import Button from "@/components/Button";
 
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [devEmail, setDevEmail] = useState("dev@gestalt.local");
   const [providerLabel, setProviderLabel] = useState("Sign in");
+  const [devMode, setDevMode] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -21,7 +22,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     getAuthInfo()
-      .then((info) => setProviderLabel("Sign in with " + info.display_name))
+      .then((info) => {
+        setProviderLabel("Sign in with " + info.display_name);
+        setDevMode(info.dev_mode);
+      })
       .catch(() => {});
   }, []);
 
@@ -44,16 +48,13 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/dev-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: devEmail }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Dev login failed");
-      }
-      const { email, token } = await res.json();
+      const { email, token } = await fetchAPI<{ email: string; token: string }>(
+        "/api/dev-login",
+        {
+          method: "POST",
+          body: JSON.stringify({ email: devEmail }),
+        },
+      );
       setSessionToken(token);
       setUserEmail(email);
       router.replace("/");
@@ -63,8 +64,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
-
-  const isDev = process.env.NODE_ENV === "development";
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -91,7 +90,7 @@ export default function LoginPage() {
           </Button>
         </div>
 
-        {isDev && (
+        {devMode && (
           <>
             <div className="mt-6 flex items-center gap-2">
               <div className="h-px flex-1 bg-stone-200" />

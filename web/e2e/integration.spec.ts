@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-const hasBackend = !!process.env.GESTALT_API_URL;
+const hasBackend = !!process.env.PLAYWRIGHT_BASE_URL;
 
 test.describe("Integration: Go server contract", () => {
-  test.skip(!hasBackend, "Requires GESTALT_API_URL (real Go server)");
+  test.skip(!hasBackend, "Requires PLAYWRIGHT_BASE_URL (real Go server)");
 
   test.describe.configure({ mode: "serial" });
 
@@ -33,7 +33,7 @@ test.describe("Integration: Go server contract", () => {
 
   test.beforeAll(async ({}, testInfo) => {
     const baseURL =
-      testInfo.project.use.baseURL || "http://localhost:3000";
+      testInfo.project.use.baseURL || "http://localhost:8080";
     authToken = await devLogin(baseURL);
   });
 

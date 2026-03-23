@@ -1466,7 +1466,7 @@ func TestAuthInfo(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
@@ -1496,7 +1496,7 @@ func TestAuthInfoFallback(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
@@ -3273,5 +3273,83 @@ func TestErrorSanitization(t *testing.T) {
 	}
 	if errResp["error"] != "operation failed" {
 		t.Fatalf("expected generic error message, got %q", errResp["error"])
+	}
+}
+
+type stubAuthWithToken struct {
+	coretesting.StubAuthProvider
+}
+
+func (s *stubAuthWithToken) IssueSessionToken(identity *core.UserIdentity) (string, error) {
+	return "dev-token-" + identity.Email, nil
+}
+
+func TestDevLogin(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Auth = &stubAuthWithToken{StubAuthProvider: coretesting.StubAuthProvider{N: "test"}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"email":"dev@test.local"}`)
+	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/dev-login: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["token"] != "dev-token-dev@test.local" {
+		t.Fatalf("expected token dev-token-dev@test.local, got %q", result["token"])
+	}
+}
+
+func TestDevLogin_NotRegisteredWithoutDevMode(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = false
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"email":"dev@test.local"}`)
+	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/dev-login: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 404/405 when dev mode disabled, got %d", resp.StatusCode)
+	}
+}
+
+func TestDevLogin_EmptyEmail(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Auth = &stubAuthWithToken{StubAuthProvider: coretesting.StubAuthProvider{N: "test"}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"email":""}`)
+	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/dev-login: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }

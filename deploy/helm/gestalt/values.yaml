@@ -132,24 +132,6 @@ readinessProbe:
   initialDelaySeconds: 3
   periodSeconds: 5
 
-web:
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: gestalt-web
-    pullPolicy: IfNotPresent
-    tag: ""
-  service:
-    type: ClusterIP
-    port: 3000
-  resources:
-    limits:
-      cpu: 500m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-
 nodeSelector: {}
 
 tolerations: []
