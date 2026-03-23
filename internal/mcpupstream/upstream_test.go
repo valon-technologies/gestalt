@@ -132,6 +132,94 @@ func TestUpstream_ExecuteReturnsError(t *testing.T) {
 	}
 }
 
+func TestUpstream_FilterOperations(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUpstream(t)
+	t.Cleanup(func() { _ = u.Close() })
+
+	err := u.FilterOperations(map[string]string{"run_query": ""})
+	if err != nil {
+		t.Fatalf("FilterOperations: %v", err)
+	}
+
+	ops := u.ListOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	if ops[0].Name != "run_query" {
+		t.Fatalf("expected run_query, got %q", ops[0].Name)
+	}
+	if ops[0].Description != "Execute a SQL query" {
+		t.Fatalf("expected spec description, got %q", ops[0].Description)
+	}
+
+	cat := u.Catalog()
+	if len(cat.Operations) != 1 {
+		t.Fatalf("expected 1 catalog operation, got %d", len(cat.Operations))
+	}
+	if cat.Operations[0].ID != "run_query" {
+		t.Fatalf("expected run_query in catalog, got %q", cat.Operations[0].ID)
+	}
+}
+
+func TestUpstream_FilterOperationsWithOverride(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUpstream(t)
+	t.Cleanup(func() { _ = u.Close() })
+
+	err := u.FilterOperations(map[string]string{
+		"run_query":      "Custom query description",
+		"list_databases": "",
+	})
+	if err != nil {
+		t.Fatalf("FilterOperations: %v", err)
+	}
+
+	ops := u.ListOperations()
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
+	}
+
+	for _, op := range ops {
+		switch op.Name {
+		case "run_query":
+			if op.Description != "Custom query description" {
+				t.Errorf("run_query description: got %q, want override", op.Description)
+			}
+		case "list_databases":
+			if op.Description != "List all databases" {
+				t.Errorf("list_databases description: got %q, want spec default", op.Description)
+			}
+		}
+	}
+}
+
+func TestUpstream_FilterOperationsUnknown(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUpstream(t)
+	t.Cleanup(func() { _ = u.Close() })
+
+	err := u.FilterOperations(map[string]string{"nonexistent": ""})
+	if err == nil {
+		t.Fatal("expected error for unknown operation")
+	}
+}
+
+func TestUpstream_FilterOperationsEmpty(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUpstream(t)
+	t.Cleanup(func() { _ = u.Close() })
+
+	err := u.FilterOperations(map[string]string{})
+	if err == nil {
+		t.Fatal("expected error for empty allowed_operations")
+	}
+}
+
 func TestUpstream_ProviderMetadata(t *testing.T) {
 	t.Parallel()
 

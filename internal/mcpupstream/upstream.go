@@ -118,6 +118,46 @@ func (u *Upstream) Close() error {
 	return u.client.Close()
 }
 
+func (u *Upstream) FilterOperations(allowed map[string]string) error {
+	if len(allowed) == 0 {
+		return fmt.Errorf("allowed_operations cannot be empty; omit the field to allow all")
+	}
+
+	opSet := make(map[string]struct{}, len(u.ops))
+	for _, op := range u.ops {
+		opSet[op.Name] = struct{}{}
+	}
+	for name := range allowed {
+		if _, ok := opSet[name]; !ok {
+			return fmt.Errorf("allowed_operations contains unknown operation %q", name)
+		}
+	}
+
+	filteredOps := make([]core.Operation, 0, len(allowed))
+	for _, op := range u.ops {
+		if desc, ok := allowed[op.Name]; ok {
+			if desc != "" {
+				op.Description = desc
+			}
+			filteredOps = append(filteredOps, op)
+		}
+	}
+
+	filteredCatOps := make([]catalog.CatalogOperation, 0, len(allowed))
+	for i := range u.cat.Operations {
+		if desc, ok := allowed[u.cat.Operations[i].ID]; ok {
+			if desc != "" {
+				u.cat.Operations[i].Description = desc
+			}
+			filteredCatOps = append(filteredCatOps, u.cat.Operations[i])
+		}
+	}
+
+	u.ops = filteredOps
+	u.cat.Operations = filteredCatOps
+	return nil
+}
+
 func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Operation) {
 	cat := &catalog.Catalog{
 		Name:       name,
