@@ -27,6 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/plugins/datastore/mysql"
 	"github.com/valon-technologies/gestalt/plugins/datastore/oracle"
 	"github.com/valon-technologies/gestalt/plugins/datastore/postgres"
+	chatsqlite "github.com/valon-technologies/gestalt/plugins/chatstore/sqlite"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlite"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlserver"
 	"github.com/valon-technologies/gestalt/plugins/providers/echo"
@@ -70,6 +71,18 @@ func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
 		return nil, fmt.Errorf("running datastore migrations: %v", err)
 	}
 
+	if result.ChatStore != nil {
+		if err := result.ChatStore.Migrate(ctx); err != nil {
+			_ = result.ChatStore.Close()
+			_ = result.Datastore.Close()
+			if closer, ok := result.SecretManager.(interface{ Close() error }); ok {
+				_ = closer.Close()
+			}
+			stop()
+			return nil, fmt.Errorf("running chatstore migrations: %v", err)
+		}
+	}
+
 	return &bootstrapEnv{
 		Ctx:    ctx,
 		Stop:   stop,
@@ -80,6 +93,9 @@ func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
 
 func (e *bootstrapEnv) Close() {
 	e.Stop()
+	if e.Result.ChatStore != nil {
+		_ = e.Result.ChatStore.Close()
+	}
 	_ = e.Result.Datastore.Close()
 	if closer, ok := e.Result.SecretManager.(interface{ Close() error }); ok {
 		_ = closer.Close()
@@ -98,6 +114,7 @@ func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegis
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
+	factories.ChatStores["sqlite"] = chatsqlite.Factory
 	factories.DefaultProvider = defaultProviderFactory(providerDirs)
 	if devMode {
 		factories.Builtins = append(factories.Builtins, echo.New())

@@ -17,6 +17,7 @@ const (
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
+	ChatStore    ChatStoreConfig           `yaml:"chatstore"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	AuthProfiles map[string]AuthProfile    `yaml:"auth_profiles"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
@@ -63,6 +64,11 @@ type AuthConfig struct {
 }
 
 type DatastoreConfig struct {
+	Provider string    `yaml:"provider"`
+	Config   yaml.Node `yaml:"config"`
+}
+
+type ChatStoreConfig struct {
 	Provider string    `yaml:"provider"`
 	Config   yaml.Node `yaml:"config"`
 }

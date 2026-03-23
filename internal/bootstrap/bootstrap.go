@@ -25,15 +25,19 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
+type ChatStoreFactory func(node yaml.Node, deps Deps) (core.ChatStore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type BindingDeps struct {
-	Invoker invocation.Invoker
+	Invoker        invocation.Invoker
+	ChatStore      core.ChatStore
+	ChatDispatcher core.ChatDispatcher
 }
 
 type RuntimeDeps struct {
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
+	ChatStore        core.ChatStore
 }
 
 type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, deps RuntimeDeps) (core.Runtime, error)
@@ -42,6 +46,7 @@ type BindingFactory func(ctx context.Context, name string, cfg config.BindingDef
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
 	Datastores      map[string]DatastoreFactory
+	ChatStores      map[string]ChatStoreFactory
 	Providers       map[string]ProviderFactory
 	DefaultProvider ProviderFactory
 	Secrets         map[string]SecretManagerFactory
@@ -54,6 +59,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
 		Auth:       make(map[string]AuthFactory),
 		Datastores: make(map[string]DatastoreFactory),
+		ChatStores: make(map[string]ChatStoreFactory),
 		Providers:  make(map[string]ProviderFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
 		Runtimes:   make(map[string]RuntimeFactory),
@@ -64,6 +70,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 type Result struct {
 	Auth             core.AuthProvider
 	Datastore        core.Datastore
+	ChatStore        core.ChatStore
 	Providers        *registry.PluginMap[core.Provider]
 	Runtimes         *registry.PluginMap[core.Runtime]
 	Bindings         *registry.PluginMap[core.Binding]
@@ -108,6 +115,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
+	cs, err := buildChatStore(cfg, factories, deps)
+	if err != nil {
+		return nil, err
+	}
+
 	providers, err := buildProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		return nil, err
@@ -116,12 +128,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	sharedInvoker := invocation.NewBroker(providers, ds)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, cs)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, cs)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +142,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	return &Result{
 		Auth:             auth,
 		Datastore:        ds,
+		ChatStore:        cs,
 		Providers:        providers,
 		Runtimes:         runtimes,
 		Bindings:         bindings,
@@ -200,6 +213,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.Datastore.Config, resolve); err != nil {
+		return err
+	}
+	if err := resolveYAMLNode(&cfg.ChatStore.Config, resolve); err != nil {
 		return err
 	}
 	for name := range cfg.Runtimes {
@@ -334,6 +350,21 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 	return ds, nil
 }
 
+func buildChatStore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.ChatStore, error) {
+	if cfg.ChatStore.Provider == "" {
+		return nil, nil
+	}
+	factory, ok := factories.ChatStores[cfg.ChatStore.Provider]
+	if !ok {
+		return nil, fmt.Errorf("bootstrap: unknown chatstore %q", cfg.ChatStore.Provider)
+	}
+	cs, err := factory(cfg.ChatStore.Config, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: chatstore %q: %w", cfg.ChatStore.Provider, err)
+	}
+	return cs, nil
+}
+
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], error) {
 	providers := make(map[string]core.Provider, len(cfg.Integrations))
 	var mu sync.Mutex
@@ -385,7 +416,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, chatStore core.ChatStore) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
@@ -399,7 +430,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown runtime type %q for runtime %q", def.Type, name)
 		}
 
-		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit)
+		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit, chatStore)
 		rt, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
@@ -414,7 +445,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, chatStore core.ChatStore) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -428,7 +459,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit)
+		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, chatStore, nil)
 		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)

@@ -7,17 +7,20 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 )
 
-func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) RuntimeDeps {
+func runtimeDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink, chatStore core.ChatStore) RuntimeDeps {
 	guarded := guardedInvoker("runtime", name, invoker, lister, providers, audit)
 	return RuntimeDeps{
 		Invoker:          guarded,
 		CapabilityLister: guarded,
+		ChatStore:        chatStore,
 	}
 }
 
-func bindingDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) BindingDeps {
+func bindingDepsForProviders(name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink, chatStore core.ChatStore, chatDispatcher core.ChatDispatcher) BindingDeps {
 	return BindingDeps{
-		Invoker: guardedInvoker("binding", name, invoker, lister, providers, audit),
+		Invoker:        guardedInvoker("binding", name, invoker, lister, providers, audit),
+		ChatStore:      chatStore,
+		ChatDispatcher: chatDispatcher,
 	}
 }
 
