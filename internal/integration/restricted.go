@@ -103,7 +103,24 @@ func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string
 	return r.oauth.AuthorizationURL(state, scopes)
 }
 
+func (r *restrictedOAuth) StartOAuth(state string, scopes []string) (string, string, error) {
+	if s, ok := r.oauth.(core.OAuthStarterProvider); ok {
+		return s.StartOAuth(state, scopes)
+	}
+	return r.oauth.AuthorizationURL(state, scopes), "", nil
+}
+
 func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return r.oauth.ExchangeCode(ctx, code)
+}
+
+func (r *restrictedOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	type exchanger interface {
+		ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	}
+	if e, ok := r.oauth.(exchanger); ok {
+		return e.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
+	}
 	return r.oauth.ExchangeCode(ctx, code)
 }
 
@@ -119,17 +136,6 @@ func (r *restrictedOAuth) RefreshTokenWithURL(ctx context.Context, refreshToken,
 		return rw.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
 	}
 	return r.oauth.RefreshToken(ctx, refreshToken)
-}
-
-type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-}
-
-func (r *restrictedOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	if exchanger, ok := r.oauth.(oauthVerifierExchanger); ok {
-		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
-	}
-	return r.oauth.ExchangeCode(ctx, code)
 }
 
 func (r *restrictedOAuth) TokenURL() string {

@@ -34,20 +34,13 @@ type UpstreamAuth struct {
 	Handler *oauth.UpstreamHandler
 }
 
-type oauthStarter interface {
-	StartOAuth(state string, scopes []string) (authURL string, verifier string)
-}
-
-type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-}
-
 func (u UpstreamAuth) AuthorizationURL(state string, scopes []string) string {
 	return u.Handler.AuthorizationURL(state, scopes)
 }
 
-func (u UpstreamAuth) StartOAuth(state string, scopes []string) (string, string) {
-	return u.Handler.AuthorizationURLWithPKCE(state, scopes)
+func (u UpstreamAuth) StartOAuth(state string, scopes []string) (string, string, error) {
+	url, verifier := u.Handler.AuthorizationURLWithPKCE(state, scopes)
+	return url, verifier, nil
 }
 
 func (u UpstreamAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
@@ -171,11 +164,14 @@ func (b *Base) AuthorizationURL(state string, scopes []string) string {
 	return b.Auth.AuthorizationURL(state, scopes)
 }
 
-func (b *Base) StartOAuth(state string, scopes []string) (string, string) {
-	if starter, ok := b.Auth.(oauthStarter); ok {
-		return starter.StartOAuth(state, scopes)
+func (b *Base) StartOAuth(state string, scopes []string) (string, string, error) {
+	type starter interface {
+		StartOAuth(state string, scopes []string) (string, string, error)
 	}
-	return b.Auth.AuthorizationURL(state, scopes), ""
+	if s, ok := b.Auth.(starter); ok {
+		return s.StartOAuth(state, scopes)
+	}
+	return b.Auth.AuthorizationURL(state, scopes), "", nil
 }
 
 func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
@@ -183,8 +179,11 @@ func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.TokenRespon
 }
 
 func (b *Base) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	if exchanger, ok := b.Auth.(oauthVerifierExchanger); ok {
-		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
+	type exchanger interface {
+		ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	}
+	if e, ok := b.Auth.(exchanger); ok {
+		return e.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
 	}
 	return b.Auth.ExchangeCode(ctx, code)
 }

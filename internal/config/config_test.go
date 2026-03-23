@@ -373,6 +373,69 @@ integrations:
 	}
 }
 
+func TestPluginConfigLoads(t *testing.T) {
+	t.Parallel()
+
+	yaml := `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+integrations:
+  custom_plugin:
+    plugin:
+      command:
+        - node
+        - ./plugins/custom-plugin/index.js
+      cwd: ./plugins/custom-plugin
+      env:
+        API_BASE_URL: https://example.com
+      config:
+        project: ENG
+        retries: 2
+      allowed_operations:
+        run_task: Run the task
+      startup_timeout: 5s
+      request_timeout: 30s
+`
+	path := mustWriteConfigFile(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	intg := cfg.Integrations["custom_plugin"]
+	if intg.Plugin == nil {
+		t.Fatal("Integrations[custom_plugin].Plugin: got nil, want non-nil")
+	}
+	if len(intg.Plugin.Command) != 2 || intg.Plugin.Command[0] != "node" {
+		t.Fatalf("Plugin.Command: got %v", intg.Plugin.Command)
+	}
+	if intg.Plugin.Cwd != "./plugins/custom-plugin" {
+		t.Errorf("Plugin.Cwd: got %q, want %q", intg.Plugin.Cwd, "./plugins/custom-plugin")
+	}
+	if intg.Plugin.Env["API_BASE_URL"] != "https://example.com" {
+		t.Errorf("Plugin.Env[API_BASE_URL]: got %q, want %q", intg.Plugin.Env["API_BASE_URL"], "https://example.com")
+	}
+	if intg.Plugin.AllowedOperations["run_task"] != "Run the task" {
+		t.Errorf("Plugin.AllowedOperations[run_task]: got %q, want %q", intg.Plugin.AllowedOperations["run_task"], "Run the task")
+	}
+	if intg.Plugin.StartupTimeout != "5s" {
+		t.Errorf("Plugin.StartupTimeout: got %q, want %q", intg.Plugin.StartupTimeout, "5s")
+	}
+	if intg.Plugin.RequestTimeout != "30s" {
+		t.Errorf("Plugin.RequestTimeout: got %q, want %q", intg.Plugin.RequestTimeout, "30s")
+	}
+
+	var pluginCfg map[string]any
+	if err := intg.Plugin.Config.Decode(&pluginCfg); err != nil {
+		t.Fatalf("Plugin.Config.Decode: %v", err)
+	}
+	if pluginCfg["project"] != "ENG" {
+		t.Errorf("Plugin.Config.project: got %v, want ENG", pluginCfg["project"])
+	}
+}
+
 func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 

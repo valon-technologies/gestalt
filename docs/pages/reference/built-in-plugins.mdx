@@ -1,6 +1,6 @@
 # Built-in Plugins
 
-The Gestalt binary registers all plugins at startup. Bootstrap builds one shared invoker and passes scoped deps to runtimes and bindings.
+The Gestalt binary registers its built-in Go plugins at startup. It can also load provider implementations from a managed subprocess, so not every provider has to live in the main binary.
 
 ## Auth providers
 
@@ -57,6 +57,10 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 | Name | Notes |
 |---|---|
 | `echo` | Dev-only provider that echoes input parameters as JSON. Single `echo` operation. Enabled only when `dev_mode: true`. |
+
+## External providers
+
+Managed subprocess providers are not listed here because they are not compiled into the binary. They are declared in integration config and loaded through the subprocess plugin protocol at startup.
 
 ## What is not pluginized
 

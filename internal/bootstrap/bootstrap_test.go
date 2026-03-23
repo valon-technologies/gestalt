@@ -745,6 +745,90 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Auth.TokenMetadata)
 		}
 	})
+
+	t.Run("resolves secret:// in plugin yaml.Node config", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedDef config.IntegrationDef
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"plugin-secret": "resolved-plugin-secret"},
+			}, nil
+		}
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+			receivedDef = intg
+			return &coretesting.StubIntegration{N: "alpha"}, nil
+		}
+
+		cfg := validConfig()
+		intg := cfg.Integrations["alpha"]
+		intg.Plugin = &config.PluginDef{
+			Command: []string{"python3", "plugin.py"},
+			Config: yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "api_key", Tag: "!!str"},
+					{Kind: yaml.ScalarNode, Value: "secret://plugin-secret", Tag: "!!str"},
+				},
+			},
+		}
+		cfg.Integrations["alpha"] = intg
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		if receivedDef.Plugin == nil {
+			t.Fatal("receivedDef.Plugin: got nil, want non-nil")
+		}
+		var decoded map[string]string
+		if err := receivedDef.Plugin.Config.Decode(&decoded); err != nil {
+			t.Fatalf("Plugin.Config.Decode: %v", err)
+		}
+		if decoded["api_key"] != "resolved-plugin-secret" {
+			t.Errorf("Plugin.Config.api_key: got %q, want %q", decoded["api_key"], "resolved-plugin-secret")
+		}
+	})
+
+	t.Run("resolves secret:// in plugin env and command fields", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedDef config.IntegrationDef
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"env-secret": "resolved-env-value"},
+			}, nil
+		}
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+			receivedDef = intg
+			return &coretesting.StubIntegration{N: "alpha"}, nil
+		}
+
+		cfg := validConfig()
+		intg := cfg.Integrations["alpha"]
+		intg.Plugin = &config.PluginDef{
+			Command: []string{"python3", "plugin.py"},
+			Env:     map[string]string{"API_KEY": "secret://env-secret"},
+		}
+		cfg.Integrations["alpha"] = intg
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		if receivedDef.Plugin == nil {
+			t.Fatal("receivedDef.Plugin: got nil, want non-nil")
+		}
+		if receivedDef.Plugin.Env["API_KEY"] != "resolved-env-value" {
+			t.Errorf("Plugin.Env[API_KEY]: got %q, want %q", receivedDef.Plugin.Env["API_KEY"], "resolved-env-value")
+		}
+	})
 }
 
 func TestBootstrapWithRuntimes(t *testing.T) {

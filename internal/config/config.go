@@ -76,6 +76,7 @@ type ServerConfig struct {
 
 type IntegrationDef struct {
 	Upstreams      []UpstreamDef `yaml:"upstreams"`
+	Plugin         *PluginDef    `yaml:"plugin"`
 	DisplayName    string        `yaml:"display_name"`
 	Description    string        `yaml:"description"`
 	AuthProfile    string        `yaml:"auth_profile"`
@@ -98,6 +99,16 @@ type IntegrationDef struct {
 	AuthStyle        string            `yaml:"auth_style"`
 	IconFile         string            `yaml:"icon_file"`
 	Headers          map[string]string `yaml:"headers"`
+}
+
+type PluginDef struct {
+	Command           []string          `yaml:"command"`
+	Cwd               string            `yaml:"cwd"`
+	Env               map[string]string `yaml:"env"`
+	Config            yaml.Node         `yaml:"config"`
+	AllowedOperations AllowedOps        `yaml:"allowed_operations"`
+	StartupTimeout    string            `yaml:"startup_timeout"`
+	RequestTimeout    string            `yaml:"request_timeout"`
 }
 
 const (

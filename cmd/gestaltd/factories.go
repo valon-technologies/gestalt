@@ -17,6 +17,7 @@ import (
 	graphqlupstream "github.com/valon-technologies/gestalt/internal/graphql"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/openapi"
+	"github.com/valon-technologies/gestalt/internal/pluginproc"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
@@ -195,6 +196,13 @@ func closeProviders(providers *registry.PluginMap[core.Provider]) {
 
 func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		if intg.Plugin != nil {
+			if len(intg.Upstreams) > 0 {
+				return nil, fmt.Errorf("integration %s: plugin and upstreams are mutually exclusive", name)
+			}
+			return pluginproc.New(ctx, name, intg, *intg.Plugin)
+		}
+
 		var apiProv core.Provider
 		var mcpUp *mcpupstream.Upstream
 		var mcpFromAPI bool

@@ -5,10 +5,10 @@
 | Directory | Purpose |
 |---|---|
 | `cmd/gestaltd` | Main Go binary. Registers all plugins and starts the server. |
-| `core` | Public interfaces: `AuthProvider`, `Datastore`, `SecretManager`, `Provider`, `OAuthProvider`, `ManualProvider`, `CatalogProvider`, `Runtime`, `Binding`. See `core/auth.go`, `core/datastore.go`, `core/secrets.go`, `core/provider.go`, `core/runtime.go`, `core/binding.go`. |
+| `core` | Public interfaces: auth providers, datastores, secret managers, providers, runtimes, bindings, hooks. |
 | `internal` | Runtime packages: config loading, HTTP routing, middleware, invocation, token management, bootstrap. |
-| `plugins` | Implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
-| `docs` | Nextra documentation site. |
+| `plugins` | Built-in Go implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
+| `docs/pages/concepts/plugin-protocol.mdx` | Overview of the managed subprocess plugin protocol for TypeScript, Python, and Rust providers. |
 | `client/cli` | Rust CLI source. Produces the `gestalt` binary. |
 | `web` | Next.js web UI. |
 | `deploy` | Helm chart, Dockerfiles, and CI workflows. |
@@ -19,6 +19,8 @@
 2. Expose a factory function that accepts the provider config and returns an initialized instance.
 3. Register the factory in `cmd/gestaltd/factories.go` so the runtime resolves it by name from config.
 4. Add tests that exercise the plugin through the same interface the runtime uses.
+
+For non-Go providers, implement the subprocess plugin protocol described in `docs/pages/concepts/plugin-protocol.mdx` and expose a thin SDK wrapper in your target language. The host should still see a normal provider after initialization.
 
 ## Add integration-specific behavior
 
@@ -46,7 +48,3 @@ cd web
 npm run check
 npm run build
 ```
-
-## Pre-push hook
-
-The repository includes a managed pre-push hook at `.githooks/pre-push`. Git is configured to use this directory via `core.hooksPath`. The hook runs automatically when you push — do not bypass it with `--no-verify`.

@@ -1,0 +1,124 @@
+# Subprocess Plugin Protocol
+
+Gestalt can load a provider from a managed child process instead of an in-process Go implementation. The host still treats the plugin as a normal provider, so the rest of the system can invoke it through the same REST and MCP paths.
+
+## Model
+
+The host starts the plugin command from config, performs a versioned initialization handshake, and then sends provider requests over stdio. The plugin writes protocol messages to `stdout` and logs to `stderr`.
+
+The protocol is intentionally small and language-agnostic. A plugin can be implemented in TypeScript, Python, or Rust without depending on Go internals.
+
+## Transport
+
+The wire format is JSON-RPC 2.0 with `Content-Length` framing, matching the common editor-plugin pattern used by systems like LSP.
+
+Each message is a framed JSON object. The plugin must not mix log output with protocol output on `stdout`.
+
+```text
+Content-Length: 123\r\n
+\r\n
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}
+```
+
+## Lifecycle
+
+1. Gestalt launches the configured command.
+2. Gestalt sends `initialize`.
+3. The plugin returns its provider metadata, optional catalog metadata, and supported capabilities.
+4. Gestalt routes normal provider calls through `provider.execute`.
+5. Gestalt shuts the plugin down when the host stops or the integration is unloaded.
+
+If the child exits unexpectedly, the host can surface that as a provider failure. The protocol itself should stay focused on request/response and initialization.
+
+## Required methods
+
+The base contract is provider-oriented:
+
+- `initialize`
+- `provider.execute`
+
+Optional methods can be exposed when the plugin supports them:
+
+- `auth.start`
+- `auth.exchange_code`
+- `auth.refresh_token`
+- `shutdown`
+- `$/cancelRequest`
+
+## Payload shape
+
+Initialization returns the metadata Gestalt needs to expose the provider:
+
+```json
+{
+  "protocolVersion": "gestalt-plugin/1",
+  "pluginInfo": { "name": "my-plugin", "version": "0.1.0" },
+  "provider": {
+    "displayName": "My Plugin",
+    "description": "Custom loan enrichment",
+    "connectionMode": "user",
+    "operations": [
+      {
+        "name": "enrich_loan",
+        "description": "Fetch enrichment data",
+        "method": "POST",
+        "parameters": [
+          { "name": "loan_id", "type": "string", "required": true }
+        ]
+      }
+    ],
+    "catalog": {
+      "name": "my-plugin",
+      "operations": [
+        {
+          "id": "enrich_loan",
+          "title": "Fetch enrichment data",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "loan_id": { "type": "string" }
+            },
+            "required": ["loan_id"]
+          }
+        }
+      ]
+    },
+    "auth": {
+      "type": "manual"
+    }
+  },
+  "capabilities": {
+    "catalog": true,
+    "oauth": false,
+    "manualAuth": true,
+    "cancellation": true
+  }
+}
+```
+
+Catalog metadata is returned inline during `initialize`. There is no separate `provider.catalog` request in the current implementation.
+
+Execution uses the same operation and parameter model as `core.Provider`:
+
+```json
+{
+  "operation": "enrich_loan",
+  "params": { "loan_id": "123" },
+  "token": "opaque-access-token"
+}
+```
+
+The response is a simple HTTP-shaped result:
+
+```json
+{
+  "status": 200,
+  "body": "{\"ok\":true}"
+}
+```
+
+When the host-side request context is canceled, Gestalt may also send `$/cancelRequest` with the original JSON-RPC request ID. Plugins can ignore it if their work is not cancelable, but SDKs should expose it where the target language supports cancellation.
+
+## Configuration expectations
+
+Plugin authors declare the command and runtime settings in integration config. The plugin process should be self-contained, should not assume it can read Gestalt internals directly, and should use the SDK for the framing and message loop.
