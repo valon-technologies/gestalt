@@ -99,6 +99,14 @@ pub fn print_success(msg: &str) {
     }
 }
 
+pub fn print_warning(msg: &str) {
+    if std::io::stderr().is_terminal() {
+        eprintln!("{}: {}", "warning".yellow().bold(), msg);
+    } else {
+        eprintln!("warning: {}", msg);
+    }
+}
+
 pub fn print_error(msg: &str) {
     if std::io::stderr().is_terminal() {
         eprintln!("{}: {}", "error".red().bold(), msg);

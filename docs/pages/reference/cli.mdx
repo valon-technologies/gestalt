@@ -80,8 +80,9 @@ cargo build --release
 
 ### Authentication
 
-- If `GESTALT_API_KEY` is set, it is sent as the Bearer token on every request.
+- If `GESTALT_API_KEY` is set, it is sent as the Bearer token on every request, overriding any session token.
 - Otherwise, the CLI uses the session token stored by `gestalt auth login`.
+- Run `gestalt auth status` to see which credential source is active.
 - Credential files are written with `0600` permissions.
 - Output formats: `--format json` (default) or `--format table`.
 
