@@ -186,6 +186,28 @@ func TestBuildUnknownAuthStyle(t *testing.T) {
 	}
 }
 
+func TestBuildBasicAuthStyle(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "basic_api",
+		DisplayName: "Basic API",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		AuthStyle:   "basic",
+		Operations: map[string]OperationDef{
+			"list": {Description: "List", Method: "GET", Path: "/list"},
+		},
+	}
+	intg, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if intg.Name() != "basic_api" {
+		t.Errorf("Name() = %q", intg.Name())
+	}
+}
+
 func TestLoadFromDir(t *testing.T) {
 	t.Parallel()
 
