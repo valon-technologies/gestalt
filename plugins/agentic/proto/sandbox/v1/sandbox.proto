@@ -66,6 +66,7 @@ message TurnComplete {
   int64 duration_ms = 6;
   int32 num_turns = 7;
   string full_text = 8;
+  string stop_reason = 9;
 }
 
 message ErrorEvent {
