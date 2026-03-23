@@ -1,3 +1,4 @@
+import { useConfig } from "nextra-theme-docs";
 import type { DocsThemeConfig } from "nextra-theme-docs";
 
 const config: DocsThemeConfig = {
@@ -7,6 +8,17 @@ const config: DocsThemeConfig = {
   },
   docsRepositoryBase:
     "https://github.com/valon-technologies/toolshed/tree/main/toolshed/docs",
+  head: function Head() {
+    const { title } = useConfig();
+    const fullTitle = title ? `${title} – Gestalt` : "Gestalt";
+    return (
+      <>
+        <title>{fullTitle}</title>
+        <meta property="og:title" content={fullTitle} />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      </>
+    );
+  },
   footer: {
     content: <span>Gestalt, a self-hosted integration platform</span>,
   },
