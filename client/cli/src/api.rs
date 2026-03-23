@@ -6,6 +6,7 @@ use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
+pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
 
 pub fn normalize_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
@@ -53,28 +54,47 @@ fn find_project_config_value(key: &str) -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenSource {
+    EnvVar,
+    Session,
+}
+
+pub fn env_api_key_is_set() -> bool {
+    std::env::var(ENV_API_KEY)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
 pub struct ApiClient {
     client: Client,
     base_url: String,
     token: String,
+    token_source: TokenSource,
 }
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        let token = if let Ok(key) = std::env::var("GESTALT_API_KEY") {
-            key
-        } else {
-            let store = CredentialStore::new()?;
-            match store.load()? {
-                Some(creds) => creds.session_token,
-                None => {
-                    bail!("not authenticated: set GESTALT_API_KEY or run 'gestalt auth login'")
+        let (token, source) =
+            if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
+                (key, TokenSource::EnvVar)
+            } else {
+                let store = CredentialStore::new()?;
+                match store.load()? {
+                    Some(creds) => (creds.session_token, TokenSource::Session),
+                    None => {
+                        bail!(
+                            "not authenticated: set {} or run 'gestalt auth login'",
+                            ENV_API_KEY
+                        )
+                    }
                 }
-            }
-        };
+            };
 
         let base_url = resolve_url(url_override)?;
-        Self::new(&base_url, &token)
+        let mut client = Self::new(&base_url, &token)?;
+        client.token_source = source;
+        Ok(client)
     }
 
     pub fn new(base_url: &str, token: &str) -> Result<Self> {
@@ -87,6 +107,7 @@ impl ApiClient {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token: token.to_string(),
+            token_source: TokenSource::Session,
         })
     }
 
@@ -159,6 +180,15 @@ impl ApiClient {
                 .ok()
                 .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
+
+            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
+                bail!(
+                    "{} (using {} from environment; \
+                     unset it to use your session token from 'gestalt auth login')",
+                    message,
+                    ENV_API_KEY,
+                );
+            }
 
             bail!("{}", message);
         }
