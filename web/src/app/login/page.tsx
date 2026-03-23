@@ -1,30 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { fetchAPI, getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setSessionToken, setUserEmail } from "@/lib/auth";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [devEmail, setDevEmail] = useState("dev@gestalt.local");
-  const [providerLabel, setProviderLabel] = useState("Sign in");
-  const [devMode, setDevMode] = useState(false);
+  const [authConfig, setAuthConfig] = useState({ label: "Sign in", devMode: false });
 
   useEffect(() => {
     if (isAuthenticated()) {
-      router.replace("/");
+      window.location.replace("/");
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     getAuthInfo()
       .then((info) => {
-        setProviderLabel("Sign in with " + info.display_name);
-        setDevMode(info.dev_mode);
+        setAuthConfig({
+          label: "Sign in with " + info.display_name,
+          devMode: info.dev_mode,
+        });
       })
       .catch(() => {});
   }, []);
@@ -44,20 +42,22 @@ export default function LoginPage() {
     }
   }
 
-  async function handleDevLogin() {
+  async function handleDevLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const devEmail = (new FormData(e.currentTarget).get("email") as string) || "dev@gestalt.local";
     setLoading(true);
     setError(null);
     try {
-      const { email, token } = await fetchAPI<{ email: string; token: string }>(
-        "/api/dev-login",
-        {
-          method: "POST",
-          body: JSON.stringify({ email: devEmail }),
-        },
-      );
+      const { email, token } = await fetchAPI<{
+        email: string;
+        token: string;
+      }>("/api/dev-login", {
+        method: "POST",
+        body: JSON.stringify({ email: devEmail }),
+      });
       setSessionToken(token);
       setUserEmail(email);
-      router.replace("/");
+      window.location.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dev login failed");
     } finally {
@@ -76,7 +76,10 @@ export default function LoginPage() {
         </p>
         <p className="mt-2 text-center text-sm text-stone-500">
           Or read the{" "}
-          <a href="/docs" className="font-medium text-timber-600 hover:text-timber-700">
+          <a
+            href="/docs"
+            className="font-medium text-timber-600 hover:text-timber-700"
+          >
             documentation
           </a>
           .
@@ -86,34 +89,34 @@ export default function LoginPage() {
         )}
         <div className="mt-6">
           <Button onClick={handleLogin} disabled={loading} className="w-full">
-            {loading ? "Redirecting..." : providerLabel}
+            {loading ? "Redirecting..." : authConfig.label}
           </Button>
         </div>
 
-        {devMode && (
+        {authConfig.devMode && (
           <>
             <div className="mt-6 flex items-center gap-2">
               <div className="h-px flex-1 bg-stone-200" />
               <span className="text-xs text-stone-400">dev mode</span>
               <div className="h-px flex-1 bg-stone-200" />
             </div>
-            <div className="mt-4">
+            <form onSubmit={handleDevLogin} className="mt-4">
               <input
+                name="email"
                 type="email"
-                value={devEmail}
-                onChange={(e) => setDevEmail(e.target.value)}
+                defaultValue="dev@gestalt.local"
                 placeholder="dev@gestalt.local"
                 className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
               />
               <Button
-                onClick={handleDevLogin}
+                type="submit"
                 disabled={loading}
                 variant="secondary"
                 className="mt-2 w-full"
               >
                 Dev Login
               </Button>
-            </div>
+            </form>
           </>
         )}
       </div>

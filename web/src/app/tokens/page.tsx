@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { getTokens, APIToken } from "@/lib/api";
 import Nav from "@/components/Nav";
 import TokenTable from "@/components/TokenTable";
@@ -12,27 +12,26 @@ export default function TokensPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadTokens = useCallback(async () => {
-    try {
-      const data = await getTokens();
-      setTokens(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tokens");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  function loadTokens() {
+    getTokens()
+      .then(setTokens)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load tokens");
+      })
+      .finally(() => setLoading(false));
+  }
 
-  useEffect(() => {
-    loadTokens();
-  }, [loadTokens]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadTokens(); }, []);
 
   return (
     <AuthGuard>
       <div className="min-h-screen">
         <Nav />
         <main className="mx-auto max-w-5xl px-6 py-8">
-          <h1 className="text-2xl font-heading font-bold text-stone-900">API Tokens</h1>
+          <h1 className="text-2xl font-heading font-bold text-stone-900">
+            API Tokens
+          </h1>
           <p className="mt-1 text-sm text-stone-500">
             Manage tokens for programmatic access to the Gestalt API.
           </p>
