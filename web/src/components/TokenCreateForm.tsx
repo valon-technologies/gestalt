@@ -9,23 +9,24 @@ interface TokenCreateFormProps {
 }
 
 export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
-  const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plaintext, setPlaintext] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim()) return;
+    const form = e.currentTarget;
+    const name = (new FormData(form).get("name") as string)?.trim();
+    if (!name) return;
 
     setCreating(true);
     setError(null);
     setPlaintext(null);
 
     try {
-      const result = await createToken(name.trim());
+      const result = await createToken(name);
       setPlaintext(result.token);
-      setName("");
+      form.reset();
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create token");
@@ -46,14 +47,14 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
           </label>
           <input
             id="token-name"
+            name="name"
             type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            required
             placeholder="e.g. ci-pipeline"
             className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
           />
         </div>
-        <Button type="submit" disabled={creating || !name.trim()}>
+        <Button type="submit" disabled={creating}>
           {creating ? "Creating..." : "Create Token"}
         </Button>
       </form>

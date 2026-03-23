@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { getIntegrations, Integration } from "@/lib/api";
 import Nav from "@/components/Nav";
 import IntegrationCard from "@/components/IntegrationCard";
@@ -9,7 +9,6 @@ import AuthGuard from "@/components/AuthGuard";
 
 function IntegrationsContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,22 +18,21 @@ function IntegrationsContent() {
     const connected = searchParams.get("connected");
     if (connected) {
       setToast(`${connected} connected successfully.`);
-      router.replace("/integrations");
+      window.history.replaceState(null, "", "/integrations");
     }
-  }, [searchParams, router]);
+  }, [searchParams]);
 
-  const loadIntegrations = useCallback(() => {
+  function loadIntegrations() {
     getIntegrations()
       .then(setIntegrations)
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Failed to load");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }
 
-  useEffect(() => {
-    loadIntegrations();
-  }, [loadIntegrations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadIntegrations(); }, []);
 
   return (
     <div className="min-h-screen">
@@ -53,7 +51,9 @@ function IntegrationsContent() {
           </div>
         )}
 
-        <h1 className="text-2xl font-heading font-bold text-stone-900">Integrations</h1>
+        <h1 className="text-2xl font-heading font-bold text-stone-900">
+          Integrations
+        </h1>
         <p className="mt-1 text-sm text-stone-500">
           Browse and connect third-party services.
         </p>
@@ -62,9 +62,7 @@ function IntegrationsContent() {
           <p className="mt-8 text-sm text-stone-400">Loading...</p>
         )}
 
-        {error && (
-          <p className="mt-8 text-sm text-ember-500">{error}</p>
-        )}
+        {error && <p className="mt-8 text-sm text-ember-500">{error}</p>}
 
         {!loading && !error && integrations.length === 0 && (
           <p className="mt-8 text-sm text-stone-400">
@@ -92,7 +90,16 @@ function IntegrationsContent() {
 export default function IntegrationsPage() {
   return (
     <AuthGuard>
-      <Suspense fallback={<div className="min-h-screen"><Nav /><main className="mx-auto max-w-5xl px-6 py-8"><p className="text-sm text-stone-400">Loading...</p></main></div>}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen">
+            <Nav />
+            <main className="mx-auto max-w-5xl px-6 py-8">
+              <p className="text-sm text-stone-400">Loading...</p>
+            </main>
+          </div>
+        }
+      >
         <IntegrationsContent />
       </Suspense>
     </AuthGuard>

@@ -23,4 +23,8 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  dialog::backdrop {
+    background-color: rgb(28 25 23 / 0.5);
+  }
 }
