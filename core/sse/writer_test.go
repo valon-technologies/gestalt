@@ -8,7 +8,6 @@ import (
 )
 
 func TestNewWriter_SetsHeaders(t *testing.T) {
-	t.Parallel()
 	rec := httptest.NewRecorder()
 	w, err := NewWriter(rec)
 	if err != nil {
@@ -30,7 +29,6 @@ func TestNewWriter_SetsHeaders(t *testing.T) {
 }
 
 func TestNewWriter_FailsWithoutFlusher(t *testing.T) {
-	t.Parallel()
 	w, err := NewWriter(noFlushWriter{})
 	if err == nil {
 		t.Fatal("expected error for non-flusher")
@@ -44,7 +42,6 @@ func TestNewWriter_FailsWithoutFlusher(t *testing.T) {
 }
 
 func TestWriteEvent_Format(t *testing.T) {
-	t.Parallel()
 	rec := httptest.NewRecorder()
 	w, err := NewWriter(rec)
 	if err != nil {
@@ -63,7 +60,6 @@ func TestWriteEvent_Format(t *testing.T) {
 }
 
 func TestWriteJSON_MarshalsAndWrites(t *testing.T) {
-	t.Parallel()
 	rec := httptest.NewRecorder()
 	w, err := NewWriter(rec)
 	if err != nil {
@@ -85,6 +81,6 @@ func TestWriteJSON_MarshalsAndWrites(t *testing.T) {
 // noFlushWriter implements http.ResponseWriter but not http.Flusher.
 type noFlushWriter struct{}
 
-func (noFlushWriter) Header() http.Header       { return http.Header{} }
-func (noFlushWriter) Write([]byte) (int, error) { return 0, nil }
-func (noFlushWriter) WriteHeader(int)           {}
+func (noFlushWriter) Header() http.Header        { return http.Header{} }
+func (noFlushWriter) Write([]byte) (int, error)   { return 0, nil }
+func (noFlushWriter) WriteHeader(int)             {}
