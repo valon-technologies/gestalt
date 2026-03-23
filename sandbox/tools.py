@@ -63,7 +63,8 @@ class ToolClient:
             return {"result": response.result_json, "status": response.status}
         except grpc.RpcError as e:
             log.error("tool execution failed: %s", e)
-            return {"error": f"tool execution failed: {e.details()}"}
+            details = e.details() if callable(getattr(e, "details", None)) else str(e)
+            return {"error": f"tool execution failed: {details}"}
 
     def close(self):
         self._channel.close()

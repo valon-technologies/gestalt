@@ -5,7 +5,6 @@ import time
 from typing import Iterator
 
 import anthropic
-import grpc
 
 from sandbox.pb import sandbox_pb2, sandbox_pb2_grpc
 from sandbox.tools import ToolClient
@@ -54,6 +53,7 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
             if request.settings.max_turns > 0:
                 max_turns = request.settings.max_turns
 
+            turn = 0
             for turn in range(max_turns):
                 if not context.is_active():
                     break
@@ -62,7 +62,6 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
                     model=model,
                     max_tokens=max_tokens,
                     messages=messages,
-                    stream=True,
                 )
                 if request.system_prompt:
                     kwargs["system"] = request.system_prompt
@@ -72,7 +71,6 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
                     kwargs["temperature"] = temperature
 
                 tool_calls = []
-                current_text = ""
 
                 with self._anthropic.messages.stream(**kwargs) as stream:
                     for event in stream:
@@ -81,7 +79,6 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
 
                         if hasattr(event, "type") and event.type == "content_block_delta":
                             if hasattr(event.delta, "text"):
-                                current_text += event.delta.text
                                 full_text += event.delta.text
                                 yield sandbox_pb2.ConversationEvent(
                                     conversation_id=conv_id,
@@ -122,7 +119,7 @@ class SandboxServicer(sandbox_pb2_grpc.SandboxServiceServicer):
                         params=tc["input"],
                     )
 
-                    is_error = result.get("error", "") != ""
+                    is_error = bool(result.get("error"))
                     content = result.get("error") if is_error else result.get("result", "")
 
                     yield sandbox_pb2.ConversationEvent(

@@ -6,7 +6,6 @@ Go host's ToolService for executing integration operations.
 import argparse
 import logging
 import signal
-import threading
 from concurrent import futures
 
 import grpc
@@ -39,12 +38,10 @@ def main():
     server.start()
     log.info("sandbox listening on %s", args.listen_addr)
 
-    stop_event = threading.Event()
-
     def handle_signal(signum, frame):
         log.info("received signal %s, shutting down", signum)
-        stop_event.set()
         server.stop(grace=5)
+        tool_client.close()
 
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
