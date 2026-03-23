@@ -231,3 +231,52 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 		t.Fatalf("expected execute on 'get_page', got %q", executedOp)
 	}
 }
+
+func TestComposite_IncludeHTTPFalseExcludesAPITools(t *testing.T) {
+	t.Parallel()
+
+	apiCat := &catalog.Catalog{
+		Name: "alpha",
+		Operations: []catalog.CatalogOperation{
+			{ID: "list_items", Method: "GET", Path: "/items", Description: "List items"},
+		},
+	}
+	apiProv := &catalogProvider{
+		StubIntegration: coretesting.StubIntegration{N: "alpha"},
+		ops:             ci.OperationsList(apiCat),
+		catalog:         apiCat,
+	}
+
+	mcpUp := &stubMCPUpstream{
+		cat: &catalog.Catalog{
+			Name: "alpha",
+			Operations: []catalog.CatalogOperation{
+				{ID: "search", Description: "Search items", InputSchema: json.RawMessage(`{"type":"object"}`)},
+			},
+		},
+	}
+
+	comp := composite.New("alpha", apiProv, mcpUp)
+	providers := testutil.NewProviderRegistry(t, comp)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "t"},
+		Providers:     providers,
+		IncludeHTTP:   map[string]bool{"alpha": false},
+	})
+
+	tools := srv.ListTools()
+	if tools["alpha_search"] == nil {
+		t.Fatal("expected alpha_search from MCP upstream")
+	}
+	if tools["alpha_list_items"] != nil {
+		t.Fatal("expected alpha_list_items to be excluded when IncludeHTTP=false")
+	}
+	if len(tools) != 1 {
+		names := make([]string, 0, len(tools))
+		for n := range tools {
+			names = append(names, n)
+		}
+		t.Fatalf("expected 1 tool, got %d: %v", len(tools), names)
+	}
+}

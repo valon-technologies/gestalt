@@ -13,7 +13,6 @@
 | `bindings` | Alternative request surfaces such as webhooks and gRPC. |
 | `provider_dirs` | Directories searched for provider YAML files at startup. |
 | `server` | Port, base URL, encryption key, and development mode. |
-| `mcp` | MCP endpoint settings: enabled flag, provider filter, tool name prefix. |
 
 ## Server block
 
@@ -121,7 +120,7 @@ Each upstream declares a type and source:
 | `type` | `rest`, `graphql`, or `mcp`. |
 | `url` | For `rest`: OpenAPI spec URL. For `graphql`: the GraphQL endpoint (introspected at startup). For `mcp`: the upstream MCP server URL. |
 | `provider` | (`rest` only) Path to a provider YAML file. Used instead of `url`. |
-| `mcp` | (`rest` and `graphql` only) Boolean. When `true` and combined with a `type: mcp` upstream, this upstream's operations are also exposed as MCP tools. |
+| `mcp` | (`rest` and `graphql` only) Boolean. When `true`, this upstream's operations are exposed as MCP tools. `type: mcp` upstreams are always exposed — no flag needed. |
 | `allowed_operations` | Positive allow-list. Can be a YAML list (names only) or a map (names to description overrides). Omit to allow all operations. An empty value is invalid. |
 
 If a `rest` upstream has neither `url` nor `provider`, Gestalt falls back to searching `provider_dirs` for a matching YAML file.
@@ -235,23 +234,6 @@ bindings:
 | `signing_secret` | | Required when `auth_mode` is `signed`. |
 | `signature_header` | `X-Signature` | Header containing the HMAC signature. |
 | `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
-
-## MCP block
-
-```yaml
-mcp:
-  enabled: true
-  providers:
-    - linear
-    - slack
-  tool_name_prefix: ""
-```
-
-| Field | Default | Notes |
-|---|---|---|
-| `enabled` | `false` | Mount the MCP endpoint at `/mcp`. |
-| `providers` | all | Restrict which integrations are exposed to MCP clients. |
-| `tool_name_prefix` | `""` | String prepended to every MCP tool name. |
 
 ## Supported providers
 
