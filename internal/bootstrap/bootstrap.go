@@ -65,6 +65,7 @@ type Result struct {
 	Auth             core.AuthProvider
 	Datastore        core.Datastore
 	Providers        *registry.PluginMap[core.Provider]
+	ProvidersReady   <-chan struct{}
 	Runtimes         *registry.PluginMap[core.Runtime]
 	Bindings         *registry.PluginMap[core.Binding]
 	Invoker          invocation.Invoker
@@ -108,7 +109,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
-	providers, err := buildProviders(ctx, cfg, factories, deps)
+	providers, providersReady, err := buildProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +132,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Auth:             auth,
 		Datastore:        ds,
 		Providers:        providers,
+		ProvidersReady:   providersReady,
 		Runtimes:         runtimes,
 		Bindings:         bindings,
 		Invoker:          sharedInvoker,
@@ -334,55 +336,56 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 	return ds, nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], error) {
-	providers := make(map[string]core.Provider, len(cfg.Integrations))
-	var mu sync.Mutex
-
-	if len(cfg.Integrations) > 0 {
-		var wg sync.WaitGroup
-		for name := range cfg.Integrations {
-			intgDef := cfg.Integrations[name]
-			factory, ok := factories.Providers[name]
-			if !ok {
-				factory = factories.DefaultProvider
-			}
-			if factory == nil {
-				return nil, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name)
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				prov, err := factory(ctx, name, intgDef, deps)
-				if err != nil {
-					log.Printf("WARNING: skipping provider %q: %v", name, err)
-					return
-				}
-				mu.Lock()
-				providers[name] = prov
-				mu.Unlock()
-			}()
-		}
-		wg.Wait()
-	}
-
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, error) {
 	reg := registry.New()
-	for name, prov := range providers {
-		if err := reg.Providers.Register(name, prov); err != nil {
-			return nil, fmt.Errorf("bootstrap: registering provider %q: %w", name, err)
-		}
-		log.Printf("loaded provider %s (%d operations)", name, len(prov.ListOperations()))
-	}
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		log.Printf("loaded builtin provider %s (%d operations)", builtin.Name(), len(builtin.ListOperations()))
 	}
 
-	return &reg.Providers, nil
+	ready := make(chan struct{})
+	if len(cfg.Integrations) == 0 {
+		close(ready)
+		return &reg.Providers, ready, nil
+	}
+
+	var wg sync.WaitGroup
+	for name := range cfg.Integrations {
+		intgDef := cfg.Integrations[name]
+		factory, ok := factories.Providers[name]
+		if !ok {
+			factory = factories.DefaultProvider
+		}
+		if factory == nil {
+			close(ready)
+			return nil, nil, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prov, err := factory(ctx, name, intgDef, deps)
+			if err != nil {
+				log.Printf("WARNING: skipping provider %q: %v", name, err)
+				return
+			}
+			if err := reg.Providers.Register(name, prov); err != nil {
+				log.Printf("WARNING: registering provider %q: %v", name, err)
+				return
+			}
+			log.Printf("loaded provider %s (%d operations)", name, len(prov.ListOperations()))
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(ready)
+	}()
+
+	return &reg.Providers, ready, nil
 }
 
 func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
