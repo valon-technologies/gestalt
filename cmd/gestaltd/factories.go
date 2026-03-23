@@ -226,7 +226,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					cleanup()
 					return nil, err
 				}
-				p, err := provider.Build(def, intg, us.AllowedOperations)
+				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations))
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -241,6 +241,12 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 				up, err := mcpupstream.New(ctx, name, us.URL, connMode)
 				if err != nil {
 					return nil, err
+				}
+				if us.AllowedOperations != nil {
+					if err := up.FilterOperations(map[string]string(us.AllowedOperations)); err != nil {
+						_ = up.Close()
+						return nil, fmt.Errorf("integration %s: %w", name, err)
+					}
 				}
 				mcpUp = up
 			default:
@@ -265,7 +271,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 func loadHTTPUpstream(ctx context.Context, name string, us config.UpstreamDef, providerDirs []string) (*provider.Definition, error) {
 	switch {
 	case us.URL != "":
-		return openapi.LoadDefinition(ctx, name, us.URL, us.AllowedOperations)
+		return openapi.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
 	case us.Provider != "":
 		return provider.LoadFile(us.Provider)
 	default:

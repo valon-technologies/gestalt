@@ -277,6 +277,102 @@ func TestHelmValuesConfigLoads(t *testing.T) {
 	}
 }
 
+func TestAllowedOperationsListForm(t *testing.T) {
+	t.Parallel()
+
+	yaml := `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+integrations:
+  test_api:
+    upstreams:
+      - type: http
+        url: https://example.com/spec.json
+        allowed_operations:
+          - list_items
+          - get_item
+`
+	path := mustWriteConfigFile(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	ops := cfg.Integrations["test_api"].Upstreams[0].AllowedOperations
+	if len(ops) != 2 {
+		t.Fatalf("AllowedOperations: got %d items, want 2", len(ops))
+	}
+	if ops["list_items"] != "" {
+		t.Errorf("list_items description: got %q, want empty", ops["list_items"])
+	}
+	if ops["get_item"] != "" {
+		t.Errorf("get_item description: got %q, want empty", ops["get_item"])
+	}
+}
+
+func TestAllowedOperationsMapForm(t *testing.T) {
+	t.Parallel()
+
+	yaml := `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+integrations:
+  test_api:
+    upstreams:
+      - type: http
+        url: https://example.com/spec.json
+        allowed_operations:
+          list_items: List all items
+          get_item: ""
+`
+	path := mustWriteConfigFile(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	ops := cfg.Integrations["test_api"].Upstreams[0].AllowedOperations
+	if len(ops) != 2 {
+		t.Fatalf("AllowedOperations: got %d items, want 2", len(ops))
+	}
+	if ops["list_items"] != "List all items" {
+		t.Errorf("list_items description: got %q, want %q", ops["list_items"], "List all items")
+	}
+	if ops["get_item"] != "" {
+		t.Errorf("get_item description: got %q, want empty", ops["get_item"])
+	}
+}
+
+func TestAllowedOperationsOmitted(t *testing.T) {
+	t.Parallel()
+
+	yaml := `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+integrations:
+  test_api:
+    upstreams:
+      - type: http
+        url: https://example.com/spec.json
+`
+	path := mustWriteConfigFile(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	ops := cfg.Integrations["test_api"].Upstreams[0].AllowedOperations
+	if ops != nil {
+		t.Fatalf("AllowedOperations: got %v, want nil", ops)
+	}
+}
+
 func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 

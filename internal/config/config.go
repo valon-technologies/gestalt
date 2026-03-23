@@ -106,11 +106,35 @@ const (
 )
 
 type UpstreamDef struct {
-	Type              string            `yaml:"type"`
-	URL               string            `yaml:"url"`
-	Provider          string            `yaml:"provider"`
-	MCP               bool              `yaml:"mcp"`
-	AllowedOperations map[string]string `yaml:"allowed_operations"`
+	Type              string     `yaml:"type"`
+	URL               string     `yaml:"url"`
+	Provider          string     `yaml:"provider"`
+	MCP               bool       `yaml:"mcp"`
+	AllowedOperations AllowedOps `yaml:"allowed_operations"`
+}
+
+// AllowedOps is a map of operation name to optional description override.
+// It can be unmarshaled from either a YAML list (names only, descriptions
+// from upstream spec) or a YAML map (names to description overrides).
+type AllowedOps map[string]string
+
+func (a *AllowedOps) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.SequenceNode:
+		*a = make(AllowedOps, len(value.Content))
+		for _, item := range value.Content {
+			(*a)[item.Value] = ""
+		}
+	case yaml.MappingNode:
+		m := make(map[string]string)
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		*a = m
+	default:
+		return fmt.Errorf("allowed_operations must be a list or map")
+	}
+	return nil
 }
 
 type AuthOverrides struct {
