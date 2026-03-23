@@ -74,6 +74,8 @@ datastore:
 gestaltd --check --config your-config.yaml
 ```
 
+`gestaltd --check` warns when SQLite appears unsafe for deployment, including local or temporary filesystem paths and environments that should not scale past one replica.
+
 ## Choose a platform
 
 <Cards>

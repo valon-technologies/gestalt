@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -169,6 +170,9 @@ func runCheck(configFlag string) error {
 	log.Printf("  provider:   %s", cfg.Datastore.Provider)
 	log.Printf("secrets:")
 	log.Printf("  provider:   %s", cfg.Secrets.Provider)
+	for _, warning := range config.DatastoreWarnings(cfg, os.Getenv) {
+		log.Printf("WARNING: %s", warning)
+	}
 
 	if len(cfg.Integrations) > 0 {
 		log.Printf("integrations: %d", len(cfg.Integrations))

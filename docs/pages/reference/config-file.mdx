@@ -62,7 +62,7 @@ datastore:
 
 | Provider | Config | Notes |
 |---|---|---|
-| `sqlite` | `path: ./gestalt.db` | Default. Single-instance only. |
+| `sqlite` | `path: ./gestalt.db` | Default. Single-instance only. `gestaltd` warns when SQLite uses risky local or temporary paths, or when it appears to be running in environments that should not scale horizontally. |
 | `postgres` | `dsn: postgres://...` | Recommended for production. |
 | `mysql` | `dsn: user:pass@tcp(host:3306)/gestalt` | Alternative SQL backend. |
 | `dynamodb` | `table`, `region`, optional `endpoint` | AWS DynamoDB. |

@@ -52,6 +52,7 @@ func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
+	logConfigWarnings(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
@@ -123,6 +124,12 @@ func resolveConfigPath(flagValue string) string {
 		return "config.yaml"
 	}
 	return "/etc/gestalt/config.yaml"
+}
+
+func logConfigWarnings(cfg *config.Config) {
+	for _, warning := range config.DatastoreWarnings(cfg, os.Getenv) {
+		log.Printf("WARNING: %s", warning)
+	}
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

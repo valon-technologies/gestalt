@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -25,6 +26,15 @@ func mustWriteConfigFile(t *testing.T, content string) string {
 		t.Fatalf("writing temp config: %v", err)
 	}
 	return path
+}
+
+func warningsContain(warnings []string, needle string) bool {
+	for _, warning := range warnings {
+		if strings.Contains(warning, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLoadValidConfig(t *testing.T) {
@@ -157,6 +167,135 @@ server:
 
 	if cfg.Server.EncryptionKey != "" {
 		t.Errorf("Server.EncryptionKey: got %q, want empty string", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestDatastoreWarnings(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		yaml          string
+		env           map[string]string
+		wantSubstring string
+		wantWarnings  bool
+	}{
+		{
+			name: "default sqlite path warns for local filesystem",
+			yaml: `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+`,
+			wantSubstring: `local filesystem storage`,
+			wantWarnings:  true,
+		},
+		{
+			name: "temp sqlite path warns for restart loss",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+  config:
+    path: /tmp/gestalt.db
+server:
+  encryption_key: key123
+`,
+			wantSubstring: `temporary storage`,
+			wantWarnings:  true,
+		},
+		{
+			name: "cloud run warns for non durable sqlite",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
+server:
+  encryption_key: key123
+`,
+			env: map[string]string{
+				"K_SERVICE": "gestalt",
+			},
+			wantSubstring: `not durable on Cloud Run`,
+			wantWarnings:  true,
+		},
+		{
+			name: "kubernetes warns for single instance sqlite",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
+server:
+  encryption_key: key123
+`,
+			env: map[string]string{
+				"KUBERNETES_SERVICE_HOST": "10.0.0.1",
+			},
+			wantSubstring: `single-instance only`,
+			wantWarnings:  true,
+		},
+		{
+			name: "postgres has no datastore warnings",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: postgres
+  config:
+    dsn: postgres://user:pass@localhost:5432/gestalt
+server:
+  encryption_key: key123
+`,
+		},
+		{
+			name: "mounted absolute sqlite path without platform signals stays quiet",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
+server:
+  encryption_key: key123
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteConfigFile(t, tc.yaml)
+			getenv := func(key string) string {
+				return tc.env[key]
+			}
+
+			cfg, err := LoadWithMapping(path, getenv)
+			if err != nil {
+				t.Fatalf("LoadWithMapping: unexpected error: %v", err)
+			}
+
+			warnings := DatastoreWarnings(cfg, getenv)
+			if tc.wantWarnings && len(warnings) == 0 {
+				t.Fatalf("DatastoreWarnings: got none, want at least one")
+			}
+			if !tc.wantWarnings && len(warnings) != 0 {
+				t.Fatalf("DatastoreWarnings: got %v, want none", warnings)
+			}
+			if tc.wantSubstring != "" && !warningsContain(warnings, tc.wantSubstring) {
+				t.Fatalf("DatastoreWarnings: got %v, want substring %q", warnings, tc.wantSubstring)
+			}
+		})
 	}
 }
 

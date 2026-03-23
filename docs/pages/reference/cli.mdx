@@ -27,6 +27,8 @@ gestaltd --check --config config.yaml
 
 Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
 
+If the resolved datastore config looks risky, `--check` also prints warnings. SQLite triggers warnings when it uses local or temporary filesystem storage, or when it appears to be running in environments that should stay single-instance.
+
 ### Config file resolution
 
 1. `--config` flag.
