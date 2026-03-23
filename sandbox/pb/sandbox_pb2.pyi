@@ -87,7 +87,7 @@ class ToolResult(_message.Message):
     def __init__(self, tool_call_id: _Optional[str] = ..., content_json: _Optional[str] = ..., is_error: bool = ...) -> None: ...
 
 class TurnComplete(_message.Message):
-    __slots__ = ("session_id", "model", "input_tokens", "output_tokens", "cost_usd", "duration_ms", "num_turns", "full_text")
+    __slots__ = ("session_id", "model", "input_tokens", "output_tokens", "cost_usd", "duration_ms", "num_turns", "full_text", "stop_reason")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
@@ -96,6 +96,7 @@ class TurnComplete(_message.Message):
     DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     NUM_TURNS_FIELD_NUMBER: _ClassVar[int]
     FULL_TEXT_FIELD_NUMBER: _ClassVar[int]
+    STOP_REASON_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     model: str
     input_tokens: int
@@ -104,7 +105,8 @@ class TurnComplete(_message.Message):
     duration_ms: int
     num_turns: int
     full_text: str
-    def __init__(self, session_id: _Optional[str] = ..., model: _Optional[str] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., cost_usd: _Optional[float] = ..., duration_ms: _Optional[int] = ..., num_turns: _Optional[int] = ..., full_text: _Optional[str] = ...) -> None: ...
+    stop_reason: str
+    def __init__(self, session_id: _Optional[str] = ..., model: _Optional[str] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., cost_usd: _Optional[float] = ..., duration_ms: _Optional[int] = ..., num_turns: _Optional[int] = ..., full_text: _Optional[str] = ..., stop_reason: _Optional[str] = ...) -> None: ...
 
 class ErrorEvent(_message.Message):
     __slots__ = ("message", "code", "recoverable")

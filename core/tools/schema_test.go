@@ -7,6 +7,7 @@ import (
 )
 
 func TestParameterSchema_Empty(t *testing.T) {
+	t.Parallel()
 	schema := ParameterSchema(nil)
 
 	if schema["type"] != "object" {
@@ -22,6 +23,7 @@ func TestParameterSchema_Empty(t *testing.T) {
 }
 
 func TestParameterSchema_MixedRequiredOptional(t *testing.T) {
+	t.Parallel()
 	params := []core.Parameter{
 		{Name: "channel", Type: "string", Description: "target channel", Required: true},
 		{Name: "limit", Type: "integer", Required: false},
@@ -58,6 +60,7 @@ func TestParameterSchema_MixedRequiredOptional(t *testing.T) {
 }
 
 func TestSchemaType_Mappings(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -84,6 +87,7 @@ func TestSchemaType_Mappings(t *testing.T) {
 }
 
 func TestCapabilitiesToTools(t *testing.T) {
+	t.Parallel()
 	caps := []core.Capability{
 		{
 			Provider:    "acme",

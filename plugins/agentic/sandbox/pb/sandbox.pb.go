@@ -553,6 +553,7 @@ type TurnComplete struct {
 	DurationMs    int64                  `protobuf:"varint,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	NumTurns      int32                  `protobuf:"varint,7,opt,name=num_turns,json=numTurns,proto3" json:"num_turns,omitempty"`
 	FullText      string                 `protobuf:"bytes,8,opt,name=full_text,json=fullText,proto3" json:"full_text,omitempty"`
+	StopReason    string                 `protobuf:"bytes,9,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -639,6 +640,13 @@ func (x *TurnComplete) GetNumTurns() int32 {
 func (x *TurnComplete) GetFullText() string {
 	if x != nil {
 		return x.FullText
+	}
+	return ""
+}
+
+func (x *TurnComplete) GetStopReason() string {
+	if x != nil {
+		return x.StopReason
 	}
 	return ""
 }
@@ -1293,7 +1301,7 @@ const file_sandbox_v1_sandbox_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x01 \x01(\tR\n" +
 	"toolCallId\x12!\n" +
 	"\fcontent_json\x18\x02 \x01(\tR\vcontentJson\x12\x19\n" +
-	"\bis_error\x18\x03 \x01(\bR\aisError\"\x81\x02\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\"\xa2\x02\n" +
 	"\fTurnComplete\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
@@ -1304,7 +1312,9 @@ const file_sandbox_v1_sandbox_proto_rawDesc = "" +
 	"\vduration_ms\x18\x06 \x01(\x03R\n" +
 	"durationMs\x12\x1b\n" +
 	"\tnum_turns\x18\a \x01(\x05R\bnumTurns\x12\x1b\n" +
-	"\tfull_text\x18\b \x01(\tR\bfullText\"\\\n" +
+	"\tfull_text\x18\b \x01(\tR\bfullText\x12\x1f\n" +
+	"\vstop_reason\x18\t \x01(\tR\n" +
+	"stopReason\"\\\n" +
 	"\n" +
 	"ErrorEvent\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +

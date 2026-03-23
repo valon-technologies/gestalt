@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import sandbox_pb2 as sandbox_dot_v1_dot_sandbox__pb2
+import sandbox_pb2 as sandbox__pb2
 
 GRPC_GENERATED_VERSION = '1.78.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in sandbox/v1/sandbox_pb2_grpc.py depends on'
+        + ' but the generated code in sandbox_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,18 +36,18 @@ class SandboxServiceStub(object):
         """
         self.Converse = channel.unary_stream(
                 '/gestalt.sandbox.v1.SandboxService/Converse',
-                request_serializer=sandbox_dot_v1_dot_sandbox__pb2.ConversationRequest.SerializeToString,
-                response_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ConversationEvent.FromString,
+                request_serializer=sandbox__pb2.ConversationRequest.SerializeToString,
+                response_deserializer=sandbox__pb2.ConversationEvent.FromString,
                 _registered_method=True)
         self.Health = channel.unary_unary(
                 '/gestalt.sandbox.v1.SandboxService/Health',
-                request_serializer=sandbox_dot_v1_dot_sandbox__pb2.HealthRequest.SerializeToString,
-                response_deserializer=sandbox_dot_v1_dot_sandbox__pb2.HealthResponse.FromString,
+                request_serializer=sandbox__pb2.HealthRequest.SerializeToString,
+                response_deserializer=sandbox__pb2.HealthResponse.FromString,
                 _registered_method=True)
         self.Shutdown = channel.unary_unary(
                 '/gestalt.sandbox.v1.SandboxService/Shutdown',
-                request_serializer=sandbox_dot_v1_dot_sandbox__pb2.ShutdownRequest.SerializeToString,
-                response_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ShutdownResponse.FromString,
+                request_serializer=sandbox__pb2.ShutdownRequest.SerializeToString,
+                response_deserializer=sandbox__pb2.ShutdownResponse.FromString,
                 _registered_method=True)
 
 
@@ -77,18 +77,18 @@ def add_SandboxServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Converse': grpc.unary_stream_rpc_method_handler(
                     servicer.Converse,
-                    request_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ConversationRequest.FromString,
-                    response_serializer=sandbox_dot_v1_dot_sandbox__pb2.ConversationEvent.SerializeToString,
+                    request_deserializer=sandbox__pb2.ConversationRequest.FromString,
+                    response_serializer=sandbox__pb2.ConversationEvent.SerializeToString,
             ),
             'Health': grpc.unary_unary_rpc_method_handler(
                     servicer.Health,
-                    request_deserializer=sandbox_dot_v1_dot_sandbox__pb2.HealthRequest.FromString,
-                    response_serializer=sandbox_dot_v1_dot_sandbox__pb2.HealthResponse.SerializeToString,
+                    request_deserializer=sandbox__pb2.HealthRequest.FromString,
+                    response_serializer=sandbox__pb2.HealthResponse.SerializeToString,
             ),
             'Shutdown': grpc.unary_unary_rpc_method_handler(
                     servicer.Shutdown,
-                    request_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ShutdownRequest.FromString,
-                    response_serializer=sandbox_dot_v1_dot_sandbox__pb2.ShutdownResponse.SerializeToString,
+                    request_deserializer=sandbox__pb2.ShutdownRequest.FromString,
+                    response_serializer=sandbox__pb2.ShutdownResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -116,8 +116,8 @@ class SandboxService(object):
             request,
             target,
             '/gestalt.sandbox.v1.SandboxService/Converse',
-            sandbox_dot_v1_dot_sandbox__pb2.ConversationRequest.SerializeToString,
-            sandbox_dot_v1_dot_sandbox__pb2.ConversationEvent.FromString,
+            sandbox__pb2.ConversationRequest.SerializeToString,
+            sandbox__pb2.ConversationEvent.FromString,
             options,
             channel_credentials,
             insecure,
@@ -143,8 +143,8 @@ class SandboxService(object):
             request,
             target,
             '/gestalt.sandbox.v1.SandboxService/Health',
-            sandbox_dot_v1_dot_sandbox__pb2.HealthRequest.SerializeToString,
-            sandbox_dot_v1_dot_sandbox__pb2.HealthResponse.FromString,
+            sandbox__pb2.HealthRequest.SerializeToString,
+            sandbox__pb2.HealthResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -170,8 +170,8 @@ class SandboxService(object):
             request,
             target,
             '/gestalt.sandbox.v1.SandboxService/Shutdown',
-            sandbox_dot_v1_dot_sandbox__pb2.ShutdownRequest.SerializeToString,
-            sandbox_dot_v1_dot_sandbox__pb2.ShutdownResponse.FromString,
+            sandbox__pb2.ShutdownRequest.SerializeToString,
+            sandbox__pb2.ShutdownResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -194,13 +194,13 @@ class ToolServiceStub(object):
         """
         self.ExecuteTool = channel.unary_unary(
                 '/gestalt.sandbox.v1.ToolService/ExecuteTool',
-                request_serializer=sandbox_dot_v1_dot_sandbox__pb2.ToolRequest.SerializeToString,
-                response_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ToolResponse.FromString,
+                request_serializer=sandbox__pb2.ToolRequest.SerializeToString,
+                response_deserializer=sandbox__pb2.ToolResponse.FromString,
                 _registered_method=True)
         self.ListTools = channel.unary_unary(
                 '/gestalt.sandbox.v1.ToolService/ListTools',
-                request_serializer=sandbox_dot_v1_dot_sandbox__pb2.ListToolsRequest.SerializeToString,
-                response_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ListToolsResponse.FromString,
+                request_serializer=sandbox__pb2.ListToolsRequest.SerializeToString,
+                response_deserializer=sandbox__pb2.ListToolsResponse.FromString,
                 _registered_method=True)
 
 
@@ -224,13 +224,13 @@ def add_ToolServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ExecuteTool': grpc.unary_unary_rpc_method_handler(
                     servicer.ExecuteTool,
-                    request_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ToolRequest.FromString,
-                    response_serializer=sandbox_dot_v1_dot_sandbox__pb2.ToolResponse.SerializeToString,
+                    request_deserializer=sandbox__pb2.ToolRequest.FromString,
+                    response_serializer=sandbox__pb2.ToolResponse.SerializeToString,
             ),
             'ListTools': grpc.unary_unary_rpc_method_handler(
                     servicer.ListTools,
-                    request_deserializer=sandbox_dot_v1_dot_sandbox__pb2.ListToolsRequest.FromString,
-                    response_serializer=sandbox_dot_v1_dot_sandbox__pb2.ListToolsResponse.SerializeToString,
+                    request_deserializer=sandbox__pb2.ListToolsRequest.FromString,
+                    response_serializer=sandbox__pb2.ListToolsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -258,8 +258,8 @@ class ToolService(object):
             request,
             target,
             '/gestalt.sandbox.v1.ToolService/ExecuteTool',
-            sandbox_dot_v1_dot_sandbox__pb2.ToolRequest.SerializeToString,
-            sandbox_dot_v1_dot_sandbox__pb2.ToolResponse.FromString,
+            sandbox__pb2.ToolRequest.SerializeToString,
+            sandbox__pb2.ToolResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -285,8 +285,8 @@ class ToolService(object):
             request,
             target,
             '/gestalt.sandbox.v1.ToolService/ListTools',
-            sandbox_dot_v1_dot_sandbox__pb2.ListToolsRequest.SerializeToString,
-            sandbox_dot_v1_dot_sandbox__pb2.ListToolsResponse.FromString,
+            sandbox__pb2.ListToolsRequest.SerializeToString,
+            sandbox__pb2.ListToolsResponse.FromString,
             options,
             channel_credentials,
             insecure,
