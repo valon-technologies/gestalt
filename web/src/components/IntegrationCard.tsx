@@ -228,18 +228,18 @@ export default function IntegrationCard({
             )}
           </div>
         </div>
-        {integration.connected && (
-          <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1">
+          {integration.connected && (
             <CheckCircleIcon className="h-5 w-5 text-grove-500" />
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="flex h-8 w-8 items-center justify-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
-              aria-label={`${integration.display_name || integration.name} settings`}
-            >
-              <GearIcon className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-8 w-8 items-center justify-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
+            aria-label={`${integration.display_name || integration.name} settings`}
+          >
+            <GearIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       {error && !settingsOpen && (
         <p className="mt-2 text-sm text-ember-500">{error}</p>
@@ -294,13 +294,6 @@ export default function IntegrationCard({
             </Button>
           </div>
         </form>
-      )}
-      {!showTokenForm && !showParamForm && !integration.connected && (
-        <div className="mt-4">
-          <Button onClick={handleConnect} disabled={loading}>
-            {loading ? "Connecting..." : "Connect"}
-          </Button>
-        </div>
       )}
       {settingsOpen && (
         <IntegrationSettingsModal

@@ -110,34 +110,54 @@ export default function IntegrationSettingsModal({
               </button>
             </div>
 
-            <div className="mt-4 flex items-center gap-2">
-              <CheckCircleIcon className="h-5 w-5 text-grove-500" />
-              <span className="text-sm font-medium text-grove-600">
-                Connected
-              </span>
-            </div>
+            {integration.connected ? (
+              <>
+                <div className="mt-4 flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 text-grove-500" />
+                  <span className="text-sm font-medium text-grove-600">
+                    Connected
+                  </span>
+                </div>
 
-            {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
+                {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
 
-            <div className="mt-6">
-              <Button
-                className="w-full"
-                onClick={onReconnect}
-                disabled={reconnecting}
-              >
-                {reconnecting ? "Connecting..." : "Reconnect"}
-              </Button>
-            </div>
+                <div className="mt-6">
+                  <Button
+                    className="w-full"
+                    onClick={onReconnect}
+                    disabled={reconnecting}
+                  >
+                    {reconnecting ? "Connecting..." : "Reconnect"}
+                  </Button>
+                </div>
 
-            <div className="mt-4 border-t border-border pt-4">
-              <Button
-                variant="danger"
-                className="w-full"
-                onClick={() => setConfirmingDisconnect(true)}
-              >
-                Disconnect
-              </Button>
-            </div>
+                <div className="mt-4 border-t border-border pt-4">
+                  <Button
+                    variant="danger"
+                    className="w-full"
+                    onClick={() => setConfirmingDisconnect(true)}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-4 text-sm text-stone-500">Not connected</p>
+
+                {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
+
+                <div className="mt-6">
+                  <Button
+                    className="w-full"
+                    onClick={onReconnect}
+                    disabled={reconnecting}
+                  >
+                    {reconnecting ? "Connecting..." : "Connect"}
+                  </Button>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
