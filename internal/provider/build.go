@@ -322,7 +322,8 @@ func extractJSONPath(data map[string]any, path string) (string, bool) {
 
 func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig {
 	var configs map[string]apiexec.PaginationConfig
-	for name, opDef := range def.Operations {
+	for name := range def.Operations {
+		opDef := def.Operations[name] //nolint:gocritic // map values not addressable
 		if opDef.Pagination == nil {
 			continue
 		}
