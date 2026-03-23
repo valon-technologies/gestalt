@@ -5,38 +5,45 @@
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Health check. Returns `{"status":"ok"}`. |
-| GET | `/ready` | Readiness check. Returns `{"status":"ready"}` when the server can accept traffic. |
-| POST | `/api/v1/auth/login` | Start platform login. Returns a browser redirect URL. |
-| GET | `/api/v1/auth/login/callback` | Complete platform login. Issues a session token. |
-| GET | `/api/v1/auth/info` | Returns the auth provider name and display label. |
+| GET | `/ready` | Readiness check. Returns `{"status":"ok"}` when the datastore is reachable, or `{"status":"unavailable"}` with a 503 when it is not. |
+| POST | `/api/v1/auth/login` | Start platform login. Accepts `{"state": "...", "callback_port": 12345}`. Returns `{"url": "..."}` with the provider's login URL. |
+| GET | `/api/v1/auth/login/callback` | Complete platform login. Exchanges the authorization code for a session token. Returns `{"email": "...", "display_name": "...", "token": "..."}`. |
+| GET | `/api/v1/auth/info` | Returns `{"provider": "...", "display_name": "...", "dev_mode": true/false}`. |
+
+In dev mode, an additional endpoint is available:
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/dev-login` | Dev-only login. Accepts `{"email": "..."}` and returns a session token without OAuth. |
 
 ## Authenticated endpoints
 
-All authenticated endpoints require an `Authorization: Bearer <token>` header or a valid session cookie.
+All authenticated endpoints require an `Authorization: Bearer <token>` header. The token can be a session token from login or an API token.
 
 ### Integrations
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/v1/integrations` | List loaded integrations with metadata (name, display name, description, icon, connection status). |
+| GET | `/api/v1/integrations` | List loaded integrations. Returns an array of objects with `name`, `display_name`, `description`, `icon_svg`, `connected` (boolean), and `auth_type` (`"oauth"` or `"manual"`). |
+| DELETE | `/api/v1/integrations/{name}` | Disconnect an integration. Removes the stored token for the calling user. Returns `{"status":"disconnected"}`. |
 | GET | `/api/v1/integrations/{name}/operations` | List operations exposed by an integration. |
-| GET or POST | `/api/v1/{integration}/{operation}` | Execute an integration operation. |
+| GET or POST | `/api/v1/{integration}/{operation}` | Execute an integration operation. MCP-only integrations return a 400 error. |
 
 ### Auth flows
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. Returns the provider's authorization URL. |
-| GET | `/api/v1/auth/callback` | Complete integration OAuth. Exchanges code for tokens and stores them. |
-| POST | `/api/v1/auth/connect-manual` | Submit manual credentials for non-OAuth integrations. |
+| POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. Accepts `{"integration": "...", "scopes": [...]}`. Returns `{"url": "...", "state": "..."}`. |
+| GET | `/api/v1/auth/callback` | Complete integration OAuth. Exchanges code for tokens and stores them. Redirects to the web UI on success. |
+| POST | `/api/v1/auth/connect-manual` | Submit manual credentials. Accepts `{"integration": "...", "credential": "..."}`. Returns `{"status":"connected"}`. |
 
 ### API tokens
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/v1/tokens` | Create an API token. Returns the plaintext token once. |
-| GET | `/api/v1/tokens` | List API tokens for the current user. |
-| DELETE | `/api/v1/tokens/{id}` | Revoke an API token. |
+| POST | `/api/v1/tokens` | Create an API token. Returns `{"id": "...", "name": "...", "token": "...", "expires_at": "..."}`. The plaintext token is shown only once. |
+| GET | `/api/v1/tokens` | List API tokens for the current user. Returns `id`, `name`, `scopes`, `created_at`, `expires_at`. |
+| DELETE | `/api/v1/tokens/{id}` | Revoke an API token. Returns `{"status":"revoked"}`. |
 
 ### Runtimes and bindings
 
@@ -58,6 +65,7 @@ Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their c
 - **GET** requests pass parameters as query string key-value pairs.
 - **POST** requests pass parameters as a JSON body.
 - Path placeholders like `{integration}` and `{operation}` are resolved from the URL. Remaining parameters are sent as query or body values depending on the method.
+- Integrations backed only by a `type: mcp` upstream cannot be invoked over HTTP. Attempting to do so returns `400: this integration is accessible only via MCP`.
 
 ## Authentication
 

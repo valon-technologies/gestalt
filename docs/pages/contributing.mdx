@@ -5,10 +5,10 @@
 | Directory | Purpose |
 |---|---|
 | `cmd/gestaltd` | Main Go binary. Registers all plugins and starts the server. |
-| `core` | Public interfaces: auth providers, datastores, secret managers, providers, runtimes, bindings, hooks. |
+| `core` | Public interfaces: `AuthProvider`, `Datastore`, `SecretManager`, `Provider`, `OAuthProvider`, `ManualProvider`, `CatalogProvider`, `Runtime`, `Binding`. See `core/auth.go`, `core/datastore.go`, `core/secrets.go`, `core/provider.go`, `core/runtime.go`, `core/binding.go`. |
 | `internal` | Runtime packages: config loading, HTTP routing, middleware, invocation, token management, bootstrap. |
 | `plugins` | Implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
-| `proto/` | gRPC protobuf service definitions. |
+| `docs` | Nextra documentation site. |
 | `client/cli` | Rust CLI source. Produces the `gestalt` binary. |
 | `web` | Next.js web UI. |
 | `deploy` | Helm chart, Dockerfiles, and CI workflows. |
@@ -46,3 +46,7 @@ cd web
 npm run check
 npm run build
 ```
+
+## Pre-push hook
+
+The repository includes a managed pre-push hook at `.githooks/pre-push`. Git is configured to use this directory via `core.hooksPath`. The hook runs automatically when you push — do not bypass it with `--no-verify`.

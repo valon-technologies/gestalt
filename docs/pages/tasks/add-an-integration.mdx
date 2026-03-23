@@ -1,42 +1,56 @@
 # Add an Integration
 
-Adding an **integration** means choosing a source of truth, optionally correcting its auth details, and deciding which operations to expose.
+Adding an **integration** means defining one or more upstreams, optionally configuring auth, and deciding which operations to expose.
 
 ## 1. Decide how to define it
 
-| Approach | When to use |
-|---|---|
-| OpenAPI spec | Public or local OpenAPI document exists. Operations generated automatically. |
-| Provider YAML | No spec exists, or the spec is too noisy. Declare operations manually. |
-| Manual auth | API-key service with no OAuth flow. Users paste credentials directly. |
+| Approach | Upstream type | When to use |
+|---|---|---|
+| OpenAPI spec | `type: rest` with `url` | Public or local OpenAPI document exists. Operations generated automatically. |
+| Provider YAML | `type: rest` with `provider` | No spec exists, or the spec is too noisy. Declare operations manually. |
+| GraphQL endpoint | `type: graphql` with `url` | GraphQL API. Operations generated from introspection. |
+| MCP server | `type: mcp` with `url` | Upstream already speaks MCP. Tools imported directly. |
+| Manual auth | Any upstream type with `auth.type: manual` | API-key service with no OAuth flow. Users paste credentials directly. |
 
-## 2. OpenAPI-backed integration
+## 2. REST integration from OpenAPI
 
 ```yaml
 integrations:
   slack:
-    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    upstreams:
+      - type: rest
+        url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+        allowed_operations:
+          conversations_list: ""
+          chat_postMessage: Send a message to a channel
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
     icon_file: slack.svg
     response_check: slack_ok
+    error_message_path: error
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
       response_hook: slack_ok
-      auth_headers:
-        Accept: application/json
-    error_message_path: $.error
-    allowed_operations:
-      conversations_list: ""
-      chat_postMessage: Send a message to a channel
 ```
 
-The `icon_file` field sets the icon displayed in the web UI. The `auth_headers` map adds static headers to token exchange requests. The `error_message_path` field is a JSONPath expression that extracts a human-readable error from upstream error responses.
+The `icon_file` field sets the icon displayed in the web UI. The `error_message_path` field is a dot-delimited path that extracts a human-readable error from upstream JSON error responses.
 
-## 3. Provider file
+## 3. REST integration from a provider file
 
 Use when the OpenAPI spec does not exist or does not fit.
+
+```yaml
+integrations:
+  internal-api:
+    upstreams:
+      - type: rest
+        provider: /etc/gestalt/providers/internal-api.yaml
+    auth:
+      type: manual
+```
+
+The provider file declares operations manually:
 
 ```yaml
 provider: internal-api
@@ -68,12 +82,34 @@ operations:
         description: Job identifier
 ```
 
-## 4. Manual auth for API-key services
+## 4. GraphQL integration
+
+```yaml
+integrations:
+  my-api:
+    upstreams:
+      - type: graphql
+        url: https://api.example.com/graphql
+        allowed_operations:
+          - searchUsers
+          - createProject
+    client_id: ${API_CLIENT_ID}
+    client_secret: ${API_CLIENT_SECRET}
+    auth:
+      authorization_url: https://example.com/oauth/authorize
+      token_url: https://example.com/oauth/token
+```
+
+Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are converted to JSON Schema inputs for MCP clients.
+
+## 5. Manual auth for API-key services
 
 ```yaml
 integrations:
   datadog:
-    provider: /etc/gestalt/providers/datadog.yaml
+    upstreams:
+      - type: rest
+        provider: /etc/gestalt/providers/datadog.yaml
     auth:
       type: manual
     token_parser: datadog_keys
@@ -81,25 +117,31 @@ integrations:
 
 Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Gestalt encrypts and stores them the same way it stores OAuth tokens.
 
-## 5. Restrict operations
+## 6. Restrict operations
 
-The `allowed_operations` map is your product design surface. Only expose what callers need. A tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
+The `allowed_operations` field on each upstream controls which operations are exposed. It accepts a YAML list (names only) or a map (names to description overrides). Omit it to allow all operations. Only expose what callers need — a tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
 
-## 6. Set the connection mode
+## 7. Set the connection mode
 
 Control how credentials are resolved per integration:
 
 ```yaml
 integrations:
   slack:
+    upstreams:
+      - type: rest
+        url: https://...
     connection_mode: user    # each user connects independently (default)
   shared-service:
+    upstreams:
+      - type: rest
+        provider: shared-service.yaml
     connection_mode: identity # single shared credential
 ```
 
 See [Connection Modes](/concepts/platform-model#connection-modes) for all options.
 
-## 7. Validate end to end
+## 8. Validate end to end
 
 ```sh
 gestaltd --check --config your-config.yaml
@@ -110,8 +152,6 @@ gestalt invoke slack conversations_list
 curl -H "Authorization: Bearer $GESTALT_API_KEY" \
   http://localhost:8080/api/v1/slack/conversations_list
 ```
-
-During validation, confirm that `icon_file`, `auth_headers`, and `error_message_path` resolve correctly in the config check output if you have set them.
 
 ## When to write code
 

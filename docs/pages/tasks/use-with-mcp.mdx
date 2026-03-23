@@ -110,12 +110,17 @@ server:
 
 integrations:
   linear:
-    openapi: https://raw.githubusercontent.com/linear/linear/master/packages/sdk/src/schema.graphql
+    upstreams:
+      - type: graphql
+        url: https://api.linear.app/graphql
+        allowed_operations:
+          - searchIssues
+          - createIssue
     client_id: ${LINEAR_CLIENT_ID}
     client_secret: ${LINEAR_CLIENT_SECRET}
-    allowed_operations:
-      search_issues: Search issues in Linear
-      create_issue: Create a new Linear issue
+    auth:
+      authorization_url: https://linear.app/oauth/authorize
+      token_url: https://api.linear.app/oauth/token
 
 mcp:
   enabled: true
@@ -129,5 +134,6 @@ If tools do not appear in your MCP client:
 
 1. Verify the server is running with `mcp.enabled: true`.
 2. Check that your API token is valid (`gestalt auth status`).
-3. Confirm the token's owner has connected the integration (completed the OAuth flow).
-4. Verify `allowed_operations` is defined for the integration.
+3. Confirm the token's owner has connected the integration (completed the OAuth flow or submitted manual credentials).
+4. If using `mcp.providers`, confirm the integration is in the list.
+5. For MCP-only integrations (`type: mcp` upstream), note that they cannot be invoked over the HTTP API — they are only available via the MCP endpoint.
