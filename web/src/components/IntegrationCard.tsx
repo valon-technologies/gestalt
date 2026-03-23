@@ -1,23 +1,25 @@
 "use client";
 
-import { Integration, startIntegrationOAuth, connectManualIntegration, disconnectIntegration } from "@/lib/api";
+import { useState } from "react";
+import {
+  Integration,
+  startIntegrationOAuth,
+  connectManualIntegration,
+  disconnectIntegration,
+} from "@/lib/api";
 import Button from "./Button";
-import { CheckCircleIcon } from "./icons";
+import { CheckCircleIcon, GearIcon, DefaultIcon } from "./icons";
 import IntegrationSettingsModal from "./IntegrationSettingsModal";
-import { useCallback, useMemo, useState } from "react";
-
-function GearIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
 
 const DANGEROUS_ELEMENTS = [
-  "script", "foreignObject", "iframe", "embed", "object",
-  "style", "animate", "set",
+  "script",
+  "foreignObject",
+  "iframe",
+  "embed",
+  "object",
+  "style",
+  "animate",
+  "set",
 ];
 
 function stripDangerousAttrs(el: Element) {
@@ -45,17 +47,6 @@ function sanitizeSVG(raw: string): string {
   return svg.outerHTML;
 }
 
-function DefaultIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </svg>
-  );
-}
-
 export default function IntegrationCard({
   integration,
   onConnected,
@@ -70,16 +61,14 @@ export default function IntegrationCard({
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showTokenForm, setShowTokenForm] = useState(false);
-  const [credential, setCredential] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const safeIconSVG = useMemo(
-    () => (integration.icon_svg ? sanitizeSVG(integration.icon_svg) : ""),
-    [integration.icon_svg],
-  );
 
+  const safeIconSVG = integration.icon_svg
+    ? sanitizeSVG(integration.icon_svg)
+    : "";
   const isManual = integration.auth_type === "manual";
 
-  const handleConnect = useCallback(async () => {
+  async function handleConnect() {
     if (isManual) {
       setSettingsOpen(false);
       setShowTokenForm(true);
@@ -96,17 +85,19 @@ export default function IntegrationCard({
     } finally {
       setLoading(false);
     }
-  }, [integration.name, isManual]);
+  }
 
-  async function handleSubmitManual(e: React.FormEvent) {
+  async function handleSubmitManual(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!credential.trim()) return;
+    const credential = (
+      new FormData(e.currentTarget).get("credential") as string
+    )?.trim();
+    if (!credential) return;
     setSubmitting(true);
     setError(null);
     try {
-      await connectManualIntegration(integration.name, credential.trim());
+      await connectManualIntegration(integration.name, credential);
       setShowTokenForm(false);
-      setCredential("");
       onConnected?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
@@ -117,28 +108,27 @@ export default function IntegrationCard({
 
   function handleCancelManual() {
     setShowTokenForm(false);
-    setCredential("");
     setError(null);
   }
 
-  const handleDisconnect = useCallback(async () => {
+  async function handleDisconnect() {
     setDisconnecting(true);
     setError(null);
     try {
       await disconnectIntegration(integration.name);
-      setSettingsOpen(false);
       onDisconnected?.();
+      setSettingsOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
       setDisconnecting(false);
     }
-  }, [integration.name, onDisconnected]);
+  }
 
-  const handleSettingsClose = useCallback(() => {
+  function handleSettingsClose() {
     setSettingsOpen(false);
     setError(null);
-  }, []);
+  }
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5 shadow-warm">
@@ -146,7 +136,10 @@ export default function IntegrationCard({
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-500 [&>svg]:h-5 [&>svg]:w-5">
             {safeIconSVG ? (
-              <div dangerouslySetInnerHTML={{ __html: safeIconSVG }} className="flex items-center justify-center [&>svg]:h-5 [&>svg]:w-5" />
+              <div
+                dangerouslySetInnerHTML={{ __html: safeIconSVG }}
+                className="flex items-center justify-center [&>svg]:h-5 [&>svg]:w-5"
+              />
             ) : (
               <DefaultIcon />
             )}
@@ -175,26 +168,36 @@ export default function IntegrationCard({
           </div>
         )}
       </div>
-      {error && !settingsOpen && <p className="mt-2 text-sm text-ember-500">{error}</p>}
+      {error && !settingsOpen && (
+        <p className="mt-2 text-sm text-ember-500">{error}</p>
+      )}
       {showTokenForm && (
         <form onSubmit={handleSubmitManual} className="mt-3">
-          <label htmlFor={`credential-${integration.name}`} className="block text-sm font-medium text-stone-700">
+          <label
+            htmlFor={`credential-${integration.name}`}
+            className="block text-sm font-medium text-stone-700"
+          >
             API Token
           </label>
           <input
             id={`credential-${integration.name}`}
+            name="credential"
             type="password"
-            value={credential}
-            onChange={(e) => setCredential(e.target.value)}
+            required
             placeholder="Paste your API token"
             autoFocus
             className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
           />
           <div className="mt-2 flex gap-2">
-            <Button type="submit" disabled={submitting || !credential.trim()}>
+            <Button type="submit" disabled={submitting}>
               {submitting ? "Connecting..." : "Submit"}
             </Button>
-            <Button type="button" variant="secondary" onClick={handleCancelManual} disabled={submitting}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCancelManual}
+              disabled={submitting}
+            >
               Cancel
             </Button>
           </div>
