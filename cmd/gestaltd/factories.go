@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
+	"github.com/valon-technologies/gestalt/plugins/agentic"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
@@ -103,6 +104,8 @@ func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegis
 		factories.Builtins = append(factories.Builtins, echo.New())
 		factories.Runtimes["echo"] = echoruntime.Factory
 	}
+	factories.Runtimes["agentic"] = agentic.RuntimeFactory
+	factories.Bindings["agentic"] = agentic.BindingFactory
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
