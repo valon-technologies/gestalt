@@ -7,6 +7,14 @@ use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
 pub fn login(url_override: Option<&str>) -> Result<()> {
+    if api::env_api_key_is_set() {
+        bail!(
+            "{} is set in your environment and takes priority over session tokens. \
+             Unset it before logging in, or use the API key directly.",
+            api::ENV_API_KEY,
+        );
+    }
+
     let base_url = api::resolve_url(url_override)?;
 
     let listener =
@@ -137,14 +145,57 @@ pub fn logout() -> Result<()> {
 }
 
 pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
+    let has_env_key = api::env_api_key_is_set();
     let authenticated = ApiClient::from_env(url_override).is_ok();
+    // Only probe the credential store when the env key is active, since
+    // from_env already loaded it otherwise (authenticated implies has_session).
+    let has_session = if has_env_key {
+        CredentialStore::new()
+            .and_then(|s| s.load())
+            .map(|c| c.is_some())
+            .unwrap_or(false)
+    } else {
+        authenticated
+    };
+
     match format {
-        Format::Json => output::print_json(&serde_json::json!({"authenticated": authenticated})),
+        Format::Json => {
+            let source = if has_env_key {
+                "env"
+            } else if has_session {
+                "session"
+            } else {
+                "none"
+            };
+            output::print_json(&serde_json::json!({
+                "authenticated": authenticated,
+                "source": source,
+                "env_var_set": has_env_key,
+                "session_stored": has_session,
+            }));
+        }
         Format::Table => {
             if authenticated {
-                eprintln!("Authenticated.");
+                if has_env_key {
+                    eprintln!(
+                        "Authenticated via {} environment variable.",
+                        api::ENV_API_KEY
+                    );
+                    if has_session {
+                        output::print_warning(&format!(
+                            "A session token from 'gestalt auth login' also exists but is being ignored. \
+                             Unset {} to use it.",
+                            api::ENV_API_KEY,
+                        ));
+                    }
+                } else {
+                    eprintln!("Authenticated via session token.");
+                }
             } else {
-                eprintln!("Not authenticated. Run 'gestalt auth login' or set GESTALT_API_KEY.");
+                eprintln!(
+                    "Not authenticated. Run 'gestalt auth login' or set {}.",
+                    api::ENV_API_KEY
+                );
             }
         }
     }

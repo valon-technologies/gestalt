@@ -28,7 +28,7 @@ The calling user has not connected the target integration. Each user must comple
 
 - Verify the `Authorization` header uses the `Bearer` prefix.
 - Use the plaintext token returned at creation time, not the hash stored in the datastore.
-- If using the CLI, check that `GESTALT_API_KEY` is set correctly and is not overridden by an expired session token.
+- If using the CLI, note that `GESTALT_API_KEY` takes priority over session tokens from `gestalt auth login`. Run `gestalt auth status` to see which credential source is active.
 
 ## Web UI does not talk to the local API
 
