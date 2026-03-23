@@ -153,6 +153,29 @@ operations:
 	}
 }
 
+func TestBaseFromCatalogBasicAuthStyle(t *testing.T) {
+	t.Parallel()
+
+	cat := MustLoadCatalogYAML([]byte(`
+name: basic_example
+display_name: Basic Example
+base_url: https://api.example.com
+auth_style: basic
+operations:
+  - id: list
+    method: GET
+    path: /list
+`))
+
+	base, err := BaseFromCatalog(cat, Base{})
+	if err != nil {
+		t.Fatalf("BaseFromCatalog: %v", err)
+	}
+	if base.AuthStyle != AuthStyleBasic {
+		t.Fatalf("AuthStyle = %v, want %v", base.AuthStyle, AuthStyleBasic)
+	}
+}
+
 func TestCompileSchemasFillsInputSchema(t *testing.T) {
 	t.Parallel()
 

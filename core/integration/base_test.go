@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -274,6 +275,42 @@ func TestBaseExecuteGraphQLErrorsReturned(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "rate limited") {
 		t.Fatalf("error = %v, want to contain 'rate limited'", err)
+	}
+}
+
+func TestBaseExecuteBasicAuthStyle(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth": r.Header.Get("Authorization"),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:      mockAuth{},
+		BaseURL:   srv.URL,
+		AuthStyle: AuthStyleBasic,
+		Endpoints: map[string]Endpoint{
+			"op": {Method: http.MethodGet, Path: "/test"},
+		},
+	}
+
+	result, err := b.Execute(context.Background(), "op", nil, "user:pass")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:pass"))
+	if resp["auth"] != want {
+		t.Fatalf("auth = %v, want %v", resp["auth"], want)
 	}
 }
 

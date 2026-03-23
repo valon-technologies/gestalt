@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
@@ -74,6 +75,7 @@ const (
 	AuthStyleBearer AuthStyle = iota
 	AuthStyleRaw
 	AuthStyleNone
+	AuthStyleBasic
 )
 
 type Base struct {
@@ -226,6 +228,8 @@ func (b *Base) resolveAuth(token string) (resolvedAuth, error) {
 		return resolvedAuth{token: token}, nil
 	case AuthStyleRaw:
 		return resolvedAuth{authHeader: token}, nil
+	case AuthStyleBasic:
+		return resolvedAuth{authHeader: "Basic " + base64.StdEncoding.EncodeToString([]byte(token))}, nil
 	default:
 		return resolvedAuth{}, nil
 	}

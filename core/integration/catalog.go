@@ -93,6 +93,8 @@ func AuthStyleValue(c *catalog.Catalog) (AuthStyle, error) {
 		return AuthStyleRaw, nil
 	case "none":
 		return AuthStyleNone, nil
+	case "basic":
+		return AuthStyleBasic, nil
 	default:
 		return AuthStyleBearer, nil
 	}

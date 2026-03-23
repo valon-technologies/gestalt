@@ -78,6 +78,8 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		base.AuthStyle = ci.AuthStyleRaw
 	case "none":
 		base.AuthStyle = ci.AuthStyleNone
+	case "basic":
+		base.AuthStyle = ci.AuthStyleBasic
 	default:
 		return nil, fmt.Errorf("%s: unknown auth_style %q", def.Provider, def.AuthStyle)
 	}

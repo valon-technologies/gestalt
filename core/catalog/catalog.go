@@ -85,6 +85,7 @@ var validAuthStyles = map[string]struct{}{
 	"bearer": {},
 	"raw":    {},
 	"none":   {},
+	"basic":  {},
 }
 
 func IsValidAuthStyle(s string) bool {
