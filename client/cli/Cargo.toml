@@ -17,6 +17,7 @@ dirs = "6"
 colored = "3"
 anyhow = "1"
 open = "5"
+terminal_size = "0.4.4"
 url = "2"
 
 [dev-dependencies]
