@@ -8,7 +8,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/config"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -33,12 +32,12 @@ type Upstream struct {
 	client   mcpclient.MCPClient
 }
 
-func New(ctx context.Context, name string, intg config.IntegrationDef) (*Upstream, error) {
-	if intg.MCP == nil || intg.MCP.URL == "" {
-		return nil, fmt.Errorf("mcpupstream %s: mcp.url is required", name)
+func New(ctx context.Context, name string, url string, connMode core.ConnectionMode) (*Upstream, error) {
+	if url == "" {
+		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
 
-	client, err := mcpclient.NewStreamableHttpClient(intg.MCP.URL,
+	client, err := mcpclient.NewStreamableHttpClient(url,
 		transport.WithHTTPTimeout(httpTimeout),
 		transport.WithHTTPHeaderFunc(func(ctx context.Context) map[string]string {
 			if token := UpstreamTokenFromContext(ctx); token != "" {
@@ -72,15 +71,10 @@ func New(ctx context.Context, name string, intg config.IntegrationDef) (*Upstrea
 
 	cat, ops := buildCatalog(name, toolsResult.Tools)
 
-	connMode := core.ConnectionModeUser
-	if intg.ConnectionMode != "" {
-		connMode = core.ConnectionMode(intg.ConnectionMode)
-	}
-
 	return &Upstream{
 		name:     name,
 		display:  name,
-		desc:     fmt.Sprintf("MCP upstream: %s", intg.MCP.URL),
+		desc:     fmt.Sprintf("MCP upstream: %s", url),
 		connMode: connMode,
 		cat:      cat,
 		ops:      ops,

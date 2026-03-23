@@ -8,6 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	TransportMCPPassthrough = "mcp-passthrough"
+	TransportHTTP           = "http"
+)
+
 // Catalog is the normalized on-disk representation for a provider's tool
 // surface. It intentionally carries richer metadata than core.Operation so the
 // rest of Gestalt can derive runtime and MCP views from a single source.

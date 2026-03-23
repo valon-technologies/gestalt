@@ -44,7 +44,9 @@ integrations:
   alpha:
     client_id: key-1
   beta:
-    openapi: https://example.com/spec.json
+    upstreams:
+      - type: http
+        url: https://example.com/spec.json
     client_id: key-2
 server:
   port: 9090
@@ -74,8 +76,8 @@ server:
 	if cfg.Integrations["alpha"].ClientID != "key-1" {
 		t.Errorf("Integrations[alpha].ClientID: got %q, want %q", cfg.Integrations["alpha"].ClientID, "key-1")
 	}
-	if cfg.Integrations["beta"].OpenAPI != "https://example.com/spec.json" {
-		t.Errorf("Integrations[beta].OpenAPI: got %q", cfg.Integrations["beta"].OpenAPI)
+	if len(cfg.Integrations["beta"].Upstreams) != 1 || cfg.Integrations["beta"].Upstreams[0].URL != "https://example.com/spec.json" {
+		t.Errorf("Integrations[beta].Upstreams: got %+v", cfg.Integrations["beta"].Upstreams)
 	}
 }
 
