@@ -1558,8 +1558,8 @@ func (s *stubPKCEIntegration) AuthorizationURL(state string, _ []string) string 
 	return s.authURL + "?state=" + url.QueryEscape(state)
 }
 
-func (s *stubPKCEIntegration) StartOAuth(state string, _ []string) (string, string) {
-	return s.AuthorizationURL(state, nil), s.wantVerifier
+func (s *stubPKCEIntegration) StartOAuth(state string, _ []string) (string, string, error) {
+	return s.AuthorizationURL(state, nil), s.wantVerifier, nil
 }
 
 func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {

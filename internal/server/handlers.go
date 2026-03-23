@@ -401,14 +401,6 @@ type startOAuthRequest struct {
 	ConnectionParams map[string]string `json:"connection_params"`
 }
 
-type oauthStarter interface {
-	StartOAuth(state string, scopes []string) (authURL string, verifier string)
-}
-
-type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-}
-
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -465,8 +457,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if authURL == "" {
-		if starter, ok := prov.(oauthStarter); ok {
-			authURL, verifier = starter.StartOAuth("_", req.Scopes)
+		if starter, ok := prov.(core.OAuthStarterProvider); ok {
+			var startErr error
+			authURL, verifier, startErr = starter.StartOAuth("_", req.Scopes)
+			if startErr != nil {
+				writeError(w, http.StatusBadGateway, fmt.Sprintf("oauth start: %v", startErr))
+				return
+			}
 		} else {
 			authURL = oauthProv.AuthorizationURL("_", req.Scopes)
 		}
@@ -534,7 +531,10 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	var tokenResp *core.TokenResponse
-	if exchanger, ok := prov.(oauthVerifierExchanger); ok {
+	type verifierExchanger interface {
+		ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	}
+	if exchanger, ok := prov.(verifierExchanger); ok {
 		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	} else {
 		if len(exchangeOpts) > 0 {

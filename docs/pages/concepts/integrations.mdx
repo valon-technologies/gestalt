@@ -1,133 +1,37 @@
 # Integrations
 
-Integrations are the unit of API exposure in Gestalt. Each integration declares one or more **upstreams** — the external services it connects to — along with auth settings and optional hooks.
+Integrations are the unit of API exposure in Gestalt. Each integration declares where its definition comes from, how it authenticates, and which operations callers can invoke.
 
-## Upstreams
+## Four ways to define an integration
 
-Every integration has an `upstreams` list. Each entry specifies a `type` and a source:
-
-| Upstream type | What it does |
-|---|---|
-| `rest` | Loads operations from an OpenAPI spec (via `url`), a provider YAML file (via `provider`), or a directory scan (via `provider_dirs`). |
-| `graphql` | Introspects a GraphQL endpoint at startup and generates operations from queries and mutations. |
-| `mcp` | Connects to an upstream MCP server and imports its tools as operations. |
-
-An integration can combine upstream types. For example, a REST upstream and an MCP upstream together create a **composite integration** where HTTP operations are available over the REST API and MCP tools are proxied directly to the upstream MCP server.
-
-## REST upstreams
-
-A REST upstream resolves its operations from one of three sources:
-
-| Source | Upstream field | When to use |
+| Source | Config field | When to use |
 |---|---|---|
-| OpenAPI spec | `url` pointing to a spec | Public or local OpenAPI document exists. Operations generated automatically. |
-| Provider file | `provider` pointing to a YAML file | No spec exists or the spec is too noisy. Declare operations manually. |
-| Provider directory | Neither `url` nor `provider` | Gestalt searches `provider_dirs` for a matching YAML file by integration name. |
-
-```yaml
-integrations:
-  slack:
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
-        allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-```
-
-## GraphQL upstreams
-
-A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field.
-
-```yaml
-integrations:
-  my-graphql-api:
-    upstreams:
-      - type: graphql
-        url: https://api.example.com/graphql
-        allowed_operations:
-          - searchUsers
-          - createProject
-    client_id: ${API_CLIENT_ID}
-    client_secret: ${API_CLIENT_SECRET}
-    auth:
-      authorization_url: https://example.com/oauth/authorize
-      token_url: https://example.com/oauth/token
-```
-
-Operation arguments are converted to JSON Schema inputs so MCP clients get type information for parameters. Scalar and enum types map to their JSON equivalents; complex input types map to `object`.
-
-## MCP upstreams
-
-An MCP upstream connects to a remote MCP server via Streamable HTTP, lists its tools, and imports them as Gestalt operations. These operations can only be invoked through the MCP binding — calling them over the HTTP API returns an error.
-
-```yaml
-integrations:
-  external-tools:
-    upstreams:
-      - type: mcp
-        url: https://mcp.example.com/sse
-    connection_mode: user
-```
-
-Tool annotations (read-only, destructive, idempotent) are preserved from the upstream server.
-
-## Mixed integrations
-
-An integration can combine a REST or GraphQL upstream with an MCP upstream. This creates a composite provider:
-
-```yaml
-integrations:
-  slack:
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
-        mcp: true
-        allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-      - type: mcp
-        url: https://mcp.slack.com/sse
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-```
-
-The `mcp: true` flag on the REST upstream means its HTTP operations are also exposed as MCP tools alongside the tools from the MCP upstream.
-
-## allowed_operations
-
-The `allowed_operations` field on an upstream controls which operations are exposed. It accepts two formats:
-
-**As a list** (names only, descriptions from the upstream source):
-
-```yaml
-allowed_operations:
-  - conversations_list
-  - chat_postMessage
-```
-
-**As a map** (names to description overrides):
-
-```yaml
-allowed_operations:
-  conversations_list: List channels the user has access to
-  chat_postMessage: Send a message to a channel
-```
-
-Omit `allowed_operations` entirely to allow all operations. An empty value is invalid — if you set the field, it must contain at least one entry.
+| OpenAPI spec | `openapi` | Point at a URL or local file. Operations, parameters, and descriptions are generated automatically. |
+| Provider file | `provider` | Write a standalone YAML file. Use when no spec exists or the spec is too noisy. |
+| Provider directory | `provider_dirs` | Scan a directory for multiple provider YAML files. Each file becomes a separate provider. |
+| Managed subprocess plugin | `plugin` | Launch a child process that speaks the Gestalt plugin protocol. Use when the provider is implemented in TypeScript, Python, or Rust and should still be invokable through Gestalt. |
 
 ## What an operation looks like
 
 | Field | Description |
 |---|---|
-| Name | Unique identifier. For OpenAPI sources, this is the `operationId`. For GraphQL, the query/mutation field name. For MCP, the tool name. |
-| Description | Human-readable summary from the spec, or overridden via `allowed_operations`. |
-| Method and path | HTTP verb and URL path template (REST only). |
-| Parameters | Query, path, header, and body fields. |
+| Name | Unique identifier. For OpenAPI sources, this is the `operationId` from the spec. |
+| Description | Human-readable summary from the spec or `allowed_operations` config. |
+| Method and path | HTTP verb and URL path template for the upstream call. |
+| Parameters | Query parameters, path parameters, headers, and body fields. |
 | Input schema | JSON Schema for parameters, passed to MCP clients for type information. |
-| Annotations | Automatic hints: GET/HEAD are read-only, PUT is idempotent, DELETE is destructive. MCP upstreams preserve the upstream server's annotations. |
+| Annotations | Automatic hints: GET/HEAD are read-only, PUT is idempotent, DELETE is destructive. |
+
+## How OpenAPI loading works
+
+When an integration includes an `openapi` field, Gestalt parses the spec at startup and extracts:
+
+- The display name from `info.title`.
+- The first server URL as the base URL.
+- OAuth authorization and token URLs from security scheme definitions.
+- Operations by iterating every path and method, keyed by `operationId`.
+
+Operations without an `operationId` are skipped. Security schemes inform the default auth configuration but can be overridden in the integration config.
 
 ## Manual auth versus OAuth
 
@@ -166,6 +70,23 @@ Hooks are registered by name in Go code and referenced by that name in config.
 | `slack_ok` | Slack | Checks `"ok": true` in response body. Used as both `response_check` and `response_hook`. |
 | `datadog_keys` | Datadog | Parses API and application keys from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
 | `hex_response` | Hex | Validates Hex-specific response format. |
+
+## Additional integration config fields
+
+| Field | Purpose |
+|---|---|
+| `icon_svg` | Inline SVG icon displayed in the web UI. |
+| `icon_file` | Load an SVG icon from a file path (alternative to inline `icon_svg`). |
+| `token_prefix` | Prefix for the Authorization header value (for example, `Bot` for Discord). |
+| `auth_style` | How the token is sent: `bearer`, `raw`, or `none`. |
+| `headers` | Default headers sent with every upstream request. |
+| `error_message_path` | JSONPath expression to extract error messages from upstream response bodies. |
+
+## Managed subprocess plugins
+
+Subprocess plugins are still integrations, not a separate runtime surface. Gestalt starts the child process from `plugin.command`, initializes it over stdio, and exposes the returned provider through the normal invocation path.
+
+This is the right shape for providers written in TypeScript, Python, or Rust when you want Gestalt to manage lifecycle but do not want to write Go code.
 
 ## Restrictions
 

@@ -31,6 +31,14 @@ type OAuthProvider interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
 }
 
+// OAuthStarterProvider extends OAuthProvider with error-returning
+// OAuth initiation. Wrappers must forward this interface to avoid
+// silently dropping verifier and error information.
+type OAuthStarterProvider interface {
+	OAuthProvider
+	StartOAuth(state string, scopes []string) (authURL string, verifier string, err error)
+}
+
 type ManualProvider interface {
 	Provider
 	SupportsManualAuth() bool

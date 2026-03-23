@@ -17,6 +17,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var yamlNodeType = reflect.TypeOf(yaml.Node{})
+
 type Deps struct {
 	EncryptionKey []byte
 	BaseURL       string
@@ -187,6 +189,11 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&intg, resolve); err != nil {
 			return err
 		}
+		if intg.Plugin != nil {
+			if err := resolveYAMLNode(&intg.Plugin.Config, resolve); err != nil {
+				return err
+			}
+		}
 		cfg.Integrations[name] = intg
 	}
 	for name := range cfg.AuthProfiles {
@@ -244,8 +251,17 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 			}
 			field.SetString(resolved)
 		case reflect.Struct:
+			if field.Type() == yamlNodeType {
+				continue
+			}
 			if field.CanSet() {
 				if err := resolveStringFields(field.Addr().Interface(), resolve); err != nil {
+					return err
+				}
+			}
+		case reflect.Ptr:
+			if !field.IsNil() && field.Elem().Kind() == reflect.Struct {
+				if err := resolveStringFields(field.Interface(), resolve); err != nil {
 					return err
 				}
 			}

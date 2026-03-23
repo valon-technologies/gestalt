@@ -66,6 +66,16 @@ integrations:
       conversations_list: ""
       chat_postMessage: Send a message to a Slack channel
 
+  my-plugin:
+    plugin:
+      command:
+        - node
+        - ./plugins/my-plugin/dist/index.js
+      config:
+        project_key: ENG
+      allowed_operations:
+        - enrich_loan
+
 mcp:
   enabled: true
   providers:
@@ -84,6 +94,10 @@ server:
 **base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 
 **provider_dirs**: Directories listed here are scanned at startup for provider YAML files. Each file becomes a registered provider whose operations are available to integrations.
+
+**integrations**: Each integration can now be declared with `openapi`, `provider`, or `plugin`. The `plugin` form launches a managed subprocess and exposes its provider surface through Gestalt.
+
+**plugin integrations**: The `plugin` block starts a managed child process and initializes it over stdio using the subprocess plugin protocol. The host still exposes the resulting provider through the normal API surfaces.
 
 **allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
 

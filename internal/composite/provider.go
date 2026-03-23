@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -99,7 +100,24 @@ func (o *oauthProvider) AuthorizationURL(state string, scopes []string) string {
 	return o.oauth.AuthorizationURL(state, scopes)
 }
 
+func (o *oauthProvider) StartOAuth(state string, scopes []string) (string, string, error) {
+	if s, ok := o.oauth.(core.OAuthStarterProvider); ok {
+		return s.StartOAuth(state, scopes)
+	}
+	return o.oauth.AuthorizationURL(state, scopes), "", nil
+}
+
 func (o *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return o.oauth.ExchangeCode(ctx, code)
+}
+
+func (o *oauthProvider) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	type exchanger interface {
+		ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	}
+	if e, ok := o.oauth.(exchanger); ok {
+		return e.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
+	}
 	return o.oauth.ExchangeCode(ctx, code)
 }
 
