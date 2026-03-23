@@ -275,15 +275,22 @@ type loginRequest struct {
 	CallbackPort int    `json:"callback_port,omitempty"`
 }
 
+type authInfoResponse struct {
+	Provider    string `json:"provider"`
+	DisplayName string `json:"display_name"`
+	DevMode     bool   `json:"dev_mode"`
+}
+
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 	provider := s.auth.Name()
 	displayName := provider
 	if dn, ok := s.auth.(AuthProviderDisplayName); ok {
 		displayName = dn.DisplayName()
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"provider":     provider,
-		"display_name": displayName,
+	writeJSON(w, http.StatusOK, authInfoResponse{
+		Provider:    provider,
+		DisplayName: displayName,
+		DevMode:     s.devMode,
 	})
 }
 
@@ -657,6 +664,42 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+func (s *Server) devLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	if _, err := s.datastore.FindOrCreateUser(r.Context(), req.Email); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		return
+	}
+
+	issuer, ok := s.auth.(SessionTokenIssuer)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
+		return
+	}
+
+	token, err := issuer.IssueSessionToken(&core.UserIdentity{Email: req.Email})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue session token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"email": req.Email,
+		"token": token,
+	})
 }
 
 func generateRandomHex(n int) (string, error) {

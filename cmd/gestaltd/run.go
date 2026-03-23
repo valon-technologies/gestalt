@@ -16,6 +16,7 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/internal/server"
+	"github.com/valon-technologies/gestalt/internal/webui"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -83,6 +84,7 @@ func run(args []string) error {
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		MCPHandler:  mcpHandler,
+		WebUI:       webui.Handler(),
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)

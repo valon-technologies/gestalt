@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL;
 const webPort = Number(process.env.WEB_PORT) || 3000;
-const apiUrl = process.env.GESTALT_API_URL; // set when running against real Go server
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,7 +18,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${webPort}`,
+    baseURL: baseURL || `http://localhost:${webPort}`,
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -37,14 +37,16 @@ export default defineConfig({
     timeout: 10000,
   },
 
-  webServer: {
-    command: apiUrl
-      ? `GESTALT_API_URL=${apiUrl} npm run dev -- --port ${webPort}`
-      : `npm run dev -- --port ${webPort}`,
-    url: `http://localhost:${webPort}`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
-    stdout: "ignore",
-    stderr: "pipe",
-  },
+  ...(baseURL
+    ? {}
+    : {
+        webServer: {
+          command: `npm run dev -- --port ${webPort}`,
+          url: `http://localhost:${webPort}`,
+          reuseExistingServer: !process.env.CI,
+          timeout: 30000,
+          stdout: "ignore",
+          stderr: "pipe",
+        },
+      }),
 });

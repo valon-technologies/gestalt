@@ -26,6 +26,7 @@ type Server struct {
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
 	mcpHandler http.Handler
+	webUI      http.Handler
 }
 
 type Config struct {
@@ -39,6 +40,7 @@ type Config struct {
 	StateSecret []byte
 	Now         func() time.Time
 	MCPHandler  http.Handler
+	WebUI       http.Handler
 }
 
 func New(cfg Config) (*Server, error) {
@@ -70,6 +72,7 @@ func New(cfg Config) (*Server, error) {
 		stateCodec: stateCodec,
 		now:        now,
 		mcpHandler: cfg.MCPHandler,
+		webUI:      cfg.WebUI,
 	}
 
 	s.routes()
@@ -80,6 +83,10 @@ func (s *Server) routes() {
 	r := s.router
 	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
+	if s.devMode {
+		r.Use(devCORS)
+	}
+
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
 
@@ -88,6 +95,10 @@ func (s *Server) routes() {
 			r.Use(s.authMiddleware)
 			r.Handle("/mcp", s.mcpHandler)
 		})
+	}
+
+	if s.devMode {
+		r.Post("/api/dev-login", s.devLogin)
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -129,6 +140,10 @@ func (s *Server) routes() {
 			r.Delete("/tokens/{id}", s.revokeAPIToken)
 		})
 	})
+
+	if s.webUI != nil {
+		r.NotFound(s.webUI.ServeHTTP)
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -11,15 +11,5 @@ services:
     env_file:
       - .env
 
-  web:
-    build:
-      context: ./web
-    ports:
-      - "3000:3000"
-    environment:
-      GESTALT_API_URL: http://gestaltd:8080
-    depends_on:
-      - gestaltd
-
 volumes:
   gestalt-data:
