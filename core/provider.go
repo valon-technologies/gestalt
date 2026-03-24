@@ -60,3 +60,7 @@ type PostConnectHook func(ctx context.Context, token *IntegrationToken, client *
 type PostConnectProvider interface {
 	PostConnectHook() PostConnectHook
 }
+
+type AuthTypeLister interface {
+	AuthTypes() []string
+}

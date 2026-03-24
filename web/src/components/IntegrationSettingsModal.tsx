@@ -9,6 +9,7 @@ interface IntegrationSettingsModalProps {
   integration: Integration;
   onClose: () => void;
   onReconnect: () => void;
+  onReconnectManual?: () => void;
   onDisconnect: () => void;
   reconnecting: boolean;
   disconnecting: boolean;
@@ -19,6 +20,7 @@ export default function IntegrationSettingsModal({
   integration,
   onClose,
   onReconnect,
+  onReconnectManual,
   onDisconnect,
   reconnecting,
   disconnecting,
@@ -147,14 +149,24 @@ export default function IntegrationSettingsModal({
 
                 {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
 
-                <div className="mt-6">
+                <div className="mt-6 flex flex-col gap-2">
                   <Button
                     className="w-full"
                     onClick={onReconnect}
                     disabled={reconnecting}
                   >
-                    {reconnecting ? "Connecting..." : "Connect"}
+                    {reconnecting ? "Connecting..." : onReconnectManual ? "Connect with OAuth" : "Connect"}
                   </Button>
+                  {onReconnectManual && (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={onReconnectManual}
+                      disabled={reconnecting}
+                    >
+                      Use API Token
+                    </Button>
+                  )}
                 </div>
               </>
             )}
