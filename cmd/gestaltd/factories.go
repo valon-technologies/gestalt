@@ -231,25 +231,28 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 			}
 		}
 
-		for _, us := range intg.Upstreams {
+		var mcpUpDef *config.UpstreamDef
+
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
 			switch us.Type {
 			case config.UpstreamTypeREST, config.UpstreamTypeGraphQL:
 				if apiProv != nil {
 					cleanup()
 					return nil, fmt.Errorf("multiple api upstreams not supported")
 				}
-				def, err := loadAPIUpstream(ctx, name, us, preparedProviders)
+				def, err := loadAPIUpstream(ctx, name, *us, preparedProviders)
 				if err != nil {
 					cleanup()
 					return nil, err
 				}
+				intgForBuild := intgWithUpstreamAuth(intg, *us)
 				var buildOpts []provider.BuildOption
-				if intg.Auth.Type == "mcp_oauth" {
-					mcpURL := mcpURLFromUpstreams(intg.Upstreams)
-					handler := buildMCPOAuthHandler(mcpURL, intg, regStore, deps)
+				if us.Auth.Type == "mcp_oauth" {
+					handler := buildMCPOAuthHandlerFromUpstream(*us, regStore, deps)
 					buildOpts = append(buildOpts, provider.WithAuthHandler(handler))
 				}
-				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations), buildOpts...)
+				p, err := provider.Build(def, intgForBuild, map[string]string(us.AllowedOperations), buildOpts...)
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -271,6 +274,7 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 					}
 				}
 				mcpUp = up
+				mcpUpDef = us
 			default:
 				cleanup()
 				return nil, fmt.Errorf("unknown upstream type %q", us.Type)
@@ -283,14 +287,32 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 		case apiProv != nil:
 			return apiProv, nil
 		case mcpUp != nil:
-			if intg.Auth.Type == "mcp_oauth" {
-				return buildMCPOAuthProvider(name, intg, mcpUp, regStore, deps)
+			if mcpUpDef != nil && mcpUpDef.Auth.Type == "mcp_oauth" {
+				return buildMCPOAuthProvider(name, intg, *mcpUpDef, mcpUp, regStore, deps)
 			}
 			return mcpUp, nil
 		default:
 			return nil, fmt.Errorf("no upstreams configured")
 		}
 	}
+}
+
+// Empty upstream fields are left as-is so integration-level defaults
+// (including redirect_url resolved later by resolveBaseURL) are preserved.
+func intgWithUpstreamAuth(intg config.IntegrationDef, us config.UpstreamDef) config.IntegrationDef {
+	if us.Auth.Type != "" {
+		intg.Auth = us.Auth
+	}
+	if us.ClientID != "" {
+		intg.ClientID = us.ClientID
+	}
+	if us.ClientSecret != "" {
+		intg.ClientSecret = us.ClientSecret
+	}
+	if us.RedirectURL != "" {
+		intg.RedirectURL = us.RedirectURL
+	}
+	return intg
 }
 
 func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
@@ -314,33 +336,28 @@ func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
 	return store
 }
 
-func buildMCPOAuthHandler(mcpURL string, intg config.IntegrationDef, store mcpoauth.RegistrationStore, deps bootstrap.Deps) *mcpoauth.Handler {
-	redirectURL := intg.RedirectURL
+func buildMCPOAuthHandlerFromUpstream(us config.UpstreamDef, store mcpoauth.RegistrationStore, deps bootstrap.Deps) *mcpoauth.Handler {
+	redirectURL := us.RedirectURL
 	if redirectURL == "" {
 		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
+	}
+
+	mcpURL := us.URL
+	if us.MCPURL != "" {
+		mcpURL = us.MCPURL
 	}
 
 	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
 		MCPURL:       mcpURL,
 		Store:        store,
 		RedirectURL:  redirectURL,
-		ClientID:     intg.ClientID,
-		ClientSecret: intg.ClientSecret,
+		ClientID:     us.ClientID,
+		ClientSecret: us.ClientSecret,
 	})
 }
 
-func mcpURLFromUpstreams(upstreams []config.UpstreamDef) string {
-	for _, us := range upstreams {
-		if us.Type == config.UpstreamTypeMCP {
-			return us.URL
-		}
-	}
-	return ""
-}
-
-func buildMCPOAuthProvider(name string, intg config.IntegrationDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps) (core.Provider, error) {
-	mcpURL := mcpURLFromUpstreams(intg.Upstreams)
-	handler := buildMCPOAuthHandler(mcpURL, intg, store, deps)
+func buildMCPOAuthProvider(name string, intg config.IntegrationDef, us config.UpstreamDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps) (core.Provider, error) {
+	handler := buildMCPOAuthHandlerFromUpstream(us, store, deps)
 
 	connMode := core.ConnectionModeUser
 	if intg.ConnectionMode != "" {

@@ -108,6 +108,20 @@ type UpstreamDef struct {
 	URL               string     `yaml:"url"`
 	MCP               bool       `yaml:"mcp"`
 	AllowedOperations AllowedOps `yaml:"allowed_operations"`
+
+	// Per-upstream auth overrides. When set, these take precedence over
+	// integration-level auth for this upstream. When empty, the
+	// integration-level values are inherited during config resolution.
+	AuthProfile  string        `yaml:"auth_profile"`
+	Auth         AuthOverrides `yaml:"auth"`
+	ClientID     string        `yaml:"client_id"`
+	ClientSecret string        `yaml:"client_secret"`
+	RedirectURL  string        `yaml:"redirect_url"`
+
+	// MCPURL is set during config resolution for non-MCP upstreams that use
+	// mcp_oauth auth. It points to the sibling MCP upstream's URL so that
+	// OAuth discovery probes the correct endpoint.
+	MCPURL string `yaml:"-"`
 }
 
 // AllowedOps is a map of operation name to optional description override.
@@ -181,6 +195,10 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := resolveUpstreamAuth(&cfg); err != nil {
+		return nil, err
+	}
+
 	resolveBaseURL(&cfg) // after resolveAuthProfiles so inherited fields take priority
 	resolveRelativePaths(path, &cfg)
 
@@ -219,54 +237,121 @@ func resolveAuthProfiles(cfg *Config) error {
 		if intg.RedirectURL == "" {
 			intg.RedirectURL = profile.RedirectURL
 		}
-		if intg.Auth.Type == "" {
-			intg.Auth.Type = profile.Auth.Type
-		}
-		if intg.Auth.AuthorizationURL == "" {
-			intg.Auth.AuthorizationURL = profile.Auth.AuthorizationURL
-		}
-		if intg.Auth.TokenURL == "" {
-			intg.Auth.TokenURL = profile.Auth.TokenURL
-		}
-		if intg.Auth.ClientAuth == "" {
-			intg.Auth.ClientAuth = profile.Auth.ClientAuth
-		}
-		if intg.Auth.TokenExchange == "" {
-			intg.Auth.TokenExchange = profile.Auth.TokenExchange
-		}
-		if !intg.Auth.PKCE && profile.Auth.PKCE {
-			intg.Auth.PKCE = true
-		}
-		if intg.Auth.AuthorizationParams == nil {
-			intg.Auth.AuthorizationParams = profile.Auth.AuthorizationParams
-		}
-		if intg.Auth.TokenParams == nil {
-			intg.Auth.TokenParams = profile.Auth.TokenParams
-		}
-		if intg.Auth.RefreshParams == nil {
-			intg.Auth.RefreshParams = profile.Auth.RefreshParams
-		}
-		if intg.Auth.Scopes == nil {
-			intg.Auth.Scopes = profile.Auth.Scopes
-		}
-		if intg.Auth.ScopeSeparator == "" {
-			intg.Auth.ScopeSeparator = profile.Auth.ScopeSeparator
-		}
-		if intg.Auth.AcceptHeader == "" {
-			intg.Auth.AcceptHeader = profile.Auth.AcceptHeader
-		}
-		if intg.Auth.TokenMetadata == nil {
-			intg.Auth.TokenMetadata = profile.Auth.TokenMetadata
-		}
-		if intg.Auth.ResponseHook == "" {
-			intg.Auth.ResponseHook = profile.Auth.ResponseHook
-		}
-		if intg.Auth.AuthHeader == "" {
-			intg.Auth.AuthHeader = profile.Auth.AuthHeader
-		}
+		fillAuthDefaults(&intg.Auth, &profile.Auth)
 		cfg.Integrations[name] = intg
 	}
 	return nil
+}
+
+// resolveUpstreamAuth cascades integration-level auth to upstreams that don't
+// specify their own, and resolves upstream-level auth profiles.
+func resolveUpstreamAuth(cfg *Config) error {
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
+
+			if us.AuthProfile != "" {
+				profile, ok := cfg.AuthProfiles[us.AuthProfile]
+				if !ok {
+					return fmt.Errorf("integration %q upstream %d references unknown auth_profile %q", name, i, us.AuthProfile)
+				}
+				fillUpstreamFromProfile(us, profile)
+			}
+
+			if us.Auth.Type == "" {
+				us.Auth.Type = intg.Auth.Type
+			}
+			if us.ClientID == "" {
+				us.ClientID = intg.ClientID
+			}
+			if us.ClientSecret == "" {
+				us.ClientSecret = intg.ClientSecret
+			}
+			if us.RedirectURL == "" {
+				us.RedirectURL = intg.RedirectURL
+			}
+			fillAuthDefaults(&us.Auth, &intg.Auth)
+		}
+
+		// Populate MCPURL so non-MCP upstreams with mcp_oauth can discover
+		// OAuth endpoints from the sibling MCP server.
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
+			if us.Auth.Type == "mcp_oauth" && us.Type != UpstreamTypeMCP && us.MCPURL == "" {
+				for j := range intg.Upstreams {
+					if intg.Upstreams[j].Type == UpstreamTypeMCP {
+						us.MCPURL = intg.Upstreams[j].URL
+						break
+					}
+				}
+			}
+		}
+
+		cfg.Integrations[name] = intg
+	}
+	return nil
+}
+
+func fillUpstreamFromProfile(us *UpstreamDef, profile AuthProfile) {
+	if us.ClientID == "" {
+		us.ClientID = profile.ClientID
+	}
+	if us.ClientSecret == "" {
+		us.ClientSecret = profile.ClientSecret
+	}
+	if us.RedirectURL == "" {
+		us.RedirectURL = profile.RedirectURL
+	}
+	fillAuthDefaults(&us.Auth, &profile.Auth)
+}
+
+func fillAuthDefaults(dst, src *AuthOverrides) {
+	if dst.Type == "" {
+		dst.Type = src.Type
+	}
+	if dst.AuthorizationURL == "" {
+		dst.AuthorizationURL = src.AuthorizationURL
+	}
+	if dst.TokenURL == "" {
+		dst.TokenURL = src.TokenURL
+	}
+	if dst.ClientAuth == "" {
+		dst.ClientAuth = src.ClientAuth
+	}
+	if dst.TokenExchange == "" {
+		dst.TokenExchange = src.TokenExchange
+	}
+	if !dst.PKCE && src.PKCE {
+		dst.PKCE = true
+	}
+	if dst.Scopes == nil {
+		dst.Scopes = src.Scopes
+	}
+	if dst.ScopeSeparator == "" {
+		dst.ScopeSeparator = src.ScopeSeparator
+	}
+	if dst.AuthorizationParams == nil {
+		dst.AuthorizationParams = src.AuthorizationParams
+	}
+	if dst.TokenParams == nil {
+		dst.TokenParams = src.TokenParams
+	}
+	if dst.RefreshParams == nil {
+		dst.RefreshParams = src.RefreshParams
+	}
+	if dst.AcceptHeader == "" {
+		dst.AcceptHeader = src.AcceptHeader
+	}
+	if dst.TokenMetadata == nil {
+		dst.TokenMetadata = src.TokenMetadata
+	}
+	if dst.ResponseHook == "" {
+		dst.ResponseHook = src.ResponseHook
+	}
+	if dst.AuthHeader == "" {
+		dst.AuthHeader = src.AuthHeader
+	}
 }
 
 func resolveBaseURL(cfg *Config) {
@@ -328,7 +413,8 @@ func validate(cfg *Config) error {
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		apiCount := 0
-		for _, us := range intg.Upstreams {
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
 			switch us.Type {
 			case UpstreamTypeREST, UpstreamTypeGraphQL:
 				apiCount++
