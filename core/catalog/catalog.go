@@ -61,6 +61,27 @@ type CatalogParameter struct {
 	Default     any    `yaml:"default,omitempty"    json:"default,omitempty"`
 }
 
+func (c *Catalog) Clone() *Catalog {
+	if c == nil {
+		return nil
+	}
+	out := &Catalog{
+		Name:        c.Name,
+		DisplayName: c.DisplayName,
+		Description: c.Description,
+		IconSVG:     c.IconSVG,
+		BaseURL:     c.BaseURL,
+		AuthStyle:   c.AuthStyle,
+		Headers:     make(map[string]string, len(c.Headers)),
+		Operations:  make([]CatalogOperation, len(c.Operations)),
+	}
+	for k, v := range c.Headers {
+		out.Headers[k] = v
+	}
+	copy(out.Operations, c.Operations)
+	return out
+}
+
 func LoadCatalogYAML(data []byte) (*Catalog, error) {
 	var catalog Catalog
 	if err := yaml.Unmarshal(data, &catalog); err != nil {

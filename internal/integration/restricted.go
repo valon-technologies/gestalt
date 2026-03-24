@@ -34,6 +34,13 @@ func NewRestricted(inner core.Provider, allowed []string) core.Provider {
 		m[name] = struct{}{}
 	}
 	r := &Restricted{inner: inner, allowed: m}
+	if scp, ok := inner.(core.SessionCatalogProvider); ok {
+		rs := &restrictedSession{Restricted: r, scp: scp}
+		if oauth, ok := inner.(core.OAuthProvider); ok {
+			return &restrictedOAuth{Restricted: rs.Restricted, oauth: oauth, session: rs}
+		}
+		return rs
+	}
 	if oauth, ok := inner.(core.OAuthProvider); ok {
 		return &restrictedOAuth{Restricted: r, oauth: oauth}
 	}
@@ -94,11 +101,41 @@ func (r *Restricted) Inner() core.Provider {
 	return r.inner
 }
 
+// restrictedSession wraps a Restricted provider and adds SessionCatalogProvider
+// support. Only returned when the inner provider actually implements it.
+type restrictedSession struct {
+	*Restricted
+	scp core.SessionCatalogProvider
+}
+
+func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	cat, err := rs.scp.CatalogForRequest(ctx, token)
+	if err != nil || cat == nil {
+		return cat, err
+	}
+	filtered := *cat
+	filtered.Operations = nil
+	for i := range cat.Operations {
+		if _, ok := rs.allowed[cat.Operations[i].ID]; ok {
+			filtered.Operations = append(filtered.Operations, cat.Operations[i])
+		}
+	}
+	return &filtered, nil
+}
+
 // restrictedOAuth wraps a Restricted provider and delegates OAuth methods
 // to the inner OAuthProvider.
 type restrictedOAuth struct {
 	*Restricted
-	oauth core.OAuthProvider
+	oauth   core.OAuthProvider
+	session *restrictedSession
+}
+
+func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if r.session != nil {
+		return r.session.CatalogForRequest(ctx, token)
+	}
+	return nil, nil
 }
 
 func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string {
