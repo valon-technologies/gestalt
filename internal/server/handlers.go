@@ -62,7 +62,6 @@ type integrationInfo struct {
 	Description      string                         `json:"description,omitempty"`
 	IconSVG          string                         `json:"icon_svg,omitempty"`
 	Connected        bool                           `json:"connected"`
-	AuthType         string                         `json:"auth_type"`
 	AuthTypes        []string                       `json:"auth_types"`
 	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
 }
@@ -101,7 +100,6 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
 			Connected:   connected[name],
-			AuthType:    authTypes[0],
 			AuthTypes:   authTypes,
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
