@@ -48,10 +48,12 @@ func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) readinessCheck(w http.ResponseWriter, r *http.Request) {
-	if err := s.datastore.Ping(r.Context()); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
-		return
+func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
+	if s.readiness != nil {
+		if reason := s.readiness(); reason != "" {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": reason})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

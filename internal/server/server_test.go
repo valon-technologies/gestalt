@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,13 +103,54 @@ func TestReadinessCheck(t *testing.T) {
 	}
 }
 
+func TestReadinessCheck_NotReady(t *testing.T) {
+	t.Parallel()
+	var ready atomic.Bool
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Readiness = func() string {
+			if !ready.Load() {
+				return "providers loading"
+			}
+			return ""
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/ready")
+	if err != nil {
+		t.Fatalf("GET /ready: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 while not ready, got %d", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body["status"] != "providers loading" {
+		t.Fatalf("expected status 'providers loading', got %q", body["status"])
+	}
+
+	ready.Store(true)
+
+	resp2, err := http.Get(ts.URL + "/ready")
+	if err != nil {
+		t.Fatalf("GET /ready after ready: %v", err)
+	}
+	defer func() { _ = resp2.Body.Close() }()
+
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 after ready, got %d", resp2.StatusCode)
+	}
+}
+
 func TestReadinessCheck_DatastoreDown(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Datastore = &coretesting.StubDatastore{
-			PingFn: func(context.Context) error {
-				return fmt.Errorf("connection refused")
-			},
+		cfg.Readiness = func() string {
+			return "datastore unavailable"
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -127,8 +169,8 @@ func TestReadinessCheck_DatastoreDown(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if body["status"] != "unavailable" {
-		t.Fatalf("expected status unavailable, got %q", body["status"])
+	if body["status"] != "datastore unavailable" {
+		t.Fatalf("expected status 'datastore unavailable', got %q", body["status"])
 	}
 }
 
