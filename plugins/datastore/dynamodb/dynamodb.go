@@ -294,6 +294,38 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 	return tokens, nil
 }
 
+func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+	keyCond := expression.KeyAnd(
+		expression.Key(attrPK).Equal(expression.Value(userPKPrefix+userID)),
+		expression.KeyBeginsWith(expression.Key(attrSK), tokenSKPrefix),
+	)
+	filt := expression.Name(attrIntegration).Equal(expression.Value(integration))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithFilter(filt).Build()
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb: building expression: %w", err)
+	}
+	out, err := s.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 &s.tableName,
+		KeyConditionExpression:    expr.KeyCondition(),
+		FilterExpression:          expr.Filter(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb: listing tokens for integration: %w", err)
+	}
+
+	tokens := make([]*core.IntegrationToken, 0, len(out.Items))
+	for _, item := range out.Items {
+		t, err := s.unmarshalIntegrationToken(item)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, nil
+}
+
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
 	pk, sk, err := s.lookupKeysByGSI(ctx, gsiID, attrID, id, tokenSKPrefix)
 	if err != nil {

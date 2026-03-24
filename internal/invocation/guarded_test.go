@@ -45,7 +45,7 @@ func TestGuardedInvoker_AllowedProvider(t *testing.T) {
 	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
 	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
 
-	result, err := guarded.Invoke(context.Background(), nil, "alpha", "ping", nil)
+	result, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestGuardedInvoker_DisallowedProvider(t *testing.T) {
 	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
 	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"beta"}), invocation.WithoutRateLimit())
 
-	_, err := guarded.Invoke(context.Background(), nil, "alpha", "ping", nil)
+	_, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
 	if err == nil {
 		t.Fatal("expected error for disallowed provider")
 	}
@@ -76,7 +76,7 @@ func TestGuardedInvoker_NoAllowlist(t *testing.T) {
 	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithoutRateLimit())
 
 	for _, provider := range []string{"alpha", "beta"} {
-		result, err := guarded.Invoke(context.Background(), nil, provider, "ping", nil)
+		result, err := guarded.Invoke(context.Background(), nil, provider, "", "ping", nil)
 		if err != nil {
 			t.Fatalf("Invoke %s: %v", provider, err)
 		}
@@ -93,7 +93,7 @@ func TestGuardedInvoker_MaxDepthEnforced(t *testing.T) {
 	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithMaxDepth(2), invocation.WithoutRateLimit())
 
 	ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{RequestID: "test-id", Depth: 2})
-	_, err := guarded.Invoke(ctx, nil, "alpha", "ping", nil)
+	_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
 	if err == nil {
 		t.Fatal("expected max depth error")
 	}
@@ -115,9 +115,9 @@ func TestGuardedInvoker_RecursionDetected(t *testing.T) {
 	ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{
 		RequestID: "test-id",
 		Depth:     1,
-		CallChain: []string{"alpha/ping"},
+		CallChain: []string{"alpha/default/ping"},
 	})
-	_, err := guarded.Invoke(ctx, nil, "alpha", "ping", nil)
+	_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
 	if err == nil {
 		t.Fatal("expected recursion error")
 	}
@@ -133,13 +133,13 @@ func TestGuardedInvoker_RateLimitExceeded(t *testing.T) {
 	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
 	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithRateLimit(1, 1))
 
-	if _, err := guarded.Invoke(context.Background(), nil, "alpha", "ping", nil); err != nil {
+	if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
 		t.Fatalf("first Invoke: %v", err)
 	}
 
 	var rateLimited bool
 	for i := 0; i < 10; i++ {
-		if _, err := guarded.Invoke(context.Background(), nil, "alpha", "ping", nil); err != nil {
+		if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
 			var rateLimitErr *invocation.RateLimitError
 			if errors.As(err, &rateLimitErr) {
 				rateLimited = true
@@ -160,7 +160,7 @@ func TestGuardedInvoker_AuditLogged(t *testing.T) {
 	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
 	guarded := invocation.NewGuarded(base, base, "binding:my-hook", sink, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
 
-	_, _ = guarded.Invoke(context.Background(), nil, "alpha", "ping", nil)
+	_, _ = guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
 	if len(sink.entries) != 1 {
 		t.Fatalf("expected 1 audit entry, got %d", len(sink.entries))
 	}
@@ -181,7 +181,7 @@ func TestGuardedInvoker_AuditLogged(t *testing.T) {
 		t.Error("expected non-empty RequestID")
 	}
 
-	_, _ = guarded.Invoke(context.Background(), nil, "beta", "ping", nil)
+	_, _ = guarded.Invoke(context.Background(), nil, "beta", "", "ping", nil)
 	if len(sink.entries) != 2 {
 		t.Fatalf("expected 2 audit entries, got %d", len(sink.entries))
 	}

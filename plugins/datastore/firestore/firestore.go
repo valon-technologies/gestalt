@@ -292,6 +292,31 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 	return tokens, nil
 }
 
+func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+	iter := s.client.Collection(datastore.IntegrationTokensCollection).
+		Where("user_id", "==", userID).
+		Where("integration", "==", integration).
+		Documents(ctx)
+	defer iter.Stop()
+
+	var tokens []*core.IntegrationToken
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("firestore: listing tokens for integration: %w", err)
+		}
+		t, err := s.snapToIntegrationToken(snap)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, nil
+}
+
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
 	_, err := s.client.Collection(datastore.IntegrationTokensCollection).Doc(id).Delete(ctx)
 	if err != nil {

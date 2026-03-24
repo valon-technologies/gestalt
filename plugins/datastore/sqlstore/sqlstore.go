@@ -248,6 +248,27 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 	return tokens, rows.Err()
 }
 
+func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
+		FROM integration_tokens WHERE user_id = `+s.ph(1)+` AND integration = `+s.ph(2), userID, integration)
+	if err != nil {
+		return nil, fmt.Errorf("listing tokens for integration: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tokens []*core.IntegrationToken
+	for rows.Next() {
+		t, err := s.scanIntegrationToken(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning token row: %w", err)
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, rows.Err()
+}
+
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
 	_, err := s.DB.ExecContext(ctx, "DELETE FROM integration_tokens WHERE id = "+s.ph(1), id)
 	if err != nil {

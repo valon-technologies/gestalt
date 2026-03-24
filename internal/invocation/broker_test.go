@@ -53,7 +53,7 @@ func TestInvoke_Success(t *testing.T) {
 		Source:   principal.SourceSession,
 	}
 
-	result, err := b.Invoke(context.Background(), p, "test-int", "do_thing", nil)
+	result, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestInvoke_ProviderNotFound(t *testing.T) {
 		UserID:   "u1",
 	}
 
-	_, err := b.Invoke(context.Background(), p, "nonexistent", "op", nil)
+	_, err := b.Invoke(context.Background(), p, "nonexistent", "", "op", nil)
 	if !errors.Is(err, invocation.ErrProviderNotFound) {
 		t.Fatalf("expected ErrProviderNotFound, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestInvoke_OperationNotFound(t *testing.T) {
 		UserID:   "u1",
 	}
 
-	_, err := b.Invoke(context.Background(), p, "test-int", "nonexistent", nil)
+	_, err := b.Invoke(context.Background(), p, "test-int", "", "nonexistent", nil)
 	if !errors.Is(err, invocation.ErrOperationNotFound) {
 		t.Fatalf("expected ErrOperationNotFound, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestInvoke_NilPrincipal(t *testing.T) {
 	ds := &coretesting.StubDatastore{}
 	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
 
-	_, err := b.Invoke(context.Background(), nil, "test-int", "do_thing", nil)
+	_, err := b.Invoke(context.Background(), nil, "test-int", "", "do_thing", nil)
 	if !errors.Is(err, invocation.ErrNotAuthenticated) {
 		t.Fatalf("expected ErrNotAuthenticated, got %v", err)
 	}
@@ -139,7 +139,7 @@ func TestInvoke_NoStoredToken(t *testing.T) {
 		UserID:   "u1",
 	}
 
-	_, err := b.Invoke(context.Background(), p, "test-int", "do_thing", nil)
+	_, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil)
 	if !errors.Is(err, invocation.ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
@@ -173,7 +173,7 @@ func TestInvoke_UserIDResolution(t *testing.T) {
 		Source:   principal.SourceSession,
 	}
 
-	_, err := b.Invoke(context.Background(), p, "test-int", "do_thing", nil)
+	_, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestInvoke_NilTokenResponse(t *testing.T) {
 		UserID:   "u1",
 	}
 
-	_, err := b.Invoke(context.Background(), p, "test-int", "do_thing", nil)
+	_, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil)
 	if !errors.Is(err, invocation.ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
@@ -240,7 +240,7 @@ func TestInvoke_MetadataJSONFlowsToContext(t *testing.T) {
 	b := invocation.NewBroker(reg, ds)
 
 	p := &principal.Principal{UserID: "u1"}
-	_, err := b.Invoke(context.Background(), p, "shopify", "list_products", nil)
+	_, err := b.Invoke(context.Background(), p, "shopify", "", "list_products", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

@@ -228,6 +228,28 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 	return tokens, cursor.Err()
 }
 
+func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+	cursor, err := s.db.Collection(datastore.IntegrationTokensCollection).Find(ctx, bson.M{"user_id": userID, "integration": integration})
+	if err != nil {
+		return nil, fmt.Errorf("mongodb: listing tokens for integration: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var tokens []*core.IntegrationToken
+	for cursor.Next(ctx) {
+		var doc integrationTokenDoc
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("mongodb: decoding token: %w", err)
+		}
+		t, err := s.integrationTokenFromDoc(&doc)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, cursor.Err()
+}
+
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
 	_, err := s.db.Collection(datastore.IntegrationTokensCollection).DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {

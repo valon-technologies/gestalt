@@ -147,12 +147,12 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 		t.Fatal("expected binding deps to be scoped, not the shared invoker")
 	}
 
-	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "alpha", "do", nil)
+	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "alpha", "", "do", nil)
 	if err == nil || !strings.Contains(err.Error(), "not available in this scope") {
 		t.Fatalf("expected scoped binding invoker to reject alpha, got %v", err)
 	}
 
-	resultOp, err := bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "do", nil)
+	resultOp, err := bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "", "do", nil)
 	if err != nil {
 		t.Fatalf("expected scoped binding invoker to allow beta: %v", err)
 	}

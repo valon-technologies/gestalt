@@ -2,6 +2,7 @@ package coretesting
 
 import (
 	"context"
+	"errors"
 
 	"github.com/valon-technologies/gestalt/core"
 )
@@ -19,15 +20,16 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
-	PingFn             func(context.Context) error
-	GetUserFn          func(context.Context, string) (*core.User, error)
-	FindOrCreateUserFn func(context.Context, string) (*core.User, error)
-	StoreTokenFn       func(context.Context, *core.IntegrationToken) error
-	TokenFn            func(context.Context, string, string, string) (*core.IntegrationToken, error)
-	ListTokensFn       func(context.Context, string) ([]*core.IntegrationToken, error)
-	DeleteTokenFn      func(context.Context, string) error
-	ValidateAPITokenFn func(context.Context, string) (*core.APIToken, error)
-	RevokeAPITokenFn   func(context.Context, string, string) error
+	PingFn                     func(context.Context) error
+	GetUserFn                  func(context.Context, string) (*core.User, error)
+	FindOrCreateUserFn         func(context.Context, string) (*core.User, error)
+	StoreTokenFn               func(context.Context, *core.IntegrationToken) error
+	TokenFn                    func(context.Context, string, string, string) (*core.IntegrationToken, error)
+	ListTokensFn               func(context.Context, string) ([]*core.IntegrationToken, error)
+	ListTokensForIntegrationFn func(context.Context, string, string) ([]*core.IntegrationToken, error)
+	DeleteTokenFn              func(context.Context, string) error
+	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
+	RevokeAPITokenFn           func(context.Context, string, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -65,6 +67,25 @@ func (s *StubDatastore) Token(ctx context.Context, userID, integration, instance
 func (s *StubDatastore) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
 	if s.ListTokensFn != nil {
 		return s.ListTokensFn(ctx, userID)
+	}
+	return nil, nil
+}
+func (s *StubDatastore) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+	if s.ListTokensForIntegrationFn != nil {
+		return s.ListTokensForIntegrationFn(ctx, userID, integration)
+	}
+	if s.TokenFn != nil {
+		tok, err := s.TokenFn(ctx, userID, integration, "default")
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		if tok == nil {
+			return nil, nil
+		}
+		return []*core.IntegrationToken{tok}, nil
 	}
 	return nil, nil
 }

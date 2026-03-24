@@ -7,12 +7,17 @@ export interface ConnectionParamDef {
   default?: string;
 }
 
+export interface InstanceInfo {
+  name: string;
+}
+
 export interface Integration {
   name: string;
   display_name?: string;
   description?: string;
   icon_svg?: string;
   connected?: boolean;
+  instances?: InstanceInfo[];
   auth_types?: ("oauth" | "manual")[];
   connection_params?: Record<string, ConnectionParamDef>;
 }
@@ -119,11 +124,13 @@ export async function startIntegrationOAuth(
   integration: string,
   scopes?: string[],
   connectionParams?: Record<string, string>,
+  instance?: string,
 ): Promise<{ url: string; state: string }> {
   return fetchAPI("/api/v1/auth/start-oauth", {
     method: "POST",
     body: JSON.stringify({
       integration,
+      instance,
       scopes: scopes || [],
       connection_params: connectionParams,
     }),
@@ -134,11 +141,13 @@ export async function connectManualIntegration(
   integration: string,
   credential: string,
   connectionParams?: Record<string, string>,
+  instance?: string,
 ): Promise<{ status: string }> {
   return fetchAPI("/api/v1/auth/connect-manual", {
     method: "POST",
     body: JSON.stringify({
       integration,
+      instance,
       credential,
       connection_params: connectionParams,
     }),
@@ -147,8 +156,10 @@ export async function connectManualIntegration(
 
 export async function disconnectIntegration(
   name: string,
+  instance?: string,
 ): Promise<void> {
-  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}`, {
+  const params = instance ? `?instance=${encodeURIComponent(instance)}` : "";
+  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}${params}`, {
     method: "DELETE",
   });
 }
