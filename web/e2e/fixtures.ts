@@ -67,8 +67,7 @@ type CustomFixtures = {
 export const test = base.extend<CustomFixtures>({
   authenticatedPage: async ({ page }, use) => {
     await page.addInitScript(() => {
-      sessionStorage.setItem("session_token", "test-session-token");
-      sessionStorage.setItem("user_email", "test@gestalt.dev");
+      localStorage.setItem("user_email", "test@gestalt.dev");
     });
     await use(page);
   },

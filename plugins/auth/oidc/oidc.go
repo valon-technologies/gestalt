@@ -124,8 +124,9 @@ func New(cfg Config) (*Provider, error) {
 	}, nil
 }
 
-func (p *Provider) Name() string        { return "oidc" }
-func (p *Provider) DisplayName() string { return p.displayName }
+func (p *Provider) Name() string                   { return "oidc" }
+func (p *Provider) DisplayName() string            { return p.displayName }
+func (p *Provider) SessionTokenTTL() time.Duration { return p.ttl }
 
 func (p *Provider) LoginURL(state string) (string, error) {
 	if !p.pkce {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchAPI, getAuthInfo, startLogin } from "@/lib/api";
-import { isAuthenticated, setSessionToken, setUserEmail } from "@/lib/auth";
+import { isAuthenticated, setUserEmail } from "@/lib/auth";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
@@ -48,14 +48,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { email, token } = await fetchAPI<{
+      const { email } = await fetchAPI<{
         email: string;
-        token: string;
       }>("/api/dev-login", {
         method: "POST",
         body: JSON.stringify({ email: devEmail }),
       });
-      setSessionToken(token);
       setUserEmail(email);
       window.location.replace("/");
     } catch (err) {
