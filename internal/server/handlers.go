@@ -611,9 +611,10 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	now := s.now().UTC().Truncate(time.Second)
 	var expiresAt *time.Time
 	if tokenResp.ExpiresIn > 0 {
-		t := s.now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		t := now.Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 		expiresAt = &t
 	}
 
@@ -631,6 +632,8 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresAt:    expiresAt,
 		MetadataJSON: metadata,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
@@ -708,12 +711,15 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	now := s.now().UTC().Truncate(time.Second)
 	tok := &core.IntegrationToken{
 		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
 		Integration: req.Integration,
 		Instance:    manualInstance,
 		AccessToken: req.Credential,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
 	if metaErr != nil {
