@@ -55,10 +55,10 @@ integrations:
 ## Start the server
 
 ```sh
-gestaltd --config gestalt.local.yaml
+gestaltd dev --config gestalt.local.yaml
 ```
 
-This starts both the API server (port 8080) and the web UI (port 3000). When dev mode is enabled, you will see "dev mode enabled" in the output; this confirms that dev login and relaxed CORS are active.
+This starts both the API server (port 8080) and the web UI (port 3000). `gestaltd dev` also prepares any remote REST or GraphQL providers automatically for local use. When dev mode is enabled, you will see "dev mode enabled" in the output; this confirms that dev login and relaxed CORS are active.
 
 ## Sign in and connect Slack
 

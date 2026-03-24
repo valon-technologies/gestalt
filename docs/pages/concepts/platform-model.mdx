@@ -11,7 +11,7 @@ Gestalt has a small set of primitives that compose into a complete API gateway f
 | **Secret manager** | Resolves `secret://` references in config before other components are built, keeping sensitive values out of plain-text YAML. |
 | **Integration definition** | Describes one or more upstreams (REST, GraphQL, or MCP) with their auth style, operations, and optional hooks. |
 | **Provider** | Runtime object that lists operations and executes them against upstream APIs. Built from the integration's upstreams at startup. |
-| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec, GraphQL introspection, MCP tool listing, or declared in YAML. |
+| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec, GraphQL introspection, or MCP tool listing. |
 | **Hooks** | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
 | **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
 | **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
@@ -30,7 +30,7 @@ When an integration declares multiple upstream types — for example, a REST ups
 
 An **upstream** is a source of operations. Every integration declares at least one. Gestalt supports three upstream types:
 
-- A **REST upstream** loads operations from an OpenAPI specification, a local provider definition file, or a directory scan. Each path and method combination in the spec becomes a callable operation.
+- A **REST upstream** loads operations from an OpenAPI specification URL. Each path and method combination in the spec becomes a callable operation.
 - A **GraphQL upstream** introspects a GraphQL endpoint at startup and generates one operation per query and mutation field.
 - An **MCP upstream** connects to a remote MCP server and imports its tools as operations.
 
@@ -78,9 +78,7 @@ Like bindings, runtimes receive a scoped invoker limited to the providers listed
 
 A **provider artifact** is a precompiled JSON file containing a complete provider definition: metadata, auth configuration, and the full list of operations with their parameters and schemas.
 
-By default, Gestalt builds providers by fetching OpenAPI specs or introspecting GraphQL endpoints at startup. This works well in development but introduces external dependencies at boot time. Artifacts eliminate this: you compile them once with `gestaltd compile-providers`, and subsequent startups load the local files instead of reaching out to the network.
-
-The `gestaltd bundle` command takes this further. It writes a self-contained directory with a generated config file and all provider artifacts, ready for deployment. No live spec fetches, no GraphQL introspection, no network dependencies at startup.
+Source configs always declare REST and GraphQL upstreams by `url`. In development, `gestaltd dev` resolves those upstreams live and writes prepared artifacts next to the config as needed. For deterministic deployment, run `gestaltd prepare` ahead of time to write `gestalt.lock.json` plus `.gestalt/providers/*.json`, then start with `gestaltd serve` so startup no longer depends on live spec fetches or GraphQL introspection.
 
 ### Connections and instances
 

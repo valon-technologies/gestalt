@@ -5,7 +5,7 @@
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Health check. Returns `{"status":"ok"}`. |
-| GET | `/ready` | Readiness check. Returns `{"status":"ok"}` when the datastore is reachable, or `{"status":"unavailable"}` with a 503 when it is not. |
+| GET | `/ready` | Readiness check. Returns `{"status":"ok"}` when providers are initialized and the datastore is reachable. Otherwise returns a 503 with a reason such as `{"status":"providers loading"}` or `{"status":"datastore unavailable"}`. |
 | POST | `/api/v1/auth/login` | Start platform login. Accepts `{"state": "...", "callback_port": 12345}`. Returns `{"url": "..."}` with the provider's login URL. |
 | GET | `/api/v1/auth/login/callback` | Complete platform login. Exchanges the authorization code for a session token. Returns `{"email": "...", "display_name": "...", "token": "..."}`. |
 | GET | `/api/v1/auth/info` | Returns `{"provider": "...", "display_name": "...", "dev_mode": true/false}`. |
@@ -58,7 +58,7 @@ Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their c
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET or POST | `/mcp` | Model Context Protocol endpoint (when `mcp.enabled: true`). |
+| GET or POST | `/mcp` | Model Context Protocol endpoint. Mounted when at least one integration exposes MCP tools, either via `mcp: true` on a REST/GraphQL upstream or via a `type: mcp` upstream. |
 
 ## Execution semantics
 
