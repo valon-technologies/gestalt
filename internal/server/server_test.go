@@ -19,7 +19,9 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -28,6 +30,8 @@ import (
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"github.com/valon-technologies/gestalt/internal/server"
 	"github.com/valon-technologies/gestalt/internal/testutil"
+	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
+	"gopkg.in/yaml.v3"
 )
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
@@ -2941,6 +2945,138 @@ func TestBindingRoutesMounted(t *testing.T) {
 	if result["binding"] != "reached" {
 		t.Fatalf("expected binding handler to be reached, got %v", result)
 	}
+}
+
+func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		configuredPath string
+		nestedURL      string
+		exactURL       string
+	}{
+		{
+			name:           "agent-proxy",
+			configuredPath: "/proxy",
+			nestedURL:      "/api/v1/bindings/agent-proxy/proxy/messages?cursor=123",
+			exactURL:       "/api/v1/bindings/agent-proxy/proxy",
+		},
+		{
+			name:           "api-proxy",
+			configuredPath: "/api",
+			nestedURL:      "/api/v1/bindings/api-proxy/api/messages?cursor=123",
+			exactURL:       "/api/v1/bindings/api-proxy/api",
+		},
+		{
+			name:           "root-proxy",
+			configuredPath: "/",
+			nestedURL:      "/api/v1/bindings/root-proxy/messages?cursor=123",
+			exactURL:       "/api/v1/bindings/root-proxy/",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			binding := newTestProxyBinding(t, tc.name, tc.configuredPath)
+			bindings := registry.NewBindingMap()
+			if err := bindings.Register(tc.name, binding); err != nil {
+				t.Fatal(err)
+			}
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.DevMode = true
+				cfg.Bindings = bindings
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, err := http.NewRequest(http.MethodPost, ts.URL+tc.nestedURL, bytes.NewBufferString("hello"))
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			req.Header.Set("Content-Type", "text/plain")
+			req.Header.Set("X-Forwarded-Host", "api.example.com")
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+
+			if resp.StatusCode != http.StatusNotImplemented {
+				_ = resp.Body.Close()
+				t.Fatalf("expected 501, got %d", resp.StatusCode)
+			}
+
+			var result struct {
+				Policy egress.PolicyInput `json:"policy_input"`
+				Target egress.Target      `json:"target"`
+				Body   string             `json:"body"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				t.Fatalf("decoding: %v", err)
+			}
+
+			if result.Target.Host != "api.example.com" {
+				t.Fatalf("target host = %q, want api.example.com", result.Target.Host)
+			}
+			if result.Target.Path != "/messages?cursor=123" {
+				t.Fatalf("target path = %q, want /messages?cursor=123", result.Target.Path)
+			}
+			if result.Policy.Subject.Kind != egress.SubjectSystem {
+				t.Fatalf("subject kind = %q, want system", result.Policy.Subject.Kind)
+			}
+			if result.Policy.Subject.ID != tc.name {
+				t.Fatalf("subject id = %q, want %s", result.Policy.Subject.ID, tc.name)
+			}
+			if result.Body != "hello" {
+				t.Fatalf("body = %q, want hello", result.Body)
+			}
+			_ = resp.Body.Close()
+
+			resp, err = http.Get(ts.URL + tc.exactURL)
+			if err != nil {
+				t.Fatalf("exact request: %v", err)
+			}
+
+			if resp.StatusCode != http.StatusNotImplemented {
+				_ = resp.Body.Close()
+				t.Fatalf("expected exact route to return 501, got %d", resp.StatusCode)
+			}
+
+			var exact struct {
+				Target egress.Target `json:"target"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&exact); err != nil {
+				t.Fatalf("decoding exact route: %v", err)
+			}
+			_ = resp.Body.Close()
+			if exact.Target.Path != "/" {
+				t.Fatalf("exact target path = %q, want /", exact.Target.Path)
+			}
+		})
+	}
+}
+
+func newTestProxyBinding(t *testing.T, name, path string) core.Binding {
+	t.Helper()
+
+	cfgYAML := "path: " + path
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatalf("unmarshal proxy config: %v", err)
+	}
+
+	binding, err := proxy.Factory(context.Background(), name, config.BindingDef{
+		Type:   "proxy",
+		Config: *node.Content[0],
+	}, bootstrap.BindingDeps{})
+	if err != nil {
+		t.Fatalf("proxy factory: %v", err)
+	}
+	return binding
 }
 
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {

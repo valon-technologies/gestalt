@@ -10,7 +10,7 @@
 | `auth_profiles` | Reusable OAuth settings shared across integrations. |
 | `integrations` | Map of integration name to definition. |
 | `runtimes` | Background processes that boot alongside the server with scoped provider access. |
-| `bindings` | Alternative request surfaces such as webhooks and gRPC. |
+| `bindings` | Alternative request surfaces such as webhooks and proxy-oriented request normalizers. |
 | `server` | Port, base URL, encryption key, and development mode. |
 
 ## Server block
@@ -221,6 +221,11 @@ bindings:
       auth_mode: signed           # "public", "signed", or "trusted_user_header"
       signing_secret: ${WEBHOOK_SECRET}
       signature_header: X-Signature
+
+  agent-proxy:
+    type: proxy
+    config:
+      path: /proxy
 ```
 
 ### Webhook config
@@ -235,6 +240,12 @@ bindings:
 | `signature_header` | `X-Signature` | Header containing the HMAC signature. |
 | `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
 
+### Proxy config
+
+| Config field | Default | Notes |
+|---|---|---|
+| `path` | | HTTP path prefix for the proxy surface. Must start with `/`. |
+
 ## Supported providers
 
 | Category | Providers |
@@ -242,5 +253,5 @@ bindings:
 | Auth | `google`, `oidc` |
 | Datastore | `sqlite`, `postgres`, `mysql`, `dynamodb`, `mongodb`, `firestore`, `oracle`, `sqlserver` |
 | Secrets | `env`, `file`, `gcp_secret_manager` |
-| Bindings | `webhook` |
+| Bindings | `webhook`, `proxy` |
 | Runtimes | `echo` (dev mode only) |
