@@ -86,9 +86,9 @@ cargo build --release
 | `gestalt config set <key> <value>` | Write a config value. |
 | `gestalt config unset <key>` | Remove a config value. |
 | `gestalt config list` | List all config values. |
-| `gestalt integrations list` | List available integrations with name, display name, auth type, connected status, and description. |
+| `gestalt integrations list` | List available integrations with name, display name, auth types, connected status, instance names, and description. |
 | `gestalt integrations connect <name>` | Start an OAuth connection flow. |
-| `gestalt invoke <integration> <operation> -p key=value` | Execute an operation. |
+| `gestalt invoke <integration> <operation> -p key=value` | Execute an operation. When multiple connections exist, pass `-p _instance=NAME` to select which one to use. |
 | `gestalt tokens create [--name <name>]` | Create an API token. |
 | `gestalt tokens list` | List API tokens. |
 | `gestalt tokens revoke <id>` | Revoke an API token. |

@@ -16,6 +16,80 @@ Gestalt has a small set of primitives that compose into a complete API gateway f
 | **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
 | **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
 
+## Main concepts
+
+### Integrations and providers
+
+An **integration** is a named entry in your configuration file that describes how Gestalt connects to an external service. It declares which upstreams to use, how authentication works, and which operations to expose. Think of it as a blueprint: it tells Gestalt everything it needs to know about a service, but it does not execute anything by itself.
+
+A **provider** is the runtime object that Gestalt builds from an integration definition at startup. The provider is what actually lists operations and executes them. When you invoke `slack/conversations_list`, the request is handled by the Slack provider, which was constructed from the `slack` integration in your config.
+
+When an integration declares multiple upstream types — for example, a REST upstream and an MCP upstream — Gestalt builds a **composite provider** that merges operations from both sources into a single namespace.
+
+### Upstreams
+
+An **upstream** is a source of operations. Every integration declares at least one. Gestalt supports three upstream types:
+
+- A **REST upstream** loads operations from an OpenAPI specification, a local provider definition file, or a directory scan. Each path and method combination in the spec becomes a callable operation.
+- A **GraphQL upstream** introspects a GraphQL endpoint at startup and generates one operation per query and mutation field.
+- An **MCP upstream** connects to a remote MCP server and imports its tools as operations.
+
+A single integration can combine upstream types. A Slack integration, for example, might use a REST upstream for HTTP operations and an MCP upstream for additional tools. The resulting provider exposes both sets of operations under the same name.
+
+### Operations
+
+An **operation** is the smallest callable unit in Gestalt. Every API call, GraphQL query, and MCP tool invocation maps to exactly one operation.
+
+Operations are identified by name. For REST upstreams, the name comes from the OpenAPI `operationId`. For GraphQL, it is the query or mutation field name. For MCP, it is the tool name. Each operation carries metadata: a human-readable description, parameter definitions with types, and annotations indicating whether the operation is read-only, destructive, or idempotent. This metadata flows through to MCP tool generation so that AI assistants can make informed decisions about which tools to call.
+
+### Plugins
+
+A **plugin** is a Go package that implements one of Gestalt's core interfaces. Plugins are how you swap components in and out of the system without changing application code.
+
+Gestalt ships with plugins across seven categories:
+
+| Category | What it provides | Examples |
+|---|---|---|
+| Auth provider | Platform login and session management | `google`, `oidc` |
+| Datastore | Persistent storage for users and tokens | `sqlite`, `mysql`, `postgres`, `dynamodb` |
+| Secret manager | Resolution of `secret://` references | `env`, `file`, `gcp_secret_manager` |
+| Integration hooks | API-specific auth and response handling | `slack_ok`, `datadog_keys` |
+| Binding | Alternative request surfaces | `webhook` |
+| Runtime | Background processes | `echo` |
+| Provider | Operation sources | `echo` |
+
+You select plugins by name in the config file. At startup, Gestalt instantiates the named plugin with the config you provide and wires it into the system. See [Built-in Plugins](/reference/built-in-plugins) for the full list.
+
+### Bindings
+
+A **binding** is an alternative way to reach Gestalt's providers, separate from the HTTP API and MCP endpoint. Bindings receive external events and forward them through the same shared invoker that handles all other requests.
+
+The built-in `webhook` binding listens for HTTP POST requests at a configured path and invokes a specific provider operation with the request body as parameters. You might use it to receive event callbacks from an upstream service and route them to an operation for processing.
+
+Bindings are scoped: each binding config declares which providers it can access. This prevents a webhook endpoint from accidentally invoking operations on unrelated integrations.
+
+### Runtimes
+
+A **runtime** is a long-lived background process that starts alongside the server and stops when the server shuts down. Runtimes are useful for periodic tasks, event loops, or any work that needs continuous access to provider operations without waiting for an external trigger.
+
+Like bindings, runtimes receive a scoped invoker limited to the providers listed in their config. A runtime that only needs Slack and Linear cannot invoke operations on any other integration.
+
+### Artifacts
+
+A **provider artifact** is a precompiled JSON file containing a complete provider definition: metadata, auth configuration, and the full list of operations with their parameters and schemas.
+
+By default, Gestalt builds providers by fetching OpenAPI specs or introspecting GraphQL endpoints at startup. This works well in development but introduces external dependencies at boot time. Artifacts eliminate this: you compile them once with `gestaltd compile-providers`, and subsequent startups load the local files instead of reaching out to the network.
+
+The `gestaltd bundle` command takes this further. It writes a self-contained directory with a generated config file and all provider artifacts, ready for deployment. No live spec fetches, no GraphQL introspection, no network dependencies at startup.
+
+### Connections and instances
+
+A **connection** is a user's stored credential for an integration. When a user completes an OAuth flow or pastes an API key, Gestalt encrypts the resulting tokens and persists them in the datastore. Each subsequent request to that integration resolves the stored connection automatically.
+
+By default, each user has one connection per integration. Some integrations support multiple accounts — a user managing two Shopify stores or three Slack workspaces, for example. Gestalt handles this through **instances**: each connection is identified by a (user, integration, instance) tuple. The first connection uses the instance name `"default"`.
+
+When a user has a single connection, Gestalt selects it automatically. When multiple connections exist, the caller must pass `_instance` as a parameter to specify which one to use. Omitting it returns an error listing the available instances.
+
 ## Execution model
 
 All request surfaces share a single invoker built once at startup:
