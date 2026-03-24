@@ -48,15 +48,15 @@ A **plugin** is a Go package that implements one of Gestalt's core interfaces. P
 
 Gestalt ships with plugins across seven categories:
 
-| Category | What it provides | Examples |
-|---|---|---|
-| Auth provider | Platform login and session management | `google`, `oidc` |
-| Datastore | Persistent storage for users and tokens | `sqlite`, `mysql`, `postgres`, `dynamodb` |
-| Secret manager | Resolution of `secret://` references | `env`, `file`, `gcp_secret_manager` |
-| Integration hooks | API-specific auth and response handling | `slack_ok`, `datadog_keys` |
-| Binding | Alternative request surfaces | `webhook` |
-| Runtime | Background processes | `echo` |
-| Provider | Operation sources | `echo` |
+| Category | What it provides |
+|---|---|
+| Auth provider | Platform login and session management |
+| Datastore | Persistent storage for users and tokens |
+| Secret manager | Resolution of `secret://` references |
+| Integration hooks | API-specific auth and response handling |
+| Binding | Alternative request surfaces |
+| Runtime | Background processes |
+| Provider | Operation sources |
 
 You select plugins by name in the config file. At startup, Gestalt instantiates the named plugin with the config you provide and wires it into the system. See [Built-in Plugins](/reference/built-in-plugins) for the full list.
 
