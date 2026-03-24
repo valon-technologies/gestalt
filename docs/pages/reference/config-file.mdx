@@ -98,6 +98,7 @@ Each integration is defined under `integrations.<name>` and contains one or more
 | `redirect_url` | Override the integration callback URL. |
 | `base_url` | Override the base URL from the upstream spec. |
 | `connection_mode` | `user` (default), `identity`, `either`, or `none`. See [Connection Modes](/concepts/platform-model#connection-modes). |
+| `mcp_tool_prefix` | Prefix prepended to MCP tool names for this integration. Applies to any operations this integration exposes over MCP. |
 | `auth` | Auth overrides (see below). |
 | `auth_header` | Custom header name for sending the token (instead of `Authorization`). |
 | `auth_mapping` | Map of header names to JSON fields, for structured token-to-headers mapping. |

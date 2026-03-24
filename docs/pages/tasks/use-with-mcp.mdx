@@ -1,5 +1,3 @@
-import { Callout } from 'nextra/components'
-
 # Use with MCP
 
 Connect Gestalt to AI assistants like Claude Code or Claude Desktop via the **Model Context Protocol**.
@@ -26,29 +24,33 @@ curl -X POST http://localhost:8080/api/v1/tokens \
 
 Save the returned token. It cannot be retrieved again.
 
-## 2. Enable MCP in your config
+## 2. Expose an integration over MCP
 
 ```yaml
-mcp:
-  enabled: true
+integrations:
+  linear:
+    upstreams:
+      - type: graphql
+        url: https://api.linear.app/graphql
+        mcp: true
 ```
 
-To expose only specific integrations:
+For an upstream MCP server, use `type: mcp` instead. No extra flag is needed:
 
 ```yaml
-mcp:
-  enabled: true
-  providers:
-    - linear
-    - slack
+integrations:
+  slack:
+    upstreams:
+      - type: mcp
+        url: https://mcp.slack.com/sse
 ```
 
-Omit `providers` to expose all configured integrations.
+Gestalt mounts `/mcp` automatically once at least one integration exposes MCP tools.
 
 ## 3. Start the server
 
 ```sh
-gestaltd --config config.yaml
+gestaltd dev --config config.yaml
 ```
 
 The MCP endpoint is available at `/mcp` on the same server as the REST API.
@@ -89,7 +91,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 ## Minimal example config
 
-A complete config with MCP enabled for a single integration:
+A complete config with one GraphQL integration exposed over MCP:
 
 ```yaml
 auth:
@@ -110,9 +112,11 @@ server:
 
 integrations:
   linear:
+    mcp_tool_prefix: gs_
     upstreams:
       - type: graphql
         url: https://api.linear.app/graphql
+        mcp: true
         allowed_operations:
           - searchIssues
           - createIssue
@@ -121,19 +125,14 @@ integrations:
     auth:
       authorization_url: https://linear.app/oauth/authorize
       token_url: https://api.linear.app/oauth/token
-
-mcp:
-  enabled: true
-  providers:
-    - linear
 ```
 
 ## Troubleshooting
 
 If tools do not appear in your MCP client:
 
-1. Verify the server is running with `mcp.enabled: true`.
+1. Verify the integration exposes MCP tools: use `mcp: true` on a REST/GraphQL upstream, or a `type: mcp` upstream.
 2. Check that your API token is valid (`gestalt auth status`).
 3. Confirm the token's owner has connected the integration (completed the OAuth flow or submitted manual credentials).
-4. If using `mcp.providers`, confirm the integration is in the list.
+4. Confirm the server has started and mounted `/mcp`.
 5. For MCP-only integrations (`type: mcp` upstream), note that they cannot be invoked over the HTTP API — they are only available via the MCP endpoint.
