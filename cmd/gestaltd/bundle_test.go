@@ -14,6 +14,96 @@ import (
 	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
+func TestBundleAndValidateRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	openAPIServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]any{"title": "REST API"},
+			"servers": []map[string]any{{"url": "https://api.example.com"}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{"operationId": "listItems", "summary": "List items"},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer openAPIServer.Close()
+
+	graphQLServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"data": map[string]any{
+				"__schema": map[string]any{
+					"queryType":    map[string]any{"name": "Query"},
+					"mutationType": nil,
+					"types": []map[string]any{
+						{
+							"kind": "OBJECT", "name": "Query", "description": "",
+							"fields": []map[string]any{
+								{
+									"name": "search", "description": "Search",
+									"args": []map[string]any{},
+									"type": map[string]any{"kind": "OBJECT", "name": "Result", "ofType": nil},
+								},
+							},
+							"inputFields": nil, "enumValues": nil,
+						},
+						{"kind": "OBJECT", "name": "Result", "description": "", "fields": []map[string]any{}, "inputFields": nil, "enumValues": nil},
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer graphQLServer.Close()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	outDir := filepath.Join(dir, "bundle")
+	cfg := `auth:
+  provider: google
+  config:
+    client_id: test-client
+    client_secret: test-secret
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
+server:
+  dev_mode: true
+  encryption_key: test-key
+integrations:
+  restapi:
+    upstreams:
+      - type: rest
+        url: ` + openAPIServer.URL + `
+  graphapi:
+    upstreams:
+      - type: graphql
+        url: ` + graphQLServer.URL + `
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	if err := bundleConfig(cfgPath, outDir); err != nil {
+		t.Fatalf("bundleConfig: %v", err)
+	}
+
+	openAPIServer.Close()
+	graphQLServer.Close()
+
+	bundledConfigPath := filepath.Join(outDir, bundleConfigName)
+	if err := run([]string{"validate", "--config", bundledConfigPath}); err != nil {
+		t.Fatalf("validate bundled config: %v", err)
+	}
+}
+
 func TestBundleConfigWritesSelfContainedBundle(t *testing.T) {
 	t.Parallel()
 
