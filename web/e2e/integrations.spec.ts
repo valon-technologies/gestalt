@@ -6,7 +6,7 @@ const OAUTH_INTEGRATION: Integration = {
 };
 
 const MANUAL_INTEGRATION: Integration = {
-  name: "manual-svc", display_name: "Manual Service", description: "Example manual integration", auth_type: "manual",
+  name: "manual-svc", display_name: "Manual Service", description: "Example manual integration", auth_types: ["manual"],
 };
 
 const sampleIntegrations: Integration[] = [
