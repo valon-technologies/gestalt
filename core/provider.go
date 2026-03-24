@@ -43,6 +43,13 @@ type CatalogProvider interface {
 	Catalog() *catalog.Catalog
 }
 
+// SessionCatalogProvider is an optional interface for providers whose MCP tool
+// surface depends on request-scoped authentication and must be resolved after a
+// user is connected.
+type SessionCatalogProvider interface {
+	CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error)
+}
+
 type ConnectionParamDef struct {
 	Required    bool
 	Description string

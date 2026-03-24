@@ -2,7 +2,8 @@ package mcpupstream
 
 import (
 	"context"
-	"sync"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -59,6 +60,23 @@ func newTestUpstream(t *testing.T) *Upstream {
 	}
 
 	return newFromClient("clickhouse", client, core.ConnectionModeUser, toolsResult.Tools)
+}
+
+func newAuthenticatedHTTPTestServer(t *testing.T, expectedAuth string) *httptest.Server {
+	t.Helper()
+
+	handler := mcpserver.NewStreamableHTTPServer(
+		newTestServer(),
+		mcpserver.WithStateLess(true),
+	)
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != expectedAuth {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
 }
 
 func TestUpstream_DiscoverTools(t *testing.T) {
@@ -238,207 +256,31 @@ func TestUpstream_ProviderMetadata(t *testing.T) {
 	}
 }
 
-const testUpstreamName = "test-deferred"
+func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
+	t.Parallel()
 
-func newTestHTTPServerURL(t *testing.T) string {
-	t.Helper()
-	srv := newTestServer()
-	ts := mcpserver.NewTestStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
+	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
-	return ts.URL + "/mcp"
-}
 
-func TestNewDeferred_EmptyCatalog(t *testing.T) {
-	t.Parallel()
-
-	u := NewDeferred(testUpstreamName, "http://localhost:9999/mcp", core.ConnectionModeUser)
-
-	if u.client != nil {
-		t.Fatal("expected nil client on deferred upstream")
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser)
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
 
-	ops := u.ListOperations()
-	if len(ops) != 0 {
-		t.Fatalf("expected 0 operations, got %d", len(ops))
+	cat, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
 	}
 
-	cat := u.Catalog()
-	if cat == nil {
-		t.Fatal("expected non-nil catalog")
-	}
-	if len(cat.Operations) != 0 {
-		t.Fatalf("expected 0 catalog operations, got %d", len(cat.Operations))
-	}
-}
-
-func TestDeferred_EnsureInitialized(t *testing.T) {
-	t.Parallel()
-
-	url := newTestHTTPServerURL(t)
-	u := NewDeferred(testUpstreamName, url, core.ConnectionModeUser)
-	t.Cleanup(func() { _ = u.Close() })
-
-	if !u.IsDeferred() {
-		t.Fatal("expected IsDeferred true before init")
-	}
-
-	ctx := context.Background()
-	if _, err := u.EnsureInitialized(ctx); err != nil {
-		t.Fatalf("EnsureInitialized: %v", err)
-	}
-
-	if u.IsDeferred() {
-		t.Fatal("expected IsDeferred false after init")
-	}
-
-	ops := u.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(ops))
-	}
-
-	opNames := make(map[string]bool)
-	for _, op := range ops {
-		opNames[op.Name] = true
-	}
-	if !opNames["run_query"] || !opNames["list_databases"] {
-		t.Fatalf("unexpected operations: %v", ops)
-	}
-
-	if _, err := u.EnsureInitialized(ctx); err != nil {
-		t.Fatalf("second EnsureInitialized should be no-op: %v", err)
-	}
-}
-
-func TestDeferred_ConcurrentInit(t *testing.T) {
-	t.Parallel()
-
-	url := newTestHTTPServerURL(t)
-	u := NewDeferred(testUpstreamName, url, core.ConnectionModeUser)
-	t.Cleanup(func() { _ = u.Close() })
-
-	const goroutines = 10
-	ctx := context.Background()
-	errs := make(chan error, goroutines)
-
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-	for range goroutines {
-		go func() {
-			defer wg.Done()
-			_, err := u.EnsureInitialized(ctx)
-			errs <- err
-		}()
-	}
-	wg.Wait()
-	close(errs)
-
-	for err := range errs {
-		if err != nil {
-			t.Fatalf("EnsureInitialized from goroutine: %v", err)
-		}
-	}
-
-	if u.IsDeferred() {
-		t.Fatal("expected IsDeferred false after concurrent init")
-	}
-
-	ops := u.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(ops))
-	}
-}
-
-func TestDeferred_CallToolTriggersInit(t *testing.T) {
-	t.Parallel()
-
-	url := newTestHTTPServerURL(t)
-	u := NewDeferred(testUpstreamName, url, core.ConnectionModeUser)
-	t.Cleanup(func() { _ = u.Close() })
-
-	if !u.IsDeferred() {
-		t.Fatal("expected IsDeferred true before CallTool")
-	}
-
-	result, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 42"})
+	ctx := WithUpstreamToken(context.Background(), "secret-token")
+	result, err := u.CallTool(ctx, "run_query", map[string]any{"sql": "SELECT 1"})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
-
-	if u.IsDeferred() {
-		t.Fatal("expected IsDeferred false after CallTool")
-	}
-
-	text, ok := result.Content[0].(mcpgo.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", result.Content[0])
-	}
-	if text.Text != "result for: SELECT 42" {
-		t.Fatalf("unexpected text: %q", text.Text)
-	}
-}
-
-func TestDeferred_AllowedOpsApplied(t *testing.T) {
-	t.Parallel()
-
-	url := newTestHTTPServerURL(t)
-	u := NewDeferred(testUpstreamName, url, core.ConnectionModeUser)
-	t.Cleanup(func() { _ = u.Close() })
-
-	u.SetAllowedOperations(map[string]string{
-		"run_query": "Custom description",
-	})
-
-	ctx := context.Background()
-	if _, err := u.EnsureInitialized(ctx); err != nil {
-		t.Fatalf("EnsureInitialized: %v", err)
-	}
-
-	ops := u.ListOperations()
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 operation after filtering, got %d", len(ops))
-	}
-	if ops[0].Name != "run_query" {
-		t.Fatalf("expected run_query, got %q", ops[0].Name)
-	}
-	if ops[0].Description != "Custom description" {
-		t.Fatalf("expected overridden description, got %q", ops[0].Description)
-	}
-
-	cat := u.Catalog()
-	if len(cat.Operations) != 1 {
-		t.Fatalf("expected 1 catalog operation, got %d", len(cat.Operations))
-	}
-	if cat.Operations[0].ID != "run_query" {
-		t.Fatalf("expected run_query in catalog, got %q", cat.Operations[0].ID)
-	}
-}
-
-func TestDeferred_CloseBeforeInit(t *testing.T) {
-	t.Parallel()
-
-	u := NewDeferred(testUpstreamName, "http://localhost:9999/mcp", core.ConnectionModeUser)
-	if err := u.Close(); err != nil {
-		t.Fatalf("Close on uninitialized deferred upstream: %v", err)
-	}
-}
-
-func TestDeferred_IsDeferred(t *testing.T) {
-	t.Parallel()
-
-	url := newTestHTTPServerURL(t)
-	u := NewDeferred(testUpstreamName, url, core.ConnectionModeUser)
-	t.Cleanup(func() { _ = u.Close() })
-
-	if !u.IsDeferred() {
-		t.Fatal("expected IsDeferred true before init")
-	}
-
-	ctx := context.Background()
-	if _, err := u.EnsureInitialized(ctx); err != nil {
-		t.Fatalf("EnsureInitialized: %v", err)
-	}
-
-	if u.IsDeferred() {
-		t.Fatal("expected IsDeferred false after init")
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
 }

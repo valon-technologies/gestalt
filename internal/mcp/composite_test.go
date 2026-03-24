@@ -24,8 +24,11 @@ type stubMCPUpstream struct {
 }
 
 func (u *stubMCPUpstream) Catalog() *catalog.Catalog { return u.cat }
-func (u *stubMCPUpstream) SupportsManualAuth() bool  { return true }
-func (u *stubMCPUpstream) Close() error              { return nil }
+func (u *stubMCPUpstream) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
+	return u.cat, nil
+}
+func (u *stubMCPUpstream) SupportsManualAuth() bool { return true }
+func (u *stubMCPUpstream) Close() error             { return nil }
 
 func (u *stubMCPUpstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if u.callFn != nil {

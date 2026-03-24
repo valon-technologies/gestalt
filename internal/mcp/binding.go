@@ -2,7 +2,8 @@ package mcp
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -31,11 +32,6 @@ type directToolCaller interface {
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
-type DeferredUpstream interface {
-	IsDeferred() bool
-	EnsureInitialized(ctx context.Context) (bool, error)
-}
-
 type Config struct {
 	Invoker          invocation.Invoker
 	TokenResolver    TokenResolver
@@ -46,36 +42,20 @@ type Config struct {
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
+	hooks := &mcpserver.Hooks{}
+	srv := mcpserver.NewMCPServer(
+		serverName,
+		serverVersion,
+		mcpserver.WithHooks(hooks),
+		mcpserver.WithToolCapabilities(true),
+	)
+
 	allowed := make(map[string]struct{}, len(cfg.AllowedProviders))
 	for _, p := range cfg.AllowedProviders {
 		allowed[p] = struct{}{}
 	}
 
-	var deferred []deferredInfo
-	for _, provName := range cfg.Providers.List() {
-		if cfg.AllowedProviders != nil {
-			if _, ok := allowed[provName]; !ok {
-				continue
-			}
-		}
-		prov, err := cfg.Providers.Get(provName)
-		if err != nil {
-			continue
-		}
-		if du := extractDeferredUpstream(prov); du != nil && du.IsDeferred() {
-			deferred = append(deferred, deferredInfo{provName: provName, upstream: du, prov: prov})
-		}
-	}
-
-	hooks := &mcpserver.Hooks{}
-	opts := []mcpserver.ServerOption{mcpserver.WithHooks(hooks)}
-	if len(deferred) > 0 {
-		// AddTool enables tool capabilities implicitly, but with only
-		// deferred providers the capability is never set.
-		opts = append(opts, mcpserver.WithToolCapabilities(true))
-	}
-	srv := mcpserver.NewMCPServer(serverName, serverVersion, opts...)
-
+	var dynamicProviders []string
 	for _, provName := range cfg.Providers.List() {
 		if cfg.AllowedProviders != nil {
 			if _, ok := allowed[provName]; !ok {
@@ -86,6 +66,10 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		prov, err := cfg.Providers.Get(provName)
 		if err != nil {
 			continue
+		}
+
+		if _, ok := prov.(core.SessionCatalogProvider); ok {
+			dynamicProviders = append(dynamicProviders, provName)
 		}
 
 		if cp, ok := prov.(core.CatalogProvider); ok {
@@ -98,101 +82,24 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		addFlatTools(srv, cfg, provName, prov)
 	}
 
-	if len(deferred) > 0 {
+	if len(dynamicProviders) > 0 {
 		hooks.AddBeforeListTools(func(ctx context.Context, _ any, _ *mcpgo.ListToolsRequest) {
-			tryInitDeferred(ctx, srv, cfg, deferred)
+			hydrateSessionTools(ctx, cfg, dynamicProviders)
+		})
+		hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcpgo.CallToolRequest) {
+			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
+				hydrateSessionTools(ctx, cfg, []string{provName})
+			}
 		})
 	}
 
 	return srv
 }
 
-type deferredInfo struct {
-	provName string
-	upstream DeferredUpstream
-	prov     core.Provider
-}
-
-func tryInitDeferred(ctx context.Context, srv *mcpserver.MCPServer, cfg Config, deferred []deferredInfo) {
-	p := principal.FromContext(ctx)
-	if p == nil || cfg.TokenResolver == nil {
-		return
-	}
-	for _, d := range deferred {
-		if !d.upstream.IsDeferred() {
-			continue
-		}
-		token, err := cfg.TokenResolver.ResolveToken(ctx, p, d.provName, "")
-		if err != nil {
-			continue
-		}
-		initCtx := mcpupstream.WithUpstreamToken(ctx, token)
-		initialized, err := d.upstream.EnsureInitialized(initCtx)
-		if err != nil {
-			log.Printf("WARNING: deferred init %q: %v", d.provName, err)
-			continue
-		}
-		if !initialized {
-			continue
-		}
-		cp, ok := d.prov.(core.CatalogProvider)
-		if !ok {
-			continue
-		}
-		cat := cp.Catalog()
-		if cat == nil {
-			continue
-		}
-		addCatalogTools(srv, cfg, d.provName, cat, d.prov)
-		log.Printf("deferred MCP upstream %q initialized, registered tools", d.provName)
-	}
-}
-
-func extractDeferredUpstream(prov core.Provider) DeferredUpstream {
-	if du, ok := prov.(DeferredUpstream); ok {
-		return du
-	}
-	return nil
-}
-
 func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog, prov core.Provider) {
-	caller, isDirect := unwrapDirectCaller(prov)
-	if isDirect && cfg.TokenResolver == nil {
-		isDirect = false
-	}
-
-	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		if op.Visible != nil && !*op.Visible {
-			continue
-		}
-		if cfg.IncludeHTTP != nil && op.Transport == catalog.TransportHTTP && !cfg.IncludeHTTP[provName] {
-			continue
-		}
-
-		name := toolName(cfg.ToolPrefixes, provName, op.ID)
-
-		var tool mcpgo.Tool
-		if len(op.InputSchema) > 0 {
-			tool = mcpgo.NewToolWithRawSchema(name, op.Description, op.InputSchema)
-		} else {
-			tool = mcpgo.NewTool(name, mcpgo.WithDescription(op.Description))
-		}
-
-		tool.Annotations = mapAnnotations(op.Annotations)
-		if op.Title != "" {
-			tool.Annotations.Title = op.Title
-		} else {
-			tool.Annotations.Title = op.ID
-		}
-
-		var handler mcpserver.ToolHandlerFunc
-		if isDirect && op.Transport != catalog.TransportHTTP {
-			handler = makeDirectHandler(cfg, provName, op.ID, caller)
-		} else {
-			handler = makeHandler(cfg.Invoker, provName, op.ID)
-		}
-		srv.AddTool(tool, handler)
+	m := buildToolMap(cfg, provName, prov, cat)
+	for name := range m {
+		srv.AddTool(m[name].Tool, m[name].Handler)
 	}
 }
 
@@ -260,6 +167,123 @@ func makeDirectHandler(cfg Config, provName, opName string, caller directToolCal
 	}
 }
 
+func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string) {
+	session := mcpserver.ClientSessionFromContext(ctx)
+	if session == nil {
+		return
+	}
+	sessionWithTools, ok := session.(mcpserver.SessionWithTools)
+	if !ok {
+		return
+	}
+
+	tools := sessionWithTools.GetSessionTools()
+	if tools == nil {
+		tools = make(map[string]mcpserver.ServerTool)
+	}
+
+	changed := false
+	for _, provName := range providerNames {
+		prefix := toolName(cfg.ToolPrefixes, provName, "")
+		if hasToolsWithPrefix(tools, prefix) {
+			continue
+		}
+
+		prov, err := cfg.Providers.Get(provName)
+		if err != nil {
+			continue
+		}
+
+		scp, ok := prov.(core.SessionCatalogProvider)
+		if !ok {
+			continue
+		}
+
+		token, err := resolveSessionToken(ctx, cfg, provName, prov)
+		if err != nil {
+			continue
+		}
+
+		cat, err := scp.CatalogForRequest(ctx, token)
+		if err != nil || cat == nil {
+			continue
+		}
+
+		m := buildToolMap(cfg, provName, prov, cat)
+		for name := range m {
+			tools[name] = m[name]
+		}
+		changed = true
+	}
+
+	if changed {
+		sessionWithTools.SetSessionTools(tools)
+	}
+}
+
+func hasToolsWithPrefix(tools map[string]mcpserver.ServerTool, prefix string) bool {
+	for name := range tools {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) map[string]mcpserver.ServerTool {
+	caller, isDirect := unwrapDirectCaller(prov)
+	if isDirect && cfg.TokenResolver == nil {
+		isDirect = false
+	}
+
+	tools := make(map[string]mcpserver.ServerTool, len(cat.Operations))
+	for i := range cat.Operations {
+		op := &cat.Operations[i]
+		if op.Visible != nil && !*op.Visible {
+			continue
+		}
+		if cfg.IncludeHTTP != nil && op.Transport == catalog.TransportHTTP && !cfg.IncludeHTTP[provName] {
+			continue
+		}
+
+		name := toolName(cfg.ToolPrefixes, provName, op.ID)
+
+		var tool mcpgo.Tool
+		if len(op.InputSchema) > 0 {
+			tool = mcpgo.NewToolWithRawSchema(name, op.Description, op.InputSchema)
+		} else {
+			tool = mcpgo.NewTool(name, mcpgo.WithDescription(op.Description))
+		}
+
+		tool.Annotations = mapAnnotations(op.Annotations)
+		if op.Title != "" {
+			tool.Annotations.Title = op.Title
+		} else {
+			tool.Annotations.Title = op.ID
+		}
+
+		var handler mcpserver.ToolHandlerFunc
+		if isDirect && op.Transport != catalog.TransportHTTP {
+			handler = makeDirectHandler(cfg, provName, op.ID, caller)
+		} else {
+			handler = makeHandler(cfg.Invoker, provName, op.ID)
+		}
+		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: handler}
+	}
+	return tools
+}
+
+func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov core.Provider) (string, error) {
+	if cfg.TokenResolver == nil || prov.ConnectionMode() == core.ConnectionModeNone {
+		return "", nil
+	}
+	p := principal.FromContext(ctx)
+	if p == nil {
+		return "", fmt.Errorf("not authenticated")
+	}
+	return cfg.TokenResolver.ResolveToken(ctx, p, provName, "")
+}
+
 func unwrapDirectCaller(prov core.Provider) (directToolCaller, bool) {
 	if c, ok := prov.(directToolCaller); ok {
 		return c, true
@@ -270,6 +294,22 @@ func unwrapDirectCaller(prov core.Provider) (directToolCaller, bool) {
 		return c, ok
 	}
 	return nil, false
+}
+
+func providerNameForTool(prefixes map[string]string, providers []string, tool string) string {
+	var best string
+	bestLen := -1
+	for _, prov := range providers {
+		prefix := toolName(prefixes, prov, "")
+		if !strings.HasPrefix(tool, prefix) {
+			continue
+		}
+		if len(prefix) > bestLen {
+			best = prov
+			bestLen = len(prefix)
+		}
+	}
+	return best
 }
 
 func toolName(prefixes map[string]string, provider, operation string) string {

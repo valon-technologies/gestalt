@@ -12,6 +12,7 @@ import (
 
 type MCPUpstream interface {
 	core.CatalogProvider
+	core.SessionCatalogProvider
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 	SupportsManualAuth() bool
 	Close() error
@@ -26,9 +27,10 @@ type Provider struct {
 }
 
 var (
-	_ core.Provider        = (*Provider)(nil)
-	_ core.CatalogProvider = (*Provider)(nil)
-	_ core.AuthTypeLister  = (*Provider)(nil)
+	_ core.Provider               = (*Provider)(nil)
+	_ core.CatalogProvider        = (*Provider)(nil)
+	_ core.SessionCatalogProvider = (*Provider)(nil)
+	_ core.AuthTypeLister         = (*Provider)(nil)
 )
 
 // New creates a composite provider. If the API provider implements
@@ -56,29 +58,19 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 	return p.api.Execute(ctx, operation, params, token)
 }
 
+func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	cat, err := p.mcp.CatalogForRequest(ctx, token)
+	if err != nil || cat == nil {
+		return cat, err
+	}
+	return tagMCPCatalog(cat), nil
+}
+
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	return p.mcp.CallTool(ctx, name, args)
 }
 
 func (p *Provider) Inner() core.Provider { return p.api }
-
-func (p *Provider) IsDeferred() bool {
-	type deferred interface{ IsDeferred() bool }
-	if du, ok := p.mcp.(deferred); ok {
-		return du.IsDeferred()
-	}
-	return false
-}
-
-func (p *Provider) EnsureInitialized(ctx context.Context) (bool, error) {
-	type initializer interface {
-		EnsureInitialized(ctx context.Context) (bool, error)
-	}
-	if init, ok := p.mcp.(initializer); ok {
-		return init.EnsureInitialized(ctx)
-	}
-	return false, nil
-}
 
 // SupportsManualAuth delegates to the API provider only. The MCP
 // upstream's manual-auth support is irrelevant — the server uses this
@@ -136,8 +128,14 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 	if cp, ok := p.api.(core.CatalogProvider); ok {
 		apiCat = cp.Catalog()
 	}
+	if mcpCat == nil && apiCat == nil {
+		return nil
+	}
 	if apiCat == nil {
 		return tagMCPCatalog(mcpCat)
+	}
+	if mcpCat == nil {
+		return tagHTTPCatalog(apiCat)
 	}
 
 	merged := &catalog.Catalog{
@@ -159,14 +157,16 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 	return merged
 }
 
-func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
-	out := &catalog.Catalog{
-		Name:        src.Name,
-		DisplayName: src.DisplayName,
-		Description: src.Description,
-		Operations:  make([]catalog.CatalogOperation, len(src.Operations)),
+func tagHTTPCatalog(src *catalog.Catalog) *catalog.Catalog {
+	out := src.Clone()
+	for i := range out.Operations {
+		out.Operations[i].Transport = catalog.TransportHTTP
 	}
-	copy(out.Operations, src.Operations)
+	return out
+}
+
+func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
+	out := src.Clone()
 	for i := range out.Operations {
 		out.Operations[i].Transport = catalog.TransportMCPPassthrough
 	}
