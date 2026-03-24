@@ -14,6 +14,7 @@ export interface Integration {
   icon_svg?: string;
   connected?: boolean;
   auth_type?: "oauth" | "manual";
+  auth_types?: ("oauth" | "manual")[];
   connection_params?: Record<string, ConnectionParamDef>;
 }
 

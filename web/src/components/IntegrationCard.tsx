@@ -74,7 +74,11 @@ export default function IntegrationCard({
   const safeIconSVG = integration.icon_svg
     ? sanitizeSVG(integration.icon_svg)
     : "";
-  const isManual = integration.auth_type === "manual";
+  const authTypes = integration.auth_types ?? [integration.auth_type ?? "oauth"];
+  const supportsOAuth = authTypes.includes("oauth");
+  const supportsManual = authTypes.includes("manual");
+  const isDualAuth = supportsOAuth && supportsManual;
+  const isManualOnly = supportsManual && !supportsOAuth;
   const needsParams = hasConnectionParams(integration);
 
   function collectConnectionParams(
@@ -89,13 +93,13 @@ export default function IntegrationCard({
     return params;
   }
 
-  async function handleConnect() {
-    if (isManual) {
-      setSettingsOpen(false);
-      setShowTokenForm(true);
-      setError(null);
-      return;
-    }
+  function handleConnectManual() {
+    setSettingsOpen(false);
+    setShowTokenForm(true);
+    setError(null);
+  }
+
+  async function handleConnectOAuth() {
     if (needsParams && !showParamForm) {
       setSettingsOpen(false);
       setShowParamForm(true);
@@ -111,6 +115,14 @@ export default function IntegrationCard({
       setError(err instanceof Error ? err.message : "Failed to start OAuth");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleConnect() {
+    if (isManualOnly) {
+      handleConnectManual();
+    } else {
+      handleConnectOAuth();
     }
   }
 
@@ -244,7 +256,7 @@ export default function IntegrationCard({
       {error && !settingsOpen && (
         <p className="mt-2 text-sm text-ember-500">{error}</p>
       )}
-      {showParamForm && !isManual && (
+      {showParamForm && !isManualOnly && (
         <form onSubmit={handleParamSubmit} className="mt-3">
           {renderConnectionParamFields()}
           <div className="mt-3 flex gap-2">
@@ -299,7 +311,8 @@ export default function IntegrationCard({
         <IntegrationSettingsModal
           integration={integration}
           onClose={handleSettingsClose}
-          onReconnect={handleConnect}
+          onReconnect={isDualAuth ? handleConnectOAuth : handleConnect}
+          onReconnectManual={isDualAuth ? handleConnectManual : undefined}
           onDisconnect={handleDisconnect}
           reconnecting={loading}
           disconnecting={disconnecting}

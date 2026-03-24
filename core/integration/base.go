@@ -115,6 +115,7 @@ type Base struct {
 
 	ConnectionDefs    map[string]core.ConnectionParamDef
 	PostConnectHookFn core.PostConnectHook
+	ManualAuthEnabled bool
 
 	catalog *catalog.Catalog
 }
@@ -131,8 +132,23 @@ func (b *Base) ConnectionMode() core.ConnectionMode {
 }
 
 func (b *Base) SupportsManualAuth() bool {
+	if b.ManualAuthEnabled {
+		return true
+	}
 	mc, ok := b.Auth.(manualChecker)
 	return ok && mc.IsManual()
+}
+
+func (b *Base) AuthTypes() []string {
+	mc, ok := b.Auth.(manualChecker)
+	manualOnly := ok && mc.IsManual()
+	if manualOnly {
+		return []string{"manual"}
+	}
+	if b.ManualAuthEnabled {
+		return []string{"oauth", "manual"}
+	}
+	return []string{"oauth"}
 }
 
 func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {

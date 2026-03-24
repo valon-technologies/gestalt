@@ -158,6 +158,8 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		base.PostConnectHookFn = hook
 	}
 
+	base.ManualAuthEnabled = def.ManualAuth
+
 	if len(def.Connection) > 0 {
 		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(def.Connection))
 		for name, cpd := range def.Connection {
@@ -251,6 +253,9 @@ func applyOverrides(def *Definition, intg config.IntegrationDef) error {
 	setStr(&def.TokenParser, intg.TokenParser)
 	setStr(&def.RequestMutator, intg.RequestMutator)
 	setStr(&def.PostConnect, intg.PostConnect)
+	if intg.ManualAuth {
+		def.ManualAuth = true
+	}
 	setStr(&def.TokenPrefix, intg.TokenPrefix)
 	setStr(&def.AuthStyle, intg.AuthStyle)
 	if intg.IconFile != "" {
