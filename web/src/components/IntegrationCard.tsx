@@ -74,7 +74,7 @@ export default function IntegrationCard({
   const safeIconSVG = integration.icon_svg
     ? sanitizeSVG(integration.icon_svg)
     : "";
-  const authTypes = integration.auth_types ?? [integration.auth_type ?? "oauth"];
+  const authTypes = integration.auth_types ?? ["oauth"];
   const supportsOAuth = authTypes.includes("oauth");
   const supportsManual = authTypes.includes("manual");
   const isDualAuth = supportsOAuth && supportsManual;

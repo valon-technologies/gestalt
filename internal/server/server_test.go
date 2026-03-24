@@ -345,7 +345,7 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_AuthType(t *testing.T) {
+func TestListIntegrations_AuthTypes(t *testing.T) {
 	t.Parallel()
 
 	oauthStub := &coretesting.StubIntegration{N: "oauth-svc", DN: "OAuth Service"}
@@ -376,8 +376,8 @@ func TestListIntegrations_AuthType(t *testing.T) {
 	}
 
 	var integrations []struct {
-		Name     string `json:"name"`
-		AuthType string `json:"auth_type"`
+		Name      string   `json:"name"`
+		AuthTypes []string `json:"auth_types"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -386,15 +386,15 @@ func TestListIntegrations_AuthType(t *testing.T) {
 		t.Fatalf("expected 2 integrations, got %d", len(integrations))
 	}
 
-	authTypes := make(map[string]string)
+	authTypes := make(map[string][]string)
 	for _, i := range integrations {
-		authTypes[i.Name] = i.AuthType
+		authTypes[i.Name] = i.AuthTypes
 	}
-	if authTypes["manual-svc"] != "manual" {
-		t.Fatalf("expected manual-svc auth_type=manual, got %q", authTypes["manual-svc"])
+	if len(authTypes["manual-svc"]) != 1 || authTypes["manual-svc"][0] != "manual" {
+		t.Fatalf("expected manual-svc auth_types=[manual], got %v", authTypes["manual-svc"])
 	}
-	if authTypes["oauth-svc"] != "oauth" {
-		t.Fatalf("expected oauth-svc auth_type=oauth, got %q", authTypes["oauth-svc"])
+	if len(authTypes["oauth-svc"]) != 1 || authTypes["oauth-svc"][0] != "oauth" {
+		t.Fatalf("expected oauth-svc auth_types=[oauth], got %v", authTypes["oauth-svc"])
 	}
 }
 
