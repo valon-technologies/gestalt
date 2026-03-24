@@ -74,7 +74,7 @@ datastore:
 gestaltd validate --config your-config.yaml
 ```
 
-`gestaltd` warns at startup when the SQLite datastore path looks risky, such as relative paths or temporary directories.
+`gestaltd validate` warns when SQLite is configured as the datastore, since it is not recommended for production.
 
 ## Choose a platform
 

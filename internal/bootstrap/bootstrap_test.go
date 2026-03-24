@@ -135,7 +135,7 @@ func TestBootstrap(t *testing.T) {
 func TestValidate(t *testing.T) {
 	t.Parallel()
 
-	if err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
+	if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestValidateStopsConstructedRuntimes(t *testing.T) {
 		return nil
 	})
 
-	if err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if !stopped {
@@ -386,7 +386,7 @@ func TestValidateProviderErrorFails(t *testing.T) {
 		return nil, fmt.Errorf("provider broke")
 	}
 
-	err := bootstrap.Validate(ctx, cfg, factories)
+	_, err := bootstrap.Validate(ctx, cfg, factories)
 	if err == nil {
 		t.Fatal("expected Validate to fail when a provider fails")
 	}

@@ -18,15 +18,15 @@ import (
 // Validate loads daemon dependencies and integration factories without
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
-func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
 	sm, err := buildSecretManager(cfg, factories)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer closeSecretManager(sm)
 
 	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
-		return err
+		return nil, err
 	}
 
 	deps := Deps{
@@ -36,18 +36,23 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 
 	if _, err := buildAuth(cfg, factories, deps); err != nil {
-		return err
+		return nil, err
 	}
 
 	ds, err := buildDatastore(cfg, factories, deps)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = ds.Close() }()
 
+	var warnings []string
+	if w, ok := ds.(interface{ Warnings() []string }); ok {
+		warnings = w.Warnings()
+	}
+
 	providers, err := buildProvidersStrict(ctx, cfg, factories, deps)
 	if err != nil {
-		return err
+		return warnings, err
 	}
 	defer func() { _ = CloseProviders(providers) }()
 
@@ -56,7 +61,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 
 	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
 	if err != nil {
-		return err
+		return warnings, err
 	}
 	// Validation does not start runtimes, but factories may still allocate
 	// resources that need to be released after construction.
@@ -66,13 +71,13 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 
 	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
 	if err != nil {
-		return err
+		return warnings, err
 	}
 	if bindings != nil {
 		defer func() { _ = CloseBindings(bindings, bindings.List()) }()
 	}
 
-	return nil
+	return warnings, nil
 }
 
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], error) {
