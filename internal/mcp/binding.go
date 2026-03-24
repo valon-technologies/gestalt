@@ -24,7 +24,7 @@ const (
 )
 
 type TokenResolver interface {
-	ResolveToken(ctx context.Context, p *principal.Principal, providerName string) (string, error)
+	ResolveToken(ctx context.Context, p *principal.Principal, providerName, instance string) (string, error)
 }
 
 type directToolCaller interface {
@@ -122,7 +122,7 @@ func tryInitDeferred(ctx context.Context, srv *mcpserver.MCPServer, cfg Config, 
 		if !d.upstream.IsDeferred() {
 			continue
 		}
-		token, err := cfg.TokenResolver.ResolveToken(ctx, p, d.provName)
+		token, err := cfg.TokenResolver.ResolveToken(ctx, p, d.provName, "")
 		if err != nil {
 			continue
 		}
@@ -222,7 +222,11 @@ func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.
 			return mcpgo.NewToolResultError("not authenticated"), nil
 		}
 
-		result, err := invoker.Invoke(ctx, p, provName, opName, req.GetArguments())
+		args := req.GetArguments()
+		instance, _ := args["_instance"].(string)
+		delete(args, "_instance")
+
+		result, err := invoker.Invoke(ctx, p, provName, instance, opName, args)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
@@ -242,13 +246,17 @@ func makeDirectHandler(cfg Config, provName, opName string, caller directToolCal
 			return mcpgo.NewToolResultError("not authenticated"), nil
 		}
 
-		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName)
+		args := req.GetArguments()
+		instance, _ := args["_instance"].(string)
+		delete(args, "_instance")
+
+		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, instance)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		ctx = mcpupstream.WithUpstreamToken(ctx, token)
-		return caller.CallTool(ctx, opName, req.GetArguments())
+		return caller.CallTool(ctx, opName, args)
 	}
 }
 

@@ -69,6 +69,9 @@ export default function IntegrationCard({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showTokenForm, setShowTokenForm] = useState(false);
   const [showParamForm, setShowParamForm] = useState(false);
+  const [showInstanceForm, setShowInstanceForm] = useState(false);
+  const [pendingInstance, setPendingInstance] = useState("");
+  const [pendingAuthMethod, setPendingAuthMethod] = useState<"oauth" | "manual">("oauth");
   const [submitting, setSubmitting] = useState(false);
 
   const safeIconSVG = integration.icon_svg
@@ -93,13 +96,24 @@ export default function IntegrationCard({
     return params;
   }
 
+  function promptForInstance(method: "oauth" | "manual") {
+    setPendingAuthMethod(method);
+    setSettingsOpen(false);
+    setShowInstanceForm(true);
+    setError(null);
+  }
+
   function handleConnectManual() {
+    if (integration.connected) {
+      promptForInstance("manual");
+      return;
+    }
     setSettingsOpen(false);
     setShowTokenForm(true);
     setError(null);
   }
 
-  async function handleConnectOAuth() {
+  async function startOAuthFlow(instance?: string) {
     if (needsParams && !showParamForm) {
       setSettingsOpen(false);
       setShowParamForm(true);
@@ -109,7 +123,7 @@ export default function IntegrationCard({
     setLoading(true);
     setError(null);
     try {
-      const { url } = await startIntegrationOAuth(integration.name);
+      const { url } = await startIntegrationOAuth(integration.name, undefined, undefined, instance);
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start OAuth");
@@ -118,11 +132,32 @@ export default function IntegrationCard({
     }
   }
 
+  function handleConnectOAuth() {
+    if (integration.connected) {
+      promptForInstance("oauth");
+      return;
+    }
+    startOAuthFlow();
+  }
+
   function handleConnect() {
     if (isManualOnly) {
       handleConnectManual();
     } else {
       handleConnectOAuth();
+    }
+  }
+
+  function handleInstanceSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = (new FormData(e.currentTarget).get("instance_name") as string)?.trim();
+    if (!name) return;
+    setPendingInstance(name);
+    setShowInstanceForm(false);
+    if (pendingAuthMethod === "manual") {
+      setShowTokenForm(true);
+    } else {
+      startOAuthFlow(name);
     }
   }
 
@@ -136,6 +171,7 @@ export default function IntegrationCard({
         integration.name,
         undefined,
         params,
+        pendingInstance || undefined,
       );
       window.location.href = url;
     } catch (err) {
@@ -157,6 +193,7 @@ export default function IntegrationCard({
         integration.name,
         credential,
         Object.keys(params).length > 0 ? params : undefined,
+        pendingInstance || undefined,
       );
       setShowTokenForm(false);
       onConnected?.();
@@ -170,14 +207,16 @@ export default function IntegrationCard({
   function handleCancelForm() {
     setShowTokenForm(false);
     setShowParamForm(false);
+    setShowInstanceForm(false);
+    setPendingInstance("");
     setError(null);
   }
 
-  async function handleDisconnect() {
+  async function handleDisconnect(instance?: string) {
     setDisconnecting(true);
     setError(null);
     try {
-      await disconnectIntegration(integration.name);
+      await disconnectIntegration(integration.name, instance);
       onDisconnected?.();
       setSettingsOpen(false);
     } catch (err) {
@@ -255,6 +294,29 @@ export default function IntegrationCard({
       </div>
       {error && !settingsOpen && (
         <p className="mt-2 text-sm text-ember-500">{error}</p>
+      )}
+      {showInstanceForm && (
+        <form onSubmit={handleInstanceSubmit} className="mt-3">
+          <label
+            htmlFor={`instance-name-${integration.name}`}
+            className="block text-sm font-medium text-stone-700"
+          >
+            Connection name
+          </label>
+          <input
+            id={`instance-name-${integration.name}`}
+            name="instance_name"
+            type="text"
+            required
+            placeholder="e.g. my-store, acme-workspace"
+            autoFocus
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button type="submit">Continue</Button>
+            <Button type="button" variant="secondary" onClick={handleCancelForm}>Cancel</Button>
+          </div>
+        </form>
       )}
       {showParamForm && !isManualOnly && (
         <form onSubmit={handleParamSubmit} className="mt-3">

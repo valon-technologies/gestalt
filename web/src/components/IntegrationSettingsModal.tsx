@@ -10,7 +10,7 @@ interface IntegrationSettingsModalProps {
   onClose: () => void;
   onReconnect: () => void;
   onReconnectManual?: () => void;
-  onDisconnect: () => void;
+  onDisconnect: (instance?: string) => void;
   reconnecting: boolean;
   disconnecting: boolean;
   error: string | null;
@@ -28,6 +28,7 @@ export default function IntegrationSettingsModal({
 }: IntegrationSettingsModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [disconnectInstance, setDisconnectInstance] = useState<string | undefined>();
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -79,7 +80,7 @@ export default function IntegrationSettingsModal({
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => setConfirmingDisconnect(false)}
+                onClick={() => { setConfirmingDisconnect(false); setDisconnectInstance(undefined); }}
                 disabled={disconnecting}
               >
                 Cancel
@@ -87,7 +88,7 @@ export default function IntegrationSettingsModal({
               <Button
                 variant="danger"
                 className="flex-1"
-                onClick={onDisconnect}
+                onClick={() => onDisconnect(disconnectInstance)}
                 disabled={disconnecting}
               >
                 {disconnecting ? "Disconnecting..." : "Disconnect"}
@@ -114,33 +115,46 @@ export default function IntegrationSettingsModal({
 
             {integration.connected ? (
               <>
-                <div className="mt-4 flex items-center gap-2">
-                  <CheckCircleIcon className="h-5 w-5 text-grove-500" />
-                  <span className="text-sm font-medium text-grove-600">
-                    Connected
-                  </span>
-                </div>
+                {integration.instances && integration.instances.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {integration.instances.map((inst) => (
+                      <div key={inst.name} className="flex items-center justify-between rounded border border-border px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircleIcon className="h-4 w-4 text-grove-500" />
+                          <span className="text-sm text-stone-700">{inst.name}</span>
+                        </div>
+                        <button
+                          onClick={() => { setDisconnectInstance(inst.name); setConfirmingDisconnect(true); }}
+                          disabled={disconnecting}
+                          className="text-xs text-ember-500 hover:text-ember-600"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
 
-                <div className="mt-6">
+                <div className="mt-6 flex flex-col gap-2">
                   <Button
                     className="w-full"
                     onClick={onReconnect}
                     disabled={reconnecting}
                   >
-                    {reconnecting ? "Connecting..." : "Reconnect"}
+                    {reconnecting ? "Connecting..." : "Add Connection"}
                   </Button>
-                </div>
-
-                <div className="mt-4 border-t border-border pt-4">
-                  <Button
-                    variant="danger"
-                    className="w-full"
-                    onClick={() => setConfirmingDisconnect(true)}
-                  >
-                    Disconnect
-                  </Button>
+                  {onReconnectManual && (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={onReconnectManual}
+                      disabled={reconnecting}
+                    >
+                      Add with API Token
+                    </Button>
+                  )}
                 </div>
               </>
             ) : (

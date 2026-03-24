@@ -108,7 +108,7 @@ type principalTokenResolver struct {
 	token string
 }
 
-func (r *principalTokenResolver) ResolveToken(ctx context.Context, p *principal.Principal, _ string) (string, error) {
+func (r *principalTokenResolver) ResolveToken(ctx context.Context, p *principal.Principal, _, _ string) (string, error) {
 	if p == nil {
 		return "", nil
 	}

@@ -265,7 +265,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker: &testutil.StubInvoker{
-			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, _, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
 				gotProvider = providerName
 				gotOperation = operation
@@ -504,7 +504,7 @@ type stubTokenResolver struct {
 	err   error
 }
 
-func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _ string) (string, error) {
+func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _, _ string) (string, error) {
 	return r.token, r.err
 }
 

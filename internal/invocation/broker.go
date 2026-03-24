@@ -17,7 +17,7 @@ import (
 const tokenRefreshThreshold = 5 * time.Minute
 
 type Invoker interface {
-	Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error)
+	Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
 }
 
 type CapabilityLister interface {
@@ -65,7 +65,7 @@ func (b *Broker) ListCapabilities() []core.Capability {
 	return caps
 }
 
-func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -90,7 +90,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return nil, ErrNotAuthenticated
 	}
 
-	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName)
+	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
-func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName string) (string, error) {
+func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, instance string) (string, error) {
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -111,11 +111,11 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		}
 		return "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	_, tok, resolveErr := b.resolveToken(ctx, prov, p, providerName)
+	_, tok, resolveErr := b.resolveToken(ctx, prov, p, providerName, instance)
 	return tok, resolveErr
 }
 
-func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName string) (context.Context, string, error) {
+func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, instance string) (context.Context, string, error) {
 	mode := prov.ConnectionMode()
 	switch mode {
 	case core.ConnectionModeNone:
@@ -135,36 +135,63 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 			}
 			p.UserID = dbUser.ID
 		}
-		return b.resolveUserToken(ctx, prov, p.UserID, providerName)
+		return b.resolveUserToken(ctx, prov, p.UserID, providerName, instance)
 
 	case core.ConnectionModeIdentity:
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName)
+		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, instance)
 
 	case core.ConnectionModeEither:
 		if p.UserID != "" {
-			enrichedCtx, tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName)
+			enrichedCtx, tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName, instance)
 			if err == nil {
 				return enrichedCtx, tok, nil
+			}
+			if errors.Is(err, ErrAmbiguousInstance) {
+				return ctx, "", err
 			}
 			if !errors.Is(err, ErrNoToken) {
 				return ctx, "", err
 			}
 		}
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName)
+		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, instance)
 
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
 }
 
-func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName string) (context.Context, string, error) {
-	storedToken, err := b.datastore.Token(ctx, userID, providerName, "default")
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, instance string) (context.Context, string, error) {
+	var storedToken *core.IntegrationToken
+	var err error
+
+	if instance != "" {
+		storedToken, err = b.datastore.Token(ctx, userID, providerName, instance)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
+			}
+			return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 		}
-		return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
+	} else {
+		tokens, listErr := b.datastore.ListTokensForIntegration(ctx, userID, providerName)
+		if listErr != nil {
+			return ctx, "", fmt.Errorf("%w: listing tokens: %v", ErrInternal, listErr)
+		}
+		switch len(tokens) {
+		case 0:
+			return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+		case 1:
+			storedToken = tokens[0]
+		default:
+			instances := make([]string, len(tokens))
+			for i, t := range tokens {
+				instances[i] = t.Instance
+			}
+			return ctx, "", fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use",
+				ErrAmbiguousInstance, providerName, len(tokens), instances)
+		}
 	}
+
 	if storedToken == nil {
 		return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 	}
