@@ -24,7 +24,6 @@ type Config struct {
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
 	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
-	ProviderDirs []string                  `yaml:"provider_dirs"`
 	Server       ServerConfig              `yaml:"server"`
 }
 
@@ -107,7 +106,6 @@ const (
 type UpstreamDef struct {
 	Type              string     `yaml:"type"`
 	URL               string     `yaml:"url"`
-	Provider          string     `yaml:"provider"`
 	MCP               bool       `yaml:"mcp"`
 	AllowedOperations AllowedOps `yaml:"allowed_operations"`
 }
@@ -301,20 +299,10 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		baseDir = filepath.Dir(absPath)
 	}
 
-	for i, dir := range cfg.ProviderDirs {
-		cfg.ProviderDirs[i] = resolveRelativePath(baseDir, dir)
-	}
-
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
-		}
-		for i, us := range intg.Upstreams {
-			if us.Provider != "" {
-				us.Provider = resolveRelativePath(baseDir, us.Provider)
-			}
-			intg.Upstreams[i] = us
 		}
 		cfg.Integrations[name] = intg
 	}
@@ -336,6 +324,30 @@ func validate(cfg *Config) error {
 	}
 	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")
+	}
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		apiCount := 0
+		for _, us := range intg.Upstreams {
+			switch us.Type {
+			case UpstreamTypeREST, UpstreamTypeGraphQL:
+				apiCount++
+				if us.URL == "" {
+					return fmt.Errorf("config validation: integration %q %s upstream requires url", name, us.Type)
+				}
+			case UpstreamTypeMCP:
+				if us.URL == "" {
+					return fmt.Errorf("config validation: integration %q mcp upstream requires url", name)
+				}
+			case "":
+				return fmt.Errorf("config validation: integration %q has upstream with empty type", name)
+			default:
+				return fmt.Errorf("config validation: integration %q has unknown upstream type %q", name, us.Type)
+			}
+		}
+		if apiCount > 1 {
+			return fmt.Errorf("config validation: integration %q has multiple REST/GraphQL upstreams; only one is supported", name)
+		}
 	}
 	return nil
 }

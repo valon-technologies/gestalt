@@ -188,14 +188,12 @@ datastore:
   provider: sqlite
 server:
   encryption_key: key123
-provider_dirs:
-  - ../providers
 integrations:
   myapi:
     icon_file: ../icons/test.svg
     upstreams:
       - type: rest
-        provider: ../providers/myapi.json
+        url: https://example.com/spec.json
 `
 	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -206,15 +204,8 @@ integrations:
 		t.Fatalf("Load: unexpected error: %v", err)
 	}
 
-	wantProviderDir := filepath.Join(dir, "providers")
-	if len(cfg.ProviderDirs) != 1 || cfg.ProviderDirs[0] != wantProviderDir {
-		t.Fatalf("ProviderDirs = %v, want [%q]", cfg.ProviderDirs, wantProviderDir)
-	}
 	if got := cfg.Integrations["myapi"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
-	}
-	if got := cfg.Integrations["myapi"].Upstreams[0].Provider; got != filepath.Join(dir, "providers", "myapi.json") {
-		t.Fatalf("Provider path = %q, want %q", got, filepath.Join(dir, "providers", "myapi.json"))
 	}
 }
 
@@ -245,6 +236,41 @@ func TestValidation(t *testing.T) {
 			name:    "dev mode skips encryption key",
 			yaml:    "auth:\n  provider: google\ndatastore:\n  provider: sqlite\nserver:\n  dev_mode: true\n",
 			wantErr: false,
+		},
+		{
+			name: "rest upstream requires url",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  api:
+    upstreams:
+      - type: rest
+`,
+			wantErr: true,
+		},
+		{
+			name: "multiple api upstreams rejected",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  api:
+    upstreams:
+      - type: rest
+        url: https://example.com/openapi.json
+      - type: graphql
+        url: https://example.com/graphql
+`,
+			wantErr: true,
 		},
 	}
 

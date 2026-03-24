@@ -129,7 +129,7 @@ Each integration declares one or more upstreams that define where operations com
 
 | Upstream type | When to use |
 |---|---|
-| `rest` | Load operations from an OpenAPI spec URL, a provider YAML file, or a provider directory scan. |
+| `rest` | Load operations from an OpenAPI spec URL. Use `gestaltd prepare` for deterministic startup. |
 | `graphql` | Introspect a GraphQL endpoint and generate operations from queries and mutations. |
 | `mcp` | Connect to an upstream MCP server and import its tools as operations. |
 
