@@ -209,6 +209,48 @@ integrations:
 	}
 }
 
+func TestLoadResolvesPluginCommandPathsRelativeToConfig(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0755); err != nil {
+		t.Fatalf("MkdirAll config dir: %v", err)
+	}
+
+	content := `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin:
+      command: ../bin/provider
+runtimes:
+  worker:
+    plugin:
+      command: ../bin/runtime
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	if got := cfg.Integrations["external"].Plugin.Command; got != filepath.Join(dir, "bin", "provider") {
+		t.Fatalf("integration plugin command = %q", got)
+	}
+	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
+		t.Fatalf("runtime plugin command = %q", got)
+	}
+}
+
 func TestValidation(t *testing.T) {
 	t.Parallel()
 
@@ -269,6 +311,71 @@ integrations:
         url: https://example.com/openapi.json
       - type: graphql
         url: https://example.com/graphql
+`,
+			wantErr: true,
+		},
+		{
+			name: "integration plugin cannot also define upstreams",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin:
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime requires type or plugin",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker: {}
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime plugin cannot also define type",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    type: echo
+    plugin:
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin command is required",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin: {}
 `,
 			wantErr: true,
 		},
