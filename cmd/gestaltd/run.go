@@ -82,7 +82,8 @@ func runStartCommand(name string, usage func(io.Writer), args []string, mode pro
 		intg := env.Config.Integrations[name]
 		hasMCP := false
 		apiMCP := false
-		for _, us := range intg.Upstreams {
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
 			if us.Type == config.UpstreamTypeMCP {
 				hasMCP = true
 			}
@@ -257,8 +258,8 @@ func logConfigSummary(path string, cfg *config.Config) {
 		for name := range cfg.Integrations {
 			intg := cfg.Integrations[name]
 			var sources []string
-			for _, us := range intg.Upstreams {
-				sources = append(sources, us.Type)
+			for i := range intg.Upstreams {
+				sources = append(sources, intg.Upstreams[i].Type)
 			}
 			auth := "oauth"
 			if intg.Auth.Type == "manual" || intg.ConnectionMode == "manual" {

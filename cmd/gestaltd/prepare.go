@@ -225,11 +225,12 @@ func writePreparedArtifacts(ctx context.Context, cfg *config.Config, paths prepa
 }
 
 func remoteAPIUpstreamForPrepare(intg config.IntegrationDef) (config.UpstreamDef, bool) {
-	for _, us := range intg.Upstreams {
+	for i := range intg.Upstreams {
+		us := &intg.Upstreams[i]
 		switch us.Type {
 		case config.UpstreamTypeREST, config.UpstreamTypeGraphQL:
 			if us.URL != "" {
-				return us, true
+				return *us, true
 			}
 		}
 	}
