@@ -38,8 +38,8 @@ func (s *SQLStore) ph(n int) string { return s.dialect.Placeholder(n) }
 
 const defaultRegistrationDDL = `CREATE TABLE IF NOT EXISTS oauth_registrations (
 	id VARCHAR(36) PRIMARY KEY,
-	auth_server_url VARCHAR(500) NOT NULL,
-	redirect_uri VARCHAR(500) NOT NULL,
+	auth_server_url VARCHAR(255) NOT NULL,
+	redirect_uri VARCHAR(255) NOT NULL,
 	client_id VARCHAR(255) NOT NULL,
 	client_secret_encrypted TEXT,
 	authorization_endpoint VARCHAR(500) NOT NULL,
