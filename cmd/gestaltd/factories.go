@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
+	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
 	dynamodbstore "github.com/valon-technologies/gestalt/plugins/datastore/dynamodb"
 	"github.com/valon-technologies/gestalt/plugins/datastore/firestore"
@@ -108,6 +109,7 @@ func buildFactories(preparedProviders map[string]string, devMode bool) *bootstra
 		factories.Runtimes["echo"] = echoruntime.Factory
 	}
 	factories.Bindings["webhook"] = webhook.Factory
+	factories.Bindings["proxy"] = proxy.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["gcp_secret_manager"] = secretsgcp.Factory

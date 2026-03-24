@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/plugins/bindings/internal/httpjson"
 )
 
 var _ core.Binding = (*Binding)(nil)
@@ -63,7 +64,7 @@ func (b *Binding) Routes() []core.Route {
 func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to read body")
+		httpjson.WriteError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
@@ -78,11 +79,11 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		sig := r.Header.Get(header)
 		if sig == "" {
-			writeError(w, http.StatusUnauthorized, "missing signature")
+			httpjson.WriteError(w, http.StatusUnauthorized, "missing signature")
 			return
 		}
 		if err := verifySignature([]byte(b.cfg.SigningSecret), rawBody, sig); err != nil {
-			writeError(w, http.StatusUnauthorized, "invalid signature")
+			httpjson.WriteError(w, http.StatusUnauthorized, "invalid signature")
 			return
 		}
 
@@ -101,13 +102,13 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if !trusted {
-				writeError(w, http.StatusForbidden, "untrusted source")
+				httpjson.WriteError(w, http.StatusForbidden, "untrusted source")
 				return
 			}
 		}
 		userID = r.Header.Get(b.cfg.UserHeader)
 		if userID == "" {
-			writeError(w, http.StatusUnauthorized, "missing user header")
+			httpjson.WriteError(w, http.StatusUnauthorized, "missing user header")
 			return
 		}
 	}
@@ -115,13 +116,13 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	if len(rawBody) > 0 {
 		if err := json.Unmarshal(rawBody, &body); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			httpjson.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 
 	if b.cfg.Provider == "" || b.cfg.Operation == "" {
-		writeJSON(w, http.StatusOK, body)
+		httpjson.WriteJSON(w, http.StatusOK, body)
 		return
 	}
 
@@ -132,21 +133,11 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 
 	result, err := b.invoker.Invoke(ctx, p, b.cfg.Provider, b.cfg.Instance, b.cfg.Operation, body)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "upstream invocation failed")
+		httpjson.WriteError(w, http.StatusBadGateway, "upstream invocation failed")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(result.Status)
 	_, _ = fmt.Fprint(w, result.Body)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
 }
