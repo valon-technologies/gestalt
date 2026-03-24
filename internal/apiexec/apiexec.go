@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -319,6 +320,25 @@ func ParseJSONToken(token string, dest any) error {
 		return fmt.Errorf("parsing token: %w", err)
 	}
 	return nil
+}
+
+func ExpandedPath(method, path string, params map[string]any) string {
+	params = copyParams(params)
+	expanded, err := substitutePath(path, params)
+	if err != nil {
+		return path
+	}
+	switch method {
+	case http.MethodGet, http.MethodDelete:
+		if len(params) > 0 {
+			q := url.Values{}
+			for k, v := range params {
+				q.Set(k, fmt.Sprintf("%v", v))
+			}
+			return expanded + "?" + q.Encode()
+		}
+	}
+	return expanded
 }
 
 func copyParams(params map[string]any) map[string]any {
