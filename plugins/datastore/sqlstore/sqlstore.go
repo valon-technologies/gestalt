@@ -122,6 +122,16 @@ func NullableTime(t *time.Time) any {
 	return *t
 }
 
+func defaultTimestamps(createdAt, updatedAt *time.Time) {
+	now := time.Now().UTC().Truncate(time.Second)
+	if createdAt.IsZero() {
+		*createdAt = now
+	}
+	if updatedAt.IsZero() {
+		*updatedAt = now
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Datastore methods
 // ---------------------------------------------------------------------------
@@ -195,6 +205,8 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 }
 
 func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
+	defaultTimestamps(&token.CreatedAt, &token.UpdatedAt)
+
 	accessEnc, refreshEnc, err := s.Enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
 	if err != nil {
 		return fmt.Errorf("encrypting token pair: %w", err)
@@ -281,6 +293,8 @@ func (s *Store) DeleteToken(ctx context.Context, id string) error {
 }
 
 func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
+	defaultTimestamps(&token.CreatedAt, &token.UpdatedAt)
+
 	_, err := s.DB.ExecContext(ctx, `
 		INSERT INTO api_tokens (id, user_id, name, hashed_token, scopes, expires_at, created_at, updated_at)
 		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`)`,
