@@ -20,6 +20,8 @@ auth:
   #   display_name: "Okta"
 
 datastore:
+  # SQLite is appropriate for local development or single-instance
+  # deployments with mounted persistent storage at /data.
   provider: sqlite
   config:
     path: /data/gestalt.db

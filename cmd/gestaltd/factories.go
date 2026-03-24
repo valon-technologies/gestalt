@@ -59,6 +59,7 @@ func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
 		stop()
 		return nil, fmt.Errorf("bootstrap: %v", err)
 	}
+	logDatastoreWarnings(result.Datastore)
 
 	if err := result.Datastore.Migrate(ctx); err != nil {
 		_ = result.Datastore.Close()
@@ -120,6 +121,17 @@ func resolveConfigPath(flagValue string) string {
 		return "config.yaml"
 	}
 	return "/etc/gestalt/config.yaml"
+}
+
+func logDatastoreWarnings(ds core.Datastore) {
+	type warner interface {
+		Warnings() []string
+	}
+	if w, ok := ds.(warner); ok {
+		for _, msg := range w.Warnings() {
+			log.Printf("WARNING: %s", msg)
+		}
+	}
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

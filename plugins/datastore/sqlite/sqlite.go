@@ -43,6 +43,7 @@ func (dialect) IsDuplicateKeyError(error) bool { return false }
 // Store embeds sqlstore.Store and adds SQLite-specific behavior.
 type Store struct {
 	*sqlstore.Store
+	path string
 }
 
 var _ core.Datastore = (*Store)(nil)
@@ -61,7 +62,7 @@ func New(dbPath string, encryptionKey []byte) (*Store, error) {
 		return nil, fmt.Errorf("creating encryptor: %w", err)
 	}
 
-	return &Store{Store: sqlstore.New(db, enc, dialect{})}, nil
+	return &Store{Store: sqlstore.New(db, enc, dialect{}), path: dbPath}, nil
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

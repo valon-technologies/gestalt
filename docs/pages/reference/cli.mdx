@@ -28,6 +28,8 @@ gestaltd validate --config config.yaml
 
 Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
 
+`gestaltd` prints datastore warnings at startup. SQLite triggers warnings for relative paths or temporary directory storage.
+
 ### Config file resolution
 
 1. `--config` flag.
