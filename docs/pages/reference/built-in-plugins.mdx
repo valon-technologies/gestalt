@@ -13,7 +13,7 @@ The Gestalt binary registers all plugins at startup. Bootstrap builds one shared
 
 | Name | Notes |
 |---|---|
-| `sqlite` | File-based. Default for local development and single-instance deployments. |
+| `sqlite` | File-based. Suitable for local development and single-instance deployments. Not recommended for production. |
 | `postgres` | Recommended for production and multi-instance deployments. |
 | `mysql` | Alternative SQL backend using the shared sqlstore layer. |
 | `dynamodb` | AWS DynamoDB. Configurable table name, region, and optional custom endpoint. |

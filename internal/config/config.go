@@ -194,9 +194,6 @@ func applyDefaults(cfg *Config) {
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
-	if cfg.Datastore.Provider == "" {
-		cfg.Datastore.Provider = "sqlite"
-	}
 	if cfg.Secrets.Provider == "" {
 		cfg.Secrets.Provider = "env"
 	}
@@ -298,6 +295,9 @@ func resolveBaseURL(cfg *Config) {
 func validate(cfg *Config) error {
 	if cfg.Auth.Provider == "" {
 		return fmt.Errorf("config validation: auth.provider is required")
+	}
+	if cfg.Datastore.Provider == "" {
+		return fmt.Errorf("config validation: datastore.provider is required")
 	}
 	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")

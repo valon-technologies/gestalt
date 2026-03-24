@@ -1,4 +1,4 @@
-# SQLite defaults are for a single replica with persistent storage.
+# These example values use SQLite with a single replica.
 # Switch to Postgres or MySQL before scaling horizontally.
 replicaCount: 1
 
