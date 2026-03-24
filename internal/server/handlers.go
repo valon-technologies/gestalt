@@ -63,6 +63,7 @@ type integrationInfo struct {
 	IconSVG          string                         `json:"icon_svg,omitempty"`
 	Connected        bool                           `json:"connected"`
 	AuthType         string                         `json:"auth_type"`
+	AuthTypes        []string                       `json:"auth_types"`
 	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
 }
 
@@ -87,16 +88,21 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		authType := "oauth"
-		if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
-			authType = "manual"
+		var authTypes []string
+		if atl, ok := prov.(core.AuthTypeLister); ok {
+			authTypes = atl.AuthTypes()
+		} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+			authTypes = []string{"manual"}
+		} else {
+			authTypes = []string{"oauth"}
 		}
 		info := integrationInfo{
 			Name:        name,
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
 			Connected:   connected[name],
-			AuthType:    authType,
+			AuthType:    authTypes[0],
+			AuthTypes:   authTypes,
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
@@ -207,14 +213,27 @@ func (s *Server) requireOAuthProvider(w http.ResponseWriter, name string) (core.
 	if !ok {
 		return nil, false
 	}
-	if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
-		writeError(w, http.StatusBadRequest,
-			fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
-		return nil, false
-	}
 	oauthProv, ok := prov.(core.OAuthProvider)
 	if !ok {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", name))
+		return nil, false
+	}
+	if atl, ok := prov.(core.AuthTypeLister); ok {
+		hasOAuth := false
+		for _, t := range atl.AuthTypes() {
+			if t == "oauth" {
+				hasOAuth = true
+				break
+			}
+		}
+		if !hasOAuth {
+			writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
+			return nil, false
+		}
+	} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
 		return nil, false
 	}
 	return oauthProv, true
