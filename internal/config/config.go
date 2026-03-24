@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -183,6 +184,7 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	}
 
 	resolveBaseURL(&cfg) // after resolveAuthProfiles so inherited fields take priority
+	resolveRelativePaths(path, &cfg)
 
 	if err := validate(&cfg); err != nil {
 		return nil, err
@@ -291,6 +293,38 @@ func resolveBaseURL(cfg *Config) {
 			cfg.Integrations[name] = intg
 		}
 	}
+}
+
+func resolveRelativePaths(configPath string, cfg *Config) {
+	baseDir := filepath.Dir(configPath)
+	if absPath, err := filepath.Abs(configPath); err == nil {
+		baseDir = filepath.Dir(absPath)
+	}
+
+	for i, dir := range cfg.ProviderDirs {
+		cfg.ProviderDirs[i] = resolveRelativePath(baseDir, dir)
+	}
+
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.IconFile != "" {
+			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
+		}
+		for i, us := range intg.Upstreams {
+			if us.Provider != "" {
+				us.Provider = resolveRelativePath(baseDir, us.Provider)
+			}
+			intg.Upstreams[i] = us
+		}
+		cfg.Integrations[name] = intg
+	}
+}
+
+func resolveRelativePath(baseDir, value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
 func validate(cfg *Config) error {

@@ -10,7 +10,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 
 Gestalt generates MCP tools from provider catalogs. Providers that implement the `CatalogProvider` interface (including all REST, GraphQL, and MCP upstream providers) supply rich metadata for their operations:
 
-- **JSON Schema inputs** from OpenAPI specs and GraphQL introspection are passed through directly, giving MCP clients full type information.
+- **JSON Schema inputs** from OpenAPI specs are passed through directly. GraphQL operations expose top-level argument types, with complex inputs represented as `object`.
 - **Tool annotations** (read-only, destructive, idempotent) are set automatically from HTTP methods for REST operations, and preserved from the upstream server for MCP operations.
 - **Operation titles** come from the catalog when available, falling back to the operation ID.
 
