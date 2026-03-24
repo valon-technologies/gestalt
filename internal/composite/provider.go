@@ -23,7 +23,6 @@ type Provider struct {
 	name string
 	api  core.Provider
 	mcp  MCPUpstream
-	cat  *catalog.Catalog
 }
 
 var (
@@ -39,7 +38,6 @@ func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
 		api:  apiProv,
 		mcp:  mcpUp,
 	}
-	p.cat = p.buildCatalog()
 	if oauth, ok := apiProv.(core.OAuthProvider); ok {
 		return &oauthProvider{Provider: p, oauth: oauth}
 	}
@@ -51,7 +49,7 @@ func (p *Provider) DisplayName() string                 { return p.api.DisplayNa
 func (p *Provider) Description() string                 { return p.api.Description() }
 func (p *Provider) ConnectionMode() core.ConnectionMode { return p.api.ConnectionMode() }
 func (p *Provider) ListOperations() []core.Operation    { return p.api.ListOperations() }
-func (p *Provider) Catalog() *catalog.Catalog           { return p.cat }
+func (p *Provider) Catalog() *catalog.Catalog           { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.api.Execute(ctx, operation, params, token)
@@ -62,6 +60,24 @@ func (p *Provider) CallTool(ctx context.Context, name string, args map[string]an
 }
 
 func (p *Provider) Inner() core.Provider { return p.api }
+
+func (p *Provider) IsDeferred() bool {
+	type deferred interface{ IsDeferred() bool }
+	if du, ok := p.mcp.(deferred); ok {
+		return du.IsDeferred()
+	}
+	return false
+}
+
+func (p *Provider) EnsureInitialized(ctx context.Context) (bool, error) {
+	type initializer interface {
+		EnsureInitialized(ctx context.Context) (bool, error)
+	}
+	if init, ok := p.mcp.(initializer); ok {
+		return init.EnsureInitialized(ctx)
+	}
+	return false, nil
+}
 
 // SupportsManualAuth delegates to the API provider only. The MCP
 // upstream's manual-auth support is irrelevant — the server uses this
