@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"log"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -30,6 +31,11 @@ type directToolCaller interface {
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
+type DeferredUpstream interface {
+	IsDeferred() bool
+	EnsureInitialized(ctx context.Context) (bool, error)
+}
+
 type Config struct {
 	Invoker          invocation.Invoker
 	TokenResolver    TokenResolver
@@ -40,12 +46,35 @@ type Config struct {
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
-	srv := mcpserver.NewMCPServer(serverName, serverVersion)
-
 	allowed := make(map[string]struct{}, len(cfg.AllowedProviders))
 	for _, p := range cfg.AllowedProviders {
 		allowed[p] = struct{}{}
 	}
+
+	var deferred []deferredInfo
+	for _, provName := range cfg.Providers.List() {
+		if cfg.AllowedProviders != nil {
+			if _, ok := allowed[provName]; !ok {
+				continue
+			}
+		}
+		prov, err := cfg.Providers.Get(provName)
+		if err != nil {
+			continue
+		}
+		if du := extractDeferredUpstream(prov); du != nil && du.IsDeferred() {
+			deferred = append(deferred, deferredInfo{provName: provName, upstream: du, prov: prov})
+		}
+	}
+
+	hooks := &mcpserver.Hooks{}
+	opts := []mcpserver.ServerOption{mcpserver.WithHooks(hooks)}
+	if len(deferred) > 0 {
+		// AddTool enables tool capabilities implicitly, but with only
+		// deferred providers the capability is never set.
+		opts = append(opts, mcpserver.WithToolCapabilities(true))
+	}
+	srv := mcpserver.NewMCPServer(serverName, serverVersion, opts...)
 
 	for _, provName := range cfg.Providers.List() {
 		if cfg.AllowedProviders != nil {
@@ -69,7 +98,61 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		addFlatTools(srv, cfg, provName, prov)
 	}
 
+	if len(deferred) > 0 {
+		hooks.AddBeforeListTools(func(ctx context.Context, _ any, _ *mcpgo.ListToolsRequest) {
+			tryInitDeferred(ctx, srv, cfg, deferred)
+		})
+	}
+
 	return srv
+}
+
+type deferredInfo struct {
+	provName string
+	upstream DeferredUpstream
+	prov     core.Provider
+}
+
+func tryInitDeferred(ctx context.Context, srv *mcpserver.MCPServer, cfg Config, deferred []deferredInfo) {
+	p := principal.FromContext(ctx)
+	if p == nil || cfg.TokenResolver == nil {
+		return
+	}
+	for _, d := range deferred {
+		if !d.upstream.IsDeferred() {
+			continue
+		}
+		token, err := cfg.TokenResolver.ResolveToken(ctx, p, d.provName)
+		if err != nil {
+			continue
+		}
+		initCtx := mcpupstream.WithUpstreamToken(ctx, token)
+		initialized, err := d.upstream.EnsureInitialized(initCtx)
+		if err != nil {
+			log.Printf("WARNING: deferred init %q: %v", d.provName, err)
+			continue
+		}
+		if !initialized {
+			continue
+		}
+		cp, ok := d.prov.(core.CatalogProvider)
+		if !ok {
+			continue
+		}
+		cat := cp.Catalog()
+		if cat == nil {
+			continue
+		}
+		addCatalogTools(srv, cfg, d.provName, cat, d.prov)
+		log.Printf("deferred MCP upstream %q initialized, registered tools", d.provName)
+	}
+}
+
+func extractDeferredUpstream(prov core.Provider) DeferredUpstream {
+	if du, ok := prov.(DeferredUpstream); ok {
+		return du
+	}
+	return nil
 }
 
 func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog, prov core.Provider) {

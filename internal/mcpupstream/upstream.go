@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -30,6 +31,14 @@ type Upstream struct {
 	cat      *catalog.Catalog
 	ops      []core.Operation
 	client   mcpclient.MCPClient
+
+	// Deferred initialization fields. When deferred is true, the upstream
+	// was created without connecting; EnsureInitialized must be called
+	// with an authenticated context before the client can be used.
+	url        string
+	deferred   bool
+	mu         sync.RWMutex
+	allowedOps map[string]string
 }
 
 func New(ctx context.Context, name string, url string, connMode core.ConnectionMode) (*Upstream, error) {
@@ -37,39 +46,12 @@ func New(ctx context.Context, name string, url string, connMode core.ConnectionM
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
 
-	client, err := mcpclient.NewStreamableHttpClient(url,
-		transport.WithHTTPTimeout(httpTimeout),
-		transport.WithHTTPHeaderFunc(func(ctx context.Context) map[string]string {
-			if token := UpstreamTokenFromContext(ctx); token != "" {
-				return map[string]string{"Authorization": core.BearerScheme + token}
-			}
-			return nil
-		}),
-	)
+	client, tools, err := connect(ctx, name, url)
 	if err != nil {
-		return nil, fmt.Errorf("mcpupstream %s: creating client: %w", name, err)
+		return nil, err
 	}
 
-	if err := client.Start(ctx); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("mcpupstream %s: starting client: %w", name, err)
-	}
-
-	initReq := mcpgo.InitializeRequest{}
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "gestalt", Version: "0.1.0"}
-	if _, err := client.Initialize(ctx, initReq); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("mcpupstream %s: initialize: %w", name, err)
-	}
-
-	toolsResult, err := client.ListTools(ctx, mcpgo.ListToolsRequest{})
-	if err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("mcpupstream %s: listing tools: %w", name, err)
-	}
-
-	cat, ops := buildCatalog(name, toolsResult.Tools)
+	cat, ops := buildCatalog(name, tools)
 
 	return &Upstream{
 		name:     name,
@@ -80,6 +62,107 @@ func New(ctx context.Context, name string, url string, connMode core.ConnectionM
 		ops:      ops,
 		client:   client,
 	}, nil
+}
+
+func NewDeferred(name string, url string, connMode core.ConnectionMode) *Upstream {
+	return &Upstream{
+		name:     name,
+		display:  name,
+		desc:     fmt.Sprintf("MCP upstream: %s", url),
+		connMode: connMode,
+		url:      url,
+		deferred: true,
+		cat:      &catalog.Catalog{Name: name},
+	}
+}
+
+func (u *Upstream) SetAllowedOperations(allowed map[string]string) {
+	u.allowedOps = allowed
+}
+
+func (u *Upstream) IsDeferred() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.deferred
+}
+
+// EnsureInitialized connects a deferred upstream using the token present in
+// ctx. Safe to call concurrently; failed attempts allow retry on next call.
+// Returns true when this call performed the actual initialization, false when
+// the upstream was already initialized (by this or another goroutine).
+func (u *Upstream) EnsureInitialized(ctx context.Context) (bool, error) {
+	u.mu.RLock()
+	if !u.deferred {
+		u.mu.RUnlock()
+		return false, nil
+	}
+	u.mu.RUnlock()
+
+	client, tools, err := connect(ctx, u.name, u.url)
+	if err != nil {
+		return false, err
+	}
+
+	cat, ops := buildCatalog(u.name, tools)
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	if !u.deferred {
+		_ = client.Close()
+		return false, nil
+	}
+
+	u.cat = cat
+	u.ops = ops
+	if u.allowedOps != nil {
+		if err := u.FilterOperations(u.allowedOps); err != nil {
+			u.cat = &catalog.Catalog{Name: u.name}
+			u.ops = nil
+			_ = client.Close()
+			return false, fmt.Errorf("mcpupstream %s: %w", u.name, err)
+		}
+	}
+
+	u.client = client
+	u.deferred = false
+	return true, nil
+}
+
+func connect(ctx context.Context, name, url string) (mcpclient.MCPClient, []mcpgo.Tool, error) {
+	client, err := mcpclient.NewStreamableHttpClient(url,
+		transport.WithHTTPTimeout(httpTimeout),
+		transport.WithHTTPHeaderFunc(func(ctx context.Context) map[string]string {
+			if token := UpstreamTokenFromContext(ctx); token != "" {
+				return map[string]string{"Authorization": core.BearerScheme + token}
+			}
+			return nil
+		}),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("mcpupstream %s: creating client: %w", name, err)
+	}
+
+	if err := client.Start(ctx); err != nil {
+		_ = client.Close()
+		return nil, nil, fmt.Errorf("mcpupstream %s: starting client: %w", name, err)
+	}
+
+	initReq := mcpgo.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "gestalt", Version: "0.1.0"}
+	if _, err := client.Initialize(ctx, initReq); err != nil {
+		_ = client.Close()
+		return nil, nil, fmt.Errorf("mcpupstream %s: initialize: %w", name, err)
+	}
+
+	toolsResult, err := client.ListTools(ctx, mcpgo.ListToolsRequest{})
+	if err != nil {
+		_ = client.Close()
+		return nil, nil, fmt.Errorf("mcpupstream %s: listing tools: %w", name, err)
+	}
+
+	return client, toolsResult.Tools, nil
 }
 
 func newFromClient(name string, client mcpclient.MCPClient, connMode core.ConnectionMode, tools []mcpgo.Tool) *Upstream {
@@ -99,23 +182,45 @@ func (u *Upstream) Name() string                        { return u.name }
 func (u *Upstream) DisplayName() string                 { return u.display }
 func (u *Upstream) Description() string                 { return u.desc }
 func (u *Upstream) ConnectionMode() core.ConnectionMode { return u.connMode }
-func (u *Upstream) ListOperations() []core.Operation    { return u.ops }
-func (u *Upstream) Catalog() *catalog.Catalog           { return u.cat }
 func (u *Upstream) SupportsManualAuth() bool            { return true }
+
+func (u *Upstream) ListOperations() []core.Operation {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.ops
+}
+
+func (u *Upstream) Catalog() *catalog.Catalog {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.cat
+}
 
 func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return nil, core.ErrMCPOnly
 }
 
 func (u *Upstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+	if _, err := u.EnsureInitialized(ctx); err != nil {
+		return nil, fmt.Errorf("deferred init: %w", err)
+	}
+	u.mu.RLock()
+	c := u.client
+	u.mu.RUnlock()
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = name
 	req.Params.Arguments = args
-	return u.client.CallTool(ctx, req)
+	return c.CallTool(ctx, req)
 }
 
 func (u *Upstream) Close() error {
-	return u.client.Close()
+	u.mu.RLock()
+	c := u.client
+	u.mu.RUnlock()
+	if c == nil {
+		return nil
+	}
+	return c.Close()
 }
 
 func (u *Upstream) FilterOperations(allowed map[string]string) error {

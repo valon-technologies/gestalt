@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/composite"
@@ -263,10 +265,16 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					return nil, fmt.Errorf("multiple mcp upstreams not supported")
 				}
 				up, err := mcpupstream.New(ctx, name, us.URL, connMode)
-				if err != nil {
+				switch {
+				case errors.Is(err, transport.ErrUnauthorized):
+					log.Printf("INFO: deferring MCP upstream %q: %v", name, err)
+					up = mcpupstream.NewDeferred(name, us.URL, connMode)
+					if us.AllowedOperations != nil {
+						up.SetAllowedOperations(map[string]string(us.AllowedOperations))
+					}
+				case err != nil:
 					return nil, err
-				}
-				if us.AllowedOperations != nil {
+				case us.AllowedOperations != nil:
 					if err := up.FilterOperations(map[string]string(us.AllowedOperations)); err != nil {
 						_ = up.Close()
 						return nil, err
