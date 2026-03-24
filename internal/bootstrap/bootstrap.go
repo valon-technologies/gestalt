@@ -21,6 +21,8 @@ type Deps struct {
 	EncryptionKey []byte
 	BaseURL       string
 	SecretManager core.SecretManager
+	SQLDB         any // *sql.DB when available, nil otherwise
+	SQLDialect    any // Placeholder(int)string when available, nil otherwise
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -107,6 +109,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	ds, err := buildDatastore(cfg, factories, deps)
 	if err != nil {
 		return nil, err
+	}
+
+	// Expose the underlying *sql.DB and dialect for optional use by
+	// provider factories (e.g. MCP OAuth registration storage).
+	type sqlDBAccessor interface{ RawDB() any }
+	type sqlDialectAccessor interface{ RawDialect() any }
+	if acc, ok := ds.(sqlDBAccessor); ok {
+		deps.SQLDB = acc.RawDB()
+	}
+	if acc, ok := ds.(sqlDialectAccessor); ok {
+		deps.SQLDialect = acc.RawDialect()
 	}
 
 	providers, providersReady, err := buildProviders(ctx, cfg, factories, deps)
