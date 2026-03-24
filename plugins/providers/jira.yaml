@@ -1,0 +1,111 @@
+provider: jira
+display_name: Jira Cloud
+description: Atlassian Jira Cloud issue tracking
+base_url: https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3
+
+auth:
+  type: oauth2
+  authorization_url: https://auth.atlassian.com/authorize
+  token_url: https://auth.atlassian.com/oauth/token
+  scopes:
+    - read:me
+    - read:jira-work
+    - write:jira-work
+    - offline_access
+  authorization_params:
+    audience: api.atlassian.com
+    prompt: consent
+
+post_connect: jira_discovery
+
+connection:
+  cloud_id:
+    required: true
+    description: Jira Cloud site ID (discovered automatically)
+    from: post_connect
+
+operations:
+  list_projects:
+    description: List accessible projects
+    method: GET
+    path: /project
+    pagination:
+      style: offset
+      cursor_param: startAt
+      limit_param: maxResults
+      default_limit: 50
+
+  get_issue:
+    description: Get an issue by key or ID
+    method: GET
+    path: /issue/{issue_key}
+    parameters:
+      - name: issue_key
+        type: string
+        required: true
+        description: "Issue key (e.g. PROJ-123) or ID"
+
+  search_issues:
+    description: Search issues using JQL
+    method: GET
+    path: /search
+    parameters:
+      - name: jql
+        type: string
+        required: true
+        description: JQL query string
+      - name: maxResults
+        type: integer
+        default: 50
+    pagination:
+      style: offset
+      cursor_param: startAt
+      limit_param: maxResults
+      default_limit: 50
+      results_path: issues
+
+  create_issue:
+    description: Create a new issue
+    method: POST
+    path: /issue
+    parameters:
+      - name: fields
+        type: object
+        required: true
+        description: "Issue fields including project, summary, issuetype, etc."
+
+  add_comment:
+    description: Add a comment to an issue
+    method: POST
+    path: /issue/{issue_key}/comment
+    parameters:
+      - name: issue_key
+        type: string
+        required: true
+        description: "Issue key (e.g. PROJ-123)"
+      - name: body
+        type: object
+        required: true
+        description: Comment body in Atlassian Document Format
+
+  get_transitions:
+    description: Get available status transitions for an issue
+    method: GET
+    path: /issue/{issue_key}/transitions
+    parameters:
+      - name: issue_key
+        type: string
+        required: true
+
+  transition_issue:
+    description: Transition an issue to a new status
+    method: POST
+    path: /issue/{issue_key}/transitions
+    parameters:
+      - name: issue_key
+        type: string
+        required: true
+      - name: transition
+        type: object
+        required: true
+        description: "Transition object with id field"
