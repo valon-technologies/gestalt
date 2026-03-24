@@ -8,21 +8,15 @@ Every integration has an `upstreams` list. Each entry specifies a `type` and a s
 
 | Upstream type | What it does |
 |---|---|
-| `rest` | Loads operations from an OpenAPI spec (via `url`), a local provider definition file (via `provider`), or a directory scan (via `provider_dirs`). |
-| `graphql` | Introspects a GraphQL endpoint at startup or loads a local provider definition file, then generates operations from queries and mutations. |
+| `rest` | Loads operations from an OpenAPI spec URL. |
+| `graphql` | Introspects a GraphQL endpoint and generates operations from queries and mutations. |
 | `mcp` | Connects to an upstream MCP server and imports its tools as operations. |
 
 An integration can combine upstream types. For example, a REST upstream and an MCP upstream together create a **composite integration** where HTTP operations are available over the REST API and MCP tools are proxied directly to the upstream MCP server.
 
 ## REST upstreams
 
-A REST upstream resolves its operations from one of three sources:
-
-| Source | Upstream field | When to use |
-|---|---|---|
-| OpenAPI spec | `url` pointing to a spec | Public or local OpenAPI document exists. Operations generated automatically. |
-| Provider file | `provider` pointing to a YAML or JSON file | Use a precompiled local artifact for deterministic startup, or declare operations manually. Relative paths resolve from the config file's directory. |
-| Provider directory | Neither `url` nor `provider` | Gestalt searches `provider_dirs` for a matching provider artifact by integration name. |
+A REST upstream resolves its operations from an OpenAPI spec URL. For deterministic production startup, run `gestaltd prepare` ahead of time so Gestalt writes local provider artifacts into `.gestalt/providers/` and records them in `gestalt.lock.json`.
 
 ```yaml
 integrations:
@@ -39,7 +33,7 @@ integrations:
 
 ## GraphQL upstreams
 
-A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field. For deterministic production boots, use `gestaltd bundle` to precompile the resulting provider definitions and rewrite your deploy config to load them locally instead of introspecting live on every start.
+A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field. For deterministic production boots, run `gestaltd prepare` so the provider definition is compiled ahead of time and `gestaltd serve` can start without live introspection.
 
 ```yaml
 integrations:

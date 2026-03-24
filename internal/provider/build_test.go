@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,19 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/config"
 )
-
-const minimalProviderYAML = `
-provider: %s
-display_name: %s
-base_url: https://%s.example.com
-auth:
-  type: manual
-operations:
-  op:
-    description: An operation
-    method: GET
-    path: /op
-`
 
 func testDefinition(name string) *Definition {
 	return &Definition{
@@ -205,39 +191,6 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 	}
 	if intg.Name() != "basic_api" {
 		t.Errorf("Name() = %q", intg.Name())
-	}
-}
-
-func TestLoadFromDir(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeProviderYAML(t, dir, "myapi", "My API")
-
-	def, err := LoadFromDir("myapi", []string{dir})
-	if err != nil {
-		t.Fatalf("LoadFromDir: %v", err)
-	}
-	if def.Provider != "myapi" {
-		t.Errorf("Provider = %q", def.Provider)
-	}
-}
-
-func TestLoadFromDir_NotFound(t *testing.T) {
-	t.Parallel()
-
-	_, err := LoadFromDir("missing", []string{t.TempDir()})
-	if err == nil {
-		t.Fatal("expected error for missing provider")
-	}
-}
-
-func TestLoadFromDir_NilDirs(t *testing.T) {
-	t.Parallel()
-
-	_, err := LoadFromDir("anything", nil)
-	if err == nil {
-		t.Fatal("expected error for nil dirs")
 	}
 }
 
@@ -764,13 +717,5 @@ func TestBuildUnknownPostConnectHook(t *testing.T) {
 	_, err := Build(def, config.IntegrationDef{}, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown post_connect hook")
-	}
-}
-
-func writeProviderYAML(t *testing.T, dir, name, displayName string) {
-	t.Helper()
-	content := fmt.Sprintf(minimalProviderYAML, name, displayName, name)
-	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte(content), 0644); err != nil {
-		t.Fatalf("writing %s: %v", name, err)
 	}
 }

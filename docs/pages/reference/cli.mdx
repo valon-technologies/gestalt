@@ -9,20 +9,20 @@ Gestalt ships two binaries: the Go server (`gestaltd`) and the Rust client (`ges
 ### Usage
 
 ```sh
-gestaltd --config config.yaml
+gestaltd dev --config config.yaml
+gestaltd prepare --config config.yaml
+gestaltd serve --config config.yaml
 gestaltd validate --config config.yaml
-gestaltd bundle --config config.yaml --output-dir ./dist/gestalt
-gestaltd compile-providers --config config.yaml --output-dir ./providers
 ```
 
 ### Commands
 
 | Command | Purpose |
 |---|---|
-| `gestaltd --config config.yaml` | Start the server. |
+| `gestaltd dev --config config.yaml` | Prepare REST/GraphQL providers if needed, then start the server from the source config. |
+| `gestaltd prepare --config config.yaml` | Write `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. |
+| `gestaltd serve --config config.yaml` | Start the server strictly from the source config plus prepared provider artifacts. |
 | `gestaltd validate --config config.yaml` | Load and validate config, then exit without starting the server. |
-| `gestaltd bundle --config config.yaml --output-dir ./dist/gestalt` | Write a deployable config bundle with local provider artifacts. |
-| `gestaltd compile-providers --config config.yaml --output-dir ./providers` | Resolve REST/GraphQL upstreams into deterministic local provider artifacts. |
 
 ### Validate configuration
 
@@ -34,22 +34,14 @@ Prints: config file path, server settings, auth provider, datastore, secrets pro
 
 `gestaltd` prints datastore warnings at startup and during `validate`. SQLite always triggers a warning since it is not recommended for production.
 
-### Bundle for deployment
+### Prepare for deployment
 
 ```sh
-gestaltd bundle --config config.yaml --output-dir ./dist/gestalt
-gestaltd --config ./dist/gestalt/config.yaml
+gestaltd prepare --config config.yaml
+gestaltd serve --config config.yaml
 ```
 
-Writes a generated `config.yaml` plus `providers/*.json` artifacts. REST and GraphQL upstreams in the bundled config are rewritten to use local `provider` files, so production startup no longer depends on live spec downloads or GraphQL introspection. This is the recommended production packaging workflow.
-
-### Compile provider artifacts
-
-```sh
-gestaltd compile-providers --config config.yaml --output-dir ./providers
-```
-
-Writes one JSON provider definition per REST or GraphQL integration. Integrations with only MCP upstreams are skipped. Use this low-level command when you want just the artifacts and will handle config rewriting yourself.
+`gestaltd prepare` writes a lockfile and hidden provider cache next to the source config. `gestaltd serve` reads the same source config and uses the prepared artifacts, so production startup no longer depends on live spec downloads or GraphQL introspection.
 
 ### Config file resolution
 

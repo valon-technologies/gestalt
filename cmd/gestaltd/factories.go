@@ -42,17 +42,15 @@ type bootstrapEnv struct {
 	Result *bootstrap.Result
 }
 
-func setupBootstrap(configFlag string) (*bootstrapEnv, error) {
-	path := resolveConfigPath(configFlag)
-
-	cfg, err := config.Load(path)
+func setupBootstrap(configFlag string, mode providerResolutionMode) (*bootstrapEnv, error) {
+	_, cfg, preparedProviders, err := loadConfigForExecution(configFlag, mode)
 	if err != nil {
-		return nil, fmt.Errorf("loading config: %v", err)
+		return nil, err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
-	factories := buildFactories(cfg.ProviderDirs, cfg.Server.DevMode)
+	factories := buildFactories(preparedProviders, cfg.Server.DevMode)
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -86,7 +84,7 @@ func (e *bootstrapEnv) Close() {
 	}
 }
 
-func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegistry {
+func buildFactories(preparedProviders map[string]string, devMode bool) *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
 	factories.Auth["oidc"] = oidc.Factory
@@ -98,7 +96,7 @@ func buildFactories(providerDirs []string, devMode bool) *bootstrap.FactoryRegis
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
-	factories.DefaultProvider = defaultProviderFactory(providerDirs)
+	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
 	if devMode {
 		factories.Builtins = append(factories.Builtins, echo.New())
 		factories.Runtimes["echo"] = echoruntime.Factory
@@ -202,7 +200,7 @@ func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
 	}
 }
 
-func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
+func defaultProviderFactory(preparedProviders map[string]string) bootstrap.ProviderFactory {
 	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
 		var apiProv core.Provider
 		var mcpUp *mcpupstream.Upstream
@@ -230,7 +228,7 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 					cleanup()
 					return nil, fmt.Errorf("multiple api upstreams not supported")
 				}
-				def, err := loadAPIUpstream(ctx, name, us, providerDirs)
+				def, err := loadAPIUpstream(ctx, name, us, preparedProviders)
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -276,9 +274,9 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	}
 }
 
-func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, providerDirs []string) (*provider.Definition, error) {
-	if us.Provider != "" {
-		return provider.LoadFile(us.Provider)
+func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, preparedProviders map[string]string) (*provider.Definition, error) {
+	if preparedPath := preparedProviders[name]; preparedPath != "" {
+		return provider.LoadFile(preparedPath)
 	}
 
 	switch us.Type {
@@ -294,5 +292,5 @@ func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, pr
 		return nil, fmt.Errorf("unsupported api upstream type %q", us.Type)
 	}
 
-	return provider.LoadFromDir(name, providerDirs)
+	return nil, fmt.Errorf("api upstream %q requires a url or prepared artifact", name)
 }

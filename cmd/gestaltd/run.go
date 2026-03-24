@@ -29,21 +29,35 @@ func run(args []string) error {
 		case "-h", "--help", "help":
 			printMainUsage(os.Stderr)
 			return flag.ErrHelp
+		case "dev":
+			return runDev(args[1:])
+		case "serve":
+			return runServe(args[1:])
+		case "prepare":
+			return runPrepare(args[1:])
 		case "validate":
 			return runValidate(args[1:])
-		case "bundle":
-			return runBundle(args[1:])
-		case "compile-providers":
-			return runCompileProviders(args[1:])
 		}
 	}
 
-	return runServe(args)
+	return runDefaultServe(args)
+}
+
+func runDefaultServe(args []string) error {
+	return runStartCommand("gestaltd", printMainUsage, args, providerResolutionPrefer)
+}
+
+func runDev(args []string) error {
+	return runStartCommand("gestaltd dev", printDevUsage, args, providerResolutionAuto)
 }
 
 func runServe(args []string) error {
-	fs := flag.NewFlagSet("gestaltd", flag.ContinueOnError)
-	fs.Usage = func() { printMainUsage(fs.Output()) }
+	return runStartCommand("gestaltd serve", printServeUsage, args, providerResolutionRequire)
+}
+
+func runStartCommand(name string, usage func(io.Writer), args []string, mode providerResolutionMode) error {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.Usage = func() { usage(fs.Output()) }
 	configPath := fs.String("config", "", "path to config file")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -52,7 +66,7 @@ func runServe(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	env, err := setupBootstrap(*configPath)
+	env, err := setupBootstrap(*configPath, mode)
 	if err != nil {
 		return err
 	}
@@ -200,51 +214,13 @@ func runValidate(args []string) error {
 	return validateConfig(*configPath)
 }
 
-func runCompileProviders(args []string) error {
-	fs := flag.NewFlagSet("gestaltd compile-providers", flag.ContinueOnError)
-	fs.Usage = func() { printCompileProvidersUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
-	outputDir := fs.String("output-dir", "", "directory to write provider artifacts into")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	if *outputDir == "" {
-		return fmt.Errorf("--output-dir is required")
-	}
-
-	return compileProviders(*configPath, *outputDir)
-}
-
-func runBundle(args []string) error {
-	fs := flag.NewFlagSet("gestaltd bundle", flag.ContinueOnError)
-	fs.Usage = func() { printBundleUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
-	outputDir := fs.String("output-dir", "", "directory to write bundle into")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	if *outputDir == "" {
-		return fmt.Errorf("--output-dir is required")
-	}
-
-	return bundleConfig(*configPath, *outputDir)
-}
-
 func validateConfig(configFlag string) error {
-	path := resolveConfigPath(configFlag)
-
-	cfg, err := config.Load(path)
+	path, cfg, preparedProviders, err := loadConfigForExecution(configFlag, providerResolutionPrefer)
 	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
-	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(cfg.ProviderDirs, cfg.Server.DevMode))
+	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(preparedProviders, cfg.Server.DevMode))
 	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
@@ -321,17 +297,49 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]")
+	writeUsageLine(w, "  gestaltd dev [--config PATH]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]")
+	writeUsageLine(w, "  gestaltd prepare [--config PATH]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]")
-	writeUsageLine(w, "  gestaltd bundle [--config PATH] --output-dir DIR")
-	writeUsageLine(w, "  gestaltd compile-providers [--config PATH] --output-dir DIR")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  dev         Refresh prepared provider artifacts if needed, then start the server")
+	writeUsageLine(w, "  serve       Start the server with prepared REST/GraphQL providers only")
+	writeUsageLine(w, "  prepare     Resolve remote REST/GraphQL upstreams into gestalt.lock.json and .gestalt/providers/")
 	writeUsageLine(w, "  validate    Load and validate configuration, then exit")
-	writeUsageLine(w, "  bundle      Build a deployable config bundle with local provider artifacts")
-	writeUsageLine(w, "  compile-providers  Build deterministic provider artifacts from configured REST/GraphQL upstreams")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config    Path to the config file")
+}
+
+func printDevUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd dev [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Prepare remote REST/GraphQL providers into gestalt.lock.json and")
+	writeUsageLine(w, ".gestalt/providers/ when needed, then start the server from the")
+	writeUsageLine(w, "source config.")
+}
+
+func printServeUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Start the server from the source config using only prepared")
+	writeUsageLine(w, "REST/GraphQL providers. If remote providers are not prepared,")
+	writeUsageLine(w, "run `gestaltd prepare` first.")
+}
+
+func printPrepareUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd prepare [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Write deterministic REST/GraphQL provider artifacts next to the source")
+	writeUsageLine(w, "config using:")
+	writeUsageLine(w, "  - gestalt.lock.json")
+	writeUsageLine(w, "  - .gestalt/providers/*.json")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Use `gestaltd dev` locally and `gestaltd serve` in production.")
 }
 
 func printValidateUsage(w io.Writer) {
@@ -339,27 +347,8 @@ func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd validate [--config PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate the configuration using the daemon's full bootstrap path,")
-	writeUsageLine(w, "without starting the server or running datastore migrations.")
-}
-
-func printCompileProvidersUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd compile-providers [--config PATH] --output-dir DIR")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Resolve configured REST and GraphQL upstreams into deterministic local")
-	writeUsageLine(w, "provider definition artifacts. Integrations with only MCP upstreams are skipped.")
-}
-
-func printBundleUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd bundle [--config PATH] --output-dir DIR")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Write a self-contained deploy bundle with:")
-	writeUsageLine(w, "  - config.yaml rewritten to use local provider artifacts")
-	writeUsageLine(w, "  - providers/*.json artifacts for REST and GraphQL integrations")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "This is the recommended production packaging workflow. Use")
-	writeUsageLine(w, "compile-providers directly only when you need the low-level artifacts.")
+	writeUsageLine(w, "without starting the server or running datastore migrations. If")
+	writeUsageLine(w, "gestalt.lock.json is present, validation prefers prepared providers.")
 }
 
 func writeUsageLine(w io.Writer, line string) {

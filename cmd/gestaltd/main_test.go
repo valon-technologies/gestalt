@@ -45,11 +45,14 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd validate") {
 		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd bundle") {
-		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd prepare") {
+		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd compile-providers") {
-		t.Fatalf("expected usage output containing 'gestaltd compile-providers', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd serve") {
+		t.Fatalf("expected usage output containing 'gestaltd serve', got: %s", out)
+	}
+	if !strings.Contains(string(out), "gestaltd dev") {
+		t.Fatalf("expected usage output containing 'gestaltd dev', got: %s", out)
 	}
 }
 
@@ -65,35 +68,23 @@ func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
 	}
 }
 
-func TestGestaltdCompileProvidersHelpExitsCleanly(t *testing.T) {
+func TestGestaltdPrepareHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "compile-providers", "--help")
+	cmd := exec.Command("go", "run", ".", "prepare", "--help")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'compile-providers --help', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'prepare --help', got error: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "gestaltd compile-providers") {
-		t.Fatalf("expected usage output containing 'gestaltd compile-providers', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd prepare") {
+		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
 	}
 }
 
-func TestGestaltdBundleHelpExitsCleanly(t *testing.T) {
+func TestRun_ServeRejectsTrailingArgs(t *testing.T) {
 	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "bundle", "--help")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0 for 'bundle --help', got error: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "gestaltd bundle") {
-		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
-	}
-}
-
-func TestRun_RejectsPositionalArgs(t *testing.T) {
-	t.Parallel()
-	err := run([]string{"serve", "--config", "foo.yaml"})
+	err := run([]string{"serve", "--config", "foo.yaml", "extra"})
 	if err == nil {
-		t.Fatal("expected error for positional arguments")
+		t.Fatal("expected error for trailing arguments")
 	}
 }
 

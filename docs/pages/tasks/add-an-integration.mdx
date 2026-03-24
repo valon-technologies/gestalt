@@ -7,7 +7,6 @@ Adding an **integration** means defining one or more upstreams, optionally confi
 | Approach | Upstream type | When to use |
 |---|---|---|
 | OpenAPI spec | `type: rest` with `url` | Public or local OpenAPI document exists. Operations generated automatically. |
-| Provider YAML | `type: rest` with `provider` | No spec exists, or the spec is too noisy. Declare operations manually. |
 | GraphQL endpoint | `type: graphql` with `url` | GraphQL API. Operations generated from introspection. |
 | MCP server | `type: mcp` with `url` | Upstream already speaks MCP. Tools imported directly. |
 | Manual auth | Any upstream type with `auth.type: manual` | API-key service with no OAuth flow. Users paste credentials directly. |
@@ -36,53 +35,7 @@ integrations:
 
 The `icon_file` field sets the icon displayed in the web UI. Relative paths resolve from the config file's directory. The `error_message_path` field is a dot-delimited path that extracts a human-readable error from upstream JSON error responses.
 
-## 3. REST integration from a provider file
-
-Use when the OpenAPI spec does not exist or does not fit.
-
-```yaml
-integrations:
-  internal-api:
-    upstreams:
-      - type: rest
-        provider: /etc/gestalt/providers/internal-api.yaml
-    auth:
-      type: manual
-```
-
-The provider file declares operations manually:
-
-```yaml
-provider: internal-api
-display_name: Internal API
-description: Purpose-built provider file for a private service
-base_url: https://internal.example.com
-
-auth:
-  type: manual
-
-operations:
-  list_jobs:
-    description: List recent jobs
-    method: GET
-    path: /api/v1/jobs
-    parameters:
-      - name: limit
-        type: integer
-        description: Maximum number of jobs
-
-  retry_job:
-    description: Retry a job
-    method: POST
-    path: /api/v1/jobs/{job_id}/retry
-    parameters:
-      - name: job_id
-        type: string
-        required: true
-        description: Job identifier
-```
-
-## 4. GraphQL integration
+## 3. GraphQL integration
 
 ```yaml
 integrations:
@@ -100,16 +53,16 @@ integrations:
       token_url: https://example.com/oauth/token
 ```
 
-Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are exposed with top-level type information for MCP clients. For deterministic production deployments, prefer `gestaltd bundle` so the GraphQL provider definition is compiled ahead of time.
+Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are exposed with top-level type information for MCP clients. For deterministic production deployments, run `gestaltd prepare` during build and `gestaltd serve` at runtime so the GraphQL provider definition is compiled ahead of time.
 
-## 5. Manual auth for API-key services
+## 4. Manual auth for API-key services
 
 ```yaml
 integrations:
   datadog:
     upstreams:
       - type: rest
-        provider: /etc/gestalt/providers/datadog.yaml
+        url: https://raw.githubusercontent.com/DataDog/documentation/master/static/resources/json/datadog-api-spec.json
     auth:
       type: manual
     token_parser: datadog_keys
@@ -117,11 +70,11 @@ integrations:
 
 Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Gestalt encrypts and stores them the same way it stores OAuth tokens.
 
-## 6. Restrict operations
+## 5. Restrict operations
 
 The `allowed_operations` field on each upstream controls which operations are exposed. It accepts a YAML list (names only) or a map (names to description overrides). Omit it to allow all operations. Only expose what callers need — a tightly scoped integration is easier to audit, faster to load, and less likely to surprise anyone.
 
-## 7. Set the connection mode
+## 6. Set the connection mode
 
 Control how credentials are resolved per integration:
 
@@ -135,13 +88,13 @@ integrations:
   shared-service:
     upstreams:
       - type: rest
-        provider: shared-service.yaml
+        url: https://api.example.com/openapi.json
     connection_mode: identity # single shared credential
 ```
 
 See [Connection Modes](/concepts/platform-model#connection-modes) for all options.
 
-## 8. Validate end to end
+## 7. Validate end to end
 
 ```sh
 gestaltd validate --config your-config.yaml

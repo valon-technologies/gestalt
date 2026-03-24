@@ -2,10 +2,8 @@ package provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -20,22 +18,6 @@ func LoadFile(path string) (*Definition, error) {
 		return unmarshalJSON(data, path)
 	}
 	return unmarshalYAML(data, path)
-}
-
-func LoadFromDir(name string, dirs []string) (*Definition, error) {
-	for _, dir := range dirs {
-		for _, ext := range []string{".yaml", ".yml", ".json"} {
-			path := filepath.Join(dir, name+ext)
-			def, err := LoadFile(path)
-			if err == nil {
-				return def, nil
-			}
-			if !errors.Is(err, os.ErrNotExist) {
-				return nil, err
-			}
-		}
-	}
-	return nil, fmt.Errorf("no provider found for %q in provider_dirs (set openapi or provider in config)", name)
 }
 
 func unmarshalJSON(data []byte, source string) (*Definition, error) {
