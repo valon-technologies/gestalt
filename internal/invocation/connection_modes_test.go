@@ -45,7 +45,7 @@ func TestInvoke_ConnectionModeIdentity(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeIdentity), ds)
-	result, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "do", nil)
+	result, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "", "do", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestInvoke_ConnectionModeIdentity_NoToken(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeIdentity), ds)
-	_, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "do", nil)
+	_, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "", "do", nil)
 	if !errors.Is(err, invocation.ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
@@ -87,7 +87,7 @@ func TestInvoke_ConnectionModeEither_PrefersUser(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeEither), ds)
-	result, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "do", nil)
+	result, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "", "do", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestInvoke_ConnectionModeEither_FallsBackToIdentity(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeEither), ds)
-	result, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "do", nil)
+	result, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "", "do", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestInvoke_ConnectionModeEither_EmptyPrincipalFallsBackToIdentity(t *testin
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeEither), ds)
-	result, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "do", nil)
+	result, err := b.Invoke(context.Background(), &principal.Principal{}, "svc", "", "do", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestInvoke_ConnectionModeEither_NoTokens(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("svc", core.ConnectionModeEither), ds)
-	_, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "do", nil)
+	_, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "svc", "", "do", nil)
 	if !errors.Is(err, invocation.ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
@@ -169,7 +169,7 @@ func TestInvoke_ConnectionModeEither_InfraErrorNotSwallowed(t *testing.T) {
 	}
 
 	b := newConnectionModeBroker(t, connectionModeProvider("alpha", core.ConnectionModeEither), ds)
-	_, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "alpha", "do", nil)
+	_, err := b.Invoke(context.Background(), &principal.Principal{UserID: "user-1"}, "alpha", "", "do", nil)
 	if err == nil {
 		t.Fatal("expected infrastructure error")
 	}

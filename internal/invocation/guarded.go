@@ -68,7 +68,7 @@ func NewGuarded(inner Invoker, lister CapabilityLister, source string, audit cor
 	return guarded
 }
 
-func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, operation string, params map[string]any) (*core.OperationResult, error) {
+func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	ctx, meta := ensureMeta(ctx)
 
 	if p == nil {
@@ -90,7 +90,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 		entry.UserID = p.UserID
 	}
 
-	if err := g.check(meta, providerName, operation); err != nil {
+	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
 		entry.Error = err.Error()
 		g.logAudit(entry)
@@ -100,7 +100,11 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	entry.Allowed = true
 	g.logAudit(entry)
 
-	chainKey := providerName + "/" + operation
+	chainInstance := instance
+	if chainInstance == "" {
+		chainInstance = "default"
+	}
+	chainKey := providerName + "/" + chainInstance + "/" + operation
 	next := &InvocationMeta{
 		RequestID: meta.RequestID,
 		Depth:     meta.Depth + 1,
@@ -108,7 +112,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	}
 	ctx = ContextWithMeta(ctx, next)
 
-	return g.inner.Invoke(ctx, p, providerName, operation, params)
+	return g.inner.Invoke(ctx, p, providerName, instance, operation, params)
 }
 
 func (g *GuardedInvoker) ListCapabilities() []core.Capability {
@@ -130,12 +134,16 @@ func (g *GuardedInvoker) ListCapabilities() []core.Capability {
 	return filtered
 }
 
-func (g *GuardedInvoker) check(meta *InvocationMeta, providerName, operation string) error {
+func (g *GuardedInvoker) check(meta *InvocationMeta, providerName, instance, operation string) error {
 	if meta.Depth >= g.maxDepth {
 		return &MaxDepthError{Depth: meta.Depth, Max: g.maxDepth}
 	}
 
-	chainKey := providerName + "/" + operation
+	checkInstance := instance
+	if checkInstance == "" {
+		checkInstance = "default"
+	}
+	chainKey := providerName + "/" + checkInstance + "/" + operation
 	for _, entry := range meta.CallChain {
 		if entry == chainKey {
 			return &RecursionError{Provider: providerName, Operation: operation}

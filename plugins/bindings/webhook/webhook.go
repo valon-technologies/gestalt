@@ -19,6 +19,7 @@ var _ core.Binding = (*Binding)(nil)
 type webhookConfig struct {
 	Path            string   `yaml:"path"`
 	Provider        string   `yaml:"provider"`
+	Instance        string   `yaml:"instance"`
 	Operation       string   `yaml:"operation"`
 	AuthMode        string   `yaml:"auth_mode"`
 	SigningSecret   string   `yaml:"signing_secret"`
@@ -129,7 +130,7 @@ func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := principal.WithPrincipal(r.Context(), p)
 
-	result, err := b.invoker.Invoke(ctx, p, b.cfg.Provider, b.cfg.Operation, body)
+	result, err := b.invoker.Invoke(ctx, p, b.cfg.Provider, b.cfg.Instance, b.cfg.Operation, body)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream invocation failed")
 		return

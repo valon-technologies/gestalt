@@ -69,7 +69,7 @@ test.describe("Integrations", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true },
+      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
       MANUAL_INTEGRATION,
     ]);
 
@@ -82,8 +82,8 @@ test.describe("Integrations", () => {
     // Connected integration's settings shows Reconnect/Disconnect
     await page.getByRole("button", { name: "OAuth Service settings" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Connected")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    await expect(dialog.getByText("default")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Add Connection" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Disconnect" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
@@ -98,7 +98,7 @@ test.describe("Integrations", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true },
+      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
     ]);
 
     await page.goto("/integrations");
@@ -107,8 +107,8 @@ test.describe("Integrations", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("OAuth Service")).toBeVisible();
-    await expect(dialog.getByText("Connected")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    await expect(dialog.getByText("default")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Add Connection" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Disconnect" })).toBeVisible();
   });
 
@@ -117,7 +117,7 @@ test.describe("Integrations", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true },
+      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
     ]);
 
     await page.goto("/integrations");
@@ -134,7 +134,7 @@ test.describe("Integrations", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true },
+      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
     ]);
 
     await page.goto("/integrations");
@@ -150,7 +150,7 @@ test.describe("Integrations", () => {
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true },
+      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
     ]);
 
     await page.goto("/integrations");
@@ -163,7 +163,7 @@ test.describe("Integrations", () => {
     await expect(dialog.getByText("This will remove your OAuth Service integration.")).toBeVisible();
 
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(dialog.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Add Connection" })).toBeVisible();
   });
 
   test("disconnect calls API and refreshes list", async ({
@@ -172,7 +172,7 @@ test.describe("Integrations", () => {
     const page = authenticatedPage;
     let disconnected = false;
 
-    const connectedList = [{ ...OAUTH_INTEGRATION, connected: true }];
+    const connectedList = [{ ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] }];
     const disconnectedList = [{ ...OAUTH_INTEGRATION, connected: false }];
 
     await mockIntegrations(page, connectedList, {
@@ -276,15 +276,18 @@ test.describe("Integrations", () => {
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
-    await mockIntegrations(page, [{ ...MANUAL_INTEGRATION, connected: true }]);
+    await mockIntegrations(page, [{ ...MANUAL_INTEGRATION, connected: true, instances: [{ name: "default" }] }]);
 
     await page.goto("/integrations");
     await page.getByRole("button", { name: "Manual Service settings" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Connected")).toBeVisible();
-    await dialog.getByRole("button", { name: "Reconnect" }).click();
-    // Modal must close so the token form isn't trapped behind the overlay
+    await expect(dialog.getByText("default")).toBeVisible();
+    await dialog.getByRole("button", { name: "Add Connection" }).click();
+    // Modal closes and instance name form appears
     await expect(page.getByRole("dialog")).not.toBeVisible();
+    await expect(page.getByLabel("Connection name")).toBeVisible();
+    await page.getByLabel("Connection name").fill("second");
+    await page.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByLabel("API Token")).toBeVisible();
   });
 });

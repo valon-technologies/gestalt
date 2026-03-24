@@ -56,12 +56,17 @@ func (s *Server) readinessCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+type instanceInfo struct {
+	Name string `json:"name"`
+}
+
 type integrationInfo struct {
 	Name             string                         `json:"name"`
 	DisplayName      string                         `json:"display_name,omitempty"`
 	Description      string                         `json:"description,omitempty"`
 	IconSVG          string                         `json:"icon_svg,omitempty"`
 	Connected        bool                           `json:"connected"`
+	Instances        []instanceInfo                 `json:"instances,omitempty"`
 	AuthTypes        []string                       `json:"auth_types"`
 	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
 }
@@ -95,11 +100,13 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		} else {
 			authTypes = []string{"oauth"}
 		}
+		instances := connected[name]
 		info := integrationInfo{
 			Name:        name,
 			DisplayName: prov.DisplayName(),
 			Description: prov.Description(),
-			Connected:   connected[name],
+			Connected:   len(instances) > 0,
+			Instances:   instances,
 			AuthTypes:   authTypes,
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
@@ -128,7 +135,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) userConnectedIntegrations(r *http.Request) (map[string]bool, error) {
+func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
 		return nil, nil
@@ -148,9 +155,9 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string]bool, er
 	if err != nil {
 		return nil, fmt.Errorf("listing tokens: %w", err)
 	}
-	m := make(map[string]bool, len(tokens))
+	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
-		m[tok.Integration] = true
+		m[tok.Integration] = append(m[tok.Integration], instanceInfo{Name: tok.Instance})
 	}
 	return m, nil
 }
@@ -166,22 +173,38 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := s.datastore.ListTokens(r.Context(), userID)
+	requestedInstance := r.URL.Query().Get("instance")
+
+	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
 	}
 
+	if len(tokens) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
+		return
+	}
+
+	if requestedInstance == "" && len(tokens) > 1 {
+		instances := make([]string, len(tokens))
+		for i, t := range tokens {
+			instances[i] = t.Instance
+		}
+		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify ?instance=NAME", name, instances))
+		return
+	}
+
 	var tokenID string
 	for _, tok := range tokens {
-		if tok.Integration == name {
+		if requestedInstance == "" || tok.Instance == requestedInstance {
 			tokenID = tok.ID
 			break
 		}
 	}
 
 	if tokenID == "" {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
 		return
 	}
 
@@ -284,7 +307,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := s.invoker.Invoke(r.Context(), p, providerName, operationName, params)
+	instance, _ := params["_instance"].(string)
+	delete(params, "_instance")
+
+	result, err := s.invoker.Invoke(r.Context(), p, providerName, instance, operationName, params)
 	if err != nil {
 		switch {
 		case errors.Is(err, invocation.ErrProviderNotFound):
@@ -295,6 +321,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 		case errors.Is(err, invocation.ErrNoToken):
 			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
+		case errors.Is(err, invocation.ErrAmbiguousInstance):
+			writeError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, invocation.ErrUserResolution):
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		case errors.Is(err, invocation.ErrInternal):
@@ -414,6 +442,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
+	Instance         string            `json:"instance"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connection_params"`
 }
@@ -447,6 +476,15 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 
 	dbUserID, ok := s.resolveUserID(w, r)
 	if !ok {
+		return
+	}
+
+	instance := req.Instance
+	if instance == "" {
+		instance = "default"
+	}
+	if !safeParamValue.MatchString(instance) {
+		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
 		return
 	}
 
@@ -492,6 +530,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	state, err := s.stateCodec.Encode(integrationOAuthState{
 		UserID:           dbUserID,
 		Integration:      req.Integration,
+		Instance:         instance,
 		Verifier:         verifier,
 		ConnectionParams: connParams,
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
@@ -578,11 +617,16 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		expiresAt = &t
 	}
 
+	callbackInstance := state.Instance
+	if callbackInstance == "" {
+		callbackInstance = defaultTokenInstance
+	}
+
 	tok := &core.IntegrationToken{
 		ID:           uuid.NewString(),
 		UserID:       state.UserID,
 		Integration:  providerName,
-		Instance:     defaultTokenInstance,
+		Instance:     callbackInstance,
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresAt:    expiresAt,
@@ -606,6 +650,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 type connectManualRequest struct {
 	Integration      string            `json:"integration"`
+	Instance         string            `json:"instance"`
 	Credential       string            `json:"credential"`
 	ConnectionParams map[string]string `json:"connection_params"`
 }
@@ -644,6 +689,15 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	manualInstance := req.Instance
+	if manualInstance == "" {
+		manualInstance = "default"
+	}
+	if !safeParamValue.MatchString(manualInstance) {
+		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+		return
+	}
+
 	var connParams map[string]string
 	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 		var valErr error
@@ -658,7 +712,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		ID:          uuid.NewString(),
 		UserID:      dbUser.ID,
 		Integration: req.Integration,
-		Instance:    defaultTokenInstance,
+		Instance:    manualInstance,
 		AccessToken: req.Credential,
 	}
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
