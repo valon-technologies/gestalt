@@ -196,7 +196,7 @@ type integrationTokenDoc struct {
 	RefreshTokenEncrypted string     `firestore:"refresh_token_encrypted"`
 	Scopes                string     `firestore:"scopes"`
 	ExpiresAt             *time.Time `firestore:"expires_at"`
-	LastRefreshedAt       time.Time  `firestore:"last_refreshed_at"`
+	LastRefreshedAt       *time.Time `firestore:"last_refreshed_at"`
 	RefreshErrorCount     int        `firestore:"refresh_error_count"`
 	MetadataJSON          string     `firestore:"metadata_json"`
 	CreatedAt             time.Time  `firestore:"created_at"`

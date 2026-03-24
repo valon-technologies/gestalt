@@ -221,7 +221,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, t
 	} else {
 		token.ExpiresAt = nil
 	}
-	token.LastRefreshedAt = now
+	token.LastRefreshedAt = &now
 	token.RefreshErrorCount = 0
 	token.UpdatedAt = now
 

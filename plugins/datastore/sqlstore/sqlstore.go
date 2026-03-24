@@ -70,11 +70,11 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 	var t core.IntegrationToken
 	var accessEnc, refreshEnc sql.NullString
 	var scopes, metadataJSON sql.NullString
-	var expiresAt sql.NullTime
+	var expiresAt, lastRefreshedAt sql.NullTime
 
 	if err := row.Scan(&t.ID, &t.UserID, &t.Integration, &t.Instance,
 		&accessEnc, &refreshEnc,
-		&scopes, &expiresAt, &t.LastRefreshedAt, &t.RefreshErrorCount,
+		&scopes, &expiresAt, &lastRefreshedAt, &t.RefreshErrorCount,
 		&metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
@@ -84,6 +84,9 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 
 	if expiresAt.Valid {
 		t.ExpiresAt = &expiresAt.Time
+	}
+	if lastRefreshedAt.Valid {
+		t.LastRefreshedAt = &lastRefreshedAt.Time
 	}
 
 	var err error
@@ -200,7 +203,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
 		token.ID, token.UserID, token.Integration, token.Instance,
 		accessEnc, refreshEnc,
-		token.Scopes, NullableTime(token.ExpiresAt), token.LastRefreshedAt,
+		token.Scopes, NullableTime(token.ExpiresAt), NullableTime(token.LastRefreshedAt),
 		token.RefreshErrorCount, token.MetadataJSON, token.CreatedAt, token.UpdatedAt,
 	)
 	if err != nil {

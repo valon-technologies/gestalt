@@ -38,7 +38,7 @@ type integrationTokenDoc struct {
 	RefreshTokenEncrypted string     `bson:"refresh_token_encrypted"`
 	Scopes                string     `bson:"scopes"`
 	ExpiresAt             *time.Time `bson:"expires_at"`
-	LastRefreshedAt       time.Time  `bson:"last_refreshed_at"`
+	LastRefreshedAt       *time.Time `bson:"last_refreshed_at"`
 	RefreshErrorCount     int        `bson:"refresh_error_count"`
 	MetadataJSON          string     `bson:"metadata_json"`
 	CreatedAt             time.Time  `bson:"created_at"`

@@ -19,7 +19,7 @@ type IntegrationToken struct {
 	RefreshToken      string
 	Scopes            string
 	ExpiresAt         *time.Time
-	LastRefreshedAt   time.Time
+	LastRefreshedAt   *time.Time
 	RefreshErrorCount int
 	MetadataJSON      string
 	CreatedAt         time.Time
