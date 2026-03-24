@@ -48,6 +48,14 @@ func New(db *sql.DB, enc *crypto.AESGCMEncryptor, dialect Dialect) *Store {
 	return &Store{DB: db, Enc: enc, Dialect: dialect}
 }
 
+// RawDB exposes the underlying *sql.DB for optional use by subsystems that
+// manage their own tables (e.g. MCP OAuth registration storage).
+func (s *Store) RawDB() any { return s.DB }
+
+// RawDialect exposes the Dialect for subsystems that need cross-database
+// compatible SQL generation.
+func (s *Store) RawDialect() any { return s.Dialect }
+
 // Ping verifies the database connection is alive.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.DB.PingContext(ctx)

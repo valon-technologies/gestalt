@@ -34,6 +34,23 @@ func (dialect) UpsertTokenSQL() string {
 			updated_at = EXCLUDED.updated_at`
 }
 
+func (dialect) RegistrationDDL() string {
+	return `CREATE TABLE IF NOT EXISTS oauth_registrations (
+		id TEXT PRIMARY KEY,
+		auth_server_url TEXT NOT NULL,
+		redirect_uri TEXT NOT NULL,
+		client_id TEXT NOT NULL,
+		client_secret_encrypted TEXT,
+		authorization_endpoint TEXT NOT NULL,
+		token_endpoint TEXT NOT NULL,
+		scopes_supported TEXT,
+		discovered_at TIMESTAMPTZ NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL,
+		updated_at TIMESTAMPTZ NOT NULL,
+		UNIQUE (auth_server_url, redirect_uri)
+	)`
+}
+
 func (dialect) IsDuplicateKeyError(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
