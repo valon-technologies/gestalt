@@ -14,10 +14,12 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 type catalogProvider struct {
@@ -51,6 +53,119 @@ func ctxWithPrincipal() context.Context {
 		Source:   principal.SourceAPIToken,
 	}
 	return principal.WithPrincipal(context.Background(), p)
+}
+
+type testSessionWithTools struct {
+	id            string
+	initialized   bool
+	notifications chan mcpgo.JSONRPCNotification
+	tools         map[string]mcpserver.ServerTool
+}
+
+func newTestSessionWithTools() *testSessionWithTools {
+	return &testSessionWithTools{
+		id:            "session-1",
+		initialized:   true,
+		notifications: make(chan mcpgo.JSONRPCNotification, 1),
+	}
+}
+
+func (s *testSessionWithTools) Initialize() { s.initialized = true }
+func (s *testSessionWithTools) Initialized() bool {
+	return s.initialized
+}
+func (s *testSessionWithTools) NotificationChannel() chan<- mcpgo.JSONRPCNotification {
+	return s.notifications
+}
+func (s *testSessionWithTools) SessionID() string { return s.id }
+func (s *testSessionWithTools) GetSessionTools() map[string]mcpserver.ServerTool {
+	if s.tools == nil {
+		return nil
+	}
+	out := make(map[string]mcpserver.ServerTool, len(s.tools))
+	for name, tool := range s.tools {
+		out[name] = tool
+	}
+	return out
+}
+func (s *testSessionWithTools) SetSessionTools(tools map[string]mcpserver.ServerTool) {
+	s.tools = make(map[string]mcpserver.ServerTool, len(tools))
+	for name, tool := range tools {
+		s.tools[name] = tool
+	}
+}
+
+func initializeSession(t *testing.T, srv *mcpserver.MCPServer, ctx context.Context, session *testSessionWithTools) {
+	t.Helper()
+
+	resp := srv.HandleMessage(srv.WithContext(ctx, session), []byte(`{
+		"jsonrpc":"2.0",
+		"id":1,
+		"method":"initialize",
+		"params":{
+			"protocolVersion":"2025-03-26",
+			"capabilities":{},
+			"clientInfo":{"name":"test","version":"1.0"}
+		}
+	}`))
+	if _, ok := resp.(mcpgo.JSONRPCResponse); !ok {
+		t.Fatalf("expected initialize response, got %T", resp)
+	}
+}
+
+func listToolsForSession(t *testing.T, srv *mcpserver.MCPServer, ctx context.Context, session *testSessionWithTools) mcpgo.ListToolsResult {
+	t.Helper()
+	initializeSession(t, srv, ctx, session)
+
+	resp := srv.HandleMessage(srv.WithContext(ctx, session), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	rpcResp, ok := resp.(mcpgo.JSONRPCResponse)
+	if !ok {
+		if rpcErr, ok := resp.(mcpgo.JSONRPCError); ok {
+			t.Fatalf("expected JSONRPCResponse, got JSONRPCError: %+v", rpcErr.Error)
+		}
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	result, ok := rpcResp.Result.(mcpgo.ListToolsResult)
+	if !ok {
+		t.Fatalf("expected ListToolsResult, got %T", rpcResp.Result)
+	}
+	return result
+}
+
+func callToolForSession(t *testing.T, srv *mcpserver.MCPServer, ctx context.Context, session *testSessionWithTools, name string, args map[string]any) mcpgo.CallToolResult {
+	t.Helper()
+	initializeSession(t, srv, ctx, session)
+
+	req := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      name,
+			"arguments": args,
+		},
+	}
+	raw, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	resp := srv.HandleMessage(srv.WithContext(ctx, session), raw)
+	rpcResp, ok := resp.(mcpgo.JSONRPCResponse)
+	if !ok {
+		if rpcErr, ok := resp.(mcpgo.JSONRPCError); ok {
+			t.Fatalf("expected JSONRPCResponse, got JSONRPCError: %+v", rpcErr.Error)
+		}
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	if result, ok := rpcResp.Result.(mcpgo.CallToolResult); ok {
+		return result
+	}
+	if result, ok := rpcResp.Result.(*mcpgo.CallToolResult); ok {
+		return *result
+	}
+	t.Fatalf("expected CallToolResult, got %T", rpcResp.Result)
+	return mcpgo.CallToolResult{}
 }
 
 func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
@@ -484,13 +599,20 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 
 type directCallerProvider struct {
 	coretesting.StubIntegration
-	ops    []core.Operation
-	cat    *catalog.Catalog
-	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
+	ops              []core.Operation
+	cat              *catalog.Catalog
+	sessionCatalogFn func(ctx context.Context, token string) (*catalog.Catalog, error)
+	callFn           func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
 func (p *directCallerProvider) ListOperations() []core.Operation { return p.ops }
 func (p *directCallerProvider) Catalog() *catalog.Catalog        { return p.cat }
+func (p *directCallerProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if p.sessionCatalogFn != nil {
+		return p.sessionCatalogFn(ctx, token)
+	}
+	return p.cat, nil
+}
 
 func (p *directCallerProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if p.callFn != nil {
@@ -644,6 +766,99 @@ func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatal("expected IsError for token resolve failure")
+	}
+}
+
+func TestNewServer_DynamicCatalogProviderListsSessionTools(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			gotToken = token
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "Execute a SQL query",
+						InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "upstream-token"},
+		Providers:     providers,
+	})
+
+	if tools := srv.ListTools(); len(tools) != 0 {
+		t.Fatalf("expected no global tools before session hydration, got %d", len(tools))
+	}
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(), newTestSessionWithTools())
+	if gotToken != "upstream-token" {
+		t.Fatalf("expected token upstream-token, got %q", gotToken)
+	}
+	if len(result.Tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(result.Tools))
+	}
+	if result.Tools[0].Name != "clickhouse_run_query" {
+		t.Fatalf("expected clickhouse_run_query, got %q", result.Tools[0].Name)
+	}
+}
+
+func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
+	t.Parallel()
+
+	var calledName string
+	var gotToken string
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "Execute a SQL query",
+						InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+					},
+				},
+			}, nil
+		},
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			calledName = name
+			gotToken = mcpupstream.UpstreamTokenFromContext(ctx)
+			if args["sql"] != "SELECT 1" {
+				t.Fatalf("expected sql argument, got %v", args)
+			}
+			return mcpgo.NewToolResultText("query result"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "upstream-token"},
+		Providers:     providers,
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "SELECT 1"})
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if calledName != "run_query" {
+		t.Fatalf("expected run_query, got %q", calledName)
+	}
+	if gotToken != "upstream-token" {
+		t.Fatalf("expected upstream-token, got %q", gotToken)
 	}
 }
 
