@@ -73,7 +73,6 @@ type IntegrationDef struct {
 	Description    string        `yaml:"description"`
 	AuthProfile    string        `yaml:"auth_profile"`
 	ConnectionMode string        `yaml:"connection_mode"`
-	MCP            bool          `yaml:"mcp"`
 	MCPToolPrefix  string        `yaml:"mcp_tool_prefix"`
 
 	ClientID     string `yaml:"client_id"`
@@ -106,6 +105,7 @@ type UpstreamDef struct {
 	Type              string     `yaml:"type"`
 	URL               string     `yaml:"url"`
 	Provider          string     `yaml:"provider"`
+	MCP               bool       `yaml:"mcp"`
 	AllowedOperations AllowedOps `yaml:"allowed_operations"`
 }
 

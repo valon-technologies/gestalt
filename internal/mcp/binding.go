@@ -36,6 +36,7 @@ type Config struct {
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
+	IncludeHTTP      map[string]bool
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
@@ -80,6 +81,9 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		if op.Visible != nil && !*op.Visible {
+			continue
+		}
+		if cfg.IncludeHTTP != nil && op.Transport == catalog.TransportHTTP && !cfg.IncludeHTTP[provName] {
 			continue
 		}
 
