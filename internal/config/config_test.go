@@ -88,6 +88,8 @@ func TestDefaults(t *testing.T) {
 	yaml := `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 `
@@ -99,9 +101,6 @@ server:
 
 	if cfg.Server.Port != 8080 {
 		t.Errorf("Server.Port default: got %d, want 8080", cfg.Server.Port)
-	}
-	if cfg.Datastore.Provider != "sqlite" {
-		t.Errorf("Datastore.Provider default: got %q, want %q", cfg.Datastore.Provider, "sqlite")
 	}
 }
 
@@ -120,6 +119,8 @@ auth:
   provider: google
   config:
     client_id: ${GESTALT_TEST_CLIENT_ID}
+datastore:
+  provider: sqlite
 server:
   encryption_key: ${GESTALT_TEST_ENC_KEY}
 `
@@ -146,6 +147,8 @@ func TestEnvVarUnsetResolvesToEmpty(t *testing.T) {
 	yaml := `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   dev_mode: true
   encryption_key: ${GESTALT_TEST_NONEXISTENT}
@@ -171,17 +174,22 @@ func TestValidation(t *testing.T) {
 	}{
 		{
 			name:    "missing auth provider",
-			yaml:    "server:\n  encryption_key: key123\n",
+			yaml:    "datastore:\n  provider: sqlite\nserver:\n  encryption_key: key123\n",
+			wantErr: true,
+		},
+		{
+			name:    "missing datastore provider",
+			yaml:    "auth:\n  provider: google\nserver:\n  encryption_key: key123\n",
 			wantErr: true,
 		},
 		{
 			name:    "missing encryption key",
-			yaml:    "auth:\n  provider: google\nserver:\n  port: 8080\n",
+			yaml:    "auth:\n  provider: google\ndatastore:\n  provider: sqlite\nserver:\n  port: 8080\n",
 			wantErr: true,
 		},
 		{
 			name:    "dev mode skips encryption key",
-			yaml:    "auth:\n  provider: google\nserver:\n  dev_mode: true\n",
+			yaml:    "auth:\n  provider: google\ndatastore:\n  provider: sqlite\nserver:\n  dev_mode: true\n",
 			wantErr: false,
 		},
 	}
@@ -260,6 +268,8 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 			yaml: `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 mcp:
@@ -336,6 +346,8 @@ func TestAllowedOperationsListForm(t *testing.T) {
 	yaml := `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 integrations:
@@ -371,6 +383,8 @@ func TestAllowedOperationsMapForm(t *testing.T) {
 	yaml := `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 integrations:
@@ -406,6 +420,8 @@ func TestAllowedOperationsOmitted(t *testing.T) {
 	yaml := `
 auth:
   provider: google
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 integrations:
@@ -436,6 +452,8 @@ auth:
     client_id: cid
     client_secret: csec
     allowed_domain: example.com
+datastore:
+  provider: sqlite
 server:
   encryption_key: key123
 `

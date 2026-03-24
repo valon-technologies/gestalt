@@ -204,11 +204,15 @@ func validateConfig(configFlag string) error {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
-	if err := bootstrap.Validate(context.Background(), cfg, buildFactories(cfg.ProviderDirs, cfg.Server.DevMode)); err != nil {
+	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(cfg.ProviderDirs, cfg.Server.DevMode))
+	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
 	logConfigSummary(path, cfg)
+	for _, w := range warnings {
+		log.Printf("WARNING: %s", w)
+	}
 	log.Printf("config ok")
 	return nil
 }
