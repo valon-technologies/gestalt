@@ -1,4 +1,4 @@
-import { clearSession, getSessionToken } from "./auth";
+import { clearSession } from "./auth";
 import { HTTP_UNAUTHORIZED, LOGIN_PATH } from "./constants";
 
 export interface ConnectionParamDef {
@@ -46,12 +46,6 @@ export class APIError extends Error {
   }
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = getSessionToken();
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 export async function fetchAPI<T>(
@@ -60,9 +54,9 @@ export async function fetchAPI<T>(
 ): Promise<T> {
   const res = await fetch(API_BASE + path, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
       ...options?.headers,
     },
   });
@@ -110,10 +104,14 @@ export async function startLogin(state: string): Promise<{ url: string }> {
 export async function loginCallback(
   code: string,
   state?: string,
-): Promise<{ email: string; display_name: string; token?: string }> {
+): Promise<{ email: string; display_name: string }> {
   const params = new URLSearchParams({ code });
   if (state) params.set("state", state);
   return fetchAPI(`/api/v1/auth/login/callback?${params}`);
+}
+
+export async function logout(): Promise<void> {
+  await fetchAPI("/api/v1/auth/logout", { method: "POST" });
 }
 
 export async function getIntegrations(): Promise<Integration[]> {

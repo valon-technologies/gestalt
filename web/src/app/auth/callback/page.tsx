@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginCallback } from "@/lib/api";
-import { setSessionToken, setUserEmail } from "@/lib/auth";
+import { setUserEmail } from "@/lib/auth";
 
 function CallbackHandler() {
   const router = useRouter();
@@ -47,11 +47,6 @@ function CallbackHandler() {
 
     loginCallback(code, returnedState ?? undefined)
       .then((result) => {
-        if (!result.token) {
-          setError("Login failed — no session token returned");
-          return;
-        }
-        setSessionToken(result.token);
         setUserEmail(result.email);
         router.replace("/");
       })

@@ -7,7 +7,8 @@ test.describe("Integration: Go server contract", () => {
 
   test.describe.configure({ mode: "serial" });
 
-  let authToken: string;
+  let sessionCookie: string;
+  let serverHost: string;
 
   async function devLogin(
     baseURL: string,
@@ -21,8 +22,9 @@ test.describe("Integration: Go server contract", () => {
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.token) return data.token;
+        const setCookie = res.headers.get("set-cookie") || "";
+        const match = setCookie.match(/session_token=([^;]+)/);
+        if (match) return match[1];
       }
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 1000));
@@ -34,17 +36,22 @@ test.describe("Integration: Go server contract", () => {
   test.beforeAll(async ({}, testInfo) => {
     const baseURL =
       testInfo.project.use.baseURL || "http://localhost:8080";
-    authToken = await devLogin(baseURL);
+    serverHost = new URL(baseURL).hostname;
+    sessionCookie = await devLogin(baseURL);
   });
 
-  function injectAuth(page: import("@playwright/test").Page) {
-    return page.addInitScript(
-      ({ token }) => {
-        sessionStorage.setItem("session_token", token);
-        sessionStorage.setItem("user_email", "e2e@gestalt.dev");
-      },
-      { token: authToken },
-    );
+  async function injectAuth(page: import("@playwright/test").Page) {
+    await page.context().addCookies([{
+      name: "session_token",
+      value: sessionCookie,
+      domain: serverHost,
+      path: "/",
+      httpOnly: true,
+      secure: false,
+    }]);
+    await page.addInitScript(() => {
+      localStorage.setItem("user_email", "e2e@gestalt.dev");
+    });
   }
 
   test("integrations page loads from Go server", async ({ page }) => {

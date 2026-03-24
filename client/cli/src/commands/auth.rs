@@ -111,18 +111,21 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         );
     }
 
-    let callback_body: serde_json::Value = callback_resp
-        .json()
-        .context("failed to parse callback response")?;
-
-    let token = callback_body["token"]
-        .as_str()
-        .context("callback response missing 'token' field")?;
+    let token = callback_resp
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find_map(|v| {
+            v.strip_prefix("session_token=")
+                .map(|rest| rest.split(';').next().unwrap_or(rest).to_string())
+        })
+        .context("callback response missing session cookie")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: base_url,
-        session_token: token.to_string(),
+        session_token: token,
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");

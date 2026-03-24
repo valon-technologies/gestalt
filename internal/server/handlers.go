@@ -27,6 +27,9 @@ const defaultTokenInstance = "default"
 const cliStatePrefix = "cli:"
 const maxPort = 65535
 
+const sessionCookieName = "session_token"
+const defaultSessionCookieTTL = 24 * time.Hour
+
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -396,6 +399,40 @@ type SessionTokenIssuer interface {
 	IssueSessionToken(identity *core.UserIdentity) (string, error)
 }
 
+// SessionTokenTTLProvider is an optional interface that auth providers can
+// implement to expose their configured session TTL for cookie MaxAge.
+type SessionTokenTTLProvider interface {
+	SessionTokenTTL() time.Duration
+}
+
+func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
+	maxAge := int(defaultSessionCookieTTL.Seconds())
+	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
+		maxAge = int(p.SessionTokenTTL().Seconds())
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   !s.devMode,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   !s.devMode,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 // StatefulCallbackHandler is an optional interface for auth providers that need
 // the OAuth state parameter during callback (e.g., for PKCE where the
 // code_verifier is encrypted in the state).
@@ -430,14 +467,17 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		"display_name": identity.DisplayName,
 	}
 
-	if issuer, ok := s.auth.(SessionTokenIssuer); ok {
-		token, err := issuer.IssueSessionToken(identity)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to issue session token")
-			return
-		}
-		resp["token"] = token
+	issuer, ok := s.auth.(SessionTokenIssuer)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
+		return
 	}
+	token, err := issuer.IssueSessionToken(identity)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue session token")
+		return
+	}
+	s.setSessionCookie(w, token)
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -858,6 +898,11 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	s.clearSessionCookie(w)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) devLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
@@ -888,9 +933,9 @@ func (s *Server) devLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	s.setSessionCookie(w, token)
+	writeJSON(w, http.StatusOK, map[string]any{
 		"email": req.Email,
-		"token": token,
 	})
 }
 
