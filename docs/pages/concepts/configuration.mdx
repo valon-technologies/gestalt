@@ -83,7 +83,9 @@ server:
 
 **base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 
-**provider_dirs**: Directories listed here are scanned at startup for provider YAML files. Each file becomes a registered provider whose operations are available to integrations.
+**relative paths**: `provider`, `provider_dirs`, and `icon_file` paths resolve relative to the config file's directory, not the current shell working directory.
+
+**provider packaging**: `gestaltd bundle --config ... --output-dir ...` is the recommended production packaging flow. It writes a generated `config.yaml` plus local provider artifacts so runtime startup is deterministic. `gestaltd compile-providers` remains available as the low-level artifact-only command.
 
 **allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
 

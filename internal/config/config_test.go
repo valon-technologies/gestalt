@@ -164,6 +164,60 @@ server:
 	}
 }
 
+func TestLoadResolvesPathsRelativeToConfig(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	iconDir := filepath.Join(dir, "icons")
+	if err := os.MkdirAll(iconDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	iconPath := filepath.Join(iconDir, "test.svg")
+	if err := os.WriteFile(iconPath, []byte(`<svg/>`), 0644); err != nil {
+		t.Fatalf("WriteFile icon: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0755); err != nil {
+		t.Fatalf("MkdirAll config dir: %v", err)
+	}
+	content := `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+provider_dirs:
+  - ../providers
+integrations:
+  myapi:
+    icon_file: ../icons/test.svg
+    upstreams:
+      - type: rest
+        provider: ../providers/myapi.json
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+
+	wantProviderDir := filepath.Join(dir, "providers")
+	if len(cfg.ProviderDirs) != 1 || cfg.ProviderDirs[0] != wantProviderDir {
+		t.Fatalf("ProviderDirs = %v, want [%q]", cfg.ProviderDirs, wantProviderDir)
+	}
+	if got := cfg.Integrations["myapi"].IconFile; got != iconPath {
+		t.Fatalf("IconFile = %q, want %q", got, iconPath)
+	}
+	if got := cfg.Integrations["myapi"].Upstreams[0].Provider; got != filepath.Join(dir, "providers", "myapi.json") {
+		t.Fatalf("Provider path = %q, want %q", got, filepath.Join(dir, "providers", "myapi.json"))
+	}
+}
+
 func TestValidation(t *testing.T) {
 	t.Parallel()
 

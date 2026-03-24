@@ -56,7 +56,6 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 		}
 
 		query := generateQuery(schema, field, isMutation)
-		inputSchema := argsToJSONSchema(schema, field.Args)
 
 		opDef := provider.OperationDef{
 			Description: provider.TruncateDescription(desc),
@@ -65,7 +64,6 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 		}
 
 		opDef.Parameters = argsToParams(schema, field.Args)
-		opDef.InputSchema = inputSchema
 
 		def.Operations[field.Name] = opDef
 	}

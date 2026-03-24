@@ -34,7 +34,7 @@ integrations:
       response_hook: slack_ok
 ```
 
-The `icon_file` field sets the icon displayed in the web UI. The `error_message_path` field is a dot-delimited path that extracts a human-readable error from upstream JSON error responses.
+The `icon_file` field sets the icon displayed in the web UI. Relative paths resolve from the config file's directory. The `error_message_path` field is a dot-delimited path that extracts a human-readable error from upstream JSON error responses.
 
 ## 3. REST integration from a provider file
 
@@ -100,7 +100,7 @@ integrations:
       token_url: https://example.com/oauth/token
 ```
 
-Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are converted to JSON Schema inputs for MCP clients.
+Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are exposed with top-level type information for MCP clients. For deterministic production deployments, prefer `gestaltd bundle` so the GraphQL provider definition is compiled ahead of time.
 
 ## 5. Manual auth for API-key services
 
