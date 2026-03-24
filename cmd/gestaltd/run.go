@@ -47,10 +47,23 @@ func run(args []string) error {
 
 	var mcpProviders []string
 	mcpPrefixes := make(map[string]string)
+	includeHTTP := make(map[string]bool)
 	for name := range env.Config.Integrations {
 		intg := env.Config.Integrations[name]
-		if intg.MCP {
+		hasMCP := false
+		apiMCP := false
+		for _, us := range intg.Upstreams {
+			if us.Type == config.UpstreamTypeMCP {
+				hasMCP = true
+			}
+			if (us.Type == config.UpstreamTypeREST || us.Type == config.UpstreamTypeGraphQL) && us.MCP {
+				hasMCP = true
+				apiMCP = true
+			}
+		}
+		if hasMCP {
 			mcpProviders = append(mcpProviders, name)
+			includeHTTP[name] = apiMCP
 			if intg.MCPToolPrefix != "" {
 				mcpPrefixes[name] = intg.MCPToolPrefix
 			}
@@ -140,6 +153,7 @@ func run(args []string) error {
 			Providers:        result.Providers,
 			AllowedProviders: mcpProviders,
 			ToolPrefixes:     mcpPrefixes,
+			IncludeHTTP:      includeHTTP,
 		}
 		mcpSlot.Set(mcpserver.NewStreamableHTTPServer(
 			gestaltmcp.NewServer(mcpCfg),

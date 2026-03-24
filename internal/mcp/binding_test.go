@@ -647,4 +647,55 @@ func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 	}
 }
 
+func TestNewServer_IncludeHTTPFiltering(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		includeHTTP bool
+		wantCount   int
+	}{
+		{"excluded", false, 1},
+		{"included", true, 2},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cat := &catalog.Catalog{
+				Name: "acme",
+				Operations: []catalog.CatalogOperation{
+					{ID: "api_op", Method: "GET", Path: "/api", Transport: catalog.TransportHTTP},
+					{ID: "mcp_op", Description: "passthrough", Transport: catalog.TransportMCPPassthrough},
+				},
+			}
+
+			prov := &catalogProvider{
+				StubIntegration: coretesting.StubIntegration{N: "acme"},
+				ops:             ci.OperationsList(cat),
+				catalog:         cat,
+			}
+
+			providers := testutil.NewProviderRegistry(t, prov)
+			ds := stubDatastoreWithToken()
+			broker := invocation.NewBroker(providers, ds)
+
+			srv := gestaltmcp.NewServer(gestaltmcp.Config{
+				Invoker:     broker,
+				Providers:   providers,
+				IncludeHTTP: map[string]bool{"acme": tc.includeHTTP},
+			})
+
+			tools := srv.ListTools()
+			if len(tools) != tc.wantCount {
+				t.Fatalf("expected %d tools, got %d", tc.wantCount, len(tools))
+			}
+			if tools["acme_mcp_op"] == nil {
+				t.Fatal("expected acme_mcp_op to always be present")
+			}
+		})
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }
