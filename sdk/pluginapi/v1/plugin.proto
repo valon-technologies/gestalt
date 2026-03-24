@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/pluginapi/v1;pluginapiv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum ConnectionMode {
+  CONNECTION_MODE_UNSPECIFIED = 0;
+  CONNECTION_MODE_NONE = 1;
+  CONNECTION_MODE_USER = 2;
+  CONNECTION_MODE_IDENTITY = 3;
+  CONNECTION_MODE_EITHER = 4;
+}
+
+enum PrincipalSource {
+  PRINCIPAL_SOURCE_UNSPECIFIED = 0;
+  PRINCIPAL_SOURCE_SESSION = 1;
+  PRINCIPAL_SOURCE_API_TOKEN = 2;
+  PRINCIPAL_SOURCE_ENV = 3;
+}
+
+message UserIdentity {
+  string email = 1;
+  string display_name = 2;
+  string avatar_url = 3;
+}
+
+message Principal {
+  string user_id = 1;
+  UserIdentity identity = 2;
+  PrincipalSource source = 3;
+}
+
+message Parameter {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+  google.protobuf.Value default_value = 5;
+}
+
+message Operation {
+  string name = 1;
+  string description = 2;
+  string method = 3;
+  repeated Parameter parameters = 4;
+}
+
+message Capability {
+  string provider = 1;
+  string operation = 2;
+  string description = 3;
+  repeated Parameter parameters = 4;
+}
+
+message ConnectionParamDef {
+  bool required = 1;
+  string description = 2;
+  string default_value = 3;
+  string from = 4;
+  string field = 5;
+}
+
+message ProviderMetadata {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  ConnectionMode connection_mode = 4;
+  repeated string auth_types = 5;
+  map<string, ConnectionParamDef> connection_params = 6;
+  string static_catalog_json = 7;
+  bool supports_session_catalog = 8;
+  bool supports_post_connect = 9;
+}
+
+message TokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;
+  string token_type = 4;
+  google.protobuf.Struct extra = 5;
+}
+
+message OperationResult {
+  int32 status = 1;
+  string body = 2;
+}
+
+message IntegrationToken {
+  string id = 1;
+  string user_id = 2;
+  string integration = 3;
+  string instance = 4;
+  string access_token = 5;
+  string refresh_token = 6;
+  string scopes = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  google.protobuf.Timestamp last_refreshed_at = 9;
+  int32 refresh_error_count = 10;
+  string metadata_json = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message ListOperationsResponse {
+  repeated Operation operations = 1;
+}
+
+message ExecuteRequest {
+  string operation = 1;
+  google.protobuf.Struct params = 2;
+  string token = 3;
+  map<string, string> connection_params = 4;
+}
+
+message AuthorizationURLRequest {
+  string state = 1;
+  repeated string scopes = 2;
+}
+
+message AuthorizationURLResponse {
+  string url = 1;
+}
+
+message ExchangeCodeRequest {
+  string code = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetSessionCatalogRequest {
+  string token = 1;
+  map<string, string> connection_params = 2;
+}
+
+message GetSessionCatalogResponse {
+  string catalog_json = 1;
+}
+
+message PostConnectRequest {
+  IntegrationToken token = 1;
+}
+
+message PostConnectResponse {
+  map<string, string> metadata = 1;
+}
+
+message ListCapabilitiesResponse {
+  repeated Capability capabilities = 1;
+}
+
+message InvokeRequest {
+  Principal principal = 1;
+  string provider = 2;
+  string instance = 3;
+  string operation = 4;
+  google.protobuf.Struct params = 5;
+}
+
+message StartRuntimeRequest {
+  string name = 1;
+  google.protobuf.Struct config = 2;
+  repeated Capability initial_capabilities = 3;
+}
+
+service ProviderPlugin {
+  rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
+  rpc ListOperations(google.protobuf.Empty) returns (ListOperationsResponse);
+  rpc Execute(ExecuteRequest) returns (OperationResult);
+  rpc AuthorizationURL(AuthorizationURLRequest) returns (AuthorizationURLResponse);
+  rpc ExchangeCode(ExchangeCodeRequest) returns (TokenResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (TokenResponse);
+  rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
+  rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
+}
+
+service RuntimePlugin {
+  rpc Start(StartRuntimeRequest) returns (google.protobuf.Empty);
+  rpc Stop(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+service RuntimeHost {
+  rpc Invoke(InvokeRequest) returns (OperationResult);
+  rpc ListCapabilities(google.protobuf.Empty) returns (ListCapabilitiesResponse);
+}
