@@ -10,19 +10,20 @@ Gestalt ships two binaries: the Go server (`gestaltd`) and the Rust client (`ges
 
 ```sh
 gestaltd --config config.yaml
+gestaltd validate --config config.yaml
 ```
 
-### Flags
+### Commands
 
-| Flag | Default | Purpose |
-|---|---|---|
-| `--config` | (see resolution order) | Path to config file. |
-| `--check` | `false` | Validate configuration, print resolved values, and exit. |
+| Command | Purpose |
+|---|---|
+| `gestaltd --config config.yaml` | Start the server. |
+| `gestaltd validate --config config.yaml` | Load and validate config, then exit without starting the server. |
 
 ### Validate configuration
 
 ```sh
-gestaltd --check --config config.yaml
+gestaltd validate --config config.yaml
 ```
 
 Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.

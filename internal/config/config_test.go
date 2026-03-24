@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -226,6 +227,58 @@ func TestLoadErrors(t *testing.T) {
 			_, err := Load(path)
 			if err == nil {
 				t.Fatal("Load: expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestLoadEmptyConfigFallsThrough(t *testing.T) {
+	t.Parallel()
+
+	for _, content := range []string{"", "# just a comment\n"} {
+		path := mustWriteConfigFile(t, content)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected validation error, got nil")
+		}
+		if strings.Contains(err.Error(), "EOF") {
+			t.Fatalf("Load: got confusing EOF error for empty config: %v", err)
+		}
+	}
+}
+
+func TestLoadRejectsUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		yaml        string
+		wantMessage string
+	}{
+		{
+			name: "legacy global mcp block",
+			yaml: `
+auth:
+  provider: google
+server:
+  encryption_key: key123
+mcp:
+  enabled: true
+`,
+			wantMessage: "field mcp not found in type config.Config",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantMessage) {
+				t.Fatalf("Load: expected error containing %q, got %v", tc.wantMessage, err)
 			}
 		})
 	}
