@@ -13,6 +13,11 @@ import (
 	"github.com/valon-technologies/gestalt/internal/registry"
 )
 
+// ReadinessChecker reports whether the server is ready to handle requests.
+// Returning a non-empty string means not ready; the string is used as the
+// status message in the /ready response.
+type ReadinessChecker func() string
+
 type Server struct {
 	router     chi.Router
 	auth       core.AuthProvider
@@ -25,6 +30,7 @@ type Server struct {
 	devMode    bool
 	stateCodec *integrationOAuthStateCodec
 	now        func() time.Time
+	readiness  ReadinessChecker
 	mcpHandler http.Handler
 	webUI      http.Handler
 }
@@ -39,6 +45,7 @@ type Config struct {
 	DevMode     bool
 	StateSecret []byte
 	Now         func() time.Time
+	Readiness   ReadinessChecker
 	MCPHandler  http.Handler
 	WebUI       http.Handler
 }
@@ -71,6 +78,7 @@ func New(cfg Config) (*Server, error) {
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
 		now:        now,
+		readiness:  cfg.Readiness,
 		mcpHandler: cfg.MCPHandler,
 		webUI:      cfg.WebUI,
 	}

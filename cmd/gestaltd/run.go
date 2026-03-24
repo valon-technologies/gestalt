@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
@@ -107,8 +108,12 @@ func runServe(args []string) error {
 		Invoker:     result.Invoker,
 		DevMode:     result.DevMode,
 		StateSecret: crypto.DeriveKey(env.Config.Server.EncryptionKey),
-		MCPHandler:  mcpHandler,
-		WebUI:       webui.Handler(),
+		Readiness: composeReadiness(
+			readinessFromChannel(result.ProvidersReady, "providers loading"),
+			datastoreReadiness(result.Datastore),
+		),
+		MCPHandler: mcpHandler,
+		WebUI:      webui.Handler(),
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
@@ -386,4 +391,37 @@ func (h *lateHandler) Set(handler http.Handler) {
 	h.mu.Lock()
 	h.handler = handler
 	h.mu.Unlock()
+}
+
+func readinessFromChannel(ch <-chan struct{}, reason string) server.ReadinessChecker {
+	return func() string {
+		select {
+		case <-ch:
+			return ""
+		default:
+			return reason
+		}
+	}
+}
+
+func composeReadiness(checks ...server.ReadinessChecker) server.ReadinessChecker {
+	return func() string {
+		for _, check := range checks {
+			if reason := check(); reason != "" {
+				return reason
+			}
+		}
+		return ""
+	}
+}
+
+func datastoreReadiness(ds core.Datastore) server.ReadinessChecker {
+	return func() string {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := ds.Ping(ctx); err != nil {
+			return "datastore unavailable"
+		}
+		return ""
+	}
 }
