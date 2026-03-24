@@ -269,6 +269,7 @@ test.describe("Integrations", () => {
     await expect(page.getByLabel("API Token")).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByLabel("API Token")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
   });
 
   test("manual auth reconnect opens token form via settings modal", async ({

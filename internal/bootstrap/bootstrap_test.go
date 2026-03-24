@@ -36,6 +36,12 @@ func stubProviderFactory(name string) bootstrap.ProviderFactory {
 	}
 }
 
+func stubRuntimeFactory(name string, stopFn func(context.Context) error) bootstrap.RuntimeFactory {
+	return func(_ context.Context, _ string, _ config.RuntimeDef, _ bootstrap.RuntimeDeps) (core.Runtime, error) {
+		return &coretesting.StubRuntime{N: name, StopFn: stopFn}, nil
+	}
+}
+
 type stubIntegrationWithOps struct {
 	coretesting.StubIntegration
 	ops []core.Operation
@@ -123,6 +129,38 @@ func TestBootstrap(t *testing.T) {
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
+	}
+}
+
+func TestValidate(t *testing.T) {
+	t.Parallel()
+
+	if err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestValidateStopsConstructedRuntimes(t *testing.T) {
+	t.Parallel()
+
+	stopped := false
+
+	cfg := validConfig()
+	cfg.Runtimes = map[string]config.RuntimeDef{
+		"echo": {Type: "test-runtime"},
+	}
+
+	factories := validFactories()
+	factories.Runtimes["test-runtime"] = stubRuntimeFactory("echo", func(context.Context) error {
+		stopped = true
+		return nil
+	})
+
+	if err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if !stopped {
+		t.Fatal("expected Validate to stop constructed runtimes")
 	}
 }
 
@@ -333,6 +371,27 @@ func TestBootstrapProviderErrorSkipsProvider(t *testing.T) {
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha] (beta should be skipped)", names)
+	}
+}
+
+func TestValidateProviderErrorFails(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Integrations["beta"] = config.IntegrationDef{}
+
+	factories := validFactories()
+	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		return nil, fmt.Errorf("provider broke")
+	}
+
+	err := bootstrap.Validate(ctx, cfg, factories)
+	if err == nil {
+		t.Fatal("expected Validate to fail when a provider fails")
+	}
+	if !strings.Contains(err.Error(), `integration "beta": provider broke`) {
+		t.Fatalf("unexpected validation error: %v", err)
 	}
 }
 

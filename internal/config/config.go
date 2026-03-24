@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -168,7 +169,9 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	resolved := os.Expand(string(data), getenv)
 
 	var cfg Config
-	if err := yaml.Unmarshal([]byte(resolved), &cfg); err != nil {
+	dec := yaml.NewDecoder(strings.NewReader(resolved))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
 	}
 
