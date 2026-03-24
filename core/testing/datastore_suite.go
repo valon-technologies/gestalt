@@ -150,7 +150,7 @@ func testDatastoreIntegrationTokens(t *testing.T, newStore func(t *testing.T) co
 			RefreshToken:    "refresh-token-value",
 			Scopes:          "scope-a,scope-b",
 			ExpiresAt:       &expires,
-			LastRefreshedAt: now,
+			LastRefreshedAt: &now,
 			MetadataJSON:    `{"key":"value"}`,
 			CreatedAt:       now,
 			UpdatedAt:       now,

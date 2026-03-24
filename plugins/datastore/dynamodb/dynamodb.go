@@ -559,7 +559,6 @@ func marshalIntegrationToken(t *core.IntegrationToken, accessEnc, refreshEnc str
 		attrAccessTokenEnc:    &ddbtypes.AttributeValueMemberS{Value: accessEnc},
 		attrRefreshTokenEnc:   &ddbtypes.AttributeValueMemberS{Value: refreshEnc},
 		attrScopes:            &ddbtypes.AttributeValueMemberS{Value: t.Scopes},
-		attrLastRefreshedAt:   &ddbtypes.AttributeValueMemberS{Value: t.LastRefreshedAt.Format(time.RFC3339)},
 		attrRefreshErrorCount: &ddbtypes.AttributeValueMemberN{Value: strconv.Itoa(t.RefreshErrorCount)},
 		attrMetadataJSON:      &ddbtypes.AttributeValueMemberS{Value: t.MetadataJSON},
 		attrCreatedAt:         &ddbtypes.AttributeValueMemberS{Value: t.CreatedAt.Format(time.RFC3339)},
@@ -567,6 +566,9 @@ func marshalIntegrationToken(t *core.IntegrationToken, accessEnc, refreshEnc str
 	}
 	if t.ExpiresAt != nil {
 		item[attrExpiresAt] = &ddbtypes.AttributeValueMemberS{Value: t.ExpiresAt.Format(time.RFC3339)}
+	}
+	if t.LastRefreshedAt != nil {
+		item[attrLastRefreshedAt] = &ddbtypes.AttributeValueMemberS{Value: t.LastRefreshedAt.Format(time.RFC3339)}
 	}
 	return item
 }
@@ -631,10 +633,11 @@ func (s *Store) unmarshalIntegrationToken(item map[string]ddbtypes.AttributeValu
 		return nil, fmt.Errorf("parsing updated_at: %w", err)
 	}
 	if lastRefreshed != "" {
-		t.LastRefreshedAt, err = time.Parse(time.RFC3339, lastRefreshed)
+		parsed, err := time.Parse(time.RFC3339, lastRefreshed)
 		if err != nil {
 			return nil, fmt.Errorf("parsing last_refreshed_at: %w", err)
 		}
+		t.LastRefreshedAt = &parsed
 	}
 
 	if v, ok := item[attrExpiresAt]; ok {

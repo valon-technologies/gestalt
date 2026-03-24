@@ -89,7 +89,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				refresh_token_encrypted CLOB,
 				scopes CLOB,
 				expires_at TIMESTAMP WITH TIME ZONE,
-				last_refreshed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				last_refreshed_at TIMESTAMP WITH TIME ZONE,
 				refresh_error_count NUMBER(10) DEFAULT 0 NOT NULL,
 				metadata_json CLOB,
 				created_at TIMESTAMP WITH TIME ZONE NOT NULL,

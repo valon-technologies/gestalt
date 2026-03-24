@@ -99,7 +99,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				refresh_token_encrypted NVARCHAR(MAX) NOT NULL DEFAULT '',
 				scopes NVARCHAR(MAX) NOT NULL DEFAULT '',
 				expires_at DATETIME2(6) NULL,
-				last_refreshed_at DATETIME2(6) NOT NULL,
+				last_refreshed_at DATETIME2(6) NULL,
 				refresh_error_count INT NOT NULL DEFAULT 0,
 				metadata_json NVARCHAR(MAX) NOT NULL DEFAULT '',
 				created_at DATETIME2(6) NOT NULL,
@@ -125,5 +125,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("creating %s table: %w", m.name, err)
 		}
 	}
+
 	return tx.Commit()
 }

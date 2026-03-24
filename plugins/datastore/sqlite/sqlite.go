@@ -82,7 +82,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
 			scopes TEXT NOT NULL DEFAULT '',
 			expires_at DATETIME,
-			last_refreshed_at DATETIME NOT NULL,
+			last_refreshed_at DATETIME,
 			refresh_error_count INTEGER NOT NULL DEFAULT 0,
 			metadata_json TEXT NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL,
