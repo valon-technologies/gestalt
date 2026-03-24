@@ -8,6 +8,7 @@ import (
 
 	_ "github.com/valon-technologies/gestalt/plugins/integrations/datadog"
 	_ "github.com/valon-technologies/gestalt/plugins/integrations/hex"
+	_ "github.com/valon-technologies/gestalt/plugins/integrations/jira"
 	_ "github.com/valon-technologies/gestalt/plugins/integrations/slack"
 )
 
