@@ -1,6 +1,6 @@
 # MCP Binding
 
-When `mcp.enabled` is set in the config, Gestalt mounts a Streamable HTTP MCP endpoint at `/mcp`. This gives AI assistants like Claude direct access to your integration operations.
+When at least one integration exposes MCP tools, Gestalt mounts a Streamable HTTP MCP endpoint at `/mcp`. REST and GraphQL upstreams opt in with `mcp: true`; `type: mcp` upstreams are always exposed. This gives AI assistants like Claude direct access to your integration operations.
 
 ## What MCP is
 
@@ -26,7 +26,7 @@ Each tool name is built from the provider name and operation ID:
 
 For example, `search_issues` on the `linear` provider becomes `linear_search_issues`.
 
-Set `tool_name_prefix` in the `mcp` config block to prepend a string to every tool name. A prefix of `gs_` produces `gs_linear_search_issues`.
+Set `mcp_tool_prefix` on an integration to prepend a string to that integration's MCP tool names. A prefix of `gs_` on the `linear` integration produces `gs_linear_search_issues`.
 
 ## Auth
 
@@ -41,7 +41,7 @@ The MCP binding is an alternative interface, not a replacement. It shares:
 - The same invoker: credential resolution, automatic token refresh, and upstream execution.
 - The same allow-list enforcement on operations.
 
-The `mcp.providers` filter lets you expose a subset of integrations to MCP clients without affecting the HTTP API.
+MCP exposure is configured per integration. For REST and GraphQL upstreams, set `mcp: true` on the upstream you want to expose. For upstream MCP servers, add a `type: mcp` upstream. Gestalt mounts `/mcp` automatically once at least one integration exposes MCP tools.
 
 ## MCP upstream passthrough
 
