@@ -21,6 +21,7 @@ var (
 	_ core.ManualProvider      = (*Restricted)(nil)
 	_ core.CatalogProvider     = (*Restricted)(nil)
 	_ core.PostConnectProvider = (*Restricted)(nil)
+	_ core.AuthTypeLister      = (*Restricted)(nil)
 	_ core.OAuthProvider       = (*restrictedOAuth)(nil)
 	_ core.ManualProvider      = (*restrictedOAuth)(nil)
 )
@@ -157,6 +158,13 @@ func (r *restrictedOAuth) StartOAuthWithOverride(authBaseURL, state string, scop
 		return ov.StartOAuthWithOverride(authBaseURL, state, scopes)
 	}
 	return r.oauth.AuthorizationURL(state, scopes), ""
+}
+
+func (r *Restricted) AuthTypes() []string {
+	if atl, ok := r.inner.(core.AuthTypeLister); ok {
+		return atl.AuthTypes()
+	}
+	return nil
 }
 
 func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {

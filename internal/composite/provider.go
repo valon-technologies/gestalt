@@ -29,6 +29,7 @@ type Provider struct {
 var (
 	_ core.Provider        = (*Provider)(nil)
 	_ core.CatalogProvider = (*Provider)(nil)
+	_ core.AuthTypeLister  = (*Provider)(nil)
 )
 
 // New creates a composite provider. If the API provider implements
@@ -71,6 +72,13 @@ func (p *Provider) SupportsManualAuth() bool {
 		return mp.SupportsManualAuth()
 	}
 	return false
+}
+
+func (p *Provider) AuthTypes() []string {
+	if atl, ok := p.api.(core.AuthTypeLister); ok {
+		return atl.AuthTypes()
+	}
+	return nil
 }
 
 func (p *Provider) Close() error {

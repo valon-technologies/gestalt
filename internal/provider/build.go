@@ -20,7 +20,7 @@ import (
 func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string) (core.Provider, error) {
 	d := *def // shallow copy so we don't mutate the caller's definition
 	def = &d
-	if err := applyOverrides(def, intg); err != nil {
+	if err := ApplyIntegrationOverrides(def, intg); err != nil {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}
 
@@ -212,7 +212,28 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	return result, nil
 }
 
-func applyOverrides(def *Definition, intg config.IntegrationDef) error {
+// ApplyArtifactOverrides merges only non-secret, structural overrides into a
+// provider definition for compile-time artifact generation. Fields that could
+// contain expanded environment variables (headers, auth_mapping) are excluded
+// so that secrets are never baked into provider JSON files.
+func ApplyArtifactOverrides(def *Definition, intg config.IntegrationDef) error {
+	setStr(&def.DisplayName, intg.DisplayName)
+	setStr(&def.Description, intg.Description)
+	if intg.IconFile != "" {
+		data, err := os.ReadFile(intg.IconFile)
+		if err != nil {
+			log.Printf("WARNING: could not read icon_file %q: %v", intg.IconFile, err)
+		} else {
+			def.IconSVG = strings.TrimSpace(string(data))
+		}
+	}
+	return nil
+}
+
+// ApplyIntegrationOverrides merges integration config into a provider definition
+// at runtime. This includes all overrides, including headers and auth mapping
+// which may contain expanded secrets. Only call this in the live server path.
+func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) error {
 	setStr(&def.DisplayName, intg.DisplayName)
 	setStr(&def.Description, intg.Description)
 	o := intg.Auth

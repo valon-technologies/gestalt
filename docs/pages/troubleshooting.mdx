@@ -2,9 +2,9 @@
 
 ## Integration is missing its provider
 
-Gestalt resolves providers at startup from the `upstreams` list. If no upstreams are configured, or a REST upstream has no `url`, `provider`, or matching file in `provider_dirs`, the server logs an error and skips the integration.
+Gestalt resolves providers at startup from the `upstreams` list. If no upstreams are configured, or a REST/GraphQL upstream has no `url`, `provider`, or matching file in `provider_dirs`, the server logs an error and skips the integration.
 
-**Fix**: Ensure each integration has at least one entry in its `upstreams` list with a valid `type` and source (`url` or `provider`).
+**Fix**: Ensure each integration has at least one entry in its `upstreams` list with a valid `type` and source (`url` or `provider`). For deterministic production startup, generate a deploy bundle with `gestaltd bundle --config your-config.yaml --output-dir ./dist/gestalt` and run the bundled `config.yaml`.
 
 ## OAuth redirects are wrong
 

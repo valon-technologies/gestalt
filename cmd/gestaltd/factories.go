@@ -225,28 +225,12 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 
 		for _, us := range intg.Upstreams {
 			switch us.Type {
-			case config.UpstreamTypeREST:
-				if apiProv != nil {
-					cleanup()
-					return nil, fmt.Errorf("multiple rest upstreams not supported")
-				}
-				def, err := loadHTTPUpstream(ctx, name, us, providerDirs)
-				if err != nil {
-					cleanup()
-					return nil, err
-				}
-				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations))
-				if err != nil {
-					cleanup()
-					return nil, err
-				}
-				apiProv = p
-			case config.UpstreamTypeGraphQL:
+			case config.UpstreamTypeREST, config.UpstreamTypeGraphQL:
 				if apiProv != nil {
 					cleanup()
 					return nil, fmt.Errorf("multiple api upstreams not supported")
 				}
-				def, err := graphqlupstream.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
+				def, err := loadAPIUpstream(ctx, name, us, providerDirs)
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -292,13 +276,23 @@ func defaultProviderFactory(providerDirs []string) bootstrap.ProviderFactory {
 	}
 }
 
-func loadHTTPUpstream(ctx context.Context, name string, us config.UpstreamDef, providerDirs []string) (*provider.Definition, error) {
-	switch {
-	case us.URL != "":
-		return openapi.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
-	case us.Provider != "":
+func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, providerDirs []string) (*provider.Definition, error) {
+	if us.Provider != "" {
 		return provider.LoadFile(us.Provider)
-	default:
-		return provider.LoadFromDir(name, providerDirs)
 	}
+
+	switch us.Type {
+	case config.UpstreamTypeREST:
+		if us.URL != "" {
+			return openapi.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
+		}
+	case config.UpstreamTypeGraphQL:
+		if us.URL != "" {
+			return graphqlupstream.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
+		}
+	default:
+		return nil, fmt.Errorf("unsupported api upstream type %q", us.Type)
+	}
+
+	return provider.LoadFromDir(name, providerDirs)
 }

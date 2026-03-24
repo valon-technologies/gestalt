@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+func strPtr(s string) *string { return &s }
+
 func newTestSchema() Schema {
 	return Schema{
 		QueryType:    &TypeName{Name: "Query"},
@@ -127,20 +129,14 @@ func TestLoadDefinitionAllOps(t *testing.T) {
 	if createIssue.Query == "" {
 		t.Error("createIssue.Query should not be empty")
 	}
-
-	var inputSchema map[string]any
-	if err := json.Unmarshal(createIssue.InputSchema, &inputSchema); err != nil {
-		t.Fatalf("createIssue.InputSchema: %v", err)
+	if createIssue.InputSchema != nil {
+		t.Fatalf("createIssue.InputSchema: got %s, want nil so schema synthesis can stay shallow", createIssue.InputSchema)
 	}
-	props := inputSchema["properties"].(map[string]any)
-	inputProp := props["input"].(map[string]any)
-	if inputProp["type"] != "object" {
-		t.Errorf("input type: got %v, want object", inputProp["type"])
+	if len(createIssue.Parameters) != 1 {
+		t.Fatalf("createIssue.Parameters: got %d, want 1", len(createIssue.Parameters))
 	}
-	inputProps := inputProp["properties"].(map[string]any)
-	priorityProp := inputProps["priority"].(map[string]any)
-	if _, hasEnum := priorityProp["enum"]; !hasEnum {
-		t.Error("priority should have enum values")
+	if got := createIssue.Parameters[0].Type; got != "object" {
+		t.Fatalf("createIssue.Parameters[0].Type = %q, want object", got)
 	}
 }
 

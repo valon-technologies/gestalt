@@ -45,6 +45,12 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd validate") {
 		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
 	}
+	if !strings.Contains(string(out), "gestaltd bundle") {
+		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
+	}
+	if !strings.Contains(string(out), "gestaltd compile-providers") {
+		t.Fatalf("expected usage output containing 'gestaltd compile-providers', got: %s", out)
+	}
 }
 
 func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
@@ -56,6 +62,30 @@ func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "gestaltd validate") {
 		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
+	}
+}
+
+func TestGestaltdCompileProvidersHelpExitsCleanly(t *testing.T) {
+	t.Parallel()
+	cmd := exec.Command("go", "run", ".", "compile-providers", "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected exit 0 for 'compile-providers --help', got error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "gestaltd compile-providers") {
+		t.Fatalf("expected usage output containing 'gestaltd compile-providers', got: %s", out)
+	}
+}
+
+func TestGestaltdBundleHelpExitsCleanly(t *testing.T) {
+	t.Parallel()
+	cmd := exec.Command("go", "run", ".", "bundle", "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected exit 0 for 'bundle --help', got error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "gestaltd bundle") {
+		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
 	}
 }
 
