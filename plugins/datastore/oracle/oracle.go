@@ -49,8 +49,8 @@ func (dialect) RegistrationDDL() string {
 		IF v_count = 0 THEN
 			EXECUTE IMMEDIATE 'CREATE TABLE oauth_registrations (
 				id VARCHAR2(36) PRIMARY KEY,
-				auth_server_url VARCHAR2(500) NOT NULL,
-				redirect_uri VARCHAR2(500) NOT NULL,
+				auth_server_url VARCHAR2(255) NOT NULL,
+				redirect_uri VARCHAR2(255) NOT NULL,
 				client_id VARCHAR2(255) NOT NULL,
 				client_secret_encrypted CLOB,
 				authorization_endpoint VARCHAR2(500) NOT NULL,

@@ -49,8 +49,8 @@ func (dialect) RegistrationDDL() string {
 	return `IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'oauth_registrations')
 		CREATE TABLE oauth_registrations (
 			id NVARCHAR(36) NOT NULL PRIMARY KEY,
-			auth_server_url NVARCHAR(500) NOT NULL,
-			redirect_uri NVARCHAR(500) NOT NULL,
+			auth_server_url NVARCHAR(255) NOT NULL,
+			redirect_uri NVARCHAR(255) NOT NULL,
 			client_id NVARCHAR(255) NOT NULL,
 			client_secret_encrypted NVARCHAR(MAX),
 			authorization_endpoint NVARCHAR(500) NOT NULL,
