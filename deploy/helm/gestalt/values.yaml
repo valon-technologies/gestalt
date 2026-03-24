@@ -1,4 +1,5 @@
-# SQLite limits to single writer; increase for PostgreSQL.
+# SQLite defaults are for a single replica with persistent storage.
+# Switch to Postgres or MySQL before scaling horizontally.
 replicaCount: 1
 
 image:
@@ -79,6 +80,8 @@ config:
     #   session_secret: "${GESTALT_SESSION_SECRET}"
     #   display_name: "Okta"
   datastore:
+    # SQLite is appropriate for local development or single-instance
+    # deployments with mounted persistent storage at /data.
     provider: sqlite
     config:
       path: /data/gestalt.db
