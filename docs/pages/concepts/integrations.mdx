@@ -135,6 +135,41 @@ Omit `allowed_operations` entirely to allow all operations. An empty value is in
 
 **Manual**: Set `auth.type` to `manual`. Users paste credentials directly through the web UI (`POST /api/v1/auth/connect-manual`) or CLI. Gestalt encrypts and stores them the same way it stores OAuth tokens.
 
+## Dual auth
+
+Some services support both OAuth and API keys. When an integration sets `manual_auth: true`, Gestalt advertises both authentication methods. Users see separate options in the web UI — "Connect with OAuth" to start the OAuth flow, or "Use API Token" to paste credentials directly.
+
+```yaml
+integrations:
+  my-service:
+    upstreams:
+      - type: rest
+        url: https://api.example.com/openapi.json
+    client_id: ${SERVICE_CLIENT_ID}
+    client_secret: ${SERVICE_CLIENT_SECRET}
+    manual_auth: true
+    auth:
+      authorization_url: https://example.com/oauth/authorize
+      token_url: https://example.com/oauth/token
+```
+
+The API returns `auth_types: ["oauth", "manual"]` for dual-auth integrations, `["oauth"]` for OAuth-only, and `["manual"]` for manual-only. Either authentication method produces the same kind of stored credential — the difference is only in how the user provides it.
+
+## Multi-instance connections
+
+By default, each user has one connection per integration. Multi-instance connections allow a user to maintain several connections to the same integration simultaneously — for example, two Slack workspaces or three Shopify stores.
+
+Each connection is identified by an **instance** name. The first connection uses the instance name `"default"`. When a user connects the same integration again with a different account, a new instance is created.
+
+Credential resolution follows two rules:
+
+- When a user has **one** connection to an integration, Gestalt selects it automatically. No instance parameter is needed.
+- When a user has **multiple** connections, the caller must specify which instance to use by passing `_instance` as a parameter. Omitting it returns a 409 error listing the available instances.
+
+Multi-instance support requires no special configuration. Any integration can have multiple connections per user.
+
+To disconnect a specific instance, pass `?instance=NAME` to the disconnect endpoint. When only one connection exists, the instance parameter is optional.
+
 ## Connection modes
 
 Each integration has a `connection_mode` that controls how credentials are resolved at invocation time:
