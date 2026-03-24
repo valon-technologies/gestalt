@@ -53,23 +53,17 @@ auth_profiles:
       token_url: https://slack.com/api/oauth.v2.access
       response_hook: slack_ok
 
-provider_dirs:
-  - /etc/gestalt/providers
-
 integrations:
   slack:
     auth_profile: slack_shared
-    openapi: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    upstreams:
+      - type: rest
+        url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+        allowed_operations:
+          conversations_list: ""
+          chat_postMessage: Send a message to a Slack channel
     response_check: slack_ok
     connection_mode: user
-    allowed_operations:
-      conversations_list: ""
-      chat_postMessage: Send a message to a Slack channel
-
-mcp:
-  enabled: true
-  providers:
-    - slack
 
 server:
   port: 8080
@@ -83,9 +77,9 @@ server:
 
 **base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 
-**relative paths**: `provider`, `provider_dirs`, and `icon_file` paths resolve relative to the config file's directory, not the current shell working directory.
+**relative paths**: `icon_file` resolves relative to the config file's directory, not the current shell working directory.
 
-**provider packaging**: `gestaltd bundle --config ... --output-dir ...` is the recommended production packaging flow. It writes a generated `config.yaml` plus local provider artifacts so runtime startup is deterministic. `gestaltd compile-providers` remains available as the low-level artifact-only command.
+**provider preparation**: `gestaltd prepare --config ...` writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve --config ...` uses that prepared state so runtime startup is deterministic without rewriting the config.
 
 **allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
 
