@@ -6,14 +6,20 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"database/sql"
+
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/crypto"
+	ci "github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/internal/graphql"
+	"github.com/valon-technologies/gestalt/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
@@ -201,7 +207,11 @@ func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
 }
 
 func defaultProviderFactory(preparedProviders map[string]string) bootstrap.ProviderFactory {
-	return func(ctx context.Context, name string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+	var regStoreOnce sync.Once
+	var regStore mcpoauth.RegistrationStore
+
+	return func(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (core.Provider, error) {
+		regStoreOnce.Do(func() { regStore = buildRegistrationStore(deps) })
 		var apiProv core.Provider
 		var mcpUp *mcpupstream.Upstream
 
@@ -233,7 +243,13 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 					cleanup()
 					return nil, err
 				}
-				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations))
+				var buildOpts []provider.BuildOption
+				if intg.Auth.Type == "mcp_oauth" {
+					mcpURL := mcpURLFromUpstreams(intg.Upstreams)
+					handler := buildMCPOAuthHandler(mcpURL, intg, regStore, deps)
+					buildOpts = append(buildOpts, provider.WithAuthHandler(handler))
+				}
+				p, err := provider.Build(def, intg, map[string]string(us.AllowedOperations), buildOpts...)
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -267,11 +283,80 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 		case apiProv != nil:
 			return apiProv, nil
 		case mcpUp != nil:
+			if intg.Auth.Type == "mcp_oauth" {
+				return buildMCPOAuthProvider(name, intg, mcpUp, regStore, deps)
+			}
 			return mcpUp, nil
 		default:
 			return nil, fmt.Errorf("no upstreams configured")
 		}
 	}
+}
+
+func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
+	db, ok := deps.SQLDB.(*sql.DB)
+	if !ok || db == nil {
+		return nil
+	}
+	dialect, ok := deps.SQLDialect.(mcpoauth.SQLDialect)
+	if !ok || dialect == nil {
+		return nil
+	}
+	enc, err := crypto.NewAESGCM(deps.EncryptionKey)
+	if err != nil {
+		log.Printf("WARNING: mcpoauth: cannot create encryptor for registration store: %v", err)
+		return nil
+	}
+	store := mcpoauth.NewSQLStore(db, enc, dialect)
+	if err := store.Migrate(context.Background()); err != nil {
+		log.Printf("WARNING: mcpoauth: migrating registration store: %v", err)
+	}
+	return store
+}
+
+func buildMCPOAuthHandler(mcpURL string, intg config.IntegrationDef, store mcpoauth.RegistrationStore, deps bootstrap.Deps) *mcpoauth.Handler {
+	redirectURL := intg.RedirectURL
+	if redirectURL == "" {
+		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
+	}
+
+	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+		MCPURL:       mcpURL,
+		Store:        store,
+		RedirectURL:  redirectURL,
+		ClientID:     intg.ClientID,
+		ClientSecret: intg.ClientSecret,
+	})
+}
+
+func mcpURLFromUpstreams(upstreams []config.UpstreamDef) string {
+	for _, us := range upstreams {
+		if us.Type == config.UpstreamTypeMCP {
+			return us.URL
+		}
+	}
+	return ""
+}
+
+func buildMCPOAuthProvider(name string, intg config.IntegrationDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps) (core.Provider, error) {
+	mcpURL := mcpURLFromUpstreams(intg.Upstreams)
+	handler := buildMCPOAuthHandler(mcpURL, intg, store, deps)
+
+	connMode := core.ConnectionModeUser
+	if intg.ConnectionMode != "" {
+		connMode = core.ConnectionMode(intg.ConnectionMode)
+	}
+
+	baseProv := &ci.Base{
+		IntegrationName:    name,
+		IntegrationDisplay: intg.DisplayName,
+		IntegrationDesc:    intg.Description,
+		ConnMode:           connMode,
+		Auth:               handler,
+		ManualAuthEnabled:  true,
+	}
+
+	return composite.New(name, baseProv, mcpUp), nil
 }
 
 func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, preparedProviders map[string]string) (*provider.Definition, error) {

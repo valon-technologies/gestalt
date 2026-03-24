@@ -41,6 +41,30 @@ VALUES (src.id, src.user_id, src.integration, src.instance, src.access_token_enc
         src.refresh_error_count, src.metadata_json, src.created_at, src.updated_at)`
 }
 
+func (dialect) RegistrationDDL() string {
+	return `DECLARE
+		v_count NUMBER;
+	BEGIN
+		SELECT COUNT(*) INTO v_count FROM user_tables WHERE table_name = 'OAUTH_REGISTRATIONS';
+		IF v_count = 0 THEN
+			EXECUTE IMMEDIATE 'CREATE TABLE oauth_registrations (
+				id VARCHAR2(36) PRIMARY KEY,
+				auth_server_url VARCHAR2(500) NOT NULL,
+				redirect_uri VARCHAR2(500) NOT NULL,
+				client_id VARCHAR2(255) NOT NULL,
+				client_secret_encrypted CLOB,
+				authorization_endpoint VARCHAR2(500) NOT NULL,
+				token_endpoint VARCHAR2(500) NOT NULL,
+				scopes_supported CLOB,
+				discovered_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				UNIQUE (auth_server_url, redirect_uri)
+			)';
+		END IF;
+	END;`
+}
+
 func (dialect) IsDuplicateKeyError(err error) bool {
 	if err == nil {
 		return false

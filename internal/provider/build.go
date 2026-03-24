@@ -17,7 +17,24 @@ import (
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
-func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string) (core.Provider, error) {
+// BuildOption configures optional aspects of provider construction.
+type BuildOption func(*buildOptions)
+
+type buildOptions struct {
+	authOverride ci.AuthHandler
+}
+
+// WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
+func WithAuthHandler(h ci.AuthHandler) BuildOption {
+	return func(o *buildOptions) { o.authOverride = h }
+}
+
+func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string, opts ...BuildOption) (core.Provider, error) {
+	var bo buildOptions
+	for _, opt := range opts {
+		opt(&bo)
+	}
+
 	d := *def // shallow copy so we don't mutate the caller's definition
 	def = &d
 	if err := ApplyIntegrationOverrides(def, intg); err != nil {
@@ -31,7 +48,13 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	auth, err := buildAuth(def, intg, baseURL, client)
+	var auth ci.AuthHandler
+	var err error
+	if bo.authOverride != nil {
+		auth = bo.authOverride
+	} else {
+		auth, err = buildAuth(def, intg, baseURL, client)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}

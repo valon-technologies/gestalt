@@ -26,6 +26,7 @@ type ClientAuthMethod int
 const (
 	ClientAuthBody ClientAuthMethod = iota
 	ClientAuthHeader
+	ClientAuthNone
 )
 
 type TokenExchangeFormat string
@@ -176,9 +177,12 @@ func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ..
 		"redirect_uri": {h.cfg.RedirectURL},
 	}
 
-	if h.cfg.ClientAuthMethod == ClientAuthBody {
+	switch h.cfg.ClientAuthMethod {
+	case ClientAuthBody:
 		data.Set("client_id", h.cfg.ClientID)
 		data.Set("client_secret", h.cfg.ClientSecret)
+	case ClientAuthNone:
+		data.Set("client_id", h.cfg.ClientID)
 	}
 
 	if eo.verifier != "" {
@@ -202,9 +206,12 @@ func (h *UpstreamHandler) RefreshTokenWithURL(ctx context.Context, refreshToken,
 		"refresh_token": {refreshToken},
 	}
 
-	if h.cfg.ClientAuthMethod == ClientAuthBody {
+	switch h.cfg.ClientAuthMethod {
+	case ClientAuthBody:
 		data.Set("client_id", h.cfg.ClientID)
 		data.Set("client_secret", h.cfg.ClientSecret)
+	case ClientAuthNone:
+		data.Set("client_id", h.cfg.ClientID)
 	}
 
 	for k, v := range h.cfg.RefreshParams {
@@ -251,9 +258,11 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tok
 		req.Header.Set("Accept", h.cfg.AcceptHeader)
 	}
 
-	if h.cfg.ClientAuthMethod == ClientAuthHeader {
+	switch h.cfg.ClientAuthMethod {
+	case ClientAuthHeader:
 		// RFC 6749 §2.3.1: URL-encode client credentials before base64.
 		req.SetBasicAuth(url.QueryEscape(h.cfg.ClientID), url.QueryEscape(h.cfg.ClientSecret))
+	case ClientAuthNone:
 	}
 
 	resp, err := h.httpClient.Do(req)
