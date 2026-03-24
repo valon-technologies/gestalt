@@ -29,7 +29,18 @@ variable "domain" {
 }
 
 variable "docs_image" {
-  description = "Initial container image for the docs service"
+  description = "Container image for the docs service (required, no default to prevent accidental reverts)"
   type        = string
-  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+variable "wif_pool_id" {
+  description = "Workload Identity Pool ID for GitHub Actions OIDC"
+  type        = string
+  default     = "github-pool"
+}
+
+variable "github_repository" {
+  description = "GitHub repository (owner/repo) allowed to authenticate via WIF"
+  type        = string
+  default     = "valon-technologies/gestalt"
 }
