@@ -122,6 +122,17 @@ integrations:
   restapi:
     display_name: REST API
     icon_file: ` + iconPath + `
+    headers:
+      X-Api-Key: secret-key-value
+    auth_header: X-Custom-Auth
+    auth_mapping:
+      headers:
+        Authorization: "Bearer {{token}}"
+    response_check: check_ok
+    token_prefix: "Token "
+    auth_style: raw
+    manual_auth: true
+    error_message_path: error.message
     upstreams:
       - type: rest
         url: ` + openAPIServer.URL + `
@@ -171,6 +182,30 @@ provider_dirs:
 	}
 	if restDef.IconSVG == "" {
 		t.Fatal("rest artifact missing embedded IconSVG")
+	}
+	if restDef.Headers != nil {
+		t.Fatalf("rest artifact Headers = %v, want nil (runtime-only field)", restDef.Headers)
+	}
+	if restDef.AuthHeader != "" {
+		t.Fatalf("rest artifact AuthHeader = %q, want empty (runtime-only field)", restDef.AuthHeader)
+	}
+	if restDef.AuthMapping != nil {
+		t.Fatalf("rest artifact AuthMapping = %v, want nil (runtime-only field)", restDef.AuthMapping)
+	}
+	if restDef.ResponseCheck != "" {
+		t.Fatalf("rest artifact ResponseCheck = %q, want empty (runtime-only field)", restDef.ResponseCheck)
+	}
+	if restDef.TokenPrefix != "" {
+		t.Fatalf("rest artifact TokenPrefix = %q, want empty (runtime-only field)", restDef.TokenPrefix)
+	}
+	if restDef.AuthStyle != "" {
+		t.Fatalf("rest artifact AuthStyle = %q, want empty (runtime-only field)", restDef.AuthStyle)
+	}
+	if restDef.ManualAuth {
+		t.Fatal("rest artifact ManualAuth = true, want false (runtime-only field)")
+	}
+	if restDef.ErrorMessagePath != "" {
+		t.Fatalf("rest artifact ErrorMessagePath = %q, want empty (runtime-only field)", restDef.ErrorMessagePath)
 	}
 
 	graphDef, err := provider.LoadFile(filepath.Join(outDir, "graphapi.json"))
