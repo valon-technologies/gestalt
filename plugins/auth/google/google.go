@@ -76,8 +76,9 @@ func New(cfg Config) (*Provider, error) {
 	}, nil
 }
 
-func (p *Provider) Name() string        { return "google" }
-func (p *Provider) DisplayName() string { return "Google" }
+func (p *Provider) Name() string                   { return "google" }
+func (p *Provider) DisplayName() string            { return "Google" }
+func (p *Provider) SessionTokenTTL() time.Duration { return p.ttl }
 
 func (p *Provider) LoginURL(state string) (string, error) {
 	return p.oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline), nil

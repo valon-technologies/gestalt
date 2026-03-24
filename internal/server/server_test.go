@@ -991,13 +991,15 @@ func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-				if code == "good-code" {
-					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
-				}
-				return nil, fmt.Errorf("bad code")
+		cfg.Auth = &stubAuthWithToken{
+			StubAuthProvider: coretesting.StubAuthProvider{
+				N: "test",
+				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+					if code == "good-code" {
+						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+					}
+					return nil, fmt.Errorf("bad code")
+				},
 			},
 		}
 	})
@@ -2362,6 +2364,10 @@ func (s *stubStatefulAuth) HandleCallbackWithState(ctx context.Context, code, st
 	return s.handleWithState(ctx, code, state)
 }
 
+func (s *stubStatefulAuth) IssueSessionToken(identity *core.UserIdentity) (string, error) {
+	return "session-token-" + identity.Email, nil
+}
+
 func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 	t.Parallel()
 
@@ -3290,6 +3296,10 @@ func (s *stubAuthWithToken) IssueSessionToken(identity *core.UserIdentity) (stri
 	return "dev-token-" + identity.Email, nil
 }
 
+func (s *stubAuthWithToken) SessionTokenTTL() time.Duration {
+	return time.Hour
+}
+
 func TestDevLogin(t *testing.T) {
 	t.Parallel()
 
@@ -3310,12 +3320,29 @@ func TestDevLogin(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var result map[string]string
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["token"] != "dev-token-dev@test.local" {
-		t.Fatalf("expected token dev-token-dev@test.local, got %q", result["token"])
+	if result["email"] != "dev@test.local" {
+		t.Fatalf("expected email dev@test.local, got %v", result["email"])
+	}
+	cookies := resp.Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "session_token" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("expected session_token cookie to be set")
+	}
+	if sessionCookie.Value != "dev-token-dev@test.local" {
+		t.Fatalf("expected cookie value dev-token-dev@test.local, got %q", sessionCookie.Value)
+	}
+	if !sessionCookie.HttpOnly {
+		t.Fatal("expected session cookie to be HttpOnly")
 	}
 }
 
@@ -3357,6 +3384,80 @@ func TestDevLogin_EmptyEmail(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCookieAuth(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubAuthProvider{
+		N: "test",
+		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token == "valid-cookie-token" {
+				return &core.UserIdentity{Email: "cookie@test.local"}, nil
+			}
+			return nil, fmt.Errorf("invalid token")
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	// Request without cookie should be rejected.
+	reqNoCookie, _ := http.NewRequest("GET", ts.URL+"/api/v1/integrations", nil)
+	noAuthResp, err := http.DefaultClient.Do(reqNoCookie)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = noAuthResp.Body.Close() }()
+	if noAuthResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without cookie, got %d", noAuthResp.StatusCode)
+	}
+
+	// Request with cookie should pass auth middleware.
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/integrations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "valid-cookie-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		t.Fatal("cookie auth should have passed middleware, got 401")
+	}
+}
+
+func TestLogout(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/auth/logout", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var found bool
+	for _, c := range resp.Cookies() {
+		if c.Name == "session_token" {
+			found = true
+			if c.MaxAge != -1 {
+				t.Fatalf("expected MaxAge -1, got %d", c.MaxAge)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected session_token cookie to be cleared")
 	}
 }
 

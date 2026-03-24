@@ -57,21 +57,32 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		header := r.Header.Get("Authorization")
-		if header == "" {
-			writeError(w, http.StatusUnauthorized, "missing authorization header")
-			return
+		// Try the session cookie first, then the Authorization header.
+		// If either yields a valid principal, use it.
+		var p *principal.Principal
+		var lastErr error
+
+		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+			p, lastErr = s.resolver.ResolveToken(r.Context(), c.Value)
 		}
 
-		token := strings.TrimPrefix(header, core.BearerScheme)
-		if token == header {
-			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
-			return
+		if p == nil {
+			if header := r.Header.Get("Authorization"); header != "" {
+				bearer := strings.TrimPrefix(header, core.BearerScheme)
+				if bearer == header {
+					writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+					return
+				}
+				p, lastErr = s.resolver.ResolveToken(r.Context(), bearer)
+			}
 		}
 
-		p, err := s.resolver.ResolveToken(r.Context(), token)
-		if err != nil {
-			if errors.Is(err, principal.ErrInvalidToken) {
+		if p == nil {
+			if lastErr == nil {
+				writeError(w, http.StatusUnauthorized, "missing authorization")
+				return
+			}
+			if errors.Is(lastErr, principal.ErrInvalidToken) {
 				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
