@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
 )
 
 type mockAuth struct{}
@@ -100,6 +101,97 @@ func TestBaseTokenParserOverridesAuthorization(t *testing.T) {
 	}
 	if resp["custom"] != "value" {
 		t.Fatalf("custom = %v, want value", resp["custom"])
+	}
+}
+
+func TestBaseExecuteRESTUsesMaterializedRequestState(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":    r.Header.Get("Authorization"),
+			"client":  r.Header.Get("X-Client"),
+			"mutated": r.Header.Get("X-Mutated"),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Endpoints: map[string]Endpoint{
+			"op": {Method: http.MethodGet, Path: "/test"},
+		},
+		TokenParser: func(token string) (string, map[string]string, error) {
+			return "Token " + token, map[string]string{"X-Client": "alpha"}, nil
+		},
+		RequestMutator: func(_ string, req *apiexec.Request, _ map[string]any) error {
+			req.AuthHeader = "Token override"
+			req.CustomHeaders["X-Mutated"] = "yes"
+			return nil
+		},
+	}
+
+	result, err := b.Execute(context.Background(), "op", nil, "original")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["auth"] != "Token override" {
+		t.Fatalf("auth = %v, want Token override", resp["auth"])
+	}
+	if resp["client"] != "alpha" {
+		t.Fatalf("client = %v, want alpha", resp["client"])
+	}
+	if resp["mutated"] != "yes" {
+		t.Fatalf("mutated = %v, want yes", resp["mutated"])
+	}
+}
+
+func TestBaseExecuteRESTAllowsBearerTokenOverrideFromRequestMutator(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":    r.Header.Get("Authorization"),
+			"mutated": r.Header.Get("X-Mutated"),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Endpoints: map[string]Endpoint{
+			"op": {Method: http.MethodGet, Path: "/test"},
+		},
+		RequestMutator: func(_ string, req *apiexec.Request, _ map[string]any) error {
+			req.Token = "override"
+			req.CustomHeaders = map[string]string{"X-Mutated": "yes"}
+			return nil
+		},
+	}
+
+	result, err := b.Execute(context.Background(), "op", nil, "original")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["auth"] != "Bearer override" {
+		t.Fatalf("auth = %v, want Bearer override", resp["auth"])
+	}
+	if resp["mutated"] != "yes" {
+		t.Fatalf("mutated = %v, want yes", resp["mutated"])
 	}
 }
 

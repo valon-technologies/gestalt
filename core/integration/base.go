@@ -2,14 +2,13 @@ package integration
 
 import (
 	"context"
-	"encoding/base64"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
 )
@@ -255,37 +254,7 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return b.executeGraphQL(ctx, query, params, token)
 	}
 
-	ep, ok := b.Endpoints[operation]
-	if !ok {
-		return nil, fmt.Errorf("unknown operation: %s", operation)
-	}
-
-	baseURL, headers := b.resolvedURLAndHeaders(ctx)
-
-	req := apiexec.Request{
-		Method:        ep.Method,
-		BaseURL:       baseURL,
-		Path:          ep.Path,
-		Params:        params,
-		CustomHeaders: headers,
-		CheckResponse: b.CheckResponse,
-	}
-
-	if err := b.applyAuth(&req, token); err != nil {
-		return nil, err
-	}
-
-	if b.RequestMutator != nil {
-		if err := b.RequestMutator(operation, &req, params); err != nil {
-			return nil, err
-		}
-	}
-
-	if pgn, ok := b.Pagination[operation]; ok {
-		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
-	}
-
-	return apiexec.Do(ctx, b.httpClient(), req)
+	return b.executeREST(ctx, operation, params, token)
 }
 
 func (b *Base) executeGraphQL(ctx context.Context, query string, params map[string]any, token string) (*core.OperationResult, error) {
@@ -303,62 +272,58 @@ func (b *Base) executeGraphQL(ctx context.Context, query string, params map[stri
 	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
 }
 
-type resolvedAuth struct {
-	token        string
-	authHeader   string
-	extraHeaders map[string]string
+func (b *Base) egressAuthStyle() egress.AuthStyle {
+	switch b.AuthStyle {
+	case AuthStyleRaw:
+		return egress.AuthStyleRaw
+	case AuthStyleNone:
+		return egress.AuthStyleNone
+	case AuthStyleBasic:
+		return egress.AuthStyleBasic
+	default:
+		return egress.AuthStyleBearer
+	}
 }
 
-func (b *Base) resolveAuth(token string) (resolvedAuth, error) {
-	if b.TokenParser != nil {
-		authHeader, extraHeaders, err := b.TokenParser(token)
-		if err != nil {
-			return resolvedAuth{}, err
-		}
-		return resolvedAuth{authHeader: authHeader, extraHeaders: extraHeaders}, nil
-	}
-	switch b.AuthStyle {
-	case AuthStyleBearer:
-		return resolvedAuth{token: token}, nil
-	case AuthStyleRaw:
-		return resolvedAuth{authHeader: token}, nil
-	case AuthStyleBasic:
-		return resolvedAuth{authHeader: "Basic " + base64.StdEncoding.EncodeToString([]byte(token))}, nil
-	default:
-		return resolvedAuth{}, nil
-	}
+func (b *Base) materializeCredential(token string) (egress.CredentialMaterialization, error) {
+	return egress.MaterializeCredential(token, b.egressAuthStyle(), b.TokenParser)
 }
 
 func (b *Base) applyAuth(req *apiexec.Request, token string) error {
-	auth, err := b.resolveAuth(token)
+	auth, err := b.materializeCredential(token)
 	if err != nil {
 		return err
 	}
-	req.Token = auth.token
-	req.AuthHeader = auth.authHeader
-	for k, v := range auth.extraHeaders {
+	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
+	for _, header := range auth.Headers {
 		if req.CustomHeaders == nil {
 			req.CustomHeaders = make(map[string]string)
 		}
-		req.CustomHeaders[k] = v
+		req.CustomHeaders[header.Name] = header.Value
 	}
 	return nil
 }
 
 func (b *Base) applyGraphQLAuth(req *apiexec.GraphQLRequest, token string) error {
-	auth, err := b.resolveAuth(token)
+	auth, err := b.materializeCredential(token)
 	if err != nil {
 		return err
 	}
-	req.Token = auth.token
-	req.AuthHeader = auth.authHeader
-	for k, v := range auth.extraHeaders {
+	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
+	for _, header := range auth.Headers {
 		if req.CustomHeaders == nil {
 			req.CustomHeaders = make(map[string]string)
 		}
-		req.CustomHeaders[k] = v
+		req.CustomHeaders[header.Name] = header.Value
 	}
 	return nil
+}
+
+func (b *Base) requestAuthFields(token string, auth egress.CredentialMaterialization) (string, string) {
+	if b.TokenParser == nil && b.AuthStyle == AuthStyleBearer {
+		return token, ""
+	}
+	return "", auth.Authorization
 }
 
 func copyHeaders(h map[string]string) map[string]string {

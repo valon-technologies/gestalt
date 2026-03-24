@@ -31,6 +31,8 @@ type PaginationConfig struct {
 	MaxPages     int
 }
 
+type RequestExecutor func(context.Context, *http.Client, Request) (*core.OperationResult, error)
+
 func (p PaginationConfig) maxPages() int {
 	if p.MaxPages > 0 {
 		return p.MaxPages
@@ -41,6 +43,20 @@ func (p PaginationConfig) maxPages() int {
 // DoPaginated fetches all pages of a paginated API endpoint and combines the
 // results into a single JSON array. It delegates each individual request to Do.
 func DoPaginated(ctx context.Context, client *http.Client, req Request, pgn PaginationConfig) (*core.OperationResult, error) {
+	return doPaginated(ctx, client, req, pgn, Do)
+}
+
+// DoPaginatedWithExecutor runs the shared pagination loop using a custom
+// request executor. This is used by callers that want apiexec's pagination
+// semantics while swapping the transport implementation.
+func DoPaginatedWithExecutor(ctx context.Context, client *http.Client, req Request, pgn PaginationConfig, exec RequestExecutor) (*core.OperationResult, error) {
+	if exec == nil {
+		exec = Do
+	}
+	return doPaginated(ctx, client, req, pgn, exec)
+}
+
+func doPaginated(ctx context.Context, client *http.Client, req Request, pgn PaginationConfig, exec RequestExecutor) (*core.OperationResult, error) {
 	params := copyParams(req.Params)
 	if params == nil {
 		params = make(map[string]any)
@@ -66,7 +82,7 @@ func DoPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 		pageReq := req
 		pageReq.Params = copyParams(params)
 
-		result, err := Do(ctx, client, pageReq)
+		result, err := exec(ctx, client, pageReq)
 		if err != nil {
 			return nil, err
 		}
