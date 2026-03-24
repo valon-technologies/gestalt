@@ -57,6 +57,12 @@ A composite integration can expose operations from different transports under a 
 
 Integrations with only a `type: mcp` upstream cannot be invoked over the HTTP API. Calling their operations via `GET/POST /api/v1/{integration}/{operation}` returns a 400 error indicating the integration is accessible only via MCP.
 
+## Multi-instance tool calls
+
+When a user has multiple connections to the same integration, MCP tool calls must include `_instance` as a tool argument to specify which connection to use. If the user has only one connection, the argument is optional — Gestalt selects the single connection automatically.
+
+When `_instance` is required but missing, the tool call returns an error listing the available instance names.
+
 ## Limitations
 
 Adding or removing integrations requires restarting the server.

@@ -24,8 +24,8 @@ All authenticated endpoints require an `Authorization: Bearer <token>` header. T
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/v1/integrations` | List loaded integrations. Returns an array of objects with `name`, `display_name`, `description`, `icon_svg`, `connected` (boolean), and `auth_type` (`"oauth"` or `"manual"`). |
-| DELETE | `/api/v1/integrations/{name}` | Disconnect an integration. Removes the stored token for the calling user. Returns `{"status":"disconnected"}`. |
+| GET | `/api/v1/integrations` | List loaded integrations. Returns an array of objects with `name`, `display_name`, `description`, `icon_svg`, `connected` (boolean), `instances` (array of `{"name": "..."}` objects), and `auth_types` (array of strings, e.g. `["oauth"]`, `["manual"]`, or `["oauth", "manual"]`). |
+| DELETE | `/api/v1/integrations/{name}` | Disconnect an integration. Removes the stored token for the calling user. Pass `?instance=NAME` to disconnect a specific instance. When multiple connections exist and no instance is specified, returns 409 with the available instance names. Returns `{"status":"disconnected"}`. |
 | GET | `/api/v1/integrations/{name}/operations` | List operations exposed by an integration. |
 | GET or POST | `/api/v1/{integration}/{operation}` | Execute an integration operation. MCP-only integrations return a 400 error. |
 
@@ -65,6 +65,7 @@ Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their c
 - **GET** requests pass parameters as query string key-value pairs.
 - **POST** requests pass parameters as a JSON body.
 - Path placeholders like `{integration}` and `{operation}` are resolved from the URL. Remaining parameters are sent as query or body values depending on the method.
+- When a user has multiple connections to an integration, pass `_instance` as a parameter to specify which connection to use. If omitted when multiple connections exist, the request returns `409 Conflict` with the available instance names.
 - Integrations backed only by a `type: mcp` upstream cannot be invoked over HTTP. Attempting to do so returns `400: this integration is accessible only via MCP`.
 
 ## Authentication

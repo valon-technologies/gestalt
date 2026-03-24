@@ -109,6 +109,7 @@ Each integration is defined under `integrations.<name>` and contains one or more
 | `auth_style` | How the token is sent: `bearer` (default), `raw`, `basic`, or `none`. |
 | `headers` | Default headers sent with every upstream request. |
 | `icon_file` | Path to an SVG file used as the integration icon. Relative paths resolve from the config file's directory. |
+| `manual_auth` | Boolean. When `true`, the integration supports both OAuth and manual authentication. Users see both connection options in the web UI. The API returns `auth_types: ["oauth", "manual"]`. |
 | `error_message_path` | Dot-delimited path for extracting error messages from upstream JSON responses. |
 
 ### Upstreams

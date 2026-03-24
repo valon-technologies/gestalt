@@ -47,7 +47,14 @@ Each stored credential includes:
 | Refresh token | Used to obtain a new access token when the current one expires. |
 | Expiry time | Timestamp at which the access token expires. |
 | Integration name | Ties the credential to a specific integration. |
+| Instance | Distinguishes multiple connections to the same integration. Defaults to `"default"`. |
 | Metadata | Additional fields extracted from the token response (if `token_metadata` is configured). |
+
+### Multiple connections
+
+A user can connect to the same integration more than once. Each connection is stored as a separate credential identified by the (user, integration, instance) tuple. This is useful when a user works across multiple accounts for the same service — for example, a personal Slack workspace and a work Slack workspace.
+
+When only one connection exists, Gestalt selects it automatically. When multiple exist, the caller must specify which instance to use by passing `_instance` as a parameter on the request. See [Multi-instance connections](/concepts/integrations#multi-instance-connections) for details.
 
 ## Token refresh
 
