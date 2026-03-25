@@ -1,0 +1,184 @@
+package pluginpkg
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"path"
+	"runtime"
+	"slices"
+	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+)
+
+const ManifestFile = "plugin.json"
+
+func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
+	var doc any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse manifest JSON: %w", err)
+	}
+	var schemaDoc any
+	if err := json.Unmarshal(pluginmanifestv1.ManifestJSONSchema, &schemaDoc); err != nil {
+		return nil, fmt.Errorf("parse embedded manifest schema: %w", err)
+	}
+
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("manifest.schema.json", schemaDoc); err != nil {
+		return nil, fmt.Errorf("load manifest schema: %w", err)
+	}
+	schema, err := compiler.Compile("manifest.schema.json")
+	if err != nil {
+		return nil, fmt.Errorf("compile manifest schema: %w", err)
+	}
+	if err := schema.Validate(doc); err != nil {
+		return nil, fmt.Errorf("manifest validation failed: %w", err)
+	}
+
+	var manifest pluginmanifestv1.Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("decode manifest: %w", err)
+	}
+	if err := ValidateManifest(&manifest); err != nil {
+		return nil, err
+	}
+	return &manifest, nil
+}
+
+func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
+	if manifest == nil {
+		return fmt.Errorf("manifest is required")
+	}
+	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
+		return fmt.Errorf("manifest schema_version must be %d", pluginmanifestv1.SchemaVersion)
+	}
+
+	artifactPaths := make(map[string]struct{}, len(manifest.Artifacts))
+	artifactPlatforms := make(map[string]struct{}, len(manifest.Artifacts))
+	for _, artifact := range manifest.Artifacts {
+		if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
+			return err
+		}
+		if _, exists := artifactPaths[artifact.Path]; exists {
+			return fmt.Errorf("duplicate artifact path %q", artifact.Path)
+		}
+		artifactPaths[artifact.Path] = struct{}{}
+
+		key := artifact.OS + "/" + artifact.Arch
+		if _, exists := artifactPlatforms[key]; exists {
+			return fmt.Errorf("duplicate artifact platform %q", key)
+		}
+		artifactPlatforms[key] = struct{}{}
+	}
+
+	for _, kind := range manifest.Kinds {
+		switch kind {
+		case pluginmanifestv1.KindProvider:
+			if manifest.Provider == nil {
+				return fmt.Errorf("provider metadata is required when kind %q is present", pluginmanifestv1.KindProvider)
+			}
+			if manifest.Provider.Protocol.Min > manifest.Provider.Protocol.Max {
+				return fmt.Errorf("provider.protocol.min must be <= provider.protocol.max")
+			}
+			if manifest.Provider.ConfigSchemaPath != "" {
+				if err := validateRelativePackagePath(manifest.Provider.ConfigSchemaPath, "provider config schema path"); err != nil {
+					return err
+				}
+			}
+			if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
+				return err
+			}
+		case pluginmanifestv1.KindRuntime:
+			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported manifest kind %q", kind)
+		}
+	}
+
+	return nil
+}
+
+func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Artifact, error) {
+	if manifest == nil {
+		return nil, fmt.Errorf("manifest is required")
+	}
+	for _, artifact := range manifest.Artifacts {
+		if artifact.OS == runtime.GOOS && artifact.Arch == runtime.GOARCH {
+			artifact := artifact
+			return &artifact, nil
+		}
+	}
+	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+}
+
+func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifactPaths map[string]struct{}) error {
+	if entry == nil {
+		return fmt.Errorf("%s entrypoint is required", kind)
+	}
+	if err := validateRelativePackagePath(entry.ArtifactPath, kind+" entrypoint artifact path"); err != nil {
+		return err
+	}
+	if _, ok := artifactPaths[entry.ArtifactPath]; !ok {
+		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
+	}
+	return nil
+}
+
+func validateRelativePackagePath(value, label string) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	if strings.HasPrefix(value, "/") {
+		return fmt.Errorf("%s must be relative", label)
+	}
+	cleaned := path.Clean(value)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%s must stay within the package", label)
+	}
+	if strings.Contains(value, "\\") {
+		return fmt.Errorf("%s must use forward slashes", label)
+	}
+	if cleaned != value {
+		return fmt.Errorf("%s must be normalized", label)
+	}
+	return nil
+}
+
+func EncodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
+	if err := ValidateManifest(manifest); err != nil {
+		return nil, err
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal manifest: %w", err)
+	}
+	return append(data, '\n'), nil
+}
+
+func Kinds(manifest *pluginmanifestv1.Manifest) []string {
+	if manifest == nil {
+		return nil
+	}
+	out := append([]string(nil), manifest.Kinds...)
+	slices.Sort(out)
+	return out
+}
+
+func ManifestEqual(a, b *pluginmanifestv1.Manifest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	aj, err := EncodeManifest(a)
+	if err != nil {
+		return false
+	}
+	bj, err := EncodeManifest(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(aj, bj)
+}
