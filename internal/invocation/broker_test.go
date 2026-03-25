@@ -314,3 +314,62 @@ func TestInvoke_PreservesExplicitEgressSubject(t *testing.T) {
 		t.Fatalf("subject = %+v, want agent agent-1", gotSubject)
 	}
 }
+
+func TestInvoke_AttachesIdentitySubjectFromPrincipalEmail(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	prov := &stubProviderWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "test-int",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				gotSubject, _ = egress.SubjectFromContext(ctx)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: "GET"}},
+	}
+
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), &coretesting.StubDatastore{})
+	p := &principal.Principal{
+		Identity: &core.UserIdentity{Email: "identity@example.invalid"},
+		UserID:   principal.IdentityPrincipal,
+	}
+
+	if _, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: "identity@example.invalid"}) {
+		t.Fatalf("subject = %+v, want identity email subject", gotSubject)
+	}
+}
+
+func TestInvoke_AttachesIdentitySubjectFromSentinelPrincipal(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	prov := &stubProviderWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "test-int",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				gotSubject, _ = egress.SubjectFromContext(ctx)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: "GET"}},
+	}
+
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), &coretesting.StubDatastore{})
+	p := &principal.Principal{UserID: principal.IdentityPrincipal}
+
+	if _, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: principal.IdentityPrincipal}) {
+		t.Fatalf("subject = %+v, want identity sentinel subject", gotSubject)
+	}
+}
