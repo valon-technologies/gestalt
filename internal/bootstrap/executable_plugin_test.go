@@ -8,10 +8,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/core"
+	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/testutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -95,6 +99,70 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 	}
 	if got.ProbeBody != `{"message":"from runtime"}` {
 		t.Fatalf("runtime output probe_body = %q", got.ProbeBody)
+	}
+}
+
+func TestExecutableOAuthProviderRefreshesWithOverrides(t *testing.T) {
+	t.Parallel()
+
+	bin := testutil.BuildGoBinary(t, "./internal/testdata/oauthplugin", "gestalt-plugin-oauth-fixture")
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"exec-oauth": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	ds := &coretesting.StubDatastore{
+		TokenFn: func(_ context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+			if userID != "u1" || integration != "exec-oauth" || instance != "default" {
+				t.Fatalf("unexpected token lookup: user=%q integration=%q instance=%q", userID, integration, instance)
+			}
+			expired := time.Now().Add(-time.Minute)
+			return &core.IntegrationToken{
+				UserID:       userID,
+				Integration:  integration,
+				Instance:     instance,
+				AccessToken:  "stale",
+				RefreshToken: "refresh:acme",
+				ExpiresAt:    &expired,
+				MetadataJSON: `{"tenant":"acme"}`,
+			}, nil
+		},
+		StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+			if tok.AccessToken != "fresh:acme|refresh:acme|https://acme.example.com/token" {
+				t.Fatalf("stored access token = %q", tok.AccessToken)
+			}
+			return nil
+		},
+	}
+
+	broker := invocation.NewBroker(providers, ds)
+	res, err := broker.Invoke(context.Background(), &principal.Principal{UserID: "u1"}, "exec-oauth", "default", "echo_token", nil)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal([]byte(res.Body), &body); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if body["token"] != "fresh:acme|refresh:acme|https://acme.example.com/token" {
+		t.Fatalf("invoke token = %q", body["token"])
+	}
+	if body["tenant"] != "acme" {
+		t.Fatalf("invoke tenant = %q", body["tenant"])
 	}
 }
 

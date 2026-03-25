@@ -550,6 +550,8 @@ type ProviderMetadata struct {
 	StaticCatalogJson      string                         `protobuf:"bytes,7,opt,name=static_catalog_json,json=staticCatalogJson,proto3" json:"static_catalog_json,omitempty"`
 	SupportsSessionCatalog bool                           `protobuf:"varint,8,opt,name=supports_session_catalog,json=supportsSessionCatalog,proto3" json:"supports_session_catalog,omitempty"`
 	SupportsPostConnect    bool                           `protobuf:"varint,9,opt,name=supports_post_connect,json=supportsPostConnect,proto3" json:"supports_post_connect,omitempty"`
+	AuthorizationBaseUrl   string                         `protobuf:"bytes,10,opt,name=authorization_base_url,json=authorizationBaseUrl,proto3" json:"authorization_base_url,omitempty"`
+	TokenUrl               string                         `protobuf:"bytes,11,opt,name=token_url,json=tokenUrl,proto3" json:"token_url,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -645,6 +647,20 @@ func (x *ProviderMetadata) GetSupportsPostConnect() bool {
 		return x.SupportsPostConnect
 	}
 	return false
+}
+
+func (x *ProviderMetadata) GetAuthorizationBaseUrl() string {
+	if x != nil {
+		return x.AuthorizationBaseUrl
+	}
+	return ""
+}
+
+func (x *ProviderMetadata) GetTokenUrl() string {
+	if x != nil {
+		return x.TokenUrl
+	}
+	return ""
 }
 
 type TokenResponse struct {
@@ -1028,11 +1044,14 @@ func (x *ExecuteRequest) GetConnectionParams() map[string]string {
 }
 
 type AuthorizationURLRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
-	Scopes        []string               `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	State            string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	Scopes           []string               `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	ConnectionParams map[string]string      `protobuf:"bytes,3,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	AuthBaseUrl      string                 `protobuf:"bytes,4,opt,name=auth_base_url,json=authBaseUrl,proto3" json:"auth_base_url,omitempty"`
+	IncludeVerifier  bool                   `protobuf:"varint,5,opt,name=include_verifier,json=includeVerifier,proto3" json:"include_verifier,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AuthorizationURLRequest) Reset() {
@@ -1079,9 +1098,31 @@ func (x *AuthorizationURLRequest) GetScopes() []string {
 	return nil
 }
 
+func (x *AuthorizationURLRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+func (x *AuthorizationURLRequest) GetAuthBaseUrl() string {
+	if x != nil {
+		return x.AuthBaseUrl
+	}
+	return ""
+}
+
+func (x *AuthorizationURLRequest) GetIncludeVerifier() bool {
+	if x != nil {
+		return x.IncludeVerifier
+	}
+	return false
+}
+
 type AuthorizationURLResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Verifier      string                 `protobuf:"bytes,2,opt,name=verifier,proto3" json:"verifier,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1123,11 +1164,21 @@ func (x *AuthorizationURLResponse) GetUrl() string {
 	return ""
 }
 
+func (x *AuthorizationURLResponse) GetVerifier() string {
+	if x != nil {
+		return x.Verifier
+	}
+	return ""
+}
+
 type ExchangeCodeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Code             string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	Verifier         string                 `protobuf:"bytes,2,opt,name=verifier,proto3" json:"verifier,omitempty"`
+	TokenUrl         string                 `protobuf:"bytes,3,opt,name=token_url,json=tokenUrl,proto3" json:"token_url,omitempty"`
+	ConnectionParams map[string]string      `protobuf:"bytes,4,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ExchangeCodeRequest) Reset() {
@@ -1167,11 +1218,34 @@ func (x *ExchangeCodeRequest) GetCode() string {
 	return ""
 }
 
+func (x *ExchangeCodeRequest) GetVerifier() string {
+	if x != nil {
+		return x.Verifier
+	}
+	return ""
+}
+
+func (x *ExchangeCodeRequest) GetTokenUrl() string {
+	if x != nil {
+		return x.TokenUrl
+	}
+	return ""
+}
+
+func (x *ExchangeCodeRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
 type RefreshTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RefreshToken  string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RefreshToken     string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	TokenUrl         string                 `protobuf:"bytes,2,opt,name=token_url,json=tokenUrl,proto3" json:"token_url,omitempty"`
+	ConnectionParams map[string]string      `protobuf:"bytes,3,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *RefreshTokenRequest) Reset() {
@@ -1209,6 +1283,20 @@ func (x *RefreshTokenRequest) GetRefreshToken() string {
 		return x.RefreshToken
 	}
 	return ""
+}
+
+func (x *RefreshTokenRequest) GetTokenUrl() string {
+	if x != nil {
+		return x.TokenUrl
+	}
+	return ""
+}
+
+func (x *RefreshTokenRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
 }
 
 type GetSessionCatalogRequest struct {
@@ -1615,7 +1703,7 @@ const file_sdk_pluginapi_v1_plugin_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\xc8\x04\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\x9b\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -1626,7 +1714,10 @@ const file_sdk_pluginapi_v1_plugin_proto_rawDesc = "" +
 	"\x11connection_params\x18\x06 \x03(\v29.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10connectionParams\x12.\n" +
 	"\x13static_catalog_json\x18\a \x01(\tR\x11staticCatalogJson\x128\n" +
 	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x122\n" +
-	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x1aj\n" +
+	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x124\n" +
+	"\x16authorization_base_url\x18\n" +
+	" \x01(\tR\x14authorizationBaseUrl\x12\x1b\n" +
+	"\ttoken_url\x18\v \x01(\tR\btokenUrl\x1aj\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
 	"\x05value\x18\x02 \x01(\v2%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x028\x01\"\xc4\x01\n" +
@@ -1670,16 +1761,34 @@ const file_sdk_pluginapi_v1_plugin_proto_rawDesc = "" +
 	"\x11connection_params\x18\x04 \x03(\v27.gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"G\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xca\x02\n" +
 	"\x17AuthorizationURLRequest\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\",\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12m\n" +
+	"\x11connection_params\x18\x03 \x03(\v2@.gestalt.plugin.v1.AuthorizationURLRequest.ConnectionParamsEntryR\x10connectionParams\x12\"\n" +
+	"\rauth_base_url\x18\x04 \x01(\tR\vauthBaseUrl\x12)\n" +
+	"\x10include_verifier\x18\x05 \x01(\bR\x0fincludeVerifier\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"H\n" +
 	"\x18AuthorizationURLResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\")\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1a\n" +
+	"\bverifier\x18\x02 \x01(\tR\bverifier\"\x92\x02\n" +
 	"\x13ExchangeCodeRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\":\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x1a\n" +
+	"\bverifier\x18\x02 \x01(\tR\bverifier\x12\x1b\n" +
+	"\ttoken_url\x18\x03 \x01(\tR\btokenUrl\x12i\n" +
+	"\x11connection_params\x18\x04 \x03(\v2<.gestalt.plugin.v1.ExchangeCodeRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x87\x02\n" +
 	"\x13RefreshTokenRequest\x12#\n" +
-	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xe5\x01\n" +
+	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x1b\n" +
+	"\ttoken_url\x18\x02 \x01(\tR\btokenUrl\x12i\n" +
+	"\x11connection_params\x18\x03 \x03(\v2<.gestalt.plugin.v1.RefreshTokenRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x01\n" +
 	"\x18GetSessionCatalogRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12n\n" +
 	"\x11connection_params\x18\x02 \x03(\v2A.gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
@@ -1747,7 +1856,7 @@ func file_sdk_pluginapi_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_sdk_pluginapi_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sdk_pluginapi_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_sdk_pluginapi_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_sdk_pluginapi_v1_plugin_proto_goTypes = []any{
 	(ConnectionMode)(0),               // 0: gestalt.plugin.v1.ConnectionMode
 	(PrincipalSource)(0),              // 1: gestalt.plugin.v1.PrincipalSource
@@ -1776,67 +1885,73 @@ var file_sdk_pluginapi_v1_plugin_proto_goTypes = []any{
 	(*StartRuntimeRequest)(nil),       // 24: gestalt.plugin.v1.StartRuntimeRequest
 	nil,                               // 25: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
 	nil,                               // 26: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                               // 27: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	nil,                               // 28: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
-	(*structpb.Value)(nil),            // 29: google.protobuf.Value
-	(*structpb.Struct)(nil),           // 30: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),     // 31: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),             // 32: google.protobuf.Empty
+	nil,                               // 27: gestalt.plugin.v1.AuthorizationURLRequest.ConnectionParamsEntry
+	nil,                               // 28: gestalt.plugin.v1.ExchangeCodeRequest.ConnectionParamsEntry
+	nil,                               // 29: gestalt.plugin.v1.RefreshTokenRequest.ConnectionParamsEntry
+	nil,                               // 30: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	nil,                               // 31: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	(*structpb.Value)(nil),            // 32: google.protobuf.Value
+	(*structpb.Struct)(nil),           // 33: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),     // 34: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),             // 35: google.protobuf.Empty
 }
 var file_sdk_pluginapi_v1_plugin_proto_depIdxs = []int32{
 	2,  // 0: gestalt.plugin.v1.Principal.identity:type_name -> gestalt.plugin.v1.UserIdentity
 	1,  // 1: gestalt.plugin.v1.Principal.source:type_name -> gestalt.plugin.v1.PrincipalSource
-	29, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
+	32, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
 	4,  // 3: gestalt.plugin.v1.Operation.parameters:type_name -> gestalt.plugin.v1.Parameter
 	4,  // 4: gestalt.plugin.v1.Capability.parameters:type_name -> gestalt.plugin.v1.Parameter
 	0,  // 5: gestalt.plugin.v1.ProviderMetadata.connection_mode:type_name -> gestalt.plugin.v1.ConnectionMode
 	25, // 6: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	30, // 7: gestalt.plugin.v1.TokenResponse.extra:type_name -> google.protobuf.Struct
-	31, // 8: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
-	31, // 9: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
-	31, // 10: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
-	31, // 11: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 7: gestalt.plugin.v1.TokenResponse.extra:type_name -> google.protobuf.Struct
+	34, // 8: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
+	34, // 9: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	34, // 10: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
+	34, // 11: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
 	5,  // 12: gestalt.plugin.v1.ListOperationsResponse.operations:type_name -> gestalt.plugin.v1.Operation
-	30, // 13: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	33, // 13: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
 	26, // 14: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	27, // 15: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	11, // 16: gestalt.plugin.v1.PostConnectRequest.token:type_name -> gestalt.plugin.v1.IntegrationToken
-	28, // 17: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
-	6,  // 18: gestalt.plugin.v1.ListCapabilitiesResponse.capabilities:type_name -> gestalt.plugin.v1.Capability
-	3,  // 19: gestalt.plugin.v1.InvokeRequest.principal:type_name -> gestalt.plugin.v1.Principal
-	30, // 20: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
-	30, // 21: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
-	6,  // 22: gestalt.plugin.v1.StartRuntimeRequest.initial_capabilities:type_name -> gestalt.plugin.v1.Capability
-	7,  // 23: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
-	32, // 24: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
-	32, // 25: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
-	13, // 26: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
-	14, // 27: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:input_type -> gestalt.plugin.v1.AuthorizationURLRequest
-	16, // 28: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:input_type -> gestalt.plugin.v1.ExchangeCodeRequest
-	17, // 29: gestalt.plugin.v1.ProviderPlugin.RefreshToken:input_type -> gestalt.plugin.v1.RefreshTokenRequest
-	18, // 30: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
-	20, // 31: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
-	24, // 32: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
-	32, // 33: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
-	23, // 34: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
-	32, // 35: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
-	8,  // 36: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
-	12, // 37: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
-	10, // 38: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
-	15, // 39: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:output_type -> gestalt.plugin.v1.AuthorizationURLResponse
-	9,  // 40: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:output_type -> gestalt.plugin.v1.TokenResponse
-	9,  // 41: gestalt.plugin.v1.ProviderPlugin.RefreshToken:output_type -> gestalt.plugin.v1.TokenResponse
-	19, // 42: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
-	21, // 43: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
-	32, // 44: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
-	32, // 45: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
-	10, // 46: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
-	22, // 47: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
-	36, // [36:48] is the sub-list for method output_type
-	24, // [24:36] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	27, // 15: gestalt.plugin.v1.AuthorizationURLRequest.connection_params:type_name -> gestalt.plugin.v1.AuthorizationURLRequest.ConnectionParamsEntry
+	28, // 16: gestalt.plugin.v1.ExchangeCodeRequest.connection_params:type_name -> gestalt.plugin.v1.ExchangeCodeRequest.ConnectionParamsEntry
+	29, // 17: gestalt.plugin.v1.RefreshTokenRequest.connection_params:type_name -> gestalt.plugin.v1.RefreshTokenRequest.ConnectionParamsEntry
+	30, // 18: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	11, // 19: gestalt.plugin.v1.PostConnectRequest.token:type_name -> gestalt.plugin.v1.IntegrationToken
+	31, // 20: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	6,  // 21: gestalt.plugin.v1.ListCapabilitiesResponse.capabilities:type_name -> gestalt.plugin.v1.Capability
+	3,  // 22: gestalt.plugin.v1.InvokeRequest.principal:type_name -> gestalt.plugin.v1.Principal
+	33, // 23: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
+	33, // 24: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
+	6,  // 25: gestalt.plugin.v1.StartRuntimeRequest.initial_capabilities:type_name -> gestalt.plugin.v1.Capability
+	7,  // 26: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
+	35, // 27: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
+	35, // 28: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
+	13, // 29: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
+	14, // 30: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:input_type -> gestalt.plugin.v1.AuthorizationURLRequest
+	16, // 31: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:input_type -> gestalt.plugin.v1.ExchangeCodeRequest
+	17, // 32: gestalt.plugin.v1.ProviderPlugin.RefreshToken:input_type -> gestalt.plugin.v1.RefreshTokenRequest
+	18, // 33: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
+	20, // 34: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
+	24, // 35: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
+	35, // 36: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
+	23, // 37: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
+	35, // 38: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
+	8,  // 39: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
+	12, // 40: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
+	10, // 41: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
+	15, // 42: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:output_type -> gestalt.plugin.v1.AuthorizationURLResponse
+	9,  // 43: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:output_type -> gestalt.plugin.v1.TokenResponse
+	9,  // 44: gestalt.plugin.v1.ProviderPlugin.RefreshToken:output_type -> gestalt.plugin.v1.TokenResponse
+	19, // 45: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
+	21, // 46: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
+	35, // 47: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
+	35, // 48: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
+	10, // 49: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
+	22, // 50: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
+	39, // [39:51] is the sub-list for method output_type
+	27, // [27:39] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_sdk_pluginapi_v1_plugin_proto_init() }
@@ -1850,7 +1965,7 @@ func file_sdk_pluginapi_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sdk_pluginapi_v1_plugin_proto_rawDesc), len(file_sdk_pluginapi_v1_plugin_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   27,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   3,
 		},
