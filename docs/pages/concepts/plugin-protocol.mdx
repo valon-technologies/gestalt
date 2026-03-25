@@ -63,9 +63,9 @@ Key fields in `ProviderMetadata`:
 | `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
 | `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
 | `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
-| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` structure. Currently advisory only; validation requires executing the binary. Phase 3 will introduce static manifests that allow validation without a running process. |
-| `min_protocol_version` | `int32` | Minimum protocol version the plugin supports (for handshake). |
-| `max_protocol_version` | `int32` | Maximum protocol version the plugin supports (for handshake). |
+| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` block. Used for startup validation for `plugin.command`, which still requires executing the binary, and for static validation when a packaged plugin is referenced via `plugin.ref`. |
+| `min_protocol_version` | `int32` | Minimum protocol version the plugin supports. |
+| `max_protocol_version` | `int32` | Maximum protocol version the plugin supports. |
 
 **`StartProvider(StartProviderRequest) → StartProviderResponse`**
 
@@ -165,6 +165,11 @@ The plugin process also inherits the host's full environment, plus any additiona
 
 Plugins are configured in `gestalt.yaml`. A provider plugin is declared inside an `integrations` entry; a runtime plugin is declared inside a `runtimes` entry.
 
+Gestalt supports two plugin workflows:
+
+- `plugin.command`: local development or ad hoc execution. Gestalt launches the given executable directly.
+- `plugin.ref`: packaged/installable workflow. Gestalt resolves an installed package from `.gestalt/plugins/` after `gestaltd prepare` writes a locked manifest and executable path into `gestalt.lock.json`.
+
 ### Provider plugin
 
 ```yaml
@@ -180,18 +185,40 @@ integrations:
 
 When `plugin` is set, `upstreams` cannot be used on the same integration. The plugin fully replaces the upstream-based provider.
 
+### Packaged provider plugin
+
+```yaml
+integrations:
+  my-custom-provider:
+    plugin:
+      ref: acme/provider@0.1.0
+      env:
+        MY_API_KEY: ${API_KEY}
+      config:
+        some_setting: value
+```
+
+For `plugin.ref`, install the package first, then run `gestaltd prepare`:
+
+```bash
+gestaltd plugin install --config ./gestalt.yaml ./acme-provider-0.1.0.tar.gz
+gestaltd prepare --config ./gestalt.yaml
+```
+
+`prepare` resolves the ref to a manifest and platform-specific executable path, validates packaged config against the manifest schema, and records the result in `gestalt.lock.json`.
+
 ### Runtime plugin
 
 ```yaml
 runtimes:
   my-agent:
+    config:
+      poll_interval: 30s
     plugin:
       command: ./my-plugin
       args: [runtime]
       env:
         LOG_LEVEL: debug
-      config:
-        poll_interval: 30s
     providers:
       - slack
       - linear
@@ -203,14 +230,15 @@ When `plugin` is set, `type` cannot be used on the same runtime.
 
 | Field | Required | Notes |
 |---|---|---|
-| `command` | Yes | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. |
-| `args` | No | Arguments passed to the command. |
+| `command` | Conditionally | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. Mutually exclusive with `ref`. |
+| `ref` | Conditionally | Stable package reference in `publisher/name@version` form. Mutually exclusive with `command`. |
+| `args` | No | Arguments passed to the command. Only valid with `command`. Packaged plugins use manifest-defined entrypoint args. |
 | `env` | No | Map of additional environment variables. Supports `${VAR}` expansion from the host environment. |
-| `config` | No | Arbitrary key-value map passed to the plugin via `StartProvider` (providers) or `Start` (runtimes). See below. |
+| `config` | No | Provider plugins only. Arbitrary key-value map passed to `StartProvider`. Runtime plugins use `runtimes.<name>.config` instead. |
 
-### Plugin config
+### Provider plugin config
 
-The `plugin.config` block holds plugin-specific configuration. It is sent as a `google.protobuf.Struct` to the plugin during the `StartProvider` or `Start` RPC, so the plugin receives it as a generic map of key-value pairs.
+The `plugin.config` block holds provider-plugin-specific configuration. It is sent as a `google.protobuf.Struct` during `StartProvider`, so the plugin receives it as a generic map of key-value pairs.
 
 ```yaml
 integrations:
@@ -225,7 +253,23 @@ integrations:
 
 Values prefixed with `secret://` are resolved by the host before being sent to the plugin. The host replaces them with the actual secret value from the configured secret manager, so the plugin never sees the `secret://` URI.
 
-Plugins can declare a `config_schema_json` field in their `ProviderMetadata` to advertise a JSON Schema for their config block. This is currently advisory only: because the schema is only available after the binary is running, the host cannot validate config before starting the process. Phase 3 will introduce static plugin manifests that allow pre-execution validation.
+Provider plugins can declare a `config_schema_json` field in `ProviderMetadata` to advertise a JSON Schema for this block. For `plugin.command`, the host still has to execute the binary to retrieve that schema before validating config. For packaged `plugin.ref`, the schema is loaded statically from the prepared manifest during `gestaltd prepare` and `gestaltd validate`.
+
+### Runtime config
+
+Runtime plugin configuration lives on the runtime itself, not inside `plugin.config`. The host sends `runtimes.<name>.config` to the plugin during the `Start` RPC.
+
+```yaml
+runtimes:
+  my-agent:
+    config:
+      poll_interval: 30s
+      workspace: ops
+    plugin:
+      ref: acme/runtime@0.1.0
+```
+
+For packaged runtime plugins, `gestaltd prepare` and `gestaltd validate` use the packaged manifest schema when one is present.
 
 ## Protocol version handshake
 
@@ -260,6 +304,8 @@ The overlay contract:
 - **No auth RPCs.** Overlay plugins should not implement `AuthorizationURL`, `ExchangeCode`, or `RefreshToken`. The host routes all auth through the declarative provider.
 - **Execute routing.** When a caller invokes an operation, the host checks the overlay's operation list first. If the operation matches, it is routed to the plugin. Otherwise, it falls through to the declarative upstream.
 - **Plugin mode.** The host sends `PLUGIN_MODE_OVERLAY` in the `StartProvider` call so the plugin knows it is running as an overlay.
+
+Exactly one of `command` or `ref` must be set.
 
 ## Error handling
 

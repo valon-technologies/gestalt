@@ -5,4 +5,5 @@ export default {
   "authentication-and-tokens": "Authentication and Tokens",
   "mcp-binding": "MCP Binding",
   "plugin-protocol": "Plugin Protocol",
+  "plugin-packaging": "Plugin Packaging",
 };

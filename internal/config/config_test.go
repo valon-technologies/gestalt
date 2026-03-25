@@ -499,6 +499,158 @@ runtimes:
     plugin:
       ref: acme/runtime@0.1.0
 `,
+			wantErr: false,
+		},
+		{
+			name: "runtime plugin config must be sibling config block",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    plugin:
+      ref: acme/runtime@0.1.0
+      config:
+        poll_interval: 30s
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime requires type or plugin",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker: {}
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime plugin cannot also define type",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    type: echo
+    plugin:
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin command is required",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin: {}
+`,
+			wantErr: true,
+		},
+		{
+			name: "egress default_action allow is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress:
+  default_action: allow
+`,
+			wantErr: false,
+		},
+		{
+			name: "egress default_action deny is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress:
+  default_action: deny
+`,
+			wantErr: false,
+		},
+		{
+			name: "egress default_action invalid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress:
+  default_action: block
+`,
+			wantErr: true,
+		},
+		{
+			name: "egress policy rule valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress:
+  policies:
+    - action: deny
+      provider: restricted
+`,
+			wantErr: false,
+		},
+		{
+			name: "egress policy rule invalid action",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress:
+  policies:
+    - action: block
+      provider: restricted
+`,
+			wantErr: true,
+		},
+		{
+			name: "egress empty is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+egress: {}
+`,
+			wantErr: false,
 		},
 	}
 

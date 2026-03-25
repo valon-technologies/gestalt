@@ -1,0 +1,68 @@
+# Plugin Packaging
+
+Phase 3 adds a local-first packaging workflow for third-party plugins. Instead of distributing a raw executable and pointing `plugin.command` at it, an author can ship a package archive and an operator can install it into a project-local store.
+
+## What a package contains
+
+A plugin package is a `.tar.gz` archive with:
+
+- `plugin.json`: the manifest
+- `artifacts/<os>/<arch>/...`: platform-specific executables
+- optional schema files such as `schemas/config.schema.json`
+
+The manifest is the static source of truth for:
+
+- plugin ID and version
+- supported kinds (`provider`, `runtime`)
+- protocol compatibility
+- artifact inventory
+- packaged config schema path
+
+## Project-local store
+
+Installed packages live next to the config file:
+
+```text
+.gestalt/plugins/<publisher>/<name>/<version>/
+```
+
+This keeps deploys self-contained and reproducible. `gestaltd prepare` records the resolved manifest and executable path in `gestalt.lock.json`.
+
+## CLI workflow
+
+Package a plugin from a prepared directory:
+
+```bash
+gestaltd plugin package --input ./package-dir --output ./acme-provider-0.1.0.tar.gz
+```
+
+Inspect a package without executing it:
+
+```bash
+gestaltd plugin inspect ./acme-provider-0.1.0.tar.gz
+```
+
+Install it into the local store:
+
+```bash
+gestaltd plugin install --config ./gestalt.yaml ./acme-provider-0.1.0.tar.gz
+```
+
+List installed packages for a config:
+
+```bash
+gestaltd plugin list --config ./gestalt.yaml
+```
+
+Prepare the config so refs resolve deterministically:
+
+```bash
+gestaltd prepare --config ./gestalt.yaml
+```
+
+## `plugin.command` vs `plugin.ref`
+
+- `plugin.command` is the development path. Gestalt launches a local executable directly.
+- `plugin.ref` is the packaged path. Gestalt resolves an installed package via the local store and `gestalt.lock.json`.
+
+Use `plugin.command` while authoring and iterating locally. Use `plugin.ref` for deterministic deployments and handoff to other operators.
