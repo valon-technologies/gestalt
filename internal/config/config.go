@@ -25,6 +25,35 @@ type Config struct {
 	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
+	Egress       EgressConfig              `yaml:"egress"`
+}
+
+type EgressConfig struct {
+	DefaultAction string                  `yaml:"default_action"`
+	Policies      []EgressPolicyRule      `yaml:"policies"`
+	Credentials   []EgressCredentialGrant `yaml:"credentials"`
+}
+
+type EgressPolicyRule struct {
+	Action      string `yaml:"action"`
+	SubjectKind string `yaml:"subject_kind"`
+	SubjectID   string `yaml:"subject_id"`
+	Provider    string `yaml:"provider"`
+	Operation   string `yaml:"operation"`
+	Method      string `yaml:"method"`
+	Host        string `yaml:"host"`
+	PathPrefix  string `yaml:"path_prefix"`
+}
+
+type EgressCredentialGrant struct {
+	Provider    string `yaml:"provider"`
+	Instance    string `yaml:"instance"`
+	SubjectKind string `yaml:"subject_kind"`
+	SubjectID   string `yaml:"subject_id"`
+	Operation   string `yaml:"operation"`
+	Method      string `yaml:"method"`
+	Host        string `yaml:"host"`
+	PathPrefix  string `yaml:"path_prefix"`
 }
 
 const (
@@ -449,6 +478,9 @@ func validate(cfg *Config) error {
 	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")
 	}
+	if err := validateEgress(&cfg.Egress); err != nil {
+		return err
+	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
@@ -523,6 +555,22 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	}
 	if plugin.Command == "" {
 		return fmt.Errorf("config validation: %s %q plugin.command is required", kind, name)
+	}
+	return nil
+}
+
+func validateEgress(cfg *EgressConfig) error {
+	switch cfg.DefaultAction {
+	case "", "allow", "deny":
+	default:
+		return fmt.Errorf("config validation: egress.default_action must be \"allow\" or \"deny\", got %q", cfg.DefaultAction)
+	}
+	for i := range cfg.Policies {
+		switch cfg.Policies[i].Action {
+		case "allow", "deny":
+		default:
+			return fmt.Errorf("config validation: egress.policies[%d].action must be \"allow\" or \"deny\", got %q", i, cfg.Policies[i].Action)
+		}
 	}
 	return nil
 }
