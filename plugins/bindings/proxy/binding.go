@@ -10,9 +10,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/plugins/bindings/internal/httpjson"
 )
+
+const maxRequestBodySize = 1 << 20 // 1 MB
 
 var _ core.Binding = (*Binding)(nil)
 
@@ -20,10 +23,14 @@ type Binding struct {
 	name     string
 	cfg      proxyConfig
 	resolver egress.Resolver
+	client   *http.Client
 }
 
-func New(name string, cfg proxyConfig, resolver egress.Resolver) *Binding {
-	return &Binding{name: name, cfg: cfg, resolver: resolver}
+func New(name string, cfg proxyConfig, resolver egress.Resolver, client *http.Client) *Binding {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &Binding{name: name, cfg: cfg, resolver: resolver, client: client}
 }
 
 func (b *Binding) Name() string           { return b.name }
@@ -48,25 +55,70 @@ func (b *Binding) Routes() []core.Route {
 }
 
 func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
-	norm, err := b.normalize(r)
+	if r.Method == http.MethodConnect {
+		httpjson.WriteError(w, http.StatusNotImplemented, "CONNECT proxying is not implemented yet")
+		return
+	}
+
+	resolved, body, err := b.resolve(r)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if r.Method == http.MethodConnect {
-		norm.Note = "CONNECT proxying is not implemented yet"
-	} else {
-		norm.Note = "proxy binding skeleton: request normalized, dispatch not wired"
+	scheme := resolveScheme(r)
+	result, err := egress.ExecuteHTTP(r.Context(), b.client, egress.HTTPRequestSpec{
+		Target:      resolved.Target,
+		BaseURL:     scheme + "://" + resolved.Target.Host,
+		Headers:     resolved.Headers,
+		Body:        body,
+		ContentType: r.Header.Get("Content-Type"),
+		Credential:  resolved.Credential,
+		Check:       acceptAllStatuses,
+		NoRetry:     true,
+	})
+	if err != nil {
+		httpjson.WriteError(w, http.StatusBadGateway, err.Error())
+		return
 	}
 
-	httpjson.WriteJSON(w, http.StatusNotImplemented, norm)
+	writeProxyResponse(w, result)
 }
 
-func (b *Binding) normalize(r *http.Request) (normalizedRequest, error) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+func writeProxyResponse(w http.ResponseWriter, result *core.OperationResult) {
+	for key, values := range result.Headers {
+		if isHopByHopHeader(key) {
+			continue
+		}
+		for _, v := range values {
+			w.Header().Add(key, v)
+		}
+	}
+	w.WriteHeader(result.Status)
+	_, _ = io.WriteString(w, result.Body)
+}
+
+// hopByHopHeaders are headers that apply to a single transport connection and
+// must not be forwarded by proxies (RFC 7230 section 6.1).
+var hopByHopHeaders = map[string]bool{
+	"Connection":          true,
+	"Keep-Alive":          true,
+	"Proxy-Authenticate":  true,
+	"Proxy-Authorization": true,
+	"Te":                  true,
+	"Trailer":             true,
+	"Transfer-Encoding":   true,
+	"Upgrade":             true,
+}
+
+func isHopByHopHeader(key string) bool {
+	return hopByHopHeaders[key]
+}
+
+func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodySize))
 	if err != nil {
-		return normalizedRequest{}, fmt.Errorf("reading request body: %w", err)
+		return egress.Resolution{}, nil, fmt.Errorf("reading request body: %w", err)
 	}
 	defer func() { _ = r.Body.Close() }()
 
@@ -86,17 +138,29 @@ func (b *Binding) normalize(r *http.Request) (normalizedRequest, error) {
 		Headers: headers,
 	})
 	if err != nil {
-		return normalizedRequest{}, err
+		return egress.Resolution{}, nil, err
 	}
 
-	norm := normalizedRequest{
-		Policy: resolved.Policy,
-		Target: resolved.Target,
+	return resolved, body, nil
+}
+
+// acceptAllStatuses allows the proxy to forward upstream error responses
+// instead of treating them as transport failures.
+var acceptAllStatuses apiexec.ResponseChecker = func(int, []byte) error { return nil }
+
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
+
+func resolveScheme(r *http.Request) string {
+	if r.URL != nil && r.URL.Scheme != "" {
+		return r.URL.Scheme
 	}
-	if len(body) > 0 {
-		norm.Body = string(body)
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto == schemeHTTP || proto == schemeHTTPS {
+		return proto
 	}
-	return norm, nil
+	return schemeHTTPS
 }
 
 func resolveHost(r *http.Request) string {
