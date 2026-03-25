@@ -77,6 +77,7 @@ func (p *echoRuntimePlugin) Start(ctx context.Context, req *pluginapiv1.StartRun
 	record := map[string]any{
 		"name":             req.GetName(),
 		"capability_count": len(capsResp.GetCapabilities()),
+		"capabilities":     capabilityNames(capsResp.GetCapabilities()),
 	}
 
 	probeProvider, _ := cfg["probe_provider"].(string)
@@ -119,6 +120,14 @@ func (p *echoRuntimePlugin) Stop(context.Context, *emptypb.Empty) (*emptypb.Empt
 	}
 	log.Printf("echo runtime %q stopped", p.name)
 	return &emptypb.Empty{}, nil
+}
+
+func capabilityNames(caps []*pluginapiv1.Capability) []string {
+	names := make([]string, 0, len(caps))
+	for _, cap := range caps {
+		names = append(names, cap.GetProvider()+"."+cap.GetOperation())
+	}
+	return names
 }
 
 func writeJSON(path string, value any) error {
