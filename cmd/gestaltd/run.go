@@ -30,6 +30,8 @@ func run(args []string) error {
 		case "-h", "--help", "help":
 			printMainUsage(os.Stderr)
 			return flag.ErrHelp
+		case "plugin":
+			return runPlugin(args[1:])
 		case "dev":
 			return runDev(args[1:])
 		case "serve":
@@ -304,12 +306,14 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]")
 	writeUsageLine(w, "  gestaltd dev [--config PATH]")
+	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH]")
 	writeUsageLine(w, "  gestaltd prepare [--config PATH]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  dev         Refresh prepared provider artifacts if needed, then start the server")
+	writeUsageLine(w, "  plugin      Package, install, inspect, or list plugins")
 	writeUsageLine(w, "  serve       Start the server with prepared REST/GraphQL providers only")
 	writeUsageLine(w, "  prepare     Resolve remote REST/GraphQL upstreams into gestalt.lock.json and .gestalt/providers/")
 	writeUsageLine(w, "  validate    Load and validate configuration, then exit")
