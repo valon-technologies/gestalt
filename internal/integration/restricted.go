@@ -187,6 +187,16 @@ func (r *restrictedOAuth) AuthorizationBaseURL() string {
 	return ""
 }
 
+func (r *restrictedOAuth) StartOAuth(state string, scopes []string) (string, string) {
+	type starter interface {
+		StartOAuth(state string, scopes []string) (string, string)
+	}
+	if s, ok := r.oauth.(starter); ok {
+		return s.StartOAuth(state, scopes)
+	}
+	return r.oauth.AuthorizationURL(state, scopes), ""
+}
+
 func (r *restrictedOAuth) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
 	type overrider interface {
 		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
