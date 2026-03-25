@@ -223,6 +223,11 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&intg, resolve); err != nil {
 			return err
 		}
+		if intg.Plugin != nil {
+			if err := resolveYAMLNode(&intg.Plugin.Config, resolve); err != nil {
+				return err
+			}
+		}
 		cfg.Integrations[name] = intg
 	}
 	for name := range cfg.AuthProfiles {
@@ -247,6 +252,11 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		}
 		if err := resolveYAMLNode(&rt.Config, resolve); err != nil {
 			return err
+		}
+		if rt.Plugin != nil {
+			if err := resolveYAMLNode(&rt.Plugin.Config, resolve); err != nil {
+				return err
+			}
 		}
 		cfg.Runtimes[name] = rt
 	}
@@ -496,6 +506,11 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			mode = config.PluginModeReplace
 		}
 
+		pluginConfig, err := nodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
+
 		if mode == config.PluginModeOverlay {
 			baseIntg := intg
 			baseIntg.Plugin = nil
@@ -514,6 +529,9 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 				Command: intg.Plugin.Command,
 				Args:    intg.Plugin.Args,
 				Env:     intg.Plugin.Env,
+				Name:    name,
+				Config:  pluginConfig,
+				Mode:    mode,
 			})
 			if err != nil {
 				if c, ok := baseProv.(interface{ Close() error }); ok {
@@ -528,6 +546,9 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			Command: intg.Plugin.Command,
 			Args:    intg.Plugin.Args,
 			Env:     intg.Plugin.Env,
+			Name:    name,
+			Config:  pluginConfig,
+			Mode:    mode,
 		})
 	}
 

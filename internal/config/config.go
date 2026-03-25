@@ -66,6 +66,7 @@ type ExecutablePluginDef struct {
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
+	Config  yaml.Node         `yaml:"config"`
 }
 
 type RuntimeDef struct {

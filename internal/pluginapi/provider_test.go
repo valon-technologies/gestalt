@@ -103,7 +103,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newProviderTestClient(t, &roundTripProvider{})
-	prov, err := NewRemoteProvider(context.Background(), client)
+	prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, "")
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}

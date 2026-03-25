@@ -28,6 +28,9 @@ type ExecConfig struct {
 	Command string
 	Args    []string
 	Env     map[string]string
+	Name    string
+	Config  map[string]any
+	Mode    string
 }
 
 type managedRuntime struct {
@@ -73,7 +76,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 	}
 
 	client := pluginapiv1.NewProviderPluginClient(proc.conn)
-	prov, err := NewRemoteProvider(ctx, client, WithCloser(proc))
+	prov, err := NewRemoteProvider(ctx, client, cfg.Name, cfg.Config, cfg.Mode, WithCloser(proc))
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -138,7 +141,7 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	if socket == "" {
 		return fmt.Errorf("%s is required", pluginapiv1.EnvPluginSocket)
 	}
-	if err := os.RemoveAll(socket); err != nil {
+	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
 	}
 
