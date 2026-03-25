@@ -30,6 +30,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/server"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
+	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
 	"gopkg.in/yaml.v3"
 )
 
@@ -2868,7 +2869,6 @@ func TestListBindings_WithBindings(t *testing.T) {
 	bindings := registry.NewBindingMap()
 	if err := bindings.Register("my-webhook", &coretesting.StubBinding{
 		N: "my-webhook",
-		K: core.BindingTrigger,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2912,9 +2912,8 @@ func TestBindingRoutesMounted(t *testing.T) {
 	bindings := registry.NewBindingMap()
 	if err := bindings.Register("my-webhook", &coretesting.StubBinding{
 		N: "my-webhook",
-		K: core.BindingTrigger,
 		R: []core.Route{
-			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler},
+			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler, Public: true},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -2958,7 +2957,6 @@ func TestSurfaceBindingRequiresAuth(t *testing.T) {
 	bindings := registry.NewBindingMap()
 	if err := bindings.Register("test-surface", &coretesting.StubBinding{
 		N: "test-surface",
-		K: core.BindingSurface,
 		R: []core.Route{
 			{Method: http.MethodPost, Pattern: "/invoke", Handler: handler},
 		},
@@ -2994,9 +2992,8 @@ func TestTriggerBindingRemainsPublic(t *testing.T) {
 	bindings := registry.NewBindingMap()
 	if err := bindings.Register("test-trigger", &coretesting.StubBinding{
 		N: "test-trigger",
-		K: core.BindingTrigger,
 		R: []core.Route{
-			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler},
+			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler, Public: true},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -3015,6 +3012,58 @@ func TestTriggerBindingRemainsPublic(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebhookBindingRemainsPublic(t *testing.T) {
+	t.Parallel()
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("webhook-public", newTestWebhookBinding(t, "webhook-public", "/incoming")); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Bindings = bindings
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/api/v1/bindings/webhook-public/incoming", "application/json", bytes.NewBufferString(`{"ok":true}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestProxyBindingRequiresAuth(t *testing.T) {
+	t.Parallel()
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("test-proxy", newTestProxyBinding(t, "test-proxy", "/proxy")); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Bindings = bindings
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/test-proxy/proxy/messages", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
 }
 
@@ -3175,6 +3224,25 @@ func newTestProxyBinding(t *testing.T, name, path string) core.Binding {
 	}, bootstrap.BindingDeps{})
 	if err != nil {
 		t.Fatalf("proxy factory: %v", err)
+	}
+	return binding
+}
+
+func newTestWebhookBinding(t *testing.T, name, path string) core.Binding {
+	t.Helper()
+
+	cfgYAML := "path: " + path
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatalf("unmarshal webhook config: %v", err)
+	}
+
+	binding, err := webhook.Factory(context.Background(), name, config.BindingDef{
+		Type:   "webhook",
+		Config: *node.Content[0],
+	}, bootstrap.BindingDeps{Invoker: &testutil.StubInvoker{}})
+	if err != nil {
+		t.Fatalf("webhook factory: %v", err)
 	}
 	return binding
 }

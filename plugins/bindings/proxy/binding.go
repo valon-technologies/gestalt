@@ -35,8 +35,7 @@ func New(name, provider string, cfg proxyConfig, resolver egress.Resolver, clien
 	return &Binding{name: name, provider: provider, cfg: cfg, resolver: resolver, client: client}
 }
 
-func (b *Binding) Name() string           { return b.name }
-func (b *Binding) Kind() core.BindingKind { return core.BindingSurface }
+func (b *Binding) Name() string { return b.name }
 
 func (b *Binding) Start(_ context.Context) error { return nil }
 func (b *Binding) Close() error                  { return nil }
@@ -50,6 +49,7 @@ func (b *Binding) Routes() []core.Route {
 				Method:  method,
 				Pattern: pattern,
 				Handler: http.HandlerFunc(b.handle),
+				Public:  false,
 			})
 		}
 	}
