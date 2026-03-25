@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/valon-technologies/gestalt-pluginapi
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
