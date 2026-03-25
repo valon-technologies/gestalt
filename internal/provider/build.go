@@ -117,13 +117,6 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	switch {
 	case def.StructuredResponseCheck != nil:
 		base.CheckResponse = buildStructuredResponseChecker(def.StructuredResponseCheck)
-	case def.ResponseCheck != "":
-		log.Printf("WARNING: %s: response_check %q is deprecated; use structured_response_check or error_message_path instead", def.Provider, def.ResponseCheck)
-		checker, ok := lookupResponseChecker(def.ResponseCheck)
-		if !ok {
-			return nil, fmt.Errorf("%s: unknown response_check %q", def.Provider, def.ResponseCheck)
-		}
-		base.CheckResponse = checker
 	case def.ErrorMessagePath != "":
 		msgPath := def.ErrorMessagePath
 		base.CheckResponse = func(status int, body []byte) error {
@@ -141,13 +134,6 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	}
 
 	switch {
-	case def.TokenParser != "":
-		log.Printf("WARNING: %s: token_parser %q is deprecated; use auth_mapping or auth_header instead", def.Provider, def.TokenParser)
-		parser, ok := lookupTokenParser(def.TokenParser)
-		if !ok {
-			return nil, fmt.Errorf("%s: unknown token_parser %q", def.Provider, def.TokenParser)
-		}
-		base.TokenParser = parser
 	case def.AuthMapping != nil && len(def.AuthMapping.Headers) > 0:
 		mapping := def.AuthMapping.Headers
 		base.TokenParser = func(token string) (string, map[string]string, error) {
@@ -282,7 +268,6 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 	}
 	setStr(&def.Auth.ScopeSeparator, o.ScopeSeparator)
 	setStr(&def.Auth.AcceptHeader, o.AcceptHeader)
-	setStr(&def.Auth.ResponseHook, o.ResponseHook)
 	if o.PKCE {
 		def.Auth.PKCE = true
 	}
@@ -317,8 +302,6 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 		}
 	}
 	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
-	setStr(&def.ResponseCheck, intg.ResponseCheck)
-	setStr(&def.TokenParser, intg.TokenParser)
 	setStr(&def.RequestMutator, intg.RequestMutator)
 	setStr(&def.PostConnect, intg.PostConnect)
 	if intg.ManualAuth {
@@ -404,13 +387,6 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 			}
 			return nil
 		}))
-	} else if def.Auth.ResponseHook != "" {
-		log.Printf("WARNING: %s: auth response_hook %q is deprecated; use auth.structured_response_check instead", def.Provider, def.Auth.ResponseHook)
-		hook, ok := lookupResponseHook(def.Auth.ResponseHook)
-		if !ok {
-			return nil, fmt.Errorf("unknown auth response_hook %q", def.Auth.ResponseHook)
-		}
-		opts = append(opts, oauth.WithResponseHook(hook))
 	}
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)

@@ -32,16 +32,6 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 | `file` | One secret per file from a base directory. Path traversal protected. Trims trailing newlines. |
 | `gcp_secret_manager` | Google Cloud Secret Manager. Configurable project and version (default: `latest`). 10-second timeout per access. |
 
-## Integration hooks
-
-> **Deprecation notice:** String-based hook references (`response_check`, `auth.response_hook`, `token_parser`) are deprecated. Use the declarative alternatives instead: `structured_response_check` for response validation, `auth.structured_response_check` for auth response validation, and `auth_mapping` or `auth_header` for token parsing. See the [integrations concept page](/concepts/integrations) for details.
-
-| Name | Hook type | Behavior |
-|---|---|---|
-| `slack_ok` | `response_check`, `response_hook` | Validates `"ok": true` in Slack API responses. |
-| `datadog_keys` | `token_parser` | Parses `api_key` and `app_key` from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
-| `hex_response` | `response_check` | Validates Hex-specific response format. |
-
 ## Bindings
 
 | Name | Notes |

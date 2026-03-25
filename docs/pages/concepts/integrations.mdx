@@ -181,15 +181,12 @@ Hooks handle the quirks of individual APIs without changing the core runtime.
 
 | Hook type | Config field | Purpose |
 |---|---|---|
-| Structured response check | `structured_response_check` | Declarative response validation using body matching and error extraction. Preferred approach. |
-| Response check | `response_check` | Validate a successful-looking response body. **Deprecated** — use `structured_response_check` instead. |
-| Token parser | `token_parser` | Turn the stored token into auth headers. **Deprecated** — use `auth_mapping` or `auth_header` instead. |
+| Structured response check | `structured_response_check` | Declarative response validation using body matching and error extraction. |
 | Request mutator | `request_mutator` | Rewrite or augment outgoing requests before execution. |
-| Auth response hook | `auth.response_hook` | Validate token exchange responses from OAuth providers. **Deprecated** — use `auth.structured_response_check` instead. |
 
 ### Structured response check
 
-The `structured_response_check` field replaces string-based `response_check` and `auth.response_hook` references with a declarative definition. It supports two modes that can be used together or independently:
+The `structured_response_check` field provides declarative response validation. It supports two modes that can be used together or independently:
 
 **Success body match** — assert that specific fields in the JSON response have expected values. When the match fails, the error message is extracted from the path given by `error_message_path`:
 
@@ -228,20 +225,6 @@ integrations:
           ok: true
         error_message_path: error
 ```
-
-When both `structured_response_check` and `response_check` are set, the structured check takes precedence and the string hook is ignored.
-
-### Legacy hooks
-
-String-based hook references (`response_check`, `token_parser`, `auth.response_hook`) are registered by name in Go code and referenced by that name in config. They continue to work but emit deprecation warnings at startup.
-
-## Built-in hooks
-
-| Name | Integration | Behavior |
-|---|---|---|
-| `slack_ok` | Slack | Checks `"ok": true` in response body. Used as both `response_check` and `response_hook`. |
-| `datadog_keys` | Datadog | Parses API and application keys from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
-| `hex_response` | Hex | Validates Hex-specific response format. |
 
 ## Restrictions
 
