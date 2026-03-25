@@ -512,6 +512,11 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 		}
 
+		if len(pluginConfig) > 0 {
+			log.Printf("WARNING: validating plugin %q config requires executing plugin binary %q; use manifests for static validation (Phase 3)",
+				name, intg.Plugin.Command)
+		}
+
 		if mode == config.PluginModeOverlay {
 			baseIntg := intg
 			baseIntg.Plugin = nil

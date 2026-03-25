@@ -46,6 +46,11 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 	if err := checkProtocolCompatibility(meta); err != nil {
 		return nil, err
 	}
+	if schemaJSON := meta.GetConfigSchemaJson(); schemaJSON != "" && len(config) > 0 {
+		if err := validateConfigSchema(config, schemaJSON); err != nil {
+			return nil, fmt.Errorf("plugin config validation: %w", err)
+		}
+	}
 	if err := callStartProvider(ctx, client, name, config, mode); err != nil {
 		return nil, err
 	}

@@ -81,6 +81,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.18 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
@@ -116,6 +117,8 @@ require (
 )
 
 replace (
+	github.com/valon-technologies/gestalt/examples/plugins/provider-go => ./examples/plugins/provider-go
+	github.com/valon-technologies/gestalt/examples/plugins/runtime-go => ./examples/plugins/runtime-go
 	github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
 	github.com/valon-technologies/gestalt/sdk/pluginsdk => ./sdk/pluginsdk
 )
