@@ -19,7 +19,8 @@ gestalt (host)                         plugin (subprocess)
 │              │◄─ gRPC connection ────→│              │
 │              │                        │              │
 │  Provider    │── GetMetadata ───────→ │  Provider    │
-│  client      │── ListOperations ────→ │  server      │
+│  client      │── StartProvider ─────→ │  server      │
+│              │── ListOperations ────→ │              │
 │              │── Execute ───────────→ │              │
 └──────────────┘                       └──────────────┘
 ```
@@ -39,15 +40,23 @@ Gestalt supports two plugin types, each defined as a separate gRPC service:
 
 A single binary can serve either role. The echo plugin (`cmd/gestalt-plugin-echo`) demonstrates both modes, selected by a command-line argument.
 
+## Protocol version handshake
+
+The host and plugin negotiate a protocol version during startup. The plugin advertises its supported range via `min_protocol_version` and `max_protocol_version` in `ProviderMetadata`. The host checks that its own version falls within that range, then sends the chosen version in `StartProviderRequest.protocol_version`. The plugin echoes it back in `StartProviderResponse.protocol_version` to confirm.
+
+If the versions are incompatible, the host refuses to start the plugin. Plugins that omit the version fields (both zero) are treated as compatible for backward compatibility.
+
+The current protocol version is `1`, defined as `CurrentProtocolVersion` in `sdk/pluginapi/v1`.
+
 ## Provider plugins
 
-A provider plugin implements the `ProviderPlugin` gRPC service. Three RPCs are required; five are optional.
+A provider plugin implements the `ProviderPlugin` gRPC service. Four RPCs are required; five are optional.
 
 ### Required RPCs
 
 **`GetMetadata(google.protobuf.Empty) → ProviderMetadata`**
 
-Called once at startup immediately after the gRPC connection is established. Returns the provider's identity, connection mode, supported auth types, connection parameter definitions, and feature flags.
+Called once at startup immediately after the gRPC connection is established. Returns the provider's identity, connection mode, supported auth types, connection parameter definitions, protocol version range, and feature flags.
 
 Key fields in `ProviderMetadata`:
 
@@ -61,10 +70,29 @@ Key fields in `ProviderMetadata`:
 | `connection_params` | `map<string, ConnectionParamDef>` | Named parameters required to connect (e.g. workspace URL). |
 | `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
 | `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
+| `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
+| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` block. Currently used for documentation only; runtime validation requires executing the binary until static manifests land in a future release. |
+| `min_protocol_version` | `int32` | Minimum protocol version the plugin supports. |
+| `max_protocol_version` | `int32` | Maximum protocol version the plugin supports. |
+
+**`StartProvider(StartProviderRequest) → StartProviderResponse`**
+
+Called once after `GetMetadata`, before `ListOperations`. Delivers the integration name, the `plugin.config` values from YAML, the plugin mode (`REPLACE` or `OVERLAY`), and the negotiated protocol version.
+
+The plugin should use this call to apply config and confirm the protocol version. Return the same `protocol_version` that was sent in the request. If the plugin returns `UNIMPLEMENTED`, the host treats it as a legacy plugin and continues without error.
+
+Key fields in `StartProviderRequest`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | `string` | The integration name from `gestalt.yaml`. |
+| `config` | `google.protobuf.Struct` | The `plugin.config` values from YAML. |
+| `mode` | `PluginMode` | `REPLACE` (full provider) or `OVERLAY` (only operations, host handles auth/session). |
+| `protocol_version` | `int32` | The protocol version the host selected. |
 
 **`ListOperations(google.protobuf.Empty) → ListOperationsResponse`**
 
-Called once at startup, right after `GetMetadata`. Returns the full list of operations this provider exposes. Each `Operation` has a `name`, `description`, HTTP `method`, and a list of `Parameter` definitions.
+Called once at startup, right after `StartProvider`. Returns the full list of operations this provider exposes. Each `Operation` has a `name`, `description`, HTTP `method`, and a list of `Parameter` definitions.
 
 **`Execute(ExecuteRequest) → OperationResult`**
 
@@ -87,6 +115,24 @@ Implement these if your provider manages its own OAuth flow (when `auth_types` i
 | RPC | Request | Response | Purpose |
 |---|---|---|---|
 | `GetSessionCatalog` | `token`, `connection_params` | `catalog_json` | Returns a per-session resource catalog. Only called if `supports_session_catalog` is `true` in metadata. |
+
+### Overlay plugins
+
+An overlay plugin uses `PLUGIN_MODE_OVERLAY` mode. It only owns its operations and `Execute` logic; authentication, session management, and connection parameters are handled by the host using the declarative config for that integration. This is useful when you want to add custom operations to a provider that already has working auth configured via `upstreams`.
+
+Overlay plugins must still implement `GetMetadata`, `StartProvider`, `ListOperations`, and `Execute`. The host ignores the overlay plugin's `auth_types` and `connection_mode` in metadata, using the declarative config values instead.
+
+## Provider boot sequence
+
+The full startup sequence for a provider plugin:
+
+1. Host spawns the plugin process with `GESTALT_PLUGIN_SOCKET`.
+2. Plugin binds a gRPC server on the socket.
+3. Host connects and calls `GetMetadata` to learn the plugin's identity and protocol version range.
+4. Host calls `checkProtocolCompatibility` to verify its version falls within `[min_protocol_version, max_protocol_version]`.
+5. Host calls `StartProvider` with the integration name, config, mode, and protocol version.
+6. Host calls `ListOperations` to discover available operations.
+7. The plugin is now live and ready to receive `Execute` calls.
 
 ## Runtime plugins
 
@@ -117,7 +163,7 @@ To use host callbacks, dial the `GESTALT_RUNTIME_HOST_SOCKET` address as a stand
 2. Gestalt sets `GESTALT_PLUGIN_SOCKET` (and `GESTALT_RUNTIME_HOST_SOCKET` for runtimes) in the subprocess environment.
 3. Gestalt spawns the plugin process. The plugin's stdout and stderr are forwarded to the host's stderr.
 4. The plugin reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to that Unix socket path, and starts serving.
-5. Gestalt polls the socket every 25ms. Once the connection succeeds, it calls `GetMetadata` and `ListOperations` (for providers) or `Start` (for runtimes).
+5. Gestalt polls the socket every 25ms. Once the connection succeeds, it runs the boot sequence: `GetMetadata` → `checkProtocolCompatibility` → `StartProvider` → `ListOperations` (for providers) or `Start` (for runtimes).
 6. If the plugin does not begin accepting connections within **10 seconds**, startup fails.
 
 ## Shutdown
@@ -152,10 +198,12 @@ integrations:
       args: [provider]
       env:
         MY_API_KEY: ${API_KEY}
+      config:
+        some_setting: value
     connection_mode: user
 ```
 
-When `plugin` is set, `upstreams` cannot be used on the same integration. The plugin fully replaces the upstream-based provider.
+When `plugin` is set, `upstreams` cannot be used on the same integration (unless using overlay mode). The `plugin.config` map is delivered to the plugin via `StartProvider`.
 
 ### Runtime plugin
 
@@ -183,6 +231,7 @@ When `plugin` is set, `type` cannot be used on the same runtime.
 | `command` | Yes | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. |
 | `args` | No | Arguments passed to the command. |
 | `env` | No | Map of additional environment variables. Supports `${VAR}` expansion from the host environment. |
+| `config` | No | Arbitrary key-value map delivered to the plugin at startup via `StartProvider` or `StartRuntime`. |
 
 ## Error handling
 
@@ -200,18 +249,31 @@ Return `UNIMPLEMENTED` for optional RPCs you do not support. The Go SDK helper `
 
 ## Example: minimal Go provider
 
-The echo plugin (`cmd/gestalt-plugin-echo`) is a working reference. Here is the minimal structure for a provider plugin in Go:
+A complete working example lives in `examples/plugins/provider-go/`. Here is the minimal structure for a provider plugin using `sdk/pluginsdk`:
 
 ```go
 package main
 
 import (
     "context"
+    "log"
     "os/signal"
     "syscall"
 
-    "github.com/valon-technologies/gestalt/internal/pluginapi"
+    "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 )
+
+type myProvider struct{}
+
+func (p *myProvider) Name() string                             { return "my-plugin" }
+func (p *myProvider) DisplayName() string                      { return "My Plugin" }
+func (p *myProvider) Description() string                      { return "A custom provider." }
+func (p *myProvider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeNone }
+func (p *myProvider) ListOperations() []pluginsdk.Operation    { return nil }
+
+func (p *myProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
+    return &pluginsdk.OperationResult{Status: 200, Body: `{}`}, nil
+}
 
 func main() {
     ctx, stop := signal.NotifyContext(
@@ -219,14 +281,13 @@ func main() {
     )
     defer stop()
 
-    // myProvider implements core.Provider
-    if err := pluginapi.ServeProvider(ctx, myProvider); err != nil {
-        panic(err)
+    if err := pluginsdk.ServeProvider(ctx, &myProvider{}); err != nil {
+        log.Fatal(err)
     }
 }
 ```
 
-`pluginapi.ServeProvider` reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to it, and registers the `ProviderPlugin` service backed by your `core.Provider` implementation. The function blocks until the context is cancelled (i.e. until the process receives SIGTERM).
+`pluginsdk.ServeProvider` reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to it, and registers the `ProviderPlugin` service backed by your `pluginsdk.Provider` implementation. The function blocks until the context is cancelled (i.e. until the process receives SIGTERM).
 
 For non-Go languages, generate gRPC stubs from `sdk/pluginapi/v1/plugin.proto` and implement the `ProviderPlugin` or `RuntimePlugin` service directly. The startup contract is the same: read `GESTALT_PLUGIN_SOCKET`, bind a gRPC server, and start serving.
 
