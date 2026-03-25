@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/oauth"
+	"github.com/valon-technologies/gestalt/internal/pluginapi"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -1760,6 +1761,91 @@ func TestIntegrationOAuthCallback_AttachesConnectionParamsToExchangeContext(t *t
 	}
 	if stub.gotConnParam != "acme" {
 		t.Fatalf("got connection param %q, want acme", stub.gotConnParam)
+	}
+}
+
+func TestIntegrationOAuthCallback_ExecutableProviderUsesPKCEAndOverrides(t *testing.T) {
+	t.Parallel()
+
+	bin := testutil.BuildGoBinary(t, "./internal/testdata/oauthplugin", "gestalt-plugin-oauth-fixture")
+	prov, err := pluginapi.NewExecutableProvider(context.Background(), pluginapi.ExecConfig{Command: bin})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	if c, ok := prov.(interface{ Close() error }); ok {
+		t.Cleanup(func() { _ = c.Close() })
+	}
+
+	var storedTokens []*core.IntegrationToken
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
+		},
+		StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+			storedTokens = append(storedTokens, tok)
+			return nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = ds
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"integration":"exec-oauth","connection_params":{"tenant":"acme"}}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(startResp.Body)
+		t.Fatalf("expected 200 from start-oauth, got %d: %s", startResp.StatusCode, body)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+	if !strings.Contains(startResult["url"], "https://acme.example.com/oauth") {
+		t.Fatalf("start url = %q, want tenant-specific auth base", startResult["url"])
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
+	}
+	if len(storedTokens) == 0 {
+		t.Fatal("expected token to be stored")
+	}
+
+	lastTok := storedTokens[len(storedTokens)-1]
+	if lastTok.AccessToken != "access:good-code|acme|fixture-verifier|https://acme.example.com/token" {
+		t.Fatalf("stored access token = %q", lastTok.AccessToken)
+	}
+	if lastTok.RefreshToken != "refresh:acme" {
+		t.Fatalf("stored refresh token = %q", lastTok.RefreshToken)
+	}
+	if !strings.Contains(lastTok.MetadataJSON, `"tenant":"acme"`) {
+		t.Fatalf("expected MetadataJSON to contain tenant=acme, got %s", lastTok.MetadataJSON)
 	}
 }
 
