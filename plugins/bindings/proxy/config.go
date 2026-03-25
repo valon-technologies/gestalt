@@ -4,19 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/valon-technologies/gestalt/internal/egress"
 )
 
 type proxyConfig struct {
 	Path string `yaml:"path"`
-}
-
-type normalizedRequest struct {
-	Note   string             `json:"note"`
-	Policy egress.PolicyInput `json:"policy_input"`
-	Target egress.Target      `json:"target"`
-	Body   string             `json:"body,omitempty"`
 }
 
 func (c proxyConfig) validate(name string) error {

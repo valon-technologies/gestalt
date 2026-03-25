@@ -21,7 +21,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
-	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -2950,29 +2949,47 @@ func TestBindingRoutesMounted(t *testing.T) {
 func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 	t.Parallel()
 
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		body, _ := io.ReadAll(r.Body)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"path":   r.URL.Path,
+			"query":  r.URL.RawQuery,
+			"method": r.Method,
+			"body":   string(body),
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	upstreamHost := upstream.Listener.Addr().String()
+
 	cases := []struct {
 		name           string
 		configuredPath string
 		nestedURL      string
 		exactURL       string
+		wantPath       string
 	}{
 		{
 			name:           "agent-proxy",
 			configuredPath: "/proxy",
 			nestedURL:      "/api/v1/bindings/agent-proxy/proxy/messages?cursor=123",
 			exactURL:       "/api/v1/bindings/agent-proxy/proxy",
+			wantPath:       "/messages",
 		},
 		{
 			name:           "api-proxy",
 			configuredPath: "/api",
 			nestedURL:      "/api/v1/bindings/api-proxy/api/messages?cursor=123",
 			exactURL:       "/api/v1/bindings/api-proxy/api",
+			wantPath:       "/messages",
 		},
 		{
 			name:           "root-proxy",
 			configuredPath: "/",
 			nestedURL:      "/api/v1/bindings/root-proxy/messages?cursor=123",
 			exactURL:       "/api/v1/bindings/root-proxy/",
+			wantPath:       "/messages",
 		},
 	}
 
@@ -2998,63 +3015,66 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 				t.Fatalf("new request: %v", err)
 			}
 			req.Header.Set("Content-Type", "text/plain")
-			req.Header.Set("X-Forwarded-Host", "api.example.com")
+			req.Header.Set("X-Forwarded-Host", upstreamHost)
+			req.Header.Set("X-Forwarded-Proto", "http")
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("request: %v", err)
 			}
 
-			if resp.StatusCode != http.StatusNotImplemented {
+			if resp.StatusCode != http.StatusOK {
 				_ = resp.Body.Close()
-				t.Fatalf("expected 501, got %d", resp.StatusCode)
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			if resp.Header.Get("Content-Type") != "application/json" {
+				_ = resp.Body.Close()
+				t.Fatalf("Content-Type = %q, want application/json", resp.Header.Get("Content-Type"))
 			}
 
-			var result struct {
-				Policy egress.PolicyInput `json:"policy_input"`
-				Target egress.Target      `json:"target"`
-				Body   string             `json:"body"`
-			}
+			var result map[string]string
 			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 				t.Fatalf("decoding: %v", err)
 			}
-
-			if result.Target.Host != "api.example.com" {
-				t.Fatalf("target host = %q, want api.example.com", result.Target.Host)
-			}
-			if result.Target.Path != "/messages?cursor=123" {
-				t.Fatalf("target path = %q, want /messages?cursor=123", result.Target.Path)
-			}
-			if result.Policy.Subject.Kind != egress.SubjectSystem {
-				t.Fatalf("subject kind = %q, want system", result.Policy.Subject.Kind)
-			}
-			if result.Policy.Subject.ID != tc.name {
-				t.Fatalf("subject id = %q, want %s", result.Policy.Subject.ID, tc.name)
-			}
-			if result.Body != "hello" {
-				t.Fatalf("body = %q, want hello", result.Body)
-			}
 			_ = resp.Body.Close()
 
-			resp, err = http.Get(ts.URL + tc.exactURL)
+			if result["path"] != tc.wantPath {
+				t.Fatalf("upstream path = %q, want %q", result["path"], tc.wantPath)
+			}
+			if result["query"] != "cursor=123" {
+				t.Fatalf("upstream query = %q, want cursor=123", result["query"])
+			}
+			if result["method"] != http.MethodPost {
+				t.Fatalf("upstream method = %q, want POST", result["method"])
+			}
+			if result["body"] != "hello" {
+				t.Fatalf("upstream body = %q, want hello", result["body"])
+			}
+
+			exactReq, err := http.NewRequest(http.MethodGet, ts.URL+tc.exactURL, nil)
+			if err != nil {
+				t.Fatalf("new exact request: %v", err)
+			}
+			exactReq.Header.Set("X-Forwarded-Host", upstreamHost)
+			exactReq.Header.Set("X-Forwarded-Proto", "http")
+
+			resp, err = http.DefaultClient.Do(exactReq)
 			if err != nil {
 				t.Fatalf("exact request: %v", err)
 			}
 
-			if resp.StatusCode != http.StatusNotImplemented {
+			if resp.StatusCode != http.StatusOK {
 				_ = resp.Body.Close()
-				t.Fatalf("expected exact route to return 501, got %d", resp.StatusCode)
+				t.Fatalf("expected exact route to return 200, got %d", resp.StatusCode)
 			}
 
-			var exact struct {
-				Target egress.Target `json:"target"`
-			}
+			var exact map[string]string
 			if err := json.NewDecoder(resp.Body).Decode(&exact); err != nil {
 				t.Fatalf("decoding exact route: %v", err)
 			}
 			_ = resp.Body.Close()
-			if exact.Target.Path != "/" {
-				t.Fatalf("exact target path = %q, want /", exact.Target.Path)
+			if exact["path"] != "/" {
+				t.Fatalf("exact upstream path = %q, want /", exact["path"])
 			}
 		})
 	}

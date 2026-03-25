@@ -203,8 +203,9 @@ func doOnce(
 	}
 
 	return &core.OperationResult{
-		Status: resp.StatusCode,
-		Body:   string(respBody),
+		Status:  resp.StatusCode,
+		Headers: resp.Header,
+		Body:    string(respBody),
 	}, resp.StatusCode, retryAfter, false, nil
 }
 
