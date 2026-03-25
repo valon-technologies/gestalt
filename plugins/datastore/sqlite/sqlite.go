@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"strings"
+
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
@@ -34,11 +36,12 @@ func (dialect) UpsertTokenSQL() string {
 			updated_at = excluded.updated_at`
 }
 
-// IsDuplicateKeyError always returns false for SQLite because
-// FindOrCreateUser uses INSERT without ON CONFLICT for the users
-// table (SQLite serializes writes via a single connection, so races
-// don't occur in practice).
-func (dialect) IsDuplicateKeyError(error) bool { return false }
+func (dialect) IsDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
 
 // Store embeds sqlstore.Store and adds SQLite-specific behavior.
 type Store struct {
@@ -47,6 +50,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
+var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -112,6 +116,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 			candidates_json TEXT NOT NULL,
 			created_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS egress_clients (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			created_by_id TEXT NOT NULL REFERENCES users(id),
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			UNIQUE(created_by_id, name)
+		);
+		CREATE TABLE IF NOT EXISTS egress_client_tokens (
+			id TEXT PRIMARY KEY,
+			client_id TEXT NOT NULL REFERENCES egress_clients(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			hashed_token TEXT UNIQUE NOT NULL,
+			expires_at DATETIME,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
 		)
 	`)
 	return err

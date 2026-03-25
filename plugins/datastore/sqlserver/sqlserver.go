@@ -78,6 +78,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
+var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})
@@ -151,6 +152,28 @@ func (s *Store) Migrate(ctx context.Context) error {
 				candidates_json NVARCHAR(MAX) NOT NULL,
 				created_at DATETIME2(6) NOT NULL,
 				expires_at DATETIME2(6) NOT NULL
+			)`},
+		{"egress_clients", `
+			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'egress_clients')
+			CREATE TABLE egress_clients (
+				id NVARCHAR(36) NOT NULL PRIMARY KEY,
+				name NVARCHAR(255) NOT NULL,
+				description NVARCHAR(MAX) NOT NULL DEFAULT '',
+				created_by_id NVARCHAR(36) NOT NULL REFERENCES users(id),
+				created_at DATETIME2(6) NOT NULL,
+				updated_at DATETIME2(6) NOT NULL,
+				UNIQUE (created_by_id, name)
+			)`},
+		{"egress_client_tokens", `
+			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'egress_client_tokens')
+			CREATE TABLE egress_client_tokens (
+				id NVARCHAR(36) NOT NULL PRIMARY KEY,
+				client_id NVARCHAR(36) NOT NULL REFERENCES egress_clients(id) ON DELETE CASCADE,
+				name NVARCHAR(255) NOT NULL,
+				hashed_token NVARCHAR(255) NOT NULL UNIQUE,
+				expires_at DATETIME2(6) NULL,
+				created_at DATETIME2(6) NOT NULL,
+				updated_at DATETIME2(6) NOT NULL
 			)`},
 	}
 

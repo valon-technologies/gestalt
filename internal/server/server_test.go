@@ -1441,6 +1441,396 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	}
 }
 
+func TestCreateAndListEgressClients(t *testing.T) {
+	t.Parallel()
+
+	var stored []*core.EgressClient
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			CreateEgressClientFn: func(_ context.Context, c *core.EgressClient) error {
+				stored = append(stored, c)
+				return nil
+			},
+			ListEgressClientsFn: func(_ context.Context, userID string) ([]*core.EgressClient, error) {
+				if userID != "u1" {
+					t.Fatalf("expected userID u1, got %q", userID)
+				}
+				return stored, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"ci-bot","description":"CI agent"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding create response: %v", err)
+	}
+	if created["name"] != "ci-bot" {
+		t.Fatalf("expected name ci-bot, got %q", created["name"])
+	}
+	if created["id"] == "" {
+		t.Fatal("expected non-empty id")
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
+	listReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 client, got %d", len(listed))
+	}
+}
+
+func TestDeleteEgressClient(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-123" {
+					return &core.EgressClient{ID: "ec-123", Name: "test", CreatedByID: "u1"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			DeleteEgressClientFn: func(_ context.Context, id string) error {
+				if id == "ec-123" {
+					return nil
+				}
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-123", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "deleted" {
+		t.Fatalf("expected deleted, got %q", result["status"])
+	}
+}
+
+func TestDeleteEgressClient_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			DeleteEgressClientFn: func(_ context.Context, id string) error {
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/nonexistent", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateAndListEgressClientTokens(t *testing.T) {
+	t.Parallel()
+
+	var storedTokens []*core.EgressClientToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-1" {
+					return &core.EgressClient{ID: "ec-1", Name: "test-client", CreatedByID: "u1"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			CreateEgressClientTokenFn: func(_ context.Context, token *core.EgressClientToken) error {
+				storedTokens = append(storedTokens, token)
+				return nil
+			},
+			ListEgressClientTokensFn: func(_ context.Context, clientID string) ([]*core.EgressClientToken, error) {
+				return storedTokens, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"deploy-token"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients/ec-1/tokens", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding create response: %v", err)
+	}
+	if created["token"] == nil || created["token"] == "" {
+		t.Fatal("expected non-empty plaintext token in response")
+	}
+	if created["name"] != "deploy-token" {
+		t.Fatalf("expected name deploy-token, got %q", created["name"])
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients/ec-1/tokens", nil)
+	listReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 token, got %d", len(listed))
+	}
+	if _, hasToken := listed[0]["token"]; hasToken {
+		t.Fatal("list response should not include plaintext token")
+	}
+	if _, hasHashed := listed[0]["hashed_token"]; hasHashed {
+		t.Fatal("list response should not include hashed token")
+	}
+}
+
+func TestRevokeEgressClientToken(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-1" {
+					return &core.EgressClient{ID: "ec-1", Name: "test", CreatedByID: "u1"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			RevokeEgressClientTokenFn: func(_ context.Context, clientID, tokenID string) error {
+				if clientID == "ec-1" && tokenID == "eclt-1" {
+					return nil
+				}
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-1/tokens/eclt-1", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "revoked" {
+		t.Fatalf("expected revoked, got %q", result["status"])
+	}
+}
+
+func TestDeleteEgressClient_WrongOwner(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-other", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-owned" {
+					return &core.EgressClient{ID: "ec-owned", Name: "owned", CreatedByID: "u-owner"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-owned", nil)
+	req.Header.Set("X-Dev-User-Email", "attacker@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestListEgressClientTokens_MissingClient(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients/nonexistent/tokens", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestEgressClientEndpoints_NoCapability(t *testing.T) {
+	t.Parallel()
+
+	// Use a datastore that does NOT implement EgressClientStore
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &minimalDatastore{}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501, got %d", resp.StatusCode)
+	}
+}
+
+// minimalDatastore implements core.Datastore but NOT core.EgressClientStore.
+type minimalDatastore struct{}
+
+func (d *minimalDatastore) GetUser(context.Context, string) (*core.User, error) {
+	return nil, core.ErrNotFound
+}
+func (d *minimalDatastore) FindOrCreateUser(_ context.Context, email string) (*core.User, error) {
+	return &core.User{ID: "u1", Email: email}, nil
+}
+func (d *minimalDatastore) StoreToken(context.Context, *core.IntegrationToken) error { return nil }
+func (d *minimalDatastore) Token(context.Context, string, string, string) (*core.IntegrationToken, error) {
+	return nil, nil
+}
+func (d *minimalDatastore) ListTokens(context.Context, string) ([]*core.IntegrationToken, error) {
+	return nil, nil
+}
+func (d *minimalDatastore) ListTokensForIntegration(context.Context, string, string) ([]*core.IntegrationToken, error) {
+	return nil, nil
+}
+func (d *minimalDatastore) DeleteToken(context.Context, string) error           { return nil }
+func (d *minimalDatastore) StoreAPIToken(context.Context, *core.APIToken) error { return nil }
+func (d *minimalDatastore) ValidateAPIToken(context.Context, string) (*core.APIToken, error) {
+	return nil, nil
+}
+func (d *minimalDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken, error) {
+	return nil, nil
+}
+func (d *minimalDatastore) RevokeAPIToken(context.Context, string, string) error { return nil }
+func (d *minimalDatastore) Ping(context.Context) error                           { return nil }
+func (d *minimalDatastore) Migrate(context.Context) error                        { return nil }
+func (d *minimalDatastore) Close() error                                         { return nil }
+
 func TestExecuteOperation_POST(t *testing.T) {
 	t.Parallel()
 

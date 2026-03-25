@@ -63,6 +63,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
+var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("pgx", dsn, encryptionKey, dialect{})
@@ -136,6 +137,30 @@ func (s *Store) Migrate(ctx context.Context) error {
 			expires_at TIMESTAMPTZ NOT NULL
 		)`); err != nil {
 		return fmt.Errorf("creating staged_connections table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS egress_clients (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			created_by_id TEXT NOT NULL REFERENCES users(id),
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL,
+			UNIQUE(created_by_id, name)
+		)`); err != nil {
+		return fmt.Errorf("creating egress_clients table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS egress_client_tokens (
+			id TEXT PRIMARY KEY,
+			client_id TEXT NOT NULL REFERENCES egress_clients(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			hashed_token TEXT UNIQUE NOT NULL,
+			expires_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("creating egress_client_tokens table: %w", err)
 	}
 	return tx.Commit()
 }
