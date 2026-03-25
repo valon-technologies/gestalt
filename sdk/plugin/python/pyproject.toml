@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gestalt-plugin"
+version = "0.1.0"
+description = "Python SDK for writing Gestalt provider and runtime plugins"
+requires-python = ">=3.9"
+dependencies = [
+    "grpcio>=1.60",
+    "protobuf>=4.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.60",
+]
+
+[tool.setuptools.packages.find]
+include = ["gestalt_plugin*", "gen*"]
