@@ -45,6 +45,7 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
+var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)

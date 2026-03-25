@@ -405,6 +405,12 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 	t.Run("store get delete lifecycle", func(t *testing.T) {
 		ds := newStore(t)
 		t.Cleanup(func() { ds.Close() })
+
+		scs, ok := ds.(core.StagedConnectionStore)
+		if !ok {
+			t.Skip("datastore does not implement StagedConnectionStore")
+		}
+
 		ctx := context.Background()
 
 		user := mustCreateUser(t, ctx, ds, "staged@example.com")
@@ -425,11 +431,11 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 			ExpiresAt:      expiry,
 		}
 
-		if err := ds.StoreStagedConnection(ctx, sc); err != nil {
+		if err := scs.StoreStagedConnection(ctx, sc); err != nil {
 			t.Fatalf("StoreStagedConnection: %v", err)
 		}
 
-		got, err := ds.GetStagedConnection(ctx, "sc-1")
+		got, err := scs.GetStagedConnection(ctx, "sc-1")
 		if err != nil {
 			t.Fatalf("GetStagedConnection: %v", err)
 		}
@@ -452,11 +458,11 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 			t.Errorf("CandidatesJSON: got %q, want %q", got.CandidatesJSON, sc.CandidatesJSON)
 		}
 
-		if err := ds.DeleteStagedConnection(ctx, "sc-1"); err != nil {
+		if err := scs.DeleteStagedConnection(ctx, "sc-1"); err != nil {
 			t.Fatalf("DeleteStagedConnection: %v", err)
 		}
 
-		_, err = ds.GetStagedConnection(ctx, "sc-1")
+		_, err = scs.GetStagedConnection(ctx, "sc-1")
 		if !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("GetStagedConnection after delete: expected ErrNotFound, got %v", err)
 		}
@@ -465,9 +471,15 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 	t.Run("get nonexistent returns ErrNotFound", func(t *testing.T) {
 		ds := newStore(t)
 		t.Cleanup(func() { ds.Close() })
+
+		scs, ok := ds.(core.StagedConnectionStore)
+		if !ok {
+			t.Skip("datastore does not implement StagedConnectionStore")
+		}
+
 		ctx := context.Background()
 
-		_, err := ds.GetStagedConnection(ctx, "nonexistent-id")
+		_, err := scs.GetStagedConnection(ctx, "nonexistent-id")
 		if !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("expected ErrNotFound, got %v", err)
 		}

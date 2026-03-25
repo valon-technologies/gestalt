@@ -159,6 +159,14 @@ func (s *Server) routes() {
 	}
 }
 
+func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
+	scs, ok := s.datastore.(core.StagedConnectionStore)
+	if !ok {
+		return nil, fmt.Errorf("datastore does not support staged connections; use a SQL-backed datastore (sqlite, postgres, mysql)")
+	}
+	return scs, nil
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }

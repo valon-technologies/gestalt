@@ -18,11 +18,13 @@ type Datastore interface {
 	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
 	RevokeAPIToken(ctx context.Context, userID, id string) error
 
-	StoreStagedConnection(ctx context.Context, sc *StagedConnection) error
-	GetStagedConnection(ctx context.Context, id string) (*StagedConnection, error)
-	DeleteStagedConnection(ctx context.Context, id string) error
-
 	Ping(ctx context.Context) error
 	Migrate(ctx context.Context) error
 	Close() error
+}
+
+type StagedConnectionStore interface {
+	StoreStagedConnection(ctx context.Context, sc *StagedConnection) error
+	GetStagedConnection(ctx context.Context, id string) (*StagedConnection, error)
+	DeleteStagedConnection(ctx context.Context, id string) error
 }
