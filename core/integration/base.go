@@ -252,13 +252,13 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 	}
 
 	if query, ok := b.Queries[operation]; ok {
-		return b.executeGraphQL(ctx, query, params, token)
+		return b.executeGraphQL(ctx, operation, query, params, token)
 	}
 
 	return b.executeREST(ctx, operation, params, token)
 }
 
-func (b *Base) executeGraphQL(ctx context.Context, query string, params map[string]any, token string) (*core.OperationResult, error) {
+func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
 
 	gqlReq := apiexec.GraphQLRequest{
@@ -270,7 +270,20 @@ func (b *Base) executeGraphQL(ctx context.Context, query string, params map[stri
 	if err := b.applyGraphQLAuth(&gqlReq, token); err != nil {
 		return nil, err
 	}
-	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
+
+	resolved, err := b.resolveGraphQLEgress(ctx, operation, gqlReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return egress.ExecuteGraphQL(ctx, b.httpClient(), egress.GraphQLRequestSpec{
+		Target:     resolved.Target,
+		URL:        gqlReq.URL,
+		Query:      gqlReq.Query,
+		Variables:  gqlReq.Variables,
+		Headers:    resolved.Headers,
+		Credential: resolved.Credential,
+	})
 }
 
 func (b *Base) egressAuthStyle() egress.AuthStyle {

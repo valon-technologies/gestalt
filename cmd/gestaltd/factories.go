@@ -266,7 +266,7 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 					cleanup()
 					return nil, fmt.Errorf("multiple mcp upstreams not supported")
 				}
-				up, err := mcpupstream.New(ctx, name, us.URL, connMode)
+				up, err := mcpupstream.New(ctx, name, us.URL, connMode, deps.Egress.Resolver)
 				if err != nil {
 					return nil, err
 				}
