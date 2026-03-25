@@ -1,0 +1,9 @@
+runtimes:
+  example-runtime:
+    plugin:
+      command: ./runtime-go
+    providers:
+      - example
+    config:
+      poll_interval: 30s
+      log_level: debug

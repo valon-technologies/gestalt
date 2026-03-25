@@ -116,6 +116,8 @@ require (
 )
 
 replace (
+	github.com/valon-technologies/gestalt/examples/plugins/provider-go => ./examples/plugins/provider-go
+	github.com/valon-technologies/gestalt/examples/plugins/runtime-go => ./examples/plugins/runtime-go
 	github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
 	github.com/valon-technologies/gestalt/sdk/pluginsdk => ./sdk/pluginsdk
 )

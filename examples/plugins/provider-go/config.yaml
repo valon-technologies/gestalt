@@ -1,0 +1,6 @@
+integrations:
+  example:
+    plugin:
+      command: ./provider-go
+      config:
+        greeting: "Hello from example plugin"

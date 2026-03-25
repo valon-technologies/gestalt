@@ -3,11 +3,44 @@
 The proto definition at `v1/plugin.proto` is the gRPC contract between Gestalt
 and its provider/runtime plugins. It defines three services:
 
-- **ProviderPlugin** — implemented by provider plugins (metadata, operations,
+- **ProviderPlugin** -- implemented by provider plugins (metadata, operations,
   auth, session catalog).
-- **RuntimePlugin** — implemented by runtime plugins (start/stop lifecycle).
-- **RuntimeHost** — implemented by the Gestalt host for runtime callbacks
+- **RuntimePlugin** -- implemented by runtime plugins (start/stop lifecycle).
+- **RuntimeHost** -- implemented by the Gestalt host for runtime callbacks
   (capability listing, cross-provider invocation).
+
+## Sub-module usage
+
+This package is a standalone Go module so external plugins can depend on it
+without pulling in the full Gestalt dependency tree:
+
+```sh
+go get github.com/valon-technologies/gestalt/sdk/pluginapi@latest
+```
+
+For most provider plugins, prefer depending on `sdk/pluginsdk` instead, which
+wraps the raw proto types with a higher-level `Provider` interface and helpers
+like `ServeProvider`.
+
+For local development within the monorepo, the root `go.mod` uses a `replace`
+directive:
+
+```
+replace github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
+```
+
+## Tagging conventions
+
+This module is tagged independently from the root module using the prefix
+`sdk/pluginapi/`:
+
+```
+sdk/pluginapi/v0.1.0
+sdk/pluginapi/v0.2.0
+```
+
+Go resolves module versions from these tags automatically when using
+`go get github.com/valon-technologies/gestalt/sdk/pluginapi@vX.Y.Z`.
 
 ## Regenerating stubs
 
