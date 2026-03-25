@@ -112,13 +112,7 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 }
 
 func (b *Broker) withSubject(ctx context.Context, p *principal.Principal) context.Context {
-	if _, ok := egress.SubjectFromContext(ctx); ok {
-		return ctx
-	}
-	if p == nil || p.UserID == "" {
-		return ctx
-	}
-	return egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: p.UserID})
+	return egress.WithSubjectFromPrincipal(ctx, p)
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, instance string) (context.Context, string, error) {

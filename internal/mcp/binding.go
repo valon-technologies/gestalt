@@ -228,16 +228,7 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 }
 
 func attachEgressSubject(ctx context.Context, p *principal.Principal) context.Context {
-	if _, ok := egress.SubjectFromContext(ctx); ok {
-		return ctx
-	}
-	if p == nil || p.UserID == "" {
-		return ctx
-	}
-	return egress.WithSubject(ctx, egress.Subject{
-		Kind: egress.SubjectUser,
-		ID:   p.UserID,
-	})
+	return egress.WithSubjectFromPrincipal(ctx, p)
 }
 
 func hasToolsWithPrefix(tools map[string]mcpserver.ServerTool, prefix string) bool {
