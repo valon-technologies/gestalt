@@ -27,7 +27,13 @@ type Config struct {
 	Server       ServerConfig              `yaml:"server"`
 }
 
+const (
+	PluginModeReplace = "replace"
+	PluginModeOverlay = "overlay"
+)
+
 type ExecutablePluginDef struct {
+	Mode    string            `yaml:"mode"`
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
@@ -449,10 +455,23 @@ func validate(cfg *Config) error {
 			return err
 		}
 		if intg.Plugin != nil {
-			if len(intg.Upstreams) > 0 {
-				return fmt.Errorf("config validation: integration %q cannot set both plugin and upstreams", name)
+			mode := intg.Plugin.Mode
+			if mode == "" {
+				mode = PluginModeReplace
 			}
-			continue
+			switch mode {
+			case PluginModeReplace:
+				if len(intg.Upstreams) > 0 {
+					return fmt.Errorf("config validation: integration %q cannot set both plugin and upstreams; use mode: overlay to combine them", name)
+				}
+				continue
+			case PluginModeOverlay:
+				if len(intg.Upstreams) == 0 {
+					return fmt.Errorf("config validation: integration %q overlay plugin requires at least one upstream", name)
+				}
+			default:
+				return fmt.Errorf("config validation: integration %q has unknown plugin mode %q", name, intg.Plugin.Mode)
+			}
 		}
 		apiCount := 0
 		for i := range intg.Upstreams {
@@ -483,6 +502,9 @@ func validate(cfg *Config) error {
 			return err
 		}
 		if rt.Plugin != nil {
+			if rt.Plugin.Mode == PluginModeOverlay {
+				return fmt.Errorf("config validation: runtime %q plugin.mode cannot be overlay", name)
+			}
 			if rt.Type != "" {
 				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
 			}
