@@ -16,9 +16,10 @@ The first match wins. Gestalt does not merge multiple config files.
 1. Raw YAML is parsed into the config struct.
 2. Environment variable references (`${VAR}`) are expanded from the process environment.
 3. Defaults are applied for any fields not explicitly set.
-4. `auth_profiles` entries are merged into integration configs that reference them by name.
-5. `base_url` from the server block is injected into OAuth callback URL construction.
-6. `secret://` references are resolved through the configured secret manager. This happens last so that secrets can contain values that would otherwise look like env vars.
+4. Executable plugin paths are resolved: absolute paths are left unchanged, relative paths starting with `.` or containing a path separator resolve from the config file's directory, and bare names are looked up on `PATH`.
+5. `auth_profiles` entries are merged into integration configs that reference them by name. Upstream-level `auth_profile` references are resolved next, then empty upstream auth fields are filled from integration-level defaults.
+6. `base_url` from the server block is injected into OAuth callback URL construction.
+7. `secret://` references are resolved through the configured secret manager. This happens last so that secrets can contain values that would otherwise look like env vars.
 
 ## Annotated example
 
@@ -77,7 +78,9 @@ server:
 
 **base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
 
-**relative paths**: `icon_file` resolves relative to the config file's directory, not the current shell working directory.
+**upstream auth cascade**: Each upstream can override auth settings individually. When an upstream references an `auth_profile`, the profile fields are merged first. Then any remaining empty auth fields inherit from the integration level. Fields already set on the upstream are never overwritten.
+
+**relative paths**: `icon_file` and executable plugin `command` paths resolve relative to the config file's directory, not the current shell working directory.
 
 **provider preparation**: `gestaltd prepare --config ...` writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve --config ...` uses that prepared state so runtime startup is deterministic without rewriting the config.
 
