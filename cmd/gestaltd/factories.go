@@ -250,6 +250,7 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 				}
 				intgForBuild := intgWithUpstreamAuth(intg, *us)
 				var buildOpts []provider.BuildOption
+				buildOpts = append(buildOpts, provider.WithEgressResolver(deps.Egress.Resolver))
 				if us.Auth.Type == "mcp_oauth" {
 					handler := buildMCPOAuthHandlerFromUpstream(*us, regStore, deps)
 					buildOpts = append(buildOpts, provider.WithAuthHandler(handler))
@@ -373,6 +374,7 @@ func buildMCPOAuthProvider(name string, intg config.IntegrationDef, us config.Up
 		ConnMode:           connMode,
 		Auth:               handler,
 		ManualAuthEnabled:  true,
+		EgressResolver:     deps.Egress.Resolver,
 	}
 
 	return composite.New(name, baseProv, mcpUp), nil
