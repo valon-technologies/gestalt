@@ -308,6 +308,10 @@ func (b *Base) materializeCredential(token string) (egress.CredentialMaterializa
 	return egress.MaterializeCredential(token, b.egressAuthStyle(), b.TokenParser)
 }
 
+func (b *Base) EgressMaterializeCredential(token string) (egress.CredentialMaterialization, error) {
+	return b.materializeCredential(token)
+}
+
 func (b *Base) applyAuth(req *apiexec.Request, token string) error {
 	auth, err := b.materializeCredential(token)
 	if err != nil {

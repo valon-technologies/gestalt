@@ -43,8 +43,8 @@ func TestStaticPolicyDenyRuleBlocksResolution(t *testing.T) {
 			DefaultAction: egress.PolicyAllow,
 			Rules: []egress.StaticPolicyRule{
 				{
-					Action:   egress.PolicyDeny,
-					Provider: "secret-api",
+					Action:        egress.PolicyDeny,
+					MatchCriteria: egress.MatchCriteria{Provider: "secret-api"},
 				},
 			},
 		},
@@ -90,8 +90,8 @@ func TestStaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
 			DefaultAction: egress.PolicyDeny,
 			Rules: []egress.StaticPolicyRule{
 				{
-					Action:   egress.PolicyAllow,
-					Provider: "trusted-api",
+					Action:        egress.PolicyAllow,
+					MatchCriteria: egress.MatchCriteria{Provider: "trusted-api"},
 				},
 			},
 		},
@@ -135,13 +135,12 @@ func TestStaticPolicyFirstMatchWins(t *testing.T) {
 			DefaultAction: egress.PolicyAllow,
 			Rules: []egress.StaticPolicyRule{
 				{
-					Action:     egress.PolicyDeny,
-					Provider:   "multi-api",
-					PathPrefix: "/v1/admin",
+					Action:        egress.PolicyDeny,
+					MatchCriteria: egress.MatchCriteria{Provider: "multi-api", PathPrefix: "/v1/admin"},
 				},
 				{
-					Action:   egress.PolicyAllow,
-					Provider: "multi-api",
+					Action:        egress.PolicyAllow,
+					MatchCriteria: egress.MatchCriteria{Provider: "multi-api"},
 				},
 			},
 		},
@@ -185,10 +184,12 @@ func TestStaticPolicyMultiFieldMatch(t *testing.T) {
 			DefaultAction: egress.PolicyAllow,
 			Rules: []egress.StaticPolicyRule{
 				{
-					Action:      egress.PolicyDeny,
-					SubjectKind: egress.SubjectAgent,
-					Provider:    "restricted-api",
-					Method:      "DELETE",
+					Action: egress.PolicyDeny,
+					MatchCriteria: egress.MatchCriteria{
+						SubjectKind: egress.SubjectAgent,
+						Provider:    "restricted-api",
+						Method:      "DELETE",
+					},
 				},
 			},
 		},
