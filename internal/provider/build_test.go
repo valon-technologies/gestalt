@@ -77,37 +77,6 @@ func TestBuildManualAuth(t *testing.T) {
 	}
 }
 
-func TestBuildWithHooks(t *testing.T) {
-	t.Parallel()
-
-	RegisterResponseChecker("test_checker", func(int, []byte) error { return nil })
-	RegisterResponseHook("test_hook", func([]byte) error { return nil })
-
-	def := testDefinition("hooked")
-	def.ResponseCheck = "test_checker"
-	def.Auth.ResponseHook = "test_hook"
-
-	intg, err := Build(def, testCreds(), nil)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if intg.Name() != "hooked" {
-		t.Errorf("Name() = %q", intg.Name())
-	}
-}
-
-func TestBuildUnknownHook(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("bad")
-	def.ResponseCheck = "nonexistent_hook"
-
-	_, err := Build(def, testCreds(), nil)
-	if err == nil {
-		t.Fatal("expected error for unknown hook")
-	}
-}
-
 func TestBuildDoesNotMutateDefinition(t *testing.T) {
 	t.Parallel()
 
@@ -874,18 +843,17 @@ func TestBuildStructuredResponseCheck_NonJSON500(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_Precedence(t *testing.T) {
+func TestBuildStructuredResponseCheck_SuccessMatchOnly(t *testing.T) {
 	t.Parallel()
 
 	def := &Definition{
-		Provider:    "check_precedence",
-		DisplayName: "Check Precedence API",
+		Provider:    "check_match_only",
+		DisplayName: "Check Match Only API",
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		StructuredResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{"ok": true},
 		},
-		ResponseCheck: "nonexistent_checker_that_should_be_skipped",
 		Operations: map[string]OperationDef{
 			"op": {Description: "Op", Method: "GET", Path: "/op"},
 		},
@@ -893,7 +861,7 @@ func TestBuildStructuredResponseCheck_Precedence(t *testing.T) {
 
 	_, err := Build(def, config.IntegrationDef{}, nil)
 	if err != nil {
-		t.Fatalf("Build should succeed (structured takes precedence over string hook): %v", err)
+		t.Fatalf("Build should succeed with structured response check: %v", err)
 	}
 }
 
