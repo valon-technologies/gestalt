@@ -37,7 +37,7 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 | Name | Notes |
 |---|---|
 | `webhook` | Exposes HTTP endpoints that forward to provider operations. Supports `public`, `signed` (HMAC-SHA256), and `trusted_user_header` auth modes. Configurable path, provider, operation, and signature headers. |
-| `proxy` | Skeletal proxy-oriented binding that normalizes inbound HTTP requests into shared egress context and returns a `501 Not Implemented` placeholder. Configurable path prefix. |
+| `proxy` | Provider-backed proxy binding that forwards inbound HTTP requests to upstream hosts. Derives egress subjects from the authenticated principal, sanitizes inbound auth headers, and resolves outbound credentials through the configured provider. Requires exactly one provider. Configurable path prefix and optional instance qualifier. |
 
 ## Runtimes
 

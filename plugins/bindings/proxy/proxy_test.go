@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/principal"
 	"gopkg.in/yaml.v3"
 )
 
@@ -207,6 +208,167 @@ func TestProxyCONNECTNotImplemented(t *testing.T) {
 	}
 }
 
+func TestProxySanitizesInboundAuthHeaders(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"authorization":       r.Header.Get("Authorization"),
+			"cookie":              r.Header.Get("Cookie"),
+			"proxy_authorization": r.Header.Get("Proxy-Authorization"),
+			"x_dev_user_email":    r.Header.Get("X-Dev-User-Email"),
+			"x_custom":            r.Header.Get("X-Custom"),
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	b := testBinding(t, "/proxy", upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/api", nil)
+	req.Header.Set("Authorization", "Bearer inbound-token")
+	req.Header.Set("Cookie", "session=abc123")
+	req.Header.Set("Proxy-Authorization", "Basic creds")
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	req.Header.Set("X-Custom", "should-pass")
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["authorization"] != "" {
+		t.Fatalf("inbound Authorization should be stripped, got %q", resp["authorization"])
+	}
+	if resp["cookie"] != "" {
+		t.Fatalf("inbound Cookie should be stripped, got %q", resp["cookie"])
+	}
+	if resp["proxy_authorization"] != "" {
+		t.Fatalf("inbound Proxy-Authorization should be stripped, got %q", resp["proxy_authorization"])
+	}
+	if resp["x_dev_user_email"] != "" {
+		t.Fatalf("inbound X-Dev-User-Email should be stripped, got %q", resp["x_dev_user_email"])
+	}
+	if resp["x_custom"] != "should-pass" {
+		t.Fatalf("X-Custom = %q, want should-pass", resp["x_custom"])
+	}
+}
+
+func TestProxyInjectsProviderCredential(t *testing.T) {
+	t.Parallel()
+
+	const providerToken = "resolved-provider-token"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"authorization": r.Header.Get("Authorization"),
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := egress.Resolver{
+		Subjects: egress.ContextSubjectResolver{},
+		Credentials: staticCredentialResolver{
+			Credential: egress.CredentialMaterialization{
+				Authorization: "Bearer " + providerToken,
+			},
+		},
+	}
+
+	b := New("test-proxy", "test-provider", proxyConfig{Path: "/proxy"}, resolver, upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/data", nil)
+	req.Header.Set("Authorization", "Bearer inbound-should-be-stripped")
+	ctx := principal.WithPrincipal(req.Context(), &principal.Principal{UserID: "user-42"})
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["authorization"] != "Bearer "+providerToken {
+		t.Fatalf("outbound Authorization = %q, want Bearer %s", resp["authorization"], providerToken)
+	}
+}
+
+func TestProxyDerivesPrincipalSubject(t *testing.T) {
+	t.Parallel()
+
+	var capturedSubject egress.Subject
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := egress.Resolver{
+		Subjects: egress.ContextSubjectResolver{},
+		Credentials: subjectCapturingResolver{
+			capture: func(s egress.Subject) {
+				capturedSubject = s
+			},
+		},
+	}
+
+	b := New("test-proxy", "test-provider", proxyConfig{Path: "/proxy"}, resolver, upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/check", nil)
+	ctx := principal.WithPrincipal(req.Context(), &principal.Principal{UserID: "user-99"})
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if capturedSubject.Kind != egress.SubjectUser {
+		t.Fatalf("subject kind = %q, want %q", capturedSubject.Kind, egress.SubjectUser)
+	}
+	if capturedSubject.ID != "user-99" {
+		t.Fatalf("subject ID = %q, want user-99", capturedSubject.ID)
+	}
+}
+
+func TestProxyFallsBackToSubjectSystem(t *testing.T) {
+	t.Parallel()
+
+	var capturedSubject egress.Subject
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := egress.Resolver{
+		Subjects: egress.ContextSubjectResolver{},
+		Credentials: subjectCapturingResolver{
+			capture: func(s egress.Subject) {
+				capturedSubject = s
+			},
+		},
+	}
+
+	b := New("my-proxy", "test-provider", proxyConfig{Path: "/proxy"}, resolver, upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/check", nil)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if capturedSubject.Kind != egress.SubjectSystem {
+		t.Fatalf("subject kind = %q, want %q", capturedSubject.Kind, egress.SubjectSystem)
+	}
+	if capturedSubject.ID != "my-proxy" {
+		t.Fatalf("subject ID = %q, want my-proxy", capturedSubject.ID)
+	}
+}
+
 func TestProxyFactory(t *testing.T) {
 	t.Parallel()
 
@@ -217,8 +379,9 @@ func TestProxyFactory(t *testing.T) {
 	}
 
 	def := config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
+		Type:      "proxy",
+		Providers: []string{"my-provider"},
+		Config:    *node.Content[0],
 	}
 
 	binding, err := Factory(context.Background(), "proxy-surface", def, bootstrap.BindingDeps{})
@@ -244,17 +407,72 @@ func TestProxyFactoryValidation(t *testing.T) {
 	}
 
 	_, err := Factory(context.Background(), "bad-proxy", config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
+		Type:      "proxy",
+		Providers: []string{"some-provider"},
+		Config:    *node.Content[0],
 	}, bootstrap.BindingDeps{})
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
 }
 
+func TestProxyFactoryRejectsNoProvider(t *testing.T) {
+	t.Parallel()
+
+	cfgYAML := `path: /proxy`
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Factory(context.Background(), "no-prov", config.BindingDef{
+		Type:   "proxy",
+		Config: *node.Content[0],
+	}, bootstrap.BindingDeps{})
+	if err == nil {
+		t.Fatal("expected error for zero providers")
+	}
+}
+
+func TestProxyFactoryRejectsMultipleProviders(t *testing.T) {
+	t.Parallel()
+
+	cfgYAML := `path: /proxy`
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Factory(context.Background(), "multi-prov", config.BindingDef{
+		Type:      "proxy",
+		Providers: []string{"alpha", "beta"},
+		Config:    *node.Content[0],
+	}, bootstrap.BindingDeps{})
+	if err == nil {
+		t.Fatal("expected error for multiple providers")
+	}
+}
+
 func testBinding(t *testing.T, path string, client *http.Client) *Binding {
 	t.Helper()
-	return New("test-proxy", proxyConfig{Path: path}, egress.Resolver{
+	return New("test-proxy", "test-provider", proxyConfig{Path: path}, egress.Resolver{
 		Subjects: egress.ContextSubjectResolver{},
 	}, client)
+}
+
+type staticCredentialResolver struct {
+	Credential egress.CredentialMaterialization
+}
+
+func (r staticCredentialResolver) ResolveCredential(_ context.Context, _ egress.Subject, _ egress.Target) (egress.CredentialMaterialization, error) {
+	return r.Credential, nil
+}
+
+type subjectCapturingResolver struct {
+	capture func(egress.Subject)
+}
+
+func (r subjectCapturingResolver) ResolveCredential(_ context.Context, subject egress.Subject, _ egress.Target) (egress.CredentialMaterialization, error) {
+	r.capture(subject)
+	return egress.CredentialMaterialization{}, nil
 }

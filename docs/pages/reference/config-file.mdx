@@ -231,8 +231,11 @@ bindings:
 
   agent-proxy:
     type: proxy
+    providers:
+      - slack
     config:
       path: /proxy
+      instance: workspace-1
 ```
 
 ### Webhook config
@@ -249,9 +252,12 @@ bindings:
 
 ### Proxy config
 
+Proxy bindings require exactly one entry in the top-level `providers` list. This provider is used for credential resolution on outbound requests. The authenticated user's principal is mapped to an egress subject so that per-user tokens can be resolved.
+
 | Config field | Default | Notes |
 |---|---|---|
 | `path` | | HTTP path prefix for the proxy surface. Must start with `/`. |
+| `instance` | | Optional provider instance qualifier for credential resolution. |
 
 ## Egress block
 
