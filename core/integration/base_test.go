@@ -11,6 +11,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/egress/egresstest"
 )
 
 type mockAuth struct{}
@@ -192,6 +194,61 @@ func TestBaseExecuteRESTAllowsBearerTokenOverrideFromRequestMutator(t *testing.T
 	}
 	if resp["mutated"] != "yes" {
 		t.Fatalf("mutated = %v, want yes", resp["mutated"])
+	}
+}
+
+func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
+	t.Parallel()
+
+	var gotPolicy egress.PolicyInput
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":    r.Header.Get("Authorization"),
+			"mutated": r.Header.Get("X-Mutated"),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:            mockAuth{},
+		IntegrationName: "test-provider",
+		BaseURL:         srv.URL,
+		Endpoints: map[string]Endpoint{
+			"op": {Method: http.MethodGet, Path: "/test"},
+		},
+		EgressResolver: &egress.Resolver{
+			Subjects: egress.StaticSubjectResolver{
+				Subject: egress.Subject{Kind: egress.SubjectAgent, ID: "agent-1"},
+			},
+			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
+				gotPolicy = input
+				return nil
+			}),
+		},
+		RequestMutator: func(_ string, req *apiexec.Request, _ map[string]any) error {
+			req.AuthHeader = "Token override"
+			req.CustomHeaders = map[string]string{"X-Mutated": "yes"}
+			return nil
+		},
+	}
+
+	if _, err := b.Execute(context.Background(), "op", nil, "original"); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if gotPolicy.Subject.Kind != egress.SubjectAgent || gotPolicy.Subject.ID != "agent-1" {
+		t.Fatalf("subject = %+v, want agent-1", gotPolicy.Subject)
+	}
+	if gotPolicy.Target.Provider != "test-provider" || gotPolicy.Target.Operation != "op" {
+		t.Fatalf("target = %+v, want test-provider/op", gotPolicy.Target)
+	}
+	if gotPolicy.Headers["Authorization"] != "Token override" {
+		t.Fatalf("authorization = %q, want Token override", gotPolicy.Headers["Authorization"])
+	}
+	if gotPolicy.Headers["X-Mutated"] != "yes" {
+		t.Fatalf("mutated header = %q, want yes", gotPolicy.Headers["X-Mutated"])
 	}
 }
 

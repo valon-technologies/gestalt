@@ -111,6 +111,7 @@ type Base struct {
 	CheckResponse  apiexec.ResponseChecker
 	RequestMutator func(operation string, req *apiexec.Request, params map[string]any) error
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
+	EgressResolver *egress.Resolver
 
 	ConnectionDefs    map[string]core.ConnectionParamDef
 	PostConnectHookFn core.PostConnectHook
@@ -228,7 +229,7 @@ func (b *Base) ListOperations() []core.Operation { return b.Operations }
 
 func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
 	baseURL := b.BaseURL
-	headers := copyHeaders(b.Headers)
+	headers := egress.CopyHeaders(b.Headers)
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		baseURL = paraminterp.Interpolate(baseURL, cp)
 		for k, v := range headers {
@@ -326,23 +327,12 @@ func (b *Base) requestAuthFields(token string, auth egress.CredentialMaterializa
 	return "", auth.Authorization
 }
 
-func copyHeaders(h map[string]string) map[string]string {
-	if h == nil {
-		return nil
-	}
-	c := make(map[string]string, len(h))
-	for k, v := range h {
-		c[k] = v
-	}
-	return c
-}
-
 func mergeHeaders(baseHeaders, overrideHeaders map[string]string) map[string]string {
 	if len(baseHeaders) == 0 && len(overrideHeaders) == 0 {
 		return nil
 	}
 
-	merged := copyHeaders(baseHeaders)
+	merged := egress.CopyHeaders(baseHeaders)
 	if merged == nil {
 		merged = make(map[string]string, len(overrideHeaders))
 	}
