@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 type User struct {
 	ID          string
@@ -67,6 +70,7 @@ type Parameter struct {
 }
 
 type OperationResult struct {
-	Status int
-	Body   string
+	Status  int
+	Headers http.Header
+	Body    string
 }
