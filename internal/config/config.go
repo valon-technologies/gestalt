@@ -498,9 +498,6 @@ func validate(cfg *Config) error {
 				}
 				continue
 			case PluginModeOverlay:
-				if len(intg.Upstreams) == 0 {
-					return fmt.Errorf("config validation: integration %q overlay plugin requires at least one upstream", name)
-				}
 			default:
 				return fmt.Errorf("config validation: integration %q has unknown plugin mode %q", name, intg.Plugin.Mode)
 			}
