@@ -136,6 +136,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 				created_at DATETIME2(6) NOT NULL,
 				updated_at DATETIME2(6) NOT NULL
 			)`},
+		{"staged_connections", `
+			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'staged_connections')
+			CREATE TABLE staged_connections (
+				id NVARCHAR(36) NOT NULL PRIMARY KEY,
+				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
+				integration NVARCHAR(255) NOT NULL,
+				instance NVARCHAR(255) NOT NULL,
+				access_token_encrypted NVARCHAR(MAX) NOT NULL,
+				refresh_token_encrypted NVARCHAR(MAX) NOT NULL DEFAULT '',
+				token_expires_at DATETIME2,
+				metadata_json NVARCHAR(MAX) NOT NULL DEFAULT '',
+				candidates_json NVARCHAR(MAX) NOT NULL,
+				created_at DATETIME2(6) NOT NULL,
+				expires_at DATETIME2(6) NOT NULL
+			)`},
 	}
 
 	for _, m := range migrations {

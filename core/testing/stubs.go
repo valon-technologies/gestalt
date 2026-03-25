@@ -30,6 +30,9 @@ type StubDatastore struct {
 	DeleteTokenFn              func(context.Context, string) error
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
+	StoreStagedConnectionFn    func(context.Context, *core.StagedConnection) error
+	GetStagedConnectionFn      func(context.Context, string) (*core.StagedConnection, error)
+	DeleteStagedConnectionFn   func(context.Context, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -108,6 +111,24 @@ func (s *StubDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken
 func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	if s.RevokeAPITokenFn != nil {
 		return s.RevokeAPITokenFn(ctx, userID, id)
+	}
+	return nil
+}
+func (s *StubDatastore) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
+	if s.StoreStagedConnectionFn != nil {
+		return s.StoreStagedConnectionFn(ctx, sc)
+	}
+	return nil
+}
+func (s *StubDatastore) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
+	if s.GetStagedConnectionFn != nil {
+		return s.GetStagedConnectionFn(ctx, id)
+	}
+	return nil, core.ErrNotFound
+}
+func (s *StubDatastore) DeleteStagedConnection(ctx context.Context, id string) error {
+	if s.DeleteStagedConnectionFn != nil {
+		return s.DeleteStagedConnectionFn(ctx, id)
 	}
 	return nil
 }

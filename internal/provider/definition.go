@@ -1,6 +1,10 @@
 package provider
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/valon-technologies/gestalt/core"
+)
 
 type Definition struct {
 	Provider         string            `yaml:"provider" json:"provider"`
@@ -22,6 +26,8 @@ type Definition struct {
 	PostConnect             string            `yaml:"post_connect" json:"post_connect"`
 	ManualAuth              bool              `yaml:"manual_auth" json:"manual_auth"`
 
+	PostConnectDiscovery *PostConnectDiscoveryDef `yaml:"post_connect_discovery" json:"post_connect_discovery,omitempty"`
+
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
 }
@@ -29,6 +35,24 @@ type Definition struct {
 type ResponseCheckDef struct {
 	SuccessBodyMatch map[string]any `yaml:"success_body_match" json:"success_body_match,omitempty"`
 	ErrorMessagePath string         `yaml:"error_message_path" json:"error_message_path,omitempty"`
+}
+
+type PostConnectDiscoveryDef struct {
+	URL             string            `yaml:"url" json:"url"`
+	ItemsPath       string            `yaml:"items_path" json:"items_path"`
+	IDPath          string            `yaml:"id_path" json:"id_path"`
+	NamePath        string            `yaml:"name_path" json:"name_path"`
+	MetadataMapping map[string]string `yaml:"metadata_mapping" json:"metadata_mapping"`
+}
+
+func (d *PostConnectDiscoveryDef) ToCore() *core.DiscoveryConfig {
+	return &core.DiscoveryConfig{
+		URL:             d.URL,
+		ItemsPath:       d.ItemsPath,
+		IDPath:          d.IDPath,
+		NamePath:        d.NamePath,
+		MetadataMapping: d.MetadataMapping,
+	}
 }
 
 type ConnectionParamDef struct {
