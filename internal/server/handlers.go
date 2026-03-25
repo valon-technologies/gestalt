@@ -1120,7 +1120,6 @@ func validateDiscoveryMetadata(metadata map[string]string) error {
 	}
 	return nil
 }
-
 func mergeMetadataJSON(existing string, extra map[string]string) (string, error) {
 	m := make(map[string]string)
 	if existing != "" {

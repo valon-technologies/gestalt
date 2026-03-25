@@ -6,7 +6,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/oauth"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -42,8 +41,8 @@ func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
 		api:  apiProv,
 		mcp:  mcpUp,
 	}
-	if oauth, ok := apiProv.(core.OAuthProvider); ok {
-		return &oauthProvider{Provider: p, oauth: oauth}
+	if oauthProv, ok := apiProv.(core.OAuthProvider); ok {
+		return &oauthProvider{Provider: p, oauthDelegator: oauthDelegator{oauth: oauthProv}}
 	}
 	return p
 }
@@ -103,79 +102,9 @@ func (p *Provider) Close() error {
 	return firstErr
 }
 
-// oauthProvider wraps a composite Provider and delegates OAuth methods
-// to the API provider, following the same pattern as restrictedOAuth.
 type oauthProvider struct {
 	*Provider
-	oauth core.OAuthProvider
-}
-
-func (o *oauthProvider) AuthorizationURL(state string, scopes []string) string {
-	return o.oauth.AuthorizationURL(state, scopes)
-}
-
-func (o *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return o.oauth.ExchangeCode(ctx, code)
-}
-
-func (o *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return o.oauth.RefreshToken(ctx, refreshToken)
-}
-
-func (o *oauthProvider) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	type refresher interface {
-		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-	}
-	if rw, ok := o.oauth.(refresher); ok {
-		return rw.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
-	}
-	return o.oauth.RefreshToken(ctx, refreshToken)
-}
-
-func (o *oauthProvider) StartOAuth(state string, scopes []string) (string, string) {
-	type starter interface {
-		StartOAuth(state string, scopes []string) (string, string)
-	}
-	if s, ok := o.oauth.(starter); ok {
-		return s.StartOAuth(state, scopes)
-	}
-	return o.oauth.AuthorizationURL(state, scopes), ""
-}
-
-func (o *oauthProvider) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	type overrider interface {
-		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-	}
-	if ov, ok := o.oauth.(overrider); ok {
-		return ov.StartOAuthWithOverride(authBaseURL, state, scopes)
-	}
-	return o.oauth.AuthorizationURL(state, scopes), ""
-}
-
-func (o *oauthProvider) AuthorizationBaseURL() string {
-	type authBaseURLer interface{ AuthorizationBaseURL() string }
-	if abu, ok := o.oauth.(authBaseURLer); ok {
-		return abu.AuthorizationBaseURL()
-	}
-	return ""
-}
-
-func (o *oauthProvider) TokenURL() string {
-	type tokenURLer interface{ TokenURL() string }
-	if tu, ok := o.oauth.(tokenURLer); ok {
-		return tu.TokenURL()
-	}
-	return ""
-}
-
-func (o *oauthProvider) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	type exchanger interface {
-		ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-	}
-	if e, ok := o.oauth.(exchanger); ok {
-		return e.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
-	}
-	return o.oauth.ExchangeCode(ctx, code)
+	oauthDelegator
 }
 
 func (p *Provider) buildCatalog() *catalog.Catalog {
