@@ -13,6 +13,7 @@ import (
 	ci "github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/integration"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
@@ -22,11 +23,17 @@ type BuildOption func(*buildOptions)
 
 type buildOptions struct {
 	authOverride ci.AuthHandler
+	egress       *egress.Resolver
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
 func WithAuthHandler(h ci.AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
+}
+
+// WithEgressResolver injects a shared outbound request resolver.
+func WithEgressResolver(r *egress.Resolver) BuildOption {
+	return func(o *buildOptions) { o.egress = r }
 }
 
 func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string, opts ...BuildOption) (core.Provider, error) {
@@ -80,6 +87,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		Queries:            ci.QueriesMap(cat),
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
+		EgressResolver:     bo.egress,
 	}
 
 	connMode := def.ConnectionMode

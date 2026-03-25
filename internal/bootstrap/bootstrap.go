@@ -23,6 +23,7 @@ type Deps struct {
 	SecretManager core.SecretManager
 	SQLDB         any // *sql.DB when available, nil otherwise
 	SQLDialect    any // Placeholder(int)string when available, nil otherwise
+	Egress        EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -31,11 +32,13 @@ type ProviderFactory func(ctx context.Context, name string, intg config.Integrat
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type BindingDeps struct {
 	Invoker invocation.Invoker
+	Egress  EgressDeps
 }
 
 type RuntimeDeps struct {
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
+	Egress           EgressDeps
 }
 
 type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, deps RuntimeDeps) (core.Runtime, error)
@@ -74,6 +77,7 @@ type Result struct {
 	CapabilityLister invocation.CapabilityLister
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
+	Egress           EgressDeps
 	DevMode          bool
 }
 
@@ -110,6 +114,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	deps.Egress = newEgressDeps(cfg, ds)
 
 	// Expose the underlying *sql.DB and dialect for optional use by
 	// provider factories (e.g. MCP OAuth registration storage).
@@ -130,12 +135,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	sharedInvoker := invocation.NewBroker(providers, ds)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +157,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CapabilityLister: sharedInvoker,
 		AuditSink:        audit,
 		SecretManager:    sm,
+		Egress:           deps.Egress,
 		DevMode:          cfg.Server.DevMode,
 	}, nil
 }
@@ -401,7 +407,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, ready, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Runtime], error) {
+func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
@@ -415,7 +421,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown runtime type %q for runtime %q", def.Type, name)
 		}
 
-		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit)
+		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
 		rt, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
@@ -430,7 +436,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	return runtimes, nil
 }
 
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink) (*registry.PluginMap[core.Binding], error) {
+func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Binding], error) {
 	if len(cfg.Bindings) == 0 {
 		return nil, nil
 	}
@@ -444,7 +450,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit)
+		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
 		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)

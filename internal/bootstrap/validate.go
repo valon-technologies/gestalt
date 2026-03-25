@@ -44,6 +44,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return nil, err
 	}
 	defer func() { _ = ds.Close() }()
+	deps.Egress = newEgressDeps(cfg, ds)
 
 	var warnings []string
 	if w, ok := ds.(interface{ Warnings() []string }); ok {
@@ -59,7 +60,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	sharedInvoker := invocation.NewBroker(providers, ds)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {
 		return warnings, err
 	}
@@ -69,7 +70,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		defer func() { _ = StopRuntimes(context.Background(), runtimes, runtimes.List()) }()
 	}
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {
 		return warnings, err
 	}
