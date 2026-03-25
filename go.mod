@@ -115,4 +115,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
+replace (
+	github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
+	github.com/valon-technologies/gestalt/sdk/pluginsdk => ./sdk/pluginsdk
+)
