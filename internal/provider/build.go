@@ -31,7 +31,6 @@ func WithAuthHandler(h ci.AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
 }
 
-// WithEgressResolver injects a shared outbound request resolver.
 func WithEgressResolver(r *egress.Resolver) BuildOption {
 	return func(o *buildOptions) { o.egress = r }
 }

@@ -46,9 +46,6 @@ func DoPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 	return doPaginated(ctx, client, req, pgn, Do)
 }
 
-// DoPaginatedWithExecutor runs the shared pagination loop using a custom
-// request executor. This is used by callers that want apiexec's pagination
-// semantics while swapping the transport implementation.
 func DoPaginatedWithExecutor(ctx context.Context, client *http.Client, req Request, pgn PaginationConfig, exec RequestExecutor) (*core.OperationResult, error) {
 	if exec == nil {
 		exec = Do

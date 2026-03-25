@@ -6,8 +6,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/egress"
 )
 
-// EgressDeps carries shared outbound request resolution dependencies that can
-// be reused by providers, bindings, and runtimes.
 type EgressDeps struct {
 	Resolver *egress.Resolver
 }
