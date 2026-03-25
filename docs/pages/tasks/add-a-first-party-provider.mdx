@@ -1,0 +1,144 @@
+# Add a First-Party Provider
+
+A **first-party provider** ships with gestaltd and has its operation inventory checked into the repo. Use this approach for stable integrations that are tested in CI and versioned alongside the server.
+
+For ad-hoc or user-configured integrations that point at remote OpenAPI/GraphQL specs, see [Add an Integration](/tasks/add-an-integration).
+
+## 1. Create the provider package
+
+Every first-party provider lives under `plugins/providers/<name>/` with three files:
+
+### `provider.yaml`
+
+Declarative definition of the API surface. See `internal/provider/definition.go` for the full schema.
+
+```yaml
+provider: myservice
+display_name: My Service
+description: One-line description
+connection_mode: user   # none | user | identity | either
+base_url: "https://api.example.com/v1"
+
+auth:
+  type: oauth2          # oauth2 | manual
+  authorization_url: https://example.com/oauth/authorize
+  token_url: https://example.com/oauth/token
+  scopes: [read, write]
+
+operations:
+  list_items:
+    description: List all items
+    method: GET
+    path: /items
+    parameters:
+      - {name: limit, type: integer, description: Max results}
+  get_item:
+    description: Get an item by ID
+    method: GET
+    path: "/items/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Item ID}
+```
+
+### `factory.go`
+
+Embed the YAML, unmarshal, and call `provider.Build()`:
+
+```go
+package myservice
+
+import (
+	"context"
+	_ "embed"
+
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/provider"
+	"gopkg.in/yaml.v3"
+)
+
+//go:embed provider.yaml
+var definitionYAML []byte
+
+func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (core.Provider, error) {
+	var def provider.Definition
+	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
+		return nil, err
+	}
+	return provider.Build(&def, intg, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+}
+```
+
+### `factory_test.go`
+
+Use the shared `providertest` harness and validate against the `inventory` contract:
+
+```go
+package myservice
+
+import (
+	"testing"
+
+	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/plugins/providers/inventory"
+	"github.com/valon-technologies/gestalt/plugins/providers/providertest"
+)
+
+func TestBuildProvider(t *testing.T) {
+	t.Parallel()
+
+	inv, err := inventory.Load()
+	if err != nil {
+		t.Fatalf("inventory.Load: %v", err)
+	}
+	spec := inv.Providers["myservice"]
+
+	def := providertest.ParseDefinition(t, definitionYAML)
+	prov := providertest.BuildProvider(t, def, config.IntegrationDef{
+		ClientID: "dummy", ClientSecret: "dummy",
+	})
+
+	providertest.CheckProvider(t, prov, providertest.ProviderExpect{
+		Name:           "myservice",
+		ConnectionMode: core.ConnectionMode(spec.ConnectionMode),
+		OperationCount: len(spec.Operations),
+		OperationNames: spec.Operations,
+	})
+}
+```
+
+## 2. Registration
+
+Factory registration in `cmd/gestaltd/providers.go` is handled by the integrator, not the provider author. Your PR should only contain the `plugins/providers/<name>/` package.
+
+## 3. Overlay providers
+
+When Go code is needed for operations that cannot be expressed as REST/GraphQL YAML (custom request shaping, SDK calls, multi-step workflows), create an **overlay binary**:
+
+1. Implement a `core.Provider` with only the custom operations in your provider package
+2. Create `cmd/gestalt-plugin-<name>/main.go` that serves it via gRPC:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"os/signal"
+	"syscall"
+
+	"github.com/valon-technologies/gestalt/internal/pluginapi"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := pluginapi.ServeProvider(ctx, newOverlayProvider()); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+The YAML definition handles the base operations; the overlay binary handles the rest. The bootstrap system composes them automatically when `mode: overlay` is set in the deployment config.
