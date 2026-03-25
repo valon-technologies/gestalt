@@ -228,6 +228,98 @@ integrations:
 	}
 }
 
+func TestValidateConfigRejectsLegacyEgressCredentials(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  dev_mode: true
+  encryption_key: test-key
+egress:
+  credentials:
+    - provider: sample
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	err := validateConfig(cfgPath)
+	if err == nil {
+		t.Fatal("expected validateConfig to reject legacy egress.credentials")
+	}
+	if !strings.Contains(err.Error(), "field credentials not found") {
+		t.Fatalf("expected unknown field error, got: %v", err)
+	}
+}
+
+func TestValidateConfigRejectsOverlayWithoutSingleBaseSource(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		body        string
+		wantContain string
+	}{
+		{
+			name: "missing base source",
+			body: `integrations:
+  sample:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantContain: "must declare a base source",
+		},
+		{
+			name: "multiple base sources",
+			body: `integrations:
+  sample:
+    plugin:
+      mode: overlay
+      base: sample-base
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantContain: "exactly one base source",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := `auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  dev_mode: true
+  encryption_key: test-key
+` + tc.body
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			err := validateConfig(cfgPath)
+			if err == nil {
+				t.Fatal("expected validateConfig to fail")
+			}
+			if !strings.Contains(err.Error(), tc.wantContain) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantContain, err)
+			}
+		})
+	}
+}
+
 func newPreparedTestOpenAPIServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
