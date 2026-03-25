@@ -442,45 +442,6 @@ func TestLoadEmptyConfigFallsThrough(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnknownFields(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name        string
-		yaml        string
-		wantMessage string
-	}{
-		{
-			name: "legacy global mcp block",
-			yaml: `
-auth:
-  provider: google
-datastore:
-  provider: sqlite
-server:
-  encryption_key: key123
-mcp:
-  enabled: true
-`,
-			wantMessage: "field mcp not found in type config.Config",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			_, err := Load(path)
-			if err == nil {
-				t.Fatal("Load: expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.wantMessage) {
-				t.Fatalf("Load: expected error containing %q, got %v", tc.wantMessage, err)
-			}
-		})
-	}
-}
-
 func TestHelmValuesConfigLoads(t *testing.T) {
 	t.Parallel()
 

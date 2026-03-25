@@ -115,8 +115,8 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	}
 
 	switch {
-	case def.StructuredResponseCheck != nil:
-		base.CheckResponse = buildStructuredResponseChecker(def.StructuredResponseCheck)
+	case def.ResponseCheck != nil:
+		base.CheckResponse = buildResponseChecker(def.ResponseCheck)
 	case def.ErrorMessagePath != "":
 		msgPath := def.ErrorMessagePath
 		base.CheckResponse = func(status int, body []byte) error {
@@ -289,16 +289,16 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 	if intg.AuthMapping != nil {
 		def.AuthMapping = &AuthMappingDef{Headers: intg.AuthMapping.Headers}
 	}
-	if intg.StructuredResponseCheck != nil {
-		def.StructuredResponseCheck = &ResponseCheckDef{
-			SuccessBodyMatch: intg.StructuredResponseCheck.SuccessBodyMatch,
-			ErrorMessagePath: intg.StructuredResponseCheck.ErrorMessagePath,
+	if intg.ResponseCheck != nil {
+		def.ResponseCheck = &ResponseCheckDef{
+			SuccessBodyMatch: intg.ResponseCheck.SuccessBodyMatch,
+			ErrorMessagePath: intg.ResponseCheck.ErrorMessagePath,
 		}
 	}
-	if intg.Auth.StructuredResponseCheck != nil {
-		def.Auth.StructuredResponseCheck = &ResponseCheckDef{
-			SuccessBodyMatch: intg.Auth.StructuredResponseCheck.SuccessBodyMatch,
-			ErrorMessagePath: intg.Auth.StructuredResponseCheck.ErrorMessagePath,
+	if intg.Auth.ResponseCheck != nil {
+		def.Auth.ResponseCheck = &ResponseCheckDef{
+			SuccessBodyMatch: intg.Auth.ResponseCheck.SuccessBodyMatch,
+			ErrorMessagePath: intg.Auth.ResponseCheck.ErrorMessagePath,
 		}
 	}
 	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
@@ -370,8 +370,8 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	var opts []oauth.Option
 	opts = append(opts, oauth.WithHTTPClient(client))
 
-	if def.Auth.StructuredResponseCheck != nil {
-		rcd := def.Auth.StructuredResponseCheck
+	if def.Auth.ResponseCheck != nil {
+		rcd := def.Auth.ResponseCheck
 		opts = append(opts, oauth.WithResponseHook(func(body []byte) error {
 			var data map[string]any
 			if err := json.Unmarshal(body, &data); err != nil {
@@ -393,7 +393,7 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	return ci.UpstreamAuth{Handler: upstream}, nil
 }
 
-func buildStructuredResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
+func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
 	return func(status int, body []byte) error {
 		var data map[string]any
 		if err := json.Unmarshal(body, &data); err != nil {

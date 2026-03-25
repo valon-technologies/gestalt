@@ -181,12 +181,12 @@ Hooks handle the quirks of individual APIs without changing the core runtime.
 
 | Hook type | Config field | Purpose |
 |---|---|---|
-| Structured response check | `structured_response_check` | Declarative response validation using body matching and error extraction. |
+| Response check | `response_check` | Declarative response validation using body matching and error extraction. |
 | Request mutator | `request_mutator` | Rewrite or augment outgoing requests before execution. |
 
-### Structured response check
+### Response check
 
-The `structured_response_check` field provides declarative response validation. It supports two modes that can be used together or independently:
+The `response_check` field provides declarative response validation. It supports two modes that can be used together or independently:
 
 **Success body match** — assert that specific fields in the JSON response have expected values. When the match fails, the error message is extracted from the path given by `error_message_path`:
 
@@ -196,7 +196,7 @@ integrations:
     upstreams:
       - type: rest
         url: https://api.example.com/openapi.json
-    structured_response_check:
+    response_check:
       success_body_match:
         ok: true
       error_message_path: error
@@ -210,7 +210,7 @@ integrations:
     upstreams:
       - type: rest
         url: https://api.example.com/openapi.json
-    structured_response_check:
+    response_check:
       error_message_path: error.message
 ```
 
@@ -220,7 +220,7 @@ The same structure can be used under `auth` to validate OAuth token exchange res
 integrations:
   my-api:
     auth:
-      structured_response_check:
+      response_check:
         success_body_match:
           ok: true
         error_message_path: error
