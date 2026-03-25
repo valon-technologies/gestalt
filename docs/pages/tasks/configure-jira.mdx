@@ -1,0 +1,45 @@
+# Configure Jira
+
+Jira Cloud is a named provider. Add it to your config with OAuth credentials and Gestalt handles the rest, including automatic cloud site discovery.
+
+## Minimal config
+
+```yaml
+integrations:
+  jira:
+    client_id: ${JIRA_CLIENT_ID}
+    client_secret: ${JIRA_CLIENT_SECRET}
+```
+
+No upstreams needed. The named factory provides the full provider definition.
+
+## How discovery works
+
+After a user completes OAuth, Gestalt calls Atlassian's accessible-resources endpoint to discover which Jira Cloud sites the user can access.
+
+- **Single site** -- the `cloud_id` is stored automatically and the connection is ready immediately.
+- **Multiple sites** -- the connection enters a `selection_required` state. The user selects a site via `POST /api/v1/auth/connections/staged/{id}/select`, and the chosen `cloud_id` is stored.
+
+The `cloud_id` is interpolated into the base URL (`https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3`) at invocation time. No manual configuration is needed.
+
+## Operations
+
+| Operation | Method | Description |
+|---|---|---|
+| `list_projects` | GET | List all accessible projects |
+| `get_issue` | GET | Get a Jira issue by key |
+| `search_issues` | POST | Search issues using JQL |
+| `create_issue` | POST | Create a new issue |
+| `add_comment` | POST | Add a comment to an issue |
+| `get_transitions` | GET | Get available transitions for an issue |
+| `transition_issue` | POST | Transition an issue to a new status |
+
+## Example invocations
+
+```sh
+gestalt invoke jira list_projects
+
+gestalt invoke jira get_issue --param issueIdOrKey=PROJ-123
+
+gestalt invoke jira search_issues --param jql="project = PROJ AND status = Open"
+```

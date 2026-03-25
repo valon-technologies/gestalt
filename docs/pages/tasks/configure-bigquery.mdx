@@ -1,0 +1,72 @@
+# Configure BigQuery
+
+BigQuery is a named provider with two modes: base-only for REST metadata operations, and overlay mode that adds SQL query execution via an executable plugin.
+
+## Base-only mode
+
+Provides REST metadata operations (list datasets, tables, routines).
+
+```yaml
+integrations:
+  bigquery:
+    client_id: ${BIGQUERY_CLIENT_ID}
+    client_secret: ${BIGQUERY_CLIENT_SECRET}
+```
+
+## Overlay mode with query support
+
+Adds the `query` operation by running `gestalt-plugin-bigquery` as an overlay plugin. The plugin handles SQL execution via the BigQuery Go SDK while the base handles REST metadata.
+
+```yaml
+integrations:
+  bigquery:
+    client_id: ${BIGQUERY_CLIENT_ID}
+    client_secret: ${BIGQUERY_CLIENT_SECRET}
+    plugin:
+      mode: overlay
+      command: gestalt-plugin-bigquery
+```
+
+## Operations
+
+| Operation | Mode | Method | Description |
+|---|---|---|---|
+| `list_datasets` | base | GET | List datasets in a project |
+| `get_dataset` | base | GET | Get dataset metadata |
+| `list_tables` | base | GET | List tables in a dataset |
+| `get_table` | base | GET | Get table metadata |
+| `list_routines` | base | GET | List routines in a dataset |
+| `query` | overlay | POST | Execute a BigQuery SQL query |
+
+## Query operation
+
+Available only in overlay mode. Parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `project_id` | string | yes | GCP project ID |
+| `query` | string | yes | SQL query to execute |
+| `max_results` | integer | no | Maximum rows to return (default: 500) |
+| `timeout_ms` | integer | no | Query timeout in milliseconds (default: 60000) |
+| `use_legacy_sql` | boolean | no | Use legacy SQL syntax (default: false) |
+
+Response schema:
+
+```json
+{
+  "schema": [{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+  "rows": [{"col1": "value1", "col2": 42}],
+  "total_rows": 100,
+  "job_complete": true
+}
+```
+
+## Example invocations
+
+```sh
+gestalt invoke bigquery list_datasets --param project_id=my-project
+
+gestalt invoke bigquery query \
+  --param project_id=my-project \
+  --param query="SELECT * FROM dataset.table LIMIT 10"
+```
