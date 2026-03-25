@@ -334,6 +334,57 @@ integrations:
 			wantErr: true,
 		},
 		{
+			name: "integration plugin ref is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin:
+      ref: acme/provider@0.1.0
+`,
+			wantErr: false,
+		},
+		{
+			name: "integration plugin command and ref are mutually exclusive",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin:
+      command: /tmp/plugin
+      ref: acme/provider@0.1.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "integration plugin args require command",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  external:
+    plugin:
+      ref: acme/provider@0.1.0
+      args:
+        - --verbose
+`,
+			wantErr: true,
+		},
+		{
 			name: "overlay plugin with upstreams is valid",
 			yaml: `
 auth:
@@ -442,6 +493,22 @@ runtimes:
       command: /tmp/plugin
 `,
 			wantErr: true,
+		},
+		{
+			name: "runtime plugin ref is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    plugin:
+      ref: acme/runtime@0.1.0
+`,
+			wantErr: false,
 		},
 		{
 			name: "runtime requires type or plugin",

@@ -1,13 +1,21 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/internal/pluginstore"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
 func TestPrepareConfigWritesLockfileAndHiddenProviders(t *testing.T) {
@@ -45,6 +53,12 @@ func TestPrepareConfigWritesLockfileAndHiddenProviders(t *testing.T) {
 	}
 	if entry.Fingerprint == "" {
 		t.Fatal("expected non-empty fingerprint")
+	}
+	if lock.Version != preparedLockVersion {
+		t.Fatalf("lockfile version = %d, want %d", lock.Version, preparedLockVersion)
+	}
+	if lock.Plugins == nil {
+		t.Fatal("expected plugins map to be initialized")
 	}
 }
 
@@ -189,6 +203,141 @@ integrations:
 	}
 }
 
+func TestPreparedLockfileV2RoundTripPreservesPluginsSection(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, preparedLockfileName)
+	want := &preparedLockfile{
+		Version: preparedLockVersion,
+		Providers: map[string]preparedProviderEntry{
+			"restapi": {
+				Fingerprint: "provider-fingerprint",
+				Provider:    ".gestalt/providers/restapi.json",
+			},
+		},
+		Plugins: map[string]preparedPluginEntry{
+			"external": {
+				Fingerprint: "plugin-fingerprint",
+				Ref:         "acme/provider@0.1.0",
+				Manifest:    ".gestalt/plugins/acme/provider/0.1.0/plugin.json",
+				Executable:  ".gestalt/plugins/acme/provider/0.1.0/artifacts/linux/amd64/provider",
+				SHA256:      "deadbeef",
+			},
+		},
+	}
+
+	if err := writePreparedLockfile(lockPath, want); err != nil {
+		t.Fatalf("writePreparedLockfile: %v", err)
+	}
+
+	got, err := readPreparedLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("readPreparedLockfile: %v", err)
+	}
+	if got.Version != preparedLockVersion {
+		t.Fatalf("lockfile version = %d, want %d", got.Version, preparedLockVersion)
+	}
+	if got.Providers["restapi"].Fingerprint != want.Providers["restapi"].Fingerprint {
+		t.Fatalf("provider fingerprint = %q, want %q", got.Providers["restapi"].Fingerprint, want.Providers["restapi"].Fingerprint)
+	}
+	if got.Plugins["external"].Ref != want.Plugins["external"].Ref {
+		t.Fatalf("plugin ref = %q, want %q", got.Plugins["external"].Ref, want.Plugins["external"].Ref)
+	}
+	if got.Plugins["external"].Manifest != want.Plugins["external"].Manifest {
+		t.Fatalf("plugin manifest = %q, want %q", got.Plugins["external"].Manifest, want.Plugins["external"].Manifest)
+	}
+}
+
+func TestPluginFingerprintStable(t *testing.T) {
+	t.Parallel()
+
+	plugin := &config.ExecutablePluginDef{
+		Mode:    config.PluginModeReplace,
+		Command: "/tmp/plugin",
+		Ref:     "",
+		Args:    []string{"--verbose"},
+		Env:     map[string]string{"API_KEY": "abc123"},
+	}
+
+	first, err := pluginFingerprint("external", plugin)
+	if err != nil {
+		t.Fatalf("pluginFingerprint: %v", err)
+	}
+	second, err := pluginFingerprint("external", plugin)
+	if err != nil {
+		t.Fatalf("pluginFingerprint second: %v", err)
+	}
+	if first != second {
+		t.Fatalf("fingerprint changed between identical inputs: %q != %q", first, second)
+	}
+
+	plugin.Ref = "acme/provider@0.1.0"
+	third, err := pluginFingerprint("external", plugin)
+	if err != nil {
+		t.Fatalf("pluginFingerprint third: %v", err)
+	}
+	if third == first {
+		t.Fatal("expected ref change to affect fingerprint")
+	}
+}
+
+func TestPrepareConfigResolvesInstalledPluginRefs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfig(t, dir, "acme/provider@0.1.0")
+	packagePath := buildPreparedTestPluginPackage(t, dir, "acme/provider", "0.1.0", "provider")
+	store := pluginstore.New(cfgPath)
+	installed, err := store.Install(packagePath)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	if err := prepareConfig(cfgPath); err != nil {
+		t.Fatalf("prepareConfig: %v", err)
+	}
+
+	lock, err := readPreparedLockfile(filepath.Join(dir, preparedLockfileName))
+	if err != nil {
+		t.Fatalf("readPreparedLockfile: %v", err)
+	}
+	entry, ok := lock.Plugins[preparedPluginKey("integration", "example")]
+	if !ok {
+		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
+	}
+	if entry.Ref != "acme/provider@0.1.0" {
+		t.Fatalf("entry.Ref = %q", entry.Ref)
+	}
+
+	_, cfg, _, err := loadConfigForExecution(cfgPath, providerResolutionRequire)
+	if err != nil {
+		t.Fatalf("loadConfigForExecution: %v", err)
+	}
+	plugin := cfg.Integrations["example"].Plugin
+	if plugin.Command != installed.ExecutablePath {
+		t.Fatalf("plugin.Command = %q, want %q", plugin.Command, installed.ExecutablePath)
+	}
+	if plugin.Ref != "acme/provider@0.1.0" {
+		t.Fatalf("plugin.Ref = %q", plugin.Ref)
+	}
+}
+
+func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginRef(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfig(t, dir, "acme/provider@0.1.0")
+
+	_, _, _, err := loadConfigForExecution(cfgPath, providerResolutionPrefer)
+	if err == nil {
+		t.Fatal("expected unprepared plugin ref to fail")
+	}
+	if !strings.Contains(err.Error(), "gestaltd prepare") {
+		t.Fatalf("expected prepare guidance, got: %v", err)
+	}
+}
+
 func newPreparedTestOpenAPIServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
@@ -237,4 +386,80 @@ integrations:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 	return cfgPath
+}
+
+func writePreparedPluginRefConfig(t *testing.T, dir, ref string) string {
+	t.Helper()
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  dev_mode: true
+  encryption_key: test-key
+integrations:
+  example:
+    plugin:
+      ref: ` + ref + `
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	return cfgPath
+}
+
+func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content string) string {
+	t.Helper()
+
+	source := filepath.Join(dir, "plugin-src")
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
+	if err := os.MkdirAll(filepath.Join(source, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
+		ID:            id,
+		Version:       version,
+		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   artifactRel,
+				SHA256: sha256HexForPrepareTest(content),
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: artifactRel,
+			},
+		},
+	}
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, pluginpkg.ManifestFile), data, 0644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(source, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	return archivePath
+}
+
+func sha256HexForPrepareTest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
