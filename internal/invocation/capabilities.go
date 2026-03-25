@@ -1,32 +1,87 @@
 package invocation
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/core"
-	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
 func capabilitiesForProvider(name string, prov core.Provider) []core.Capability {
 	if cp, ok := prov.(core.CatalogProvider); ok {
 		if cat := cp.Catalog(); cat != nil {
-			return capabilitiesFromOperations(name, ci.OperationsList(cat))
+			return capabilitiesFromCatalog(name, cat)
 		}
 	}
 	return capabilitiesFromOperations(name, prov.ListOperations())
 }
 
+func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capability {
+	caps := make([]core.Capability, 0, len(cat.Operations))
+	for i := range cat.Operations {
+		op := cat.Operations[i]
+		if strings.TrimSpace(op.ID) == "" {
+			continue
+		}
+
+		params := make([]core.Parameter, 0, len(op.Parameters))
+		for _, p := range op.Parameters {
+			params = append(params, core.Parameter{
+				Name:        p.Name,
+				Type:        p.Type,
+				Description: p.Description,
+				Required:    p.Required,
+				Default:     p.Default,
+			})
+		}
+
+		method := strings.ToUpper(strings.TrimSpace(op.Method))
+		transport := strings.TrimSpace(op.Transport)
+		if transport == "" && method != "" {
+			transport = catalog.TransportHTTP
+		}
+
+		caps = append(caps, core.Capability{
+			Provider:    name,
+			Operation:   op.ID,
+			Title:       op.Title,
+			Description: op.Description,
+			Parameters:  params,
+			InputSchema: bytes.Clone(op.InputSchema),
+			Method:      method,
+			Transport:   transport,
+			Annotations: core.CapabilityAnnotations{
+				ReadOnlyHint:    op.Annotations.ReadOnlyHint,
+				IdempotentHint:  op.Annotations.IdempotentHint,
+				DestructiveHint: op.Annotations.DestructiveHint,
+				OpenWorldHint:   op.Annotations.OpenWorldHint,
+			},
+		})
+	}
+	return caps
+}
+
 func capabilitiesFromOperations(name string, ops []core.Operation) []core.Capability {
 	caps := make([]core.Capability, 0, len(ops))
 	for _, op := range ops {
-		if strings.TrimSpace(op.Method) == "" {
+		if strings.TrimSpace(op.Name) == "" {
 			continue
 		}
+
+		method := strings.ToUpper(strings.TrimSpace(op.Method))
+		transport := ""
+		if method != "" {
+			transport = catalog.TransportHTTP
+		}
+
 		caps = append(caps, core.Capability{
 			Provider:    name,
 			Operation:   op.Name,
 			Description: op.Description,
 			Parameters:  op.Parameters,
+			Method:      method,
+			Transport:   transport,
 		})
 	}
 	return caps
