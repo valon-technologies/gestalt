@@ -192,7 +192,7 @@ func operationsFromProto(ops []*pluginapiv1.Operation) []core.Operation {
 	return out
 }
 
-func capabilityToProto(cap core.Capability) (*pluginapiv1.Capability, error) {
+func capabilityToProto(cap *core.Capability) (*pluginapiv1.Capability, error) {
 	params, err := parametersToProto(cap.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("capability %q/%q: %w", cap.Provider, cap.Operation, err)
@@ -207,8 +207,8 @@ func capabilityToProto(cap core.Capability) (*pluginapiv1.Capability, error) {
 
 func capabilitiesToProto(caps []core.Capability) ([]*pluginapiv1.Capability, error) {
 	out := make([]*pluginapiv1.Capability, 0, len(caps))
-	for _, cap := range caps {
-		msg, err := capabilityToProto(cap)
+	for i := range caps {
+		msg, err := capabilityToProto(&caps[i])
 		if err != nil {
 			return nil, err
 		}
