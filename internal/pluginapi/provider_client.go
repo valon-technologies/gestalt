@@ -2,12 +2,15 @@ package pluginapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -35,9 +38,15 @@ func (p *remoteProviderBase) Close() error {
 	return nil
 }
 
-func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, opts ...RemoteProviderOption) (core.Provider, error) {
+func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, mode string, opts ...RemoteProviderOption) (core.Provider, error) {
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
+		return nil, err
+	}
+	if err := checkProtocolCompatibility(meta); err != nil {
+		return nil, err
+	}
+	if err := callStartProvider(ctx, client, name, config, mode); err != nil {
 		return nil, err
 	}
 	opsResp, err := client.ListOperations(ctx, &emptypb.Empty{})
@@ -203,4 +212,45 @@ func (p *remoteProviderWithOAuthSessionCatalog) RefreshToken(ctx context.Context
 
 func (p *remoteProviderWithOAuthSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
+}
+
+func checkProtocolCompatibility(meta *pluginapiv1.ProviderMetadata) error {
+	minV := meta.GetMinProtocolVersion()
+	maxV := meta.GetMaxProtocolVersion()
+	if minV == 0 && maxV == 0 {
+		return nil
+	}
+	if minV > 0 && pluginapiv1.CurrentProtocolVersion < minV {
+		return fmt.Errorf("plugin requires protocol version >= %d, host speaks %d",
+			minV, pluginapiv1.CurrentProtocolVersion)
+	}
+	if maxV > 0 && pluginapiv1.CurrentProtocolVersion > maxV {
+		return fmt.Errorf("plugin requires protocol version <= %d, host speaks %d",
+			maxV, pluginapiv1.CurrentProtocolVersion)
+	}
+	return nil
+}
+
+func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, mode string) error {
+	cfgStruct, err := structFromMap(config)
+	if err != nil {
+		return fmt.Errorf("encode provider config: %w", err)
+	}
+	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+		Name:            name,
+		Config:          cfgStruct,
+		Mode:            protoPluginMode(mode),
+		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+	})
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return nil
+		}
+		return fmt.Errorf("start provider: %w", err)
+	}
+	if v := resp.GetProtocolVersion(); v != pluginapiv1.CurrentProtocolVersion {
+		return fmt.Errorf("plugin responded with protocol version %d, host requires %d",
+			v, pluginapiv1.CurrentProtocolVersion)
+	}
+	return nil
 }
