@@ -111,7 +111,7 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	var bindingDeps bootstrap.BindingDeps
 	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
 		bindingDeps = deps
-		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
+		return &coretesting.StubBinding{N: name}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)

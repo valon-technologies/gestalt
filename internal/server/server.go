@@ -116,11 +116,10 @@ func (s *Server) routes() {
 		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/callback", s.integrationOAuthCallback)
 
-		s.mountBindingRoutes(r, core.BindingTrigger)
+		s.mountBindingRoutes(r)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
-			s.mountBindingRoutes(r, core.BindingSurface)
 
 			r.Get("/integrations", s.listIntegrations)
 			r.Delete("/integrations/{name}", s.disconnectIntegration)
@@ -157,7 +156,7 @@ func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 	return scs, nil
 }
 
-func (s *Server) mountBindingRoutes(r chi.Router, kind core.BindingKind) {
+func (s *Server) mountBindingRoutes(r chi.Router) {
 	if s.bindings == nil {
 		return
 	}
@@ -167,11 +166,12 @@ func (s *Server) mountBindingRoutes(r chi.Router, kind core.BindingKind) {
 			log.Printf("warning: skipping binding %q routes: %v", name, err)
 			continue
 		}
-		if binding.Kind() != kind {
-			continue
-		}
 		for _, route := range binding.Routes() {
-			r.Method(route.Method, "/bindings/"+name+route.Pattern, route.Handler)
+			handler := route.Handler
+			if !route.Public {
+				handler = s.authMiddleware(handler)
+			}
+			r.Method(route.Method, "/bindings/"+name+route.Pattern, handler)
 		}
 	}
 }

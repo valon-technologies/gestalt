@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// Deprecated: BindingKind is no longer used by the core Binding contract.
 type BindingKind int
 
 const (
@@ -14,7 +15,6 @@ const (
 
 type Binding interface {
 	Name() string
-	Kind() BindingKind
 	Start(ctx context.Context) error
 	Routes() []Route
 	Close() error
@@ -24,4 +24,5 @@ type Route struct {
 	Method  string
 	Pattern string
 	Handler http.Handler
+	Public  bool
 }

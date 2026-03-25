@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
@@ -391,9 +390,6 @@ func TestProxyFactory(t *testing.T) {
 
 	if binding.Name() != "proxy-surface" {
 		t.Fatalf("name = %q, want proxy-surface", binding.Name())
-	}
-	if binding.Kind() != core.BindingSurface {
-		t.Fatalf("kind = %v, want BindingSurface", binding.Kind())
 	}
 }
 
