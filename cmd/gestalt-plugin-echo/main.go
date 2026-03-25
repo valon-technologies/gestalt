@@ -79,6 +79,9 @@ func (p *echoRuntimePlugin) Start(ctx context.Context, req *pluginapiv1.StartRun
 		"capability_count": len(capsResp.GetCapabilities()),
 		"capabilities":     capabilityNames(capsResp.GetCapabilities()),
 	}
+	if len(cfg) > 0 {
+		record["config"] = cfg
+	}
 
 	probeProvider, _ := cfg["probe_provider"].(string)
 	probeOperation, _ := cfg["probe_operation"].(string)

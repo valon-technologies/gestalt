@@ -231,13 +231,16 @@ func checkProtocolCompatibility(meta *pluginapiv1.ProviderMetadata) error {
 	if minV == 0 && maxV == 0 {
 		return nil
 	}
-	if minV > 0 && pluginapiv1.CurrentProtocolVersion < minV {
-		return fmt.Errorf("plugin requires protocol version >= %d, host speaks %d",
-			minV, pluginapiv1.CurrentProtocolVersion)
+	if maxV == 0 {
+		if pluginapiv1.CurrentProtocolVersion < minV {
+			return fmt.Errorf("plugin requires protocol version %d+, host speaks %d",
+				minV, pluginapiv1.CurrentProtocolVersion)
+		}
+		return nil
 	}
-	if maxV > 0 && pluginapiv1.CurrentProtocolVersion > maxV {
-		return fmt.Errorf("plugin requires protocol version <= %d, host speaks %d",
-			maxV, pluginapiv1.CurrentProtocolVersion)
+	if pluginapiv1.CurrentProtocolVersion < minV || pluginapiv1.CurrentProtocolVersion > maxV {
+		return fmt.Errorf("plugin requires protocol version %d-%d, host speaks %d",
+			minV, maxV, pluginapiv1.CurrentProtocolVersion)
 	}
 	return nil
 }

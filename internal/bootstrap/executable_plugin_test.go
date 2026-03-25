@@ -20,11 +20,12 @@ import (
 )
 
 type runtimeOutput struct {
-	Name            string   `json:"name"`
-	CapabilityCount int      `json:"capability_count"`
-	Capabilities    []string `json:"capabilities"`
-	ProbeStatus     int      `json:"probe_status"`
-	ProbeBody       string   `json:"probe_body"`
+	Name            string         `json:"name"`
+	CapabilityCount int            `json:"capability_count"`
+	Capabilities    []string       `json:"capabilities"`
+	ProbeStatus     int            `json:"probe_status"`
+	ProbeBody       string         `json:"probe_body"`
+	Config          map[string]any `json:"config"`
 }
 
 type catalogProviderWithOps struct {
@@ -64,15 +65,15 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
+					Config: mustNode(t, map[string]any{
+						"output_file":     outputFile,
+						"probe_provider":  "echoext",
+						"probe_operation": "echo",
+						"probe_params": map[string]any{
+							"message": "from runtime",
+						},
+					}),
 				},
-				Config: mustNode(t, map[string]any{
-					"output_file":     outputFile,
-					"probe_provider":  "echoext",
-					"probe_operation": "echo",
-					"probe_params": map[string]any{
-						"message": "from runtime",
-					},
-				}),
 			},
 		},
 	}
@@ -131,10 +132,10 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
+					Config: mustNode(t, map[string]any{
+						"output_file": outputFile,
+					}),
 				},
-				Config: mustNode(t, map[string]any{
-					"output_file": outputFile,
-				}),
 			},
 		},
 	}
@@ -208,15 +209,15 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
+					Config: mustNode(t, map[string]any{
+						"output_file":     outputFile,
+						"probe_provider":  "workspace",
+						"probe_operation": "fetch_record",
+						"probe_params": map[string]any{
+							"id": "abc123",
+						},
+					}),
 				},
-				Config: mustNode(t, map[string]any{
-					"output_file":     outputFile,
-					"probe_provider":  "workspace",
-					"probe_operation": "fetch_record",
-					"probe_params": map[string]any{
-						"id": "abc123",
-					},
-				}),
 			},
 		},
 	}
@@ -314,10 +315,10 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
+					Config: mustNode(t, map[string]any{
+						"output_file": outputFile,
+					}),
 				},
-				Config: mustNode(t, map[string]any{
-					"output_file": outputFile,
-				}),
 			},
 		},
 	}
@@ -366,6 +367,149 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 	}
 }
 
+func TestExecutableRuntimeReceivesPluginConfig(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	outputFile := filepath.Join(t.TempDir(), "runtime-output.json")
+
+	cfg := &config.Config{
+		Runtimes: map[string]config.RuntimeDef{
+			"echoextrt": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"runtime"},
+					Config: mustNode(t, map[string]any{
+						"output_file":  outputFile,
+						"plugin_only":  "from plugin config",
+						"runtime_only": "from plugin config",
+					}),
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	broker := invocation.NewBroker(nil, nil)
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	if err != nil {
+		t.Fatalf("buildRuntimes: %v", err)
+	}
+	defer func() { _ = StopRuntimes(context.Background(), runtimes, runtimes.List()) }()
+
+	rt, err := runtimes.Get("echoextrt")
+	if err != nil {
+		t.Fatalf("runtimes.Get: %v", err)
+	}
+	if err := rt.Start(context.Background()); err != nil {
+		t.Fatalf("runtime.Start: %v", err)
+	}
+
+	got := readRuntimeOutput(t, outputFile)
+	if got.Config["runtime_only"] != "from plugin config" {
+		t.Fatalf("runtime config missing runtime_only: %+v", got.Config)
+	}
+	if got.Config["plugin_only"] != "from plugin config" {
+		t.Fatalf("runtime config missing plugin_only: %+v", got.Config)
+	}
+}
+
+func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
+	t.Parallel()
+
+	bin := buildExampleProviderBinary(t)
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Config: mustNode(t, map[string]any{
+						"greeting": "Hello from config",
+					}),
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get(example): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "greet", map[string]any{"name": "Gestalt"}, "")
+	if err != nil {
+		t.Fatalf("Execute(greet): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("greet status = %d", result.Status)
+	}
+	if result.Body != `{"message":"Hello from config, Gestalt!"}` {
+		t.Fatalf("greet body = %q", result.Body)
+	}
+
+	result, err = prov.Execute(context.Background(), "status", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(status): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status status = %d", result.Status)
+	}
+
+	var got map[string]string
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal(status): %v", err)
+	}
+	if got["name"] != "example" {
+		t.Fatalf("status.name = %q", got["name"])
+	}
+	if got["mode"] != "replace" {
+		t.Fatalf("status.mode = %q", got["mode"])
+	}
+	if got["greeting"] != "Hello from config" {
+		t.Fatalf("status.greeting = %q", got["greeting"])
+	}
+}
+
+func TestExecutableProviderAcceptsMinOnlyProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	bin := buildMinProtocolProviderBinary(t)
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"minproto": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("minproto")
+	if err != nil {
+		t.Fatalf("providers.Get(minproto): %v", err)
+	}
+	if prov.Name() != "minproto" {
+		t.Fatalf("provider name = %q", prov.Name())
+	}
+	if len(prov.ListOperations()) != 1 || prov.ListOperations()[0].Name != "ping" {
+		t.Fatalf("operations = %+v", prov.ListOperations())
+	}
+}
+
 func buildEchoPluginBinary(t *testing.T) string {
 	t.Helper()
 
@@ -375,6 +519,32 @@ func buildEchoPluginBinary(t *testing.T) string {
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build plugin binary: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func buildExampleProviderBinary(t *testing.T) string {
+	t.Helper()
+
+	bin := filepath.Join(t.TempDir(), "provider-go")
+	root := repoRoot(t)
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	cmd.Dir = filepath.Join(root, "examples", "plugins", "provider-go")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build example provider: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func buildMinProtocolProviderBinary(t *testing.T) string {
+	t.Helper()
+
+	bin := filepath.Join(t.TempDir(), "minproto-provider")
+	root := repoRoot(t)
+	cmd := exec.Command("go", "build", "-o", bin, "./internal/testplugins/min_protocol_provider")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build min protocol provider: %v\n%s", err, out)
 	}
 	return bin
 }
