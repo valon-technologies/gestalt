@@ -362,6 +362,80 @@ func TestBaseExecuteGraphQLWithVariables(t *testing.T) {
 	}
 }
 
+func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
+	t.Parallel()
+
+	var gotPolicy egress.PolicyInput
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/graphql" {
+			t.Fatalf("path = %s, want /graphql", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"auth":"` + r.Header.Get("Authorization") + `","org":"` + r.Header.Get("X-Org") + `"}}}`))
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL + "/graphql",
+		Queries: map[string]string{
+			"get_viewer": "{ viewer { login } }",
+		},
+		TokenParser: func(token string) (string, map[string]string, error) {
+			return "Token " + token, map[string]string{"X-Org": "acme"}, nil
+		},
+		IntegrationName: "github",
+		EgressResolver: &egress.Resolver{
+			Subjects: egress.ContextSubjectResolver{},
+			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
+				gotPolicy = input
+				return nil
+			}),
+		},
+	}
+
+	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectAgent, ID: "agent-graphql"})
+	result, err := b.Execute(ctx, "get_viewer", nil, "gql-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+
+	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectAgent, ID: "agent-graphql"}) {
+		t.Fatalf("subject = %+v, want agent-graphql", gotPolicy.Subject)
+	}
+	if gotPolicy.Target.Provider != "github" || gotPolicy.Target.Operation != "get_viewer" {
+		t.Fatalf("target = %+v, want github/get_viewer", gotPolicy.Target)
+	}
+	if gotPolicy.Target.Method != http.MethodPost || gotPolicy.Target.Path != "/graphql" {
+		t.Fatalf("target = %+v, want POST /graphql", gotPolicy.Target)
+	}
+	if gotPolicy.Headers["Authorization"] != "Token gql-token" {
+		t.Fatalf("authorization = %q, want Token gql-token", gotPolicy.Headers["Authorization"])
+	}
+	if gotPolicy.Headers["X-Org"] != "acme" {
+		t.Fatalf("org = %q, want acme", gotPolicy.Headers["X-Org"])
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	viewer := data["viewer"].(map[string]any)
+	if viewer["auth"] != "Token gql-token" {
+		t.Fatalf("auth = %v, want Token gql-token", viewer["auth"])
+	}
+	if viewer["org"] != "acme" {
+		t.Fatalf("org = %v, want acme", viewer["org"])
+	}
+}
+
 func TestBaseExecuteGraphQLWithTokenParser(t *testing.T) {
 	t.Parallel()
 

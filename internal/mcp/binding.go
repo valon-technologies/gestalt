@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/internal/principal"
@@ -152,6 +153,7 @@ func makeDirectHandler(cfg Config, provName, opName string, caller directToolCal
 		if p == nil {
 			return mcpgo.NewToolResultError("not authenticated"), nil
 		}
+		ctx = attachEgressSubject(ctx, p)
 
 		args := req.GetArguments()
 		instance, _ := args["_instance"].(string)
@@ -168,6 +170,10 @@ func makeDirectHandler(cfg Config, provName, opName string, caller directToolCal
 }
 
 func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string) {
+	if p := principal.FromContext(ctx); p != nil {
+		ctx = attachEgressSubject(ctx, p)
+	}
+
 	session := mcpserver.ClientSessionFromContext(ctx)
 	if session == nil {
 		return
@@ -219,6 +225,19 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 	if changed {
 		sessionWithTools.SetSessionTools(tools)
 	}
+}
+
+func attachEgressSubject(ctx context.Context, p *principal.Principal) context.Context {
+	if _, ok := egress.SubjectFromContext(ctx); ok {
+		return ctx
+	}
+	if p == nil || p.UserID == "" {
+		return ctx
+	}
+	return egress.WithSubject(ctx, egress.Subject{
+		Kind: egress.SubjectUser,
+		ID:   p.UserID,
+	})
 }
 
 func hasToolsWithPrefix(tools map[string]mcpserver.ServerTool, prefix string) bool {
