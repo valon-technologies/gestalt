@@ -345,18 +345,3 @@ func (b *Base) requestAuthFields(token string, auth egress.CredentialMaterializa
 	}
 	return "", auth.Authorization
 }
-
-func mergeHeaders(baseHeaders, overrideHeaders map[string]string) map[string]string {
-	if len(baseHeaders) == 0 && len(overrideHeaders) == 0 {
-		return nil
-	}
-
-	merged := egress.CopyHeaders(baseHeaders)
-	if merged == nil {
-		merged = make(map[string]string, len(overrideHeaders))
-	}
-	for key, value := range overrideHeaders {
-		merged[key] = value
-	}
-	return merged
-}

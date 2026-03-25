@@ -8,14 +8,6 @@ import (
 	"github.com/valon-technologies/gestalt/core/catalog"
 )
 
-func LoadCatalogYAML(data []byte) (*catalog.Catalog, error) {
-	return catalog.LoadCatalogYAML(data)
-}
-
-func MustLoadCatalogYAML(data []byte) *catalog.Catalog {
-	return catalog.MustLoadCatalogYAML(data)
-}
-
 func OperationsList(c *catalog.Catalog) []core.Operation {
 	ops := make([]core.Operation, 0, len(c.Operations))
 	for i := range c.Operations {
@@ -82,51 +74,4 @@ func QueriesMap(c *catalog.Catalog) map[string]string {
 		return nil
 	}
 	return queries
-}
-
-func AuthStyleValue(c *catalog.Catalog) (AuthStyle, error) {
-	if !catalog.IsValidAuthStyle(c.AuthStyle) {
-		return AuthStyleBearer, fmt.Errorf("catalog %q has unknown auth_style %q", c.Name, c.AuthStyle)
-	}
-	switch strings.ToLower(strings.TrimSpace(c.AuthStyle)) {
-	case "raw":
-		return AuthStyleRaw, nil
-	case "none":
-		return AuthStyleNone, nil
-	case "basic":
-		return AuthStyleBasic, nil
-	default:
-		return AuthStyleBearer, nil
-	}
-}
-
-func BaseFromCatalog(cat *catalog.Catalog, runtime Base) (Base, error) {
-	if err := cat.Validate(); err != nil {
-		return Base{}, err
-	}
-
-	authStyle, err := AuthStyleValue(cat)
-	if err != nil {
-		return Base{}, err
-	}
-
-	base := runtime
-	base.IntegrationName = cat.Name
-	base.IntegrationDisplay = cat.DisplayName
-	base.IntegrationDesc = cat.Description
-	if base.BaseURL == "" {
-		base.BaseURL = cat.BaseURL
-	}
-	base.AuthStyle = authStyle
-	base.Operations = OperationsList(cat)
-	endpoints, err := EndpointsMap(cat)
-	if err != nil {
-		return Base{}, err
-	}
-	base.Endpoints = endpoints
-	base.Queries = QueriesMap(cat)
-	base.Headers = mergeHeaders(cat.Headers, runtime.Headers)
-	base.catalog = cat
-
-	return base, nil
 }
