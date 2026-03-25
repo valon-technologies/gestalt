@@ -11,6 +11,7 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -78,6 +79,55 @@ func (ConnectionMode) EnumDescriptor() ([]byte, []int) {
 	return file_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
+type PluginMode int32
+
+const (
+	PluginMode_PLUGIN_MODE_UNSPECIFIED PluginMode = 0
+	PluginMode_PLUGIN_MODE_REPLACE     PluginMode = 1
+	PluginMode_PLUGIN_MODE_OVERLAY     PluginMode = 2
+)
+
+// Enum value maps for PluginMode.
+var (
+	PluginMode_name = map[int32]string{
+		0: "PLUGIN_MODE_UNSPECIFIED",
+		1: "PLUGIN_MODE_REPLACE",
+		2: "PLUGIN_MODE_OVERLAY",
+	}
+	PluginMode_value = map[string]int32{
+		"PLUGIN_MODE_UNSPECIFIED": 0,
+		"PLUGIN_MODE_REPLACE":     1,
+		"PLUGIN_MODE_OVERLAY":     2,
+	}
+)
+
+func (x PluginMode) Enum() *PluginMode {
+	p := new(PluginMode)
+	*p = x
+	return p
+}
+
+func (x PluginMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PluginMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_plugin_proto_enumTypes[1].Descriptor()
+}
+
+func (PluginMode) Type() protoreflect.EnumType {
+	return &file_v1_plugin_proto_enumTypes[1]
+}
+
+func (x PluginMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PluginMode.Descriptor instead.
+func (PluginMode) EnumDescriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{1}
+}
+
 type PrincipalSource int32
 
 const (
@@ -114,11 +164,11 @@ func (x PrincipalSource) String() string {
 }
 
 func (PrincipalSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_plugin_proto_enumTypes[1].Descriptor()
+	return file_v1_plugin_proto_enumTypes[2].Descriptor()
 }
 
 func (PrincipalSource) Type() protoreflect.EnumType {
-	return &file_v1_plugin_proto_enumTypes[1]
+	return &file_v1_plugin_proto_enumTypes[2]
 }
 
 func (x PrincipalSource) Number() protoreflect.EnumNumber {
@@ -127,7 +177,7 @@ func (x PrincipalSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PrincipalSource.Descriptor instead.
 func (PrincipalSource) EnumDescriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{1}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{2}
 }
 
 type UserIdentity struct {
@@ -548,6 +598,10 @@ type ProviderMetadata struct {
 	ConnectionParams       map[string]*ConnectionParamDef `protobuf:"bytes,6,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	StaticCatalogJson      string                         `protobuf:"bytes,7,opt,name=static_catalog_json,json=staticCatalogJson,proto3" json:"static_catalog_json,omitempty"`
 	SupportsSessionCatalog bool                           `protobuf:"varint,8,opt,name=supports_session_catalog,json=supportsSessionCatalog,proto3" json:"supports_session_catalog,omitempty"`
+	SupportsPostConnect    bool                           `protobuf:"varint,9,opt,name=supports_post_connect,json=supportsPostConnect,proto3" json:"supports_post_connect,omitempty"`
+	ConfigSchemaJson       string                         `protobuf:"bytes,10,opt,name=config_schema_json,json=configSchemaJson,proto3" json:"config_schema_json,omitempty"`
+	MinProtocolVersion     int32                          `protobuf:"varint,11,opt,name=min_protocol_version,json=minProtocolVersion,proto3" json:"min_protocol_version,omitempty"`
+	MaxProtocolVersion     int32                          `protobuf:"varint,12,opt,name=max_protocol_version,json=maxProtocolVersion,proto3" json:"max_protocol_version,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -636,6 +690,34 @@ func (x *ProviderMetadata) GetSupportsSessionCatalog() bool {
 		return x.SupportsSessionCatalog
 	}
 	return false
+}
+
+func (x *ProviderMetadata) GetSupportsPostConnect() bool {
+	if x != nil {
+		return x.SupportsPostConnect
+	}
+	return false
+}
+
+func (x *ProviderMetadata) GetConfigSchemaJson() string {
+	if x != nil {
+		return x.ConfigSchemaJson
+	}
+	return ""
+}
+
+func (x *ProviderMetadata) GetMinProtocolVersion() int32 {
+	if x != nil {
+		return x.MinProtocolVersion
+	}
+	return 0
+}
+
+func (x *ProviderMetadata) GetMaxProtocolVersion() int32 {
+	if x != nil {
+		return x.MaxProtocolVersion
+	}
+	return 0
 }
 
 type TokenResponse struct {
@@ -766,6 +848,146 @@ func (x *OperationResult) GetBody() string {
 	return ""
 }
 
+type IntegrationToken struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId            string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Integration       string                 `protobuf:"bytes,3,opt,name=integration,proto3" json:"integration,omitempty"`
+	Instance          string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
+	AccessToken       string                 `protobuf:"bytes,5,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken      string                 `protobuf:"bytes,6,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	Scopes            string                 `protobuf:"bytes,7,opt,name=scopes,proto3" json:"scopes,omitempty"`
+	ExpiresAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	LastRefreshedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_refreshed_at,json=lastRefreshedAt,proto3" json:"last_refreshed_at,omitempty"`
+	RefreshErrorCount int32                  `protobuf:"varint,10,opt,name=refresh_error_count,json=refreshErrorCount,proto3" json:"refresh_error_count,omitempty"`
+	MetadataJson      string                 `protobuf:"bytes,11,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
+	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *IntegrationToken) Reset() {
+	*x = IntegrationToken{}
+	mi := &file_v1_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationToken) ProtoMessage() {}
+
+func (x *IntegrationToken) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationToken.ProtoReflect.Descriptor instead.
+func (*IntegrationToken) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *IntegrationToken) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetIntegration() string {
+	if x != nil {
+		return x.Integration
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetInstance() string {
+	if x != nil {
+		return x.Instance
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetScopes() string {
+	if x != nil {
+		return x.Scopes
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *IntegrationToken) GetLastRefreshedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastRefreshedAt
+	}
+	return nil
+}
+
+func (x *IntegrationToken) GetRefreshErrorCount() int32 {
+	if x != nil {
+		return x.RefreshErrorCount
+	}
+	return 0
+}
+
+func (x *IntegrationToken) GetMetadataJson() string {
+	if x != nil {
+		return x.MetadataJson
+	}
+	return ""
+}
+
+func (x *IntegrationToken) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *IntegrationToken) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 type ListOperationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Operations    []*Operation           `protobuf:"bytes,1,rep,name=operations,proto3" json:"operations,omitempty"`
@@ -775,7 +997,7 @@ type ListOperationsResponse struct {
 
 func (x *ListOperationsResponse) Reset() {
 	*x = ListOperationsResponse{}
-	mi := &file_v1_plugin_proto_msgTypes[9]
+	mi := &file_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -787,7 +1009,7 @@ func (x *ListOperationsResponse) String() string {
 func (*ListOperationsResponse) ProtoMessage() {}
 
 func (x *ListOperationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[9]
+	mi := &file_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -800,7 +1022,7 @@ func (x *ListOperationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOperationsResponse.ProtoReflect.Descriptor instead.
 func (*ListOperationsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListOperationsResponse) GetOperations() []*Operation {
@@ -822,7 +1044,7 @@ type ExecuteRequest struct {
 
 func (x *ExecuteRequest) Reset() {
 	*x = ExecuteRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[10]
+	mi := &file_v1_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +1056,7 @@ func (x *ExecuteRequest) String() string {
 func (*ExecuteRequest) ProtoMessage() {}
 
 func (x *ExecuteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[10]
+	mi := &file_v1_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +1069,7 @@ func (x *ExecuteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ExecuteRequest) GetOperation() string {
@@ -888,7 +1110,7 @@ type AuthorizationURLRequest struct {
 
 func (x *AuthorizationURLRequest) Reset() {
 	*x = AuthorizationURLRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[11]
+	mi := &file_v1_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +1122,7 @@ func (x *AuthorizationURLRequest) String() string {
 func (*AuthorizationURLRequest) ProtoMessage() {}
 
 func (x *AuthorizationURLRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[11]
+	mi := &file_v1_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +1135,7 @@ func (x *AuthorizationURLRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationURLRequest.ProtoReflect.Descriptor instead.
 func (*AuthorizationURLRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{11}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AuthorizationURLRequest) GetState() string {
@@ -939,7 +1161,7 @@ type AuthorizationURLResponse struct {
 
 func (x *AuthorizationURLResponse) Reset() {
 	*x = AuthorizationURLResponse{}
-	mi := &file_v1_plugin_proto_msgTypes[12]
+	mi := &file_v1_plugin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -951,7 +1173,7 @@ func (x *AuthorizationURLResponse) String() string {
 func (*AuthorizationURLResponse) ProtoMessage() {}
 
 func (x *AuthorizationURLResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[12]
+	mi := &file_v1_plugin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -964,7 +1186,7 @@ func (x *AuthorizationURLResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationURLResponse.ProtoReflect.Descriptor instead.
 func (*AuthorizationURLResponse) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{12}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AuthorizationURLResponse) GetUrl() string {
@@ -983,7 +1205,7 @@ type ExchangeCodeRequest struct {
 
 func (x *ExchangeCodeRequest) Reset() {
 	*x = ExchangeCodeRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[13]
+	mi := &file_v1_plugin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -995,7 +1217,7 @@ func (x *ExchangeCodeRequest) String() string {
 func (*ExchangeCodeRequest) ProtoMessage() {}
 
 func (x *ExchangeCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[13]
+	mi := &file_v1_plugin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1008,7 +1230,7 @@ func (x *ExchangeCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeCodeRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeCodeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{13}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ExchangeCodeRequest) GetCode() string {
@@ -1027,7 +1249,7 @@ type RefreshTokenRequest struct {
 
 func (x *RefreshTokenRequest) Reset() {
 	*x = RefreshTokenRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[14]
+	mi := &file_v1_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1039,7 +1261,7 @@ func (x *RefreshTokenRequest) String() string {
 func (*RefreshTokenRequest) ProtoMessage() {}
 
 func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[14]
+	mi := &file_v1_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1052,7 +1274,7 @@ func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
 func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RefreshTokenRequest) GetRefreshToken() string {
@@ -1072,7 +1294,7 @@ type GetSessionCatalogRequest struct {
 
 func (x *GetSessionCatalogRequest) Reset() {
 	*x = GetSessionCatalogRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[15]
+	mi := &file_v1_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1084,7 +1306,7 @@ func (x *GetSessionCatalogRequest) String() string {
 func (*GetSessionCatalogRequest) ProtoMessage() {}
 
 func (x *GetSessionCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[15]
+	mi := &file_v1_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1097,7 +1319,7 @@ func (x *GetSessionCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionCatalogRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{15}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetSessionCatalogRequest) GetToken() string {
@@ -1123,7 +1345,7 @@ type GetSessionCatalogResponse struct {
 
 func (x *GetSessionCatalogResponse) Reset() {
 	*x = GetSessionCatalogResponse{}
-	mi := &file_v1_plugin_proto_msgTypes[16]
+	mi := &file_v1_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +1357,7 @@ func (x *GetSessionCatalogResponse) String() string {
 func (*GetSessionCatalogResponse) ProtoMessage() {}
 
 func (x *GetSessionCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[16]
+	mi := &file_v1_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1370,7 @@ func (x *GetSessionCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionCatalogResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{16}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetSessionCatalogResponse) GetCatalogJson() string {
@@ -1156,6 +1378,94 @@ func (x *GetSessionCatalogResponse) GetCatalogJson() string {
 		return x.CatalogJson
 	}
 	return ""
+}
+
+type PostConnectRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         *IntegrationToken      `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostConnectRequest) Reset() {
+	*x = PostConnectRequest{}
+	mi := &file_v1_plugin_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostConnectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostConnectRequest) ProtoMessage() {}
+
+func (x *PostConnectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostConnectRequest.ProtoReflect.Descriptor instead.
+func (*PostConnectRequest) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *PostConnectRequest) GetToken() *IntegrationToken {
+	if x != nil {
+		return x.Token
+	}
+	return nil
+}
+
+type PostConnectResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Metadata      map[string]string      `protobuf:"bytes,1,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostConnectResponse) Reset() {
+	*x = PostConnectResponse{}
+	mi := &file_v1_plugin_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostConnectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostConnectResponse) ProtoMessage() {}
+
+func (x *PostConnectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostConnectResponse.ProtoReflect.Descriptor instead.
+func (*PostConnectResponse) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PostConnectResponse) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
 }
 
 type ListCapabilitiesResponse struct {
@@ -1167,7 +1477,7 @@ type ListCapabilitiesResponse struct {
 
 func (x *ListCapabilitiesResponse) Reset() {
 	*x = ListCapabilitiesResponse{}
-	mi := &file_v1_plugin_proto_msgTypes[17]
+	mi := &file_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +1489,7 @@ func (x *ListCapabilitiesResponse) String() string {
 func (*ListCapabilitiesResponse) ProtoMessage() {}
 
 func (x *ListCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[17]
+	mi := &file_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +1502,7 @@ func (x *ListCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{17}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListCapabilitiesResponse) GetCapabilities() []*Capability {
@@ -1215,7 +1525,7 @@ type InvokeRequest struct {
 
 func (x *InvokeRequest) Reset() {
 	*x = InvokeRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[18]
+	mi := &file_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1227,7 +1537,7 @@ func (x *InvokeRequest) String() string {
 func (*InvokeRequest) ProtoMessage() {}
 
 func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[18]
+	mi := &file_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1240,7 +1550,7 @@ func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeRequest.ProtoReflect.Descriptor instead.
 func (*InvokeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{18}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *InvokeRequest) GetPrincipal() *Principal {
@@ -1278,6 +1588,118 @@ func (x *InvokeRequest) GetParams() *structpb.Struct {
 	return nil
 }
 
+type StartProviderRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Config          *structpb.Struct       `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	Mode            PluginMode             `protobuf:"varint,3,opt,name=mode,proto3,enum=gestalt.plugin.v1.PluginMode" json:"mode,omitempty"`
+	ProtocolVersion int32                  `protobuf:"varint,4,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StartProviderRequest) Reset() {
+	*x = StartProviderRequest{}
+	mi := &file_v1_plugin_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProviderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProviderRequest) ProtoMessage() {}
+
+func (x *StartProviderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProviderRequest.ProtoReflect.Descriptor instead.
+func (*StartProviderRequest) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *StartProviderRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StartProviderRequest) GetConfig() *structpb.Struct {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *StartProviderRequest) GetMode() PluginMode {
+	if x != nil {
+		return x.Mode
+	}
+	return PluginMode_PLUGIN_MODE_UNSPECIFIED
+}
+
+func (x *StartProviderRequest) GetProtocolVersion() int32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+type StartProviderResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion int32                  `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StartProviderResponse) Reset() {
+	*x = StartProviderResponse{}
+	mi := &file_v1_plugin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProviderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProviderResponse) ProtoMessage() {}
+
+func (x *StartProviderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProviderResponse.ProtoReflect.Descriptor instead.
+func (*StartProviderResponse) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *StartProviderResponse) GetProtocolVersion() int32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
 type StartRuntimeRequest struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1289,7 +1711,7 @@ type StartRuntimeRequest struct {
 
 func (x *StartRuntimeRequest) Reset() {
 	*x = StartRuntimeRequest{}
-	mi := &file_v1_plugin_proto_msgTypes[19]
+	mi := &file_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1301,7 +1723,7 @@ func (x *StartRuntimeRequest) String() string {
 func (*StartRuntimeRequest) ProtoMessage() {}
 
 func (x *StartRuntimeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_plugin_proto_msgTypes[19]
+	mi := &file_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,7 +1736,7 @@ func (x *StartRuntimeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRuntimeRequest.ProtoReflect.Descriptor instead.
 func (*StartRuntimeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_plugin_proto_rawDescGZIP(), []int{19}
+	return file_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *StartRuntimeRequest) GetName() string {
@@ -1342,7 +1764,7 @@ var File_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x0fv1/plugin.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"f\n" +
+	"\x0fv1/plugin.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"f\n" +
 	"\fUserIdentity\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1d\n" +
@@ -1378,7 +1800,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\x9a\x04\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\xda\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -1388,11 +1810,15 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"auth_types\x18\x05 \x03(\tR\tauthTypes\x12f\n" +
 	"\x11connection_params\x18\x06 \x03(\v29.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10connectionParams\x12.\n" +
 	"\x13static_catalog_json\x18\a \x01(\tR\x11staticCatalogJson\x128\n" +
-	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x1aj\n" +
+	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x122\n" +
+	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x12,\n" +
+	"\x12config_schema_json\x18\n" +
+	" \x01(\tR\x10configSchemaJson\x120\n" +
+	"\x14min_protocol_version\x18\v \x01(\x05R\x12minProtocolVersion\x120\n" +
+	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1aj\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
-	"\x05value\x18\x02 \x01(\v2%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x028\x01J\x04\b\t\x10\n" +
-	"\"\xc4\x01\n" +
+	"\x05value\x18\x02 \x01(\v2%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x028\x01\"\xc4\x01\n" +
 	"\rTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +
@@ -1403,7 +1829,25 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x05extra\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05extra\"=\n" +
 	"\x0fOperationResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\"V\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\"\xa7\x04\n" +
+	"\x10IntegrationToken\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12 \n" +
+	"\vintegration\x18\x03 \x01(\tR\vintegration\x12\x1a\n" +
+	"\binstance\x18\x04 \x01(\tR\binstance\x12!\n" +
+	"\faccess_token\x18\x05 \x01(\tR\vaccessToken\x12#\n" +
+	"\rrefresh_token\x18\x06 \x01(\tR\frefreshToken\x12\x16\n" +
+	"\x06scopes\x18\a \x01(\tR\x06scopes\x129\n" +
+	"\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12F\n" +
+	"\x11last_refreshed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0flastRefreshedAt\x12.\n" +
+	"\x13refresh_error_count\x18\n" +
+	" \x01(\x05R\x11refreshErrorCount\x12#\n" +
+	"\rmetadata_json\x18\v \x01(\tR\fmetadataJson\x129\n" +
+	"\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"V\n" +
 	"\x16ListOperationsResponse\x12<\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1c.gestalt.plugin.v1.OperationR\n" +
@@ -1432,7 +1876,14 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\">\n" +
 	"\x19GetSessionCatalogResponse\x12!\n" +
-	"\fcatalog_json\x18\x01 \x01(\tR\vcatalogJson\"]\n" +
+	"\fcatalog_json\x18\x01 \x01(\tR\vcatalogJson\"O\n" +
+	"\x12PostConnectRequest\x129\n" +
+	"\x05token\x18\x01 \x01(\v2#.gestalt.plugin.v1.IntegrationTokenR\x05token\"\xa4\x01\n" +
+	"\x13PostConnectResponse\x12P\n" +
+	"\bmetadata\x18\x01 \x03(\v24.gestalt.plugin.v1.PostConnectResponse.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"]\n" +
 	"\x18ListCapabilitiesResponse\x12A\n" +
 	"\fcapabilities\x18\x01 \x03(\v2\x1d.gestalt.plugin.v1.CapabilityR\fcapabilities\"\xd2\x01\n" +
 	"\rInvokeRequest\x12:\n" +
@@ -1440,7 +1891,14 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x1a\n" +
 	"\binstance\x18\x03 \x01(\tR\binstance\x12\x1c\n" +
 	"\toperation\x18\x04 \x01(\tR\toperation\x12/\n" +
-	"\x06params\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06params\"\xac\x01\n" +
+	"\x06params\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06params\"\xb9\x01\n" +
+	"\x14StartProviderRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
+	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x121\n" +
+	"\x04mode\x18\x03 \x01(\x0e2\x1d.gestalt.plugin.v1.PluginModeR\x04mode\x12)\n" +
+	"\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n" +
+	"\x15StartProviderResponse\x12)\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"\xac\x01\n" +
 	"\x13StartRuntimeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12P\n" +
@@ -1450,20 +1908,27 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x18\n" +
 	"\x14CONNECTION_MODE_USER\x10\x02\x12\x1c\n" +
 	"\x18CONNECTION_MODE_IDENTITY\x10\x03\x12\x1a\n" +
-	"\x16CONNECTION_MODE_EITHER\x10\x04*\x8b\x01\n" +
+	"\x16CONNECTION_MODE_EITHER\x10\x04*[\n" +
+	"\n" +
+	"PluginMode\x12\x1b\n" +
+	"\x17PLUGIN_MODE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13PLUGIN_MODE_REPLACE\x10\x01\x12\x17\n" +
+	"\x13PLUGIN_MODE_OVERLAY\x10\x02*\x8b\x01\n" +
 	"\x0fPrincipalSource\x12 \n" +
 	"\x1cPRINCIPAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PRINCIPAL_SOURCE_SESSION\x10\x01\x12\x1e\n" +
 	"\x1aPRINCIPAL_SOURCE_API_TOKEN\x10\x02\x12\x18\n" +
-	"\x14PRINCIPAL_SOURCE_ENV\x10\x032\x94\x05\n" +
+	"\x14PRINCIPAL_SOURCE_ENV\x10\x032\xd6\x06\n" +
 	"\x0eProviderPlugin\x12J\n" +
-	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12S\n" +
+	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12b\n" +
+	"\rStartProvider\x12'.gestalt.plugin.v1.StartProviderRequest\x1a(.gestalt.plugin.v1.StartProviderResponse\x12S\n" +
 	"\x0eListOperations\x12\x16.google.protobuf.Empty\x1a).gestalt.plugin.v1.ListOperationsResponse\x12P\n" +
 	"\aExecute\x12!.gestalt.plugin.v1.ExecuteRequest\x1a\".gestalt.plugin.v1.OperationResult\x12k\n" +
 	"\x10AuthorizationURL\x12*.gestalt.plugin.v1.AuthorizationURLRequest\x1a+.gestalt.plugin.v1.AuthorizationURLResponse\x12X\n" +
 	"\fExchangeCode\x12&.gestalt.plugin.v1.ExchangeCodeRequest\x1a .gestalt.plugin.v1.TokenResponse\x12X\n" +
 	"\fRefreshToken\x12&.gestalt.plugin.v1.RefreshTokenRequest\x1a .gestalt.plugin.v1.TokenResponse\x12n\n" +
-	"\x11GetSessionCatalog\x12+.gestalt.plugin.v1.GetSessionCatalogRequest\x1a,.gestalt.plugin.v1.GetSessionCatalogResponse2\x90\x01\n" +
+	"\x11GetSessionCatalog\x12+.gestalt.plugin.v1.GetSessionCatalogRequest\x1a,.gestalt.plugin.v1.GetSessionCatalogResponse\x12\\\n" +
+	"\vPostConnect\x12%.gestalt.plugin.v1.PostConnectRequest\x1a&.gestalt.plugin.v1.PostConnectResponse2\x90\x01\n" +
 	"\rRuntimePlugin\x12G\n" +
 	"\x05Start\x12&.gestalt.plugin.v1.StartRuntimeRequest\x1a\x16.google.protobuf.Empty\x126\n" +
 	"\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xb6\x01\n" +
@@ -1484,84 +1949,104 @@ func file_v1_plugin_proto_rawDescGZIP() []byte {
 	return file_v1_plugin_proto_rawDescData
 }
 
-var file_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_v1_plugin_proto_goTypes = []any{
 	(ConnectionMode)(0),               // 0: gestalt.plugin.v1.ConnectionMode
-	(PrincipalSource)(0),              // 1: gestalt.plugin.v1.PrincipalSource
-	(*UserIdentity)(nil),              // 2: gestalt.plugin.v1.UserIdentity
-	(*Principal)(nil),                 // 3: gestalt.plugin.v1.Principal
-	(*Parameter)(nil),                 // 4: gestalt.plugin.v1.Parameter
-	(*Operation)(nil),                 // 5: gestalt.plugin.v1.Operation
-	(*Capability)(nil),                // 6: gestalt.plugin.v1.Capability
-	(*ConnectionParamDef)(nil),        // 7: gestalt.plugin.v1.ConnectionParamDef
-	(*ProviderMetadata)(nil),          // 8: gestalt.plugin.v1.ProviderMetadata
-	(*TokenResponse)(nil),             // 9: gestalt.plugin.v1.TokenResponse
-	(*OperationResult)(nil),           // 10: gestalt.plugin.v1.OperationResult
-	(*ListOperationsResponse)(nil),    // 11: gestalt.plugin.v1.ListOperationsResponse
-	(*ExecuteRequest)(nil),            // 12: gestalt.plugin.v1.ExecuteRequest
-	(*AuthorizationURLRequest)(nil),   // 13: gestalt.plugin.v1.AuthorizationURLRequest
-	(*AuthorizationURLResponse)(nil),  // 14: gestalt.plugin.v1.AuthorizationURLResponse
-	(*ExchangeCodeRequest)(nil),       // 15: gestalt.plugin.v1.ExchangeCodeRequest
-	(*RefreshTokenRequest)(nil),       // 16: gestalt.plugin.v1.RefreshTokenRequest
-	(*GetSessionCatalogRequest)(nil),  // 17: gestalt.plugin.v1.GetSessionCatalogRequest
-	(*GetSessionCatalogResponse)(nil), // 18: gestalt.plugin.v1.GetSessionCatalogResponse
-	(*ListCapabilitiesResponse)(nil),  // 19: gestalt.plugin.v1.ListCapabilitiesResponse
-	(*InvokeRequest)(nil),             // 20: gestalt.plugin.v1.InvokeRequest
-	(*StartRuntimeRequest)(nil),       // 21: gestalt.plugin.v1.StartRuntimeRequest
-	nil,                               // 22: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	nil,                               // 23: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                               // 24: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	(*structpb.Value)(nil),            // 25: google.protobuf.Value
-	(*structpb.Struct)(nil),           // 26: google.protobuf.Struct
-	(*emptypb.Empty)(nil),             // 27: google.protobuf.Empty
+	(PluginMode)(0),                   // 1: gestalt.plugin.v1.PluginMode
+	(PrincipalSource)(0),              // 2: gestalt.plugin.v1.PrincipalSource
+	(*UserIdentity)(nil),              // 3: gestalt.plugin.v1.UserIdentity
+	(*Principal)(nil),                 // 4: gestalt.plugin.v1.Principal
+	(*Parameter)(nil),                 // 5: gestalt.plugin.v1.Parameter
+	(*Operation)(nil),                 // 6: gestalt.plugin.v1.Operation
+	(*Capability)(nil),                // 7: gestalt.plugin.v1.Capability
+	(*ConnectionParamDef)(nil),        // 8: gestalt.plugin.v1.ConnectionParamDef
+	(*ProviderMetadata)(nil),          // 9: gestalt.plugin.v1.ProviderMetadata
+	(*TokenResponse)(nil),             // 10: gestalt.plugin.v1.TokenResponse
+	(*OperationResult)(nil),           // 11: gestalt.plugin.v1.OperationResult
+	(*IntegrationToken)(nil),          // 12: gestalt.plugin.v1.IntegrationToken
+	(*ListOperationsResponse)(nil),    // 13: gestalt.plugin.v1.ListOperationsResponse
+	(*ExecuteRequest)(nil),            // 14: gestalt.plugin.v1.ExecuteRequest
+	(*AuthorizationURLRequest)(nil),   // 15: gestalt.plugin.v1.AuthorizationURLRequest
+	(*AuthorizationURLResponse)(nil),  // 16: gestalt.plugin.v1.AuthorizationURLResponse
+	(*ExchangeCodeRequest)(nil),       // 17: gestalt.plugin.v1.ExchangeCodeRequest
+	(*RefreshTokenRequest)(nil),       // 18: gestalt.plugin.v1.RefreshTokenRequest
+	(*GetSessionCatalogRequest)(nil),  // 19: gestalt.plugin.v1.GetSessionCatalogRequest
+	(*GetSessionCatalogResponse)(nil), // 20: gestalt.plugin.v1.GetSessionCatalogResponse
+	(*PostConnectRequest)(nil),        // 21: gestalt.plugin.v1.PostConnectRequest
+	(*PostConnectResponse)(nil),       // 22: gestalt.plugin.v1.PostConnectResponse
+	(*ListCapabilitiesResponse)(nil),  // 23: gestalt.plugin.v1.ListCapabilitiesResponse
+	(*InvokeRequest)(nil),             // 24: gestalt.plugin.v1.InvokeRequest
+	(*StartProviderRequest)(nil),      // 25: gestalt.plugin.v1.StartProviderRequest
+	(*StartProviderResponse)(nil),     // 26: gestalt.plugin.v1.StartProviderResponse
+	(*StartRuntimeRequest)(nil),       // 27: gestalt.plugin.v1.StartRuntimeRequest
+	nil,                               // 28: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
+	nil,                               // 29: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
+	nil,                               // 30: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	nil,                               // 31: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	(*structpb.Value)(nil),            // 32: google.protobuf.Value
+	(*structpb.Struct)(nil),           // 33: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),     // 34: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),             // 35: google.protobuf.Empty
 }
 var file_v1_plugin_proto_depIdxs = []int32{
-	2,  // 0: gestalt.plugin.v1.Principal.identity:type_name -> gestalt.plugin.v1.UserIdentity
-	1,  // 1: gestalt.plugin.v1.Principal.source:type_name -> gestalt.plugin.v1.PrincipalSource
-	25, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
-	4,  // 3: gestalt.plugin.v1.Operation.parameters:type_name -> gestalt.plugin.v1.Parameter
-	4,  // 4: gestalt.plugin.v1.Capability.parameters:type_name -> gestalt.plugin.v1.Parameter
+	3,  // 0: gestalt.plugin.v1.Principal.identity:type_name -> gestalt.plugin.v1.UserIdentity
+	2,  // 1: gestalt.plugin.v1.Principal.source:type_name -> gestalt.plugin.v1.PrincipalSource
+	32, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
+	5,  // 3: gestalt.plugin.v1.Operation.parameters:type_name -> gestalt.plugin.v1.Parameter
+	5,  // 4: gestalt.plugin.v1.Capability.parameters:type_name -> gestalt.plugin.v1.Parameter
 	0,  // 5: gestalt.plugin.v1.ProviderMetadata.connection_mode:type_name -> gestalt.plugin.v1.ConnectionMode
-	22, // 6: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	26, // 7: gestalt.plugin.v1.TokenResponse.extra:type_name -> google.protobuf.Struct
-	5,  // 8: gestalt.plugin.v1.ListOperationsResponse.operations:type_name -> gestalt.plugin.v1.Operation
-	26, // 9: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	23, // 10: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	24, // 11: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	6,  // 12: gestalt.plugin.v1.ListCapabilitiesResponse.capabilities:type_name -> gestalt.plugin.v1.Capability
-	3,  // 13: gestalt.plugin.v1.InvokeRequest.principal:type_name -> gestalt.plugin.v1.Principal
-	26, // 14: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
-	26, // 15: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
-	6,  // 16: gestalt.plugin.v1.StartRuntimeRequest.initial_capabilities:type_name -> gestalt.plugin.v1.Capability
-	7,  // 17: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
-	27, // 18: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
-	27, // 19: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
-	12, // 20: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
-	13, // 21: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:input_type -> gestalt.plugin.v1.AuthorizationURLRequest
-	15, // 22: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:input_type -> gestalt.plugin.v1.ExchangeCodeRequest
-	16, // 23: gestalt.plugin.v1.ProviderPlugin.RefreshToken:input_type -> gestalt.plugin.v1.RefreshTokenRequest
-	17, // 24: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
-	21, // 25: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
-	27, // 26: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
-	20, // 27: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
-	27, // 28: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
-	8,  // 29: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
-	11, // 30: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
-	10, // 31: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
-	14, // 32: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:output_type -> gestalt.plugin.v1.AuthorizationURLResponse
-	9,  // 33: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:output_type -> gestalt.plugin.v1.TokenResponse
-	9,  // 34: gestalt.plugin.v1.ProviderPlugin.RefreshToken:output_type -> gestalt.plugin.v1.TokenResponse
-	18, // 35: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
-	27, // 36: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
-	27, // 37: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
-	10, // 38: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
-	19, // 39: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
-	29, // [29:40] is the sub-list for method output_type
-	18, // [18:29] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	28, // 6: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
+	33, // 7: gestalt.plugin.v1.TokenResponse.extra:type_name -> google.protobuf.Struct
+	34, // 8: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
+	34, // 9: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	34, // 10: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
+	34, // 11: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 12: gestalt.plugin.v1.ListOperationsResponse.operations:type_name -> gestalt.plugin.v1.Operation
+	33, // 13: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	29, // 14: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
+	30, // 15: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	12, // 16: gestalt.plugin.v1.PostConnectRequest.token:type_name -> gestalt.plugin.v1.IntegrationToken
+	31, // 17: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	7,  // 18: gestalt.plugin.v1.ListCapabilitiesResponse.capabilities:type_name -> gestalt.plugin.v1.Capability
+	4,  // 19: gestalt.plugin.v1.InvokeRequest.principal:type_name -> gestalt.plugin.v1.Principal
+	33, // 20: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
+	33, // 21: gestalt.plugin.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	1,  // 22: gestalt.plugin.v1.StartProviderRequest.mode:type_name -> gestalt.plugin.v1.PluginMode
+	33, // 23: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
+	7,  // 24: gestalt.plugin.v1.StartRuntimeRequest.initial_capabilities:type_name -> gestalt.plugin.v1.Capability
+	8,  // 25: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
+	35, // 26: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
+	25, // 27: gestalt.plugin.v1.ProviderPlugin.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
+	35, // 28: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
+	14, // 29: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
+	15, // 30: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:input_type -> gestalt.plugin.v1.AuthorizationURLRequest
+	17, // 31: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:input_type -> gestalt.plugin.v1.ExchangeCodeRequest
+	18, // 32: gestalt.plugin.v1.ProviderPlugin.RefreshToken:input_type -> gestalt.plugin.v1.RefreshTokenRequest
+	19, // 33: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
+	21, // 34: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
+	27, // 35: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
+	35, // 36: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
+	24, // 37: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
+	35, // 38: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
+	9,  // 39: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
+	26, // 40: gestalt.plugin.v1.ProviderPlugin.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
+	13, // 41: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
+	11, // 42: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
+	16, // 43: gestalt.plugin.v1.ProviderPlugin.AuthorizationURL:output_type -> gestalt.plugin.v1.AuthorizationURLResponse
+	10, // 44: gestalt.plugin.v1.ProviderPlugin.ExchangeCode:output_type -> gestalt.plugin.v1.TokenResponse
+	10, // 45: gestalt.plugin.v1.ProviderPlugin.RefreshToken:output_type -> gestalt.plugin.v1.TokenResponse
+	20, // 46: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
+	22, // 47: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
+	35, // 48: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
+	35, // 49: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
+	11, // 50: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
+	23, // 51: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
+	39, // [39:52] is the sub-list for method output_type
+	26, // [26:39] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_v1_plugin_proto_init() }
@@ -1574,8 +2059,8 @@ func file_v1_plugin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_plugin_proto_rawDesc), len(file_v1_plugin_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   23,
+			NumEnums:      3,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

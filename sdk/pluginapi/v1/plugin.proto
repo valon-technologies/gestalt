@@ -6,6 +6,7 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/pluginapi/v1;plug
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
@@ -13,6 +14,12 @@ enum ConnectionMode {
   CONNECTION_MODE_USER = 2;
   CONNECTION_MODE_IDENTITY = 3;
   CONNECTION_MODE_EITHER = 4;
+}
+
+enum PluginMode {
+  PLUGIN_MODE_UNSPECIFIED = 0;
+  PLUGIN_MODE_REPLACE = 1;
+  PLUGIN_MODE_OVERLAY = 2;
 }
 
 enum PrincipalSource {
@@ -73,7 +80,10 @@ message ProviderMetadata {
   map<string, ConnectionParamDef> connection_params = 6;
   string static_catalog_json = 7;
   bool supports_session_catalog = 8;
-  reserved 9;
+  bool supports_post_connect = 9;
+  string config_schema_json = 10;
+  int32 min_protocol_version = 11;
+  int32 max_protocol_version = 12;
 }
 
 message TokenResponse {
@@ -87,6 +97,22 @@ message TokenResponse {
 message OperationResult {
   int32 status = 1;
   string body = 2;
+}
+
+message IntegrationToken {
+  string id = 1;
+  string user_id = 2;
+  string integration = 3;
+  string instance = 4;
+  string access_token = 5;
+  string refresh_token = 6;
+  string scopes = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  google.protobuf.Timestamp last_refreshed_at = 9;
+  int32 refresh_error_count = 10;
+  string metadata_json = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
 }
 
 message ListOperationsResponse {
@@ -126,6 +152,14 @@ message GetSessionCatalogResponse {
   string catalog_json = 1;
 }
 
+message PostConnectRequest {
+  IntegrationToken token = 1;
+}
+
+message PostConnectResponse {
+  map<string, string> metadata = 1;
+}
+
 message ListCapabilitiesResponse {
   repeated Capability capabilities = 1;
 }
@@ -138,6 +172,17 @@ message InvokeRequest {
   google.protobuf.Struct params = 5;
 }
 
+message StartProviderRequest {
+  string name = 1;
+  google.protobuf.Struct config = 2;
+  PluginMode mode = 3;
+  int32 protocol_version = 4;
+}
+
+message StartProviderResponse {
+  int32 protocol_version = 1;
+}
+
 message StartRuntimeRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
@@ -146,12 +191,14 @@ message StartRuntimeRequest {
 
 service ProviderPlugin {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
+  rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
   rpc ListOperations(google.protobuf.Empty) returns (ListOperationsResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);
   rpc AuthorizationURL(AuthorizationURLRequest) returns (AuthorizationURLResponse);
   rpc ExchangeCode(ExchangeCodeRequest) returns (TokenResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (TokenResponse);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
+  rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
 }
 
 service RuntimePlugin {
