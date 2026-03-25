@@ -46,6 +46,7 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
+var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"

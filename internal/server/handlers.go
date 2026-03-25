@@ -1163,6 +1163,10 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				return &postConnectResult{Status: "connected"}, nil
 			}
 
+			scs, err := s.stagedConnectionStore()
+			if err != nil {
+				return nil, err
+			}
 			candidatesJSON, _ := json.Marshal(candidates)
 			now := s.now().UTC().Truncate(time.Second)
 			sc := &core.StagedConnection{
@@ -1178,7 +1182,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				CreatedAt:      now,
 				ExpiresAt:      now.Add(stagedConnectionTTL),
 			}
-			if err := s.datastore.StoreStagedConnection(ctx, sc); err != nil {
+			if err := scs.StoreStagedConnection(ctx, sc); err != nil {
 				return nil, fmt.Errorf("storing staged connection: %w", err)
 			}
 			return &postConnectResult{
@@ -1208,9 +1212,9 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 	return &postConnectResult{Status: "connected"}, nil
 }
 
-func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, userID string) (*core.StagedConnection, bool) {
+func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, userID string, scs core.StagedConnectionStore) (*core.StagedConnection, bool) {
 	id := chi.URLParam(r, "id")
-	sc, err := s.datastore.GetStagedConnection(r.Context(), id)
+	sc, err := scs.GetStagedConnection(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "staged connection not found")
@@ -1224,7 +1228,7 @@ func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, us
 		return nil, false
 	}
 	if s.now().After(sc.ExpiresAt) {
-		_ = s.datastore.DeleteStagedConnection(r.Context(), id)
+		_ = scs.DeleteStagedConnection(r.Context(), id)
 		writeError(w, http.StatusGone, "staged connection has expired")
 		return nil, false
 	}
@@ -1232,11 +1236,16 @@ func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, us
 }
 
 func (s *Server) getStagedConnection(w http.ResponseWriter, r *http.Request) {
+	scs, err := s.stagedConnectionStore()
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, err.Error())
+		return
+	}
 	userID, ok := s.resolveUserID(w, r)
 	if !ok {
 		return
 	}
-	sc, ok := s.loadStagedConnection(w, r, userID)
+	sc, ok := s.loadStagedConnection(w, r, userID, scs)
 	if !ok {
 		return
 	}
@@ -1256,6 +1265,11 @@ func (s *Server) getStagedConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) {
+	scs, err := s.stagedConnectionStore()
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, err.Error())
+		return
+	}
 	userID, ok := s.resolveUserID(w, r)
 	if !ok {
 		return
@@ -1273,7 +1287,7 @@ func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	sc, ok := s.loadStagedConnection(w, r, userID)
+	sc, ok := s.loadStagedConnection(w, r, userID, scs)
 	if !ok {
 		return
 	}
@@ -1320,7 +1334,7 @@ func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.datastore.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
+	if err := scs.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
 		log.Printf("failed to delete staged connection %s: %v", sc.ID, err)
 	}
 
@@ -1328,17 +1342,22 @@ func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) cancelStagedConnection(w http.ResponseWriter, r *http.Request) {
+	scs, err := s.stagedConnectionStore()
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, err.Error())
+		return
+	}
 	userID, ok := s.resolveUserID(w, r)
 	if !ok {
 		return
 	}
 
-	sc, ok := s.loadStagedConnection(w, r, userID)
+	sc, ok := s.loadStagedConnection(w, r, userID, scs)
 	if !ok {
 		return
 	}
 
-	if err := s.datastore.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
+	if err := scs.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to cancel staged connection")
 		return
 	}
