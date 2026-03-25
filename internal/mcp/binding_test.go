@@ -56,6 +56,15 @@ func ctxWithPrincipal() context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
+func ctxWithIdentityPrincipal(email, userID string) context.Context {
+	p := &principal.Principal{
+		Identity: &core.UserIdentity{Email: email},
+		UserID:   userID,
+		Source:   principal.SourceAPIToken,
+	}
+	return principal.WithPrincipal(context.Background(), p)
+}
+
 type testSessionWithTools struct {
 	id            string
 	initialized   bool
@@ -740,6 +749,110 @@ func TestNewServer_DirectCallerNoPrincipal(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatal("expected IsError when no principal")
+	}
+}
+
+func TestNewServer_DirectCallerUsesIdentitySubjectEmail(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	cat := &catalog.Catalog{
+		Name: "sample",
+		Operations: []catalog.CatalogOperation{
+			{ID: "perform", Description: "Perform action"},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sample"},
+		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
+		cat:             cat,
+		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			var ok bool
+			gotSubject, ok = egress.SubjectFromContext(ctx)
+			if !ok {
+				t.Fatal("expected egress subject in direct caller context")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "test-token"},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("sample_perform")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "sample_perform"
+
+	result, err := tool.Handler(ctxWithIdentityPrincipal("identity@example.invalid", principal.IdentityPrincipal), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: "identity@example.invalid"}) {
+		t.Fatalf("subject = %+v, want identity email subject", gotSubject)
+	}
+}
+
+func TestNewServer_DirectCallerUsesIdentitySubjectSentinel(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	cat := &catalog.Catalog{
+		Name: "sample",
+		Operations: []catalog.CatalogOperation{
+			{ID: "perform", Description: "Perform action"},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sample"},
+		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
+		cat:             cat,
+		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			var ok bool
+			gotSubject, ok = egress.SubjectFromContext(ctx)
+			if !ok {
+				t.Fatal("expected egress subject in direct caller context")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "test-token"},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("sample_perform")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "sample_perform"
+
+	result, err := tool.Handler(ctxWithIdentityPrincipal("", principal.IdentityPrincipal), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: principal.IdentityPrincipal}) {
+		t.Fatalf("subject = %+v, want identity sentinel subject", gotSubject)
 	}
 }
 
