@@ -163,26 +163,6 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		}
 	}
 
-	if def.RequestMutator != "" {
-		mutator, ok := lookupRequestMutator(def.RequestMutator)
-		if !ok {
-			return nil, fmt.Errorf("%s: unknown request_mutator %q", def.Provider, def.RequestMutator)
-		}
-		base.RequestMutator = mutator
-	}
-
-	if def.PostConnect != "" && def.PostConnectDiscovery != nil {
-		return nil, fmt.Errorf("%s: cannot set both post_connect and post_connect_discovery", def.Provider)
-	}
-
-	if def.PostConnect != "" {
-		hook, ok := lookupPostConnectHook(def.PostConnect)
-		if !ok {
-			return nil, fmt.Errorf("%s: unknown post_connect %q", def.Provider, def.PostConnect)
-		}
-		base.PostConnectHookFn = hook
-	}
-
 	if def.PostConnectDiscovery != nil {
 		base.DiscoveryDef = def.PostConnectDiscovery.ToCore()
 	}
@@ -310,8 +290,6 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 		}
 	}
 	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
-	setStr(&def.RequestMutator, intg.RequestMutator)
-	setStr(&def.PostConnect, intg.PostConnect)
 	if intg.ManualAuth {
 		def.ManualAuth = true
 	}

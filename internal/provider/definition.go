@@ -21,10 +21,8 @@ type Definition struct {
 	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping" json:"auth_mapping"`
 	ErrorMessagePath string            `yaml:"error_message_path" json:"error_message_path"`
 
-	ResponseCheck  *ResponseCheckDef `yaml:"response_check" json:"response_check,omitempty"`
-	RequestMutator string            `yaml:"request_mutator" json:"request_mutator"`
-	PostConnect    string            `yaml:"post_connect" json:"post_connect"`
-	ManualAuth     bool              `yaml:"manual_auth" json:"manual_auth"`
+	ResponseCheck *ResponseCheckDef `yaml:"response_check" json:"response_check,omitempty"`
+	ManualAuth    bool              `yaml:"manual_auth" json:"manual_auth"`
 
 	PostConnectDiscovery *PostConnectDiscoveryDef `yaml:"post_connect_discovery" json:"post_connect_discovery,omitempty"`
 

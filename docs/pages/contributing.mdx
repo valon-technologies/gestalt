@@ -22,11 +22,7 @@
 
 ## Add integration-specific behavior
 
-Integration hooks live under `plugins/integrations`. Each package exports named hook functions registered in the factory file. To add behavior for a new upstream API:
-
-1. Create a package under `plugins/integrations/<name>`.
-2. Implement the relevant hook signature (`request_mutator`).
-3. Register them by name in `cmd/gestaltd/factories.go`.
+Integration-specific behavior is handled through structured config fields (like `response_check` and `post_connect_discovery`) or gRPC plugins. See the [config file reference](/reference/config-file) and [gRPC plugin protocol](/reference/grpc-plugin-protocol) for details.
 
 ## Development workflow
 
