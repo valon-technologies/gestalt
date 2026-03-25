@@ -17,9 +17,12 @@ type Resolution struct {
 }
 
 type Resolver struct {
-	Subjects    SubjectResolver
-	Policy      PolicyEnforcer
-	Credentials CredentialResolver
+	Subjects SubjectResolver
+	Policy   PolicyEnforcer
+	// CredentialSources is the preferred credential resolution entrypoint.
+	// Credentials is kept for compatibility with existing callsites/tests.
+	CredentialSources CredentialResolver
+	Credentials       CredentialResolver
 }
 
 func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolution, error) {
@@ -34,8 +37,12 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 	}
 
 	credential := input.Credential
-	if r.Credentials != nil && credential.Authorization == "" && len(credential.Headers) == 0 {
-		resolved, err := r.Credentials.ResolveCredential(ctx, subject, input.Target)
+	credentialResolver := r.CredentialSources
+	if credentialResolver == nil {
+		credentialResolver = r.Credentials
+	}
+	if credentialResolver != nil && !hasCredentialMaterialization(credential) {
+		resolved, err := credentialResolver.ResolveCredential(ctx, subject, input.Target)
 		if err != nil {
 			return Resolution{}, err
 		}
@@ -83,4 +90,8 @@ func CopyHeaders(headers map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func hasCredentialMaterialization(credential CredentialMaterialization) bool {
+	return credential.Authorization != "" || len(credential.Headers) > 0
 }
