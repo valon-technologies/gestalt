@@ -354,7 +354,7 @@ integrations:
 			wantErr: false,
 		},
 		{
-			name: "overlay plugin without upstreams",
+			name: "overlay plugin without upstreams allowed",
 			yaml: `
 auth:
   provider: google
@@ -368,7 +368,7 @@ integrations:
       mode: overlay
       command: /tmp/plugin
 `,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "replace plugin with upstreams rejected",
@@ -601,23 +601,6 @@ func TestPluginModeValidationMessages(t *testing.T) {
 		yaml        string
 		wantContain string
 	}{
-		{
-			name: "overlay without upstreams",
-			yaml: `
-auth:
-  provider: google
-datastore:
-  provider: sqlite
-server:
-  encryption_key: key123
-integrations:
-  gadget:
-    plugin:
-      mode: overlay
-      command: /tmp/plugin
-`,
-			wantContain: "overlay plugin requires",
-		},
 		{
 			name: "replace with upstreams",
 			yaml: `
