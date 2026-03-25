@@ -44,9 +44,12 @@ Operations are identified by name. For REST upstreams, the name comes from the O
 
 ### Plugins
 
-A **plugin** is a Go package that implements one of Gestalt's core interfaces. Plugins are how you swap components in and out of the system without changing application code.
+A **plugin** is a component that implements one of Gestalt's core interfaces. Plugins come in two forms:
 
-Gestalt ships with plugins across seven categories:
+- **Compiled plugins** are Go packages linked into the Gestalt binary at build time. You select them by name in the config file.
+- **Executable plugins** are standalone binaries that communicate with Gestalt over gRPC using Unix sockets. You declare them with a `plugin` block in the config instead of a type name. Executable plugins can be written in any language that supports gRPC. The Provider and Runtime categories support both forms.
+
+Gestalt ships with compiled plugins across seven categories:
 
 | Category | What it provides |
 |---|---|

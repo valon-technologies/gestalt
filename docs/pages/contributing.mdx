@@ -20,6 +20,17 @@
 3. Register the factory in `cmd/gestaltd/factories.go` so the runtime resolves it by name from config.
 4. Add tests that exercise the plugin through the same interface the runtime uses.
 
+### Executable plugins
+
+Provider and runtime plugins can also be implemented as standalone executables that communicate over gRPC:
+
+1. Create a binary under `cmd/` (e.g., `cmd/gestalt-plugin-myname/main.go`).
+2. For a provider: implement `core.Provider` and call `pluginapi.ServeProvider(ctx, provider)`.
+3. For a runtime: implement `pluginapiv1.RuntimePluginServer` and call `pluginapi.ServeRuntime(ctx, server)`. Use `pluginapi.DialRuntimeHost(ctx)` to call back into Gestalt for invocation and capability listing.
+4. Reference the binary from config with a `plugin` block instead of a `type` or `upstreams` entry.
+
+See `cmd/gestalt-plugin-echo` for a working example.
+
 ## Add integration-specific behavior
 
 Integration hooks live under `plugins/integrations`. Each package exports named hook functions registered in the factory file. To add behavior for a new upstream API:
