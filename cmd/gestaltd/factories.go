@@ -35,9 +35,7 @@ import (
 	"github.com/valon-technologies/gestalt/plugins/datastore/postgres"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlite"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlserver"
-	"github.com/valon-technologies/gestalt/plugins/providers/bigquery"
 	"github.com/valon-technologies/gestalt/plugins/providers/echo"
-	"github.com/valon-technologies/gestalt/plugins/providers/jira"
 	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
 	secretsenv "github.com/valon-technologies/gestalt/plugins/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/plugins/secrets/file"
@@ -105,8 +103,7 @@ func buildFactories(preparedProviders map[string]string, devMode bool) *bootstra
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
-	factories.Providers["jira"] = jira.Factory
-	factories.Providers["bigquery"] = bigquery.Factory
+	registerProviders(factories)
 	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
 	if devMode {
 		factories.Builtins = append(factories.Builtins, echo.New())
