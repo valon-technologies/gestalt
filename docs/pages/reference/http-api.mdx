@@ -7,18 +7,18 @@
 | GET | `/health` | Health check. Returns `{"status":"ok"}`. |
 | GET | `/ready` | Readiness check. Returns `{"status":"ok"}` when providers are initialized and the datastore is reachable. Otherwise returns a 503 with a reason such as `{"status":"providers loading"}` or `{"status":"datastore unavailable"}`. |
 | POST | `/api/v1/auth/login` | Start platform login. Accepts `{"state": "...", "callback_port": 12345}`. Returns `{"url": "..."}` with the provider's login URL. |
-| GET | `/api/v1/auth/login/callback` | Complete platform login. Exchanges the authorization code and sets an httpOnly `session_token` cookie. Returns `{"email": "...", "display_name": "..."}`. |
+| GET | `/api/v1/auth/login/callback` | Complete platform login. Exchanges the authorization code for a session token. Returns `{"email": "...", "display_name": "...", "token": "..."}`. |
 | GET | `/api/v1/auth/info` | Returns `{"provider": "...", "display_name": "...", "dev_mode": true/false}`. |
 
 In dev mode, an additional endpoint is available:
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/dev-login` | Dev-only login. Accepts `{"email": "..."}` and returns `{"email": "..."}`. Sets an httpOnly `session_token` cookie. |
+| POST | `/api/dev-login` | Dev-only login. Accepts `{"email": "..."}` and returns a session token without OAuth. |
 
 ## Authenticated endpoints
 
-All authenticated endpoints require either a valid `session_token` cookie or an `Authorization: Bearer <token>` header. The cookie is checked first, with the header as fallback.
+All authenticated endpoints require an `Authorization: Bearer <token>` header. The token can be a session token from login or an API token.
 
 ### Integrations
 
@@ -36,7 +36,6 @@ All authenticated endpoints require either a valid `session_token` cookie or an 
 | POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. Accepts `{"integration": "...", "scopes": [...]}`. Returns `{"url": "...", "state": "..."}`. |
 | GET | `/api/v1/auth/callback` | Complete integration OAuth. Exchanges code for tokens and stores them. Redirects to the web UI on success. |
 | POST | `/api/v1/auth/connect-manual` | Submit manual credentials. Accepts `{"integration": "...", "credential": "..."}`. Returns `{"status":"connected"}`. |
-| POST | `/api/v1/auth/logout` | Clear session. Removes the `session_token` cookie. Returns `{"status":"ok"}`. |
 
 ### API tokens
 
@@ -70,12 +69,6 @@ Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their c
 - Integrations backed only by a `type: mcp` upstream cannot be invoked over HTTP. Attempting to do so returns `400: this integration is accessible only via MCP`.
 
 ## Authentication
-
-Gestalt accepts two authentication methods. The session cookie is checked first.
-
-**Session cookie**: The login and dev-login endpoints set an httpOnly `session_token` cookie. Browser clients send it automatically. Cookie attributes: `HttpOnly`, `Secure` (production only), `SameSite: Lax`, `Path: /`, `MaxAge: 24h` (configurable via `session_ttl`).
-
-**Bearer token**: Pass an API token or session token in the `Authorization` header:
 
 ```
 Authorization: Bearer <session-token-or-api-token>

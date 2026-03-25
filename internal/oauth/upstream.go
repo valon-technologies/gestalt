@@ -98,22 +98,6 @@ type exchangeOptions struct {
 	tokenURL string
 }
 
-type ResolvedExchangeOptions struct {
-	Verifier string
-	TokenURL string
-}
-
-func ResolveExchangeOptions(opts ...ExchangeOption) ResolvedExchangeOptions {
-	var eo exchangeOptions
-	for _, opt := range opts {
-		opt(&eo)
-	}
-	return ResolvedExchangeOptions{
-		Verifier: eo.verifier,
-		TokenURL: eo.tokenURL,
-	}
-}
-
 func WithPKCEVerifier(verifier string) ExchangeOption {
 	return func(o *exchangeOptions) {
 		o.verifier = verifier

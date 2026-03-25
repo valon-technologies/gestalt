@@ -34,6 +34,8 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 
 ## Integration hooks
 
+> **Deprecation notice:** String-based hook references (`response_check`, `auth.response_hook`, `token_parser`) are deprecated. Use the declarative alternatives instead: `structured_response_check` for response validation, `auth.structured_response_check` for auth response validation, and `auth_mapping` or `auth_header` for token parsing. See the [integrations concept page](/concepts/integrations) for details.
+
 | Name | Hook type | Behavior |
 |---|---|---|
 | `slack_ok` | `response_check`, `response_hook` | Validates `"ok": true` in Slack API responses. |
@@ -58,19 +60,6 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 | Name | Notes |
 |---|---|
 | `echo` | Dev-only provider that echoes input parameters as JSON. Single `echo` operation. Enabled only when `dev_mode: true`. |
-
-## Executable plugins
-
-The Provider and Runtime categories also support **executable plugins** — standalone binaries that communicate with Gestalt over gRPC on Unix sockets. Use executable plugins when provider or runtime logic cannot be expressed as config-only integrations and you want to write it in any language, not just Go.
-
-The host manages the plugin lifecycle: spawning the process, waiting for socket readiness, and graceful shutdown (SIGTERM with a 2-second grace period before SIGKILL). Two environment variables are injected:
-
-| Variable | Set for | Purpose |
-|---|---|---|
-| `GESTALT_PLUGIN_SOCKET` | Providers and runtimes | Unix socket path the plugin must bind to serve its gRPC interface. |
-| `GESTALT_RUNTIME_HOST_SOCKET` | Runtimes only | Unix socket path the runtime dials to invoke operations and list capabilities on the host. |
-
-The gRPC contract is defined in `sdk/pluginapi/v1`. For Go plugins, helper functions `pluginapi.ServeProvider` and `pluginapi.ServeRuntime` handle the gRPC server setup. See `cmd/gestalt-plugin-echo` for a working example that implements both a provider and a runtime plugin.
 
 ## What is not pluginized
 
