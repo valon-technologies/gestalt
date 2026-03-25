@@ -21,6 +21,7 @@ require (
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/microsoft/go-mssqldb v1.9.8
 	github.com/pb33f/libopenapi v0.34.3
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/valon-technologies/gestalt/sdk/pluginapi v0.0.0-00010101000000-000000000000
 	go.mongodb.org/mongo-driver/v2 v2.5.0

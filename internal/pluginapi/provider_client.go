@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -45,6 +46,16 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 	}
 	if err := checkProtocolCompatibility(meta); err != nil {
 		return nil, err
+	}
+	if schemaJSON := meta.GetConfigSchemaJson(); schemaJSON != "" {
+		log.Printf("WARNING: validating plugin %q config requires executing plugin binary; use manifests for static validation (Phase 3)", name)
+		validationTarget := config
+		if validationTarget == nil {
+			validationTarget = map[string]any{}
+		}
+		if err := validateConfigSchema(validationTarget, schemaJSON); err != nil {
+			return nil, err
+		}
 	}
 	if err := callStartProvider(ctx, client, name, config, mode); err != nil {
 		return nil, err
