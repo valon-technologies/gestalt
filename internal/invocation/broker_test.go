@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -254,5 +255,62 @@ func TestInvoke_MetadataJSONFlowsToContext(t *testing.T) {
 	}
 	if cp["region"] != "us" {
 		t.Errorf("region = %q, want us", cp["region"])
+	}
+}
+
+func TestInvoke_AttachesEgressSubjectFromPrincipal(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	prov := &stubProviderWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "test-int",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				gotSubject, _ = egress.SubjectFromContext(ctx)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: "GET"}},
+	}
+
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), &coretesting.StubDatastore{})
+	p := &principal.Principal{UserID: "u1"}
+
+	if _, err := b.Invoke(context.Background(), p, "test-int", "", "do_thing", nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
+		t.Fatalf("subject = %+v, want user u1", gotSubject)
+	}
+}
+
+func TestInvoke_PreservesExplicitEgressSubject(t *testing.T) {
+	t.Parallel()
+
+	var gotSubject egress.Subject
+
+	prov := &stubProviderWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "test-int",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				gotSubject, _ = egress.SubjectFromContext(ctx)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: "GET"}},
+	}
+
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), &coretesting.StubDatastore{})
+	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectAgent, ID: "agent-1"})
+	p := &principal.Principal{UserID: "u1"}
+
+	if _, err := b.Invoke(ctx, p, "test-int", "", "do_thing", nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotSubject != (egress.Subject{Kind: egress.SubjectAgent, ID: "agent-1"}) {
+		t.Fatalf("subject = %+v, want agent agent-1", gotSubject)
 	}
 }

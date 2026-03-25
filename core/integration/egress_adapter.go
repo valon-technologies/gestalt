@@ -36,6 +36,12 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 		}
 	}
 
+	resolved, err := b.resolveEgress(ctx, operation, req)
+	if err != nil {
+		return nil, err
+	}
+	req.CustomHeaders = egress.CopyHeaders(resolved.Headers)
+
 	if pgn, ok := b.Pagination[operation]; ok {
 		return apiexec.DoPaginatedWithExecutor(ctx, b.httpClient(), req, pgn, executeEgressHTTP)
 	}
@@ -43,19 +49,40 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 	return executeEgressHTTP(ctx, b.httpClient(), req)
 }
 
+func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.Request) (egress.Resolution, error) {
+	resolver := egress.Resolver{}
+	if b.EgressResolver != nil {
+		resolver = *b.EgressResolver
+	}
+
+	return resolver.Resolve(ctx, egress.ResolutionInput{
+		Target: egress.Target{
+			Provider:  b.IntegrationName,
+			Operation: operation,
+			Method:    req.Method,
+			Path:      apiexec.ExpandedPath(req.Method, req.Path, req.Params),
+		},
+		Headers:    egress.CopyHeaders(req.CustomHeaders),
+		Credential: credentialFromAPIRequest(req),
+	})
+}
+
+func credentialFromAPIRequest(req apiexec.Request) egress.CredentialMaterialization {
+	switch {
+	case req.AuthHeader != "":
+		return egress.CredentialMaterialization{Authorization: req.AuthHeader}
+	case req.Token != "":
+		return egress.CredentialMaterialization{Authorization: core.BearerScheme + req.Token}
+	default:
+		return egress.CredentialMaterialization{}
+	}
+}
+
 func executeEgressHTTP(ctx context.Context, client *http.Client, req apiexec.Request) (*core.OperationResult, error) {
 	return egress.ExecuteHTTP(ctx, client, egressRequestFromAPIExec(req))
 }
 
 func egressRequestFromAPIExec(req apiexec.Request) egress.HTTPRequestSpec {
-	credential := egress.CredentialMaterialization{}
-	switch {
-	case req.AuthHeader != "":
-		credential.Authorization = req.AuthHeader
-	case req.Token != "":
-		credential.Authorization = core.BearerScheme + req.Token
-	}
-
 	return egress.HTTPRequestSpec{
 		Target: egress.Target{
 			Method: req.Method,
@@ -63,12 +90,12 @@ func egressRequestFromAPIExec(req apiexec.Request) egress.HTTPRequestSpec {
 		},
 		BaseURL:     req.BaseURL,
 		Params:      req.Params,
-		Headers:     copyHeaders(req.CustomHeaders),
+		Headers:     egress.CopyHeaders(req.CustomHeaders),
 		Body:        req.Body,
 		ContentType: req.ContentType,
 		Check:       req.CheckResponse,
 		MaxRetries:  req.MaxRetries,
 		NoRetry:     req.NoRetry,
-		Credential:  credential,
+		Credential:  credentialFromAPIRequest(req),
 	}
 }
