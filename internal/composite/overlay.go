@@ -147,13 +147,6 @@ func (p *OverlayProvider) AuthTypes() []string {
 	return nil
 }
 
-func (p *OverlayProvider) PostConnectHook() core.PostConnectHook {
-	if pcp, ok := p.base.(core.PostConnectProvider); ok {
-		return pcp.PostConnectHook()
-	}
-	return nil
-}
-
 func (p *OverlayProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	if cpp, ok := p.base.(core.ConnectionParamProvider); ok {
 		return cpp.ConnectionParamDefs()
