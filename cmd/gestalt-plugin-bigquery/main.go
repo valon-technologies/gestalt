@@ -7,8 +7,9 @@ import (
 	"syscall"
 
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
-	providerbigquery "github.com/valon-technologies/gestalt/plugins/providers/bigquery"
 )
+
+const functionalTestScenarioEnv = "GESTALT_BIGQUERY_SCENARIO"
 
 func main() {
 	if err := run(); err != nil {
@@ -20,5 +21,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	return pluginapi.ServeProvider(ctx, providerbigquery.NewQueryProvider())
+	provider, err := providerForRun()
+	if err != nil {
+		return err
+	}
+	return pluginapi.ServeProvider(ctx, provider)
 }
