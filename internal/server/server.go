@@ -116,21 +116,11 @@ func (s *Server) routes() {
 		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/callback", s.integrationOAuthCallback)
 
-		if s.bindings != nil {
-			for _, name := range s.bindings.List() {
-				binding, err := s.bindings.Get(name)
-				if err != nil {
-					log.Printf("warning: skipping binding %q routes: %v", name, err)
-					continue
-				}
-				for _, route := range binding.Routes() {
-					r.Method(route.Method, "/bindings/"+name+route.Pattern, route.Handler)
-				}
-			}
-		}
+		s.mountBindingRoutes(r, core.BindingTrigger)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
+			s.mountBindingRoutes(r, core.BindingSurface)
 
 			r.Get("/integrations", s.listIntegrations)
 			r.Delete("/integrations/{name}", s.disconnectIntegration)
@@ -165,6 +155,25 @@ func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 		return nil, fmt.Errorf("datastore does not support staged connections; use a SQL-backed datastore (sqlite, postgres, mysql)")
 	}
 	return scs, nil
+}
+
+func (s *Server) mountBindingRoutes(r chi.Router, kind core.BindingKind) {
+	if s.bindings == nil {
+		return
+	}
+	for _, name := range s.bindings.List() {
+		binding, err := s.bindings.Get(name)
+		if err != nil {
+			log.Printf("warning: skipping binding %q routes: %v", name, err)
+			continue
+		}
+		if binding.Kind() != kind {
+			continue
+		}
+		for _, route := range binding.Routes() {
+			r.Method(route.Method, "/bindings/"+name+route.Pattern, route.Handler)
+		}
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
