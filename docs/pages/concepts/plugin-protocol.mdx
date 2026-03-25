@@ -71,7 +71,7 @@ Key fields in `ProviderMetadata`:
 | `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
 | `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
 | `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
-| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` block. Currently used for documentation only; runtime validation requires executing the binary until static manifests land in a future release. |
+| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` block. Used for startup validation for `plugin.command`, and for static validation when a packaged plugin is referenced via `plugin.ref`. |
 | `min_protocol_version` | `int32` | Minimum protocol version the plugin supports. |
 | `max_protocol_version` | `int32` | Maximum protocol version the plugin supports. |
 
@@ -188,6 +188,11 @@ The plugin process also inherits the host's full environment, plus any additiona
 
 Plugins are configured in `gestalt.yaml`. A provider plugin is declared inside an `integrations` entry; a runtime plugin is declared inside a `runtimes` entry.
 
+Gestalt supports two plugin workflows:
+
+- `plugin.command`: local development or ad hoc execution. Gestalt launches the given executable directly.
+- `plugin.ref`: packaged/installable workflow. Gestalt resolves an installed package from `.gestalt/plugins/` after `gestaltd prepare` writes a locked manifest and executable path into `gestalt.lock.json`.
+
 ### Provider plugin
 
 ```yaml
@@ -204,6 +209,28 @@ integrations:
 ```
 
 When `plugin` is set, `upstreams` cannot be used on the same integration (unless using overlay mode). The `plugin.config` map is delivered to the plugin via `StartProvider`.
+
+### Packaged provider plugin
+
+```yaml
+integrations:
+  my-custom-provider:
+    plugin:
+      ref: acme/provider@0.1.0
+      env:
+        MY_API_KEY: ${API_KEY}
+      config:
+        some_setting: value
+```
+
+For `plugin.ref`, install the package first, then run `gestaltd prepare`:
+
+```bash
+gestaltd plugin install --config ./gestalt.yaml ./acme-provider-0.1.0.tar.gz
+gestaltd prepare --config ./gestalt.yaml
+```
+
+`prepare` resolves the ref to a manifest and platform-specific executable path, validates `plugin.config` against the packaged schema, and records the result in `gestalt.lock.json`.
 
 ### Runtime plugin
 
@@ -228,10 +255,13 @@ When `plugin` is set, `type` cannot be used on the same runtime.
 
 | Field | Required | Notes |
 |---|---|---|
-| `command` | Yes | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. |
-| `args` | No | Arguments passed to the command. |
+| `command` | Conditionally | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. Mutually exclusive with `ref`. |
+| `ref` | Conditionally | Stable package reference in `publisher/name@version` form. Mutually exclusive with `command`. |
+| `args` | No | Arguments passed to the command. Only valid with `command`. Packaged plugins use manifest-defined entrypoint args. |
 | `env` | No | Map of additional environment variables. Supports `${VAR}` expansion from the host environment. |
 | `config` | No | Arbitrary key-value map delivered to the plugin at startup via `StartProvider` or `StartRuntime`. |
+
+Exactly one of `command` or `ref` must be set.
 
 ## Error handling
 

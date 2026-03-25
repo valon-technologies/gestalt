@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -338,6 +339,56 @@ func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginRef(t *testing.T) {
 	}
 }
 
+func TestValidateConfigUsesPreparedManifestForPluginRef(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfigWithConfig(t, dir, "acme/provider@0.1.0", map[string]any{
+		"api_key": "sk-test",
+	})
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+  "type": "object",
+  "required": ["api_key"],
+  "properties": {
+    "api_key": { "type": "string" }
+  }
+}`)
+	store := pluginstore.New(cfgPath)
+	if _, err := store.Install(packagePath); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if err := prepareConfig(cfgPath); err != nil {
+		t.Fatalf("prepareConfig: %v", err)
+	}
+
+	if err := validateConfig(cfgPath); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+}
+
+func TestValidateConfigRejectsPreparedPluginRefSchemaViolation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfigWithConfig(t, dir, "acme/provider@0.1.0", map[string]any{
+		"wrong_key": "value",
+	})
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+  "type": "object",
+  "required": ["api_key"],
+  "properties": {
+    "api_key": { "type": "string" }
+  }
+}`)
+	store := pluginstore.New(cfgPath)
+	if _, err := store.Install(packagePath); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if err := prepareConfig(cfgPath); err == nil {
+		t.Fatal("expected schema validation failure during prepare")
+	}
+}
+
 func newPreparedTestOpenAPIServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
@@ -390,19 +441,45 @@ integrations:
 
 func writePreparedPluginRefConfig(t *testing.T, dir, ref string) string {
 	t.Helper()
+	return writePreparedPluginRefConfigWithConfig(t, dir, ref, nil)
+}
+
+func writePreparedPluginRefConfigWithConfig(t *testing.T, dir, ref string, pluginConfig map[string]any) string {
+	t.Helper()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
+	var configBlock string
+	if pluginConfig != nil {
+		configBlock += "\n      config:"
+		payload, err := json.Marshal(pluginConfig)
+		if err != nil {
+			t.Fatalf("Marshal(pluginConfig): %v", err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("Unmarshal(pluginConfig): %v", err)
+		}
+		for key, value := range decoded {
+			configBlock += fmt.Sprintf("\n        %s: %q", key, value)
+		}
+	}
 	cfg := `auth:
   provider: google
+  config:
+    client_id: test-client
+    client_secret: test-secret
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
 datastore:
   provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
   dev_mode: true
   encryption_key: test-key
 integrations:
   example:
     plugin:
-      ref: ` + ref + `
+      ref: ` + ref + configBlock + `
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -411,6 +488,11 @@ integrations:
 }
 
 func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content string) string {
+	t.Helper()
+	return buildPreparedTestPluginPackageWithSchema(t, dir, id, version, content, "")
+}
+
+func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, id, version, content, schema string) string {
 	t.Helper()
 
 	source := filepath.Join(dir, "plugin-src")
@@ -421,6 +503,16 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content stri
 	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
+	var schemaPath string
+	if schema != "" {
+		schemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
+		if err := os.MkdirAll(filepath.Join(source, "schemas"), 0755); err != nil {
+			t.Fatalf("MkdirAll schema dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(schemaPath)), []byte(schema), 0644); err != nil {
+			t.Fatalf("WriteFile schema: %v", err)
+		}
+	}
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
@@ -428,7 +520,8 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content stri
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{

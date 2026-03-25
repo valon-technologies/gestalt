@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -483,6 +484,13 @@ func preparedPluginEntryForConfigItem(paths preparedPaths, store *pluginstore.St
 	if err != nil {
 		return preparedPluginEntry{}, fmt.Errorf("%s %q plugin.ref %q is not installed; run `gestaltd plugin install --config %s <package>`: %w", kind, name, plugin.Ref, paths.configPath, err)
 	}
+	configMap, err := pluginConfigNodeToMap(plugin.Config)
+	if err != nil {
+		return preparedPluginEntry{}, fmt.Errorf("decode plugin config for %s %q: %w", kind, name, err)
+	}
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, configMap); err != nil {
+		return preparedPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
 	fingerprint, err := pluginFingerprint(name, plugin)
 	if err != nil {
 		return preparedPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
@@ -566,6 +574,13 @@ func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind,
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 	}
+	configMap, err := pluginConfigNodeToMap(plugin.Config)
+	if err != nil {
+		return fmt.Errorf("decode plugin config for %s %q: %w", kind, name, err)
+	}
+	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, configMap); err != nil {
+		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
 	args, err := preparedEntrypointArgs(kind, manifest)
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
@@ -573,6 +588,8 @@ func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind,
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
+	plugin.PreparedManifestPath = manifestPath
+	plugin.PreparedExecutablePath = executablePath
 	return nil
 }
 
@@ -590,6 +607,17 @@ func preparedEntrypointArgs(kind string, manifest *pluginmanifestv1.Manifest) ([
 		return nil, fmt.Errorf("manifest does not define an entrypoint for %s", kind)
 	}
 	return append([]string(nil), entry.Args...), nil
+}
+
+func pluginConfigNodeToMap(node yaml.Node) (map[string]any, error) {
+	if node.Kind == 0 {
+		return nil, nil
+	}
+	var out map[string]any
+	if err := node.Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func integrationFingerprint(name string, intg config.IntegrationDef, upstream config.UpstreamDef) (string, error) {

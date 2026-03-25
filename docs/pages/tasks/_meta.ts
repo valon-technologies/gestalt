@@ -4,5 +4,6 @@ export default {
   "add-a-first-party-provider": "Add a First-Party Provider",
   "configure-jira": "Configure Jira",
   "configure-bigquery": "Configure BigQuery",
+  "install-a-plugin": "Install a Plugin",
   "use-with-mcp": "Use with MCP",
 };
