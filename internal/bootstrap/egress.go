@@ -54,10 +54,13 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 		}
 	}
 
-	deps.Resolver.Credentials = &egress.ProviderCredentialResolver{
+	providerSource := &egress.ProviderCredentialResolver{
 		TokenResolver: &brokerTokenResolver{broker: broker},
 		Materializer:  &registryMaterializer{providers: providers},
 		Grants:        grants,
+	}
+	deps.Resolver.CredentialSources = egress.CredentialSourceChain{
+		Sources: []egress.CredentialSource{providerSource},
 	}
 }
 
