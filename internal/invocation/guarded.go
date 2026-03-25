@@ -126,9 +126,9 @@ func (g *GuardedInvoker) ListCapabilities() []core.Capability {
 	}
 
 	filtered := make([]core.Capability, 0, len(caps))
-	for _, cap := range caps {
-		if _, ok := g.allowed[cap.Provider]; ok {
-			filtered = append(filtered, cap)
+	for i := range caps {
+		if _, ok := g.allowed[caps[i].Provider]; ok {
+			filtered = append(filtered, caps[i])
 		}
 	}
 	return filtered

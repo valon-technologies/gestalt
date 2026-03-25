@@ -184,11 +184,11 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 	}
 
 	got := readRuntimeOutput(t, outputFile)
-	if got.CapabilityCount != 0 {
-		t.Fatalf("runtime output capability_count = %d, want 0", got.CapabilityCount)
+	if got.CapabilityCount != 1 {
+		t.Fatalf("runtime output capability_count = %d, want 1", got.CapabilityCount)
 	}
-	if len(got.Capabilities) != 0 {
-		t.Fatalf("runtime output capabilities = %v, want []", got.Capabilities)
+	if !slices.Equal(got.Capabilities, []string{"search.search_workspace"}) {
+		t.Fatalf("runtime output capabilities = %v, want [search.search_workspace]", got.Capabilities)
 	}
 }
 
@@ -284,11 +284,11 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 	}
 
 	got := readRuntimeOutput(t, outputFile)
-	if got.CapabilityCount != 1 {
-		t.Fatalf("runtime output capability_count = %d, want 1", got.CapabilityCount)
+	if got.CapabilityCount != 2 {
+		t.Fatalf("runtime output capability_count = %d, want 2", got.CapabilityCount)
 	}
-	if !slices.Equal(got.Capabilities, []string{"workspace.fetch_record"}) {
-		t.Fatalf("runtime output capabilities = %v, want [workspace.fetch_record]", got.Capabilities)
+	if !slices.Equal(got.Capabilities, []string{"workspace.fetch_record", "workspace.search_workspace"}) {
+		t.Fatalf("runtime output capabilities = %v, want [workspace.fetch_record workspace.search_workspace]", got.Capabilities)
 	}
 	if got.ProbeStatus != http.StatusOK {
 		t.Fatalf("runtime output probe_status = %d, want %d", got.ProbeStatus, http.StatusOK)
@@ -358,11 +358,11 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 	}
 
 	got := readRuntimeOutput(t, outputFile)
-	if got.CapabilityCount != 1 {
-		t.Fatalf("runtime output capability_count = %d, want 1", got.CapabilityCount)
+	if got.CapabilityCount != 2 {
+		t.Fatalf("runtime output capability_count = %d, want 2", got.CapabilityCount)
 	}
-	if !slices.Equal(got.Capabilities, []string{"alpha.http_op"}) {
-		t.Fatalf("runtime output capabilities = %v, want [alpha.http_op]", got.Capabilities)
+	if !slices.Equal(got.Capabilities, []string{"alpha.http_op", "alpha.hidden_op"}) {
+		t.Fatalf("runtime output capabilities = %v, want [alpha.http_op alpha.hidden_op]", got.Capabilities)
 	}
 }
 
