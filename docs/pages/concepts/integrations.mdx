@@ -1,6 +1,6 @@
 # Integrations
 
-Integrations are the unit of API exposure in Gestalt. Each integration declares one or more **upstreams** — the external services it connects to — along with auth settings and optional hooks.
+Integrations are the unit of API exposure in Gestalt. Each integration declares one or more **upstreams** — the external services it connects to — along with auth settings.
 
 ## Upstreams
 
@@ -175,15 +175,9 @@ Each integration has a `connection_mode` that controls how credentials are resol
 | `either` | Try the user's token first, fall back to the identity token. |
 | `none` | No credentials needed. |
 
-## Hooks
+## Response checks
 
-Hooks handle the quirks of individual APIs without changing the core runtime.
-
-| Hook type | Config field | Purpose |
-|---|---|---|
-| Response check | `response_check` | Declarative response validation using body matching and error extraction. |
-
-### Response check
+Response checks handle the quirks of individual APIs without changing the core runtime.
 
 The `response_check` field provides declarative response validation. It supports two modes that can be used together or independently:
 

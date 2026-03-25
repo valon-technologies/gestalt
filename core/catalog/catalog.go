@@ -94,14 +94,6 @@ func LoadCatalogYAML(data []byte) (*Catalog, error) {
 	return &catalog, nil
 }
 
-func MustLoadCatalogYAML(data []byte) *Catalog {
-	catalog, err := LoadCatalogYAML(data)
-	if err != nil {
-		panic(err)
-	}
-	return catalog
-}
-
 var validAuthStyles = map[string]struct{}{
 	"":       {},
 	"bearer": {},
@@ -110,7 +102,7 @@ var validAuthStyles = map[string]struct{}{
 	"basic":  {},
 }
 
-func IsValidAuthStyle(s string) bool {
+func isValidAuthStyle(s string) bool {
 	_, ok := validAuthStyles[strings.ToLower(strings.TrimSpace(s))]
 	return ok
 }
@@ -125,7 +117,7 @@ func (c *Catalog) Validate() error {
 	if len(c.Operations) == 0 {
 		return fmt.Errorf("catalog %q must declare at least one operation", c.Name)
 	}
-	if !IsValidAuthStyle(c.AuthStyle) {
+	if !isValidAuthStyle(c.AuthStyle) {
 		return fmt.Errorf("catalog %q has unknown auth_style %q", c.Name, c.AuthStyle)
 	}
 

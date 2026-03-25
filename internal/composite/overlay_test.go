@@ -3,7 +3,6 @@ package composite
 import (
 	"context"
 	"errors"
-	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -67,13 +66,6 @@ type stubConnectionParamProvider struct {
 func (s *stubConnectionParamProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return s.defs
 }
-
-type stubPostConnectProvider struct {
-	stubProvider
-	hook core.PostConnectHook
-}
-
-func (s *stubPostConnectProvider) PostConnectHook() core.PostConnectHook { return s.hook }
 
 func TestOverlayExecuteRouting(t *testing.T) {
 	t.Parallel()
@@ -298,26 +290,6 @@ func TestOverlayConnectionParamDefs(t *testing.T) {
 	got := p.ConnectionParamDefs()
 	if len(got) != 1 || got["project_id"].Description != "Project ID" {
 		t.Errorf("ConnectionParamDefs = %v", got)
-	}
-}
-
-func TestOverlayPostConnectHook(t *testing.T) {
-	t.Parallel()
-
-	base := &stubPostConnectProvider{
-		stubProvider: stubProvider{name: "base", operations: []core.Operation{{Name: "op1"}}},
-		hook: func(_ context.Context, _ *core.IntegrationToken, _ *http.Client) (map[string]string, error) {
-			return nil, nil
-		},
-	}
-	overlay := &stubProvider{
-		name:       "overlay",
-		operations: []core.Operation{{Name: "op2"}},
-	}
-
-	p := NewOverlay("test", base, overlay).(*OverlayProvider)
-	if p.PostConnectHook() == nil {
-		t.Error("PostConnectHook should delegate to base")
 	}
 }
 

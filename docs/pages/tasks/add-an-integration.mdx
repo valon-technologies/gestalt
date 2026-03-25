@@ -116,4 +116,4 @@ curl -H "Authorization: Bearer $GESTALT_API_KEY" \
 
 ## When to write code
 
-Most integrations need zero Go code. Write a hook only when the upstream API has unusual auth flows, requires request rewrites the config cannot express, or returns non-standard response envelopes that need validation logic.
+Most integrations need zero Go code. Write a plugin only when the upstream API has unusual auth flows, requires request rewrites the config cannot express, or needs custom execution logic beyond what declarative config supports.

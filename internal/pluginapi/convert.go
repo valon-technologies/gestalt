@@ -9,7 +9,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/principal"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func coreConnectionModeToProto(mode core.ConnectionMode) pluginapiv1.ConnectionMode {
@@ -280,68 +279,6 @@ func tokenResponseFromProto(msg *pluginapiv1.TokenResponse) *core.TokenResponse 
 		TokenType:    msg.GetTokenType(),
 		Extra:        mapFromStruct(msg.GetExtra()),
 	}
-}
-
-func integrationTokenToProto(tok *core.IntegrationToken) *pluginapiv1.IntegrationToken {
-	if tok == nil {
-		return nil
-	}
-	msg := &pluginapiv1.IntegrationToken{
-		Id:                tok.ID,
-		UserId:            tok.UserID,
-		Integration:       tok.Integration,
-		Instance:          tok.Instance,
-		AccessToken:       tok.AccessToken,
-		RefreshToken:      tok.RefreshToken,
-		Scopes:            tok.Scopes,
-		RefreshErrorCount: int32(tok.RefreshErrorCount),
-		MetadataJson:      tok.MetadataJSON,
-	}
-	if tok.ExpiresAt != nil {
-		msg.ExpiresAt = timestamppb.New(*tok.ExpiresAt)
-	}
-	if tok.LastRefreshedAt != nil {
-		msg.LastRefreshedAt = timestamppb.New(*tok.LastRefreshedAt)
-	}
-	if !tok.CreatedAt.IsZero() {
-		msg.CreatedAt = timestamppb.New(tok.CreatedAt)
-	}
-	if !tok.UpdatedAt.IsZero() {
-		msg.UpdatedAt = timestamppb.New(tok.UpdatedAt)
-	}
-	return msg
-}
-
-func integrationTokenFromProto(msg *pluginapiv1.IntegrationToken) *core.IntegrationToken {
-	if msg == nil {
-		return nil
-	}
-	tok := &core.IntegrationToken{
-		ID:                msg.GetId(),
-		UserID:            msg.GetUserId(),
-		Integration:       msg.GetIntegration(),
-		Instance:          msg.GetInstance(),
-		AccessToken:       msg.GetAccessToken(),
-		RefreshToken:      msg.GetRefreshToken(),
-		Scopes:            msg.GetScopes(),
-		RefreshErrorCount: int(msg.GetRefreshErrorCount()),
-		MetadataJSON:      msg.GetMetadataJson(),
-	}
-	if ts := msg.GetExpiresAt(); ts != nil {
-		t := ts.AsTime()
-		tok.ExpiresAt = &t
-	}
-	if ts := msg.GetLastRefreshedAt(); ts != nil {
-		t := ts.AsTime()
-		tok.LastRefreshedAt = &t
-	}
-	if ts := msg.GetCreatedAt(); ts != nil {
-		tok.CreatedAt = ts.AsTime()
-	}
-	if ts := msg.GetUpdatedAt(); ts != nil {
-		tok.UpdatedAt = ts.AsTime()
-	}
-	return tok
 }
 
 func catalogToJSON(cat *catalog.Catalog) (string, error) {
