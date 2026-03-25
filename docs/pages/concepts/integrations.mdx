@@ -4,7 +4,7 @@ Integrations are the unit of API exposure in Gestalt. Each integration declares 
 
 ## Upstreams
 
-Every integration has an `upstreams` list. Each entry specifies a `type` and a source:
+Most integrations declare an `upstreams` list. Each entry specifies a `type` and a source. Alternatively, an integration can use a [`plugin`](/reference/config-file#executable-plugins) block to delegate to an executable plugin.
 
 | Upstream type | What it does |
 |---|---|
@@ -89,6 +89,40 @@ integrations:
 ```
 
 The `mcp: true` flag on the REST upstream means its HTTP operations are also exposed as MCP tools alongside the tools from the MCP upstream.
+
+## Per-upstream auth
+
+Individual upstreams can override the integration-level auth settings. The available fields are `auth_profile`, `auth`, `client_id`, `client_secret`, and `redirect_url`.
+
+Resolution order:
+
+1. If the upstream sets `auth_profile`, the named profile is resolved first.
+2. Any remaining empty auth fields are filled from the integration-level values. Fields already set on the upstream are never overwritten.
+
+This allows a single integration to connect upstreams that require different credentials or OAuth flows:
+
+```yaml
+integrations:
+  multi-service:
+    client_id: ${DEFAULT_CLIENT_ID}
+    client_secret: ${DEFAULT_CLIENT_SECRET}
+    auth:
+      type: oauth2
+      authorization_url: https://auth.example.com/authorize
+      token_url: https://auth.example.com/token
+    upstreams:
+      - type: rest
+        url: https://api.example.com/openapi.json
+        # inherits integration-level auth
+      - type: mcp
+        url: https://mcp.example.com/sse
+        auth:
+          type: mcp_oauth
+        client_id: ${MCP_CLIENT_ID}
+        client_secret: ${MCP_CLIENT_SECRET}
+```
+
+When `auth.type` is `mcp_oauth`, Gestalt performs OAuth discovery against an MCP server following RFC 9728. For a non-MCP upstream with `mcp_oauth`, the discovery URL is auto-populated from the sibling `type: mcp` upstream in the same integration. If no static `client_id` is configured, Gestalt attempts Dynamic Client Registration when the server advertises a registration endpoint.
 
 ## allowed_operations
 
@@ -196,6 +230,21 @@ Hooks are registered by name in Go code and referenced by that name in config.
 | `datadog_keys` | Datadog | Parses API and application keys from stored credentials, injects as `DD-API-KEY` and `DD-APPLICATION-KEY` headers. |
 | `hex_response` | Hex | Validates Hex-specific response format. |
 
+## Executable plugin integrations
+
+An integration can set `plugin` instead of `upstreams` to delegate provider behavior to an external executable. The executable communicates with Gestalt over gRPC on a Unix socket and implements the provider plugin contract. This is useful when the upstream API cannot be described by an OpenAPI spec, GraphQL endpoint, or MCP server.
+
+```yaml
+integrations:
+  custom-service:
+    plugin:
+      command: ./my-provider-plugin
+      args: [--config, production]
+    display_name: Custom Service
+```
+
+See the [config file reference](/reference/config-file#executable-plugins) for the full field list and path resolution rules.
+
 ## Restrictions
 
-Gestalt keeps the integration model simple. There is no plugin discovery protocol, no remote registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. Adding or changing integrations requires a restart.
+Gestalt keeps the integration model simple. There is no plugin discovery protocol and no remote registry. Executable plugins are loaded at startup and communicate over gRPC. Adding or changing integrations requires a restart.
