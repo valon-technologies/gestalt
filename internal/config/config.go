@@ -101,8 +101,6 @@ type IntegrationDef struct {
 	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping"`
 	ErrorMessagePath string            `yaml:"error_message_path"`
 	ResponseCheck    *ResponseCheckDef `yaml:"response_check"`
-	RequestMutator   string            `yaml:"request_mutator"`
-	PostConnect      string            `yaml:"post_connect"`
 	ManualAuth       bool              `yaml:"manual_auth"`
 	TokenPrefix      string            `yaml:"token_prefix"`
 	AuthStyle        string            `yaml:"auth_style"`

@@ -31,12 +31,6 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 		return nil, err
 	}
 
-	if b.RequestMutator != nil {
-		if err := b.RequestMutator(operation, &req, params); err != nil {
-			return nil, err
-		}
-	}
-
 	resolved, err := b.resolveEgress(ctx, operation, req)
 	if err != nil {
 		return nil, err

@@ -110,7 +110,6 @@ type Base struct {
 
 	TokenParser    func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse  apiexec.ResponseChecker
-	RequestMutator func(operation string, req *apiexec.Request, params map[string]any) error
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
 	EgressResolver *egress.Resolver
 
