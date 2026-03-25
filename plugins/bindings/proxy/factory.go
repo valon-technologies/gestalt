@@ -21,5 +21,5 @@ var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def 
 	if deps.Egress.Resolver != nil {
 		resolver = *deps.Egress.Resolver
 	}
-	return New(name, cfg, resolver), nil
+	return New(name, cfg, resolver, nil), nil
 }

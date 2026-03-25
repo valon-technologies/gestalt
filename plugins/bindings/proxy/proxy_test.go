@@ -1,4 +1,4 @@
-package proxy_test
+package proxy
 
 import (
 	"bytes"
@@ -12,14 +12,13 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
-	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
 	"gopkg.in/yaml.v3"
 )
 
 func TestProxyRoutes(t *testing.T) {
 	t.Parallel()
 
-	b := makeBinding(t, "/proxy")
+	b := testBinding(t, "/proxy", nil)
 	routes := b.Routes()
 	if len(routes) != 16 {
 		t.Fatalf("expected 16 routes, got %d", len(routes))
@@ -36,45 +35,175 @@ func TestProxyRoutes(t *testing.T) {
 	}
 }
 
-func TestProxyNormalizeRequest(t *testing.T) {
+func TestProxyForwardsResponseHeaders(t *testing.T) {
 	t.Parallel()
 
-	b := makeBinding(t, "/proxy")
-	req := httptest.NewRequest(http.MethodPost, "/proxy/messages?cursor=123", bytes.NewBufferString("hello"))
-	req.Host = "api.example.com"
-	req.Header.Set("X-Proxy-Token", "abc")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "req-abc")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"path":   r.URL.Path,
+			"method": r.Method,
+		})
+	}))
+	t.Cleanup(upstream.Close)
 
+	b := testBinding(t, "/proxy", upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/v1/items", nil)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	if rid := w.Header().Get("X-Request-Id"); rid != "req-abc" {
+		t.Fatalf("X-Request-Id = %q, want req-abc", rid)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["path"] != "/v1/items" {
+		t.Fatalf("upstream path = %q, want /v1/items", body["path"])
+	}
+	if body["method"] != http.MethodGet {
+		t.Fatalf("upstream method = %q, want GET", body["method"])
+	}
+}
+
+func TestProxyForwardsRedirectHeaders(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.com/new-path")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	t.Cleanup(upstream.Close)
+
+	noRedirectClient := upstream.Client()
+	noRedirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	b := testBinding(t, "/proxy", noRedirectClient)
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/old-path", nil)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want 301", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "https://example.com/new-path" {
+		t.Fatalf("Location = %q, want https://example.com/new-path", loc)
+	}
+}
+
+func TestProxyForwardsPostBody(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var payload map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"echo":         payload["message"],
+			"content_type": r.Header.Get("Content-Type"),
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	b := testBinding(t, "/proxy", upstream.Client())
+
+	body := `{"message":"hello"}`
+	req := httptest.NewRequest(http.MethodPost, upstream.URL+"/proxy/echo", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["echo"] != "hello" {
+		t.Fatalf("echo = %q, want hello", resp["echo"])
+	}
+	if resp["content_type"] != "application/json" {
+		t.Fatalf("upstream content_type = %q, want application/json", resp["content_type"])
+	}
+}
+
+func TestProxyStripsHopByHopHeaders(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Keep-Alive", "timeout=5")
+		w.Header().Set("X-Custom", "preserved")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	b := testBinding(t, "/proxy", upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/test", nil)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Header().Get("Connection") != "" {
+		t.Fatal("hop-by-hop Connection header should be stripped")
+	}
+	if w.Header().Get("Keep-Alive") != "" {
+		t.Fatal("hop-by-hop Keep-Alive header should be stripped")
+	}
+	if w.Header().Get("X-Custom") != "preserved" {
+		t.Fatalf("X-Custom = %q, want preserved", w.Header().Get("X-Custom"))
+	}
+}
+
+func TestProxyForwardsUpstreamErrors(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"access denied"}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	b := testBinding(t, "/proxy", upstream.Client())
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/secret", nil)
+	w := httptest.NewRecorder()
+	b.Routes()[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+}
+
+func TestProxyCONNECTNotImplemented(t *testing.T) {
+	t.Parallel()
+
+	b := testBinding(t, "/proxy", nil)
+	req := httptest.NewRequest(http.MethodConnect, "/proxy/tunnel", nil)
 	w := httptest.NewRecorder()
 	b.Routes()[0].Handler.ServeHTTP(w, req)
 
 	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", w.Code)
-	}
-
-	var resp struct {
-		Note   string             `json:"note"`
-		Policy egress.PolicyInput `json:"policy_input"`
-		Target egress.Target      `json:"target"`
-		Body   string             `json:"body"`
-	}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if resp.Target.Host != "api.example.com" {
-		t.Fatalf("target host = %q, want api.example.com", resp.Target.Host)
-	}
-	if resp.Target.Method != http.MethodPost {
-		t.Fatalf("target method = %q, want POST", resp.Target.Method)
-	}
-	if resp.Target.Path != "/messages?cursor=123" {
-		t.Fatalf("target path = %q, want /messages?cursor=123", resp.Target.Path)
-	}
-	if resp.Policy.Subject.Kind != egress.SubjectSystem {
-		t.Fatalf("subject kind = %q, want system", resp.Policy.Subject.Kind)
-	}
-	if resp.Body != "hello" {
-		t.Fatalf("body = %q, want hello", resp.Body)
 	}
 }
 
@@ -92,7 +221,7 @@ func TestProxyFactory(t *testing.T) {
 		Config: *node.Content[0],
 	}
 
-	binding, err := proxy.Factory(context.Background(), "proxy-surface", def, bootstrap.BindingDeps{})
+	binding, err := Factory(context.Background(), "proxy-surface", def, bootstrap.BindingDeps{})
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -114,7 +243,7 @@ func TestProxyFactoryValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := proxy.Factory(context.Background(), "bad-proxy", config.BindingDef{
+	_, err := Factory(context.Background(), "bad-proxy", config.BindingDef{
 		Type:   "proxy",
 		Config: *node.Content[0],
 	}, bootstrap.BindingDeps{})
@@ -123,22 +252,9 @@ func TestProxyFactoryValidation(t *testing.T) {
 	}
 }
 
-func makeBinding(t *testing.T, path string) *proxy.Binding {
+func testBinding(t *testing.T, path string, client *http.Client) *Binding {
 	t.Helper()
-
-	cfgYAML := "path: " + path
-	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
-		t.Fatal(err)
-	}
-
-	binding, err := proxy.Factory(context.Background(), "proxy-surface", config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
-	}, bootstrap.BindingDeps{})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-
-	return binding.(*proxy.Binding)
+	return New("test-proxy", proxyConfig{Path: path}, egress.Resolver{
+		Subjects: egress.ContextSubjectResolver{},
+	}, client)
 }

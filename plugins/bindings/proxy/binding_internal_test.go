@@ -20,7 +20,7 @@ func TestBindingNormalizeRunsResolver(t *testing.T) {
 			got = input
 			return nil
 		}),
-	})
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/proxy/messages?cursor=123", bytes.NewBufferString("hello"))
 	req.Host = "api.example.com"
@@ -29,8 +29,8 @@ func TestBindingNormalizeRunsResolver(t *testing.T) {
 	w := httptest.NewRecorder()
 	b.Routes()[0].Handler.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501", w.Code)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
 	}
 	if got.Subject != (egress.Subject{Kind: egress.SubjectSystem, ID: "agent-proxy"}) {
 		t.Fatalf("subject = %+v, want system agent-proxy", got.Subject)
