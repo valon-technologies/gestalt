@@ -42,8 +42,7 @@ func New(name string, cfg webhookConfig, invoker invocation.Invoker) *Binding {
 	return &Binding{name: name, cfg: cfg, invoker: invoker}
 }
 
-func (b *Binding) Name() string           { return b.name }
-func (b *Binding) Kind() core.BindingKind { return core.BindingTrigger }
+func (b *Binding) Name() string { return b.name }
 
 func (b *Binding) Start(_ context.Context) error {
 	return nil
@@ -57,6 +56,7 @@ func (b *Binding) Routes() []core.Route {
 			Method:  http.MethodPost,
 			Pattern: b.cfg.Path,
 			Handler: http.HandlerFunc(b.handle),
+			Public:  true,
 		},
 	}
 }

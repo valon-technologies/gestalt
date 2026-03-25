@@ -161,15 +161,6 @@ func TestWebhookInvokerError(t *testing.T) {
 	}
 }
 
-func TestWebhookKind(t *testing.T) {
-	t.Parallel()
-
-	b := makeBinding(t, "/incoming", "", "", &testutil.StubInvoker{})
-	if b.Kind() != core.BindingTrigger {
-		t.Fatalf("expected BindingTrigger, got %d", b.Kind())
-	}
-}
-
 func TestWebhookFactory(t *testing.T) {
 	t.Parallel()
 

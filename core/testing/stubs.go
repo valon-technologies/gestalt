@@ -186,9 +186,8 @@ type StubBinding struct {
 	R       []core.Route
 }
 
-func (b *StubBinding) Name() string           { return b.N }
-func (b *StubBinding) Kind() core.BindingKind { return b.K }
-func (b *StubBinding) Routes() []core.Route   { return b.R }
+func (b *StubBinding) Name() string         { return b.N }
+func (b *StubBinding) Routes() []core.Route { return b.R }
 func (b *StubBinding) Start(ctx context.Context) error {
 	if b.StartFn != nil {
 		return b.StartFn(ctx)
