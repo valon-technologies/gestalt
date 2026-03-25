@@ -11,6 +11,11 @@ const (
 	ConnectionModeEither   ConnectionMode = "either"
 )
 
+const (
+	PluginModeReplace = "replace"
+	PluginModeOverlay = "overlay"
+)
+
 type Provider interface {
 	Name() string
 	DisplayName() string

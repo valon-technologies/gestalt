@@ -35,6 +35,27 @@ func (p *stubProvider) Execute(_ context.Context, operation string, params map[s
 	}, nil
 }
 
+type startableStubProvider struct {
+	stubProvider
+	startName   string
+	startConfig map[string]any
+	startMode   string
+}
+
+func (p *startableStubProvider) Start(_ context.Context, name string, config map[string]any, mode string) error {
+	p.startName = name
+	p.startConfig = config
+	p.startMode = mode
+	return nil
+}
+
+type schemaStubProvider struct {
+	stubProvider
+	schema string
+}
+
+func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schema }
+
 func newTestProviderClient(t *testing.T, prov pluginsdk.Provider) pluginapiv1.ProviderPluginClient {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
@@ -159,6 +180,104 @@ func TestProviderServerExecute(t *testing.T) {
 	}
 	if resp.GetBody() != `{"operation":"test_op"}` {
 		t.Errorf("Body = %q, want %q", resp.GetBody(), `{"operation":"test_op"}`)
+	}
+}
+
+func TestProviderServerStartProvider(t *testing.T) {
+	prov := &startableStubProvider{
+		stubProvider: stubProvider{
+			name:     "test-provider",
+			connMode: pluginsdk.ConnectionModeNone,
+		},
+	}
+
+	client := newTestProviderClient(t, prov)
+	ctx := context.Background()
+
+	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
+	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+		Name:            "my-instance",
+		Config:          cfg,
+		Mode:            pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY,
+		ProtocolVersion: 1,
+	})
+	if err != nil {
+		t.Fatalf("StartProvider: %v", err)
+	}
+	if resp.GetProtocolVersion() != 1 {
+		t.Errorf("ProtocolVersion = %d, want 1", resp.GetProtocolVersion())
+	}
+	if prov.startName != "my-instance" {
+		t.Errorf("startName = %q, want %q", prov.startName, "my-instance")
+	}
+	if prov.startConfig["key"] != "val" {
+		t.Errorf("startConfig[key] = %v, want %q", prov.startConfig["key"], "val")
+	}
+	if prov.startMode != pluginsdk.PluginModeOverlay {
+		t.Errorf("startMode = %q, want %q", prov.startMode, pluginsdk.PluginModeOverlay)
+	}
+}
+
+func TestProviderServerStartProviderNoOp(t *testing.T) {
+	prov := &stubProvider{
+		name:     "test-provider",
+		connMode: pluginsdk.ConnectionModeNone,
+	}
+
+	client := newTestProviderClient(t, prov)
+	ctx := context.Background()
+
+	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+		Name:            "my-instance",
+		ProtocolVersion: 1,
+	})
+	if err != nil {
+		t.Fatalf("StartProvider: %v", err)
+	}
+	if resp.GetProtocolVersion() != 1 {
+		t.Errorf("ProtocolVersion = %d, want 1", resp.GetProtocolVersion())
+	}
+}
+
+func TestProviderServerConfigSchema(t *testing.T) {
+	prov := &schemaStubProvider{
+		stubProvider: stubProvider{
+			name:     "test-provider",
+			connMode: pluginsdk.ConnectionModeNone,
+		},
+		schema: `{"type":"object"}`,
+	}
+
+	client := newTestProviderClient(t, prov)
+	ctx := context.Background()
+
+	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("GetMetadata: %v", err)
+	}
+	if meta.GetConfigSchemaJson() != `{"type":"object"}` {
+		t.Errorf("ConfigSchemaJson = %q, want %q", meta.GetConfigSchemaJson(), `{"type":"object"}`)
+	}
+}
+
+func TestProviderServerProtocolVersion(t *testing.T) {
+	prov := &stubProvider{
+		name:     "test-provider",
+		connMode: pluginsdk.ConnectionModeNone,
+	}
+
+	client := newTestProviderClient(t, prov)
+	ctx := context.Background()
+
+	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("GetMetadata: %v", err)
+	}
+	if meta.GetMinProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
+		t.Errorf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
+	}
+	if meta.GetMaxProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
+		t.Errorf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
 	}
 }
 
