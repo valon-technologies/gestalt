@@ -98,16 +98,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		intgDef := cfg.Integrations[name]
-		factory, ok := factories.Providers[name]
-		if !ok {
-			factory = factories.DefaultProvider
-		}
-		if factory == nil {
-			errs = append(errs, fmt.Errorf("bootstrap: no provider factory for %q and no default factory registered", name))
-			continue
-		}
-
-		prov, err := factory(ctx, name, intgDef, deps)
+		prov, err := buildProvider(ctx, name, intgDef, factories, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue

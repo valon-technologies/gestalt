@@ -27,10 +27,17 @@ type Config struct {
 	Server       ServerConfig              `yaml:"server"`
 }
 
+type ExecutablePluginDef struct {
+	Command string            `yaml:"command"`
+	Args    []string          `yaml:"args"`
+	Env     map[string]string `yaml:"env"`
+}
+
 type RuntimeDef struct {
-	Type      string    `yaml:"type"`
-	Providers []string  `yaml:"providers"`
-	Config    yaml.Node `yaml:"config"`
+	Type      string               `yaml:"type"`
+	Providers []string             `yaml:"providers"`
+	Config    yaml.Node            `yaml:"config"`
+	Plugin    *ExecutablePluginDef `yaml:"plugin"`
 }
 
 type BindingDef struct {
@@ -69,12 +76,13 @@ type ServerConfig struct {
 }
 
 type IntegrationDef struct {
-	Upstreams      []UpstreamDef `yaml:"upstreams"`
-	DisplayName    string        `yaml:"display_name"`
-	Description    string        `yaml:"description"`
-	AuthProfile    string        `yaml:"auth_profile"`
-	ConnectionMode string        `yaml:"connection_mode"`
-	MCPToolPrefix  string        `yaml:"mcp_tool_prefix"`
+	Upstreams      []UpstreamDef        `yaml:"upstreams"`
+	DisplayName    string               `yaml:"display_name"`
+	Description    string               `yaml:"description"`
+	AuthProfile    string               `yaml:"auth_profile"`
+	ConnectionMode string               `yaml:"connection_mode"`
+	MCPToolPrefix  string               `yaml:"mcp_tool_prefix"`
+	Plugin         *ExecutablePluginDef `yaml:"plugin"`
 
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
@@ -389,7 +397,18 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
+		if intg.Plugin != nil {
+			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
+		}
 		cfg.Integrations[name] = intg
+	}
+
+	for name := range cfg.Runtimes {
+		rt := cfg.Runtimes[name]
+		if rt.Plugin != nil {
+			rt.Plugin.Command = resolveExecutablePath(baseDir, rt.Plugin.Command)
+		}
+		cfg.Runtimes[name] = rt
 	}
 }
 
@@ -398,6 +417,16 @@ func resolveRelativePath(baseDir, value string) string {
 		return value
 	}
 	return filepath.Clean(filepath.Join(baseDir, value))
+}
+
+func resolveExecutablePath(baseDir, value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	if strings.HasPrefix(value, ".") || strings.ContainsRune(value, os.PathSeparator) {
+		return filepath.Clean(filepath.Join(baseDir, value))
+	}
+	return value
 }
 
 func validate(cfg *Config) error {
@@ -412,6 +441,15 @@ func validate(cfg *Config) error {
 	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
+		if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
+			return err
+		}
+		if intg.Plugin != nil {
+			if len(intg.Upstreams) > 0 {
+				return fmt.Errorf("config validation: integration %q cannot set both plugin and upstreams", name)
+			}
+			continue
+		}
 		apiCount := 0
 		for i := range intg.Upstreams {
 			us := &intg.Upstreams[i]
@@ -434,6 +472,31 @@ func validate(cfg *Config) error {
 		if apiCount > 1 {
 			return fmt.Errorf("config validation: integration %q has multiple REST/GraphQL upstreams; only one is supported", name)
 		}
+	}
+	for name := range cfg.Runtimes {
+		rt := cfg.Runtimes[name]
+		if err := validateExecutablePlugin("runtime", name, rt.Plugin); err != nil {
+			return err
+		}
+		if rt.Plugin != nil {
+			if rt.Type != "" {
+				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
+			}
+			continue
+		}
+		if rt.Type == "" {
+			return fmt.Errorf("config validation: runtime %q requires either type or plugin", name)
+		}
+	}
+	return nil
+}
+
+func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) error {
+	if plugin == nil {
+		return nil
+	}
+	if plugin.Command == "" {
+		return fmt.Errorf("config validation: %s %q plugin.command is required", kind, name)
 	}
 	return nil
 }
