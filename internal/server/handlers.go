@@ -632,13 +632,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	var tokenResp *core.TokenResponse
+	exchangeCtx := r.Context()
+	if len(connParams) > 0 {
+		exchangeCtx = core.WithConnectionParams(exchangeCtx, connParams)
+	}
 	if exchanger, ok := prov.(oauthVerifierExchanger); ok {
-		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
+		tokenResp, err = exchanger.ExchangeCodeWithVerifier(exchangeCtx, code, state.Verifier, exchangeOpts...)
 	} else {
 		if len(exchangeOpts) > 0 {
 			log.Printf("WARNING: %s does not support exchange options (e.g. token URL override); connection params may not apply to token exchange", providerName)
 		}
-		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
+		tokenResp, err = oauthProv.ExchangeCode(exchangeCtx, code)
 	}
 	if err != nil {
 		log.Printf("token exchange failed for %s: %v", providerName, err)
