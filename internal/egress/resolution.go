@@ -17,8 +17,9 @@ type Resolution struct {
 }
 
 type Resolver struct {
-	Subjects SubjectResolver
-	Policy   PolicyEnforcer
+	Subjects    SubjectResolver
+	Policy      PolicyEnforcer
+	Credentials CredentialResolver
 }
 
 func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolution, error) {
@@ -32,18 +33,27 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 		return Resolution{}, err
 	}
 
-	headers := ApplyHeaderMutations(input.Headers, input.Credential.Headers)
+	credential := input.Credential
+	if r.Credentials != nil && credential.Authorization == "" && len(credential.Headers) == 0 {
+		resolved, err := r.Credentials.ResolveCredential(ctx, subject, input.Target)
+		if err != nil {
+			return Resolution{}, err
+		}
+		credential = resolved
+	}
 
-	if input.Credential.Authorization != "" {
+	headers := ApplyHeaderMutations(input.Headers, credential.Headers)
+
+	if credential.Authorization != "" {
 		delete(headers, "Authorization")
 	}
 
 	policyHeaders := CopyHeaders(headers)
-	if input.Credential.Authorization != "" {
+	if credential.Authorization != "" {
 		if policyHeaders == nil {
 			policyHeaders = map[string]string{}
 		}
-		policyHeaders["Authorization"] = input.Credential.Authorization
+		policyHeaders["Authorization"] = credential.Authorization
 	}
 
 	policy := PolicyInput{
@@ -59,7 +69,7 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 		Subject:    subject,
 		Target:     input.Target,
 		Headers:    headers,
-		Credential: CredentialMaterialization{Authorization: input.Credential.Authorization},
+		Credential: CredentialMaterialization{Authorization: credential.Authorization},
 		Policy:     policy,
 	}, nil
 }
