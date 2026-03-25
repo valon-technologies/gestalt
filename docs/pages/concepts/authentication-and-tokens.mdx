@@ -27,8 +27,8 @@ After first login, the user record is created in the datastore. The session toke
 
 The authentication path on every request:
 
-1. Check for a valid `session_token` cookie. If present, validate the session.
-2. If no valid cookie, check for a `Bearer` token in the `Authorization` header. If present, hash it and look it up in the datastore.
+1. Check for a `Bearer` token in the `Authorization` header. If present, hash it and look it up in the datastore.
+2. If no bearer token, check for a valid session cookie.
 3. If neither is found, reject the request.
 
 <Callout>
@@ -66,6 +66,6 @@ When `dev_mode: true` is set in the server config:
 
 - HTTPS is not required for OAuth callbacks.
 - The `X-Dev-User-Email` header impersonates a user without the full login flow.
-- The `/api/dev-login` endpoint creates a session without an external identity provider.
+- The `/dev-login` endpoint creates a session without an external identity provider.
 
 Never enable dev mode in production.

@@ -8,7 +8,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/oauth"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -67,17 +66,11 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 
 	switch {
 	case hasOAuth && hasSessionCatalog && hasPostConnect:
-		return &remoteProviderWithOAuthSessionCatalogPostConnect{
-			remoteProviderWithOAuth: &remoteProviderWithOAuth{remoteProviderBase: base},
-		}, nil
+		return &remoteProviderWithOAuthSessionCatalogPostConnect{remoteProviderBase: base}, nil
 	case hasOAuth && hasSessionCatalog:
-		return &remoteProviderWithOAuthSessionCatalog{
-			remoteProviderWithOAuth: &remoteProviderWithOAuth{remoteProviderBase: base},
-		}, nil
+		return &remoteProviderWithOAuthSessionCatalog{remoteProviderBase: base}, nil
 	case hasOAuth && hasPostConnect:
-		return &remoteProviderWithOAuthPostConnect{
-			remoteProviderWithOAuth: &remoteProviderWithOAuth{remoteProviderBase: base},
-		}, nil
+		return &remoteProviderWithOAuthPostConnect{remoteProviderBase: base}, nil
 	case hasSessionCatalog && hasPostConnect:
 		return &remoteProviderWithSessionCatalogPostConnect{remoteProviderBase: base}, nil
 	case hasOAuth:
@@ -146,38 +139,27 @@ func (p *remoteProviderBase) AuthTypes() []string {
 	return slices.Clone(p.metadata.GetAuthTypes())
 }
 
-func (p *remoteProviderBase) authorizationURL(state string, scopes []string, includeVerifier bool, authBaseURL string) (string, string) {
+func (p *remoteProviderBase) authorizationURL(state string, scopes []string) string {
 	resp, err := p.client.AuthorizationURL(context.Background(), &pluginapiv1.AuthorizationURLRequest{
-		State:           state,
-		Scopes:          slices.Clone(scopes),
-		AuthBaseUrl:     authBaseURL,
-		IncludeVerifier: includeVerifier,
+		State:  state,
+		Scopes: slices.Clone(scopes),
 	})
 	if err != nil {
-		return "", ""
+		return ""
 	}
-	return resp.GetUrl(), resp.GetVerifier()
+	return resp.GetUrl()
 }
 
-func (p *remoteProviderBase) exchangeCode(ctx context.Context, code, verifier, tokenURL string) (*core.TokenResponse, error) {
-	resp, err := p.client.ExchangeCode(ctx, &pluginapiv1.ExchangeCodeRequest{
-		Code:             code,
-		Verifier:         verifier,
-		TokenUrl:         tokenURL,
-		ConnectionParams: core.ConnectionParams(ctx),
-	})
+func (p *remoteProviderBase) exchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	resp, err := p.client.ExchangeCode(ctx, &pluginapiv1.ExchangeCodeRequest{Code: code})
 	if err != nil {
 		return nil, err
 	}
 	return tokenResponseFromProto(resp), nil
 }
 
-func (p *remoteProviderBase) refreshToken(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	resp, err := p.client.RefreshToken(ctx, &pluginapiv1.RefreshTokenRequest{
-		RefreshToken:     refreshToken,
-		TokenUrl:         tokenURL,
-		ConnectionParams: core.ConnectionParams(ctx),
-	})
+func (p *remoteProviderBase) refreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	resp, err := p.client.RefreshToken(ctx, &pluginapiv1.RefreshTokenRequest{RefreshToken: refreshToken})
 	if err != nil {
 		return nil, err
 	}
@@ -210,44 +192,15 @@ func (p *remoteProviderBase) postConnectHook() core.PostConnectHook {
 type remoteProviderWithOAuth struct{ *remoteProviderBase }
 
 func (p *remoteProviderWithOAuth) AuthorizationURL(state string, scopes []string) string {
-	url, _ := p.authorizationURL(state, scopes, false, "")
-	return url
-}
-
-func (p *remoteProviderWithOAuth) StartOAuth(state string, scopes []string) (string, string) {
-	return p.authorizationURL(state, scopes, true, "")
-}
-
-func (p *remoteProviderWithOAuth) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	return p.authorizationURL(state, scopes, true, authBaseURL)
+	return p.authorizationURL(state, scopes)
 }
 
 func (p *remoteProviderWithOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.exchangeCode(ctx, code, "", "")
+	return p.exchangeCode(ctx, code)
 }
 
 func (p *remoteProviderWithOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken, "")
-}
-
-func (p *remoteProviderWithOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	resolved := oauth.ResolveExchangeOptions(extraOpts...)
-	if verifier == "" {
-		verifier = resolved.Verifier
-	}
-	return p.exchangeCode(ctx, code, verifier, resolved.TokenURL)
-}
-
-func (p *remoteProviderWithOAuth) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken, tokenURL)
-}
-
-func (p *remoteProviderWithOAuth) AuthorizationBaseURL() string {
-	return p.metadata.GetAuthorizationBaseUrl()
-}
-
-func (p *remoteProviderWithOAuth) TokenURL() string {
-	return p.metadata.GetTokenUrl()
+	return p.refreshToken(ctx, refreshToken)
 }
 
 type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
@@ -262,13 +215,37 @@ func (p *remoteProviderWithPostConnect) PostConnectHook() core.PostConnectHook {
 	return p.postConnectHook()
 }
 
-type remoteProviderWithOAuthSessionCatalog struct{ *remoteProviderWithOAuth }
+type remoteProviderWithOAuthSessionCatalog struct{ *remoteProviderBase }
+
+func (p *remoteProviderWithOAuthSessionCatalog) AuthorizationURL(state string, scopes []string) string {
+	return p.authorizationURL(state, scopes)
+}
+
+func (p *remoteProviderWithOAuthSessionCatalog) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.exchangeCode(ctx, code)
+}
+
+func (p *remoteProviderWithOAuthSessionCatalog) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.refreshToken(ctx, refreshToken)
+}
 
 func (p *remoteProviderWithOAuthSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
 }
 
-type remoteProviderWithOAuthPostConnect struct{ *remoteProviderWithOAuth }
+type remoteProviderWithOAuthPostConnect struct{ *remoteProviderBase }
+
+func (p *remoteProviderWithOAuthPostConnect) AuthorizationURL(state string, scopes []string) string {
+	return p.authorizationURL(state, scopes)
+}
+
+func (p *remoteProviderWithOAuthPostConnect) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.exchangeCode(ctx, code)
+}
+
+func (p *remoteProviderWithOAuthPostConnect) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.refreshToken(ctx, refreshToken)
+}
 
 func (p *remoteProviderWithOAuthPostConnect) PostConnectHook() core.PostConnectHook {
 	return p.postConnectHook()
@@ -284,7 +261,19 @@ func (p *remoteProviderWithSessionCatalogPostConnect) PostConnectHook() core.Pos
 	return p.postConnectHook()
 }
 
-type remoteProviderWithOAuthSessionCatalogPostConnect struct{ *remoteProviderWithOAuth }
+type remoteProviderWithOAuthSessionCatalogPostConnect struct{ *remoteProviderBase }
+
+func (p *remoteProviderWithOAuthSessionCatalogPostConnect) AuthorizationURL(state string, scopes []string) string {
+	return p.authorizationURL(state, scopes)
+}
+
+func (p *remoteProviderWithOAuthSessionCatalogPostConnect) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.exchangeCode(ctx, code)
+}
+
+func (p *remoteProviderWithOAuthSessionCatalogPostConnect) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.refreshToken(ctx, refreshToken)
+}
 
 func (p *remoteProviderWithOAuthSessionCatalogPostConnect) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)

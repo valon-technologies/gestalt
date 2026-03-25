@@ -10,7 +10,6 @@ Adding an **integration** means defining one or more upstreams, optionally confi
 | GraphQL endpoint | `type: graphql` with `url` | GraphQL API. Operations generated from introspection. |
 | MCP server | `type: mcp` with `url` | Upstream already speaks MCP. Tools imported directly. |
 | Manual auth | Any upstream type with `auth.type: manual` | API-key service with no OAuth flow. Users paste credentials directly. |
-| Executable plugin | `plugin` block with `command` | Custom provider logic in any gRPC-capable language. No spec or MCP server needed. |
 
 ## 2. REST integration from OpenAPI
 

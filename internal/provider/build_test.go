@@ -719,3 +719,222 @@ func TestBuildUnknownPostConnectHook(t *testing.T) {
 		t.Fatal("expected error for unknown post_connect hook")
 	}
 }
+
+func TestBuildStructuredResponseCheck_SuccessMatch(t *testing.T) {
+	t.Parallel()
+
+	const successKey = "ok"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{successKey: true, "data": "hello"})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "check_ok",
+		DisplayName: "Check OK API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			SuccessBodyMatch: map[string]any{successKey: true},
+			ErrorMessagePath: "error",
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "op", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute should succeed: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Errorf("status = %d, want 200", result.Status)
+	}
+}
+
+func TestBuildStructuredResponseCheck_FailureMatch(t *testing.T) {
+	t.Parallel()
+
+	const (
+		successKey = "ok"
+		errorKey   = "error"
+		errorValue = "channel_not_found"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{successKey: false, errorKey: errorValue})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "check_fail",
+		DisplayName: "Check Fail API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			SuccessBodyMatch: map[string]any{successKey: true},
+			ErrorMessagePath: errorKey,
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "op", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error for failed response check")
+	}
+	if !strings.Contains(err.Error(), errorValue) {
+		t.Errorf("error should contain %q, got: %v", errorValue, err)
+	}
+}
+
+func TestBuildStructuredResponseCheck_NonJSON200(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("plain text response"))
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "check_text_ok",
+		DisplayName: "Check Text OK API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			SuccessBodyMatch: map[string]any{"ok": true},
+			ErrorMessagePath: "error",
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "op", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute should succeed for non-JSON 200: %v", err)
+	}
+}
+
+func TestBuildStructuredResponseCheck_NonJSON500(t *testing.T) {
+	t.Parallel()
+
+	const serverErrorStatus = http.StatusInternalServerError
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(serverErrorStatus)
+		_, _ = w.Write([]byte("internal server error"))
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "check_text_err",
+		DisplayName: "Check Text Err API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			SuccessBodyMatch: map[string]any{"ok": true},
+			ErrorMessagePath: "error",
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "op", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error for non-JSON 500")
+	}
+}
+
+func TestBuildStructuredResponseCheck_Precedence(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "check_precedence",
+		DisplayName: "Check Precedence API",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			SuccessBodyMatch: map[string]any{"ok": true},
+		},
+		ResponseCheck: "nonexistent_checker_that_should_be_skipped",
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	_, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build should succeed (structured takes precedence over string hook): %v", err)
+	}
+}
+
+func TestBuildStructuredResponseCheck_ErrorMessagePathOnly(t *testing.T) {
+	t.Parallel()
+
+	const (
+		msgKey   = "message"
+		msgValue = "bad request"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{msgKey: msgValue})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "check_errpath",
+		DisplayName: "Check ErrPath API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		StructuredResponseCheck: &ResponseCheckDef{
+			ErrorMessagePath: msgKey,
+		},
+		Operations: map[string]OperationDef{
+			"op": {Description: "Op", Method: "GET", Path: "/op"},
+		},
+	}
+
+	prov, err := Build(def, config.IntegrationDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "op", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error for 400 response")
+	}
+	if !strings.Contains(err.Error(), msgValue) {
+		t.Errorf("error should contain %q, got: %v", msgValue, err)
+	}
+}
