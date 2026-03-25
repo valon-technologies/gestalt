@@ -77,6 +77,7 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
+var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})

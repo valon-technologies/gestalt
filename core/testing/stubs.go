@@ -18,6 +18,8 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 	return "", core.ErrSecretNotFound
 }
 
+var _ core.StagedConnectionStore = (*StubDatastore)(nil)
+
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
 	PingFn                     func(context.Context) error
