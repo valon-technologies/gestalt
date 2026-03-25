@@ -86,7 +86,7 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "do"}},
+			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
 		}, nil
 	}
 	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
@@ -98,7 +98,7 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "do"}},
+			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
 		}, nil
 	}
 
