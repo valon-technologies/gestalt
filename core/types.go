@@ -66,6 +66,20 @@ type Parameter struct {
 	Default     any
 }
 
+type StagedConnection struct {
+	ID             string
+	UserID         string
+	Integration    string
+	Instance       string
+	AccessToken    string
+	RefreshToken   string
+	TokenExpiresAt *time.Time
+	MetadataJSON   string
+	CandidatesJSON string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+}
+
 type OperationResult struct {
 	Status int
 	Body   string

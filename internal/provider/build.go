@@ -185,12 +185,20 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		base.RequestMutator = mutator
 	}
 
+	if def.PostConnect != "" && def.PostConnectDiscovery != nil {
+		return nil, fmt.Errorf("%s: cannot set both post_connect and post_connect_discovery", def.Provider)
+	}
+
 	if def.PostConnect != "" {
 		hook, ok := lookupPostConnectHook(def.PostConnect)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown post_connect %q", def.Provider, def.PostConnect)
 		}
 		base.PostConnectHookFn = hook
+	}
+
+	if def.PostConnectDiscovery != nil {
+		base.DiscoveryDef = def.PostConnectDiscovery.ToCore()
 	}
 
 	base.ManualAuthEnabled = def.ManualAuth

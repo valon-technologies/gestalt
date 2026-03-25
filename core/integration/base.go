@@ -19,6 +19,7 @@ var (
 	_ core.CatalogProvider         = (*Base)(nil)
 	_ core.ConnectionParamProvider = (*Base)(nil)
 	_ core.PostConnectProvider     = (*Base)(nil)
+	_ core.DiscoveryConfigProvider = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -115,6 +116,7 @@ type Base struct {
 
 	ConnectionDefs    map[string]core.ConnectionParamDef
 	PostConnectHookFn core.PostConnectHook
+	DiscoveryDef      *core.DiscoveryConfig
 	ManualAuthEnabled bool
 
 	catalog *catalog.Catalog
@@ -157,6 +159,10 @@ func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 
 func (b *Base) PostConnectHook() core.PostConnectHook {
 	return b.PostConnectHookFn
+}
+
+func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {
+	return b.DiscoveryDef
 }
 
 func (b *Base) TokenURL() string {

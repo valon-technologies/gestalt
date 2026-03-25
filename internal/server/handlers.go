@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/discovery"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
@@ -653,40 +654,36 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	now := s.now().UTC().Truncate(time.Second)
-	var expiresAt *time.Time
-	if tokenResp.ExpiresIn > 0 {
-		t := now.Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-		expiresAt = &t
-	}
-
 	callbackInstance := state.Instance
 	if callbackInstance == "" {
 		callbackInstance = defaultTokenInstance
 	}
 
-	tok := &core.IntegrationToken{
-		ID:           uuid.NewString(),
-		UserID:       state.UserID,
-		Integration:  providerName,
-		Instance:     callbackInstance,
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		ExpiresAt:    expiresAt,
-		MetadataJSON: metadata,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+	var tokenExpiresAt *time.Time
+	if tokenResp.ExpiresIn > 0 {
+		t := s.now().UTC().Truncate(time.Second).Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		tokenExpiresAt = &t
 	}
 
-	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
-		log.Printf("failed to store token for %s: %v", providerName, err)
-		writeError(w, http.StatusInternalServerError, "failed to store token")
+	tm := tokenMaterial{
+		UserID:         state.UserID,
+		Integration:    providerName,
+		Instance:       callbackInstance,
+		AccessToken:    tokenResp.AccessToken,
+		RefreshToken:   tokenResp.RefreshToken,
+		TokenExpiresAt: tokenExpiresAt,
+		MetadataJSON:   metadata,
+	}
+
+	result, err := s.runPostConnect(r.Context(), prov, tm)
+	if err != nil {
+		log.Printf("post_connect failed for %s: %v", providerName, err)
+		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
 
-	if err := s.runPostConnectHook(r.Context(), prov, tok); err != nil {
-		log.Printf("post_connect hook failed for %s: %v", providerName, err)
-		writeError(w, http.StatusBadGateway, "connection setup failed")
+	if result.Status == "selection_required" {
+		http.Redirect(w, r, "/integrations?pending="+url.QueryEscape(result.StagedID), http.StatusSeeOther)
 		return
 	}
 
@@ -753,35 +750,28 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	now := s.now().UTC().Truncate(time.Second)
-	tok := &core.IntegrationToken{
-		ID:          uuid.NewString(),
-		UserID:      dbUser.ID,
-		Integration: req.Integration,
-		Instance:    manualInstance,
-		AccessToken: req.Credential,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
 	if metaErr != nil {
 		writeError(w, http.StatusBadRequest, metaErr.Error())
 		return
 	}
-	tok.MetadataJSON = manualMeta
-	if err := s.datastore.StoreToken(r.Context(), tok); err != nil {
-		log.Printf("failed to store credential for %s: %v", req.Integration, err)
-		writeError(w, http.StatusInternalServerError, "failed to store credential")
-		return
+
+	tm := tokenMaterial{
+		UserID:       dbUser.ID,
+		Integration:  req.Integration,
+		Instance:     manualInstance,
+		AccessToken:  req.Credential,
+		MetadataJSON: manualMeta,
 	}
 
-	if err := s.runPostConnectHook(r.Context(), prov, tok); err != nil {
-		log.Printf("post_connect hook failed for %s: %v", req.Integration, err)
+	result, err := s.runPostConnect(r.Context(), prov, tm)
+	if err != nil {
+		log.Printf("post_connect failed for %s: %v", req.Integration, err)
 		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+	writeJSON(w, http.StatusOK, result)
 }
 
 type createTokenRequest struct {
@@ -1032,7 +1022,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func (s *Server) runPostConnectHook(ctx context.Context, prov core.Provider, tok *core.IntegrationToken) error {
+func (s *Server) runLegacyPostConnectHook(ctx context.Context, prov core.Provider, tok *core.IntegrationToken) error {
 	pcp, ok := prov.(core.PostConnectProvider)
 	if !ok {
 		return nil
@@ -1082,4 +1072,277 @@ func (s *Server) runPostConnectHook(ctx context.Context, prov core.Provider, tok
 	}
 
 	return nil
+}
+
+const stagedConnectionTTL = 30 * time.Minute
+
+type tokenMaterial struct {
+	UserID         string
+	Integration    string
+	Instance       string
+	AccessToken    string
+	RefreshToken   string
+	TokenExpiresAt *time.Time
+	MetadataJSON   string
+}
+
+type postConnectResult struct {
+	Status     string                    `json:"status"`
+	StagedID   string                    `json:"staged_id,omitempty"`
+	Candidates []core.DiscoveryCandidate `json:"candidates,omitempty"`
+}
+
+func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
+	now := s.now().UTC().Truncate(time.Second)
+	tok := &core.IntegrationToken{
+		ID:           uuid.NewString(),
+		UserID:       tm.UserID,
+		Integration:  tm.Integration,
+		Instance:     tm.Instance,
+		AccessToken:  tm.AccessToken,
+		RefreshToken: tm.RefreshToken,
+		ExpiresAt:    tm.TokenExpiresAt,
+		MetadataJSON: tm.MetadataJSON,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.datastore.StoreToken(ctx, tok); err != nil {
+		return nil, err
+	}
+	return tok, nil
+}
+
+func validateDiscoveryMetadata(metadata map[string]string) error {
+	for k, v := range metadata {
+		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
+			return fmt.Errorf("discovery returned invalid key or value for %q", k)
+		}
+	}
+	return nil
+}
+
+func mergeMetadataJSON(existing string, extra map[string]string) (string, error) {
+	m := make(map[string]string)
+	if existing != "" {
+		if err := json.Unmarshal([]byte(existing), &m); err != nil {
+			return "", fmt.Errorf("corrupt MetadataJSON: %w", err)
+		}
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	b, _ := json.Marshal(m)
+	return string(b), nil
+}
+
+func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
+	if dcp, ok := prov.(core.DiscoveryConfigProvider); ok {
+		if cfg := dcp.DiscoveryConfig(); cfg != nil {
+			client := &http.Client{
+				Timeout:   30 * time.Second,
+				Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
+			}
+			candidates, err := discovery.Run(ctx, cfg, client)
+			if err != nil {
+				return nil, fmt.Errorf("discovery: %w", err)
+			}
+			if len(candidates) == 0 {
+				return nil, fmt.Errorf("no resources discovered")
+			}
+			if len(candidates) == 1 {
+				if err := validateDiscoveryMetadata(candidates[0].Metadata); err != nil {
+					return nil, err
+				}
+				merged, err := mergeMetadataJSON(tm.MetadataJSON, candidates[0].Metadata)
+				if err != nil {
+					return nil, err
+				}
+				tm.MetadataJSON = merged
+				if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
+					return nil, err
+				}
+				return &postConnectResult{Status: "connected"}, nil
+			}
+
+			candidatesJSON, _ := json.Marshal(candidates)
+			now := s.now().UTC().Truncate(time.Second)
+			sc := &core.StagedConnection{
+				ID:             uuid.NewString(),
+				UserID:         tm.UserID,
+				Integration:    tm.Integration,
+				Instance:       tm.Instance,
+				AccessToken:    tm.AccessToken,
+				RefreshToken:   tm.RefreshToken,
+				TokenExpiresAt: tm.TokenExpiresAt,
+				MetadataJSON:   tm.MetadataJSON,
+				CandidatesJSON: string(candidatesJSON),
+				CreatedAt:      now,
+				ExpiresAt:      now.Add(stagedConnectionTTL),
+			}
+			if err := s.datastore.StoreStagedConnection(ctx, sc); err != nil {
+				return nil, fmt.Errorf("storing staged connection: %w", err)
+			}
+			return &postConnectResult{
+				Status:     "selection_required",
+				StagedID:   sc.ID,
+				Candidates: candidates,
+			}, nil
+		}
+	}
+
+	if pcp, ok := prov.(core.PostConnectProvider); ok {
+		if hookFn := pcp.PostConnectHook(); hookFn != nil {
+			tok, err := s.storeTokenFromMaterial(ctx, tm)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.runLegacyPostConnectHook(ctx, prov, tok); err != nil {
+				return nil, err
+			}
+			return &postConnectResult{Status: "connected"}, nil
+		}
+	}
+
+	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
+		return nil, err
+	}
+	return &postConnectResult{Status: "connected"}, nil
+}
+
+func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, userID string) (*core.StagedConnection, bool) {
+	id := chi.URLParam(r, "id")
+	sc, err := s.datastore.GetStagedConnection(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "staged connection not found")
+			return nil, false
+		}
+		writeError(w, http.StatusInternalServerError, "failed to get staged connection")
+		return nil, false
+	}
+	if sc.UserID != userID {
+		writeError(w, http.StatusNotFound, "staged connection not found")
+		return nil, false
+	}
+	if s.now().After(sc.ExpiresAt) {
+		_ = s.datastore.DeleteStagedConnection(r.Context(), id)
+		writeError(w, http.StatusGone, "staged connection has expired")
+		return nil, false
+	}
+	return sc, true
+}
+
+func (s *Server) getStagedConnection(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+	sc, ok := s.loadStagedConnection(w, r, userID)
+	if !ok {
+		return
+	}
+
+	var candidates []core.DiscoveryCandidate
+	if err := json.Unmarshal([]byte(sc.CandidatesJSON), &candidates); err != nil {
+		writeError(w, http.StatusInternalServerError, "corrupt candidates data")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":          sc.ID,
+		"integration": sc.Integration,
+		"instance":    sc.Instance,
+		"candidates":  candidates,
+	})
+}
+
+func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		CandidateID string `json:"candidate_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.CandidateID == "" {
+		writeError(w, http.StatusBadRequest, "candidate_id is required")
+		return
+	}
+
+	sc, ok := s.loadStagedConnection(w, r, userID)
+	if !ok {
+		return
+	}
+
+	var candidates []core.DiscoveryCandidate
+	if err := json.Unmarshal([]byte(sc.CandidatesJSON), &candidates); err != nil {
+		writeError(w, http.StatusInternalServerError, "corrupt candidates data")
+		return
+	}
+
+	var selected *core.DiscoveryCandidate
+	for i := range candidates {
+		if candidates[i].ID == req.CandidateID {
+			selected = &candidates[i]
+			break
+		}
+	}
+	if selected == nil {
+		writeError(w, http.StatusBadRequest, "candidate not found")
+		return
+	}
+
+	if err := validateDiscoveryMetadata(selected.Metadata); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	merged, err := mergeMetadataJSON(sc.MetadataJSON, selected.Metadata)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
+		return
+	}
+
+	tm := tokenMaterial{
+		UserID:         sc.UserID,
+		Integration:    sc.Integration,
+		Instance:       sc.Instance,
+		AccessToken:    sc.AccessToken,
+		RefreshToken:   sc.RefreshToken,
+		TokenExpiresAt: sc.TokenExpiresAt,
+		MetadataJSON:   merged,
+	}
+	if _, err := s.storeTokenFromMaterial(r.Context(), tm); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store connection")
+		return
+	}
+
+	if err := s.datastore.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
+		log.Printf("failed to delete staged connection %s: %v", sc.ID, err)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+}
+
+func (s *Server) cancelStagedConnection(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
+	sc, ok := s.loadStagedConnection(w, r, userID)
+	if !ok {
+		return
+	}
+
+	if err := s.datastore.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to cancel staged connection")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "canceled"})
 }
