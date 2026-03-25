@@ -62,6 +62,30 @@ test.describe("Integration: Go server contract", () => {
     ).toBeVisible();
   });
 
+  test("dashboard loads from Go server", async ({ page }) => {
+    await injectAuth(page);
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Dashboard" }),
+    ).toBeVisible();
+  });
+
+  test("unauthenticated user is redirected to login", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("logout clears session and redirects to login", async ({ page }) => {
+    await injectAuth(page);
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Dashboard" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /log\s*out/i }).click();
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("tokens CRUD works against Go server", async ({ page }) => {
     await injectAuth(page);
     await page.goto("/tokens");
