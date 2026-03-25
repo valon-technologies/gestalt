@@ -57,7 +57,8 @@ func (r functionalTestQueryRunner) Run(_ context.Context, projectID, token, sql 
 				{Name: "items", Type: cloudbigquery.StringFieldType, Repeated: true},
 				{Name: "nested", Type: cloudbigquery.RecordFieldType},
 			},
-			totalRows: 2,
+			totalRows:      2,
+			delayTotalRows: true,
 			rows: []map[string]cloudbigquery.Value{
 				{
 					"value": big.NewRat(2469, 200),
@@ -105,15 +106,22 @@ func (r functionalTestQueryRunner) Run(_ context.Context, projectID, token, sql 
 }
 
 type functionalTestQueryIterator struct {
-	schema    cloudbigquery.Schema
-	totalRows uint64
-	rows      []map[string]cloudbigquery.Value
-	index     int
-	closed    bool
+	schema             cloudbigquery.Schema
+	totalRows          uint64
+	delayTotalRows     bool
+	totalRowsAvailable bool
+	rows               []map[string]cloudbigquery.Value
+	index              int
+	closed             bool
 }
 
 func (f *functionalTestQueryIterator) Schema() cloudbigquery.Schema { return f.schema }
-func (f *functionalTestQueryIterator) TotalRows() uint64            { return f.totalRows }
+func (f *functionalTestQueryIterator) TotalRows() uint64 {
+	if f.delayTotalRows && !f.totalRowsAvailable {
+		return 0
+	}
+	return f.totalRows
+}
 
 func (f *functionalTestQueryIterator) Next(row *map[string]cloudbigquery.Value) error {
 	if f.closed {
@@ -124,6 +132,7 @@ func (f *functionalTestQueryIterator) Next(row *map[string]cloudbigquery.Value) 
 	}
 	*row = f.rows[f.index]
 	f.index++
+	f.totalRowsAvailable = true
 	return nil
 }
 

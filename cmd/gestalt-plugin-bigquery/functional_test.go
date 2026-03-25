@@ -152,6 +152,35 @@ func TestExecutableBigQueryProviderReturnsErrors(t *testing.T) {
 	}
 }
 
+func TestExecutableBigQueryProviderHandlesNegativeMaxResults(t *testing.T) {
+	t.Parallel()
+
+	prov := newBigQueryExecutableProvider(t, "rows")
+	result, err := prov.Execute(context.Background(), "query", map[string]any{
+		"project_id":     "sample",
+		"query":          "SELECT 1",
+		"max_results":    -1,
+		"timeout_ms":     1500,
+		"use_legacy_sql": true,
+	}, "test-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var body struct {
+		Rows []map[string]any `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if result.Status != 200 {
+		t.Fatalf("status = %d", result.Status)
+	}
+	if len(body.Rows) != 0 {
+		t.Fatalf("rows = %#v, want empty result set", body.Rows)
+	}
+}
+
 func newBigQueryExecutableProvider(t *testing.T, scenario string) core.Provider {
 	t.Helper()
 

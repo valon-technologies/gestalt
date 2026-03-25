@@ -72,11 +72,10 @@ type querySchemaField struct {
 type sdkQueryRunner struct{}
 
 type sdkQueryIterator struct {
-	schema    cloudbigquery.Schema
-	totalRows uint64
-	iter      *cloudbigquery.RowIterator
-	client    *cloudbigquery.Client
-	cancel    context.CancelFunc
+	schema cloudbigquery.Schema
+	iter   *cloudbigquery.RowIterator
+	client *cloudbigquery.Client
+	cancel context.CancelFunc
 }
 
 var _ core.Provider = (*QueryProvider)(nil)
@@ -123,6 +122,9 @@ func (p *QueryProvider) Execute(ctx context.Context, operation string, params ma
 	}
 
 	maxResults := intParam(params, queryParamMaxResults, defaultQueryMaxResults)
+	if maxResults < 0 {
+		maxResults = 0
+	}
 	iter, err := p.runner.Run(ctx, projectID, token, sql, queryOptions{
 		Timeout:      time.Duration(intParam(params, queryParamTimeoutMs, defaultQueryTimeoutMs)) * time.Millisecond,
 		UseLegacySQL: boolParam(params, queryParamUseLegacySQL, defaultQueryUseLegacySQL),
@@ -184,16 +186,15 @@ func (sdkQueryRunner) Run(ctx context.Context, projectID, token, sql string, opt
 		return nil, fmt.Errorf("executing query: %w", err)
 	}
 	return sdkQueryIterator{
-		schema:    iter.Schema,
-		totalRows: iter.TotalRows,
-		iter:      iter,
-		client:    client,
-		cancel:    cancel,
+		schema: iter.Schema,
+		iter:   iter,
+		client: client,
+		cancel: cancel,
 	}, nil
 }
 
 func (it sdkQueryIterator) Schema() cloudbigquery.Schema { return it.schema }
-func (it sdkQueryIterator) TotalRows() uint64            { return it.totalRows }
+func (it sdkQueryIterator) TotalRows() uint64            { return it.iter.TotalRows }
 
 func (it sdkQueryIterator) Next(row *map[string]cloudbigquery.Value) error {
 	return it.iter.Next(row)
