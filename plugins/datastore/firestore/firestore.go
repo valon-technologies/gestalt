@@ -452,6 +452,18 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) StoreStagedConnection(_ context.Context, _ *core.StagedConnection) error {
+	return fmt.Errorf("staged connections not supported by firestore datastore")
+}
+
+func (s *Store) GetStagedConnection(_ context.Context, _ string) (*core.StagedConnection, error) {
+	return nil, fmt.Errorf("staged connections not supported by firestore datastore")
+}
+
+func (s *Store) DeleteStagedConnection(_ context.Context, _ string) error {
+	return fmt.Errorf("staged connections not supported by firestore datastore")
+}
+
 func snapToAPIToken(snap *gcpfirestore.DocumentSnapshot) (*core.APIToken, error) {
 	var doc apiTokenDoc
 	if err := snap.DataTo(&doc); err != nil {

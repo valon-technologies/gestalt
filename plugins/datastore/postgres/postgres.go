@@ -120,5 +120,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`); err != nil {
 		return fmt.Errorf("creating api_tokens table: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS staged_connections (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			integration TEXT NOT NULL,
+			instance TEXT NOT NULL,
+			access_token_encrypted TEXT NOT NULL,
+			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
+			token_expires_at TIMESTAMPTZ,
+			metadata_json TEXT NOT NULL DEFAULT '',
+			candidates_json TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL,
+			expires_at TIMESTAMPTZ NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("creating staged_connections table: %w", err)
+	}
 	return tx.Commit()
 }

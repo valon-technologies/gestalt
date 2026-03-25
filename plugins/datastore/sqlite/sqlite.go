@@ -98,6 +98,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 			expires_at DATETIME,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS staged_connections (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			integration TEXT NOT NULL,
+			instance TEXT NOT NULL,
+			access_token_encrypted TEXT NOT NULL,
+			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
+			token_expires_at DATETIME,
+			metadata_json TEXT NOT NULL DEFAULT '',
+			candidates_json TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			expires_at DATETIME NOT NULL
 		)
 	`)
 	return err

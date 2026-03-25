@@ -54,7 +54,7 @@ type ConnectionParamDef struct {
 	Required    bool
 	Description string
 	Default     string
-	From        string // "" = user-provided, "token_response" = extracted from OAuth response
+	From        string // "" = user-provided, "token_response" = from OAuth response, "discovery" = from post-connect discovery
 	Field       string // JSON field name for token_response extraction
 }
 
@@ -70,4 +70,22 @@ type PostConnectProvider interface {
 
 type AuthTypeLister interface {
 	AuthTypes() []string
+}
+
+type DiscoveryCandidate struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+type DiscoveryConfig struct {
+	URL             string
+	ItemsPath       string
+	IDPath          string
+	NamePath        string
+	MetadataMapping map[string]string
+}
+
+type DiscoveryConfigProvider interface {
+	DiscoveryConfig() *DiscoveryConfig
 }
