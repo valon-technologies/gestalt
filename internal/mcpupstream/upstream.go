@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/egress"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -34,9 +36,10 @@ type Upstream struct {
 	ops      []core.Operation
 	client   mcpclient.MCPClient
 	allowed  map[string]string
+	resolver *egress.Resolver
 }
 
-func New(_ context.Context, name string, url string, connMode core.ConnectionMode) (*Upstream, error) {
+func New(_ context.Context, name string, url string, connMode core.ConnectionMode, resolver *egress.Resolver) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
@@ -47,6 +50,7 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		desc:     fmt.Sprintf("MCP upstream: %s", url),
 		url:      url,
 		connMode: connMode,
+		resolver: resolver,
 	}, nil
 }
 
@@ -134,8 +138,13 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		return u.client, nil
 	}
 
+	httpClient := &http.Client{
+		Timeout:   httpTimeout,
+		Transport: egress.NewResolvingRoundTripper(http.DefaultTransport, u.resolver),
+	}
+
 	client, err := mcpclient.NewStreamableHttpClient(u.url,
-		transport.WithHTTPTimeout(httpTimeout),
+		transport.WithHTTPBasicClient(httpClient),
 		transport.WithHTTPHeaderFunc(func(context.Context) map[string]string {
 			if token != "" {
 				return map[string]string{"Authorization": core.BearerScheme + token}

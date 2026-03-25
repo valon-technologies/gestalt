@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/egress/egresstest"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -262,7 +264,7 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser)
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -277,6 +279,52 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 
 	ctx := WithUpstreamToken(context.Background(), "secret-token")
 	result, err := u.CallTool(ctx, "run_query", map[string]any{"sql": "SELECT 1"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
+	t.Parallel()
+
+	var gotPolicy egress.PolicyInput
+	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, &egress.Resolver{
+		Subjects: egress.ContextSubjectResolver{},
+		Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
+			gotPolicy = input
+			return nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "u1"})
+	cat, err := u.CatalogForRequest(ctx, "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
+		t.Fatalf("subject = %+v, want user u1", gotPolicy.Subject)
+	}
+	if gotPolicy.Target.Method == "" {
+		t.Fatal("expected target method to be populated")
+	}
+
+	callCtx := WithUpstreamToken(
+		egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "u1"}),
+		"secret-token",
+	)
+	result, err := u.CallTool(callCtx, "run_query", map[string]any{"sql": "SELECT 1"})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
