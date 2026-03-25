@@ -17,12 +17,13 @@ import (
 var _ core.Binding = (*Binding)(nil)
 
 type Binding struct {
-	name string
-	cfg  proxyConfig
+	name     string
+	cfg      proxyConfig
+	resolver egress.Resolver
 }
 
-func New(name string, cfg proxyConfig) *Binding {
-	return &Binding{name: name, cfg: cfg}
+func New(name string, cfg proxyConfig, resolver egress.Resolver) *Binding {
+	return &Binding{name: name, cfg: cfg, resolver: resolver}
 }
 
 func (b *Binding) Name() string           { return b.name }
@@ -76,18 +77,21 @@ func (b *Binding) normalize(r *http.Request) (normalizedRequest, error) {
 		Path:   resolvePath(r, b.cfg.normalizedPath()),
 	}
 
-	policy := egress.PolicyInput{
-		Subject: egress.Subject{
-			Kind: egress.SubjectSystem,
-			ID:   b.name,
-		},
+	ctx := egress.WithSubject(r.Context(), egress.Subject{
+		Kind: egress.SubjectSystem,
+		ID:   b.name,
+	})
+	resolved, err := b.resolver.Resolve(ctx, egress.ResolutionInput{
 		Target:  target,
 		Headers: headers,
+	})
+	if err != nil {
+		return normalizedRequest{}, err
 	}
 
 	norm := normalizedRequest{
-		Policy: policy,
-		Target: target,
+		Policy: resolved.Policy,
+		Target: resolved.Target,
 	}
 	if len(body) > 0 {
 		norm.Body = string(body)
