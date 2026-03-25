@@ -18,8 +18,6 @@ type Definition struct {
 	ErrorMessagePath string            `yaml:"error_message_path" json:"error_message_path"`
 
 	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check" json:"structured_response_check,omitempty"`
-	ResponseCheck           string            `yaml:"response_check" json:"response_check"`
-	TokenParser             string            `yaml:"token_parser" json:"token_parser"`
 	RequestMutator          string            `yaml:"request_mutator" json:"request_mutator"`
 	PostConnect             string            `yaml:"post_connect" json:"post_connect"`
 	ManualAuth              bool              `yaml:"manual_auth" json:"manual_auth"`
@@ -55,7 +53,6 @@ type AuthDef struct {
 	RefreshParams           map[string]string `yaml:"refresh_params" json:"refresh_params"`
 	AcceptHeader            string            `yaml:"accept_header" json:"accept_header"`
 	TokenMetadata           []string          `yaml:"token_metadata" json:"token_metadata"`
-	ResponseHook            string            `yaml:"response_hook" json:"response_hook"`
 	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check" json:"structured_response_check,omitempty"`
 }
 

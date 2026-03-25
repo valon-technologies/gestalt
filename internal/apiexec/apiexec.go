@@ -314,14 +314,6 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	}, nil
 }
 
-// ParseJSONToken extracts fields from a JSON-encoded token string.
-func ParseJSONToken(token string, dest any) error {
-	if err := json.Unmarshal([]byte(token), dest); err != nil {
-		return fmt.Errorf("parsing token: %w", err)
-	}
-	return nil
-}
-
 func ExpandedPath(method, path string, params map[string]any) string {
 	params = copyParams(params)
 	expanded, err := substitutePath(path, params)

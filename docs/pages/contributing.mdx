@@ -25,7 +25,7 @@
 Integration hooks live under `plugins/integrations`. Each package exports named hook functions registered in the factory file. To add behavior for a new upstream API:
 
 1. Create a package under `plugins/integrations/<name>`.
-2. Implement the relevant hook signatures (`response_check`, `token_parser`, or `request_mutator`).
+2. Implement the relevant hook signature (`request_mutator`).
 3. Register them by name in `cmd/gestaltd/factories.go`.
 
 ## Development workflow

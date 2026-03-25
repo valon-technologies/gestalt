@@ -25,12 +25,17 @@ integrations:
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
     icon_file: slack.svg
-    response_check: slack_ok
-    error_message_path: error
+    structured_response_check:
+      success_body_match:
+        ok: true
+      error_message_path: error
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      response_hook: slack_ok
+      structured_response_check:
+        success_body_match:
+          ok: true
+        error_message_path: error
 ```
 
 The `icon_file` field sets the icon displayed in the web UI. Relative paths resolve from the config file's directory. The `error_message_path` field is a dot-delimited path that extracts a human-readable error from upstream JSON error responses.
@@ -65,7 +70,10 @@ integrations:
         url: https://raw.githubusercontent.com/DataDog/documentation/master/static/resources/json/datadog-api-spec.json
     auth:
       type: manual
-    token_parser: datadog_keys
+    auth_mapping:
+      headers:
+        DD-API-KEY: api_key
+        DD-APPLICATION-KEY: app_key
 ```
 
 Users paste their credentials through the web UI or via `POST /api/v1/auth/connect-manual`. Gestalt encrypts and stores them the same way it stores OAuth tokens.

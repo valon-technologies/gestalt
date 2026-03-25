@@ -102,8 +102,6 @@ Each integration is defined under `integrations.<name>` and contains one or more
 | `auth` | Auth overrides (see below). |
 | `auth_header` | Custom header name for sending the token (instead of `Authorization`). |
 | `auth_mapping` | Map of header names to JSON fields, for structured token-to-headers mapping. |
-| `response_check` | Named hook to validate responses. |
-| `token_parser` | Named hook to transform stored tokens into auth headers. |
 | `request_mutator` | Named hook to rewrite outgoing requests. |
 | `token_prefix` | Prefix for the Authorization header value. |
 | `auth_style` | How the token is sent: `bearer` (default), `raw`, `basic`, or `none`. |
@@ -144,7 +142,10 @@ integrations:
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      response_hook: slack_ok
+      structured_response_check:
+        success_body_match:
+          ok: true
+        error_message_path: error
 ```
 
 ### Auth overrides
@@ -167,7 +168,10 @@ auth:
   token_metadata:
     - team_id
     - team_name
-  response_hook: slack_ok
+  structured_response_check:
+    success_body_match:
+      ok: true
+    error_message_path: error
 ```
 
 ## Auth profiles
@@ -183,7 +187,10 @@ auth_profiles:
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      response_hook: slack_ok
+      structured_response_check:
+        success_body_match:
+          ok: true
+        error_message_path: error
 ```
 
 Fields set directly on the integration override the profile.

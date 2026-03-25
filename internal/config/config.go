@@ -95,8 +95,6 @@ type IntegrationDef struct {
 	AuthMapping             *AuthMappingDef   `yaml:"auth_mapping"`
 	ErrorMessagePath        string            `yaml:"error_message_path"`
 	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check"`
-	ResponseCheck           string            `yaml:"response_check"`
-	TokenParser             string            `yaml:"token_parser"`
 	RequestMutator          string            `yaml:"request_mutator"`
 	PostConnect             string            `yaml:"post_connect"`
 	ManualAuth              bool              `yaml:"manual_auth"`
@@ -171,7 +169,6 @@ type AuthOverrides struct {
 	RefreshParams           map[string]string `yaml:"refresh_params"`
 	AcceptHeader            string            `yaml:"accept_header"`
 	TokenMetadata           []string          `yaml:"token_metadata"`
-	ResponseHook            string            `yaml:"response_hook"`
 	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check"`
 	AuthHeader              string            `yaml:"auth_header"`
 }
@@ -360,9 +357,6 @@ func fillAuthDefaults(dst, src *AuthOverrides) {
 	}
 	if dst.TokenMetadata == nil {
 		dst.TokenMetadata = src.TokenMetadata
-	}
-	if dst.ResponseHook == "" {
-		dst.ResponseHook = src.ResponseHook
 	}
 	if dst.StructuredResponseCheck == nil {
 		dst.StructuredResponseCheck = src.StructuredResponseCheck
