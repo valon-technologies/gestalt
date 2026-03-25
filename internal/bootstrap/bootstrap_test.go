@@ -875,7 +875,7 @@ func TestBootstrapWithBindings(t *testing.T) {
 
 	factories := validFactories()
 	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ bootstrap.BindingDeps) (core.Binding, error) {
-		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
+		return &coretesting.StubBinding{N: name}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
@@ -940,7 +940,7 @@ func TestBootstrapBindingWithProviders(t *testing.T) {
 	var receivedDeps bootstrap.BindingDeps
 	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
 		receivedDeps = deps
-		return &coretesting.StubBinding{N: name, K: core.BindingTrigger}, nil
+		return &coretesting.StubBinding{N: name}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)

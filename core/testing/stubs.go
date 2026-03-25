@@ -180,7 +180,6 @@ func (r *StubRuntime) Stop(ctx context.Context) error {
 
 type StubBinding struct {
 	N       string
-	K       core.BindingKind
 	StartFn func(context.Context) error
 	CloseFn func() error
 	R       []core.Route
