@@ -22,6 +22,7 @@ require (
 	github.com/microsoft/go-mssqldb v1.9.8
 	github.com/pb33f/libopenapi v0.34.3
 	github.com/sijms/go-ora/v2 v2.9.0
+	github.com/valon-technologies/gestalt/sdk/pluginapi v0.0.0-00010101000000-000000000000
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.14.0
@@ -113,3 +114,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
