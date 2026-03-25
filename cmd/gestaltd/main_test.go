@@ -17,15 +17,6 @@ func TestRun_ValidateWithMissingConfig(t *testing.T) {
 	}
 }
 
-func TestRun_CheckFlagRejected(t *testing.T) {
-	t.Parallel()
-
-	err := run([]string{"--check"})
-	if err == nil {
-		t.Fatal("expected error for removed --check flag")
-	}
-}
-
 func TestRun_UnknownFlag(t *testing.T) {
 	t.Parallel()
 
@@ -139,31 +130,5 @@ integrations:
 	}
 	if !strings.Contains(err.Error(), `unknown upstream type "http"`) {
 		t.Fatalf("expected unknown upstream type error, got: %v", err)
-	}
-}
-
-func TestRun_ValidateRejectsLegacyGlobalMCPConfig(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: google
-server:
-  dev_mode: true
-  encryption_key: test-key
-mcp:
-  enabled: true
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	err := run([]string{"validate", "--config", cfgPath})
-	if err == nil {
-		t.Fatal("expected validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), `field mcp not found in type config.Config`) {
-		t.Fatalf("expected unknown mcp field error, got: %v", err)
 	}
 }

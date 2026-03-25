@@ -51,7 +51,7 @@ auth_profiles:
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      structured_response_check:
+      response_check:
         success_body_match:
           ok: true
         error_message_path: error
@@ -65,7 +65,7 @@ integrations:
         allowed_operations:
           conversations_list: ""
           chat_postMessage: Send a message to a Slack channel
-    structured_response_check:
+    response_check:
       success_body_match:
         ok: true
       error_message_path: error
