@@ -2946,6 +2946,78 @@ func TestBindingRoutesMounted(t *testing.T) {
 	}
 }
 
+func TestSurfaceBindingRequiresAuth(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("test-surface", &coretesting.StubBinding{
+		N: "test-surface",
+		K: core.BindingSurface,
+		R: []core.Route{
+			{Method: http.MethodPost, Pattern: "/invoke", Handler: handler},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Bindings = bindings
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/api/v1/bindings/test-surface/invoke", "application/json", nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerBindingRemainsPublic(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("test-trigger", &coretesting.StubBinding{
+		N: "test-trigger",
+		K: core.BindingTrigger,
+		R: []core.Route{
+			{Method: http.MethodPost, Pattern: "/incoming", Handler: handler},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Bindings = bindings
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/api/v1/bindings/test-trigger/incoming", "application/json", nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 	t.Parallel()
 
@@ -3007,6 +3079,11 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.DevMode = true
 				cfg.Bindings = bindings
+				cfg.Datastore = &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+				}
 			})
 			testutil.CloseOnCleanup(t, ts)
 
@@ -3017,6 +3094,7 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			req.Header.Set("Content-Type", "text/plain")
 			req.Header.Set("X-Forwarded-Host", upstreamHost)
 			req.Header.Set("X-Forwarded-Proto", "http")
+			req.Header.Set("X-Dev-User-Email", "dev@example.com")
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -3057,6 +3135,7 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			}
 			exactReq.Header.Set("X-Forwarded-Host", upstreamHost)
 			exactReq.Header.Set("X-Forwarded-Proto", "http")
+			exactReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 
 			resp, err = http.DefaultClient.Do(exactReq)
 			if err != nil {
