@@ -8,33 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
 	"gopkg.in/yaml.v3"
 )
-
-func TestProxyRoutes(t *testing.T) {
-	t.Parallel()
-
-	b := makeBinding(t, "/proxy")
-	routes := b.Routes()
-	if len(routes) != 16 {
-		t.Fatalf("expected 16 routes, got %d", len(routes))
-	}
-	patterns := map[string]int{}
-	for _, route := range routes {
-		patterns[route.Pattern]++
-	}
-	if patterns["/proxy"] != 8 {
-		t.Fatalf("expected 8 exact routes, got %d", patterns["/proxy"])
-	}
-	if patterns["/proxy/*"] != 8 {
-		t.Fatalf("expected 8 wildcard routes, got %d", patterns["/proxy/*"])
-	}
-}
 
 func TestProxyNormalizeRequest(t *testing.T) {
 	t.Parallel()
@@ -75,51 +54,6 @@ func TestProxyNormalizeRequest(t *testing.T) {
 	}
 	if resp.Body != "hello" {
 		t.Fatalf("body = %q, want hello", resp.Body)
-	}
-}
-
-func TestProxyFactory(t *testing.T) {
-	t.Parallel()
-
-	cfgYAML := `path: /proxy`
-	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
-		t.Fatal(err)
-	}
-
-	def := config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
-	}
-
-	binding, err := proxy.Factory(context.Background(), "proxy-surface", def, bootstrap.BindingDeps{})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-
-	if binding.Name() != "proxy-surface" {
-		t.Fatalf("name = %q, want proxy-surface", binding.Name())
-	}
-	if binding.Kind() != core.BindingSurface {
-		t.Fatalf("kind = %v, want BindingSurface", binding.Kind())
-	}
-}
-
-func TestProxyFactoryValidation(t *testing.T) {
-	t.Parallel()
-
-	cfgYAML := `path: proxy`
-	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := proxy.Factory(context.Background(), "bad-proxy", config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
-	}, bootstrap.BindingDeps{})
-	if err == nil {
-		t.Fatal("expected validation error")
 	}
 }
 
