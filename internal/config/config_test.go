@@ -354,7 +354,25 @@ integrations:
 			wantErr: false,
 		},
 		{
-			name: "overlay plugin without upstreams allowed",
+			name: "overlay plugin with explicit base is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      base: jira
+      command: /tmp/plugin
+`,
+			wantErr: false,
+		},
+		{
+			name: "overlay plugin without base source rejected",
 			yaml: `
 auth:
   provider: google
@@ -368,7 +386,28 @@ integrations:
       mode: overlay
       command: /tmp/plugin
 `,
-			wantErr: false,
+			wantErr: true,
+		},
+		{
+			name: "overlay plugin with upstreams and explicit base rejected",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      base: jira
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantErr: true,
 		},
 		{
 			name: "replace plugin with upstreams rejected",
@@ -637,6 +676,61 @@ integrations:
       command: /tmp/plugin
 `,
 			wantContain: "unknown plugin mode",
+		},
+		{
+			name: "overlay requires explicit base source",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantContain: "must declare a base source",
+		},
+		{
+			name: "overlay rejects both upstreams and explicit base",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      base: jira
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantContain: "exactly one base source",
+		},
+		{
+			name: "plugin base requires overlay",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      base: jira
+      command: /tmp/plugin
+`,
+			wantContain: "plugin.base requires mode: overlay",
 		},
 		{
 			name: "runtime overlay",

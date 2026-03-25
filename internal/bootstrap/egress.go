@@ -12,8 +12,7 @@ import (
 )
 
 type EgressDeps struct {
-	Resolver         *egress.Resolver
-	CredentialGrants []config.EgressCredentialGrant
+	Resolver *egress.Resolver
 }
 
 func newEgressDeps(cfg *config.Config, _ core.Datastore) EgressDeps {
@@ -28,7 +27,6 @@ func newEgressDeps(cfg *config.Config, _ core.Datastore) EgressDeps {
 			Subjects: egress.ContextSubjectResolver{},
 			Policy:   policy,
 		},
-		CredentialGrants: cfg.Egress.Credentials,
 	}
 }
 

@@ -29,9 +29,8 @@ type Config struct {
 }
 
 type EgressConfig struct {
-	DefaultAction string                  `yaml:"default_action"`
-	Policies      []EgressPolicyRule      `yaml:"policies"`
-	Credentials   []EgressCredentialGrant `yaml:"credentials"`
+	DefaultAction string             `yaml:"default_action"`
+	Policies      []EgressPolicyRule `yaml:"policies"`
 }
 
 type EgressPolicyRule struct {
@@ -45,17 +44,6 @@ type EgressPolicyRule struct {
 	PathPrefix  string `yaml:"path_prefix"`
 }
 
-type EgressCredentialGrant struct {
-	Provider    string `yaml:"provider"`
-	Instance    string `yaml:"instance"`
-	SubjectKind string `yaml:"subject_kind"`
-	SubjectID   string `yaml:"subject_id"`
-	Operation   string `yaml:"operation"`
-	Method      string `yaml:"method"`
-	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"path_prefix"`
-}
-
 const (
 	PluginModeReplace = "replace"
 	PluginModeOverlay = "overlay"
@@ -63,6 +51,7 @@ const (
 
 type ExecutablePluginDef struct {
 	Mode    string            `yaml:"mode"`
+	Base    string            `yaml:"base"`
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
@@ -497,6 +486,14 @@ func validate(cfg *Config) error {
 				}
 				continue
 			case PluginModeOverlay:
+				hasUpstreams := len(intg.Upstreams) > 0
+				hasBase := intg.Plugin.Base != ""
+				switch {
+				case hasUpstreams && hasBase:
+					return fmt.Errorf("config validation: integration %q overlay plugin must declare exactly one base source via upstreams or plugin.base", name)
+				case !hasUpstreams && !hasBase:
+					return fmt.Errorf("config validation: integration %q overlay plugin must declare a base source via upstreams or plugin.base", name)
+				}
 			default:
 				return fmt.Errorf("config validation: integration %q has unknown plugin mode %q", name, intg.Plugin.Mode)
 			}
@@ -554,6 +551,13 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	}
 	if plugin.Command == "" {
 		return fmt.Errorf("config validation: %s %q plugin.command is required", kind, name)
+	}
+	mode := plugin.Mode
+	if mode == "" {
+		mode = PluginModeReplace
+	}
+	if plugin.Base != "" && mode == PluginModeReplace {
+		return fmt.Errorf("config validation: %s %q plugin.base requires mode: overlay", kind, name)
 	}
 	return nil
 }
