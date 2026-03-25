@@ -200,14 +200,14 @@ func TestGuardedInvoker_ListCapabilities(t *testing.T) {
 	alpha := &stubProviderWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "alpha"},
 		ops: []core.Operation{
-			{Name: "op1", Description: "Alpha op 1"},
-			{Name: "op2", Description: "Alpha op 2"},
+			{Name: "op1", Description: "Alpha op 1", Method: http.MethodGet},
+			{Name: "op2", Description: "Alpha op 2", Method: http.MethodPost},
 		},
 	}
 	beta := &stubProviderWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "beta"},
 		ops: []core.Operation{
-			{Name: "op3", Description: "Beta op 3"},
+			{Name: "op3", Description: "Beta op 3", Method: http.MethodGet},
 		},
 	}
 

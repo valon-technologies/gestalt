@@ -54,14 +54,7 @@ func (b *Broker) ListCapabilities() []core.Capability {
 		if err != nil {
 			continue
 		}
-		for _, op := range prov.ListOperations() {
-			caps = append(caps, core.Capability{
-				Provider:    name,
-				Operation:   op.Name,
-				Description: op.Description,
-				Parameters:  op.Parameters,
-			})
-		}
+		caps = append(caps, capabilitiesForProvider(name, prov)...)
 	}
 	return caps
 }

@@ -223,6 +223,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Ope
 			Title:       tools[i].Annotations.Title,
 			Description: tools[i].Description,
 			InputSchema: schema,
+			Transport:   catalog.TransportMCPPassthrough,
 		}
 		catOp.Annotations = catalog.OperationAnnotations{
 			ReadOnlyHint:    tools[i].Annotations.ReadOnlyHint,
