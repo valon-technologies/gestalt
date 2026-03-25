@@ -5,87 +5,61 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/config"
-	"github.com/valon-technologies/gestalt/internal/provider"
-	"gopkg.in/yaml.v3"
+	"github.com/valon-technologies/gestalt/plugins/providers/inventory"
+	"github.com/valon-technologies/gestalt/plugins/providers/providertest"
 )
 
 const (
-	testClientID     = "dummy-client-id"
-	testClientSecret = "dummy-client-secret"
-	expectedOps      = 7
-	discoveryURL     = "https://api.atlassian.com/oauth/token/accessible-resources"
+	dummyClientID     = "dummy-client-id"
+	dummyClientSecret = "dummy-client-secret"
+	discoveryURL      = "https://api.atlassian.com/oauth/token/accessible-resources"
 )
 
 func TestDefinitionParses(t *testing.T) {
 	t.Parallel()
 
-	var def provider.Definition
-	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	inv, err := inventory.Load()
+	if err != nil {
+		t.Fatalf("inventory.Load: %v", err)
 	}
+	spec := inv.Providers["jira"]
 
-	if def.Provider != "jira" {
-		t.Fatalf("expected provider jira, got %q", def.Provider)
-	}
-	if len(def.Operations) != expectedOps {
-		t.Fatalf("expected %d operations, got %d", expectedOps, len(def.Operations))
-	}
-
-	cloudID, ok := def.Connection["cloud_id"]
-	if !ok {
-		t.Fatal("missing cloud_id connection param")
-	}
-	if cloudID.From != "discovery" {
-		t.Fatalf("expected cloud_id from=discovery, got %q", cloudID.From)
-	}
-	if !cloudID.Required {
-		t.Fatal("expected cloud_id to be required")
-	}
+	def := providertest.ParseDefinition(t, definitionYAML)
+	providertest.CheckDefinition(t, def, providertest.DefinitionExpect{
+		Name:           "jira",
+		OperationCount: len(spec.Operations),
+		AuthType:       spec.AuthType,
+		ConnectionMode: spec.ConnectionMode,
+		Connection: map[string]providertest.ConnParam{
+			"cloud_id": {Required: true, From: "discovery"},
+		},
+	})
 }
 
 func TestBuildProvider(t *testing.T) {
 	t.Parallel()
 
-	var def provider.Definition
-	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	intg := config.IntegrationDef{
-		ClientID:     testClientID,
-		ClientSecret: testClientSecret,
-	}
-
-	prov, err := provider.Build(&def, intg, nil)
+	inv, err := inventory.Load()
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("inventory.Load: %v", err)
 	}
+	spec := inv.Providers["jira"]
 
-	if prov.Name() != "jira" {
-		t.Fatalf("expected name jira, got %q", prov.Name())
-	}
-	if prov.ConnectionMode() != core.ConnectionModeUser {
-		t.Fatalf("expected connection mode user, got %q", prov.ConnectionMode())
-	}
+	def := providertest.ParseDefinition(t, definitionYAML)
+	prov := providertest.BuildProvider(t, def, config.IntegrationDef{
+		ClientID:     dummyClientID,
+		ClientSecret: dummyClientSecret,
+	})
 
-	ops := prov.ListOperations()
-	if len(ops) != expectedOps {
-		t.Fatalf("expected %d operations, got %d", expectedOps, len(ops))
-	}
+	providertest.CheckProvider(t, prov, providertest.ProviderExpect{
+		Name:           "jira",
+		ConnectionMode: core.ConnectionMode(spec.ConnectionMode),
+		OperationCount: len(spec.Operations),
+		OperationNames: spec.Operations,
+	})
 
-	dcp, ok := prov.(core.DiscoveryConfigProvider)
-	if !ok {
-		t.Fatal("provider does not implement DiscoveryConfigProvider")
-	}
-
-	dc := dcp.DiscoveryConfig()
-	if dc == nil {
-		t.Fatal("DiscoveryConfig() returned nil")
-	}
-	if dc.URL != discoveryURL {
-		t.Fatalf("expected discovery URL %q, got %q", discoveryURL, dc.URL)
-	}
-	if dc.MetadataMapping["cloud_id"] != "id" {
-		t.Fatalf("expected metadata_mapping cloud_id=id, got %q", dc.MetadataMapping["cloud_id"])
-	}
+	providertest.CheckDiscovery(t, prov, providertest.DiscoveryExpect{
+		URL:             discoveryURL,
+		MetadataMapping: map[string]string{"cloud_id": "id"},
+	})
 }
