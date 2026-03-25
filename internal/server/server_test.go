@@ -3169,8 +3169,9 @@ func newTestProxyBinding(t *testing.T, name, path string) core.Binding {
 	}
 
 	binding, err := proxy.Factory(context.Background(), name, config.BindingDef{
-		Type:   "proxy",
-		Config: *node.Content[0],
+		Type:      "proxy",
+		Providers: []string{"test-provider"},
+		Config:    *node.Content[0],
 	}, bootstrap.BindingDeps{})
 	if err != nil {
 		t.Fatalf("proxy factory: %v", err)

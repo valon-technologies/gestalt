@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/plugins/bindings/internal/httpjson"
 )
 
@@ -21,16 +22,17 @@ var _ core.Binding = (*Binding)(nil)
 
 type Binding struct {
 	name     string
+	provider string
 	cfg      proxyConfig
 	resolver egress.Resolver
 	client   *http.Client
 }
 
-func New(name string, cfg proxyConfig, resolver egress.Resolver, client *http.Client) *Binding {
+func New(name, provider string, cfg proxyConfig, resolver egress.Resolver, client *http.Client) *Binding {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Binding{name: name, cfg: cfg, resolver: resolver, client: client}
+	return &Binding{name: name, provider: provider, cfg: cfg, resolver: resolver, client: client}
 }
 
 func (b *Binding) Name() string           { return b.name }
@@ -98,8 +100,6 @@ func writeProxyResponse(w http.ResponseWriter, result *core.OperationResult) {
 	_, _ = io.WriteString(w, result.Body)
 }
 
-// hopByHopHeaders are headers that apply to a single transport connection and
-// must not be forwarded by proxies (RFC 7230 section 6.1).
 var hopByHopHeaders = map[string]bool{
 	"Connection":          true,
 	"Keep-Alive":          true,
@@ -122,17 +122,23 @@ func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
 	}
 	defer func() { _ = r.Body.Close() }()
 
-	headers := normalizeHeaders(r.Header)
+	headers := sanitizeForwardHeaders(normalizeHeaders(r.Header))
 	target := egress.Target{
-		Method: r.Method,
-		Host:   resolveHost(r),
-		Path:   resolvePath(r, b.cfg.normalizedPath()),
+		Provider: b.provider,
+		Instance: b.cfg.Instance,
+		Method:   r.Method,
+		Host:     resolveHost(r),
+		Path:     resolvePath(r, b.cfg.normalizedPath()),
 	}
 
-	ctx := egress.WithSubject(r.Context(), egress.Subject{
-		Kind: egress.SubjectSystem,
-		ID:   b.name,
-	})
+	ctx := egress.WithSubjectFromPrincipal(r.Context(), principal.FromContext(r.Context()))
+	if _, ok := egress.SubjectFromContext(ctx); !ok {
+		ctx = egress.WithSubject(ctx, egress.Subject{
+			Kind: egress.SubjectSystem,
+			ID:   b.name,
+		})
+	}
+
 	resolved, err := b.resolver.Resolve(ctx, egress.ResolutionInput{
 		Target:  target,
 		Headers: headers,
@@ -144,9 +150,40 @@ func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
 	return resolved, body, nil
 }
 
-// acceptAllStatuses allows the proxy to forward upstream error responses
-// instead of treating them as transport failures.
 var acceptAllStatuses apiexec.ResponseChecker = func(int, []byte) error { return nil }
+
+var sanitizedHeaders = func() map[string]bool {
+	m := map[string]bool{
+		"Authorization":     true,
+		"Cookie":            true,
+		"Host":              true,
+		"Content-Length":    true,
+		"X-Dev-User-Email":  true,
+		"X-Forwarded-Host":  true,
+		"X-Forwarded-Proto": true,
+	}
+	for k := range hopByHopHeaders {
+		m[k] = true
+	}
+	return m
+}()
+
+func sanitizeForwardHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if sanitizedHeaders[k] {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
 
 const (
 	schemeHTTP  = "http"

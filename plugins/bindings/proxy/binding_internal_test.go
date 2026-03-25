@@ -15,7 +15,7 @@ func TestBindingNormalizeRunsResolver(t *testing.T) {
 	t.Parallel()
 
 	var got egress.PolicyInput
-	b := New("agent-proxy", proxyConfig{Path: "/proxy"}, egress.Resolver{
+	b := New("agent-proxy", "test-provider", proxyConfig{Path: "/proxy"}, egress.Resolver{
 		Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
 			got = input
 			return nil

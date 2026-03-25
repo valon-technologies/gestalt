@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
@@ -17,9 +18,12 @@ var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def 
 	if err := cfg.validate(name); err != nil {
 		return nil, err
 	}
+	if len(def.Providers) != 1 {
+		return nil, fmt.Errorf("proxy %q: exactly one provider must be configured in bindings.%s.providers", name, name)
+	}
 	resolver := egress.Resolver{}
 	if deps.Egress.Resolver != nil {
 		resolver = *deps.Egress.Resolver
 	}
-	return New(name, cfg, resolver, nil), nil
+	return New(name, def.Providers[0], cfg, resolver, nil), nil
 }
