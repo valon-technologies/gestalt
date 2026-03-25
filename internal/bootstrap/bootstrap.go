@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
@@ -490,6 +491,39 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
 	if intg.Plugin != nil {
+		mode := intg.Plugin.Mode
+		if mode == "" {
+			mode = config.PluginModeReplace
+		}
+
+		if mode == config.PluginModeOverlay {
+			baseIntg := intg
+			baseIntg.Plugin = nil
+			factory, ok := factories.Providers[name]
+			if !ok {
+				factory = factories.DefaultProvider
+			}
+			if factory == nil {
+				return nil, fmt.Errorf("no provider factory for overlay base %q", name)
+			}
+			baseProv, err := factory(ctx, name, baseIntg, deps)
+			if err != nil {
+				return nil, fmt.Errorf("building overlay base: %w", err)
+			}
+			overlayProv, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
+				Command: intg.Plugin.Command,
+				Args:    intg.Plugin.Args,
+				Env:     intg.Plugin.Env,
+			})
+			if err != nil {
+				if c, ok := baseProv.(interface{ Close() error }); ok {
+					_ = c.Close()
+				}
+				return nil, fmt.Errorf("building overlay plugin: %w", err)
+			}
+			return composite.NewOverlay(name, baseProv, overlayProv), nil
+		}
+
 		return pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
 			Command: intg.Plugin.Command,
 			Args:    intg.Plugin.Args,
@@ -509,6 +543,16 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 
 func providerBuildAvailable(name string, intg config.IntegrationDef, factories *FactoryRegistry) bool {
 	if intg.Plugin != nil {
+		mode := intg.Plugin.Mode
+		if mode == "" {
+			mode = config.PluginModeReplace
+		}
+		if mode == config.PluginModeOverlay {
+			if _, ok := factories.Providers[name]; ok {
+				return true
+			}
+			return factories.DefaultProvider != nil
+		}
 		return true
 	}
 	if _, ok := factories.Providers[name]; ok {

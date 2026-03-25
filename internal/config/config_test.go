@@ -334,6 +334,116 @@ integrations:
 			wantErr: true,
 		},
 		{
+			name: "overlay plugin with upstreams is valid",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantErr: false,
+		},
+		{
+			name: "overlay plugin without upstreams",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
+			name: "replace plugin with upstreams rejected",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: replace
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty mode defaults to replace rejects upstreams",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantErr: true,
+		},
+		{
+			name: "unknown plugin mode",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: turbo
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime overlay mode rejected",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
 			name: "runtime requires type or plugin",
 			yaml: `
 auth:
@@ -391,6 +501,102 @@ integrations:
 			}
 			if !tc.wantErr && err != nil {
 				t.Fatalf("Load: unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestPluginModeValidationMessages(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		yaml        string
+		wantContain string
+	}{
+		{
+			name: "overlay without upstreams",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantContain: "overlay plugin requires",
+		},
+		{
+			name: "replace with upstreams",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: replace
+      command: /tmp/plugin
+    upstreams:
+      - type: rest
+        url: https://example.com/spec.json
+`,
+			wantContain: "cannot set both",
+		},
+		{
+			name: "unknown mode",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+integrations:
+  gadget:
+    plugin:
+      mode: turbo
+      command: /tmp/plugin
+`,
+			wantContain: "unknown plugin mode",
+		},
+		{
+			name: "runtime overlay",
+			yaml: `
+auth:
+  provider: google
+datastore:
+  provider: sqlite
+server:
+  encryption_key: key123
+runtimes:
+  worker:
+    plugin:
+      mode: overlay
+      command: /tmp/plugin
+`,
+			wantContain: "cannot be overlay",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantContain) {
+				t.Fatalf("Load error = %q, want it to contain %q", err, tc.wantContain)
 			}
 		})
 	}

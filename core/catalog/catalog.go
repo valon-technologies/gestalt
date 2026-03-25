@@ -11,6 +11,7 @@ import (
 const (
 	TransportMCPPassthrough = "mcp-passthrough"
 	TransportHTTP           = "http"
+	TransportPlugin         = "plugin"
 )
 
 // Catalog is the normalized on-disk representation for a provider's tool
