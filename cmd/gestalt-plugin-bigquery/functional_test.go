@@ -72,6 +72,33 @@ func TestExecutableBigQueryProviderShapesResults(t *testing.T) {
 	}
 }
 
+func TestExecutableBigQueryProviderFallsBackForNonTerminatingDecimals(t *testing.T) {
+	t.Parallel()
+
+	prov := newBigQueryExecutableProvider(t, "non_terminating_decimal")
+	result, err := prov.Execute(context.Background(), "query", map[string]any{
+		"project_id":  "sample",
+		"query":       "SELECT 1",
+		"max_results": 1,
+	}, "test-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var body struct {
+		Rows []map[string]any `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if len(body.Rows) != 1 {
+		t.Fatalf("rows = %d", len(body.Rows))
+	}
+	if got := body.Rows[0]["value"]; got != "1/3" {
+		t.Fatalf("value = %#v, want rational fallback", got)
+	}
+}
+
 func TestExecutableBigQueryProviderReturnsErrors(t *testing.T) {
 	t.Parallel()
 

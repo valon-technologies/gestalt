@@ -17,9 +17,11 @@ import (
 func NewQueryProviderForFunctionalTest(scenario string) (*QueryProvider, error) {
 	switch scenario {
 	case "rows":
-		return newQueryProviderWithRunner(functionalTestQueryRunner{scenario: scenario}), nil
+		return &QueryProvider{runner: functionalTestQueryRunner{scenario: scenario}}, nil
+	case "non_terminating_decimal":
+		return &QueryProvider{runner: functionalTestQueryRunner{scenario: scenario}}, nil
 	case "backend_error":
-		return newQueryProviderWithRunner(functionalTestQueryRunner{scenario: scenario}), nil
+		return &QueryProvider{runner: functionalTestQueryRunner{scenario: scenario}}, nil
 	default:
 		return nil, fmt.Errorf("unknown functional test scenario %q", scenario)
 	}
@@ -73,6 +75,28 @@ func (r functionalTestQueryRunner) Run(_ context.Context, projectID, token, sql 
 				},
 			},
 		}, nil
+	case "non_terminating_decimal":
+		if projectID != "sample" {
+			return nil, fmt.Errorf("unexpected project_id %q", projectID)
+		}
+		if token != "test-token" {
+			return nil, fmt.Errorf("unexpected token %q", token)
+		}
+		if sql != "SELECT 1" {
+			return nil, fmt.Errorf("unexpected query %q", sql)
+		}
+
+		return &functionalTestQueryIterator{
+			schema: cloudbigquery.Schema{
+				{Name: "value", Type: cloudbigquery.NumericFieldType},
+			},
+			totalRows: 1,
+			rows: []map[string]cloudbigquery.Value{
+				{
+					"value": big.NewRat(1, 3),
+				},
+			},
+		}, nil
 	case "backend_error":
 		return nil, errors.New("backend unavailable")
 	default:
@@ -85,16 +109,25 @@ type functionalTestQueryIterator struct {
 	totalRows uint64
 	rows      []map[string]cloudbigquery.Value
 	index     int
+	closed    bool
 }
 
 func (f *functionalTestQueryIterator) Schema() cloudbigquery.Schema { return f.schema }
 func (f *functionalTestQueryIterator) TotalRows() uint64            { return f.totalRows }
 
 func (f *functionalTestQueryIterator) Next(row *map[string]cloudbigquery.Value) error {
+	if f.closed {
+		return errors.New("iterator used after close")
+	}
 	if f.index >= len(f.rows) {
 		return iterator.Done
 	}
 	*row = f.rows[f.index]
 	f.index++
+	return nil
+}
+
+func (f *functionalTestQueryIterator) Close() error {
+	f.closed = true
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
 	cloudbigquery "cloud.google.com/go/bigquery"
@@ -54,6 +53,7 @@ type queryIterator interface {
 	Schema() cloudbigquery.Schema
 	TotalRows() uint64
 	Next(*map[string]cloudbigquery.Value) error
+	Close() error
 }
 
 type queryResult struct {
@@ -75,16 +75,14 @@ type sdkQueryIterator struct {
 	schema    cloudbigquery.Schema
 	totalRows uint64
 	iter      *cloudbigquery.RowIterator
+	client    *cloudbigquery.Client
+	cancel    context.CancelFunc
 }
 
 var _ core.Provider = (*QueryProvider)(nil)
 
 func NewQueryProvider() *QueryProvider {
 	return &QueryProvider{runner: sdkQueryRunner{}}
-}
-
-func newQueryProviderWithRunner(runner queryRunner) *QueryProvider {
-	return &QueryProvider{runner: runner}
 }
 
 func (p *QueryProvider) Name() string                        { return "bigquery" }
@@ -132,6 +130,7 @@ func (p *QueryProvider) Execute(ctx context.Context, operation string, params ma
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = iter.Close() }()
 
 	rows := make([]map[string]any, 0, maxResults)
 	for i := 0; i < maxResults; i++ {
@@ -168,7 +167,6 @@ func (sdkQueryRunner) Run(ctx context.Context, projectID, token, sql string, opt
 	if err != nil {
 		return nil, fmt.Errorf("creating bigquery client: %w", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	query := client.Query(sql)
 	query.UseLegacySQL = opts.UseLegacySQL
@@ -178,16 +176,19 @@ func (sdkQueryRunner) Run(ctx context.Context, projectID, token, sql string, opt
 	if opts.Timeout > 0 {
 		queryCtx, cancel = context.WithTimeout(ctx, opts.Timeout)
 	}
-	defer cancel()
 
 	iter, err := query.Read(queryCtx)
 	if err != nil {
+		cancel()
+		_ = client.Close()
 		return nil, fmt.Errorf("executing query: %w", err)
 	}
 	return sdkQueryIterator{
 		schema:    iter.Schema,
 		totalRows: iter.TotalRows,
 		iter:      iter,
+		client:    client,
+		cancel:    cancel,
 	}, nil
 }
 
@@ -196,6 +197,16 @@ func (it sdkQueryIterator) TotalRows() uint64            { return it.totalRows }
 
 func (it sdkQueryIterator) Next(row *map[string]cloudbigquery.Value) error {
 	return it.iter.Next(row)
+}
+
+func (it sdkQueryIterator) Close() error {
+	if it.cancel != nil {
+		it.cancel()
+	}
+	if it.client != nil {
+		return it.client.Close()
+	}
+	return nil
 }
 
 func convertSchema(schema cloudbigquery.Schema) []querySchemaField {
@@ -266,23 +277,66 @@ func rationalDecimalString(r *big.Rat) string {
 		sign = "-"
 		num.Abs(num)
 	}
-
-	intPart := new(big.Int)
-	remainder := new(big.Int)
-	intPart.QuoRem(num, den, remainder)
-
-	var frac strings.Builder
-	ten := big.NewInt(10)
-	for remainder.Sign() != 0 {
-		remainder.Mul(remainder, ten)
-		digit := new(big.Int)
-		nextRemainder := new(big.Int)
-		digit.QuoRem(remainder, den, nextRemainder)
-		frac.WriteByte(byte('0' + digit.Int64()))
-		remainder = nextRemainder
+	scale, ok := finiteDecimalScale(den)
+	if !ok {
+		return sign + new(big.Rat).SetFrac(num, den).RatString()
 	}
 
-	return sign + intPart.String() + "." + frac.String()
+	pow10 := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+	scaledNum := new(big.Int).Mul(num, pow10)
+	scaledNum.Quo(scaledNum, den)
+
+	intPart := new(big.Int)
+	fracPart := new(big.Int)
+	intPart.QuoRem(scaledNum, pow10, fracPart)
+	if scale == 0 {
+		return sign + intPart.String()
+	}
+	return sign + intPart.String() + "." + zeroPadDecimal(fracPart.String(), scale)
+}
+
+func finiteDecimalScale(den *big.Int) (int, bool) {
+	if den == nil || den.Sign() == 0 {
+		return 0, false
+	}
+
+	remaining := new(big.Int).Set(den)
+	two := big.NewInt(2)
+	five := big.NewInt(5)
+	zero := big.NewInt(0)
+
+	twos := 0
+	for new(big.Int).Mod(remaining, two).Cmp(zero) == 0 {
+		remaining.Quo(remaining, two)
+		twos++
+	}
+
+	fives := 0
+	for new(big.Int).Mod(remaining, five).Cmp(zero) == 0 {
+		remaining.Quo(remaining, five)
+		fives++
+	}
+
+	if remaining.Cmp(big.NewInt(1)) != 0 {
+		return 0, false
+	}
+	if twos > fives {
+		return twos, true
+	}
+	return fives, true
+}
+
+func zeroPadDecimal(value string, width int) string {
+	if len(value) >= width {
+		return value
+	}
+	buf := make([]byte, width)
+	offset := width - len(value)
+	for i := 0; i < offset; i++ {
+		buf[i] = '0'
+	}
+	copy(buf[offset:], value)
+	return string(buf)
 }
 
 func intParam(params map[string]any, key string, defaultVal int) int {
