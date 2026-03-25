@@ -1,0 +1,24 @@
+{
+  "name": "@gestalt/plugin",
+  "version": "0.0.1",
+  "description": "TypeScript SDK for writing Gestalt provider and runtime plugins",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "files": [
+    "dist",
+    "gen"
+  ],
+  "dependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@protobuf-ts/runtime": "^2.11.1",
+    "@protobuf-ts/runtime-rpc": "^2.11.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}
