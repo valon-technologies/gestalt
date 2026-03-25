@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
@@ -23,6 +24,15 @@ type stubProviderWithOps struct {
 
 func (s *stubProviderWithOps) ListOperations() []core.Operation {
 	return s.ops
+}
+
+type stubCatalogProvider struct {
+	*stubProviderWithOps
+	cat *catalog.Catalog
+}
+
+func (s *stubCatalogProvider) Catalog() *catalog.Catalog {
+	return s.cat
 }
 
 func TestInvoke_Success(t *testing.T) {
@@ -371,5 +381,72 @@ func TestInvoke_AttachesIdentitySubjectFromSentinelPrincipal(t *testing.T) {
 	}
 	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: principal.IdentityPrincipal}) {
 		t.Fatalf("subject = %+v, want identity sentinel subject", gotSubject)
+	}
+}
+
+func TestBroker_ListCapabilities_IncludesMCPOnlyCatalogOperations(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubCatalogProvider{
+		stubProviderWithOps: &stubProviderWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
+			ops: []core.Operation{
+				{Name: "list_databases", Method: http.MethodGet, Description: "List databases"},
+			},
+		},
+		cat: &catalog.Catalog{
+			Name: "clickhouse",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Title:       "Run Query",
+					Description: "Execute a SQL query",
+					Transport:   catalog.TransportMCPPassthrough,
+					InputSchema: []byte(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+				},
+				{
+					ID:          "list_databases",
+					Method:      http.MethodGet,
+					Path:        "/databases",
+					Description: "List databases",
+				},
+			},
+		},
+	}
+
+	b := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), &coretesting.StubDatastore{})
+	caps := b.ListCapabilities()
+	if len(caps) != 2 {
+		t.Fatalf("expected 2 capabilities, got %d", len(caps))
+	}
+
+	byOp := make(map[string]core.Capability, len(caps))
+	for _, cap := range caps {
+		byOp[cap.Operation] = cap
+	}
+
+	runQuery, ok := byOp["run_query"]
+	if !ok {
+		t.Fatalf("expected run_query capability in %+v", caps)
+	}
+	if runQuery.Transport != catalog.TransportMCPPassthrough {
+		t.Fatalf("run_query transport = %q, want %q", runQuery.Transport, catalog.TransportMCPPassthrough)
+	}
+	if runQuery.Method != "" {
+		t.Fatalf("run_query method = %q, want empty", runQuery.Method)
+	}
+	if len(runQuery.InputSchema) == 0 {
+		t.Fatal("expected run_query input schema to be present")
+	}
+
+	listDatabases, ok := byOp["list_databases"]
+	if !ok {
+		t.Fatalf("expected list_databases capability in %+v", caps)
+	}
+	if listDatabases.Transport != catalog.TransportHTTP {
+		t.Fatalf("list_databases transport = %q, want %q", listDatabases.Transport, catalog.TransportHTTP)
+	}
+	if listDatabases.Method != http.MethodGet {
+		t.Fatalf("list_databases method = %q, want %q", listDatabases.Method, http.MethodGet)
 	}
 }

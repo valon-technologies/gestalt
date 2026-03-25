@@ -653,6 +653,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 			{
 				ID:          "run_query",
 				Description: "Execute a SQL query",
+				Transport:   catalog.TransportMCPPassthrough,
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
 			},
 		},
@@ -675,8 +676,20 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	caps := broker.ListCapabilities()
+	if len(caps) != 1 {
+		t.Fatalf("expected 1 capability, got %d", len(caps))
+	}
+	if caps[0].Operation != "run_query" {
+		t.Fatalf("expected run_query capability, got %q", caps[0].Operation)
+	}
+	if caps[0].Transport != catalog.TransportMCPPassthrough {
+		t.Fatalf("capability transport = %q, want %q", caps[0].Transport, catalog.TransportMCPPassthrough)
+	}
+
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
+		Invoker:       broker,
 		TokenResolver: &stubTokenResolver{token: "upstream-token"},
 		Providers:     providers,
 	})
