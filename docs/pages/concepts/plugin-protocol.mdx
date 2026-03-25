@@ -1,0 +1,245 @@
+# Plugin Protocol
+
+Gestalt plugins are standalone executables that communicate with the host process over gRPC on Unix domain sockets. This page describes the wire protocol so you can write plugins in any language with gRPC support.
+
+## Why write a plugin?
+
+The built-in integration system covers REST, GraphQL, and MCP upstreams declaratively. A plugin is the right choice when you need custom logic that goes beyond what declarative config supports: proprietary protocols, multi-step workflows, computed parameters, or deep integration with a language-specific SDK.
+
+A plugin is a separate process. It can be written in any language, use any dependencies, and crash without taking down the Gestalt server.
+
+## Architecture
+
+```
+gestalt (host)                         plugin (subprocess)
+┌──────────────┐                       ┌──────────────┐
+│              │── spawns process ────→ │              │
+│              │                        │  binds to    │
+│              │                        │  unix socket │
+│              │◄─ gRPC connection ────→│              │
+│              │                        │              │
+│  Provider    │── GetMetadata ───────→ │  Provider    │
+│  client      │── ListOperations ────→ │  server      │
+│              │── Execute ───────────→ │              │
+└──────────────┘                       └──────────────┘
+```
+
+The host creates a temporary directory under `/tmp` containing a Unix domain socket path. It passes this path to the plugin via the `GESTALT_PLUGIN_SOCKET` environment variable, spawns the plugin as a subprocess, then polls the socket until the plugin starts accepting connections (up to 10 seconds).
+
+All communication uses [Protocol Buffers](https://protobuf.dev/) over gRPC. The service definitions live in `sdk/pluginapi/v1/plugin.proto`.
+
+## Plugin types
+
+Gestalt supports two plugin types, each defined as a separate gRPC service:
+
+| Type | Service | Purpose |
+|---|---|---|
+| **Provider** | `ProviderPlugin` | Exposes operations that callers invoke through the Gestalt API. Equivalent to a REST or GraphQL upstream, but with arbitrary implementation logic. |
+| **Runtime** | `RuntimePlugin` | Background process that starts alongside the server and can call back into other providers through the host. |
+
+A single binary can serve either role. The echo plugin (`cmd/gestalt-plugin-echo`) demonstrates both modes, selected by a command-line argument.
+
+## Provider plugins
+
+A provider plugin implements the `ProviderPlugin` gRPC service. Three RPCs are required; five are optional.
+
+### Required RPCs
+
+**`GetMetadata(google.protobuf.Empty) → ProviderMetadata`**
+
+Called once at startup immediately after the gRPC connection is established. Returns the provider's identity, connection mode, supported auth types, connection parameter definitions, and feature flags.
+
+Key fields in `ProviderMetadata`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | `string` | Internal identifier. Must be unique across all providers. |
+| `display_name` | `string` | Human-readable label. |
+| `description` | `string` | Short description shown in the UI and CLI. |
+| `connection_mode` | `ConnectionMode` | `NONE`, `USER`, `IDENTITY`, or `EITHER`. |
+| `auth_types` | `repeated string` | e.g. `["oauth"]`, `["manual"]`, or `["oauth", "manual"]`. |
+| `connection_params` | `map<string, ConnectionParamDef>` | Named parameters required to connect (e.g. workspace URL). |
+| `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
+| `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
+| `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
+
+**`ListOperations(google.protobuf.Empty) → ListOperationsResponse`**
+
+Called once at startup, right after `GetMetadata`. Returns the full list of operations this provider exposes. Each `Operation` has a `name`, `description`, HTTP `method`, and a list of `Parameter` definitions.
+
+**`Execute(ExecuteRequest) → OperationResult`**
+
+Called for every API invocation. The request contains the operation name, a `google.protobuf.Struct` of parameters, an OAuth access token (if the user is connected), and any connection parameters.
+
+Return an `OperationResult` with an HTTP-style `status` code and a `body` string (typically JSON).
+
+### Optional RPCs (OAuth)
+
+Implement these if your provider manages its own OAuth flow (when `auth_types` includes `"oauth"`):
+
+| RPC | Request | Response | Purpose |
+|---|---|---|---|
+| `AuthorizationURL` | `state`, `scopes` | `url` | Returns the OAuth authorization URL for the user to visit. |
+| `ExchangeCode` | `code` | `TokenResponse` | Exchanges an authorization code for tokens. |
+| `RefreshToken` | `refresh_token` | `TokenResponse` | Refreshes an expired access token. |
+
+### Optional RPCs (advanced)
+
+| RPC | Request | Response | Purpose |
+|---|---|---|---|
+| `GetSessionCatalog` | `token`, `connection_params` | `catalog_json` | Returns a per-session resource catalog. Only called if `supports_session_catalog` is `true` in metadata. |
+| `PostConnect` | `IntegrationToken` | `metadata` | Hook called after a user completes OAuth. Returns metadata to store alongside the token. Only called if `supports_post_connect` is `true` in metadata. |
+
+## Runtime plugins
+
+A runtime plugin implements the `RuntimePlugin` gRPC service.
+
+**`Start(StartRuntimeRequest) → google.protobuf.Empty`**
+
+Called once after the gRPC connection is established. The request contains the runtime's `name`, a `config` struct (from the YAML config), and the `initial_capabilities` list describing which provider operations are accessible.
+
+**`Stop(google.protobuf.Empty) → google.protobuf.Empty`**
+
+Called when the server is shutting down, before the process is terminated.
+
+### Host callbacks
+
+Runtime plugins can call back into the Gestalt host via the `RuntimeHost` service, available on a second Unix domain socket passed as `GESTALT_RUNTIME_HOST_SOCKET`:
+
+| RPC | Request | Response | Purpose |
+|---|---|---|---|
+| `Invoke` | `principal`, `provider`, `instance`, `operation`, `params` | `OperationResult` | Execute an operation on any provider in the runtime's scope. |
+| `ListCapabilities` | `(empty)` | `ListCapabilitiesResponse` | List all operations available to this runtime. |
+
+To use host callbacks, dial the `GESTALT_RUNTIME_HOST_SOCKET` address as a standard gRPC Unix socket connection.
+
+## Startup flow
+
+1. Gestalt creates a temporary directory (e.g. `/tmp/gstp-XXXXXX/`) containing `plugin.sock`. For runtime plugins, it also creates `host.sock` in the same directory and starts a gRPC server on it.
+2. Gestalt sets `GESTALT_PLUGIN_SOCKET` (and `GESTALT_RUNTIME_HOST_SOCKET` for runtimes) in the subprocess environment.
+3. Gestalt spawns the plugin process. The plugin's stdout and stderr are forwarded to the host's stderr.
+4. The plugin reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to that Unix socket path, and starts serving.
+5. Gestalt polls the socket every 25ms. Once the connection succeeds, it calls `GetMetadata` and `ListOperations` (for providers) or `Start` (for runtimes).
+6. If the plugin does not begin accepting connections within **10 seconds**, startup fails.
+
+## Shutdown
+
+1. Gestalt sends `SIGTERM` to the plugin process.
+2. The plugin has **2 seconds** to shut down gracefully.
+3. If still running after 2 seconds, Gestalt sends `SIGKILL`.
+4. Gestalt removes the temporary socket directory.
+
+Your plugin should listen for `SIGTERM` and clean up promptly. For gRPC servers, call `GracefulStop()` from a signal handler.
+
+## Environment variables
+
+| Variable | Set for | Value |
+|---|---|---|
+| `GESTALT_PLUGIN_SOCKET` | All plugins | Unix socket path where the plugin must bind its gRPC server. |
+| `GESTALT_RUNTIME_HOST_SOCKET` | Runtime plugins only | Unix socket path where the host's `RuntimeHost` gRPC service is listening. |
+
+The plugin process also inherits the host's full environment, plus any additional variables specified in the `plugin.env` config block.
+
+## Configuration
+
+Plugins are configured in `gestalt.yaml`. A provider plugin is declared inside an `integrations` entry; a runtime plugin is declared inside a `runtimes` entry.
+
+### Provider plugin
+
+```yaml
+integrations:
+  my-custom-provider:
+    plugin:
+      command: ./my-plugin
+      args: [provider]
+      env:
+        MY_API_KEY: ${API_KEY}
+    connection_mode: user
+```
+
+When `plugin` is set, `upstreams` cannot be used on the same integration. The plugin fully replaces the upstream-based provider.
+
+### Runtime plugin
+
+```yaml
+runtimes:
+  my-agent:
+    plugin:
+      command: ./my-plugin
+      args: [runtime]
+      env:
+        LOG_LEVEL: debug
+    providers:
+      - slack
+      - linear
+    config:
+      poll_interval: 30s
+```
+
+When `plugin` is set, `type` cannot be used on the same runtime.
+
+### Plugin block fields
+
+| Field | Required | Notes |
+|---|---|---|
+| `command` | Yes | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. |
+| `args` | No | Arguments passed to the command. |
+| `env` | No | Map of additional environment variables. Supports `${VAR}` expansion from the host environment. |
+
+## Error handling
+
+Use standard gRPC status codes to report errors. The host interprets these codes as follows:
+
+| Code | Meaning |
+|---|---|
+| `OK` | Success. |
+| `INVALID_ARGUMENT` | Bad input from the caller. |
+| `UNIMPLEMENTED` | The RPC is not supported (e.g. OAuth RPCs on a non-OAuth provider). |
+| `UNAVAILABLE` | Transient failure; the host may retry. |
+| `UNKNOWN` | Catch-all for upstream or internal errors. |
+
+Return `UNIMPLEMENTED` for optional RPCs you do not support. The Go SDK helper `UnimplementedProviderPluginServer` handles this automatically if you embed it.
+
+## Example: minimal Go provider
+
+The echo plugin (`cmd/gestalt-plugin-echo`) is a working reference. Here is the minimal structure for a provider plugin in Go:
+
+```go
+package main
+
+import (
+    "context"
+    "os/signal"
+    "syscall"
+
+    "github.com/valon-technologies/gestalt/internal/pluginapi"
+)
+
+func main() {
+    ctx, stop := signal.NotifyContext(
+        context.Background(), syscall.SIGINT, syscall.SIGTERM,
+    )
+    defer stop()
+
+    // myProvider implements core.Provider
+    if err := pluginapi.ServeProvider(ctx, myProvider); err != nil {
+        panic(err)
+    }
+}
+```
+
+`pluginapi.ServeProvider` reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to it, and registers the `ProviderPlugin` service backed by your `core.Provider` implementation. The function blocks until the context is cancelled (i.e. until the process receives SIGTERM).
+
+For non-Go languages, generate gRPC stubs from `sdk/pluginapi/v1/plugin.proto` and implement the `ProviderPlugin` or `RuntimePlugin` service directly. The startup contract is the same: read `GESTALT_PLUGIN_SOCKET`, bind a gRPC server, and start serving.
+
+## Writing plugins in other languages
+
+The plugin protocol is language-agnostic. To write a plugin in Python, TypeScript, Rust, or any other language:
+
+1. Generate gRPC client and server stubs from `sdk/pluginapi/v1/plugin.proto` using the standard protoc toolchain for your language.
+2. Read `GESTALT_PLUGIN_SOCKET` from the environment.
+3. Start a gRPC server listening on that Unix socket.
+4. Implement the `ProviderPlugin` or `RuntimePlugin` service.
+5. Handle `SIGTERM` for graceful shutdown.
+
+Official TypeScript and Python SDKs are planned but not yet available. In the meantime, generating stubs from the proto file is the supported path.
