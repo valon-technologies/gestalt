@@ -142,7 +142,7 @@ integrations:
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      structured_response_check:
+      response_check:
         success_body_match:
           ok: true
         error_message_path: error
@@ -168,7 +168,7 @@ auth:
   token_metadata:
     - team_id
     - team_name
-  structured_response_check:
+  response_check:
     success_body_match:
       ok: true
     error_message_path: error
@@ -187,7 +187,7 @@ auth_profiles:
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      structured_response_check:
+      response_check:
         success_body_match:
           ok: true
         error_message_path: error

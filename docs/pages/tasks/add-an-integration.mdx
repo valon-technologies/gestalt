@@ -25,14 +25,14 @@ integrations:
     client_id: ${SLACK_CLIENT_ID}
     client_secret: ${SLACK_CLIENT_SECRET}
     icon_file: slack.svg
-    structured_response_check:
+    response_check:
       success_body_match:
         ok: true
       error_message_path: error
     auth:
       authorization_url: https://slack.com/oauth/v2/authorize
       token_url: https://slack.com/api/oauth.v2.access
-      structured_response_check:
+      response_check:
         success_body_match:
           ok: true
         error_message_path: error

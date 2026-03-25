@@ -689,7 +689,7 @@ func TestBuildUnknownPostConnectHook(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_SuccessMatch(t *testing.T) {
+func TestBuildResponseCheck_SuccessMatch(t *testing.T) {
 	t.Parallel()
 
 	const successKey = "ok"
@@ -705,7 +705,7 @@ func TestBuildStructuredResponseCheck_SuccessMatch(t *testing.T) {
 		DisplayName: "Check OK API",
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{successKey: true},
 			ErrorMessagePath: "error",
 		},
@@ -728,7 +728,7 @@ func TestBuildStructuredResponseCheck_SuccessMatch(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_FailureMatch(t *testing.T) {
+func TestBuildResponseCheck_FailureMatch(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -748,7 +748,7 @@ func TestBuildStructuredResponseCheck_FailureMatch(t *testing.T) {
 		DisplayName: "Check Fail API",
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{successKey: true},
 			ErrorMessagePath: errorKey,
 		},
@@ -771,7 +771,7 @@ func TestBuildStructuredResponseCheck_FailureMatch(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_NonJSON200(t *testing.T) {
+func TestBuildResponseCheck_NonJSON200(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -786,7 +786,7 @@ func TestBuildStructuredResponseCheck_NonJSON200(t *testing.T) {
 		DisplayName: "Check Text OK API",
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{"ok": true},
 			ErrorMessagePath: "error",
 		},
@@ -806,7 +806,7 @@ func TestBuildStructuredResponseCheck_NonJSON200(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_NonJSON500(t *testing.T) {
+func TestBuildResponseCheck_NonJSON500(t *testing.T) {
 	t.Parallel()
 
 	const serverErrorStatus = http.StatusInternalServerError
@@ -823,7 +823,7 @@ func TestBuildStructuredResponseCheck_NonJSON500(t *testing.T) {
 		DisplayName: "Check Text Err API",
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{"ok": true},
 			ErrorMessagePath: "error",
 		},
@@ -843,7 +843,7 @@ func TestBuildStructuredResponseCheck_NonJSON500(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_SuccessMatchOnly(t *testing.T) {
+func TestBuildResponseCheck_SuccessMatchOnly(t *testing.T) {
 	t.Parallel()
 
 	def := &Definition{
@@ -851,7 +851,7 @@ func TestBuildStructuredResponseCheck_SuccessMatchOnly(t *testing.T) {
 		DisplayName: "Check Match Only API",
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			SuccessBodyMatch: map[string]any{"ok": true},
 		},
 		Operations: map[string]OperationDef{
@@ -865,7 +865,7 @@ func TestBuildStructuredResponseCheck_SuccessMatchOnly(t *testing.T) {
 	}
 }
 
-func TestBuildStructuredResponseCheck_ErrorMessagePathOnly(t *testing.T) {
+func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -885,7 +885,7 @@ func TestBuildStructuredResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 		DisplayName: "Check ErrPath API",
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
-		StructuredResponseCheck: &ResponseCheckDef{
+		ResponseCheck: &ResponseCheckDef{
 			ErrorMessagePath: msgKey,
 		},
 		Operations: map[string]OperationDef{
