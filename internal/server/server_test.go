@@ -1623,6 +1623,26 @@ func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, 
 	return &core.TokenResponse{AccessToken: "pkce-token"}, nil
 }
 
+type stubPKCEConnParamIntegration struct {
+	stubPKCEIntegration
+	gotConnParam string
+}
+
+func (s *stubPKCEConnParamIntegration) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return map[string]core.ConnectionParamDef{
+		"org": {Required: true, Description: "Organization slug"},
+	}
+}
+
+func (s *stubPKCEConnParamIntegration) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	s.gotVerifier = verifier
+	s.gotConnParam = core.ConnectionParams(ctx)["org"]
+	if code != "good-code" {
+		return nil, fmt.Errorf("bad code")
+	}
+	return &core.TokenResponse{AccessToken: "pkce-token"}, nil
+}
+
 func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	t.Parallel()
 
@@ -1679,6 +1699,67 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	}
 	if stub.gotVerifier != stub.wantVerifier {
 		t.Fatalf("got verifier %q, want %q", stub.gotVerifier, stub.wantVerifier)
+	}
+}
+
+func TestIntegrationOAuthCallback_AttachesConnectionParamsToExchangeContext(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubPKCEConnParamIntegration{
+		stubPKCEIntegration: stubPKCEIntegration{
+			StubIntegration: coretesting.StubIntegration{N: "gitlab"},
+			authURL:         "https://gitlab.com/oauth/authorize",
+			wantVerifier:    "verifier-123",
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"integration":"gitlab","connection_params":{"org":"acme"}}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", resp.StatusCode)
+	}
+	if stub.gotConnParam != "acme" {
+		t.Fatalf("got connection param %q, want acme", stub.gotConnParam)
 	}
 }
 
