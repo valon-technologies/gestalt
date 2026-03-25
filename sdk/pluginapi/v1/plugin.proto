@@ -75,8 +75,6 @@ message ProviderMetadata {
   string static_catalog_json = 7;
   bool supports_session_catalog = 8;
   bool supports_post_connect = 9;
-  string authorization_base_url = 10;
-  string token_url = 11;
 }
 
 message TokenResponse {
@@ -122,27 +120,18 @@ message ExecuteRequest {
 message AuthorizationURLRequest {
   string state = 1;
   repeated string scopes = 2;
-  map<string, string> connection_params = 3;
-  string auth_base_url = 4;
-  bool include_verifier = 5;
 }
 
 message AuthorizationURLResponse {
   string url = 1;
-  string verifier = 2;
 }
 
 message ExchangeCodeRequest {
   string code = 1;
-  string verifier = 2;
-  string token_url = 3;
-  map<string, string> connection_params = 4;
 }
 
 message RefreshTokenRequest {
   string refresh_token = 1;
-  string token_url = 2;
-  map<string, string> connection_params = 3;
 }
 
 message GetSessionCatalogRequest {

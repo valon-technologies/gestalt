@@ -17,14 +17,20 @@ type Definition struct {
 	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping" json:"auth_mapping"`
 	ErrorMessagePath string            `yaml:"error_message_path" json:"error_message_path"`
 
-	ResponseCheck  string `yaml:"response_check" json:"response_check"`
-	TokenParser    string `yaml:"token_parser" json:"token_parser"`
-	RequestMutator string `yaml:"request_mutator" json:"request_mutator"`
-	PostConnect    string `yaml:"post_connect" json:"post_connect"`
-	ManualAuth     bool   `yaml:"manual_auth" json:"manual_auth"`
+	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check" json:"structured_response_check,omitempty"`
+	ResponseCheck           string            `yaml:"response_check" json:"response_check"`
+	TokenParser             string            `yaml:"token_parser" json:"token_parser"`
+	RequestMutator          string            `yaml:"request_mutator" json:"request_mutator"`
+	PostConnect             string            `yaml:"post_connect" json:"post_connect"`
+	ManualAuth              bool              `yaml:"manual_auth" json:"manual_auth"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
+}
+
+type ResponseCheckDef struct {
+	SuccessBodyMatch map[string]any `yaml:"success_body_match" json:"success_body_match,omitempty"`
+	ErrorMessagePath string         `yaml:"error_message_path" json:"error_message_path,omitempty"`
 }
 
 type ConnectionParamDef struct {
@@ -36,20 +42,21 @@ type ConnectionParamDef struct {
 }
 
 type AuthDef struct {
-	Type                string            `yaml:"type" json:"type"` // oauth2, manual
-	AuthorizationURL    string            `yaml:"authorization_url" json:"authorization_url"`
-	TokenURL            string            `yaml:"token_url" json:"token_url"`
-	ClientAuth          string            `yaml:"client_auth" json:"client_auth"`       // body (default), header
-	TokenExchange       string            `yaml:"token_exchange" json:"token_exchange"` // form (default), json
-	Scopes              []string          `yaml:"scopes" json:"scopes"`
-	ScopeSeparator      string            `yaml:"scope_separator" json:"scope_separator"`
-	PKCE                bool              `yaml:"pkce" json:"pkce"`
-	AuthorizationParams map[string]string `yaml:"authorization_params" json:"authorization_params"`
-	TokenParams         map[string]string `yaml:"token_params" json:"token_params"`
-	RefreshParams       map[string]string `yaml:"refresh_params" json:"refresh_params"`
-	AcceptHeader        string            `yaml:"accept_header" json:"accept_header"`
-	TokenMetadata       []string          `yaml:"token_metadata" json:"token_metadata"`
-	ResponseHook        string            `yaml:"response_hook" json:"response_hook"`
+	Type                    string            `yaml:"type" json:"type"` // oauth2, manual
+	AuthorizationURL        string            `yaml:"authorization_url" json:"authorization_url"`
+	TokenURL                string            `yaml:"token_url" json:"token_url"`
+	ClientAuth              string            `yaml:"client_auth" json:"client_auth"`       // body (default), header
+	TokenExchange           string            `yaml:"token_exchange" json:"token_exchange"` // form (default), json
+	Scopes                  []string          `yaml:"scopes" json:"scopes"`
+	ScopeSeparator          string            `yaml:"scope_separator" json:"scope_separator"`
+	PKCE                    bool              `yaml:"pkce" json:"pkce"`
+	AuthorizationParams     map[string]string `yaml:"authorization_params" json:"authorization_params"`
+	TokenParams             map[string]string `yaml:"token_params" json:"token_params"`
+	RefreshParams           map[string]string `yaml:"refresh_params" json:"refresh_params"`
+	AcceptHeader            string            `yaml:"accept_header" json:"accept_header"`
+	TokenMetadata           []string          `yaml:"token_metadata" json:"token_metadata"`
+	ResponseHook            string            `yaml:"response_hook" json:"response_hook"`
+	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check" json:"structured_response_check,omitempty"`
 }
 
 type OperationDef struct {

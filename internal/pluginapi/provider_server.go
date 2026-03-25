@@ -7,8 +7,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/oauth"
-	"github.com/valon-technologies/gestalt/internal/paraminterp"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -50,8 +48,6 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
 		SupportsPostConnect:    supportsPostConnect(s.provider),
-		AuthorizationBaseUrl:   authorizationBaseURLForProvider(s.provider),
-		TokenUrl:               tokenURLForProvider(s.provider),
 	}, nil
 }
 
@@ -81,30 +77,9 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 }
 
 func (s *ProviderServer) AuthorizationURL(_ context.Context, req *pluginapiv1.AuthorizationURLRequest) (*pluginapiv1.AuthorizationURLResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
 	oauthProv, ok := s.provider.(core.OAuthProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-
-	authBaseURL := resolveAuthorizationBaseURL(s.provider, req.GetAuthBaseUrl(), req.GetConnectionParams())
-	if authBaseURL != "" {
-		if ov, ok := s.provider.(interface {
-			StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-		}); ok {
-			url, verifier := ov.StartOAuthWithOverride(authBaseURL, req.GetState(), slices.Clone(req.GetScopes()))
-			return &pluginapiv1.AuthorizationURLResponse{Url: url, Verifier: verifier}, nil
-		}
-	}
-	if req.GetIncludeVerifier() {
-		if starter, ok := s.provider.(interface {
-			StartOAuth(state string, scopes []string) (string, string)
-		}); ok {
-			url, verifier := starter.StartOAuth(req.GetState(), slices.Clone(req.GetScopes()))
-			return &pluginapiv1.AuthorizationURLResponse{Url: url, Verifier: verifier}, nil
-		}
 	}
 	return &pluginapiv1.AuthorizationURLResponse{
 		Url: oauthProv.AuthorizationURL(req.GetState(), slices.Clone(req.GetScopes())),
@@ -112,36 +87,11 @@ func (s *ProviderServer) AuthorizationURL(_ context.Context, req *pluginapiv1.Au
 }
 
 func (s *ProviderServer) ExchangeCode(ctx context.Context, req *pluginapiv1.ExchangeCodeRequest) (*pluginapiv1.TokenResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
 	oauthProv, ok := s.provider.(core.OAuthProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
 	}
-	if len(req.GetConnectionParams()) > 0 {
-		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
-	}
-
-	tokenURL := resolveTokenURL(s.provider, req.GetTokenUrl(), req.GetConnectionParams())
-
-	var resp *core.TokenResponse
-	var err error
-	if req.GetVerifier() != "" || tokenURL != "" {
-		if exchanger, ok := s.provider.(interface {
-			ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-		}); ok {
-			var opts []oauth.ExchangeOption
-			if tokenURL != "" {
-				opts = append(opts, oauth.WithTokenURL(tokenURL))
-			}
-			resp, err = exchanger.ExchangeCodeWithVerifier(ctx, req.GetCode(), req.GetVerifier(), opts...)
-		} else {
-			resp, err = oauthProv.ExchangeCode(ctx, req.GetCode())
-		}
-	} else {
-		resp, err = oauthProv.ExchangeCode(ctx, req.GetCode())
-	}
+	resp, err := oauthProv.ExchangeCode(ctx, req.GetCode())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "exchange code: %v", err)
 	}
@@ -153,32 +103,11 @@ func (s *ProviderServer) ExchangeCode(ctx context.Context, req *pluginapiv1.Exch
 }
 
 func (s *ProviderServer) RefreshToken(ctx context.Context, req *pluginapiv1.RefreshTokenRequest) (*pluginapiv1.TokenResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
 	oauthProv, ok := s.provider.(core.OAuthProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
 	}
-	if len(req.GetConnectionParams()) > 0 {
-		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
-	}
-
-	tokenURL := resolveTokenURL(s.provider, req.GetTokenUrl(), req.GetConnectionParams())
-
-	var resp *core.TokenResponse
-	var err error
-	if tokenURL != "" {
-		if refresher, ok := s.provider.(interface {
-			RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-		}); ok {
-			resp, err = refresher.RefreshTokenWithURL(ctx, req.GetRefreshToken(), tokenURL)
-		} else {
-			resp, err = oauthProv.RefreshToken(ctx, req.GetRefreshToken())
-		}
-	} else {
-		resp, err = oauthProv.RefreshToken(ctx, req.GetRefreshToken())
-	}
+	resp, err := oauthProv.RefreshToken(ctx, req.GetRefreshToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "refresh token: %v", err)
 	}
@@ -263,48 +192,4 @@ func supportsSessionCatalog(prov core.Provider) bool {
 func supportsPostConnect(prov core.Provider) bool {
 	pcp, ok := prov.(core.PostConnectProvider)
 	return ok && pcp.PostConnectHook() != nil
-}
-
-func authorizationBaseURLForProvider(prov core.Provider) string {
-	if abu, ok := prov.(interface{ AuthorizationBaseURL() string }); ok {
-		return abu.AuthorizationBaseURL()
-	}
-	return ""
-}
-
-func tokenURLForProvider(prov core.Provider) string {
-	if tu, ok := prov.(interface{ TokenURL() string }); ok {
-		return tu.TokenURL()
-	}
-	return ""
-}
-
-func resolveAuthorizationBaseURL(prov core.Provider, explicit string, connParams map[string]string) string {
-	if explicit != "" {
-		return explicit
-	}
-	raw := authorizationBaseURLForProvider(prov)
-	if raw == "" || len(connParams) == 0 {
-		return ""
-	}
-	resolved := paraminterp.Interpolate(raw, connParams)
-	if resolved == raw {
-		return ""
-	}
-	return resolved
-}
-
-func resolveTokenURL(prov core.Provider, explicit string, connParams map[string]string) string {
-	if explicit != "" {
-		return explicit
-	}
-	raw := tokenURLForProvider(prov)
-	if raw == "" || len(connParams) == 0 {
-		return ""
-	}
-	resolved := paraminterp.Interpolate(raw, connParams)
-	if resolved == raw {
-		return ""
-	}
-	return resolved
 }

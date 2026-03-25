@@ -90,8 +90,7 @@ Each integration is defined under `integrations.<name>` and contains one or more
 
 | Field | Notes |
 |---|---|
-| `upstreams` | List of upstream definitions (see below). Required unless `plugin` is set. |
-| `plugin` | Executable plugin definition (see [Executable plugins](#executable-plugins) below). Mutually exclusive with `upstreams`. |
+| `upstreams` | List of upstream definitions (see below). At least one is required. |
 | `display_name` | Human-readable label for the integration. |
 | `description` | Short description shown in the web UI and CLI. |
 | `auth_profile` | Name of a reusable auth profile to inherit from. |
@@ -123,13 +122,6 @@ Each upstream declares a type and source:
 | `url` | For `rest`: OpenAPI spec URL. For `graphql`: the GraphQL endpoint (introspected at startup). For `mcp`: the upstream MCP server URL. |
 | `mcp` | (`rest` and `graphql` only) Boolean. When `true`, this upstream's operations are exposed as MCP tools. `type: mcp` upstreams are always exposed — no flag needed. |
 | `allowed_operations` | Positive allow-list. Can be a YAML list (names only) or a map (names to description overrides). Omit to allow all operations. An empty value is invalid. |
-| `auth_profile` | Name of an auth profile to apply to this upstream. Resolved before integration-level cascade. |
-| `auth` | Auth overrides specific to this upstream. Same structure as [integration-level auth](#auth-overrides). |
-| `client_id` | OAuth client ID for this upstream. |
-| `client_secret` | OAuth client secret for this upstream. |
-| `redirect_url` | OAuth redirect URL for this upstream. |
-
-When an upstream sets `auth_profile`, the profile is resolved first. Then any empty auth fields on the upstream are filled from the integration-level values. Each field is checked individually — only unset values inherit.
 
 REST, GraphQL, and MCP upstreams all require `url` in the source config. Deterministic startup comes from running `gestaltd prepare`, which writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve` then uses those prepared artifacts without changing the source config.
 
@@ -159,7 +151,7 @@ integrations:
 
 ```yaml
 auth:
-  type: oauth2              # or "manual" or "mcp_oauth"
+  type: oauth2              # or "manual"
   authorization_url: https://provider.com/authorize
   token_url: https://provider.com/token
   client_auth: body          # or "header"
@@ -177,8 +169,6 @@ auth:
     - team_name
   response_hook: slack_ok
 ```
-
-When `type` is `mcp_oauth`, Gestalt performs OAuth discovery against an MCP server following RFC 9728. The `authorization_url` and `token_url` fields are optional — if omitted, they are discovered automatically. For a non-MCP upstream (e.g., REST) with `mcp_oauth`, Gestalt locates the sibling `type: mcp` upstream in the same integration and uses its URL for discovery. If no static `client_id` is provided, Gestalt attempts Dynamic Client Registration (DCR) when the server advertises a registration endpoint.
 
 ## Auth profiles
 
@@ -198,29 +188,6 @@ auth_profiles:
 
 Fields set directly on the integration override the profile.
 
-### Executable plugins
-
-An integration can set `plugin` instead of `upstreams` to delegate provider behavior to an external executable that communicates over gRPC. Validation rejects setting both `plugin` and `upstreams` on the same integration.
-
-| Field | Notes |
-|---|---|
-| `command` | Path to the executable. Required. Absolute paths are used as-is. Relative paths starting with `.` or containing a path separator resolve from the config file's directory. Bare names are looked up on `PATH`. |
-| `args` | List of command-line arguments passed to the executable. |
-| `env` | Map of additional environment variables merged into the process environment. |
-
-The host automatically sets `GESTALT_PLUGIN_SOCKET` to the Unix socket path the plugin must bind for gRPC communication.
-
-```yaml
-integrations:
-  custom-provider:
-    plugin:
-      command: ./gestalt-plugin-echo
-      args: [provider]
-      env:
-        LOG_LEVEL: debug
-    display_name: Custom Provider
-```
-
 ## Runtimes block
 
 Background processes that boot alongside the server with scoped provider access.
@@ -234,20 +201,6 @@ runtimes:
       - linear
     config: {}             # type-specific configuration
 ```
-
-A runtime can use `plugin` instead of `type` to delegate to an external executable. Validation rejects setting both.
-
-```yaml
-runtimes:
-  custom-runtime:
-    plugin:
-      command: ./gestalt-plugin-echo
-      args: [runtime]
-    providers:
-      - slack
-```
-
-The `plugin` block accepts the same fields as [integration executable plugins](#executable-plugins). Runtime plugins receive both `GESTALT_PLUGIN_SOCKET` and `GESTALT_RUNTIME_HOST_SOCKET` — the latter is a Unix socket the plugin can dial to invoke operations and list capabilities on the host.
 
 The `providers` list scopes which integrations the runtime can invoke. The runtime receives a scoped invoker and capability lister.
 

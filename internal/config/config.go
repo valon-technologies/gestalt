@@ -91,18 +91,19 @@ type IntegrationDef struct {
 
 	Auth AuthOverrides `yaml:"auth"`
 
-	AuthHeader       string            `yaml:"auth_header"`
-	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping"`
-	ErrorMessagePath string            `yaml:"error_message_path"`
-	ResponseCheck    string            `yaml:"response_check"`
-	TokenParser      string            `yaml:"token_parser"`
-	RequestMutator   string            `yaml:"request_mutator"`
-	PostConnect      string            `yaml:"post_connect"`
-	ManualAuth       bool              `yaml:"manual_auth"`
-	TokenPrefix      string            `yaml:"token_prefix"`
-	AuthStyle        string            `yaml:"auth_style"`
-	IconFile         string            `yaml:"icon_file"`
-	Headers          map[string]string `yaml:"headers"`
+	AuthHeader              string            `yaml:"auth_header"`
+	AuthMapping             *AuthMappingDef   `yaml:"auth_mapping"`
+	ErrorMessagePath        string            `yaml:"error_message_path"`
+	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check"`
+	ResponseCheck           string            `yaml:"response_check"`
+	TokenParser             string            `yaml:"token_parser"`
+	RequestMutator          string            `yaml:"request_mutator"`
+	PostConnect             string            `yaml:"post_connect"`
+	ManualAuth              bool              `yaml:"manual_auth"`
+	TokenPrefix             string            `yaml:"token_prefix"`
+	AuthStyle               string            `yaml:"auth_style"`
+	IconFile                string            `yaml:"icon_file"`
+	Headers                 map[string]string `yaml:"headers"`
 }
 
 const (
@@ -157,25 +158,31 @@ func (a *AllowedOps) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type AuthOverrides struct {
-	Type                string            `yaml:"type"`
-	AuthorizationURL    string            `yaml:"authorization_url"`
-	TokenURL            string            `yaml:"token_url"`
-	ClientAuth          string            `yaml:"client_auth"`
-	TokenExchange       string            `yaml:"token_exchange"`
-	Scopes              []string          `yaml:"scopes"`
-	ScopeSeparator      string            `yaml:"scope_separator"`
-	PKCE                bool              `yaml:"pkce"`
-	AuthorizationParams map[string]string `yaml:"authorization_params"`
-	TokenParams         map[string]string `yaml:"token_params"`
-	RefreshParams       map[string]string `yaml:"refresh_params"`
-	AcceptHeader        string            `yaml:"accept_header"`
-	TokenMetadata       []string          `yaml:"token_metadata"`
-	ResponseHook        string            `yaml:"response_hook"`
-	AuthHeader          string            `yaml:"auth_header"`
+	Type                    string            `yaml:"type"`
+	AuthorizationURL        string            `yaml:"authorization_url"`
+	TokenURL                string            `yaml:"token_url"`
+	ClientAuth              string            `yaml:"client_auth"`
+	TokenExchange           string            `yaml:"token_exchange"`
+	Scopes                  []string          `yaml:"scopes"`
+	ScopeSeparator          string            `yaml:"scope_separator"`
+	PKCE                    bool              `yaml:"pkce"`
+	AuthorizationParams     map[string]string `yaml:"authorization_params"`
+	TokenParams             map[string]string `yaml:"token_params"`
+	RefreshParams           map[string]string `yaml:"refresh_params"`
+	AcceptHeader            string            `yaml:"accept_header"`
+	TokenMetadata           []string          `yaml:"token_metadata"`
+	ResponseHook            string            `yaml:"response_hook"`
+	StructuredResponseCheck *ResponseCheckDef `yaml:"structured_response_check"`
+	AuthHeader              string            `yaml:"auth_header"`
 }
 
 type AuthMappingDef struct {
 	Headers map[string]string `yaml:"headers"`
+}
+
+type ResponseCheckDef struct {
+	SuccessBodyMatch map[string]any `yaml:"success_body_match"`
+	ErrorMessagePath string         `yaml:"error_message_path"`
 }
 
 func Load(path string) (*Config, error) {
@@ -356,6 +363,9 @@ func fillAuthDefaults(dst, src *AuthOverrides) {
 	}
 	if dst.ResponseHook == "" {
 		dst.ResponseHook = src.ResponseHook
+	}
+	if dst.StructuredResponseCheck == nil {
+		dst.StructuredResponseCheck = src.StructuredResponseCheck
 	}
 	if dst.AuthHeader == "" {
 		dst.AuthHeader = src.AuthHeader

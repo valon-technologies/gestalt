@@ -114,13 +114,17 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		return nil, fmt.Errorf("%s: unknown auth_style %q", def.Provider, def.AuthStyle)
 	}
 
-	if def.ResponseCheck != "" {
+	switch {
+	case def.StructuredResponseCheck != nil:
+		base.CheckResponse = buildStructuredResponseChecker(def.StructuredResponseCheck)
+	case def.ResponseCheck != "":
+		log.Printf("WARNING: %s: response_check %q is deprecated; use structured_response_check or error_message_path instead", def.Provider, def.ResponseCheck)
 		checker, ok := lookupResponseChecker(def.ResponseCheck)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown response_check %q", def.Provider, def.ResponseCheck)
 		}
 		base.CheckResponse = checker
-	} else if def.ErrorMessagePath != "" {
+	case def.ErrorMessagePath != "":
 		msgPath := def.ErrorMessagePath
 		base.CheckResponse = func(status int, body []byte) error {
 			if status < 400 {
@@ -138,6 +142,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	switch {
 	case def.TokenParser != "":
+		log.Printf("WARNING: %s: token_parser %q is deprecated; use auth_mapping or auth_header instead", def.Provider, def.TokenParser)
 		parser, ok := lookupTokenParser(def.TokenParser)
 		if !ok {
 			return nil, fmt.Errorf("%s: unknown token_parser %q", def.Provider, def.TokenParser)
@@ -299,6 +304,18 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 	if intg.AuthMapping != nil {
 		def.AuthMapping = &AuthMappingDef{Headers: intg.AuthMapping.Headers}
 	}
+	if intg.StructuredResponseCheck != nil {
+		def.StructuredResponseCheck = &ResponseCheckDef{
+			SuccessBodyMatch: intg.StructuredResponseCheck.SuccessBodyMatch,
+			ErrorMessagePath: intg.StructuredResponseCheck.ErrorMessagePath,
+		}
+	}
+	if intg.Auth.StructuredResponseCheck != nil {
+		def.Auth.StructuredResponseCheck = &ResponseCheckDef{
+			SuccessBodyMatch: intg.Auth.StructuredResponseCheck.SuccessBodyMatch,
+			ErrorMessagePath: intg.Auth.StructuredResponseCheck.ErrorMessagePath,
+		}
+	}
 	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
 	setStr(&def.ResponseCheck, intg.ResponseCheck)
 	setStr(&def.TokenParser, intg.TokenParser)
@@ -370,7 +387,25 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	var opts []oauth.Option
 	opts = append(opts, oauth.WithHTTPClient(client))
 
-	if def.Auth.ResponseHook != "" {
+	if def.Auth.StructuredResponseCheck != nil {
+		rcd := def.Auth.StructuredResponseCheck
+		opts = append(opts, oauth.WithResponseHook(func(body []byte) error {
+			var data map[string]any
+			if err := json.Unmarshal(body, &data); err != nil {
+				return fmt.Errorf("failed to parse auth response: %w", err)
+			}
+			if len(rcd.SuccessBodyMatch) > 0 {
+				return checkBodyMatch(data, rcd)
+			}
+			if rcd.ErrorMessagePath != "" {
+				if msg, ok := extractJSONPath(data, rcd.ErrorMessagePath); ok && msg != "" {
+					return fmt.Errorf("%s", msg)
+				}
+			}
+			return nil
+		}))
+	} else if def.Auth.ResponseHook != "" {
+		log.Printf("WARNING: %s: auth response_hook %q is deprecated; use auth.structured_response_check instead", def.Provider, def.Auth.ResponseHook)
 		hook, ok := lookupResponseHook(def.Auth.ResponseHook)
 		if !ok {
 			return nil, fmt.Errorf("unknown auth response_hook %q", def.Auth.ResponseHook)
@@ -380,6 +415,66 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
 	return ci.UpstreamAuth{Handler: upstream}, nil
+}
+
+func buildStructuredResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
+	return func(status int, body []byte) error {
+		var data map[string]any
+		if err := json.Unmarshal(body, &data); err != nil {
+			if status >= 400 {
+				return fmt.Errorf("HTTP %d: %s", status, body)
+			}
+			return nil
+		}
+		if len(rcd.SuccessBodyMatch) > 0 {
+			if err := checkBodyMatch(data, rcd); err != nil {
+				return fmt.Errorf("response check failed: %s", err)
+			}
+			return nil
+		}
+		if status >= 400 && rcd.ErrorMessagePath != "" {
+			if msg, ok := extractJSONPath(data, rcd.ErrorMessagePath); ok {
+				return fmt.Errorf("HTTP %d: %s", status, msg)
+			}
+			return fmt.Errorf("HTTP %d: %s", status, body)
+		}
+		return nil
+	}
+}
+
+func checkBodyMatch(data map[string]any, rcd *ResponseCheckDef) error {
+	for key, expected := range rcd.SuccessBodyMatch {
+		actual, ok := data[key]
+		if !ok || !matchValue(actual, expected) {
+			errMsg := "unknown error"
+			if rcd.ErrorMessagePath != "" {
+				if msg, found := extractJSONPath(data, rcd.ErrorMessagePath); found {
+					errMsg = msg
+				}
+			}
+			return fmt.Errorf("%s", errMsg)
+		}
+	}
+	return nil
+}
+
+func matchValue(actual, expected any) bool {
+	switch e := expected.(type) {
+	case bool:
+		a, ok := actual.(bool)
+		return ok && a == e
+	case string:
+		a, ok := actual.(string)
+		return ok && a == e
+	case float64:
+		a, ok := actual.(float64)
+		return ok && a == e
+	case int:
+		a, ok := actual.(float64)
+		return ok && a == float64(e)
+	default:
+		return fmt.Sprintf("%v", actual) == fmt.Sprintf("%v", expected)
+	}
 }
 
 func extractJSONPath(data map[string]any, path string) (string, bool) {
