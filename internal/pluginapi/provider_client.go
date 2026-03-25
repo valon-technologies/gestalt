@@ -3,7 +3,6 @@ package pluginapi
 import (
 	"context"
 	"io"
-	"net/http"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -62,23 +61,14 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 
 	hasOAuth := slices.Contains(meta.GetAuthTypes(), "oauth")
 	hasSessionCatalog := meta.GetSupportsSessionCatalog()
-	hasPostConnect := meta.GetSupportsPostConnect()
 
 	switch {
-	case hasOAuth && hasSessionCatalog && hasPostConnect:
-		return &remoteProviderWithOAuthSessionCatalogPostConnect{remoteProviderBase: base}, nil
 	case hasOAuth && hasSessionCatalog:
 		return &remoteProviderWithOAuthSessionCatalog{remoteProviderBase: base}, nil
-	case hasOAuth && hasPostConnect:
-		return &remoteProviderWithOAuthPostConnect{remoteProviderBase: base}, nil
-	case hasSessionCatalog && hasPostConnect:
-		return &remoteProviderWithSessionCatalogPostConnect{remoteProviderBase: base}, nil
 	case hasOAuth:
 		return &remoteProviderWithOAuth{remoteProviderBase: base}, nil
 	case hasSessionCatalog:
 		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
-	case hasPostConnect:
-		return &remoteProviderWithPostConnect{remoteProviderBase: base}, nil
 	default:
 		return base, nil
 	}
@@ -177,18 +167,6 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	return catalogFromJSON(resp.GetCatalogJson())
 }
 
-func (p *remoteProviderBase) postConnectHook() core.PostConnectHook {
-	return func(ctx context.Context, tok *core.IntegrationToken, _ *http.Client) (map[string]string, error) {
-		resp, err := p.client.PostConnect(ctx, &pluginapiv1.PostConnectRequest{
-			Token: integrationTokenToProto(tok),
-		})
-		if err != nil {
-			return nil, err
-		}
-		return resp.GetMetadata(), nil
-	}
-}
-
 type remoteProviderWithOAuth struct{ *remoteProviderBase }
 
 func (p *remoteProviderWithOAuth) AuthorizationURL(state string, scopes []string) string {
@@ -209,12 +187,6 @@ func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context
 	return p.sessionCatalog(ctx, token)
 }
 
-type remoteProviderWithPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithPostConnect) PostConnectHook() core.PostConnectHook {
-	return p.postConnectHook()
-}
-
 type remoteProviderWithOAuthSessionCatalog struct{ *remoteProviderBase }
 
 func (p *remoteProviderWithOAuthSessionCatalog) AuthorizationURL(state string, scopes []string) string {
@@ -231,54 +203,4 @@ func (p *remoteProviderWithOAuthSessionCatalog) RefreshToken(ctx context.Context
 
 func (p *remoteProviderWithOAuthSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
-}
-
-type remoteProviderWithOAuthPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithOAuthPostConnect) AuthorizationURL(state string, scopes []string) string {
-	return p.authorizationURL(state, scopes)
-}
-
-func (p *remoteProviderWithOAuthPostConnect) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.exchangeCode(ctx, code)
-}
-
-func (p *remoteProviderWithOAuthPostConnect) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken)
-}
-
-func (p *remoteProviderWithOAuthPostConnect) PostConnectHook() core.PostConnectHook {
-	return p.postConnectHook()
-}
-
-type remoteProviderWithSessionCatalogPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithSessionCatalogPostConnect) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.sessionCatalog(ctx, token)
-}
-
-func (p *remoteProviderWithSessionCatalogPostConnect) PostConnectHook() core.PostConnectHook {
-	return p.postConnectHook()
-}
-
-type remoteProviderWithOAuthSessionCatalogPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithOAuthSessionCatalogPostConnect) AuthorizationURL(state string, scopes []string) string {
-	return p.authorizationURL(state, scopes)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalogPostConnect) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.exchangeCode(ctx, code)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalogPostConnect) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalogPostConnect) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.sessionCatalog(ctx, token)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalogPostConnect) PostConnectHook() core.PostConnectHook {
-	return p.postConnectHook()
 }

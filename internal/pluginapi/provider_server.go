@@ -2,7 +2,6 @@ package pluginapi
 
 import (
 	"context"
-	"net/http"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -15,16 +14,11 @@ import (
 
 type ProviderServer struct {
 	pluginapiv1.UnimplementedProviderPluginServer
-	provider   core.Provider
-	httpClient *http.Client
+	provider core.Provider
 }
 
 func NewProviderServer(provider core.Provider) *ProviderServer {
-	return &ProviderServer{provider: provider, httpClient: http.DefaultClient}
-}
-
-func (s *ProviderServer) SetHTTPClient(client *http.Client) {
-	s.httpClient = client
+	return &ProviderServer{provider: provider}
 }
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
@@ -47,7 +41,6 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 		ConnectionParams:       connectionParamDefsToProto(defs),
 		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
-		SupportsPostConnect:    supportsPostConnect(s.provider),
 	}, nil
 }
 
@@ -137,25 +130,6 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1
 	return &pluginapiv1.GetSessionCatalogResponse{CatalogJson: raw}, nil
 }
 
-func (s *ProviderServer) PostConnect(ctx context.Context, req *pluginapiv1.PostConnectRequest) (*pluginapiv1.PostConnectResponse, error) {
-	pcp, ok := s.provider.(core.PostConnectProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support post-connect")
-	}
-	hook := pcp.PostConnectHook()
-	if hook == nil {
-		return nil, status.Error(codes.Unimplemented, "provider returned nil post-connect hook")
-	}
-	if req == nil || req.Token == nil {
-		return nil, status.Error(codes.InvalidArgument, "token is required")
-	}
-	metadata, err := hook(ctx, integrationTokenFromProto(req.GetToken()), s.httpClient)
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "post-connect: %v", err)
-	}
-	return &pluginapiv1.PostConnectResponse{Metadata: metadata}, nil
-}
-
 func authTypesForProvider(prov core.Provider) []string {
 	if atl, ok := prov.(core.AuthTypeLister); ok {
 		return slices.Clone(atl.AuthTypes())
@@ -187,9 +161,4 @@ func staticCatalogForProvider(prov core.Provider) *catalog.Catalog {
 func supportsSessionCatalog(prov core.Provider) bool {
 	_, ok := prov.(core.SessionCatalogProvider)
 	return ok
-}
-
-func supportsPostConnect(prov core.Provider) bool {
-	pcp, ok := prov.(core.PostConnectProvider)
-	return ok && pcp.PostConnectHook() != nil
 }

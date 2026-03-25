@@ -1022,58 +1022,6 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func (s *Server) runLegacyPostConnectHook(ctx context.Context, prov core.Provider, tok *core.IntegrationToken) error {
-	pcp, ok := prov.(core.PostConnectProvider)
-	if !ok {
-		return nil
-	}
-	hookFn := pcp.PostConnectHook()
-	if hookFn == nil {
-		return nil
-	}
-
-	client := &http.Client{
-		Timeout:   30 * time.Second,
-		Transport: &bearerTransport{token: tok.AccessToken, base: http.DefaultTransport},
-	}
-	extra, err := hookFn(ctx, tok, client)
-	if err != nil {
-		_ = s.datastore.DeleteToken(ctx, tok.ID)
-		return fmt.Errorf("post_connect: %w", err)
-	}
-
-	if len(extra) == 0 {
-		return nil
-	}
-
-	for k, v := range extra {
-		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
-			_ = s.datastore.DeleteToken(ctx, tok.ID)
-			return fmt.Errorf("post_connect returned invalid key or value for %q", k)
-		}
-	}
-
-	existing := make(map[string]string)
-	if tok.MetadataJSON != "" {
-		if err := json.Unmarshal([]byte(tok.MetadataJSON), &existing); err != nil {
-			_ = s.datastore.DeleteToken(ctx, tok.ID)
-			return fmt.Errorf("post_connect: corrupt MetadataJSON: %w", err)
-		}
-	}
-	for k, v := range extra {
-		existing[k] = v
-	}
-	b, _ := json.Marshal(existing)
-	tok.MetadataJSON = string(b)
-
-	if err := s.datastore.StoreToken(ctx, tok); err != nil {
-		_ = s.datastore.DeleteToken(ctx, tok.ID)
-		return fmt.Errorf("post_connect: failed to update metadata: %w", err)
-	}
-
-	return nil
-}
-
 const stagedConnectionTTL = 30 * time.Minute
 
 type tokenMaterial struct {
@@ -1190,19 +1138,6 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				StagedID:   sc.ID,
 				Candidates: candidates,
 			}, nil
-		}
-	}
-
-	if pcp, ok := prov.(core.PostConnectProvider); ok {
-		if hookFn := pcp.PostConnectHook(); hookFn != nil {
-			tok, err := s.storeTokenFromMaterial(ctx, tm)
-			if err != nil {
-				return nil, err
-			}
-			if err := s.runLegacyPostConnectHook(ctx, prov, tok); err != nil {
-				return nil, err
-			}
-			return &postConnectResult{Status: "connected"}, nil
 		}
 	}
 

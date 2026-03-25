@@ -9,10 +9,9 @@ Gestalt has a small set of primitives that compose into a complete API gateway f
 | **Auth provider** | Authenticates users to the Gestalt platform and issues session tokens. |
 | **Datastore** | Persists users, integration tokens (encrypted), and API tokens in a pluggable backend such as Postgres, SQLite, or DynamoDB. |
 | **Secret manager** | Resolves `secret://` references in config before other components are built, keeping sensitive values out of plain-text YAML. |
-| **Integration definition** | Describes one or more upstreams (REST, GraphQL, or MCP) with their auth style, operations, and optional hooks. |
+| **Integration definition** | Describes one or more upstreams (REST, GraphQL, or MCP) with their auth style, operations, and optional response checks. |
 | **Provider** | Runtime object that lists operations and executes them against upstream APIs. Built from the integration's upstreams at startup. |
 | **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec, GraphQL introspection, or MCP tool listing. |
-| **Hooks** | Integration-specific code for non-standard auth, token parsing, response validation, or request shaping. |
 | **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
 | **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
 
@@ -53,7 +52,6 @@ Gestalt ships with plugins across seven categories:
 | Auth provider | Platform login and session management |
 | Datastore | Persistent storage for users and tokens |
 | Secret manager | Resolution of `secret://` references |
-| Integration hooks | API-specific auth and response handling |
 | Binding | Alternative request surfaces |
 | Runtime | Background processes |
 | Provider | Operation sources |
@@ -105,8 +103,8 @@ All request surfaces share a single invoker built once at startup:
 2. The shared invoker resolves the caller's stored credential for the target integration.
 3. If the access token is within 5 minutes of expiry, the invoker refreshes it automatically using the stored refresh token.
 4. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
-5. Configured hooks run: request mutators can rewrite headers or query parameters, and token parsers can transform the stored credential into the format the upstream API expects.
-6. Gestalt executes the upstream HTTP call, runs response-check hooks if configured, and returns the result.
+5. Gestalt applies any configured auth mapping or custom auth headers to transform the stored credential into the format the upstream API expects.
+6. Gestalt executes the upstream HTTP call, applies response checks if configured, and returns the result.
 
 ## Connection modes
 

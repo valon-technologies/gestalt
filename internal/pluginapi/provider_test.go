@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -96,12 +95,6 @@ func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionPara
 	}
 }
 
-func (p *roundTripProvider) PostConnectHook() core.PostConnectHook {
-	return func(_ context.Context, tok *core.IntegrationToken, _ *http.Client) (map[string]string, error) {
-		return map[string]string{"instance": tok.Instance, "integration": tok.Integration}, nil
-	}
-}
-
 func (p *roundTripProvider) AuthTypes() []string {
 	return []string{"oauth", "manual"}
 }
@@ -139,9 +132,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 	if _, ok := prov.(core.ConnectionParamProvider); !ok {
 		t.Fatal("expected remote provider to implement ConnectionParamProvider")
-	}
-	if _, ok := prov.(core.PostConnectProvider); !ok {
-		t.Fatal("expected remote provider to implement PostConnectProvider")
 	}
 	if _, ok := prov.(core.AuthTypeLister); !ok {
 		t.Fatal("expected remote provider to implement AuthTypeLister")
@@ -187,17 +177,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
 
-	pcp := prov.(core.PostConnectProvider)
-	meta, err := pcp.PostConnectHook()(context.Background(), &core.IntegrationToken{
-		Integration: "roundtrip",
-		Instance:    "default",
-	}, nil)
-	if err != nil {
-		t.Fatalf("PostConnectHook: %v", err)
-	}
-	if meta["instance"] != "default" || meta["integration"] != "roundtrip" {
-		t.Fatalf("unexpected post-connect metadata: %+v", meta)
-	}
 }
 
 func newProviderTestClient(t *testing.T, prov core.Provider) pluginapiv1.ProviderPluginClient {

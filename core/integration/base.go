@@ -18,7 +18,6 @@ var (
 	_ core.ManualProvider          = (*Base)(nil)
 	_ core.CatalogProvider         = (*Base)(nil)
 	_ core.ConnectionParamProvider = (*Base)(nil)
-	_ core.PostConnectProvider     = (*Base)(nil)
 	_ core.DiscoveryConfigProvider = (*Base)(nil)
 )
 
@@ -114,7 +113,6 @@ type Base struct {
 	EgressResolver *egress.Resolver
 
 	ConnectionDefs    map[string]core.ConnectionParamDef
-	PostConnectHookFn core.PostConnectHook
 	DiscoveryDef      *core.DiscoveryConfig
 	ManualAuthEnabled bool
 
@@ -154,10 +152,6 @@ func (b *Base) AuthTypes() []string {
 
 func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return b.ConnectionDefs
-}
-
-func (b *Base) PostConnectHook() core.PostConnectHook {
-	return b.PostConnectHookFn
 }
 
 func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {

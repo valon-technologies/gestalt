@@ -61,7 +61,6 @@ Key fields in `ProviderMetadata`:
 | `connection_params` | `map<string, ConnectionParamDef>` | Named parameters required to connect (e.g. workspace URL). |
 | `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
 | `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
-| `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
 
 **`ListOperations(google.protobuf.Empty) → ListOperationsResponse`**
 
@@ -88,7 +87,6 @@ Implement these if your provider manages its own OAuth flow (when `auth_types` i
 | RPC | Request | Response | Purpose |
 |---|---|---|---|
 | `GetSessionCatalog` | `token`, `connection_params` | `catalog_json` | Returns a per-session resource catalog. Only called if `supports_session_catalog` is `true` in metadata. |
-| `PostConnect` | `IntegrationToken` | `metadata` | Hook called after a user completes OAuth. Returns metadata to store alongside the token. Only called if `supports_post_connect` is `true` in metadata. |
 
 ## Runtime plugins
 
