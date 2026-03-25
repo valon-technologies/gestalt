@@ -12,6 +12,7 @@
 | `runtimes` | Background processes that boot alongside the server with scoped provider access. |
 | `bindings` | Alternative request surfaces such as webhooks and proxy-oriented request normalizers. |
 | `server` | Port, base URL, encryption key, and development mode. |
+| `egress` | Policy and credential rules for outbound requests made by runtimes and bindings. |
 
 ## Server block
 
@@ -252,6 +253,58 @@ bindings:
 | Config field | Default | Notes |
 |---|---|---|
 | `path` | | HTTP path prefix for the proxy surface. Must start with `/`. |
+
+## Egress block
+
+Controls policy enforcement and credential injection for outbound requests made by runtimes, bindings, and the proxy surface.
+
+```yaml
+egress:
+  default_action: allow   # "allow" (default) or "deny"
+  policies:
+    - action: deny
+      subject_kind: agent
+      provider: internal-api
+      path_prefix: /v1/admin
+    - action: allow
+      provider: internal-api
+  credentials:
+    - provider: acme-api
+      instance: acme-api
+      subject_kind: user
+```
+
+### Policy rules
+
+Rules are evaluated in order; the first matching rule wins. If no rule matches, `default_action` applies (defaults to `allow`).
+
+| Field | Notes |
+|---|---|
+| `action` | Required. `allow` or `deny`. |
+| `subject_kind` | Match subject kind: `user`, `identity`, `agent`, or `system`. Empty matches all. |
+| `subject_id` | Match a specific subject ID. Empty matches all. |
+| `provider` | Match the target provider name. Empty matches all. |
+| `operation` | Match the target operation name. Empty matches all. |
+| `method` | Match the HTTP method. Empty matches all. |
+| `host` | Exact match against the target host. Empty matches all. |
+| `path_prefix` | Segment-aware path prefix match. Empty matches all. |
+
+All non-empty fields must match for a rule to apply (AND logic).
+
+### Credential grants
+
+Credential grants control which provider credentials are injected into outbound requests. They are matched using the same field set as policy rules (minus `action`), plus `instance` to identify the credential source.
+
+| Field | Notes |
+|---|---|
+| `provider` | The provider whose credentials to inject. |
+| `instance` | The credential instance name (defaults to `provider` if omitted). |
+| `subject_kind` | Restrict to a specific subject kind. Empty matches all. |
+| `subject_id` | Restrict to a specific subject ID. Empty matches all. |
+| `operation` | Match the target operation. Empty matches all. |
+| `method` | Match the HTTP method. Empty matches all. |
+| `host` | Exact match against the target host. Empty matches all. |
+| `path_prefix` | Segment-aware path prefix match. Empty matches all. |
 
 ## Supported providers
 
