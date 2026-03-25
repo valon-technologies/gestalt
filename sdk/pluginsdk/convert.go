@@ -79,6 +79,15 @@ func operationsToProto(ops []Operation) ([]*pluginapiv1.Operation, error) {
 	return out, nil
 }
 
+func pluginModeFromProto(mode pluginapiv1.PluginMode) string {
+	switch mode {
+	case pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY:
+		return PluginModeOverlay
+	default:
+		return PluginModeReplace
+	}
+}
+
 func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*pluginapiv1.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
