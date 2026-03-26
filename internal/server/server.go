@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -98,85 +97,6 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) routes() {
-	r := s.router
-	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
-
-	if s.devMode {
-		r.Use(devCORS)
-	}
-
-	r.Get("/health", s.healthCheck)
-	r.Get("/ready", s.readinessCheck)
-
-	if s.mcpHandler != nil {
-		r.Group(func(r chi.Router) {
-			r.Use(s.authMiddleware)
-			r.Handle("/mcp", s.mcpHandler)
-		})
-	}
-
-	if s.devMode {
-		r.Post("/api/dev-login", s.devLogin)
-	}
-
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Get("/auth/info", s.authInfo)
-		r.Post("/auth/login", s.startLogin)
-		r.Get("/auth/login/callback", s.loginCallback)
-		r.Post("/auth/logout", s.logout)
-		r.Get("/auth/callback", s.integrationOAuthCallback)
-
-		s.mountBindingRoutes(r)
-
-		r.Group(func(r chi.Router) {
-			r.Use(s.authMiddleware)
-			r.Use(s.adminMiddleware)
-			r.Post("/egress/deny-rules", s.createEgressDenyRule)
-			r.Get("/egress/deny-rules", s.listEgressDenyRules)
-			r.Delete("/egress/deny-rules/{id}", s.deleteEgressDenyRule)
-			r.Post("/egress/credential-grants", s.createEgressCredentialGrant)
-			r.Get("/egress/credential-grants", s.listEgressCredentialGrants)
-			r.Delete("/egress/credential-grants/{id}", s.deleteEgressCredentialGrant)
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(s.authMiddleware)
-
-			r.Get("/integrations", s.listIntegrations)
-			r.Delete("/integrations/{name}", s.disconnectIntegration)
-			r.Get("/integrations/{name}/operations", s.listOperations)
-			r.Get("/runtimes", s.listRuntimes)
-			r.Get("/bindings", s.listBindings)
-
-			r.Get("/{integration}/{operation}", s.executeOperation)
-			r.Post("/{integration}/{operation}", s.executeOperation)
-
-			r.Post("/auth/start-oauth", s.startIntegrationOAuth)
-			r.Post("/auth/connect-manual", s.connectManual)
-
-			r.Get("/connections/staged/{id}", s.getStagedConnection)
-			r.Post("/connections/staged/{id}/select", s.selectStagedConnection)
-			r.Delete("/connections/staged/{id}", s.cancelStagedConnection)
-
-			r.Post("/tokens", s.createAPIToken)
-			r.Get("/tokens", s.listAPITokens)
-			r.Delete("/tokens/{id}", s.revokeAPIToken)
-
-			r.Post("/egress-clients", s.createEgressClient)
-			r.Get("/egress-clients", s.listEgressClients)
-			r.Delete("/egress-clients/{id}", s.deleteEgressClient)
-			r.Post("/egress-clients/{id}/tokens", s.createEgressClientToken)
-			r.Get("/egress-clients/{id}/tokens", s.listEgressClientTokens)
-			r.Delete("/egress-clients/{id}/tokens/{tokenID}", s.revokeEgressClientToken)
-		})
-	})
-
-	if s.webUI != nil {
-		r.NotFound(s.webUI.ServeHTTP)
-	}
-}
-
 func resolverOpts(ds core.Datastore) []principal.ResolverOption {
 	var opts []principal.ResolverOption
 	if ecs, ok := ds.(core.EgressClientStore); ok {
@@ -191,38 +111,6 @@ func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 		return nil, fmt.Errorf("datastore does not support staged connections; use a SQL-backed datastore (sqlite, postgres, mysql)")
 	}
 	return scs, nil
-}
-
-func (s *Server) mountBindingRoutes(r chi.Router) {
-	if s.bindings == nil {
-		return
-	}
-	for _, name := range s.bindings.List() {
-		binding, err := s.bindings.Get(name)
-		if err != nil {
-			log.Printf("warning: skipping binding %q routes: %v", name, err)
-			continue
-		}
-		for _, route := range binding.Routes() {
-			handler := route.Handler
-			if !route.Public {
-				if route.ProxyAuth {
-					handler = s.proxyAuthMiddleware(handler)
-				} else {
-					handler = s.authMiddleware(handler)
-				}
-			}
-			if route.Connect {
-				if s.connectHandler != nil {
-					log.Printf("warning: binding %q registers CONNECT but another binding already claimed it; skipping", name)
-					continue
-				}
-				s.connectHandler = handler
-				continue
-			}
-			r.Method(route.Method, "/bindings/"+name+route.Pattern, handler)
-		}
-	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
