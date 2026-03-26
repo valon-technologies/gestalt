@@ -1022,16 +1022,17 @@ type postConnectResult struct {
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
 	now := s.now().UTC().Truncate(time.Second)
 	tok := &core.IntegrationToken{
-		ID:           uuid.NewString(),
-		UserID:       tm.UserID,
-		Integration:  tm.Integration,
-		Instance:     tm.Instance,
-		AccessToken:  tm.AccessToken,
-		RefreshToken: tm.RefreshToken,
-		ExpiresAt:    tm.TokenExpiresAt,
-		MetadataJSON: tm.MetadataJSON,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              uuid.NewString(),
+		UserID:          tm.UserID,
+		Integration:     tm.Integration,
+		Instance:        tm.Instance,
+		AccessToken:     tm.AccessToken,
+		RefreshToken:    tm.RefreshToken,
+		ExpiresAt:       tm.TokenExpiresAt,
+		LastRefreshedAt: &now,
+		MetadataJSON:    tm.MetadataJSON,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 	if err := s.datastore.StoreToken(ctx, tok); err != nil {
 		return nil, err
