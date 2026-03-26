@@ -1,247 +1,221 @@
-use gestalt::output::Format;
-use mockito::{Matcher, Server};
+mod support;
 
-fn create_client(server: &Server) -> gestalt::api::ApiClient {
-    gestalt::api::ApiClient::new(&server.url(), "test-token").unwrap()
+use std::fs;
+
+use support::{CliEnv, TestServer};
+
+#[test]
+fn config_commands_use_real_filesystem_state() {
+    let cli = CliEnv::new();
+
+    let set = cli.run(&["config", "set", "url", "gestalt.example.test"]);
+    set.assert_success();
+
+    let get = cli.run(&["--format", "json", "config", "get", "url"]);
+    get.assert_success();
+    assert_eq!(get.stdout_json()["url"], "https://gestalt.example.test");
+
+    let list = cli.run(&["--format", "json", "config", "list"]);
+    list.assert_success();
+    assert_eq!(list.stdout_json()["url"], "https://gestalt.example.test");
+
+    let unset = cli.run(&["config", "unset", "url"]);
+    unset.assert_success();
+
+    let get_missing = cli.run(&["--format", "json", "config", "get", "url"]);
+    get_missing.assert_success();
+    assert!(get_missing.stdout_json()["url"].is_null());
 }
 
 #[test]
-fn test_list_integrations() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[{"name":"github","display_name":"GitHub","description":"GitHub integration"}]"#,
-        )
-        .create();
+fn auth_status_and_logout_use_real_credential_store() {
+    let server = TestServer::start();
+    let cli = CliEnv::new();
+    let session = server.dev_login("status@gestalt.dev");
+    cli.write_credentials(&server.base_url, &session);
 
-    let client = create_client(&server);
-    let resp = client.get("/api/v1/integrations").unwrap();
+    let status = cli.run(&["--format", "json", "auth", "status"]);
+    status.assert_success();
+    let body = status.stdout_json();
+    assert_eq!(body["authenticated"], true);
+    assert_eq!(body["source"], "session");
+    assert_eq!(body["session_stored"], true);
 
-    mock.assert();
-    let items = resp.as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["name"], "github");
+    let logout = cli.run(&["auth", "logout"]);
+    logout.assert_success();
+    assert!(
+        !cli.credentials_path().exists(),
+        "credentials file should be removed on logout"
+    );
+
+    let status_after = cli.run(&["--format", "json", "auth", "status"]);
+    status_after.assert_success();
+    let body = status_after.stdout_json();
+    assert_eq!(body["authenticated"], false);
+    assert_eq!(body["source"], "none");
+    assert_eq!(body["session_stored"], false);
 }
 
 #[test]
-fn test_list_tokens() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/tokens")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[{"id":"1","name":"my-token","scopes":"","created_at":"2025-01-01T00:00:00Z"}]"#,
-        )
-        .create();
+fn integrations_list_and_invoke_use_project_url_precedence() {
+    let server = TestServer::start();
+    let cli = CliEnv::new();
+    let session = server.dev_login("invoke@gestalt.dev");
+    cli.write_credentials("http://127.0.0.1:9", &session);
 
-    let client = create_client(&server);
-    let resp = client.get("/api/v1/tokens").unwrap();
+    let project_root = cli.project_dir.join("workspace");
+    let nested = project_root.join("nested");
+    fs::create_dir_all(&nested).expect("create nested project dir");
+    cli.write_project_url(&project_root, &server.base_url);
 
-    mock.assert();
-    let items = resp.as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["name"], "my-token");
+    let list = cli.run_in(
+        &nested,
+        &["--format", "json", "integrations", "list"],
+        None,
+        &[],
+    );
+    list.assert_success();
+    assert!(
+        list.stdout_json()
+            .as_array()
+            .expect("integrations array")
+            .iter()
+            .any(|item| item["name"] == "echo"),
+        "expected built-in echo integration in list output"
+    );
+
+    let invoke = cli.run_in(
+        &nested,
+        &[
+            "--format",
+            "json",
+            "invoke",
+            "echo",
+            "echo",
+            "-p",
+            "message=hello",
+        ],
+        None,
+        &[],
+    );
+    invoke.assert_success();
+    let body = invoke.stdout_json();
+    assert_eq!(body["message"], "hello");
 }
 
 #[test]
-fn test_create_token() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/tokens")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(r#"{"name":"cli-token"}"#.to_string()))
-        .with_status(201)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"id":"2","name":"cli-token","token":"plaintext-secret"}"#)
-        .create();
+fn tokens_create_list_and_revoke_use_live_server() {
+    let server = TestServer::start();
+    let cli = CliEnv::new();
+    let session = server.dev_login("tokens@gestalt.dev");
+    cli.write_credentials(&server.base_url, &session);
 
-    let client = create_client(&server);
-    let body = serde_json::json!({"name": "cli-token"});
-    let resp = client.post("/api/v1/tokens", &body).unwrap();
+    let create = cli.run(&[
+        "--format",
+        "json",
+        "tokens",
+        "create",
+        "--name",
+        "cli-token",
+    ]);
+    create.assert_success();
+    let created = create.stdout_json();
+    let token_id = created["id"].as_str().expect("token id").to_string();
+    assert_eq!(created["name"], "cli-token");
+    assert!(
+        created["token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty()),
+        "plaintext token should be returned once on create"
+    );
 
-    mock.assert();
-    assert_eq!(resp["token"], "plaintext-secret");
+    let list = cli.run(&["--format", "json", "tokens", "list"]);
+    list.assert_success();
+    assert!(
+        list.stdout_json()
+            .as_array()
+            .expect("tokens array")
+            .iter()
+            .any(|item| item["id"] == token_id && item["name"] == "cli-token"),
+        "expected created token in list output"
+    );
+
+    let revoke = cli.run(&["tokens", "revoke", &token_id]);
+    revoke.assert_success();
+
+    let list_after = cli.run(&["--format", "json", "tokens", "list"]);
+    list_after.assert_success();
+    assert!(
+        list_after
+            .stdout_json()
+            .as_array()
+            .expect("tokens array")
+            .is_empty(),
+        "expected token list to be empty after revoke"
+    );
 }
 
 #[test]
-fn test_revoke_token() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("DELETE", "/api/v1/tokens/42")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"status":"revoked"}"#)
-        .create();
+fn env_api_key_overrides_session_and_invalid_env_key_shows_guidance() {
+    let server = TestServer::start();
+    let cli = CliEnv::new();
+    let valid_session = server.dev_login("env@gestalt.dev");
+    cli.write_credentials(&server.base_url, &valid_session);
 
-    let client = create_client(&server);
-    let resp = client.delete("/api/v1/tokens/42").unwrap();
+    let api_token = server.create_api_token(&valid_session, "env-token");
+    let token_value = api_token["token"].as_str().expect("api token value");
 
-    mock.assert();
-    assert_eq!(resp["status"], "revoked");
+    cli.write_credentials(&server.base_url, "invalid-session-token");
+    let env_success = cli.run_in(
+        &cli.project_dir,
+        &["--format", "json", "integrations", "list"],
+        None,
+        &[("GESTALT_API_KEY", token_value)],
+    );
+    env_success.assert_success();
+
+    cli.write_credentials(&server.base_url, &valid_session);
+    let env_failure = cli.run_in(
+        &cli.project_dir,
+        &["integrations", "list"],
+        None,
+        &[("GESTALT_API_KEY", "not-a-real-token")],
+    );
+    env_failure.assert_failure();
+    assert!(
+        env_failure
+            .stderr
+            .contains("using GESTALT_API_KEY from environment"),
+        "stderr should explain env token precedence:\n{}",
+        env_failure.stderr
+    );
 }
 
 #[test]
-fn test_execute_operation() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/github/search_code")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"results":[]}"#)
-        .create();
+fn init_writes_global_and_project_config_without_logging_in() {
+    let server = TestServer::start();
+    let cli = CliEnv::new();
+    let project_dir = cli.project_dir.join("init-project");
+    fs::create_dir_all(&project_dir).expect("create init project dir");
 
-    let client = create_client(&server);
-    let body = serde_json::json!({"query": "hello"});
-    let resp = client.post("/api/v1/github/search_code", &body).unwrap();
+    let init = cli.run_in(
+        &project_dir,
+        &["init"],
+        Some(&format!("{}\nn\ny\n", server.base_url)),
+        &[],
+    );
+    init.assert_success();
 
-    mock.assert();
-    assert_eq!(resp["results"], serde_json::json!([]));
-}
+    let global_config = fs::read_to_string(cli.config_path()).expect("read global config");
+    assert!(
+        global_config.contains(&server.base_url),
+        "global config should contain configured url"
+    );
 
-#[test]
-fn test_list_integrations_table_format() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[
-                {"name": "test_svc", "description": "A short description", "connected": true},
-                {"name": "other_svc", "description": "Another service", "connected": false}
-            ]"#,
-        )
-        .create();
-
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result = gestalt::commands::integrations::list(Some(&server.url()), Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_error_response() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/tokens")
-        .with_status(401)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"error":"missing authorization header"}"#)
-        .create();
-
-    let client = create_client(&server);
-    let result = client.get("/api/v1/tokens");
-
-    mock.assert();
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("missing authorization header"));
-}
-
-#[test]
-fn test_list_operations_formats_parameters() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[{
-                "Name": "do_thing",
-                "Description": "Does a thing",
-                "Method": "POST",
-                "Parameters": [
-                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"},
-                    {"Name": "mode", "Type": "string", "Required": false, "Default": null, "Description": "Mode"}
-                ]
-            }]"#,
-        )
-        .create();
-
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_list_operations_json_format() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[{
-                "Name": "do_thing",
-                "Description": "Does a thing",
-                "Method": "POST",
-                "Parameters": [
-                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"}
-                ]
-            }]"#,
-        )
-        .create();
-
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Json);
-    std::env::remove_var("GESTALT_API_KEY");
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_list_operations_empty_parameters() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"Name": "list_items", "Description": "Lists items", "Method": "GET", "Parameters": []}]"#)
-        .create();
-
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_start_oauth() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/auth/start-oauth")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-        .create();
-
-    let client = create_client(&server);
-    let body = serde_json::json!({"integration": "github"});
-    let resp = client.post("/api/v1/auth/start-oauth", &body).unwrap();
-
-    mock.assert();
-    assert_eq!(resp["url"], "https://example.com/oauth");
-    assert_eq!(resp["state"], "abc123");
+    let project_config =
+        fs::read_to_string(project_dir.join(".gestalt.json")).expect("read project config");
+    assert!(
+        project_config.contains(&server.base_url),
+        "project config should contain configured url"
+    );
 }

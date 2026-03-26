@@ -200,20 +200,3 @@ impl ApiClient {
         serde_json::from_str(&body).context("failed to parse response JSON")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_client_creation() {
-        let client = ApiClient::new("http://localhost:8080", "test-token");
-        assert!(client.is_ok());
-    }
-
-    #[test]
-    fn test_base_url_trailing_slash() {
-        let client = ApiClient::new("http://localhost:8080/", "test-token").unwrap();
-        assert_eq!(client.base_url, "http://localhost:8080");
-    }
-}
