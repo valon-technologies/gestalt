@@ -75,7 +75,7 @@ Key points:
 - The `bindings.proxy` section declares zero providers. This is the providerless proxy mode.
 - `egress.default_action: deny` blocks all outbound traffic except hosts explicitly allowed.
 - Each credential grant uses `secret_ref` to pull a secret at request time and `auth_style: bearer` to inject it as a `Bearer` token.
-- `admin_emails` grants the listed users access to the deny-rule and credential-grant admin APIs.
+- `admin_emails` grants the listed users access to the deny-rule and credential-grant admin APIs, and to global-scope egress client management.
 
 <Callout>
   `secret_ref` values are resolved at request time through the configured secret manager, not during config loading. This means the proxy always fetches the current secret value.
@@ -193,7 +193,7 @@ egress:
       auth_style: bearer
 ```
 
-The credential source chain evaluates config grants first, then saved DB grants. Within each source, the first matching grant wins.
+The credential grant resolver evaluates saved DB grants before config grants, so operator-managed state overrides bootstrap defaults. Within each source, the first matching grant wins.
 
 ## Startup
 

@@ -10,9 +10,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/egress"
-	"github.com/valon-technologies/gestalt/internal/integration"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
@@ -207,7 +207,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 
 	prov := &catalogProvider{
 		StubIntegration: coretesting.StubIntegration{N: "linear"},
-		ops:             integration.OperationsList(cat),
+		ops:             coreintegration.OperationsList(cat),
 		catalog:         cat,
 	}
 
@@ -585,7 +585,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 
 	prov := &catalogProvider{
 		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             integration.OperationsList(cat),
+		ops:             coreintegration.OperationsList(cat),
 		catalog:         cat,
 	}
 
@@ -1042,7 +1042,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 
 			prov := &catalogProvider{
 				StubIntegration: coretesting.StubIntegration{N: "acme"},
-				ops:             integration.OperationsList(cat),
+				ops:             coreintegration.OperationsList(cat),
 				catalog:         cat,
 			}
 

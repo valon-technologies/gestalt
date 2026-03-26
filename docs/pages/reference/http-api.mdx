@@ -70,12 +70,12 @@ In dev mode only:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/egress-clients` | Create an egress client. |
-| `GET` | `/api/v1/egress-clients` | List egress clients. |
-| `DELETE` | `/api/v1/egress-clients/{id}` | Delete an egress client. |
-| `POST` | `/api/v1/egress-clients/{id}/tokens` | Create an egress client token. |
-| `GET` | `/api/v1/egress-clients/{id}/tokens` | List egress client tokens. |
-| `DELETE` | `/api/v1/egress-clients/{id}/tokens/{tokenID}` | Revoke an egress client token. |
+| `POST` | `/api/v1/egress-clients` | Create a personal egress client, or a global one when the caller is an admin and sends `scope: "global"`. |
+| `GET` | `/api/v1/egress-clients` | List visible egress clients. Admins can also filter `scope=global` or view their personal plus all global clients by default. |
+| `DELETE` | `/api/v1/egress-clients/{id}` | Delete an authorized egress client. Personal clients are creator-managed; global clients are admin-managed. |
+| `POST` | `/api/v1/egress-clients/{id}/tokens` | Create a token for an authorized egress client. |
+| `GET` | `/api/v1/egress-clients/{id}/tokens` | List tokens for an authorized egress client. |
+| `DELETE` | `/api/v1/egress-clients/{id}/tokens/{tokenID}` | Revoke a token for an authorized egress client. |
 
 ### Runtime And Binding Discovery
 
@@ -93,6 +93,11 @@ These routes require a logged-in or token-authenticated user whose email appears
 | `POST` | `/api/v1/egress/deny-rules` | Create an egress deny rule. |
 | `GET` | `/api/v1/egress/deny-rules` | List egress deny rules. |
 | `DELETE` | `/api/v1/egress/deny-rules/{id}` | Delete an egress deny rule. |
+| `POST` | `/api/v1/egress/credential-grants` | Create an egress credential grant. |
+| `GET` | `/api/v1/egress/credential-grants` | List egress credential grants. |
+| `DELETE` | `/api/v1/egress/credential-grants/{id}` | Delete an egress credential grant. |
+
+The same `server.admin_emails` gate also controls global-scope egress client creation, listing, deletion, and token management through the regular `/api/v1/egress-clients` routes.
 
 ## Dynamic Binding Routes
 
