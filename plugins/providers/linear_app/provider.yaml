@@ -1,0 +1,567 @@
+provider: linear_app
+display_name: Linear (App)
+description: Linear issue tracking and project management via API key
+connection_mode: identity
+base_url: "https://api.linear.app/graphql"
+manual_auth: true
+
+auth:
+  type: manual
+
+operations:
+  list_teams:
+    description: List all Linear teams
+    transport: graphql
+    query: |
+      query ListTeams {
+        teams {
+          nodes {
+            id
+            name
+            key
+            description
+            private
+            timezone
+          }
+        }
+      }
+
+  list_users:
+    description: List all Linear users in the organization
+    transport: graphql
+    query: |
+      query ListUsers($includeDisabled: Boolean, $first: Int, $after: String) {
+        users(includeDisabled: $includeDisabled, first: $first, after: $after) {
+          nodes {
+            id
+            name
+            displayName
+            email
+            active
+            admin
+            avatarUrl
+            createdAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    parameters:
+      - {name: includeDisabled, type: boolean, description: "Include disabled/deactivated users"}
+      - {name: first, type: integer, description: "Results per page (max 100)"}
+      - {name: after, type: string, description: "Pagination cursor"}
+
+  get_current_user:
+    description: Get the current authenticated user's profile
+    transport: graphql
+    query: |
+      query GetCurrentUser {
+        viewer {
+          id
+          name
+          displayName
+          email
+          active
+          admin
+          avatarUrl
+          createdAt
+        }
+      }
+
+  list_issues:
+    description: List Linear issues with optional filtering
+    transport: graphql
+    query: |
+      query ListIssues($filter: IssueFilter, $first: Int, $after: String) {
+        issues(filter: $filter, first: $first, after: $after) {
+          nodes {
+            id
+            identifier
+            title
+            description
+            priority
+            priorityLabel
+            state {
+              id
+              name
+              color
+              type
+            }
+            assignee {
+              id
+              name
+              email
+            }
+            team {
+              id
+              name
+              key
+            }
+            project {
+              id
+              name
+            }
+            labels {
+              nodes {
+                id
+                name
+                color
+              }
+            }
+            createdAt
+            updatedAt
+            completedAt
+            url
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    parameters:
+      - {name: filter, type: object, description: "Issue filter object"}
+      - {name: first, type: integer, description: "Results per page (max 100)"}
+      - {name: after, type: string, description: "Pagination cursor"}
+
+  get_issue:
+    description: Get a single Linear issue by ID
+    transport: graphql
+    query: |
+      query GetIssue($id: String!) {
+        issue(id: $id) {
+          id
+          identifier
+          title
+          description
+          priority
+          priorityLabel
+          estimate
+          state {
+            id
+            name
+            color
+            type
+          }
+          assignee {
+            id
+            name
+            email
+          }
+          creator {
+            id
+            name
+            email
+          }
+          team {
+            id
+            name
+            key
+          }
+          project {
+            id
+            name
+          }
+          labels {
+            nodes {
+              id
+              name
+              color
+            }
+          }
+          comments {
+            nodes {
+              id
+              body
+              createdAt
+              user {
+                id
+                name
+              }
+            }
+          }
+          attachments {
+            nodes {
+              id
+              title
+              url
+            }
+          }
+          createdAt
+          updatedAt
+          completedAt
+          canceledAt
+          archivedAt
+          url
+        }
+      }
+    parameters:
+      - {name: id, type: string, required: true, description: "Issue ID"}
+
+  search_issues:
+    description: Search Linear issues by query string
+    transport: graphql
+    query: |
+      query SearchIssues($term: String!, $first: Int) {
+        searchIssues(term: $term, first: $first) {
+          nodes {
+            id
+            identifier
+            title
+            description
+            priority
+            priorityLabel
+            state {
+              id
+              name
+              color
+            }
+            assignee {
+              id
+              name
+            }
+            team {
+              id
+              name
+              key
+            }
+            createdAt
+            updatedAt
+            url
+          }
+        }
+      }
+    parameters:
+      - {name: term, type: string, required: true, description: "Search query string"}
+      - {name: first, type: integer, description: "Results per page (max 100)"}
+
+  create_issue:
+    description: Create a new Linear issue
+    transport: graphql
+    query: |
+      mutation CreateIssue($input: IssueCreateInput!) {
+        issueCreate(input: $input) {
+          success
+          issue {
+            id
+            identifier
+            title
+            description
+            priority
+            priorityLabel
+            state {
+              id
+              name
+            }
+            assignee {
+              id
+              name
+            }
+            team {
+              id
+              name
+              key
+            }
+            project {
+              id
+              name
+            }
+            createdAt
+            url
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Issue create input"}
+
+  update_issue:
+    description: Update an existing Linear issue
+    transport: graphql
+    query: |
+      mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
+        issueUpdate(id: $id, input: $input) {
+          success
+          issue {
+            id
+            identifier
+            title
+            description
+            priority
+            priorityLabel
+            state {
+              id
+              name
+            }
+            assignee {
+              id
+              name
+            }
+            team {
+              id
+              name
+              key
+            }
+            project {
+              id
+              name
+            }
+            updatedAt
+            url
+          }
+        }
+      }
+    parameters:
+      - {name: id, type: string, required: true, description: "Issue ID"}
+      - {name: input, type: object, required: true, description: "Issue update input"}
+
+  create_comment:
+    description: Create a comment on a Linear issue
+    transport: graphql
+    query: |
+      mutation CreateComment($input: CommentCreateInput!) {
+        commentCreate(input: $input) {
+          success
+          comment {
+            id
+            body
+            createdAt
+            user {
+              id
+              name
+              email
+            }
+            issue {
+              id
+              identifier
+              title
+            }
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Comment create input"}
+
+  list_projects:
+    description: List Linear projects
+    transport: graphql
+    query: |
+      query ListProjects($filter: ProjectFilter, $first: Int, $after: String) {
+        projects(filter: $filter, first: $first, after: $after) {
+          nodes {
+            id
+            name
+            description
+            icon
+            color
+            state
+            progress
+            startDate
+            targetDate
+            lead {
+              id
+              name
+            }
+            teams {
+              nodes {
+                id
+                name
+                key
+              }
+            }
+            createdAt
+            updatedAt
+            url
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    parameters:
+      - {name: filter, type: object, description: "Project filter object"}
+      - {name: first, type: integer, description: "Results per page (max 100)"}
+      - {name: after, type: string, description: "Pagination cursor"}
+
+  create_project:
+    description: Create a new Linear project
+    transport: graphql
+    query: |
+      mutation CreateProject($input: ProjectCreateInput!) {
+        projectCreate(input: $input) {
+          success
+          project {
+            id
+            name
+            description
+            icon
+            color
+            state
+            progress
+            startDate
+            targetDate
+            lead {
+              id
+              name
+            }
+            teams {
+              nodes {
+                id
+                name
+                key
+              }
+            }
+            createdAt
+            url
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Project create input"}
+
+  list_workflow_states:
+    description: List workflow states for teams
+    transport: graphql
+    query: |
+      query ListWorkflowStates($filter: WorkflowStateFilter) {
+        workflowStates(filter: $filter) {
+          nodes {
+            id
+            name
+            color
+            type
+            position
+            description
+            team {
+              id
+              name
+              key
+            }
+          }
+        }
+      }
+    parameters:
+      - {name: filter, type: object, description: "Workflow state filter object"}
+
+  create_issue_label:
+    description: Create a new issue label
+    transport: graphql
+    query: |
+      mutation CreateIssueLabel($input: IssueLabelCreateInput!) {
+        issueLabelCreate(input: $input) {
+          success
+          issueLabel {
+            id
+            name
+            color
+            description
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Label create input"}
+
+  create_milestone:
+    description: Create a project milestone
+    transport: graphql
+    query: |
+      mutation CreateMilestone($input: ProjectMilestoneCreateInput!) {
+        projectMilestoneCreate(input: $input) {
+          success
+          projectMilestone {
+            id
+            name
+            description
+            targetDate
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Milestone create input"}
+
+  update_milestone:
+    description: Update a project milestone
+    transport: graphql
+    query: |
+      mutation UpdateMilestone($id: String!, $input: ProjectMilestoneUpdateInput!) {
+        projectMilestoneUpdate(id: $id, input: $input) {
+          success
+          projectMilestone {
+            id
+            name
+            description
+            targetDate
+          }
+        }
+      }
+    parameters:
+      - {name: id, type: string, required: true, description: "Milestone ID"}
+      - {name: input, type: object, required: true, description: "Milestone update input"}
+
+  create_initiative:
+    description: Create a new initiative
+    transport: graphql
+    query: |
+      mutation CreateInitiative($input: InitiativeCreateInput!) {
+        initiativeCreate(input: $input) {
+          success
+          initiative {
+            id
+            name
+            description
+            status
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Initiative create input"}
+
+  update_initiative:
+    description: Update an initiative
+    transport: graphql
+    query: |
+      mutation UpdateInitiative($id: String!, $input: InitiativeUpdateInput!) {
+        initiativeUpdate(id: $id, input: $input) {
+          success
+          initiative {
+            id
+            name
+            description
+            status
+          }
+        }
+      }
+    parameters:
+      - {name: id, type: string, required: true, description: "Initiative ID"}
+      - {name: input, type: object, required: true, description: "Initiative update input"}
+
+  save_status_update:
+    description: Create a project status update
+    transport: graphql
+    query: |
+      mutation CreateProjectUpdate($input: ProjectUpdateCreateInput!) {
+        projectUpdateCreate(input: $input) {
+          success
+          projectUpdate {
+            id
+            body
+            health
+          }
+        }
+      }
+    parameters:
+      - {name: input, type: object, required: true, description: "Status update create input"}
+
+  delete_status_update:
+    description: Delete a project status update
+    transport: graphql
+    query: |
+      mutation DeleteProjectUpdate($id: String!) {
+        projectUpdateDelete(id: $id) {
+          success
+        }
+      }
+    parameters:
+      - {name: id, type: string, required: true, description: "Status update ID"}
