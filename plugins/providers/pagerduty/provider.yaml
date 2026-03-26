@@ -1,0 +1,105 @@
+provider: pagerduty
+display_name: PagerDuty
+description: Incident management, on-call scheduling, and alerting
+connection_mode: user
+base_url: "https://api.pagerduty.com"
+
+auth:
+  type: manual
+
+token_prefix: "Token token="
+
+operations:
+  list_incidents:
+    description: List incidents
+    method: GET
+    path: /incidents
+    parameters:
+      - {name: "statuses[]", type: string, description: "Filter by status (triggered, acknowledged, resolved)"}
+      - {name: "service_ids[]", type: string, description: Filter by service IDs}
+      - {name: since, type: string, description: Start date (ISO 8601)}
+      - {name: until, type: string, description: End date (ISO 8601)}
+      - {name: limit, type: integer, description: Results per page}
+      - {name: offset, type: integer, description: Pagination offset}
+  get_incident:
+    description: Get a specific incident
+    method: GET
+    path: "/incidents/{incident_id}"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+  create_incident:
+    description: Create a new incident
+    method: POST
+    path: /incidents
+    parameters:
+      - {name: incident, type: object, required: true, description: Incident payload}
+  acknowledge_incident:
+    description: Acknowledge an incident
+    method: PUT
+    path: "/incidents/{incident_id}"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: incident, type: object, required: true, description: Incident update payload}
+  resolve_incident:
+    description: Resolve an incident
+    method: PUT
+    path: "/incidents/{incident_id}"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: incident, type: object, required: true, description: Incident update payload}
+  reassign_incident:
+    description: Reassign an incident to different users
+    method: PUT
+    path: "/incidents/{incident_id}"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: incident, type: object, required: true, description: Incident update payload with assignments}
+  snooze_incident:
+    description: Snooze an incident for a specified duration
+    method: POST
+    path: "/incidents/{incident_id}/snooze"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: duration, type: integer, required: true, description: Snooze duration in seconds}
+  add_note:
+    description: Add a note to an incident
+    method: POST
+    path: "/incidents/{incident_id}/notes"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: note, type: object, required: true, description: Note payload with content field}
+  list_services:
+    description: List services
+    method: GET
+    path: /services
+    parameters:
+      - {name: query, type: string, description: Filter by name}
+      - {name: "team_ids[]", type: string, description: Filter by team IDs}
+      - {name: limit, type: integer, description: Results per page}
+      - {name: offset, type: integer, description: Pagination offset}
+  get_service:
+    description: Get a specific service
+    method: GET
+    path: "/services/{service_id}"
+    parameters:
+      - {name: service_id, type: string, required: true, description: Service ID}
+  get_on_calls:
+    description: Get current on-call users
+    method: GET
+    path: /oncalls
+    parameters:
+      - {name: "schedule_ids[]", type: string, description: Filter by schedule IDs}
+      - {name: "escalation_policy_ids[]", type: string, description: Filter by escalation policy IDs}
+      - {name: since, type: string, description: Start time (ISO 8601)}
+      - {name: until, type: string, description: End time (ISO 8601)}
+      - {name: limit, type: integer, description: Results per page}
+      - {name: offset, type: integer, description: Pagination offset}
+  list_users:
+    description: List users
+    method: GET
+    path: /users
+    parameters:
+      - {name: query, type: string, description: Filter by name or email}
+      - {name: "team_ids[]", type: string, description: Filter by team IDs}
+      - {name: limit, type: integer, description: Results per page}
+      - {name: offset, type: integer, description: Pagination offset}

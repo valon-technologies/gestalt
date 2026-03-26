@@ -1,0 +1,35 @@
+provider: launchdarkly
+display_name: LaunchDarkly
+description: Feature flag management and experimentation
+connection_mode: identity
+base_url: "https://app.launchdarkly.com/api/v2"
+
+auth:
+  type: manual
+
+auth_style: raw
+
+operations:
+  list_projects:
+    description: List projects
+    method: GET
+    path: /projects
+    parameters:
+      - {name: limit, type: integer, description: Max projects to return}
+      - {name: offset, type: integer, description: Pagination offset}
+  list_feature_flags:
+    description: List feature flags in a project
+    method: GET
+    path: "/flags/{project_key}"
+    parameters:
+      - {name: project_key, type: string, required: true, description: Project key}
+      - {name: limit, type: integer, description: Max flags to return}
+      - {name: offset, type: integer, description: Pagination offset}
+      - {name: filter, type: string, description: Filter flags by name or key}
+  get_feature_flag:
+    description: Get a specific feature flag
+    method: GET
+    path: "/flags/{project_key}/{flag_key}"
+    parameters:
+      - {name: project_key, type: string, required: true, description: Project key}
+      - {name: flag_key, type: string, required: true, description: Feature flag key}
