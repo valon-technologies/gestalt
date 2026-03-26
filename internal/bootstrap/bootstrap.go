@@ -70,6 +70,32 @@ type Result struct {
 	DevMode          bool
 }
 
+func (r *Result) Start(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	if err := startRuntimes(ctx, r.Runtimes); err != nil {
+		return err
+	}
+	if err := startBindings(ctx, r.Bindings, r.Runtimes); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Result) Close(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	return errors.Join(
+		CloseBindings(r.Bindings, bindingNames(r.Bindings)),
+		StopRuntimes(ctx, r.Runtimes, runtimeNames(r.Runtimes)),
+		CloseProviders(r.Providers),
+		closeDatastore(r.Datastore),
+		closeResultSecretManager(r.SecretManager),
+	)
+}
+
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
 	sm, err := buildSecretManager(cfg, factories)
 	if err != nil {
@@ -172,6 +198,91 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", cfg.Secrets.Provider, err)
 	}
 	return sm, nil
+}
+
+func startRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime]) error {
+	if runtimes == nil {
+		return nil
+	}
+
+	var started []string
+	for _, name := range runtimeNames(runtimes) {
+		rt, err := runtimes.Get(name)
+		if err != nil {
+			return errors.Join(
+				fmt.Errorf("getting runtime %q: %w", name, err),
+				StopRuntimes(ctx, runtimes, started),
+			)
+		}
+		if err := rt.Start(ctx); err != nil {
+			return errors.Join(
+				fmt.Errorf("starting runtime %q: %w", name, err),
+				stopRuntime(ctx, name, rt),
+				StopRuntimes(ctx, runtimes, started),
+			)
+		}
+		started = append(started, name)
+	}
+
+	return nil
+}
+
+func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Binding], runtimes *registry.PluginMap[core.Runtime]) error {
+	if bindings == nil {
+		return nil
+	}
+
+	var started []string
+	for _, name := range bindingNames(bindings) {
+		binding, err := bindings.Get(name)
+		if err != nil {
+			return errors.Join(
+				fmt.Errorf("getting binding %q: %w", name, err),
+				CloseBindings(bindings, started),
+				StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
+			)
+		}
+		if err := binding.Start(ctx); err != nil {
+			return errors.Join(
+				fmt.Errorf("starting binding %q: %w", name, err),
+				closeBinding(name, binding),
+				CloseBindings(bindings, started),
+				StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
+			)
+		}
+		started = append(started, name)
+	}
+
+	return nil
+}
+
+func closeDatastore(ds core.Datastore) error {
+	if ds == nil {
+		return nil
+	}
+	return ds.Close()
+}
+
+func closeResultSecretManager(sm core.SecretManager) error {
+	closer, ok := sm.(interface{ Close() error })
+	if !ok {
+		return nil
+	}
+	return closer.Close()
+}
+
+func stopRuntime(ctx context.Context, name string, rt core.Runtime) error {
+	if err := rt.Stop(ctx); err != nil {
+		return fmt.Errorf("stopping runtime %q: %w", name, err)
+	}
+	return nil
+}
+
+func closeBinding(name string, binding core.Binding) error {
+	if err := binding.Close(); err != nil {
+		return fmt.Errorf("closing binding %q: %w", name, err)
+	}
+	return nil
 }
 
 const secretPrefix = "secret://"

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
-	ci "github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
@@ -22,12 +21,12 @@ import (
 type BuildOption func(*buildOptions)
 
 type buildOptions struct {
-	authOverride ci.AuthHandler
+	authOverride integration.AuthHandler
 	egress       *egress.Resolver
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
-func WithAuthHandler(h ci.AuthHandler) BuildOption {
+func WithAuthHandler(h integration.AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
 }
 
@@ -54,7 +53,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	var auth ci.AuthHandler
+	var auth integration.AuthHandler
 	var err error
 	if bo.authOverride != nil {
 		auth = bo.authOverride
@@ -67,23 +66,23 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	cat := CatalogFromDefinition(def)
 	cat.BaseURL = baseURL
-	ci.CompileSchemas(cat)
+	integration.CompileSchemas(cat)
 
-	endpoints, err := ci.EndpointsMap(cat)
+	endpoints, err := integration.EndpointsMap(cat)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}
 
-	base := &ci.Base{
+	base := &integration.Base{
 		IntegrationName:    def.Provider,
 		IntegrationDisplay: def.DisplayName,
 		IntegrationDesc:    def.Description,
 		Auth:               auth,
 		BaseURL:            baseURL,
 		HTTPClient:         client,
-		Operations:         ci.OperationsList(cat),
+		Operations:         integration.OperationsList(cat),
 		Endpoints:          endpoints,
-		Queries:            ci.QueriesMap(cat),
+		Queries:            integration.QueriesMap(cat),
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
 		EgressResolver:     bo.egress,
@@ -105,11 +104,11 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	switch def.AuthStyle {
 	case "", "bearer":
 	case "raw":
-		base.AuthStyle = ci.AuthStyleRaw
+		base.AuthStyle = integration.AuthStyleRaw
 	case "none":
-		base.AuthStyle = ci.AuthStyleNone
+		base.AuthStyle = integration.AuthStyleNone
 	case "basic":
-		base.AuthStyle = ci.AuthStyleBasic
+		base.AuthStyle = integration.AuthStyleBasic
 	default:
 		return nil, fmt.Errorf("%s: unknown auth_style %q", def.Provider, def.AuthStyle)
 	}
@@ -315,7 +314,7 @@ func setStr(dst *string, val string) {
 	}
 }
 
-func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, client *http.Client) (ci.AuthHandler, error) {
+func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, client *http.Client) (integration.AuthHandler, error) {
 	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
 		return oauth.ManualAuthHandler{}, nil
 	}
@@ -376,7 +375,7 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	}
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
-	return ci.UpstreamAuth{Handler: upstream}, nil
+	return integration.UpstreamAuth{Handler: upstream}, nil
 }
 
 func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
