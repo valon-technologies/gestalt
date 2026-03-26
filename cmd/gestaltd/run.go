@@ -105,7 +105,7 @@ func runServer(env *bootstrapEnv) error {
 
 	var mcpProviders []string
 	mcpPrefixes := make(map[string]string)
-	includeHTTP := make(map[string]bool)
+	includeREST := make(map[string]bool)
 	for name := range env.Config.Integrations {
 		intg := env.Config.Integrations[name]
 		hasMCP := false
@@ -122,7 +122,7 @@ func runServer(env *bootstrapEnv) error {
 		}
 		if hasMCP {
 			mcpProviders = append(mcpProviders, name)
-			includeHTTP[name] = apiMCP
+			includeREST[name] = apiMCP
 			if intg.MCPToolPrefix != "" {
 				mcpPrefixes[name] = intg.MCPToolPrefix
 			}
@@ -217,7 +217,7 @@ func runServer(env *bootstrapEnv) error {
 			Providers:        result.Providers,
 			AllowedProviders: mcpProviders,
 			ToolPrefixes:     mcpPrefixes,
-			IncludeHTTP:      includeHTTP,
+			IncludeREST:      includeREST,
 		}
 		mcpSlot.Set(mcpserver.NewStreamableHTTPServer(
 			gestaltmcp.NewServer(mcpCfg),

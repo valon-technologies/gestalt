@@ -18,7 +18,7 @@ type MCPUpstream interface {
 	Close() error
 }
 
-// Provider wraps an HTTP API provider and an MCP upstream for a single
+// Provider wraps a REST-backed API provider and an MCP upstream for a single
 // integration. Execute goes to the API; CallTool goes to the upstream.
 type Provider struct {
 	name string
@@ -121,7 +121,7 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 		return tagMCPCatalog(mcpCat)
 	}
 	if mcpCat == nil {
-		return tagHTTPCatalog(apiCat)
+		return tagRESTCatalog(apiCat)
 	}
 
 	merged := &catalog.Catalog{
@@ -137,16 +137,16 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 	}
 	for i := range apiCat.Operations {
 		op := apiCat.Operations[i]
-		op.Transport = catalog.TransportHTTP
+		op.Transport = catalog.TransportREST
 		merged.Operations = append(merged.Operations, op)
 	}
 	return merged
 }
 
-func tagHTTPCatalog(src *catalog.Catalog) *catalog.Catalog {
+func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
 	out := src.Clone()
 	for i := range out.Operations {
-		out.Operations[i].Transport = catalog.TransportHTTP
+		out.Operations[i].Transport = catalog.TransportREST
 	}
 	return out
 }
