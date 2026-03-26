@@ -86,18 +86,7 @@ In dev mode only:
 
 ## Admin-Only Routes
 
-These routes require a logged-in or token-authenticated user whose email appears in `server.admin_emails`.
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/v1/egress/deny-rules` | Create an egress deny rule. |
-| `GET` | `/api/v1/egress/deny-rules` | List egress deny rules. |
-| `DELETE` | `/api/v1/egress/deny-rules/{id}` | Delete an egress deny rule. |
-| `POST` | `/api/v1/egress/credential-grants` | Create an egress credential grant. |
-| `GET` | `/api/v1/egress/credential-grants` | List egress credential grants. |
-| `DELETE` | `/api/v1/egress/credential-grants/{id}` | Delete an egress credential grant. |
-
-The same `server.admin_emails` gate also controls global-scope egress client creation, listing, deletion, and token management through the regular `/api/v1/egress-clients` routes.
+The `server.admin_emails` gate controls global-scope egress client creation, listing, deletion, and token management through the regular `/api/v1/egress-clients` routes.
 
 ## Dynamic Binding Routes
 

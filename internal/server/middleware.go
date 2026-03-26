@@ -10,8 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
-const adminForbiddenMessage = "forbidden"
-
 type contextKey string
 
 const (
@@ -103,16 +101,6 @@ func (s *Server) isAdmin(p *principal.Principal) bool {
 	}
 	_, ok := s.adminEmails[strings.ToLower(p.Identity.Email)]
 	return ok
-}
-
-func (s *Server) adminMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAdmin(principal.FromContext(r.Context())) {
-			writeError(w, http.StatusForbidden, adminForbiddenMessage)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {

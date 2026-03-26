@@ -158,7 +158,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	deps.Egress = newEgressDeps(cfg, ds)
+	deps.Egress = newEgressDeps(cfg)
 
 	// Expose the underlying *sql.DB and dialect for optional use by
 	// provider factories (e.g. MCP OAuth registration storage).
@@ -184,7 +184,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	sharedInvoker := invocation.NewBroker(providers, ds)
-	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds, sm)
+	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
 	extensions, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
