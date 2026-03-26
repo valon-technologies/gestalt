@@ -1,0 +1,439 @@
+provider: github
+display_name: GitHub
+description: GitHub code hosting and collaboration platform
+connection_mode: user
+base_url: "https://api.github.com"
+
+headers:
+  Accept: "application/vnd.github+json"
+  X-GitHub-Api-Version: "2022-11-28"
+
+auth:
+  type: oauth2
+  authorization_url: https://github.com/login/oauth/authorize
+  token_url: https://github.com/login/oauth/access_token
+  scopes: [repo]
+  accept_header: application/json
+
+operations:
+  compare_commits:
+    description: Compare two commits
+    method: GET
+    path: "/repos/{owner}/{repo}/compare/{basehead}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: basehead, type: string, required: true, description: "Base and head in format base...head"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  create_branch:
+    description: Create a new branch
+    method: POST
+    path: "/repos/{owner}/{repo}/git/refs"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: ref, type: string, required: true, description: "Full ref name (e.g. refs/heads/my-branch)"}
+      - {name: sha, type: string, required: true, description: SHA to create the branch from}
+
+  create_comment:
+    description: Create a comment on an issue or pull request
+    method: POST
+    path: "/repos/{owner}/{repo}/issues/{issue_number}/comments"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: issue_number, type: integer, required: true, description: Issue or PR number}
+      - {name: body, type: string, required: true, description: Comment body}
+
+  create_issue:
+    description: Create a new issue
+    method: POST
+    path: "/repos/{owner}/{repo}/issues"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: title, type: string, required: true, description: Issue title}
+      - {name: body, type: string, description: Issue body}
+      - {name: labels, type: array, description: Labels to add}
+      - {name: assignees, type: array, description: Assignees (usernames)}
+      - {name: milestone, type: integer, description: Milestone number}
+
+  create_or_update_file:
+    description: Create or update a file in a repository
+    method: PUT
+    path: "/repos/{owner}/{repo}/contents/{path}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: path, type: string, required: true, description: Path to the file}
+      - {name: message, type: string, required: true, description: Commit message}
+      - {name: content, type: string, required: true, description: Base64-encoded file content}
+      - {name: sha, type: string, description: SHA of the file being replaced (required for updates)}
+      - {name: branch, type: string, description: Branch to commit to}
+      - {name: committer, type: object, description: Committer info (name and email)}
+
+  create_pull_request:
+    description: Create a pull request
+    method: POST
+    path: "/repos/{owner}/{repo}/pulls"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: title, type: string, required: true, description: PR title}
+      - {name: head, type: string, required: true, description: Head branch}
+      - {name: base, type: string, required: true, description: Base branch}
+      - {name: body, type: string, description: PR body}
+      - {name: draft, type: boolean, description: Create as draft}
+      - {name: maintainer_can_modify, type: boolean, description: Allow maintainer edits}
+
+  create_release:
+    description: Create a release
+    method: POST
+    path: "/repos/{owner}/{repo}/releases"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: tag_name, type: string, required: true, description: Tag name for the release}
+      - {name: target_commitish, type: string, description: Commitish value for the tag}
+      - {name: name, type: string, description: Release name}
+      - {name: body, type: string, description: Release notes}
+      - {name: draft, type: boolean, description: Create as draft release}
+      - {name: prerelease, type: boolean, description: Mark as pre-release}
+      - {name: generate_release_notes, type: boolean, description: Auto-generate release notes}
+
+  create_review:
+    description: Create a pull request review
+    method: POST
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: event, type: string, required: true, description: "Review action: APPROVE, REQUEST_CHANGES, or COMMENT"}
+      - {name: body, type: string, description: Review body}
+      - {name: commit_id, type: string, description: SHA of commit to review}
+      - {name: comments, type: array, description: Review comments with path and body}
+
+  create_review_comment:
+    description: Create an inline review comment on a pull request
+    method: POST
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}/comments"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: body, type: string, required: true, description: Comment body}
+      - {name: commit_id, type: string, required: true, description: SHA of the commit to comment on}
+      - {name: path, type: string, required: true, description: Relative path of the file}
+      - {name: line, type: integer, description: Line number in the diff}
+      - {name: side, type: string, description: "Which side of the diff: LEFT or RIGHT"}
+      - {name: start_line, type: integer, description: Start line for multi-line comments}
+      - {name: start_side, type: string, description: "Start side: LEFT or RIGHT"}
+
+  delete_file:
+    description: Delete a file from a repository
+    method: DELETE
+    path: "/repos/{owner}/{repo}/contents/{path}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: path, type: string, required: true, description: Path to the file}
+      - {name: message, type: string, required: true, description: Commit message}
+      - {name: sha, type: string, required: true, description: SHA of the file to delete}
+      - {name: branch, type: string, description: Branch to delete from}
+
+  get_authenticated_user:
+    description: Get the authenticated user
+    method: GET
+    path: /user
+    parameters: []
+
+  get_commit:
+    description: Get a commit by ref
+    method: GET
+    path: "/repos/{owner}/{repo}/commits/{ref}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: ref, type: string, required: true, description: "Commit SHA, branch name, or tag name"}
+
+  get_file_contents:
+    description: Get file or directory contents
+    method: GET
+    path: "/repos/{owner}/{repo}/contents/{path}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: path, type: string, required: true, description: Path to file or directory}
+      - {name: ref, type: string, description: "Git ref (branch, tag, or commit SHA)"}
+
+  get_latest_release:
+    description: Get the latest release
+    method: GET
+    path: "/repos/{owner}/{repo}/releases/latest"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+
+  get_pull_request:
+    description: Get a pull request
+    method: GET
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+
+  get_ref:
+    description: Get a git reference
+    method: GET
+    path: "/repos/{owner}/{repo}/git/ref/{ref}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: ref, type: string, required: true, description: "The ref (e.g. heads/main or tags/v1.0)"}
+
+  get_workflow_run:
+    description: Get a workflow run
+    method: GET
+    path: "/repos/{owner}/{repo}/actions/runs/{run_id}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: run_id, type: integer, required: true, description: Workflow run ID}
+
+  list_branches:
+    description: List branches
+    method: GET
+    path: "/repos/{owner}/{repo}/branches"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: protected, type: boolean, description: Filter by protected status}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_check_runs:
+    description: List check runs for a git reference
+    method: GET
+    path: "/repos/{owner}/{repo}/commits/{ref}/check-runs"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: ref, type: string, required: true, description: "Git ref (SHA, branch name, or tag name)"}
+      - {name: check_name, type: string, description: Filter by check name}
+      - {name: status, type: string, description: "Filter by status: queued, in_progress, completed"}
+      - {name: filter, type: string, description: "Filter: latest or all"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_comments:
+    description: List comments on an issue or pull request
+    method: GET
+    path: "/repos/{owner}/{repo}/issues/{issue_number}/comments"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: issue_number, type: integer, required: true, description: Issue or PR number}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_commits:
+    description: List commits
+    method: GET
+    path: "/repos/{owner}/{repo}/commits"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: sha, type: string, description: SHA or branch to list commits from}
+      - {name: path, type: string, description: Only commits containing this file path}
+      - {name: author, type: string, description: Filter by author username or email}
+      - {name: since, type: string, description: Only commits after this date (ISO 8601)}
+      - {name: until, type: string, description: Only commits before this date (ISO 8601)}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_issues:
+    description: List issues for a repository
+    method: GET
+    path: "/repos/{owner}/{repo}/issues"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: state, type: string, description: "Filter by state (open, closed, all)"}
+      - {name: labels, type: string, description: Filter by labels (comma-separated)}
+      - {name: sort, type: string, description: "Sort by (created, updated, comments)"}
+      - {name: direction, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_pull_requests:
+    description: List pull requests
+    method: GET
+    path: "/repos/{owner}/{repo}/pulls"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: state, type: string, description: "Filter by state (open, closed, all)"}
+      - {name: head, type: string, description: "Filter by head branch (format: user:ref-name)"}
+      - {name: base, type: string, description: Filter by base branch}
+      - {name: sort, type: string, description: "Sort by (created, updated, popularity, long-running)"}
+      - {name: direction, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_releases:
+    description: List releases
+    method: GET
+    path: "/repos/{owner}/{repo}/releases"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_repos:
+    description: List repositories for the authenticated user
+    method: GET
+    path: /user/repos
+    parameters:
+      - {name: visibility, type: string, description: "Filter by visibility (all, public, private)"}
+      - {name: affiliation, type: string, description: "Filter by affiliation (owner, collaborator, organization_member)"}
+      - {name: sort, type: string, description: "Sort by (created, updated, pushed, full_name)"}
+      - {name: direction, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_review_comments:
+    description: List review comments on a pull request
+    method: GET
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}/comments"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: sort, type: string, description: "Sort by: created or updated"}
+      - {name: direction, type: string, description: "Sort direction: asc or desc"}
+      - {name: since, type: string, description: Only comments after this date (ISO 8601)}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_reviews:
+    description: List reviews on a pull request
+    method: GET
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_user_orgs:
+    description: List organizations for the authenticated user
+    method: GET
+    path: /user/orgs
+    parameters:
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_workflow_runs:
+    description: List workflow runs
+    method: GET
+    path: "/repos/{owner}/{repo}/actions/runs"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: actor, type: string, description: Filter by user who triggered the run}
+      - {name: branch, type: string, description: Filter by branch}
+      - {name: event, type: string, description: "Filter by event type (push, pull_request, etc.)"}
+      - {name: status, type: string, description: "Filter by status (queued, in_progress, completed, etc.)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  merge_pull_request:
+    description: Merge a pull request
+    method: PUT
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}/merge"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: commit_title, type: string, description: Title for the merge commit}
+      - {name: commit_message, type: string, description: Message for the merge commit}
+      - {name: merge_method, type: string, description: "Merge method (merge, squash, or rebase)"}
+      - {name: sha, type: string, description: SHA that PR head must match}
+
+  rerun_workflow:
+    description: Re-run a workflow
+    method: POST
+    path: "/repos/{owner}/{repo}/actions/runs/{run_id}/rerun"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: run_id, type: integer, required: true, description: Workflow run ID}
+      - {name: enable_debug_logging, type: boolean, description: Enable debug logging for the re-run}
+
+  search_code:
+    description: Search code
+    method: GET
+    path: /search/code
+    parameters:
+      - {name: q, type: string, required: true, description: Search query}
+      - {name: sort, type: string, description: "Sort by: indexed"}
+      - {name: order, type: string, description: "Sort order: asc or desc"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  search_issues:
+    description: Search issues and pull requests
+    method: GET
+    path: /search/issues
+    parameters:
+      - {name: q, type: string, required: true, description: Search query}
+      - {name: sort, type: string, description: "Sort by: comments, reactions, created, updated, etc."}
+      - {name: order, type: string, description: "Sort order: asc or desc"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  search_repos:
+    description: Search repositories
+    method: GET
+    path: /search/repositories
+    parameters:
+      - {name: q, type: string, required: true, description: Search query}
+      - {name: sort, type: string, description: "Sort by: stars, forks, help-wanted-issues, updated"}
+      - {name: order, type: string, description: "Sort order: asc or desc"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  update_issue:
+    description: Update an issue
+    method: PATCH
+    path: "/repos/{owner}/{repo}/issues/{issue_number}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: issue_number, type: integer, required: true, description: Issue number}
+      - {name: title, type: string, description: New title}
+      - {name: body, type: string, description: New body}
+      - {name: state, type: string, description: "New state (open or closed)"}
+      - {name: labels, type: array, description: Labels}
+      - {name: assignees, type: array, description: Assignees (usernames)}
+      - {name: milestone, type: integer, description: Milestone number}
+
+  update_pull_request:
+    description: Update a pull request
+    method: PATCH
+    path: "/repos/{owner}/{repo}/pulls/{pull_number}"
+    parameters:
+      - {name: owner, type: string, required: true, description: Repository owner}
+      - {name: repo, type: string, required: true, description: Repository name}
+      - {name: pull_number, type: integer, required: true, description: Pull request number}
+      - {name: title, type: string, description: New title}
+      - {name: body, type: string, description: New body}
+      - {name: state, type: string, description: "New state (open or closed)"}
+      - {name: base, type: string, description: New base branch}
+      - {name: maintainer_can_modify, type: boolean, description: Allow maintainer edits}

@@ -1,0 +1,242 @@
+provider: gitlab
+display_name: GitLab
+description: GitLab code hosting and CI/CD platform
+connection_mode: user
+base_url: "https://gitlab.com/api/v4"
+
+auth:
+  type: oauth2
+  authorization_url: https://gitlab.com/oauth/authorize
+  token_url: https://gitlab.com/oauth/token
+  scopes: [api]
+  pkce: true
+
+operations:
+  create_issue:
+    description: Create a new issue
+    method: POST
+    path: "/projects/{project_id}/issues"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: title, type: string, required: true, description: Issue title}
+      - {name: description, type: string, description: Issue description}
+      - {name: labels, type: string, description: Labels (comma-separated)}
+      - {name: assignee_ids, type: array, description: Assignee user IDs}
+      - {name: milestone_id, type: integer, description: Milestone ID}
+      - {name: due_date, type: string, description: Due date (YYYY-MM-DD)}
+
+  create_issue_note:
+    description: Create a comment on an issue
+    method: POST
+    path: "/projects/{project_id}/issues/{issue_iid}/notes"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: issue_iid, type: integer, required: true, description: Issue IID}
+      - {name: body, type: string, required: true, description: Note body text}
+
+  create_merge_request:
+    description: Create a merge request
+    method: POST
+    path: "/projects/{project_id}/merge_requests"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: source_branch, type: string, required: true, description: Source branch name}
+      - {name: target_branch, type: string, required: true, description: Target branch name}
+      - {name: title, type: string, required: true, description: Merge request title}
+      - {name: description, type: string, description: Merge request description}
+      - {name: labels, type: string, description: Labels (comma-separated)}
+      - {name: assignee_id, type: integer, description: Assignee user ID}
+      - {name: reviewer_ids, type: array, description: Reviewer user IDs}
+      - {name: remove_source_branch, type: boolean, description: Remove source branch on merge}
+
+  create_mr_note:
+    description: Create a comment on a merge request
+    method: POST
+    path: "/projects/{project_id}/merge_requests/{merge_request_iid}/notes"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: merge_request_iid, type: integer, required: true, description: Merge request IID}
+      - {name: body, type: string, required: true, description: Note body text}
+
+  create_file:
+    description: Create a new file in a repository
+    method: POST
+    path: "/projects/{project_id}/repository/files/{file_path}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: file_path, type: string, required: true, description: Path to the file in the repository}
+      - {name: branch, type: string, required: true, description: Branch to commit to}
+      - {name: content, type: string, required: true, description: File content}
+      - {name: commit_message, type: string, required: true, description: Commit message}
+      - {name: author_email, type: string, description: Commit author email}
+      - {name: author_name, type: string, description: Commit author name}
+      - {name: encoding, type: string, description: "Content encoding: text or base64"}
+
+  update_file:
+    description: Update an existing file in a repository
+    method: PUT
+    path: "/projects/{project_id}/repository/files/{file_path}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: file_path, type: string, required: true, description: Path to the file in the repository}
+      - {name: branch, type: string, required: true, description: Branch to commit to}
+      - {name: content, type: string, required: true, description: File content}
+      - {name: commit_message, type: string, required: true, description: Commit message}
+      - {name: last_commit_id, type: string, description: Last known commit ID for conflict detection}
+      - {name: author_email, type: string, description: Commit author email}
+      - {name: author_name, type: string, description: Commit author name}
+      - {name: encoding, type: string, description: "Content encoding: text or base64"}
+
+  delete_file:
+    description: Delete a file from a repository
+    method: DELETE
+    path: "/projects/{project_id}/repository/files/{file_path}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: file_path, type: string, required: true, description: Path to the file in the repository}
+      - {name: branch, type: string, required: true, description: Branch to delete from}
+      - {name: commit_message, type: string, required: true, description: Commit message}
+      - {name: last_commit_id, type: string, description: Last known commit ID}
+
+  get_merge_request:
+    description: Get a merge request
+    method: GET
+    path: "/projects/{project_id}/merge_requests/{merge_request_iid}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: merge_request_iid, type: integer, required: true, description: Merge request IID}
+
+  get_pipeline:
+    description: Get a pipeline
+    method: GET
+    path: "/projects/{project_id}/pipelines/{pipeline_id}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: pipeline_id, type: integer, required: true, description: Pipeline ID}
+
+  get_project:
+    description: Get a project
+    method: GET
+    path: "/projects/{project_id}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+
+  get_repository_file:
+    description: Get a file from a repository
+    method: GET
+    path: "/projects/{project_id}/repository/files/{file_path}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: file_path, type: string, required: true, description: Path to the file in the repository}
+      - {name: ref, type: string, required: true, description: Branch or tag to get the file from}
+
+  list_issues:
+    description: List issues for a project
+    method: GET
+    path: "/projects/{project_id}/issues"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: state, type: string, description: "Filter by state (opened, closed, all)"}
+      - {name: scope, type: string, description: "Filter by scope (created_by_me, assigned_to_me, all)"}
+      - {name: labels, type: string, description: Filter by labels (comma-separated)}
+      - {name: milestone, type: string, description: Filter by milestone}
+      - {name: search, type: string, description: Search issues}
+      - {name: order_by, type: string, description: "Order by (created_at, updated_at, priority, etc.)"}
+      - {name: sort, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_jobs:
+    description: List jobs in a pipeline
+    method: GET
+    path: "/projects/{project_id}/pipelines/{pipeline_id}/jobs"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: pipeline_id, type: integer, required: true, description: Pipeline ID}
+      - {name: scope, type: string, description: "Filter by scope (created, pending, running, failed, etc.)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_merge_requests:
+    description: List merge requests for a project
+    method: GET
+    path: "/projects/{project_id}/merge_requests"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: state, type: string, description: "Filter by state (opened, closed, merged, all)"}
+      - {name: scope, type: string, description: "Filter by scope (created_by_me, assigned_to_me, all)"}
+      - {name: target_branch, type: string, description: Filter by target branch}
+      - {name: source_branch, type: string, description: Filter by source branch}
+      - {name: labels, type: string, description: Filter by labels (comma-separated)}
+      - {name: order_by, type: string, description: "Order by (created_at, updated_at)"}
+      - {name: sort, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_pipelines:
+    description: List pipelines for a project
+    method: GET
+    path: "/projects/{project_id}/pipelines"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: scope, type: string, description: "Filter by scope (running, pending, finished, etc.)"}
+      - {name: status, type: string, description: "Filter by status (created, preparing, running, etc.)"}
+      - {name: ref, type: string, description: Filter by ref (branch or tag)}
+      - {name: sha, type: string, description: Filter by commit SHA}
+      - {name: order_by, type: string, description: "Order by (id, status, ref, updated_at, user_id)"}
+      - {name: sort, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_projects:
+    description: List projects for the authenticated user
+    method: GET
+    path: /projects
+    parameters:
+      - {name: membership, type: boolean, description: Limit to projects user is a member of}
+      - {name: visibility, type: string, description: "Filter by visibility (public, internal, private)"}
+      - {name: owned, type: boolean, description: Limit to projects owned by user}
+      - {name: starred, type: boolean, description: Limit to starred projects}
+      - {name: search, type: string, description: Search projects by name}
+      - {name: order_by, type: string, description: "Order by (id, name, path, created_at, updated_at, last_activity_at)"}
+      - {name: sort, type: string, description: "Sort direction (asc, desc)"}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  list_repository_tree:
+    description: List a repository directory tree
+    method: GET
+    path: "/projects/{project_id}/repository/tree"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: path, type: string, description: Path inside repository to list}
+      - {name: ref, type: string, description: Branch or tag to list}
+      - {name: recursive, type: boolean, description: Get tree recursively}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  search_code:
+    description: Search code in a project
+    method: GET
+    path: "/projects/{project_id}/search"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: search, type: string, required: true, description: Search query string}
+      - {name: scope, type: string, required: true, description: "Search scope (e.g. blobs for code)"}
+      - {name: ref, type: string, description: Branch or tag to search in}
+      - {name: per_page, type: integer, description: Results per page (max 100)}
+      - {name: page, type: integer, description: Page number}
+
+  update_issue:
+    description: Update an issue
+    method: PUT
+    path: "/projects/{project_id}/issues/{issue_iid}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Project ID or URL-encoded path}
+      - {name: issue_iid, type: integer, required: true, description: Issue IID}
+      - {name: title, type: string, description: New title}
+      - {name: description, type: string, description: New description}
+      - {name: state_event, type: string, description: "State change: close or reopen"}
+      - {name: labels, type: string, description: Labels (comma-separated)}
+      - {name: assignee_ids, type: array, description: Assignee user IDs}
+      - {name: milestone_id, type: integer, description: Milestone ID}
