@@ -3,15 +3,10 @@ package pluginapi
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 type roundTripProvider struct{}
@@ -102,7 +97,7 @@ func (p *roundTripProvider) AuthTypes() []string {
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderTestClient(t, &roundTripProvider{})
+	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
 	prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, "")
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
@@ -177,31 +172,4 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
 
-}
-
-func newProviderTestClient(t *testing.T, prov core.Provider) pluginapiv1.ProviderPluginClient {
-	t.Helper()
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, NewProviderServer(prov))
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return pluginapiv1.NewProviderPluginClient(conn)
 }

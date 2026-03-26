@@ -2,16 +2,12 @@ package pluginapi
 
 import (
 	"context"
-	"net"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -37,7 +33,7 @@ func TestRemoteRuntimeRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubRuntimePluginServer{}
-	client := newRuntimeTestClient(t, stub)
+	client := newRuntimePluginClient(t, stub)
 
 	rt, err := NewRemoteRuntime("echo", client, map[string]any{"enabled": true}, []core.Capability{
 		{Provider: "alpha", Operation: "read"},
@@ -117,57 +113,3 @@ type stubCapabilityLister struct {
 }
 
 func (s *stubCapabilityLister) ListCapabilities() []core.Capability { return s.caps }
-
-func newRuntimeTestClient(t *testing.T, server pluginapiv1.RuntimePluginServer) pluginapiv1.RuntimePluginClient {
-	t.Helper()
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterRuntimePluginServer(srv, server)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return pluginapiv1.NewRuntimePluginClient(conn)
-}
-
-func newRuntimeHostClient(t *testing.T, host pluginapiv1.RuntimeHostServer) pluginapiv1.RuntimeHostClient {
-	t.Helper()
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterRuntimeHostServer(srv, host)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return pluginapiv1.NewRuntimeHostClient(conn)
-}

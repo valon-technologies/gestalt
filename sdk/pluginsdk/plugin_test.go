@@ -2,15 +2,11 @@ package pluginsdk_test
 
 import (
 	"context"
-	"net"
 	"testing"
 
 	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -57,30 +53,6 @@ type schemaStubProvider struct {
 
 func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schema }
 
-func newTestProviderClient(t *testing.T, prov pluginsdk.Provider) pluginapiv1.ProviderPluginClient {
-	t.Helper()
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, pluginsdk.NewProviderServer(prov))
-
-	go func() { _ = srv.Serve(lis) }()
-	t.Cleanup(srv.Stop)
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufconn",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return lis.DialContext(ctx)
-		}),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	return pluginapiv1.NewProviderPluginClient(conn)
-}
-
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -90,7 +62,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		description: "A test provider for SDK validation",
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
@@ -134,7 +106,7 @@ func TestProviderServerListOperations(t *testing.T) {
 		},
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	resp, err := client.ListOperations(ctx, &emptypb.Empty{})
@@ -169,7 +141,7 @@ func TestProviderServerExecute(t *testing.T) {
 		connMode: pluginsdk.ConnectionModeNone,
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	params, _ := structpb.NewStruct(map[string]any{"key": "value"})
@@ -199,7 +171,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 		},
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
@@ -234,7 +206,7 @@ func TestProviderServerStartProviderNoOp(t *testing.T) {
 		connMode: pluginsdk.ConnectionModeNone,
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
@@ -260,7 +232,7 @@ func TestProviderServerConfigSchema(t *testing.T) {
 		schema: `{"type":"object"}`,
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
@@ -280,7 +252,7 @@ func TestProviderServerMetadataProtocolVersions(t *testing.T) {
 		connMode: pluginsdk.ConnectionModeNone,
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
@@ -303,7 +275,7 @@ func TestProviderServerUnimplementedRPCs(t *testing.T) {
 		connMode: pluginsdk.ConnectionModeNone,
 	}
 
-	client := newTestProviderClient(t, prov)
+	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	_, err := client.AuthorizationURL(ctx, &pluginapiv1.AuthorizationURLRequest{State: "s"})
