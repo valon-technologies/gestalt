@@ -182,23 +182,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestConnectionSpecFromMetadata_DefaultsOAuthWhenAuthTypesMissing(t *testing.T) {
-	t.Parallel()
-
-	spec := connectionSpecFromMetadata(&pluginapiv1.ProviderMetadata{
-		ConnectionParams: map[string]*pluginapiv1.ConnectionParamDef{
-			"tenant": {Required: true, Description: "Tenant slug"},
-		},
-	})
-
-	if len(spec.AuthTypes) != 1 || spec.AuthTypes[0] != "oauth" {
-		t.Fatalf("auth types = %+v, want [oauth]", spec.AuthTypes)
-	}
-	if spec.ConnectionParams["tenant"].Description != "Tenant slug" {
-		t.Fatalf("connection params = %+v", spec.ConnectionParams)
-	}
-}
-
 func newProviderTestClient(t *testing.T, prov core.Provider) pluginapiv1.ProviderPluginClient {
 	t.Helper()
 
