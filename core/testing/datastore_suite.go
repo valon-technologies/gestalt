@@ -36,6 +36,9 @@ func RunDatastoreTests(t *testing.T, newStore func(t *testing.T) core.Datastore)
 	t.Run("EgressDenyRules", func(t *testing.T) {
 		testDatastoreEgressDenyRules(t, newStore)
 	})
+	t.Run("EgressCredentialGrants", func(t *testing.T) {
+		testDatastoreEgressCredentialGrants(t, newStore)
+	})
 }
 
 func mustCreateUser(t *testing.T, ctx context.Context, ds core.Datastore, email string) *core.User {
@@ -1012,6 +1015,140 @@ func testDatastoreEgressDenyRules(t *testing.T, newStore func(t *testing.T) core
 
 		ctx := context.Background()
 		err := edrs.DeleteEgressDenyRule(ctx, "nonexistent-id")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+}
+
+func testDatastoreEgressCredentialGrants(t *testing.T, newStore func(t *testing.T) core.Datastore) {
+	t.Run("create get list and delete lifecycle", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecgs, ok := ds.(core.EgressCredentialGrantStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressCredentialGrantStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "grant-admin@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		grant := &core.EgressCredentialGrant{
+			ID:          "ecg-1",
+			Provider:    "acme",
+			Instance:    "acme-prod",
+			SubjectKind: "agent",
+			Host:        "api.acme.test",
+			CreatedByID: user.ID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := ecgs.CreateEgressCredentialGrant(ctx, grant); err != nil {
+			t.Fatalf("CreateEgressCredentialGrant: %v", err)
+		}
+
+		got, err := ecgs.GetEgressCredentialGrant(ctx, "ecg-1")
+		if err != nil {
+			t.Fatalf("GetEgressCredentialGrant: %v", err)
+		}
+		if got.Provider != "acme" {
+			t.Errorf("Provider: got %q, want %q", got.Provider, "acme")
+		}
+		if got.Instance != "acme-prod" {
+			t.Errorf("Instance: got %q, want %q", got.Instance, "acme-prod")
+		}
+		if got.SubjectKind != "agent" {
+			t.Errorf("SubjectKind: got %q, want %q", got.SubjectKind, "agent")
+		}
+		if got.Host != "api.acme.test" {
+			t.Errorf("Host: got %q, want %q", got.Host, "api.acme.test")
+		}
+		if got.CreatedByID != user.ID {
+			t.Errorf("CreatedByID: got %q, want %q", got.CreatedByID, user.ID)
+		}
+
+		grants, err := ecgs.ListEgressCredentialGrants(ctx, core.EgressCredentialGrantFilter{})
+		if err != nil {
+			t.Fatalf("ListEgressCredentialGrants (unfiltered): %v", err)
+		}
+		if len(grants) != 1 {
+			t.Fatalf("ListEgressCredentialGrants: got %d, want 1", len(grants))
+		}
+
+		if err := ecgs.DeleteEgressCredentialGrant(ctx, "ecg-1"); err != nil {
+			t.Fatalf("DeleteEgressCredentialGrant: %v", err)
+		}
+
+		_, err = ecgs.GetEgressCredentialGrant(ctx, "ecg-1")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetEgressCredentialGrant after delete: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("list filters by provider", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecgs, ok := ds.(core.EgressCredentialGrantStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressCredentialGrantStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "grant-filter@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecgs.CreateEgressCredentialGrant(ctx, &core.EgressCredentialGrant{
+			ID: "ecg-a", Provider: "acme", Host: "alpha.test",
+			CreatedByID: user.ID, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressCredentialGrant a: %v", err)
+		}
+		if err := ecgs.CreateEgressCredentialGrant(ctx, &core.EgressCredentialGrant{
+			ID: "ecg-b", Provider: "globex", Host: "beta.test",
+			CreatedByID: user.ID, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second),
+		}); err != nil {
+			t.Fatalf("CreateEgressCredentialGrant b: %v", err)
+		}
+
+		byProvider, err := ecgs.ListEgressCredentialGrants(ctx, core.EgressCredentialGrantFilter{Provider: "acme"})
+		if err != nil {
+			t.Fatalf("ListEgressCredentialGrants by provider: %v", err)
+		}
+		if len(byProvider) != 1 || byProvider[0].ID != "ecg-a" {
+			t.Fatalf("filter by provider: got %d grants, want 1 (ecg-a)", len(byProvider))
+		}
+	})
+
+	t.Run("get nonexistent returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecgs, ok := ds.(core.EgressCredentialGrantStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressCredentialGrantStore")
+		}
+
+		ctx := context.Background()
+		_, err := ecgs.GetEgressCredentialGrant(ctx, "nonexistent-id")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("delete nonexistent returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecgs, ok := ds.(core.EgressCredentialGrantStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressCredentialGrantStore")
+		}
+
+		ctx := context.Background()
+		err := ecgs.DeleteEgressCredentialGrant(ctx, "nonexistent-id")
 		if !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("expected ErrNotFound, got %v", err)
 		}

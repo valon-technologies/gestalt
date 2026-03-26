@@ -56,3 +56,14 @@ type EgressDenyRuleStore interface {
 	ListEgressDenyRules(ctx context.Context, filter EgressDenyRuleFilter) ([]*EgressDenyRule, error)
 	DeleteEgressDenyRule(ctx context.Context, id string) error
 }
+
+type EgressCredentialGrantFilter struct {
+	Provider string
+}
+
+type EgressCredentialGrantStore interface {
+	CreateEgressCredentialGrant(ctx context.Context, grant *EgressCredentialGrant) error
+	GetEgressCredentialGrant(ctx context.Context, id string) (*EgressCredentialGrant, error)
+	ListEgressCredentialGrants(ctx context.Context, filter EgressCredentialGrantFilter) ([]*EgressCredentialGrant, error)
+	DeleteEgressCredentialGrant(ctx context.Context, id string) error
+}

@@ -68,7 +68,7 @@ func (a *denyRuleStoreAdapter) LoadDenyRules(ctx context.Context) ([]egress.Deny
 	return out, nil
 }
 
-func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider]) {
+func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore) {
 	var sources []egress.CredentialResolver
 
 	if len(deps.CredentialGrants) > 0 {
@@ -95,6 +95,14 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 		})
 	}
 
+	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
+		sources = append(sources, &egress.SavedGrantCredentialResolver{
+			Store:         &credentialGrantStoreAdapter{store: grantStore},
+			TokenResolver: &brokerTokenResolver{broker: broker},
+			Materializer:  &registryMaterializer{providers: providers},
+		})
+	}
+
 	switch len(sources) {
 	case 0:
 		return
@@ -103,6 +111,33 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 	default:
 		deps.Resolver.Credentials = &egress.CredentialSourceChain{Sources: sources}
 	}
+}
+
+type credentialGrantStoreAdapter struct {
+	store core.EgressCredentialGrantStore
+}
+
+func (a *credentialGrantStoreAdapter) ListCandidateCredentialGrants(ctx context.Context, _ egress.Subject, _ egress.Target) ([]egress.CredentialGrant, error) {
+	grants, err := a.store.ListEgressCredentialGrants(ctx, core.EgressCredentialGrantFilter{})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]egress.CredentialGrant, len(grants))
+	for i, g := range grants {
+		out[i] = egress.CredentialGrant{
+			Instance: g.Instance,
+			MatchCriteria: egress.MatchCriteria{
+				SubjectKind: egress.SubjectKind(g.SubjectKind),
+				SubjectID:   g.SubjectID,
+				Provider:    g.Provider,
+				Operation:   g.Operation,
+				Method:      g.Method,
+				Host:        g.Host,
+				PathPrefix:  g.PathPrefix,
+			},
+		}
+	}
+	return out, nil
 }
 
 type brokerTokenResolver struct {

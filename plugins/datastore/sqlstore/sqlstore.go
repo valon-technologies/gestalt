@@ -697,3 +697,84 @@ func (s *Store) DeleteEgressDenyRule(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// --- Egress Credential Grants ---
+
+func scanEgressCredentialGrant(row Scanner) (*core.EgressCredentialGrant, error) {
+	var g core.EgressCredentialGrant
+	if err := row.Scan(&g.ID, &g.Provider, &g.Instance, &g.SecretRef, &g.AuthStyle,
+		&g.SubjectKind, &g.SubjectID, &g.Operation, &g.Method, &g.Host, &g.PathPrefix,
+		&g.CreatedByID, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+func (s *Store) CreateEgressCredentialGrant(ctx context.Context, grant *core.EgressCredentialGrant) error {
+	defaultTimestamps(&grant.CreatedAt, &grant.UpdatedAt)
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO egress_credential_grants (id, provider, instance, secret_ref, auth_style, subject_kind, subject_id, operation, method, host, path_prefix, created_by_id, created_at, updated_at)
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`, `+s.ph(12)+`, `+s.ph(13)+`, `+s.ph(14)+`)`,
+		grant.ID, grant.Provider, grant.Instance, grant.SecretRef, grant.AuthStyle,
+		grant.SubjectKind, grant.SubjectID, grant.Operation, grant.Method, grant.Host, grant.PathPrefix,
+		grant.CreatedByID, grant.CreatedAt, grant.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting egress credential grant: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetEgressCredentialGrant(ctx context.Context, id string) (*core.EgressCredentialGrant, error) {
+	row := s.DB.QueryRowContext(ctx, `
+		SELECT id, provider, instance, secret_ref, auth_style, subject_kind, subject_id, operation, method, host, path_prefix, created_by_id, created_at, updated_at
+		FROM egress_credential_grants WHERE id = `+s.ph(1), id)
+	g, err := scanEgressCredentialGrant(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, core.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying egress credential grant: %w", err)
+	}
+	return g, nil
+}
+
+func (s *Store) ListEgressCredentialGrants(ctx context.Context, filter core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+	query := `SELECT id, provider, instance, secret_ref, auth_style, subject_kind, subject_id, operation, method, host, path_prefix, created_by_id, created_at, updated_at FROM egress_credential_grants`
+	var args []any
+	if filter.Provider != "" {
+		query += ` WHERE provider = ` + s.ph(1)
+		args = append(args, filter.Provider)
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing egress credential grants: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var grants []*core.EgressCredentialGrant
+	for rows.Next() {
+		g, err := scanEgressCredentialGrant(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning egress credential grant row: %w", err)
+		}
+		grants = append(grants, g)
+	}
+	return grants, rows.Err()
+}
+
+func (s *Store) DeleteEgressCredentialGrant(ctx context.Context, id string) error {
+	result, err := s.DB.ExecContext(ctx, "DELETE FROM egress_credential_grants WHERE id = "+s.ph(1), id)
+	if err != nil {
+		return fmt.Errorf("deleting egress credential grant: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("deleting egress credential grant: %w", err)
+	}
+	if n == 0 {
+		return core.ErrNotFound
+	}
+	return nil
+}
