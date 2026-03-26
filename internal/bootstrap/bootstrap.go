@@ -550,6 +550,14 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		})
 	}
 
+	factory, err := providerFactoryForName(name, factories)
+	if err != nil {
+		return nil, err
+	}
+	return factory(ctx, name, intg, deps)
+}
+
+func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFactory, error) {
 	factory, ok := factories.Providers[name]
 	if !ok {
 		factory = factories.DefaultProvider
@@ -557,7 +565,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	if factory == nil {
 		return nil, fmt.Errorf("no provider factory for %q and no default factory registered", name)
 	}
-	return factory(ctx, name, intg, deps)
+	return factory, nil
 }
 
 func overlayBaseFactory(name string, intg config.IntegrationDef, factories *FactoryRegistry) (ProviderFactory, error) {
@@ -568,9 +576,17 @@ func overlayBaseFactory(name string, intg config.IntegrationDef, factories *Fact
 		return factories.DefaultProvider, nil
 	}
 	baseName := intg.Plugin.Base
-	factory, ok := factories.Providers[baseName]
-	if !ok || factory == nil {
+	factory, err := registeredProviderFactory(baseName, factories)
+	if err != nil {
 		return nil, fmt.Errorf("no provider factory for overlay base %q", baseName)
+	}
+	return factory, nil
+}
+
+func registeredProviderFactory(name string, factories *FactoryRegistry) (ProviderFactory, error) {
+	factory, ok := factories.Providers[name]
+	if !ok || factory == nil {
+		return nil, fmt.Errorf("no provider factory for %q", name)
 	}
 	return factory, nil
 }
@@ -582,26 +598,13 @@ func validateProviderBuildAvailable(name string, intg config.IntegrationDef, fac
 			mode = config.PluginModeReplace
 		}
 		if mode == config.PluginModeOverlay {
-			if len(intg.Upstreams) > 0 {
-				if factories.DefaultProvider == nil {
-					return fmt.Errorf("no default provider factory for overlay base %q", name)
-				}
-				return nil
-			}
-			if _, ok := factories.Providers[intg.Plugin.Base]; !ok {
-				return fmt.Errorf("no provider factory for overlay base %q", intg.Plugin.Base)
-			}
-			return nil
+			_, err := overlayBaseFactory(name, intg, factories)
+			return err
 		}
 		return nil
 	}
-	if _, ok := factories.Providers[name]; ok {
-		return nil
-	}
-	if factories.DefaultProvider == nil {
-		return fmt.Errorf("no provider factory for %q and no default factory registered", name)
-	}
-	return nil
+	_, err := providerFactoryForName(name, factories)
+	return err
 }
 
 func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {

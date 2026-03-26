@@ -311,6 +311,51 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestBootstrapNilProviderFactoryFailsFast(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("direct provider", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Providers["alpha"] = nil
+
+		_, err := bootstrap.Bootstrap(ctx, validConfig(), factories)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `no provider factory for "alpha"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("overlay base provider", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		delete(cfg.Integrations, "alpha")
+		cfg.Integrations["beta"] = config.IntegrationDef{
+			Plugin: &config.ExecutablePluginDef{
+				Mode:    config.PluginModeOverlay,
+				Base:    "alpha",
+				Command: "/tmp/plugin",
+			},
+		}
+
+		factories := validFactories()
+		factories.Providers["alpha"] = nil
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `no provider factory for overlay base "alpha"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestBootstrapFactoryError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
