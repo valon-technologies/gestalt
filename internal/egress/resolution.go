@@ -33,6 +33,17 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 		return Resolution{}, err
 	}
 
+	// Policy evaluation runs before credential resolution so that denied
+	// requests never trigger secret fetches or decryption.
+	policy := PolicyInput{
+		Subject: subject,
+		Target:  input.Target,
+		Headers: CopyHeaders(input.Headers),
+	}
+	if err := EvaluatePolicy(ctx, r.Policy, policy); err != nil {
+		return Resolution{}, err
+	}
+
 	credential := input.Credential
 	if r.Credentials != nil && credential.Authorization == "" && len(credential.Headers) == 0 {
 		resolved, err := r.Credentials.ResolveCredential(ctx, subject, input.Target)
@@ -46,23 +57,6 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 
 	if credential.Authorization != "" {
 		delete(headers, "Authorization")
-	}
-
-	policyHeaders := CopyHeaders(headers)
-	if credential.Authorization != "" {
-		if policyHeaders == nil {
-			policyHeaders = map[string]string{}
-		}
-		policyHeaders["Authorization"] = credential.Authorization
-	}
-
-	policy := PolicyInput{
-		Subject: subject,
-		Target:  input.Target,
-		Headers: policyHeaders,
-	}
-	if err := EvaluatePolicy(ctx, r.Policy, policy); err != nil {
-		return Resolution{}, err
 	}
 
 	return Resolution{

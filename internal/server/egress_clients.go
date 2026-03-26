@@ -112,7 +112,7 @@ func (s *Server) listEgressClients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clients, err := ecs.ListEgressClients(r.Context(), userID)
+	clients, err := ecs.ListEgressClients(r.Context(), core.EgressClientFilter{CreatedByID: userID})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list egress clients")
 		return
@@ -189,7 +189,7 @@ func (s *Server) createEgressClientToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	issued, err := s.issueToken()
+	issued, err := s.issueEgressClientToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return

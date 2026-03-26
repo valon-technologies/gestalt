@@ -146,8 +146,8 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 	if gotPolicy.Target.Provider != "test-provider" || gotPolicy.Target.Operation != "op" {
 		t.Fatalf("target = %+v, want test-provider/op", gotPolicy.Target)
 	}
-	if gotPolicy.Headers["Authorization"] != "Bearer test-token" {
-		t.Fatalf("authorization = %q, want Bearer test-token", gotPolicy.Headers["Authorization"])
+	if gotPolicy.Headers["Authorization"] != "" {
+		t.Fatalf("policy should not see credential Authorization (policy runs before credentials), got %q", gotPolicy.Headers["Authorization"])
 	}
 }
 
@@ -315,11 +315,11 @@ func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
 	if gotPolicy.Target.Method != http.MethodPost || gotPolicy.Target.Path != "/graphql" {
 		t.Fatalf("target = %+v, want POST /graphql", gotPolicy.Target)
 	}
-	if gotPolicy.Headers["Authorization"] != "Token gql-token" {
-		t.Fatalf("authorization = %q, want Token gql-token", gotPolicy.Headers["Authorization"])
+	if gotPolicy.Headers["Authorization"] != "" {
+		t.Fatalf("policy should not see credential Authorization (policy runs before credentials), got %q", gotPolicy.Headers["Authorization"])
 	}
 	if gotPolicy.Headers["X-Org"] != "acme" {
-		t.Fatalf("org = %q, want acme", gotPolicy.Headers["X-Org"])
+		t.Fatalf("X-Org should be visible to policy (it's an input header, not a credential header), got %q", gotPolicy.Headers["X-Org"])
 	}
 
 	var data map[string]any

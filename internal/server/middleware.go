@@ -95,6 +95,51 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.devMode {
+			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
+				p := s.resolver.ResolveEmail(email)
+				ctx := principal.WithPrincipal(r.Context(), p)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		var p *principal.Principal
+		var lastErr error
+
+		if header := r.Header.Get("Proxy-Authorization"); header != "" {
+			bearer := strings.TrimPrefix(header, core.BearerScheme)
+			if bearer != header {
+				p, lastErr = s.resolver.ResolveToken(r.Context(), bearer)
+			}
+		}
+
+		if p == nil {
+			if header := r.Header.Get("Authorization"); header != "" {
+				bearer := strings.TrimPrefix(header, core.BearerScheme)
+				if bearer != header {
+					p, lastErr = s.resolver.ResolveToken(r.Context(), bearer)
+				}
+			}
+		}
+
+		if p == nil {
+			w.Header().Set("Proxy-Authenticate", "Bearer")
+			if lastErr != nil && !errors.Is(lastErr, principal.ErrInvalidToken) {
+				writeError(w, http.StatusInternalServerError, "token validation failed")
+				return
+			}
+			writeError(w, http.StatusProxyAuthRequired, "proxy authentication required")
+			return
+		}
+
+		ctx := principal.WithPrincipal(r.Context(), p)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // devCORS permits cross-origin requests in dev mode so the Next.js dev
 // server (hot reload on a different port) can reach the API.
 func devCORS(next http.Handler) http.Handler {
