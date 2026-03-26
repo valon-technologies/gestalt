@@ -532,7 +532,7 @@ func testDatastoreEgressClients(t *testing.T, newStore func(t *testing.T) core.D
 			t.Errorf("CreatedByID: got %q, want %q", got.CreatedByID, user.ID)
 		}
 
-		clients, err := ecs.ListEgressClients(ctx, user.ID)
+		clients, err := ecs.ListEgressClients(ctx, core.EgressClientFilter{CreatedByID: user.ID})
 		if err != nil {
 			t.Fatalf("ListEgressClients: %v", err)
 		}
@@ -643,7 +643,7 @@ func testDatastoreEgressClients(t *testing.T, newStore func(t *testing.T) core.D
 			t.Fatalf("CreateEgressClient userB: %v", err)
 		}
 
-		clientsA, err := ecs.ListEgressClients(ctx, userA.ID)
+		clientsA, err := ecs.ListEgressClients(ctx, core.EgressClientFilter{CreatedByID: userA.ID})
 		if err != nil {
 			t.Fatalf("ListEgressClients userA: %v", err)
 		}
@@ -651,12 +651,20 @@ func testDatastoreEgressClients(t *testing.T, newStore func(t *testing.T) core.D
 			t.Fatalf("ListEgressClients userA: got %+v, want only ec-a", clientsA)
 		}
 
-		clientsB, err := ecs.ListEgressClients(ctx, userB.ID)
+		clientsB, err := ecs.ListEgressClients(ctx, core.EgressClientFilter{CreatedByID: userB.ID})
 		if err != nil {
 			t.Fatalf("ListEgressClients userB: %v", err)
 		}
 		if len(clientsB) != 1 || clientsB[0].ID != "ec-b" {
 			t.Fatalf("ListEgressClients userB: got %+v, want only ec-b", clientsB)
+		}
+
+		all, err := ecs.ListEgressClients(ctx, core.EgressClientFilter{})
+		if err != nil {
+			t.Fatalf("ListEgressClients unfiltered: %v", err)
+		}
+		if len(all) != 2 {
+			t.Fatalf("ListEgressClients unfiltered: got %d, want 2", len(all))
 		}
 	})
 }

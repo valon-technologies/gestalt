@@ -491,12 +491,15 @@ func (s *Store) GetEgressClient(ctx context.Context, id string) (*core.EgressCli
 	return c, nil
 }
 
-func (s *Store) ListEgressClients(ctx context.Context, userID string) ([]*core.EgressClient, error) {
-	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, name, description, created_by_id, created_at, updated_at
-		FROM egress_clients
-		WHERE created_by_id = `+s.ph(1)+`
-		ORDER BY created_at`, userID)
+func (s *Store) ListEgressClients(ctx context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
+	query := `SELECT id, name, description, created_by_id, created_at, updated_at FROM egress_clients`
+	var args []any
+	if filter.CreatedByID != "" {
+		query += ` WHERE created_by_id = ` + s.ph(1)
+		args = append(args, filter.CreatedByID)
+	}
+	query += ` ORDER BY created_at`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing egress clients: %w", err)
 	}

@@ -214,6 +214,12 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 
 func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "test",
@@ -222,8 +228,11 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 			},
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
-			ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
-				return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+			ValidateAPITokenFn: func(_ context.Context, h string) (*core.APIToken, error) {
+				if h == hashed {
+					return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+				}
+				return nil, core.ErrNotFound
 			},
 			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
 				return &core.User{ID: id, Email: "user@example.com", DisplayName: "Test User"}, nil
@@ -233,7 +242,7 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("Authorization", "Bearer some-api-key")
+	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1457,9 +1466,9 @@ func TestCreateAndListEgressClients(t *testing.T) {
 				stored = append(stored, c)
 				return nil
 			},
-			ListEgressClientsFn: func(_ context.Context, userID string) ([]*core.EgressClient, error) {
-				if userID != "u1" {
-					t.Fatalf("expected userID u1, got %q", userID)
+			ListEgressClientsFn: func(_ context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
+				if filter.CreatedByID != "u1" {
+					t.Fatalf("expected CreatedByID u1, got %q", filter.CreatedByID)
 				}
 				return stored, nil
 			},
@@ -3511,8 +3520,11 @@ func TestProxyBindingRequiresAuth(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusProxyAuthRequired {
+		t.Fatalf("expected 407, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Proxy-Authenticate") != "Bearer" {
+		t.Fatalf("expected Proxy-Authenticate: Bearer header, got %q", resp.Header.Get("Proxy-Authenticate"))
 	}
 }
 
@@ -4606,12 +4618,20 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 	t.Run("prefers user token", func(t *testing.T) {
 		t.Parallel()
 
+		apiToken, apiHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.Datastore = &coretesting.StubDatastore{
-				ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
-					return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+				ValidateAPITokenFn: func(_ context.Context, h string) (*core.APIToken, error) {
+					if h == apiHash {
+						return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+					}
+					return nil, core.ErrNotFound
 				},
 				GetUserFn: func(_ context.Context, id string) (*core.User, error) {
 					return &core.User{ID: id, Email: "dev@example.com"}, nil
@@ -4630,7 +4650,7 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-		req.Header.Set("Authorization", "Bearer test-api-key")
+		req.Header.Set("Authorization", "Bearer "+apiToken)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)

@@ -38,7 +38,7 @@ type StubDatastore struct {
 	DeleteStagedConnectionFn    func(context.Context, string) error
 	CreateEgressClientFn        func(context.Context, *core.EgressClient) error
 	GetEgressClientFn           func(context.Context, string) (*core.EgressClient, error)
-	ListEgressClientsFn         func(context.Context, string) ([]*core.EgressClient, error)
+	ListEgressClientsFn         func(context.Context, core.EgressClientFilter) ([]*core.EgressClient, error)
 	DeleteEgressClientFn        func(context.Context, string) error
 	CreateEgressClientTokenFn   func(context.Context, *core.EgressClientToken) error
 	ValidateEgressClientTokenFn func(context.Context, string) (*core.EgressClientToken, error)
@@ -155,9 +155,9 @@ func (s *StubDatastore) GetEgressClient(ctx context.Context, id string) (*core.E
 	}
 	return nil, core.ErrNotFound
 }
-func (s *StubDatastore) ListEgressClients(ctx context.Context, userID string) ([]*core.EgressClient, error) {
+func (s *StubDatastore) ListEgressClients(ctx context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
 	if s.ListEgressClientsFn != nil {
-		return s.ListEgressClientsFn(ctx, userID)
+		return s.ListEgressClientsFn(ctx, filter)
 	}
 	return nil, nil
 }

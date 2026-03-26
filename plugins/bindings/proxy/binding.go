@@ -42,23 +42,32 @@ func (b *Binding) Close() error                  { return nil }
 
 func (b *Binding) Routes() []core.Route {
 	patterns := b.cfg.routePatterns()
-	routes := make([]core.Route, 0, len(b.cfg.methods())*len(patterns))
+	routes := make([]core.Route, 0, len(b.cfg.methods())*len(patterns)+1)
 	for _, method := range b.cfg.methods() {
 		for _, pattern := range patterns {
 			routes = append(routes, core.Route{
-				Method:  method,
-				Pattern: pattern,
-				Handler: http.HandlerFunc(b.handle),
-				Public:  false,
+				Method:    method,
+				Pattern:   pattern,
+				Handler:   http.HandlerFunc(b.handle),
+				Public:    false,
+				ProxyAuth: true,
 			})
 		}
+	}
+	if b.resolver.Policy != nil {
+		routes = append(routes, core.Route{
+			Method:    http.MethodConnect,
+			Handler:   http.HandlerFunc(b.handle),
+			ProxyAuth: true,
+			Connect:   true,
+		})
 	}
 	return routes
 }
 
 func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		httpjson.WriteError(w, http.StatusNotImplemented, "CONNECT proxying is not implemented yet")
+		b.handleConnect(w, r)
 		return
 	}
 
@@ -131,13 +140,7 @@ func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
 		Path:     resolvePath(r, b.cfg.normalizedPath()),
 	}
 
-	ctx := egress.WithSubjectFromPrincipal(r.Context(), principal.FromContext(r.Context()))
-	if _, ok := egress.SubjectFromContext(ctx); !ok {
-		ctx = egress.WithSubject(ctx, egress.Subject{
-			Kind: egress.SubjectSystem,
-			ID:   b.name,
-		})
-	}
+	ctx := b.subjectContext(r.Context())
 
 	resolved, err := b.resolver.Resolve(ctx, egress.ResolutionInput{
 		Target:  target,
@@ -148,6 +151,17 @@ func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
 	}
 
 	return resolved, body, nil
+}
+
+func (b *Binding) subjectContext(ctx context.Context) context.Context {
+	ctx = egress.WithSubjectFromPrincipal(ctx, principal.FromContext(ctx))
+	if _, ok := egress.SubjectFromContext(ctx); !ok {
+		ctx = egress.WithSubject(ctx, egress.Subject{
+			Kind: egress.SubjectSystem,
+			ID:   b.name,
+		})
+	}
+	return ctx
 }
 
 var acceptAllStatuses apiexec.ResponseChecker = func(int, []byte) error { return nil }

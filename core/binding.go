@@ -21,8 +21,10 @@ type Binding interface {
 }
 
 type Route struct {
-	Method  string
-	Pattern string
-	Handler http.Handler
-	Public  bool
+	Method    string
+	Pattern   string
+	Handler   http.Handler
+	Public    bool
+	ProxyAuth bool // use proxy auth semantics (Proxy-Authorization, 407 responses)
+	Connect   bool // handle CONNECT method (dispatched outside path-based routing)
 }
