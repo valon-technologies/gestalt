@@ -19,26 +19,9 @@ type SecretResolver interface {
 }
 
 type CredentialGrant struct {
+	Source    CredentialSource
 	Instance  string
 	SecretRef string
 	AuthStyle AuthStyle
 	MatchCriteria
-}
-
-func (g *CredentialGrant) ResolveProvider(target Target) (provider, instance string, ok bool) {
-	p := g.Provider
-	if p == "" {
-		p = target.Provider
-	}
-	if p == "" {
-		return "", "", false
-	}
-	inst := g.Instance
-	if inst == "" {
-		inst = target.Instance
-	}
-	if inst == "" {
-		inst = p
-	}
-	return p, inst, true
 }
