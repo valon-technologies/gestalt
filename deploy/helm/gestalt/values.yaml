@@ -121,6 +121,9 @@ extraEnv: []
 #       name: gestalt-secrets
 #       key: oidc-client-secret
 
+pluginInit:
+  enabled: false
+
 livenessProbe:
   httpGet:
     path: /health

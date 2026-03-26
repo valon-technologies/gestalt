@@ -7,9 +7,10 @@ Gestalt boots entirely from a YAML config file plus environment and secret resol
 1. Explicit `--config` flag passed to the binary.
 2. `GESTALT_CONFIG` environment variable.
 3. `./config.yaml` in the current working directory.
-4. `/etc/gestalt/config.yaml` as a system-wide fallback.
+4. `~/.gestalt/config.yaml` as a user-level fallback.
+5. `/etc/gestalt/config.yaml` as a system-wide fallback.
 
-The first match wins. Gestalt does not merge multiple config files.
+The first match wins. Gestalt does not merge multiple config files. When no config file is found and the command supports auto-generation (bare `gestaltd`), a default config is written to `~/.gestalt/config.yaml` with local auth, sqlite, and env secrets.
 
 ## How values are resolved
 
@@ -85,7 +86,7 @@ server:
 
 **relative paths**: `icon_file` resolves relative to the config file's directory, not the current shell working directory.
 
-**provider preparation**: `gestaltd prepare --config ...` writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve --config ...` uses that prepared state so runtime startup is deterministic without rewriting the config.
+**provider preparation**: `gestaltd init --config ...` writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve --config ...` uses that prepared state so runtime startup is deterministic without rewriting the config.
 
 **allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
 

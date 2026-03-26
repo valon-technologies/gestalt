@@ -4,52 +4,52 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	pluginpkg "github.com/valon-technologies/gestalt/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
-var refPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._+:-]*$`)
+var pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._+:-]*$`)
 
-type Ref struct {
+type PluginID struct {
 	Publisher string
 	Name      string
 	Version   string
 }
 
-func ParseRef(raw string) (Ref, error) {
+func ParsePluginID(raw string) (PluginID, error) {
 	if strings.TrimSpace(raw) != raw {
-		return Ref{}, fmt.Errorf("invalid plugin ref %q: leading or trailing whitespace is not allowed", raw)
+		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: leading or trailing whitespace is not allowed", raw)
 	}
-	if !refPattern.MatchString(raw) {
-		return Ref{}, fmt.Errorf("invalid plugin ref %q: expected publisher/name@version", raw)
+	if !pluginIDPattern.MatchString(raw) {
+		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
 	}
 
 	left, version, ok := strings.Cut(raw, "@")
 	if !ok || version == "" {
-		return Ref{}, fmt.Errorf("invalid plugin ref %q: expected publisher/name@version", raw)
+		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
 	}
 	publisher, name, ok := strings.Cut(left, "/")
 	if !ok || publisher == "" || name == "" {
-		return Ref{}, fmt.Errorf("invalid plugin ref %q: expected publisher/name@version", raw)
+		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
 	}
 
-	return Ref{Publisher: publisher, Name: name, Version: version}, nil
+	return PluginID{Publisher: publisher, Name: name, Version: version}, nil
 }
 
-func (r Ref) String() string {
+func (r PluginID) String() string {
 	if r.Publisher == "" && r.Name == "" && r.Version == "" {
 		return ""
 	}
 	return r.Publisher + "/" + r.Name + "@" + r.Version
 }
 
-func (r Ref) IsZero() bool {
+func (r PluginID) IsZero() bool {
 	return r.Publisher == "" && r.Name == "" && r.Version == ""
 }
 
@@ -68,15 +68,8 @@ func New(configPath string) *Store {
 	return &Store{root: storeRootForConfigPath(configPath)}
 }
 
-func (s *Store) Root() string {
-	if s == nil {
-		return ""
-	}
-	return s.root
-}
-
 type InstalledPlugin struct {
-	Ref            Ref
+	PluginID       PluginID
 	Root           string
 	ManifestPath   string
 	ExecutablePath string
@@ -94,7 +87,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	ref, err := refFromManifest(manifest)
+	id, err := pluginIDFromManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +108,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	if root == "" {
 		return nil, fmt.Errorf("store root is required")
 	}
-	destDir := filepath.Join(root, ref.Publisher, ref.Name, ref.Version)
+	destDir := filepath.Join(root, id.Publisher, id.Name, id.Version)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
@@ -130,7 +123,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	}
 
 	installed := &InstalledPlugin{
-		Ref:            ref,
+		PluginID:       id,
 		Root:           destDir,
 		ManifestPath:   manifestPath,
 		ExecutablePath: executablePath,
@@ -142,102 +135,80 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	return installed, nil
 }
 
-func (s *Store) List() ([]InstalledPlugin, error) {
+func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	if s == nil {
 		return nil, fmt.Errorf("store is required")
 	}
-	root := s.root
-	if root == "" {
-		return nil, fmt.Errorf("store root is required")
-	}
-	if _, err := os.Stat(root); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("stat store root: %w", err)
-	}
-
-	var items []InstalledPlugin
-	pattern := filepath.Join(root, "*", "*", "*", pluginpkg.ManifestFile)
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("list plugin manifests: %w", err)
-	}
-	for _, manifestPath := range matches {
-		data, err := os.ReadFile(manifestPath)
-		if err != nil {
-			return nil, fmt.Errorf("read manifest %s: %w", manifestPath, err)
-		}
-		manifest, err := pluginpkg.DecodeManifest(data)
-		if err != nil {
-			return nil, fmt.Errorf("decode manifest %s: %w", manifestPath, err)
-		}
-		ref, err := refFromManifest(manifest)
-		if err != nil {
-			return nil, err
-		}
-		artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
-		if err != nil {
-			return nil, err
-		}
-		executablePath, err := executablePathForManifest(filepath.Dir(manifestPath), manifest)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, InstalledPlugin{
-			Ref:            ref,
-			Root:           filepath.Dir(manifestPath),
-			ManifestPath:   manifestPath,
-			ExecutablePath: executablePath,
-			ArtifactPath:   artifact.Path,
-			SHA256:         artifact.SHA256,
-			Manifest:       manifest,
-			Artifact:       artifact,
-		})
-	}
-
-	slices.SortFunc(items, func(a, b InstalledPlugin) int {
-		return strings.Compare(a.Ref.String(), b.Ref.String())
-	})
-	return items, nil
-}
-
-func (s *Store) Resolve(ref Ref) (*InstalledPlugin, error) {
-	if s == nil {
-		return nil, fmt.Errorf("store is required")
-	}
-	if ref.IsZero() {
-		return nil, fmt.Errorf("plugin ref is required")
-	}
-	root := filepath.Join(s.root, ref.Publisher, ref.Name, ref.Version)
-	manifestPath := filepath.Join(root, pluginpkg.ManifestFile)
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read installed manifest %q: %w", manifestPath, err)
-	}
-	manifest, err := pluginpkg.DecodeManifest(data)
-	if err != nil {
-		return nil, fmt.Errorf("decode installed manifest %q: %w", manifestPath, err)
-	}
-	installedRef, err := refFromManifest(manifest)
+	_, manifest, _, err := pluginpkg.LoadManifestFromPath(dirPath)
 	if err != nil {
 		return nil, err
 	}
-	if installedRef != ref {
-		return nil, fmt.Errorf("installed plugin %s does not match requested ref %s", installedRef, ref)
+	id, err := pluginIDFromManifest(manifest)
+	if err != nil {
+		return nil, err
 	}
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
 	if err != nil {
 		return nil, err
 	}
-	executablePath, err := executablePathForManifest(root, manifest)
+
+	artifactPath := filepath.Join(dirPath, filepath.FromSlash(artifact.Path))
+	artifactFile, err := os.Open(artifactPath)
+	if err != nil {
+		return nil, fmt.Errorf("open artifact %s: %w", artifact.Path, err)
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(sum, artifactFile); err != nil {
+		_ = artifactFile.Close()
+		return nil, fmt.Errorf("read artifact %s: %w", artifact.Path, err)
+	}
+	_ = artifactFile.Close()
+	if got := hex.EncodeToString(sum.Sum(nil)); got != artifact.SHA256 {
+		return nil, fmt.Errorf("artifact digest mismatch for %s: directory has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+	}
+
+	root := s.root
+	if root == "" {
+		return nil, fmt.Errorf("store root is required")
+	}
+	destDir := filepath.Join(root, id.Publisher, id.Name, id.Version)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return nil, fmt.Errorf("create plugin directory: %w", err)
+	}
+
+	manifestSrc := filepath.Join(dirPath, pluginpkg.ManifestFile)
+	if err := copyFile(manifestSrc, filepath.Join(destDir, pluginpkg.ManifestFile)); err != nil {
+		return nil, fmt.Errorf("copy manifest: %w", err)
+	}
+
+	artifactDest := filepath.Join(destDir, filepath.FromSlash(artifact.Path))
+	if err := os.MkdirAll(filepath.Dir(artifactDest), 0755); err != nil {
+		return nil, fmt.Errorf("create artifact directory: %w", err)
+	}
+	if err := copyFile(artifactPath, artifactDest); err != nil {
+		return nil, fmt.Errorf("copy artifact: %w", err)
+	}
+
+	for _, schemaRel := range configSchemaPaths(manifest, dirPath) {
+		schemaSrc := filepath.Join(dirPath, filepath.FromSlash(schemaRel))
+		schemaDest := filepath.Join(destDir, filepath.FromSlash(schemaRel))
+		if err := os.MkdirAll(filepath.Dir(schemaDest), 0755); err != nil {
+			return nil, fmt.Errorf("create schema directory: %w", err)
+		}
+		if err := copyFile(schemaSrc, schemaDest); err != nil {
+			return nil, fmt.Errorf("copy config schema %s: %w", schemaRel, err)
+		}
+	}
+
+	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
 	}
+
 	return &InstalledPlugin{
-		Ref:            ref,
-		Root:           root,
-		ManifestPath:   manifestPath,
+		PluginID:       id,
+		Root:           destDir,
+		ManifestPath:   filepath.Join(destDir, pluginpkg.ManifestFile),
 		ExecutablePath: executablePath,
 		ArtifactPath:   artifact.Path,
 		SHA256:         artifact.SHA256,
@@ -246,19 +217,15 @@ func (s *Store) Resolve(ref Ref) (*InstalledPlugin, error) {
 	}, nil
 }
 
-func RootForConfigPath(configPath string) string {
-	return storeRootForConfigPath(configPath)
-}
-
-func refFromManifest(manifest *pluginmanifestv1.Manifest) (Ref, error) {
+func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error) {
 	if manifest == nil {
-		return Ref{}, fmt.Errorf("manifest is required")
+		return PluginID{}, fmt.Errorf("manifest is required")
 	}
-	ref, err := ParseRef(manifest.ID + "@" + manifest.Version)
+	id, err := ParsePluginID(manifest.ID + "@" + manifest.Version)
 	if err != nil {
-		return Ref{}, fmt.Errorf("manifest id/version must form a valid plugin ref: %w", err)
+		return PluginID{}, fmt.Errorf("manifest id/version must form a valid plugin identifier: %w", err)
 	}
-	return ref, nil
+	return id, nil
 }
 
 func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest) (string, error) {
@@ -286,4 +253,42 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		return "", fmt.Errorf("manifest entrypoint artifact_path is required")
 	}
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
+}
+
+const runtimeConfigSchemaPath = "schemas/config.schema.json"
+
+func configSchemaPaths(manifest *pluginmanifestv1.Manifest, dirPath string) []string {
+	var paths []string
+	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
+		paths = append(paths, manifest.Provider.ConfigSchemaPath)
+	}
+	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(runtimeConfigSchemaPath))
+	if _, err := os.Stat(runtimeSchema); err == nil {
+		paths = append(paths, runtimeConfigSchemaPath)
+	}
+	return paths
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = out.Close() }()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }

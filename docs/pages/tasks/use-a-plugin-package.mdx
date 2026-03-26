@@ -1,0 +1,40 @@
+# Use a Plugin Package
+
+This task covers the packaged plugin workflow for operators.
+
+## 1. Reference the package in config
+
+```yaml
+integrations:
+  acme:
+    plugin:
+      package: ./plugins/acme-provider-0.1.0.tar.gz
+      config:
+        endpoint: https://api.example.com
+```
+
+`plugin.package` accepts a local path to a `.tar.gz` archive or an HTTPS URL. Relative paths resolve from the config file's directory.
+
+## 2. Prepare the deployment
+
+```bash
+gestaltd init --config ./gestalt.yaml
+```
+
+This extracts the package into `.gestalt/plugins/`, validates the manifest and platform-specific artifact, and writes the locked manifest and executable paths into `gestalt.lock.json`.
+
+## 3. Validate
+
+```bash
+gestaltd validate --config ./gestalt.yaml
+```
+
+For packaged plugins, validation uses the prepared manifest and packaged schema instead of launching the plugin binary just to read metadata.
+
+## 4. Serve
+
+```bash
+gestaltd serve --config ./gestalt.yaml
+```
+
+`serve` uses the locked executable path from `gestalt.lock.json`.

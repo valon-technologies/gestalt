@@ -76,7 +76,7 @@ Like bindings, runtimes receive a scoped invoker limited to the providers listed
 
 A **provider artifact** is a precompiled JSON file containing a complete provider definition: metadata, auth configuration, and the full list of operations with their parameters and schemas.
 
-Source configs always declare REST and GraphQL upstreams by `url`. In development, `gestaltd dev` resolves those upstreams live and writes prepared artifacts next to the config as needed. For deterministic deployment, run `gestaltd prepare` ahead of time to write `gestalt.lock.json` plus `.gestalt/providers/*.json`, then start with `gestaltd serve` so startup no longer depends on live spec fetches or GraphQL introspection.
+Source configs always declare REST and GraphQL upstreams by `url`. In development, `gestaltd` resolves those upstreams live and writes prepared artifacts next to the config as needed. For deterministic deployment, run `gestaltd init` ahead of time to write `gestalt.lock.json` plus `.gestalt/providers/*.json`, then start with `gestaltd serve` so startup no longer depends on live spec fetches or GraphQL introspection.
 
 ### Connections and instances
 
@@ -125,7 +125,7 @@ Each integration declares one or more upstreams that define where operations com
 
 | Upstream type | When to use |
 |---|---|
-| `rest` | Load operations from an OpenAPI spec URL. Use `gestaltd prepare` for deterministic startup. |
+| `rest` | Load operations from an OpenAPI spec URL. Use `gestaltd init` for deterministic startup. |
 | `graphql` | Introspect a GraphQL endpoint and generate operations from queries and mutations. |
 | `mcp` | Connect to an upstream MCP server and import its tools as operations. |
 
