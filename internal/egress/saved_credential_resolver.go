@@ -10,9 +10,10 @@ type SavedCredentialGrantLoader interface {
 }
 
 type SavedGrantCredentialResolver struct {
-	Store         SavedCredentialGrantLoader
-	TokenResolver ProviderTokenResolver
-	Materializer  CredentialMaterializer
+	Store          SavedCredentialGrantLoader
+	TokenResolver  ProviderTokenResolver
+	Materializer   CredentialMaterializer
+	SecretResolver SecretResolver
 }
 
 func (r *SavedGrantCredentialResolver) ResolveCredential(ctx context.Context, subject Subject, target Target) (CredentialMaterialization, error) {
@@ -25,6 +26,10 @@ func (r *SavedGrantCredentialResolver) ResolveCredential(ctx context.Context, su
 		g := &candidates[i]
 		if !g.Matches(subject, target) {
 			continue
+		}
+
+		if g.SecretRef != "" {
+			return resolveSecretGrant(ctx, r.SecretResolver, g)
 		}
 
 		provider, instance, ok := g.ResolveProvider(target)

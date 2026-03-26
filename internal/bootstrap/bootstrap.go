@@ -142,7 +142,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	sharedInvoker := invocation.NewBroker(providers, ds)
-	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds)
+	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
 	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)

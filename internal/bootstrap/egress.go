@@ -68,7 +68,7 @@ func (a *denyRuleStoreAdapter) LoadDenyRules(ctx context.Context) ([]egress.Deny
 	return out, nil
 }
 
-func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore) {
+func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore, sm core.SecretManager) {
 	var sources []egress.CredentialResolver
 
 	if len(deps.CredentialGrants) > 0 {
@@ -76,7 +76,9 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 		for i := range deps.CredentialGrants {
 			g := &deps.CredentialGrants[i]
 			grants[i] = egress.CredentialGrant{
-				Instance: g.Instance,
+				Instance:  g.Instance,
+				SecretRef: g.SecretRef,
+				AuthStyle: egress.AuthStyle(g.AuthStyle),
 				MatchCriteria: egress.MatchCriteria{
 					SubjectKind: egress.SubjectKind(g.SubjectKind),
 					SubjectID:   g.SubjectID,
@@ -89,17 +91,19 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 			}
 		}
 		sources = append(sources, &egress.ProviderCredentialResolver{
-			TokenResolver: &brokerTokenResolver{broker: broker},
-			Materializer:  &registryMaterializer{providers: providers},
-			Grants:        grants,
+			TokenResolver:  &brokerTokenResolver{broker: broker},
+			Materializer:   &registryMaterializer{providers: providers},
+			SecretResolver: sm,
+			Grants:         grants,
 		})
 	}
 
 	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
 		sources = append(sources, &egress.SavedGrantCredentialResolver{
-			Store:         &credentialGrantStoreAdapter{store: grantStore},
-			TokenResolver: &brokerTokenResolver{broker: broker},
-			Materializer:  &registryMaterializer{providers: providers},
+			Store:          &credentialGrantStoreAdapter{store: grantStore},
+			TokenResolver:  &brokerTokenResolver{broker: broker},
+			Materializer:   &registryMaterializer{providers: providers},
+			SecretResolver: sm,
 		})
 	}
 
@@ -125,7 +129,9 @@ func (a *credentialGrantStoreAdapter) ListCandidateCredentialGrants(ctx context.
 	out := make([]egress.CredentialGrant, len(grants))
 	for i, g := range grants {
 		out[i] = egress.CredentialGrant{
-			Instance: g.Instance,
+			Instance:  g.Instance,
+			SecretRef: g.SecretRef,
+			AuthStyle: egress.AuthStyle(g.AuthStyle),
 			MatchCriteria: egress.MatchCriteria{
 				SubjectKind: egress.SubjectKind(g.SubjectKind),
 				SubjectID:   g.SubjectID,
