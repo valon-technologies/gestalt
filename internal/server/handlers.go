@@ -328,6 +328,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, invocation.ErrUserResolution):
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		case errors.Is(err, invocation.ErrMissingRequiredParam):
+			writeError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, invocation.ErrInternal):
 			writeError(w, http.StatusInternalServerError, "internal error")
 		case errors.Is(err, core.ErrMCPOnly):

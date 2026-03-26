@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -73,6 +74,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	for _, op := range ops {
 		if op.Name == operation {
 			found = true
+			if missing := missingRequiredParams(op.Parameters, params); len(missing) > 0 {
+				return nil, fmt.Errorf("%w: %s", ErrMissingRequiredParam, strings.Join(missing, ", "))
+			}
 			break
 		}
 	}
@@ -276,4 +280,16 @@ func (b *Broker) refreshOAuth(ctx context.Context, oauthProv core.OAuthProvider,
 		}
 	}
 	return oauthProv.RefreshToken(ctx, refreshToken)
+}
+
+func missingRequiredParams(defined []core.Parameter, provided map[string]any) []string {
+	var missing []string
+	for _, p := range defined {
+		if p.Required {
+			if _, ok := provided[p.Name]; !ok {
+				missing = append(missing, p.Name)
+			}
+		}
+	}
+	return missing
 }
