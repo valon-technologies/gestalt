@@ -1587,6 +1587,9 @@ func TestCreateAndListEgressClients(t *testing.T) {
 				if filter.CreatedByID != "u1" {
 					t.Fatalf("expected CreatedByID u1, got %q", filter.CreatedByID)
 				}
+				if filter.Scope != core.EgressClientScopePersonal {
+					t.Fatalf("expected Scope personal, got %q", filter.Scope)
+				}
 				return stored, nil
 			},
 		}
@@ -1617,6 +1620,9 @@ func TestCreateAndListEgressClients(t *testing.T) {
 	}
 	if created["id"] == "" {
 		t.Fatal("expected non-empty id")
+	}
+	if created["scope"] != core.EgressClientScopePersonal {
+		t.Fatalf("expected scope personal, got %q", created["scope"])
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
@@ -5319,5 +5325,651 @@ func TestAdminCredentialGrants_ListFilterByProvider(t *testing.T) {
 	}
 	if lastFilter.Provider != "vendorx" {
 		t.Fatalf("expected provider filter vendorx, got %q", lastFilter.Provider)
+	}
+}
+
+func TestEgressClientScope_NonAdminCreatePersonal(t *testing.T) {
+	t.Parallel()
+
+	var created *core.EgressClient
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			CreateEgressClientFn: func(_ context.Context, c *core.EgressClient) error {
+				created = c
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"my-client","scope":"personal"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", body)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+	if created.Scope != core.EgressClientScopePersonal {
+		t.Fatalf("expected personal scope, got %q", created.Scope)
+	}
+}
+
+func TestEgressClientScope_NonAdminCreateGlobalForbidden(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"shared-client","scope":"global"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", body)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_InvalidScopeOnCreate(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"bad-scope","scope":"team"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", body)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_AdminCreateGlobal(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	var created *core.EgressClient
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			CreateEgressClientFn: func(_ context.Context, c *core.EgressClient) error {
+				created = c
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"shared-bot","scope":"global"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", body)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+	if created.Scope != core.EgressClientScopeGlobal {
+		t.Fatalf("expected global scope, got %q", created.Scope)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["scope"] != core.EgressClientScopeGlobal {
+		t.Fatalf("expected scope global in response, got %q", result["scope"])
+	}
+}
+
+func TestEgressClientScope_AdminListDefault(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	personalClient := &core.EgressClient{
+		ID: "ec-p1", Name: "my-bot", Scope: core.EgressClientScopePersonal,
+		CreatedByID: "u-admin", CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	globalClient := &core.EgressClient{
+		ID: "ec-g1", Name: "shared-bot", Scope: core.EgressClientScopeGlobal,
+		CreatedByID: "u-admin", CreatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			ListEgressClientsFn: func(_ context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
+				if filter.Scope == core.EgressClientScopePersonal {
+					return []*core.EgressClient{personalClient}, nil
+				}
+				if filter.Scope == core.EgressClientScopeGlobal {
+					return []*core.EgressClient{globalClient}, nil
+				}
+				return nil, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 clients, got %d", len(listed))
+	}
+	if listed[0]["id"] != "ec-p1" {
+		t.Fatalf("expected first client ec-p1, got %q", listed[0]["id"])
+	}
+	if listed[1]["id"] != "ec-g1" {
+		t.Fatalf("expected second client ec-g1, got %q", listed[1]["id"])
+	}
+}
+
+func TestEgressClientScope_NonAdminListReturnsOnlyPersonal(t *testing.T) {
+	t.Parallel()
+
+	personalClient := &core.EgressClient{
+		ID: "ec-p1", Name: "my-bot", Scope: core.EgressClientScopePersonal, CreatedByID: "u1",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			ListEgressClientsFn: func(_ context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
+				if filter.CreatedByID == "u1" && filter.Scope == core.EgressClientScopePersonal {
+					return []*core.EgressClient{personalClient}, nil
+				}
+				return nil, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 client, got %d", len(listed))
+	}
+	if listed[0]["scope"] != core.EgressClientScopePersonal {
+		t.Fatalf("expected scope personal, got %q", listed[0]["scope"])
+	}
+}
+
+func TestEgressClientScope_NonAdminListGlobalForbidden(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients?scope=global", nil)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_InvalidScopeQueryParam(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients?scope=team", nil)
+	req.Header.Set("X-Dev-User-Email", "user@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_AdminCannotDeleteOtherPersonalClient(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-other" {
+					return &core.EgressClient{
+						ID: "ec-other", Name: "other-bot",
+						Scope: core.EgressClientScopePersonal, CreatedByID: "u-other",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-other", nil)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestEgressClientScope_AdminCanDeleteGlobalClient(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+	deleted := false
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-global" {
+					return &core.EgressClient{
+						ID: "ec-global", Name: "shared-bot",
+						Scope: core.EgressClientScopeGlobal, CreatedByID: "u-admin",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			DeleteEgressClientFn: func(_ context.Context, id string) error {
+				if id == "ec-global" {
+					deleted = true
+					return nil
+				}
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-global", nil)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if !deleted {
+		t.Fatal("expected delete to be called")
+	}
+}
+
+func TestEgressClientScope_AdminCanManageGlobalTokens(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-global" {
+					return &core.EgressClient{
+						ID: "ec-global", Name: "shared-bot",
+						Scope: core.EgressClientScopeGlobal, CreatedByID: "u-admin",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			CreateEgressClientTokenFn: func(_ context.Context, _ *core.EgressClientToken) error {
+				return nil
+			},
+			ListEgressClientTokensFn: func(_ context.Context, clientID string) ([]*core.EgressClientToken, error) {
+				return []*core.EgressClientToken{
+					{ID: "tok-1", ClientID: clientID, Name: "deploy"},
+				}, nil
+			},
+			RevokeEgressClientTokenFn: func(_ context.Context, _, _ string) error {
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"deploy-token"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients/ec-global/tokens", body)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create token request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients/ec-global/tokens", nil)
+	listReq.Header.Set("X-Dev-User-Email", adminEmail)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list token request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+
+	revokeReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress-clients/ec-global/tokens/tok-1", nil)
+	revokeReq.Header.Set("X-Dev-User-Email", adminEmail)
+	revokeResp, err := http.DefaultClient.Do(revokeReq)
+	if err != nil {
+		t.Fatalf("revoke token request: %v", err)
+	}
+	defer func() { _ = revokeResp.Body.Close() }()
+	if revokeResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", revokeResp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_NonAdminAccessGlobalByIDReturns404(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-global" {
+					return &core.EgressClient{
+						ID: "ec-global", Name: "shared-bot",
+						Scope: core.EgressClientScopeGlobal, CreatedByID: "u-admin",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	for _, path := range []string{
+		"/api/v1/egress-clients/ec-global",
+		"/api/v1/egress-clients/ec-global/tokens",
+	} {
+		method := http.MethodDelete
+		if strings.HasSuffix(path, "/tokens") {
+			method = http.MethodGet
+		}
+		req, _ := http.NewRequest(method, ts.URL+path, nil)
+		req.Header.Set("X-Dev-User-Email", "user@example.com")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		_ = resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s %s: expected 404, got %d", method, path, resp.StatusCode)
+		}
+	}
+}
+
+func TestEgressClientScope_GlobalTokenAuth(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeEgressClient)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateEgressClientTokenFn: func(_ context.Context, h string) (*core.EgressClientToken, error) {
+				if h == hashed {
+					return &core.EgressClientToken{ID: "tok-1", ClientID: "ec-global"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-global" {
+					return &core.EgressClient{
+						ID: "ec-global", Name: "shared-bot",
+						Scope: core.EgressClientScopeGlobal, CreatedByID: "u-admin",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestEgressClientScope_SameNamePersonalAndGlobal(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+	var stored []*core.EgressClient
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			CreateEgressClientFn: func(_ context.Context, c *core.EgressClient) error {
+				stored = append(stored, c)
+				return nil
+			},
+			ListEgressClientsFn: func(_ context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
+				var result []*core.EgressClient
+				for _, c := range stored {
+					match := true
+					if filter.CreatedByID != "" && c.CreatedByID != filter.CreatedByID {
+						match = false
+					}
+					if filter.Scope != "" && c.Scope != filter.Scope {
+						match = false
+					}
+					if match {
+						result = append(result, c)
+					}
+				}
+				return result, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	personalBody := bytes.NewBufferString(`{"name":"dual-bot","scope":"personal"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", personalBody)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create personal: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 for personal, got %d", resp.StatusCode)
+	}
+
+	globalBody := bytes.NewBufferString(`{"name":"dual-bot","scope":"global"}`)
+	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress-clients", globalBody)
+	req2.Header.Set("X-Dev-User-Email", adminEmail)
+	req2.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("create global: %v", err)
+	}
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 for global, got %d", resp2.StatusCode)
+	}
+
+	if len(stored) != 2 {
+		t.Fatalf("expected 2 stored clients, got %d", len(stored))
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress-clients", nil)
+	listReq.Header.Set("X-Dev-User-Email", adminEmail)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 clients in default admin list, got %d", len(listed))
+	}
+
+	scopes := map[string]bool{}
+	for _, c := range listed {
+		scopes[c["scope"].(string)] = true
+	}
+	if !scopes[core.EgressClientScopePersonal] || !scopes[core.EgressClientScopeGlobal] {
+		t.Fatalf("expected both personal and global scopes, got %v", scopes)
 	}
 }

@@ -61,6 +61,7 @@ func egressClientResponseFromCore(client *core.EgressClient) egressClientRespons
 		ID:          client.ID,
 		Name:        client.Name,
 		Description: client.Description,
+		Scope:       client.Scope,
 		CreatedByID: client.CreatedByID,
 		CreatedAt:   client.CreatedAt,
 		UpdatedAt:   client.UpdatedAt,
