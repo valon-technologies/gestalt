@@ -4615,11 +4615,15 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 			Loaders: []egress.CredentialGrantLoader{
 				&egress.StaticCredentialGrantLoader{
 					Grants: []egress.CredentialGrant{
-						{MatchCriteria: egress.MatchCriteria{Provider: "test-provider"}},
+						{
+							MatchCriteria: egress.MatchCriteria{Provider: "test-provider"},
+							Source: &egress.ProviderTokenCredentialSource{
+								TokenResolver: staticTokenResolverFunc("injected-token"),
+							},
+						},
 					},
 				},
 			},
-			TokenResolver: staticTokenResolverFunc("injected-token"),
 		},
 	}
 

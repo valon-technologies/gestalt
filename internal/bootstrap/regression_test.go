@@ -904,7 +904,7 @@ func TestInvalidSavedGrantAuthStyleBlocksConfigFallback(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid auth_style error, got nil")
 	}
-	if !strings.Contains(err.Error(), "unknown auth style") {
-		t.Fatalf("expected auth style error, got: %v", err)
+	if !strings.Contains(err.Error(), "invalid saved grant") {
+		t.Fatalf("expected invalid saved grant error, got: %v", err)
 	}
 }
