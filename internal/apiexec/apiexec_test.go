@@ -3,6 +3,7 @@ package apiexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,31 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/testutil"
 )
+
+func TestSubstitutePath_MissingParam(t *testing.T) {
+	t.Parallel()
+	_, err := substitutePath("/users/{userId}/messages", map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for missing path parameter")
+	}
+	if !errors.Is(err, ErrMissingPathParam) {
+		t.Errorf("expected ErrMissingPathParam, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "userId") {
+		t.Errorf("error should mention the missing param name, got: %v", err)
+	}
+}
+
+func TestSubstitutePath_Success(t *testing.T) {
+	t.Parallel()
+	result, err := substitutePath("/users/{userId}/messages", map[string]any{"userId": "me"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "/users/me/messages" {
+		t.Errorf("expected /users/me/messages, got: %s", result)
+	}
+}
 
 func TestDoGETWithQueryAndPathParams(t *testing.T) {
 	t.Parallel()

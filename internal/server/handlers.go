@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/discovery"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -332,6 +333,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "internal error")
 		case errors.Is(err, core.ErrMCPOnly):
 			writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
+		case errors.Is(err, apiexec.ErrMissingPathParam):
+			writeError(w, http.StatusBadRequest, err.Error())
 		default:
 			log.Printf("operation %s/%s failed: %v", providerName, operationName, err)
 			writeError(w, http.StatusBadGateway, "operation failed")
