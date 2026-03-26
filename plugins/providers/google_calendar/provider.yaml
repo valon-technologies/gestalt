@@ -1,0 +1,89 @@
+provider: google_calendar
+display_name: Google Calendar
+description: Google Calendar event and schedule management
+connection_mode: user
+base_url: "https://www.googleapis.com/calendar/v3"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/calendar
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  list_calendars:
+    description: List all calendars accessible to the user
+    method: GET
+    path: /users/me/calendarList
+    parameters:
+      - {name: showHidden, type: boolean, description: Show hidden calendars}
+      - {name: showDeleted, type: boolean, description: Show deleted calendars}
+
+  get_calendar:
+    description: Get details of a specific calendar by ID
+    method: GET
+    path: "/users/me/calendarList/{calendarId}"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: Calendar ID}
+
+  list_events:
+    description: List calendar events with optional time range and search filters
+    method: GET
+    path: "/calendars/{calendarId}/events"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: "Calendar ID (use 'primary' for main calendar)"}
+      - {name: timeMin, type: string, description: Lower bound for event start time (RFC3339)}
+      - {name: timeMax, type: string, description: Upper bound for event start time (RFC3339)}
+      - {name: maxResults, type: integer, description: Maximum events to return}
+      - {name: singleEvents, type: boolean, description: Expand recurring events into instances}
+      - {name: orderBy, type: string, description: "Sort order: startTime or updated"}
+      - {name: q, type: string, description: Free text search query}
+      - {name: pageToken, type: string, description: Token for pagination}
+
+  get_event:
+    description: Get details of a specific calendar event
+    method: GET
+    path: "/calendars/{calendarId}/events/{eventId}"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: Calendar ID}
+      - {name: eventId, type: string, required: true, description: Event ID}
+
+  create_event:
+    description: Create a new calendar event
+    method: POST
+    path: "/calendars/{calendarId}/events"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: Calendar ID}
+      - {name: summary, type: string, required: true, description: Event title}
+      - {name: start, type: object, required: true, description: Start time object with dateTime or date}
+      - {name: end, type: object, required: true, description: End time object with dateTime or date}
+      - {name: description, type: string, description: Event description}
+      - {name: location, type: string, description: Event location}
+      - {name: attendees, type: array, description: List of attendee objects}
+
+  update_event:
+    description: Update an existing calendar event
+    method: PATCH
+    path: "/calendars/{calendarId}/events/{eventId}"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: Calendar ID}
+      - {name: eventId, type: string, required: true, description: Event ID}
+      - {name: summary, type: string, description: New event title}
+      - {name: start, type: object, description: New start time object}
+      - {name: end, type: object, description: New end time object}
+      - {name: description, type: string, description: New description}
+      - {name: location, type: string, description: New location}
+      - {name: attendees, type: array, description: New attendees list}
+
+  delete_event:
+    description: Delete a calendar event
+    method: DELETE
+    path: "/calendars/{calendarId}/events/{eventId}"
+    parameters:
+      - {name: calendarId, type: string, required: true, description: Calendar ID}
+      - {name: eventId, type: string, required: true, description: Event ID}
+      - {name: sendUpdates, type: string, description: "Notification mode: all, externalOnly, or none"}

@@ -1,0 +1,122 @@
+provider: google_sheets
+display_name: Google Sheets
+description: Google Sheets spreadsheet and data management
+connection_mode: user
+base_url: "https://sheets.googleapis.com/v4/spreadsheets"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/spreadsheets
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  create_spreadsheet:
+    description: Create a new spreadsheet
+    method: POST
+    path: /
+    parameters:
+      - {name: properties, type: object, required: true, description: Spreadsheet properties including title}
+      - {name: sheets, type: array, description: List of sheet definitions}
+
+  get_spreadsheet:
+    description: Get spreadsheet metadata and structure
+    method: GET
+    path: "/{spreadsheetId}"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: includeGridData, type: boolean, description: Whether to include cell data}
+      - {name: ranges, type: array, description: Specific ranges to include}
+
+  get_values:
+    description: Read values from a range in A1 notation
+    method: GET
+    path: "/{spreadsheetId}/values/{range}"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: range, type: string, required: true, description: "A1 notation range (e.g. Sheet1!A1:D10)"}
+      - {name: majorDimension, type: string, description: "ROWS or COLUMNS"}
+      - {name: valueRenderOption, type: string, description: "FORMATTED_VALUE, UNFORMATTED_VALUE, or FORMULA"}
+      - {name: dateTimeRenderOption, type: string, description: "SERIAL_NUMBER or FORMATTED_STRING"}
+
+  batch_get_values:
+    description: Read values from multiple ranges
+    method: GET
+    path: "/{spreadsheetId}/values:batchGet"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: ranges, type: array, required: true, description: List of A1 notation ranges}
+      - {name: majorDimension, type: string, description: "ROWS or COLUMNS"}
+      - {name: valueRenderOption, type: string, description: Value render option}
+      - {name: dateTimeRenderOption, type: string, description: Date/time render option}
+
+  update_values:
+    description: Write values to a range (values are parsed as if typed by a user)
+    method: PUT
+    path: "/{spreadsheetId}/values/{range}?valueInputOption=USER_ENTERED"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: range, type: string, required: true, description: A1 notation range}
+      - {name: values, type: array, required: true, description: 2D array of values}
+
+  batch_update_values:
+    description: Write values to multiple ranges (values are parsed as if typed by a user)
+    method: POST
+    path: "/{spreadsheetId}/values:batchUpdate"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: valueInputOption, type: string, required: true, default: USER_ENTERED, description: "How to interpret input: RAW or USER_ENTERED"}
+      - {name: data, type: array, required: true, description: List of range data with values}
+
+  append_values:
+    description: Append rows to a sheet (values are parsed as if typed by a user)
+    method: POST
+    path: "/{spreadsheetId}/values/{range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: range, type: string, required: true, description: A1 notation range to append after}
+      - {name: values, type: array, required: true, description: 2D array of values to append}
+
+  clear_values:
+    description: Clear values from a range
+    method: POST
+    path: "/{spreadsheetId}/values/{range}:clear"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: range, type: string, required: true, description: A1 notation range to clear}
+
+  add_sheet:
+    description: Add a new sheet tab to a spreadsheet
+    method: POST
+    path: "/{spreadsheetId}:batchUpdate"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: requests, type: array, required: true, description: Batch update requests containing addSheet}
+
+  delete_sheet:
+    description: Delete a sheet tab from a spreadsheet
+    method: POST
+    path: "/{spreadsheetId}:batchUpdate"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: requests, type: array, required: true, description: Batch update requests containing deleteSheet}
+
+  update_sheet_properties:
+    description: Update sheet properties such as title and tab color
+    method: POST
+    path: "/{spreadsheetId}:batchUpdate"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: requests, type: array, required: true, description: Batch update requests containing updateSheetProperties}
+
+  find_replace:
+    description: Find and replace text in a spreadsheet
+    method: POST
+    path: "/{spreadsheetId}:batchUpdate"
+    parameters:
+      - {name: spreadsheetId, type: string, required: true, description: Spreadsheet ID}
+      - {name: requests, type: array, required: true, description: Batch update requests containing findReplace}

@@ -1,0 +1,38 @@
+provider: google_docs
+display_name: Google Docs
+description: Google Docs document creation and editing
+connection_mode: user
+base_url: "https://docs.googleapis.com/v1"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/documents
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  get_document:
+    description: Get a document with content and metadata
+    method: GET
+    path: "/documents/{documentId}"
+    parameters:
+      - {name: documentId, type: string, required: true, description: Document ID}
+
+  create_document:
+    description: Create a new document
+    method: POST
+    path: /documents
+    parameters:
+      - {name: title, type: string, required: true, description: Document title}
+
+  batch_update:
+    description: Apply batch updates to a document
+    method: POST
+    path: "/documents/{documentId}:batchUpdate"
+    parameters:
+      - {name: documentId, type: string, required: true, description: Document ID}
+      - {name: requests, type: array, required: true, description: List of update request objects}
