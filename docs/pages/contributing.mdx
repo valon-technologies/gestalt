@@ -24,6 +24,8 @@
 
 Integration-specific behavior is handled through structured config fields (like `response_check` and `post_connect_discovery`) or gRPC plugins. See the [config file reference](/reference/config-file) and [gRPC plugin protocol](/reference/grpc-plugin-protocol) for details.
 
+For provider connection metadata, prefer `core.ConnectionSpecProvider`. The legacy metadata interfaces (`core.ManualProvider`, `core.AuthTypeLister`, `core.ConnectionParamProvider`, and `core.DiscoveryConfigProvider`) are still supported as transitional compatibility shims, but new code should treat `ConnectionSpecProvider` as the primary interface.
+
 ## Development workflow
 
 ```sh

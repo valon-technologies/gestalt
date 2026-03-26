@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/providerinfo"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -30,6 +31,7 @@ var (
 	_ core.Provider               = (*Provider)(nil)
 	_ core.CatalogProvider        = (*Provider)(nil)
 	_ core.SessionCatalogProvider = (*Provider)(nil)
+	_ core.ConnectionSpecProvider = (*Provider)(nil)
 	_ core.AuthTypeLister         = (*Provider)(nil)
 )
 
@@ -51,8 +53,11 @@ func (p *Provider) Name() string                        { return p.name }
 func (p *Provider) DisplayName() string                 { return p.api.DisplayName() }
 func (p *Provider) Description() string                 { return p.api.Description() }
 func (p *Provider) ConnectionMode() core.ConnectionMode { return p.api.ConnectionMode() }
-func (p *Provider) ListOperations() []core.Operation    { return p.api.ListOperations() }
-func (p *Provider) Catalog() *catalog.Catalog           { return p.buildCatalog() }
+func (p *Provider) ConnectionSpec() core.ConnectionSpec {
+	return providerinfo.ResolveConnectionSpec(p.api)
+}
+func (p *Provider) ListOperations() []core.Operation { return p.api.ListOperations() }
+func (p *Provider) Catalog() *catalog.Catalog        { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.api.Execute(ctx, operation, params, token)

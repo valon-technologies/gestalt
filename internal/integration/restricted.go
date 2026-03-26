@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	"github.com/valon-technologies/gestalt/internal/oauth"
+	"github.com/valon-technologies/gestalt/internal/providerinfo"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations.
@@ -17,12 +18,13 @@ type Restricted struct {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider        = (*Restricted)(nil)
-	_ core.ManualProvider  = (*Restricted)(nil)
-	_ core.CatalogProvider = (*Restricted)(nil)
-	_ core.AuthTypeLister  = (*Restricted)(nil)
-	_ core.OAuthProvider   = (*restrictedOAuth)(nil)
-	_ core.ManualProvider  = (*restrictedOAuth)(nil)
+	_ core.Provider               = (*Restricted)(nil)
+	_ core.CatalogProvider        = (*Restricted)(nil)
+	_ core.ConnectionSpecProvider = (*Restricted)(nil)
+	_ core.ManualProvider         = (*Restricted)(nil)
+	_ core.AuthTypeLister         = (*Restricted)(nil)
+	_ core.OAuthProvider          = (*restrictedOAuth)(nil)
+	_ core.ManualProvider         = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -50,6 +52,9 @@ func (r *Restricted) Name() string                        { return r.inner.Name(
 func (r *Restricted) DisplayName() string                 { return r.inner.DisplayName() }
 func (r *Restricted) Description() string                 { return r.inner.Description() }
 func (r *Restricted) ConnectionMode() core.ConnectionMode { return r.inner.ConnectionMode() }
+func (r *Restricted) ConnectionSpec() core.ConnectionSpec {
+	return providerinfo.ResolveConnectionSpec(r.inner)
+}
 
 func (r *Restricted) ListOperations() []core.Operation {
 	all := r.inner.ListOperations()

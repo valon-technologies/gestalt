@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/providerinfo"
 )
 
 type OverlayProvider struct {
@@ -19,6 +20,7 @@ var (
 	_ core.Provider               = (*OverlayProvider)(nil)
 	_ core.CatalogProvider        = (*OverlayProvider)(nil)
 	_ core.SessionCatalogProvider = (*OverlayProvider)(nil)
+	_ core.ConnectionSpecProvider = (*OverlayProvider)(nil)
 	_ core.AuthTypeLister         = (*OverlayProvider)(nil)
 )
 
@@ -38,6 +40,9 @@ func (p *OverlayProvider) Name() string                        { return p.name }
 func (p *OverlayProvider) DisplayName() string                 { return p.base.DisplayName() }
 func (p *OverlayProvider) Description() string                 { return p.base.Description() }
 func (p *OverlayProvider) ConnectionMode() core.ConnectionMode { return p.base.ConnectionMode() }
+func (p *OverlayProvider) ConnectionSpec() core.ConnectionSpec {
+	return providerinfo.ResolveConnectionSpec(p.base)
+}
 
 func (p *OverlayProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	if _, ok := p.overlayOps[operation]; ok {
