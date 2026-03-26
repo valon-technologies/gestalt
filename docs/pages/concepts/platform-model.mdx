@@ -1,160 +1,143 @@
 # Platform Model
 
-Gestalt has a small set of primitives that compose into a complete API gateway for AI assistants and programmatic callers. Once you understand how they fit together, the rest of the system is predictable.
+Gestalt has a small number of primitives, but they compose into a full integration runtime. The easiest way to understand `gestaltd` is to follow the startup path from configuration to invocation.
 
-## Core primitives
+## The Core Model
 
-| Primitive | What it does |
-|---|---|
-| **Auth provider** | Authenticates users to the Gestalt platform and issues session tokens. |
-| **Datastore** | Persists users, integration tokens (encrypted), and API tokens in a pluggable backend such as Postgres, SQLite, or DynamoDB. |
-| **Secret manager** | Resolves `secret://` references in config before other components are built, keeping sensitive values out of plain-text YAML. |
-| **Integration definition** | Describes one or more upstreams (REST, GraphQL, or MCP) with their auth style, operations, and optional response checks. |
-| **Provider** | Runtime object that lists operations and executes them against upstream APIs. Built from the integration's upstreams at startup. |
-| **Operation** | A callable unit exposed by an integration, generated from an OpenAPI spec, GraphQL introspection, or MCP tool listing. |
-| **Runtime** | A background process that boots alongside the server and receives scoped access to a subset of providers. |
-| **Binding** | An alternative request surface (for example, webhooks or MCP) that forwards calls through the shared invoker. |
+At the highest level, `gestaltd` does four things:
 
-## Main concepts
+1. Load and validate a declarative config file.
+2. Bootstrap the platform components that config names.
+3. Build providers from integrations.
+4. Expose those providers through shared request surfaces.
 
-### Integrations and providers
+## The Main Primitives
 
-An **integration** is a named entry in your configuration file that describes how Gestalt connects to an external service. It declares which upstreams to use, how authentication works, and which operations to expose. Think of it as a blueprint: it tells Gestalt everything it needs to know about a service, but it does not execute anything by itself.
+| Primitive | Purpose |
+| --- | --- |
+| `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
+| `datastore` | Persists users, API tokens, integration tokens, staged connections, and some egress data. |
+| `secrets` | Resolves `secret://...` references during bootstrap. |
+| `integrations` | Define the user-facing provider graph: upstreams, auth behavior, connection mode, operation allowlists, overlays, and metadata. |
+| `runtimes` | Long-lived background workers with scoped access to selected providers. |
+| `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
+| `egress` | Policy and credential rules for outbound traffic. |
 
-A **provider** is the runtime object that Gestalt builds from an integration definition at startup. The provider is what actually lists operations and executes them. When you invoke `slack/conversations_list`, the request is handled by the Slack provider, which was constructed from the `slack` integration in your config.
+## Bootstrap Order
 
-When an integration declares multiple upstream types — for example, a REST upstream and an MCP upstream — Gestalt builds a **composite provider** that merges operations from both sources into a single namespace.
+This is the actual shape of startup:
 
-### Upstreams
+1. Load YAML from the resolved config path.
+2. Expand `${ENV_VAR}` placeholders.
+3. Apply defaults such as `server.port: 8080` and `secrets.provider: env`.
+4. Resolve auth profiles and inherited upstream auth.
+5. Fill redirect URLs from `server.base_url` when possible.
+6. Resolve relative paths against the config file directory.
+7. Validate the config.
+8. Build the secret manager.
+9. Resolve `secret://...` references across the rest of the config.
+10. Build the platform auth provider.
+11. Build the datastore.
+12. Build providers from `integrations`.
+13. Build the shared invocation broker.
+14. Build scoped runtimes and bindings.
+15. Start the HTTP server, then start bindings and runtimes once providers are ready.
 
-An **upstream** is a source of operations. Every integration declares at least one. Gestalt supports three upstream types:
+## Integrations Become Providers
 
-- A **REST upstream** loads operations from an OpenAPI specification URL. Each path and method combination in the spec becomes a callable operation.
-- A **GraphQL upstream** introspects a GraphQL endpoint at startup and generates one operation per query and mutation field.
-- An **MCP upstream** connects to a remote MCP server and imports its tools as operations.
+An integration is a declarative definition. A provider is the runtime object built from it.
 
-A single integration can combine upstream types. A Slack integration, for example, might use a REST upstream for HTTP operations and an MCP upstream for additional tools. The resulting provider exposes both sets of operations under the same name.
+That distinction matters:
 
-### Operations
+- you edit `integrations.<name>` in YAML
+- `gestaltd` turns that entry into a provider at startup
+- every request surface invokes the provider, not the raw YAML
 
-An **operation** is the smallest callable unit in Gestalt. Every API call, GraphQL query, and MCP tool invocation maps to exactly one operation.
+Providers can come from three sources:
 
-Operations are identified by name. For REST upstreams, the name comes from the OpenAPI `operationId`. For GraphQL, it is the query or mutation field name. For MCP, it is the tool name. Each operation carries metadata: a human-readable description, parameter definitions with types, and annotations indicating whether the operation is read-only, destructive, or idempotent. This metadata flows through to MCP tool generation so that AI assistants can make informed decisions about which tools to call.
+| Source | How it works |
+| --- | --- |
+| Built-in named provider | `plugin.base` or a registered provider name such as `bigquery` or `jira`. |
+| Upstream-defined provider | Built from a REST, GraphQL, or MCP upstream in config. |
+| Executable plugin | Spawned as a separate process and connected over the plugin protocol. |
 
-### Plugins
+## Composition Rules
 
-A **plugin** is a Go package that implements one of Gestalt's core interfaces. Plugins are how you swap components in and out of the system without changing application code.
+The composition rules are intentionally narrow:
 
-Gestalt ships with plugins across seven categories:
+- an integration may have at most one REST or GraphQL upstream
+- an integration may have at most one MCP upstream
+- one API upstream plus one MCP upstream is valid
+- a provider plugin normally replaces upstreams entirely
+- `plugin.mode: overlay` lets a provider plugin wrap exactly one base source
 
-| Category | What it provides |
-|---|---|
-| Auth provider | Platform login and session management |
-| Datastore | Persistent storage for users and tokens |
-| Secret manager | Resolution of `secret://` references |
-| Binding | Alternative request surfaces |
-| Runtime | Background processes |
-| Provider | Operation sources |
+That gives you a predictable composition model:
 
-You select plugins by name in the config file. At startup, Gestalt instantiates the named plugin with the config you provide and wires it into the system. See [Built-in Plugins](/reference/built-in-plugins) for the full list.
+- REST only
+- GraphQL only
+- MCP only
+- REST plus MCP
+- GraphQL plus MCP
+- overlay plugin on top of one of the above
 
-### Bindings
+## The Shared Invocation Broker
 
-A **binding** is an alternative way to reach Gestalt's providers, separate from the HTTP API and MCP endpoint. Bindings receive external events and forward them through the same shared invoker that handles all other requests.
+Every execution path in Gestalt goes through the same invocation broker. That is the mechanism that makes the platform feel uniform.
 
-The built-in `webhook` binding listens for HTTP POST requests at a configured path and invokes a specific provider operation with the request body as parameters. You might use it to receive event callbacks from an upstream service and route them to an operation for processing.
+The broker is responsible for:
 
-Bindings are scoped: each binding config declares which providers it can access. This prevents a webhook endpoint from accidentally invoking operations on unrelated integrations.
+- locating the target provider and operation
+- resolving credentials based on `connection_mode`
+- choosing an instance when multiple connections exist
+- refreshing expiring OAuth tokens
+- injecting connection metadata into execution context
+- returning normalized operation results
 
-### Runtimes
+Because this broker is shared, the same token and policy behavior applies whether the caller is:
 
-A **runtime** is a long-lived background process that starts alongside the server and stops when the server shuts down. Runtimes are useful for periodic tasks, event loops, or any work that needs continuous access to provider operations without waiting for an external trigger.
+- the web UI
+- a direct HTTP client
+- an MCP client hitting `/mcp`
+- a webhook binding
+- a proxy binding
+- a background runtime
 
-Like bindings, runtimes receive a scoped invoker limited to the providers listed in their config. A runtime that only needs Slack and Linear cannot invoke operations on any other integration.
+## Connection Modes
 
-### Artifacts
+Each integration declares how credentials are resolved:
 
-A **provider artifact** is a precompiled JSON file containing a complete provider definition: metadata, auth configuration, and the full list of operations with their parameters and schemas.
+| Mode | Meaning |
+| --- | --- |
+| `user` | Use the authenticated caller's token. This is the default. |
+| `identity` | Use a shared platform-level token. |
+| `either` | Try the user's token first, then fall back to the identity token. |
+| `none` | Invoke with no credential at all. |
 
-Source configs always declare REST and GraphQL upstreams by `url`. In development, `gestaltd` resolves those upstreams live and writes prepared artifacts next to the config as needed. For deterministic deployment, run `gestaltd init` ahead of time to write `gestalt.lock.json` plus `.gestalt/providers/*.json`, then start with `gestaltd serve` so startup no longer depends on live spec fetches or GraphQL introspection.
+If an integration has more than one stored connection for the chosen subject, callers must specify an instance. If there is exactly one, Gestalt selects it automatically.
 
-### Connections and instances
+## Surfaces Built On Top
 
-A **connection** is a user's stored credential for an integration. When a user completes an OAuth flow or pastes an API key, Gestalt encrypts the resulting tokens and persists them in the datastore. Each subsequent request to that integration resolves the stored connection automatically.
+Once providers exist, `gestaltd` projects them into several surfaces:
 
-By default, each user has one connection per integration. Some integrations support multiple accounts — a user managing two Shopify stores or three Slack workspaces, for example. Gestalt handles this through **instances**: each connection is identified by a (user, integration, instance) tuple. The first connection uses the instance name `"default"`.
+| Surface | What it exposes |
+| --- | --- |
+| HTTP API | `/api/v1/...` for integration listing, auth flows, invocation, token management, egress clients, and admin egress rules. |
+| Embedded web UI | Served by the same server process and port as the API. |
+| MCP endpoint | `/mcp`, mounted only when at least one integration is MCP-enabled. |
+| Bindings | Additional routes and triggers declared under `bindings:`. |
+| Runtimes | Background workers declared under `runtimes:`. |
 
-When a user has a single connection, Gestalt selects it automatically. When multiple connections exist, the caller must pass `_instance` as a parameter to specify which one to use. Omitting it returns an error listing the available instances.
+## What The User Actually Programs Against
 
-## Execution model
+As a Gestalt operator, the main primitives you compose are:
 
-All request surfaces share a single invoker built once at startup:
+- top-level config blocks
+- integration definitions
+- upstream definitions
+- auth profiles
+- runtime definitions
+- binding definitions
+- egress rules
+- optional plugin manifests and packages
 
-| Piece | What it does |
-|---|---|
-| Shared invoker | Built in bootstrap. Used by HTTP handlers, MCP endpoint, bindings, and runtimes. |
-| Runtime deps | A runtime receives a scoped invoker plus a capability lister, limited to its allowed providers. |
-| Binding deps | A binding receives a scoped invoker so it can forward calls without accessing the full platform surface. |
-| Allowlists | Binding and runtime configs narrow which providers they can reach. |
-
-## How a request flows
-
-1. The caller authenticates with a session token or API token. Middleware resolves the caller's identity before the request reaches any handler.
-2. The shared invoker resolves the caller's stored credential for the target integration.
-3. If the access token is within 5 minutes of expiry, the invoker refreshes it automatically using the stored refresh token.
-4. The operation is matched by integration name and operation ID. If the operation is not in the integration's allow-list, the request is rejected.
-5. Gestalt applies any configured auth mapping or custom auth headers to transform the stored credential into the format the upstream API expects.
-6. Gestalt executes the upstream HTTP call, applies response checks if configured, and returns the result.
-
-## Connection modes
-
-Each integration has a connection mode that controls how credentials are resolved:
-
-| Mode | Behavior |
-|---|---|
-| `user` | Resolve the calling user's token. Each user connects independently. |
-| `identity` | Resolve a shared org-level or app-level token. |
-| `either` | Try the user's token first, fall back to the identity token. |
-| `none` | No credentials needed. The integration does not require authentication. |
-
-Set `connection_mode` on the integration config. Default is `user`.
-
-## Upstream types
-
-Each integration declares one or more upstreams that define where operations come from:
-
-| Upstream type | When to use |
-|---|---|
-| `rest` | Load operations from an OpenAPI spec URL. Use `gestaltd init` for deterministic startup. |
-| `graphql` | Introspect a GraphQL endpoint and generate operations from queries and mutations. |
-| `mcp` | Connect to an upstream MCP server and import its tools as operations. |
-
-An integration can combine multiple upstream types (e.g. REST + MCP) to create a composite provider.
-
-## Extension interfaces
-
-Gestalt's plugin system is built on interfaces defined in the `core/` package:
-
-| Interface | Package | Purpose |
-|---|---|---|
-| `AuthProvider` | `core/auth.go` | Authenticates users and issues session tokens. |
-| `Datastore` | `core/datastore.go` | Persists users, integration tokens, and API tokens. |
-| `SecretManager` | `core/secrets.go` | Resolves secret values by name. |
-| `Provider` | `core/provider.go` | Lists and executes operations against an upstream API. |
-| `OAuthProvider` | `core/provider.go` | Extends `Provider` with OAuth authorization and token exchange. |
-| `ManualProvider` | `core/provider.go` | Extends `Provider` for API-key services with no OAuth flow. |
-| `CatalogProvider` | `core/provider.go` | Exposes rich metadata (JSON Schema inputs, annotations) for MCP tool generation. |
-| `Runtime` | `core/runtime.go` | Background process with lifecycle management (`Start`/`Stop`). |
-| `Binding` | `core/binding.go` | Alternative request surface (triggers or surfaces) with HTTP routes. |
-| `Invoker` | `internal/invocation/broker.go` | Dispatches operations with credential resolution and token refresh. |
-| `CapabilityLister` | `internal/invocation/broker.go` | Lists all available operations across providers. |
-
-## Self-serve model
-
-You choose every component:
-
-- **Auth provider**: Google OAuth or any OIDC provider (Okta, Azure AD, Auth0, Keycloak, and others).
-- **Datastore**: SQLite for local dev, Postgres or MySQL for production, or DynamoDB, MongoDB, Firestore, Oracle, SQL Server for specialized environments.
-- **Secret manager**: environment variables, files, or Google Cloud Secret Manager.
-- **Integrations**: which upstream APIs to expose (Slack, Linear, Datadog, and others) and which operations within each are callable.
-- **Deployment**: laptop, VM, Kubernetes, Fly.io, Railway, Render, or AWS Lambda.
+Everything else is a consequence of those inputs.

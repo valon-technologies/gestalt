@@ -2,103 +2,108 @@ import { Callout, Steps } from 'nextra/components'
 
 # Getting Started
 
-This guide walks you through standing up a local Gestalt instance, connecting a Slack integration, and invoking your first operation from the CLI. You will have a working setup in under five minutes.
+This guide starts with the true out-of-the-box flow, then moves to an explicit config and a production-style startup path.
 
-## Before you begin
+## 1. Run `gestaltd` With No Config
 
-- Google OAuth credentials (or any OIDC provider).
-- Node.js 18+ (for the web UI).
+```sh
+gestaltd
+```
 
-## Create a config file
+If no config file exists and you did not pass `--config`, `gestaltd` creates `~/.gestalt/config.yaml` for you and starts immediately.
 
-Save the following as `gestalt.local.yaml` in the project root. This file defines the server, auth provider, datastore, and one integration (Slack) with two allowed operations.
+The generated local config uses:
+
+- `auth.provider: local`
+- `datastore.provider: sqlite`
+- `secrets.provider: env`
+- `server.dev_mode: true`
+- a generated `server.encryption_key`
+- `~/.gestalt/gestalt.db` as the SQLite database
+
+The server listens on `http://localhost:8080`. The web UI is served from that same port.
+
+<Callout>
+  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd init` followed by `gestaltd serve --locked`.
+</Callout>
+
+## 2. Open The UI And Sign In
+
+<Steps>
+### Open the server
+
+Visit `http://localhost:8080`.
+
+### Sign in
+
+The generated config uses the built-in `local` auth provider, so you can sign in without Google or OIDC credentials.
+
+### Inspect the default environment
+
+Because the generated config enables `server.dev_mode: true`, dev-only surfaces such as the built-in `echo` provider are available for local experimentation.
+</Steps>
+
+## 3. Switch To An Explicit Config
+
+Save this as `gestalt.yaml`:
 
 ```yaml
 server:
   port: 8080
   base_url: http://localhost:8080
   dev_mode: true
-  encryption_key: local-dev-key
+  encryption_key: change-me
 
 auth:
-  provider: google
-  config:
-    client_id: ${GOOGLE_CLIENT_ID}
-    client_secret: ${GOOGLE_CLIENT_SECRET}
+  provider: local
 
 datastore:
   provider: sqlite
   config:
-    path: ./gestalt.local.db
+    path: ./gestalt.db
 
 integrations:
-  slack:
+  petstore:
+    display_name: Swagger Petstore
+    description: Public example API
+    connection_mode: none
     upstreams:
       - type: rest
-        url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+        url: https://petstore3.swagger.io/api/v3/openapi.json
         allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-    response_check:
-      success_body_match:
-        ok: true
-      error_message_path: error
-    auth:
-      authorization_url: https://slack.com/oauth/v2/authorize
-      token_url: https://slack.com/api/oauth.v2.access
-      response_check:
-        success_body_match:
-          ok: true
-        error_message_path: error
+          findPetsByStatus: List pets by status
+          getPetById: Fetch a pet by id
 ```
 
-<Callout>
-  `base_url` tells Gestalt where to build OAuth callback URLs. If this value is wrong or missing, every OAuth flow will fail with a redirect mismatch error. For local development, `http://localhost:8080` is the correct value.
-</Callout>
+This is the smallest useful production-shaped config:
 
-## Start the server
+- explicit `server`, `auth`, and `datastore`
+- one named integration
+- one REST upstream
+- no per-user credential requirement because `connection_mode: none`
+
+## 4. Prepare And Validate It
 
 ```sh
-gestaltd --config gestalt.local.yaml
+gestaltd validate --init --config ./gestalt.yaml
 ```
 
-This starts both the API server (port 8080) and the web UI (port 3000). `gestaltd` also prepares any remote REST or GraphQL providers automatically for local use. When dev mode is enabled, you will see "dev mode enabled" in the output; this confirms that dev login and relaxed CORS are active.
+`--init` resolves remote provider inputs first, then validates the final locked state. For the config above, that writes:
 
-## Sign in and connect Slack
+- `gestalt.lock.json`
+- `.gestalt/providers/petstore.json`
 
-<Steps>
-### Open the web UI
-
-Go to `http://localhost:3000`. Sign in with your Google account, or use **Dev Login** if you are running in dev mode.
-
-### Connect the integration
-
-Navigate to **Integrations** and click **Connect** next to Slack. Complete the OAuth flow in your browser; Gestalt stores the resulting token and refreshes it automatically on future requests.
-
-### Invoke an operation
-
-Once connected, you can invoke any allowed operation from the web UI or the CLI. The next section covers CLI setup.
-</Steps>
-
-## Install and use the CLI
-
-Install the `gestalt` CLI via Homebrew, then authenticate against your local server:
+## 5. Start From Locked State
 
 ```sh
-brew install valon-technologies/toolshed/gestalt
-gestalt init
-gestalt auth login
-gestalt integrations list
-gestalt invoke slack conversations_list
+gestaltd serve --locked --config ./gestalt.yaml
 ```
 
-`gestalt init` creates a `.gestalt.json` file in your home directory that stores the server URL and session credentials. You can override the server URL at any time by setting the `GESTALT_URL` environment variable.
+This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.
 
-## Next steps
+## 6. What To Learn Next
 
-- [Platform Model](/concepts/platform-model): understand the core primitives that Gestalt builds on.
-- [Add an Integration](/tasks/add-an-integration): walk through adding a new API from scratch.
-- [Config File](/reference/config-file): full reference for every configuration key.
-- [Use with MCP](/tasks/use-with-mcp): connect Gestalt to Claude or any MCP-compatible client.
+- [Platform Model](/concepts/platform-model): how config turns into providers, runtimes, bindings, and MCP.
+- [Configuration](/concepts/configuration): config discovery, defaults, secret resolution, and lock state.
+- [Add an Integration](/tasks/add-an-integration): build a real integration from REST, GraphQL, MCP, or plugins.
+- [Deploy](/deploy): move the same config into Docker or Kubernetes.

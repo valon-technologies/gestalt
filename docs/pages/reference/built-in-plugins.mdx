@@ -1,56 +1,57 @@
 # Built-in Plugins
 
-The Gestalt binary registers all plugins at startup. Bootstrap builds one shared invoker and passes scoped deps to runtimes and bindings.
+This page lists the components that the `gestaltd` binary actually registers today.
 
-## Auth providers
+## Auth Providers
 
 | Name | Notes |
-|---|---|
-| `google` | Google OAuth 2.0 with userinfo validation. Supports `allowed_domains` and `session_ttl`. |
-| `oidc` | Generic OIDC discovery. Supports Okta, Azure AD, Auth0, Keycloak, Firebase, OneLogin, Rippling, and Google. Optional PKCE, domain allow-lists, custom scopes, configurable display name. |
+| --- | --- |
+| `google` | Google OAuth login for the Gestalt platform. |
+| `local` | Local-only auth provider used by the generated no-config startup path. |
+| `oidc` | Generic OIDC platform auth provider. |
 
 ## Datastores
 
 | Name | Notes |
-|---|---|
-| `sqlite` | File-based. Suitable for local development and single-instance deployments. Not recommended for production. |
-| `postgres` | Recommended for production and multi-instance deployments. |
-| `mysql` | Alternative SQL backend using the shared sqlstore layer. |
-| `dynamodb` | AWS DynamoDB. Configurable table name, region, and optional custom endpoint. |
-| `mongodb` | MongoDB with configurable database name (default: `gestalt`). |
-| `firestore` | Google Cloud Firestore with configurable project and database. |
-| `oracle` | Oracle Database via shared sqlstore layer. |
-| `sqlserver` | Microsoft SQL Server via shared sqlstore layer. |
+| --- | --- |
+| `sqlite` | File-backed datastore. Best for local or single-node deployments. |
+| `postgres` | Recommended production datastore. |
+| `mysql` | SQL-backed production datastore. |
+| `dynamodb` | DynamoDB-backed datastore. |
+| `mongodb` | MongoDB-backed datastore. |
+| `oracle` | Oracle-backed datastore. |
+| `firestore` | Firestore-backed datastore. |
+| `sqlserver` | SQL Server-backed datastore. |
 
-All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common implementation layer with automatic schema migration on startup.
-
-## Secret managers
+## Secret Managers
 
 | Name | Notes |
-|---|---|
-| `env` | Resolves from environment variables. Optional prefix. Converts names to uppercase, replaces hyphens with underscores. |
-| `file` | One secret per file from a base directory. Path traversal protected. Trims trailing newlines. |
-| `gcp_secret_manager` | Google Cloud Secret Manager. Configurable project and version (default: `latest`). 10-second timeout per access. |
+| --- | --- |
+| `env` | Resolve secrets from environment variables. |
+| `file` | Resolve secrets from files in a configured directory. |
+| `gcp_secret_manager` | Resolve secrets from Google Secret Manager. |
 
 ## Bindings
 
 | Name | Notes |
-|---|---|
-| `webhook` | Exposes HTTP endpoints that forward to provider operations. Supports `public`, `signed` (HMAC-SHA256), and `trusted_user_header` auth modes. Configurable path, provider, operation, and signature headers. |
-| `proxy` | Provider-backed proxy binding that forwards inbound HTTP requests to upstream hosts. Derives egress subjects from the authenticated principal, sanitizes inbound auth headers, and resolves outbound credentials through the configured provider. Requires exactly one provider. Configurable path prefix and optional instance qualifier. |
+| --- | --- |
+| `webhook` | Inbound HTTP route that can optionally forward into a provider operation. |
+| `proxy` | HTTP proxy surface with egress policy and credential resolution. |
 
 ## Runtimes
 
 | Name | Notes |
-|---|---|
-| `echo` | Dev-only test runtime. Logs startup/shutdown and lists available capabilities. Enabled only when `dev_mode: true`. |
+| --- | --- |
+| `echo` | Dev-only runtime. Registered only when `server.dev_mode: true`. |
 
-## Built-in providers
+## Built-In Named Providers
 
 | Name | Notes |
-|---|---|
-| `echo` | Dev-only provider that echoes input parameters as JSON. Single `echo` operation. Enabled only when `dev_mode: true`. |
+| --- | --- |
+| `bigquery` | Built-in named provider registered by the server binary. |
+| `jira` | Built-in named provider registered by the server binary. |
+| `echo` | Dev-only provider registered only when `server.dev_mode: true`. |
 
-## What is not pluginized
+## What This Page Does Not Mean
 
-The HTTP route structure, middleware chain, and operation dispatch loop are fixed in the binary. There is no plugin point for injecting custom routes or middleware. Custom behavior at that layer means contributing to the core runtime.
+The repo contains provider inventory files and examples, but those are not the same thing as binary-registered built-ins. This page only lists components that are actually wired into `cmd/gestaltd`.

@@ -1,40 +1,54 @@
 # Use a Plugin Package
 
-This task covers the packaged plugin workflow for operators.
+Packaged plugins are the deployment-oriented way to run executable providers and runtimes.
 
-## 1. Reference the package in config
+## 1. Reference The Package
 
 ```yaml
 integrations:
   acme:
     plugin:
-      package: ./plugins/acme-provider-0.1.0.tar.gz
+      package: ./plugins/acme-provider.tar.gz
       config:
         endpoint: https://api.example.com
 ```
 
-`plugin.package` accepts a local path to a `.tar.gz` archive or an HTTPS URL. Relative paths resolve from the config file's directory.
+`plugin.package` accepts:
 
-## 2. Prepare the deployment
+- a local directory
+- a local `.tar.gz`
+- an HTTPS URL
 
-```bash
+## 2. Prepare It
+
+```sh
 gestaltd init --config ./gestalt.yaml
 ```
 
-This extracts the package into `.gestalt/plugins/`, validates the manifest and platform-specific artifact, and writes the locked manifest and executable paths into `gestalt.lock.json`.
+This validates the manifest, selects the current platform artifact, installs the package into `.gestalt/plugins/`, and records the prepared result in `gestalt.lock.json`.
 
-## 3. Validate
+## 3. Validate The Locked Deployment
 
-```bash
+```sh
 gestaltd validate --config ./gestalt.yaml
 ```
 
-For packaged plugins, validation uses the prepared manifest and packaged schema instead of launching the plugin binary just to read metadata.
+Validation now uses the prepared plugin state instead of re-resolving the package every time.
 
-## 4. Serve
+## 4. Start From Locked State
 
-```bash
-gestaltd serve --config ./gestalt.yaml
+```sh
+gestaltd serve --locked --config ./gestalt.yaml
 ```
 
-`serve` uses the locked executable path from `gestalt.lock.json`.
+That is the normal production path for packaged plugins.
+
+## 5. Refresh A Remote Package
+
+If `plugin.package` points at an HTTPS URL and the remote archive changes, rerun:
+
+```sh
+gestaltd init --config ./gestalt.yaml
+```
+
+Remote packages are intentionally refreshed during explicit `init`.

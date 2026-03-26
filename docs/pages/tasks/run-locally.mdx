@@ -2,57 +2,61 @@ import { Callout } from 'nextra/components'
 
 # Run Locally
 
-## Full stack (API + web UI)
+There are three useful local workflows: zero-config startup, explicit config, and locked local startup.
+
+## Zero-Config Startup
 
 ```sh
-gestaltd --config gestalt.dev.yaml
+gestaltd
 ```
 
-This starts the API server and the Next.js web UI in a single process. The API runs on the port in your config (default 8080), the web UI on port 3000. `gestaltd` also prepares remote REST and GraphQL providers automatically when needed.
+If no config exists, `gestaltd` generates `~/.gestalt/config.yaml` and starts a local environment with:
 
-## Web UI with mock API
+- `local` auth
+- SQLite
+- `env` secrets
+- dev mode on
+
+The server and embedded UI are both available at `http://localhost:8080`.
+
+## Explicit Config
 
 ```sh
-cd gestalt/web
-./dev.sh web
+gestaltd --config ./gestalt.yaml
 ```
 
-Starts the Next.js app with built-in mock API routes. No Go server involved.
+Use this when you want to control:
 
-## Development mode
+- auth provider
+- datastore path or DSN
+- integrations
+- runtimes
+- bindings
 
-Set `dev_mode: true` in your config to:
+## Locked Local Startup
 
-- Relax HTTPS requirements for OAuth callbacks.
-- Enable the Dev Login auth path (no external IdP needed).
-- Enable the echo provider and echo runtime for testing.
+If your config includes remote REST or GraphQL upstreams, or packaged plugins, validate and prepare first:
 
-`encryption_key` must be set even in dev mode. Any stable string works locally.
+```sh
+gestaltd validate --init --config ./gestalt.yaml
+gestaltd serve --locked --config ./gestalt.yaml
+```
+
+This is the closest local approximation to a production deployment.
+
+## Local Dev Features
+
+With `server.dev_mode: true`, Gestalt enables:
+
+- `POST /api/dev-login`
+- `X-Dev-User-Email`
+- dev CORS
+- the built-in `echo` provider and `echo` runtime
 
 <Callout>
-  Never enable `dev_mode` in production.
+  Dev mode is for local work only. Do not carry it into production configs.
 </Callout>
 
-## Docker Compose
+## The Frontend In Isolation
 
-```sh
-cd gestalt && docker compose up --build
-```
-
-Runs the API on port 8080 and the web UI on port 3000. Config is mounted from `deploy/docker/config.yaml`. SQLite data is persisted in a named volume.
-
-## Validate your config
-
-```sh
-gestaltd validate --config gestalt.dev.yaml
-```
-
-Prints resolved server settings, auth provider, datastore, integrations, runtimes, and bindings. Exits with "config ok" if valid.
-
-## Sanity checks
-
-```sh
-curl http://localhost:8080/health
-gestalt --url http://localhost:8080 auth status
-gestalt --url http://localhost:8080 integrations list
-```
+If you are working on the web app itself rather than `gestaltd`, the repo also supports running the Next.js app separately. That is a frontend development workflow, not the normal runtime model.

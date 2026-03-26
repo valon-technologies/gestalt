@@ -1,71 +1,149 @@
-import { Callout } from 'nextra/components'
-
 # Authentication and Tokens
 
-Gestalt manages three distinct token flows: platform identity, API tokens for programmatic callers, and per-integration credentials for upstream APIs.
+Gestalt has two separate auth layers:
 
-## Platform auth
+1. platform auth: who is allowed to use Gestalt
+2. integration auth: which upstream credentials Gestalt should use on behalf of that subject
 
-**Platform auth** is the login flow that establishes a user's identity within Gestalt. You configure a single auth provider, and Gestalt handles the rest: redirects, token exchange, session creation, and session validation on every subsequent request.
+Keeping those layers separate is one of the core design choices in `gestaltd`.
 
-| Provider | Notes |
-|---|---|
-| `google` | Google OAuth 2.0. Simplest option for teams on Google Workspace. |
-| `oidc` | Any OpenID Connect provider: Okta, Azure AD, Auth0, Keycloak, Firebase, OneLogin, Rippling, or Google via OIDC discovery. Supports PKCE. |
+## Platform Auth Providers
 
-Both providers support:
+Gestalt currently ships three platform auth providers:
 
-- **Domain allow-lists**: Set `allowed_domains` to restrict which email domains can sign in.
-- **Session TTL**: Set `session_ttl` to control how long sessions last (default: 24 hours).
-- **Session secret**: Set `session_secret` to sign session JWTs.
+| Provider | When to use it |
+| --- | --- |
+| `local` | Local development, no external identity provider required. |
+| `google` | Google Workspace or Google account login. |
+| `oidc` | Any OIDC-compatible provider such as Okta, Auth0, Azure AD, or Keycloak. |
 
-After first login, the user record is created in the datastore. The session token is set as an HTTP cookie and validated on every request.
+### `local`
 
-## API tokens
+`local` is the auth provider used by the auto-generated out-of-the-box config.
 
-**API tokens** give programmatic callers (CLI tools, CI pipelines, MCP clients) persistent access without a browser-based login flow. Users generate API tokens through the web UI or API; the server returns the raw token exactly once. Only a SHA-256 hash is stored, so the token cannot be recovered after creation.
+```yaml
+auth:
+  provider: local
+  config:
+    email: you@example.com
+```
 
-The authentication path on every request:
+`email` is optional. If omitted, Gestalt uses `local@gestalt.local`.
 
-1. Check for a `Bearer` token in the `Authorization` header. If present, hash it and look it up in the datastore.
-2. If no bearer token, check for a valid session cookie.
-3. If neither is found, reject the request.
+### `google`
 
-<Callout>
-  API token scopes are stored but not yet enforced by middleware. Treat the scopes field as metadata for now.
-</Callout>
+```yaml
+auth:
+  provider: google
+  config:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: secret://google-client-secret
+    allowed_domains:
+      - example.com
+```
 
-## Integration tokens
+If `redirect_url` is omitted and `server.base_url` is set, Gestalt derives the login callback automatically.
 
-**Integration tokens** are the credentials Gestalt stores for a user's connection to an upstream API such as Slack, Linear, or Datadog. When a user completes an OAuth flow (or pastes manual credentials), Gestalt encrypts the tokens and persists them in the datastore.
+### `oidc`
 
-Each stored credential includes:
+```yaml
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+    session_secret: secret://oidc-session-secret
+    allowed_domains:
+      - example.com
+    scopes:
+      - openid
+      - email
+      - profile
+    pkce: true
+    display_name: Company SSO
+```
 
-| Field | Purpose |
-|---|---|
-| Access token | Sent to the upstream API on each request. |
-| Refresh token | Used to obtain a new access token when the current one expires. |
-| Expiry time | Timestamp at which the access token expires. |
-| Integration name | Ties the credential to a specific integration. |
-| Instance | Distinguishes multiple connections to the same integration. Defaults to `"default"`. |
-| Metadata | Additional fields extracted from the token response (if `token_metadata` is configured). |
+OIDC exposes more knobs because the host identity provider can vary.
 
-### Multiple connections
+## Session Tokens
 
-A user can connect to the same integration more than once. Each connection is stored as a separate credential identified by the (user, integration, instance) tuple. This is useful when a user works across multiple accounts for the same service — for example, a personal Slack workspace and a work Slack workspace.
+Successful platform login produces a Gestalt session token:
 
-When only one connection exists, Gestalt selects it automatically. When multiple exist, the caller must specify which instance to use by passing `_instance` as a parameter on the request. See [Multi-instance connections](/concepts/integrations#multi-instance-connections) for details.
+- stored in the `session_token` cookie for browser flows
+- validated by the platform auth provider
+- used by the API when no bearer token is provided
 
-## Token refresh
+The auth middleware checks the session cookie first, then the `Authorization: Bearer ...` header.
 
-When the invoker resolves a credential and finds the access token within 5 minutes of expiry, it automatically refreshes it using the stored refresh token. The new tokens are encrypted and persisted before the upstream call proceeds. If refresh fails, the caller receives an error indicating re-authentication is needed.
+## API Tokens
 
-## Development mode
+Users can mint long-lived API tokens for direct HTTP access.
 
-When `dev_mode: true` is set in the server config:
+These tokens:
 
-- HTTPS is not required for OAuth callbacks.
-- The `X-Dev-User-Email` header impersonates a user without the full login flow.
-- The `/dev-login` endpoint creates a session without an external identity provider.
+- are created through `POST /api/v1/tokens`
+- are stored hashed, not in plaintext
+- use the prefix `gst_api_`
+- resolve back to the owning user at request time
 
-Never enable dev mode in production.
+API tokens authenticate to the same HTTP API as browser sessions.
+
+## Integration Tokens
+
+Integration tokens are the credentials Gestalt stores for upstream providers. These are different from platform sessions and API tokens.
+
+They are keyed by:
+
+- subject
+- integration name
+- instance
+
+The invocation broker resolves them based on `connection_mode`:
+
+| Mode | Token lookup |
+| --- | --- |
+| `user` | Find the calling user's token |
+| `identity` | Find the shared identity token |
+| `either` | Try user, then identity |
+| `none` | Do not look up a token |
+
+If an OAuth access token is near expiry and a refresh token exists, Gestalt refreshes it automatically and persists the new token.
+
+## Manual Auth
+
+Not every integration uses OAuth. Gestalt also supports manual connection flows, where a user pastes a token or key directly.
+
+At the config layer, that is controlled by the integration auth model:
+
+- auth type `manual`
+- or `manual_auth: true` when a provider exposes both OAuth and manual auth
+
+Manual auth still ends with a stored integration token. The difference is only how the token enters the system.
+
+## Egress Client Tokens
+
+Gestalt also has a machine-oriented token type for proxy and egress use cases.
+
+These tokens:
+
+- are created under `/api/v1/egress-clients/...`
+- use the prefix `gst_ec_`
+- authenticate as an egress client principal, not as a user
+
+They are mainly relevant when you use the proxy binding and egress policy controls.
+
+## Instances And Ambiguity
+
+If there is exactly one stored connection for an integration, Gestalt uses it automatically.
+
+If there are multiple stored instances and the caller does not specify which one to use, invocation fails with an ambiguity error. That is a deliberate safeguard; Gestalt does not guess when more than one upstream account could apply.
+
+## Dev Mode Overrides
+
+In `server.dev_mode: true`, Gestalt exposes local testing shortcuts:
+
+- `POST /api/dev-login`
+- `X-Dev-User-Email` on authenticated routes
+
+Those are development features only. They bypass normal browser auth flows so you can exercise provider and binding behavior quickly.

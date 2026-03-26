@@ -1,340 +1,496 @@
 # Config File
 
-## Top-level keys
+This page is the authoritative reference for `gestaltd` configuration.
 
-| Key | Purpose |
-|---|---|
-| `auth` | Platform authentication provider and provider-specific config. |
-| `datastore` | Where users, API tokens, and integration tokens are stored. |
-| `secrets` | How `secret://` references are resolved. |
-| `auth_profiles` | Reusable OAuth settings shared across integrations. |
-| `integrations` | Map of integration name to definition. |
-| `runtimes` | Background processes that boot alongside the server with scoped provider access. |
-| `bindings` | Alternative request surfaces such as webhooks and proxy-oriented request normalizers. |
-| `server` | Port, base URL, encryption key, and development mode. |
-| `egress` | Policy and credential rules for outbound requests made by runtimes, bindings, and proxy surfaces. |
+## Top-Level Shape
 
-## Server block
+```yaml
+auth: {}
+datastore: {}
+secrets: {}
+auth_profiles: {}
+integrations: {}
+runtimes: {}
+bindings: {}
+server: {}
+egress: {}
+```
 
-| Field | Default | Notes |
-|---|---|---|
-| `port` | `8080` | HTTP listen port. |
-| `base_url` | | Used to derive missing OAuth callback URLs. Required in production. |
-| `encryption_key` | | Required outside dev mode. Derives the data-encryption key for stored tokens. |
-| `dev_mode` | `false` | Enables auth bypass header, Dev Login endpoint, and echo runtime. |
+## Load Semantics
 
-## Auth block
+Before you get into individual fields, these global rules matter:
+
+- `${ENV_VAR}` expansion happens before YAML decode
+- unknown YAML fields are rejected
+- `server.port` defaults to `8080`
+- `secrets.provider` defaults to `env`
+- relative paths resolve relative to the config file directory
+- `secret://...` values are resolved later during bootstrap, not during raw YAML parsing
+
+## `server`
+
+```yaml
+server:
+  port: 8080
+  base_url: https://gestalt.example.com
+  encryption_key: secret://gestalt-encryption-key
+  dev_mode: false
+  admin_emails:
+    - admin@example.com
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `port` | no | Defaults to `8080`. |
+| `base_url` | no, but strongly recommended | Used to derive OAuth callback URLs when explicit redirect URLs are missing. |
+| `encryption_key` | yes unless `dev_mode: true` | Root deployment secret used for encryption and derived session material. |
+| `dev_mode` | no | Enables dev login, `X-Dev-User-Email`, dev CORS, and dev-only built-ins. |
+| `admin_emails` | no | Grants access to admin-only egress deny-rule endpoints. |
+
+## `auth`
+
+### `local`
 
 ```yaml
 auth:
-  provider: oidc     # "google" or "oidc"
+  provider: local
   config:
-    issuer_url: https://auth.example.com
-    client_id: ${CLIENT_ID}
-    client_secret: ${CLIENT_SECRET}
-    redirect_url: http://localhost:8080/api/v1/auth/login/callback
-    allowed_domains: [example.com]
-    session_secret: ${SESSION_SECRET}
-    session_ttl: 24h
-    display_name: "Okta"
-    scopes: [openid, email, profile]
-    pkce: false
+    email: local@example.com
 ```
 
-| Field | Notes |
-|---|---|
-| `allowed_domains` | Restrict sign-in to specific email domains. |
-| `session_ttl` | Session duration. Default: `24h`. |
-| `session_secret` | Signs session JWTs. |
-| `display_name` | Label shown on the login button (OIDC only). |
-| `scopes` | OIDC scopes. Default: `openid, email, profile`. |
-| `pkce` | Enable PKCE for public clients (OIDC only). |
+| Field | Required | Notes |
+| --- | --- | --- |
+| `email` | no | Defaults to `local@gestalt.local`. |
 
-## Datastore block
+### `google`
+
+```yaml
+auth:
+  provider: google
+  config:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: secret://google-client-secret
+    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
+    allowed_domains:
+      - example.com
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `client_id` | yes | Google OAuth client ID. |
+| `client_secret` | yes | Google OAuth client secret. |
+| `redirect_url` | no | If omitted and `server.base_url` is set, Gestalt derives the login callback. |
+| `allowed_domains` | no | Restrict login to selected email domains. |
+
+### `oidc`
+
+```yaml
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
+    allowed_domains:
+      - example.com
+    scopes:
+      - openid
+      - email
+      - profile
+    session_secret: secret://oidc-session-secret
+    session_ttl: 24h
+    pkce: true
+    display_name: Company SSO
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `issuer_url` | yes | OIDC discovery base URL. |
+| `client_id` | yes | OIDC client ID. |
+| `client_secret` | no in some PKCE setups, but commonly set | OIDC client secret. |
+| `redirect_url` | no | Derived from `server.base_url` when omitted. |
+| `allowed_domains` | no | Optional email-domain allowlist. |
+| `scopes` | no | Defaults to `openid`, `email`, `profile`. |
+| `session_secret` | yes | Secret used to sign OIDC-backed session tokens. |
+| `session_ttl` | no | Defaults to `24h`. |
+| `pkce` | no | Enables PKCE for the platform login flow. |
+| `display_name` | no | Defaults to `SSO`. |
+
+## `datastore`
 
 ```yaml
 datastore:
-  provider: postgres   # see table below
+  provider: postgres
   config:
-    dsn: postgres://user:pass@host:5432/gestalt
+    dsn: ${DATABASE_URL}
 ```
 
-| Provider | Config | Notes |
-|---|---|---|
-| `sqlite` | `path: ./gestalt.db` | Not recommended for production. |
-| `postgres` | `dsn: postgres://...` | Recommended for production. |
-| `mysql` | `dsn: user:pass@tcp(host:3306)/gestalt` | Alternative SQL backend. |
-| `dynamodb` | `table`, `region`, optional `endpoint` | AWS DynamoDB. |
-| `mongodb` | `uri`, optional `database` (default: `gestalt`) | MongoDB. |
-| `firestore` | `project_id`, optional `database` | Google Cloud Firestore. |
-| `oracle` | `dsn: ...` | Oracle Database. |
-| `sqlserver` | `dsn: ...` | Microsoft SQL Server. |
+| Provider | Config fields | Notes |
+| --- | --- | --- |
+| `sqlite` | `path` | Defaults to `./gestalt.db` if the provider itself applies its default. Good for local or single-node use. |
+| `postgres` | `dsn` | Recommended production choice. |
+| `mysql` | `dsn` | SQL-backed production option. |
+| `dynamodb` | `table`, `region`, `endpoint` | `table` defaults to `gestalt`. |
+| `mongodb` | `uri`, `database` | `database` defaults to `gestalt`. |
+| `oracle` | `dsn` | SQL-backed enterprise option. |
+| `firestore` | `project_id`, `database` | Firestore-backed deployment. |
+| `sqlserver` | `dsn` | SQL Server-backed deployment. |
 
-## Secrets block
+Some features, such as staged connections, rely on SQL-backed datastore support.
+
+## `secrets`
 
 ```yaml
 secrets:
-  provider: env      # "env", "file", or "gcp_secret_manager"
+  provider: file
   config:
-    prefix: GESTALT_  # env only
+    dir: /etc/gestalt-secrets
 ```
 
-| Provider | Config | Notes |
-|---|---|---|
-| `env` | Optional `prefix` | Resolves from environment variables. Converts names to uppercase, replaces hyphens with underscores. |
-| `file` | `path: /etc/secrets` | One secret per file. Path traversal protected. |
-| `gcp_secret_manager` | `project_id`, optional `version` (default: `latest`) | Google Cloud Secret Manager. |
+| Provider | Config fields | Notes |
+| --- | --- | --- |
+| `env` | `prefix` | Reads secrets from environment variables. |
+| `file` | `dir` | Reads one secret per file from a base directory. |
+| `gcp_secret_manager` | `project`, `version` | `version` defaults to `latest`. |
 
-## Integration block
+Any string value outside `secrets.config` may use:
 
-Each integration is defined under `integrations.<name>` and is backed by either `upstreams`, an executable `plugin`, or both when `plugin.mode: overlay` is used.
+```yaml
+secret://name-of-secret
+```
 
-| Field | Notes |
-|---|---|
-| `upstreams` | List of upstream definitions (see below). Required unless the integration is fully served by `plugin.mode: replace`, and one of the two allowed base sources for `plugin.mode: overlay`. |
-| `plugin` | Executable provider plugin config. Use `mode: replace` to serve the whole provider from a binary, or `mode: overlay` to compose a binary on top of exactly one base source. |
-| `display_name` | Human-readable label for the integration. |
-| `description` | Short description shown in the web UI and CLI. |
-| `auth_profile` | Name of a reusable auth profile to inherit from. |
-| `client_id`, `client_secret` | OAuth client credentials for the upstream integration. |
-| `redirect_url` | Override the integration callback URL. |
-| `base_url` | Override the base URL from the upstream spec. |
-| `connection_mode` | `user` (default), `identity`, `either`, or `none`. See [Connection Modes](/concepts/platform-model#connection-modes). |
-| `mcp_tool_prefix` | Prefix prepended to MCP tool names for this integration. Applies to any operations this integration exposes over MCP. |
-| `auth` | Auth overrides (see below). |
-| `auth_header` | Custom header name for sending the token (instead of `Authorization`). |
-| `auth_mapping` | Map of header names to JSON fields, for structured token-to-headers mapping. |
-| `token_prefix` | Prefix for the Authorization header value. |
-| `auth_style` | How the token is sent: `bearer` (default), `raw`, `basic`, or `none`. |
-| `headers` | Default headers sent with every upstream request. |
-| `icon_file` | Path to an SVG file used as the integration icon. Relative paths resolve from the config file's directory. |
-| `manual_auth` | Boolean. When `true`, the integration supports both OAuth and manual authentication. Users see both connection options in the web UI. The API returns `auth_types: ["oauth", "manual"]`. |
-| `error_message_path` | Dot-delimited path for extracting error messages from upstream JSON responses. |
+## `auth_profiles`
 
-### Executable plugin config
+Auth profiles let you define shared integration auth once and reference it from integrations or individual upstreams.
 
-| Field | Notes |
-|---|---|
-| `command` | Path to the executable. Relative paths resolve from the config file's directory. Mutually exclusive with `package`. |
-| `package` | Path to a `.tar.gz` plugin archive or an HTTPS URL. Relative paths resolve from the config file's directory. Mutually exclusive with `command`. |
-| `args` | Optional argv passed to the executable. Only valid with `command`. |
-| `env` | Optional extra environment variables for the plugin process. |
-| `config` | Provider plugins only. Arbitrary key-value map passed to `StartProvider`. Runtime plugins use `runtimes.<name>.config` instead. |
-| `mode` | `replace` (default) or `overlay`. |
-| `base` | `overlay` only. Names the registered first-party provider factory to compose under the plugin when `upstreams` are not used. |
+```yaml
+auth_profiles:
+  github_oauth:
+    client_id: ${GITHUB_CLIENT_ID}
+    client_secret: secret://github-client-secret
+    redirect_url: https://gestalt.example.com/api/v1/auth/callback
+    auth:
+      type: oauth2
+      authorization_url: https://github.com/login/oauth/authorize
+      token_url: https://github.com/login/oauth/access_token
+```
 
-Overlay plugins must declare exactly one base source:
+Profile fields are inherited unless the integration or upstream overrides them locally.
 
-- `upstreams` when the base provider comes from prepared REST/GraphQL/MCP config
-- `plugin.base` when the base provider comes from a registered Go factory
+## `integrations`
 
-### Upstreams
-
-Each upstream declares a type and source:
-
-| Field | Notes |
-|---|---|
-| `type` | `rest`, `graphql`, or `mcp`. |
-| `url` | For `rest`: OpenAPI spec URL. For `graphql`: the GraphQL endpoint (introspected at startup). For `mcp`: the upstream MCP server URL. |
-| `mcp` | (`rest` and `graphql` only) Boolean. When `true`, this upstream's operations are exposed as MCP tools. `type: mcp` upstreams are always exposed — no flag needed. |
-| `allowed_operations` | Positive allow-list. Can be a YAML list (names only) or a map (names to description overrides). Omit to allow all operations. An empty value is invalid. |
-
-REST, GraphQL, and MCP upstreams all require `url` in the source config. Deterministic startup comes from running `gestaltd init`, which writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve` then uses those prepared artifacts without changing the source config.
-
-Example with multiple upstreams:
+Integrations are the main user-facing primitive.
 
 ```yaml
 integrations:
-  slack:
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
-        allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-      - type: mcp
-        url: https://mcp.slack.com/sse
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
+  github:
+    display_name: GitHub
+    description: GitHub REST API
+    auth_profile: github_oauth
+    connection_mode: user
+    mcp_tool_prefix: github_
+    plugin: {}
+    client_id: ${GITHUB_CLIENT_ID}
+    client_secret: secret://github-client-secret
+    redirect_url: https://gestalt.example.com/api/v1/auth/callback
+    base_url: https://api.github.com
+    auth: {}
+    auth_header: Authorization
+    auth_mapping: {}
+    error_message_path: error.message
+    response_check: {}
+    manual_auth: false
+    token_prefix: Bearer
     auth_style: bearer
-    auth:
-      authorization_url: https://slack.com/oauth/v2/authorize
-      token_url: https://slack.com/api/oauth.v2.access
-      response_check:
-        success_body_match:
-          ok: true
-        error_message_path: error
+    icon_file: ./icons/github.svg
+    headers:
+      X-GitHub-Api-Version: "2022-11-28"
+    upstreams: []
 ```
 
-### Auth overrides
+| Field | Notes |
+| --- | --- |
+| `upstreams` | Source operations from REST, GraphQL, or MCP. |
+| `display_name`, `description` | Presentation metadata. |
+| `auth_profile` | Reuse shared auth values. |
+| `connection_mode` | `user`, `identity`, `either`, or `none`. Defaults to `user`. |
+| `mcp_tool_prefix` | Prefix tool names when exposing this integration over MCP. |
+| `plugin` | Executable provider plugin config. |
+| `client_id`, `client_secret`, `redirect_url` | Integration-level auth values that upstreams inherit unless they override them. |
+| `base_url` | Advanced override used by some provider builds. |
+| `auth` | Advanced auth override block. |
+| `auth_header` | Custom token header name. |
+| `auth_mapping` | Maps header names to fields extracted from structured token payloads. |
+| `error_message_path` | Error extraction path for upstream responses. |
+| `response_check` | Declarative success and error checks. |
+| `manual_auth` | Expose both OAuth and manual connection paths when supported. |
+| `token_prefix` | Prefix inserted before a raw token string. |
+| `auth_style` | `bearer`, `raw`, `none`, or `basic`. |
+| `icon_file` | SVG path, resolved relative to the config file. |
+| `headers` | Static request headers added to upstream calls. |
+
+### `upstreams`
+
+```yaml
+upstreams:
+  - type: rest
+    url: https://example.com/openapi.json
+    mcp: true
+    allowed_operations:
+      listThings: List things
+    auth_profile: shared_auth
+    auth: {}
+    client_id: ${CLIENT_ID}
+    client_secret: secret://client-secret
+    redirect_url: https://gestalt.example.com/api/v1/auth/callback
+```
+
+| Field | Notes |
+| --- | --- |
+| `type` | `rest`, `graphql`, or `mcp`. |
+| `url` | Required for all upstream types. |
+| `mcp` | For `rest` and `graphql`, also expose operations through `/mcp`. |
+| `allowed_operations` | Either a YAML list of names or a YAML map of name to description override. |
+| `auth_profile` | Optional upstream-specific auth profile. |
+| `auth`, `client_id`, `client_secret`, `redirect_url` | Upstream-level auth overrides. |
+
+Rules:
+
+- at most one REST or GraphQL upstream per integration
+- at most one MCP upstream per integration
+- one API upstream plus one MCP upstream is valid
+
+### `auth`
+
+This block is used at integration level or upstream level.
 
 ```yaml
 auth:
-  type: oauth2              # or "manual"
-  authorization_url: https://provider.com/authorize
-  token_url: https://provider.com/token
-  client_auth: body          # or "header"
+  type: oauth2
+  authorization_url: https://provider.example.com/oauth/authorize
+  token_url: https://provider.example.com/oauth/token
+  client_auth: body
+  token_exchange: form
+  scopes:
+    - read
+    - write
   scope_separator: ","
   pkce: true
   authorization_params:
     audience: https://api.example.com
   token_params:
-    grant_type: authorization_code
+    resource: api
   refresh_params: {}
-  token_exchange: form       # or "json"
   accept_header: application/json
   token_metadata:
-    - team_id
-    - team_name
+    - workspace_id
   response_check:
     success_body_match:
       ok: true
     error_message_path: error
+  auth_header: Authorization
 ```
 
-## Auth profiles
+Supported or notable fields:
 
-Reusable OAuth config referenced by `auth_profile` in integrations:
+- `type`
+- `authorization_url`
+- `token_url`
+- `client_auth`
+- `token_exchange`
+- `scopes`
+- `scope_separator`
+- `pkce`
+- `authorization_params`
+- `token_params`
+- `refresh_params`
+- `accept_header`
+- `token_metadata`
+- `response_check`
+- `auth_header`
+
+The normal auth types are `oauth2` and `manual`. `mcp_oauth` also exists as an advanced mode for MCP-driven OAuth discovery.
+
+### `plugin`
 
 ```yaml
-auth_profiles:
-  slack_shared:
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-    redirect_url: https://gestalt.example.com/api/v1/auth/callback
-    auth:
-      authorization_url: https://slack.com/oauth/v2/authorize
-      token_url: https://slack.com/api/oauth.v2.access
-      response_check:
-        success_body_match:
-          ok: true
-        error_message_path: error
+plugin:
+  mode: overlay
+  base: jira
+  command: ./my-plugin
+  package: https://example.com/my-plugin.tar.gz
+  args:
+    - --verbose
+  env:
+    LOG_LEVEL: debug
+  config:
+    greeting: hello
 ```
 
-Fields set directly on the integration override the profile.
+| Field | Notes |
+| --- | --- |
+| `mode` | `replace` or `overlay`. Defaults to `replace`. |
+| `base` | Only valid with `mode: overlay`. Names a built-in provider base. |
+| `command` | Local executable path. Mutually exclusive with `package`. |
+| `package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `command`. |
+| `args` | Only valid with `command`. |
+| `env` | Extra plugin environment variables. |
+| `config` | Arbitrary plugin config payload. |
 
-## Runtimes block
+Validation rules:
 
-Background processes that boot alongside the server with scoped provider access.
+- exactly one of `command` or `package`
+- plain `http://` package URLs are rejected
+- overlay integrations must declare exactly one base source via `upstreams` or `plugin.base`
+
+## `runtimes`
 
 ```yaml
 runtimes:
-  my-runtime:
-    type: echo             # runtime type (registered in binary)
+  syncer:
+    type: echo
     providers:
-      - slack
-      - linear
-    config: {}             # type-specific configuration
+      - github
+    config: {}
 ```
 
-The `providers` list scopes which integrations the runtime can invoke. The runtime receives a scoped invoker and capability lister.
+or:
 
-## Bindings block
+```yaml
+runtimes:
+  syncer:
+    providers:
+      - github
+    plugin:
+      command: ./runtime-plugin
+    config:
+      interval: 30s
+```
 
-Alternative request surfaces that forward calls through the shared invoker.
+| Field | Notes |
+| --- | --- |
+| `type` | Built-in runtime type. Currently only `echo`, and only in dev mode. |
+| `providers` | Allowlist of providers the runtime can access. |
+| `config` | Runtime config payload. |
+| `plugin` | Executable runtime plugin. Runtime plugins cannot use overlay mode. |
+
+## `bindings`
 
 ```yaml
 bindings:
-  slack-webhook:
+  inbound:
     type: webhook
     providers:
-      - slack
+      - github
     config:
-      path: /webhooks/slack
-      provider: slack
-      operation: chat_postMessage
-      auth_mode: signed           # "public", "signed", or "trusted_user_header"
-      signing_secret: ${WEBHOOK_SECRET}
-      signature_header: X-Signature
-
-  agent-proxy:
-    type: proxy
-    providers:
-      - slack
-    config:
-      path: /proxy
-      instance: workspace-1
+      path: /events/github
+      provider: github
+      operation: issues_listForAuthenticatedUser
+      auth_mode: signed
+      signing_secret: secret://webhook-secret
 ```
 
-### Webhook config
+or:
 
-| Config field | Default | Notes |
-|---|---|---|
-| `path` | | HTTP path for the webhook endpoint. Must start with `/`. |
-| `provider` | | Target provider to forward requests to. |
-| `operation` | | Target operation to invoke. |
-| `auth_mode` | `public` | `public` (no auth), `signed` (HMAC-SHA256), or `trusted_user_header`. |
-| `signing_secret` | | Required when `auth_mode` is `signed`. |
-| `signature_header` | `X-Signature` | Header containing the HMAC signature. |
-| `user_header` | | Required when `auth_mode` is `trusted_user_header`. Header containing the user ID. |
+```yaml
+bindings:
+  outbound_proxy:
+    type: proxy
+    providers:
+      - github
+    config:
+      path: /proxy
+      instance: default
+```
 
-### Proxy config
+### Common binding fields
 
-Proxy bindings require exactly one entry in the top-level `providers` list. This provider is used for credential resolution on outbound requests. The authenticated user's principal is mapped to an egress subject so that per-user tokens can be resolved.
+| Field | Notes |
+| --- | --- |
+| `type` | `webhook` or `proxy`. |
+| `providers` | Allowlist of providers the binding can access. |
+| `config` | Binding-type-specific config. |
 
-| Config field | Default | Notes |
-|---|---|---|
-| `path` | | HTTP path prefix for the proxy surface. Must start with `/`. |
-| `instance` | | Optional provider instance qualifier for credential resolution. |
+### Webhook binding config
 
-## Egress block
+| Field | Notes |
+| --- | --- |
+| `path` | Required. Must start with `/`. |
+| `provider` | Optional target provider for forwarding. |
+| `instance` | Optional provider instance. |
+| `operation` | Optional target operation. |
+| `auth_mode` | `public`, `signed`, or `trusted_user_header`. |
+| `signing_secret` | Required for `signed`. |
+| `signature_header` | Header carrying the signature. Defaults to `X-Signature`. |
+| `user_header` | Required for `trusted_user_header`. |
+| `trusted_sources` | Optional source IP allowlist for `trusted_user_header`. |
 
-Controls policy enforcement and credential injection for outbound requests made by runtimes, bindings, and the proxy surface.
+### Proxy binding config
+
+| Field | Notes |
+| --- | --- |
+| `path` | Required. Must start with `/`. |
+| `instance` | Optional provider instance to use for credential resolution. |
+
+Rules:
+
+- proxy bindings may declare zero or one provider in `bindings.<name>.providers`
+- webhook forwarding requires the forwarded provider to be present in the binding allowlist
+
+## `egress`
 
 ```yaml
 egress:
-  default_action: allow   # "allow" (default) or "deny"
+  default_action: deny
   policies:
-    - action: deny
-      subject_kind: agent
-      provider: internal-api
-      path_prefix: /v1/admin
     - action: allow
-      provider: internal-api
-  credentials:
-    - provider: acme-api
-      instance: acme-api
       subject_kind: user
+      provider: github
+      method: GET
+      host: api.github.com
+      path_prefix: /repos
+  credentials:
+    - provider: github
+      instance: default
+      subject_kind: user
+      method: GET
+      host: api.github.com
+      path_prefix: /repos
 ```
 
-### Policy rules
-
-Rules are evaluated in order; the first matching rule wins. If no rule matches, `default_action` applies (defaults to `allow`).
+### `policies`
 
 | Field | Notes |
-|---|---|
-| `action` | Required. `allow` or `deny`. |
-| `subject_kind` | Match subject kind: `user`, `identity`, `agent`, or `system`. Empty matches all. |
-| `subject_id` | Match a specific subject ID. Empty matches all. |
-| `provider` | Match the target provider name. Empty matches all. |
-| `operation` | Match the target operation name. Empty matches all. |
-| `method` | Match the HTTP method. Empty matches all. |
-| `host` | Exact match against the target host. Empty matches all. |
-| `path_prefix` | Segment-aware path prefix match. Empty matches all. |
+| --- | --- |
+| `action` | `allow` or `deny`. |
+| `subject_kind` | Match a subject kind. |
+| `subject_id` | Match a specific subject. |
+| `provider` | Match a provider name. |
+| `operation` | Match an operation name. |
+| `method` | Match an HTTP method. |
+| `host` | Match an outbound host. |
+| `path_prefix` | Match a path prefix. |
 
-All non-empty fields must match for a rule to apply (AND logic).
-
-### Credential grants
-
-Credential grants control which provider credentials are injected into outbound requests. They are matched using the same field set as policy rules (minus `action`), plus `instance` to identify the credential source.
+### `credentials`
 
 | Field | Notes |
-|---|---|
-| `provider` | The provider whose credentials to inject. |
-| `instance` | The credential instance name (defaults to `provider` if omitted). |
-| `subject_kind` | Restrict to a specific subject kind. Empty matches all. |
-| `subject_id` | Restrict to a specific subject ID. Empty matches all. |
-| `operation` | Match the target operation. Empty matches all. |
-| `method` | Match the HTTP method. Empty matches all. |
-| `host` | Exact match against the target host. Empty matches all. |
-| `path_prefix` | Segment-aware path prefix match. Empty matches all. |
+| --- | --- |
+| `provider` | Credential source provider. |
+| `instance` | Credential instance. |
+| `subject_kind` | Subject filter. |
+| `subject_id` | Subject filter. |
+| `operation` | Optional operation filter. |
+| `method` | Optional HTTP-method filter. |
+| `host` | Optional host filter. |
+| `path_prefix` | Optional path filter. |
 
-## Supported providers
+## Validation Rules Worth Remembering
 
-| Category | Providers |
-|---|---|
-| Auth | `google`, `oidc` |
-| Datastore | `sqlite`, `postgres`, `mysql`, `dynamodb`, `mongodb`, `firestore`, `oracle`, `sqlserver` |
-| Secrets | `env`, `file`, `gcp_secret_manager` |
-| Bindings | `webhook`, `proxy` |
-| Runtimes | `echo` (dev mode only) |
+- `auth.provider` is required
+- `datastore.provider` is required
+- `server.encryption_key` is required outside dev mode
+- integrations cannot mix `plugin` and `upstreams` unless `plugin.mode: overlay`
+- runtime plugins must use `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`
+- runtime plugins cannot use overlay mode
+- `egress.default_action` and policy `action` must be `allow` or `deny`

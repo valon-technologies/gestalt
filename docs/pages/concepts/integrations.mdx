@@ -1,224 +1,175 @@
 # Integrations
 
-Integrations are the unit of API exposure in Gestalt. Each integration declares one or more **upstreams** — the external services it connects to — along with auth settings.
+Integrations are the main user-facing primitive in Gestalt. Every integration becomes a provider at runtime, and every provider exposes operations that callers can invoke through the API, UI, bindings, runtimes, or MCP.
+
+## The Shape Of An Integration
+
+```yaml
+integrations:
+  github:
+    display_name: GitHub
+    description: GitHub REST API
+    auth_profile: github_oauth
+    connection_mode: user
+    mcp_tool_prefix: github_
+    headers:
+      X-GitHub-Api-Version: "2022-11-28"
+    upstreams:
+      - type: rest
+        url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+        mcp: true
+        allowed_operations:
+          repos_listForAuthenticatedUser: List repositories
+          issues_listForAuthenticatedUser: List assigned issues
+```
+
+This one block answers five questions:
+
+1. What should the provider be called
+2. Where do its operations come from
+3. How should credentials be resolved
+4. Which operations should be exposed
+5. Whether those operations should also appear on `/mcp`
 
 ## Upstreams
 
-Every integration has an `upstreams` list. Each entry specifies a `type` and a source:
+An integration must declare a base source of operations unless it fully replaces that source with a plugin.
 
-| Upstream type | What it does |
-|---|---|
-| `rest` | Loads operations from an OpenAPI spec URL. |
-| `graphql` | Introspects a GraphQL endpoint and generates operations from queries and mutations. |
-| `mcp` | Connects to an upstream MCP server and imports its tools as operations. |
+Supported upstream types are:
 
-An integration can combine upstream types. For example, a REST upstream and an MCP upstream together create a **composite integration** where HTTP operations are available over the REST API and MCP tools are proxied directly to the upstream MCP server.
+| Type | What it does |
+| --- | --- |
+| `rest` | Loads operations from an OpenAPI document. |
+| `graphql` | Introspects a GraphQL endpoint and exposes query and mutation fields as operations. |
+| `mcp` | Imports tools from an upstream MCP server. |
 
-## REST upstreams
+Composition is deliberately constrained:
 
-A REST upstream resolves its operations from an OpenAPI spec URL. For deterministic production startup, run `gestaltd init` ahead of time so Gestalt writes local provider artifacts into `.gestalt/providers/` and records them in `gestalt.lock.json`.
+- one `rest` or `graphql` upstream maximum
+- one `mcp` upstream maximum
+- one API upstream plus one MCP upstream is valid
 
-```yaml
-integrations:
-  slack:
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
-        allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-```
+## Operation Exposure
 
-## GraphQL upstreams
+`allowed_operations` narrows what a provider exposes.
 
-A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field. For deterministic production boots, run `gestaltd init` so the provider definition is compiled ahead of time and `gestaltd serve` can start without live introspection.
-
-```yaml
-integrations:
-  my-graphql-api:
-    upstreams:
-      - type: graphql
-        url: https://api.example.com/graphql
-        allowed_operations:
-          - searchUsers
-          - createProject
-    client_id: ${API_CLIENT_ID}
-    client_secret: ${API_CLIENT_SECRET}
-    auth:
-      authorization_url: https://example.com/oauth/authorize
-      token_url: https://example.com/oauth/token
-```
-
-Operation arguments are exposed with top-level type information so MCP clients can supply parameters. Scalar and enum types map to their JSON equivalents; complex input types map to `object`.
-
-## MCP upstreams
-
-An MCP upstream connects to a remote MCP server via Streamable HTTP, lists its tools, and imports them as Gestalt operations. These operations can only be invoked through the MCP binding — calling them over the HTTP API returns an error.
-
-```yaml
-integrations:
-  external-tools:
-    upstreams:
-      - type: mcp
-        url: https://mcp.example.com/sse
-    connection_mode: user
-```
-
-Tool annotations (read-only, destructive, idempotent) are preserved from the upstream server.
-
-## Mixed integrations
-
-An integration can combine a REST or GraphQL upstream with an MCP upstream. This creates a composite provider:
-
-```yaml
-integrations:
-  slack:
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/.../slack_web_openapi_v2.json
-        mcp: true
-        allowed_operations:
-          conversations_list: List channels
-          chat_postMessage: Send a message
-      - type: mcp
-        url: https://mcp.slack.com/sse
-    client_id: ${SLACK_CLIENT_ID}
-    client_secret: ${SLACK_CLIENT_SECRET}
-```
-
-The `mcp: true` flag on the REST upstream means its HTTP operations are also exposed as MCP tools alongside the tools from the MCP upstream.
-
-## allowed_operations
-
-The `allowed_operations` field on an upstream controls which operations are exposed. It accepts two formats:
-
-**As a list** (names only, descriptions from the upstream source):
+It supports two forms:
 
 ```yaml
 allowed_operations:
-  - conversations_list
-  - chat_postMessage
+  - repos_listForAuthenticatedUser
+  - issues_listForAuthenticatedUser
 ```
 
-**As a map** (names to description overrides):
+or:
 
 ```yaml
 allowed_operations:
-  conversations_list: List channels the user has access to
-  chat_postMessage: Send a message to a channel
+  repos_listForAuthenticatedUser: List repositories
+  issues_listForAuthenticatedUser: List assigned issues
 ```
 
-Omit `allowed_operations` entirely to allow all operations. An empty value is invalid — if you set the field, it must contain at least one entry.
+The list form keeps upstream descriptions. The map form lets you override descriptions.
 
-## What an operation looks like
+If you omit `allowed_operations`, Gestalt exposes every operation from the upstream.
 
-| Field | Description |
-|---|---|
-| Name | Unique identifier. For OpenAPI sources, this is the `operationId`. For GraphQL, the query/mutation field name. For MCP, the tool name. |
-| Description | Human-readable summary from the spec, or overridden via `allowed_operations`. |
-| Method and path | HTTP verb and URL path template (REST only). |
-| Parameters | Query, path, header, and body fields. |
-| Input schema | JSON Schema for parameters, passed to MCP clients for type information. |
-| Annotations | Automatic hints: GET/HEAD are read-only, PUT is idempotent, DELETE is destructive. MCP upstreams preserve the upstream server's annotations. |
+## Auth Inheritance
 
-## Manual auth versus OAuth
+Auth configuration can live at three layers:
 
-**OAuth**: Gestalt manages the full authorization code flow. It generates the authorization URL, handles the callback, exchanges the code for tokens, encrypts them, and stores them in the datastore. On subsequent requests, the stored access token is attached to upstream calls. If a refresh token is available and the access token is near expiry, Gestalt refreshes it automatically.
+1. `auth_profiles.<name>`
+2. `integrations.<name>`
+3. `integrations.<name>.upstreams[]`
 
-**Manual**: Set `auth.type` to `manual`. Users paste credentials directly through the web UI (`POST /api/v1/auth/connect-manual`) or CLI. Gestalt encrypts and stores them the same way it stores OAuth tokens.
+Resolution is cascading:
 
-## Dual auth
+- an integration may reference `auth_profile`
+- an upstream may reference its own `auth_profile`
+- integration-level auth fields flow down to upstreams that do not override them
 
-Some services support both OAuth and API keys. When an integration sets `manual_auth: true`, Gestalt advertises both authentication methods. Users see separate options in the web UI — "Connect with OAuth" to start the OAuth flow, or "Use API Token" to paste credentials directly.
+That lets you centralize OAuth details once and reuse them across multiple integrations.
+
+## Connection Modes
+
+`connection_mode` controls where credentials come from:
+
+| Value | Behavior |
+| --- | --- |
+| `user` | Use the authenticated caller's token. |
+| `identity` | Use a shared identity token. |
+| `either` | Prefer the user token, fall back to the identity token. |
+| `none` | Use no credential. |
+
+If you do not set it, Gestalt uses `user`.
+
+## Integration-Level Auth Behavior
+
+In addition to upstream auth config, integrations expose a few convenience fields:
+
+| Field | Purpose |
+| --- | --- |
+| `client_id`, `client_secret`, `redirect_url` | Common OAuth values applied to upstreams unless an upstream overrides them. |
+| `auth` | Low-level auth override block for OAuth or manual auth behavior. |
+| `auth_header` | Custom header used for token placement. |
+| `auth_mapping` | Maps header names to fields extracted from structured tokens. |
+| `token_prefix` | Prefix inserted before the raw token string. |
+| `auth_style` | Token style such as `bearer`, `raw`, `basic`, or `none`. |
+| `manual_auth` | Expose a manual-auth connection path alongside OAuth when supported. |
+| `response_check` | Declare success matching and error extraction. |
+| `headers` | Static request headers added to upstream calls. |
+
+## Plugins
+
+An integration can also be backed by an executable provider plugin:
 
 ```yaml
 integrations:
-  my-service:
+  example:
+    plugin:
+      command: ./example-provider
+      config:
+        greeting: hello
+```
+
+By default, that replaces upstreams entirely.
+
+If you need to wrap an existing integration, use overlay mode:
+
+```yaml
+integrations:
+  github:
     upstreams:
       - type: rest
-        url: https://api.example.com/openapi.json
-    client_id: ${SERVICE_CLIENT_ID}
-    client_secret: ${SERVICE_CLIENT_SECRET}
-    manual_auth: true
-    auth:
-      authorization_url: https://example.com/oauth/authorize
-      token_url: https://example.com/oauth/token
+        url: https://example.com/openapi.json
+    plugin:
+      mode: overlay
+      command: ./github-overlay
 ```
 
-The API returns `auth_types: ["oauth", "manual"]` for dual-auth integrations, `["oauth"]` for OAuth-only, and `["manual"]` for manual-only. Either authentication method produces the same kind of stored credential — the difference is only in how the user provides it.
+Overlay providers are only valid for integrations, not runtimes, and they must declare exactly one base source:
 
-## Multi-instance connections
+- either `upstreams`
+- or `plugin.base`
 
-By default, each user has one connection per integration. Multi-instance connections allow a user to maintain several connections to the same integration simultaneously — for example, two Slack workspaces or three Shopify stores.
+## Metadata And Presentation
 
-Each connection is identified by an **instance** name. The first connection uses the instance name `"default"`. When a user connects the same integration again with a different account, a new instance is created.
+These fields only affect how the provider is presented, not how it executes:
 
-Credential resolution follows two rules:
+- `display_name`
+- `description`
+- `icon_file`
+- `mcp_tool_prefix`
 
-- When a user has **one** connection to an integration, Gestalt selects it automatically. No instance parameter is needed.
-- When a user has **multiple** connections, the caller must specify which instance to use by passing `_instance` as a parameter. Omitting it returns a 409 error listing the available instances.
+`icon_file` is resolved relative to the config file and embedded into the prepared provider artifact during `init`.
 
-Multi-instance support requires no special configuration. Any integration can have multiple connections per user.
+## Instances
 
-To disconnect a specific instance, pass `?instance=NAME` to the disconnect endpoint. When only one connection exists, the instance parameter is optional.
+Gestalt stores connection state by `(subject, integration, instance)`.
 
-## Connection modes
+That means one integration can support:
 
-Each integration has a `connection_mode` that controls how credentials are resolved at invocation time:
+- one default connection
+- multiple named connections for the same user
+- a shared identity connection
 
-| Mode | Behavior |
-|---|---|
-| `user` | Resolve the calling user's personal token. Default. |
-| `identity` | Resolve a shared org-level or app-level token. |
-| `either` | Try the user's token first, fall back to the identity token. |
-| `none` | No credentials needed. |
-
-## Response checks
-
-Response checks handle the quirks of individual APIs without changing the core runtime.
-
-The `response_check` field provides declarative response validation. It supports two modes that can be used together or independently:
-
-**Success body match** — assert that specific fields in the JSON response have expected values. When the match fails, the error message is extracted from the path given by `error_message_path`:
-
-```yaml
-integrations:
-  my-api:
-    upstreams:
-      - type: rest
-        url: https://api.example.com/openapi.json
-    response_check:
-      success_body_match:
-        ok: true
-      error_message_path: error
-```
-
-**Error message path only** — extract a human-readable error message from error responses (HTTP 4xx/5xx) without checking success body fields:
-
-```yaml
-integrations:
-  my-api:
-    upstreams:
-      - type: rest
-        url: https://api.example.com/openapi.json
-    response_check:
-      error_message_path: error.message
-```
-
-The same structure can be used under `auth` to validate OAuth token exchange responses:
-
-```yaml
-integrations:
-  my-api:
-    auth:
-      response_check:
-        success_body_match:
-          ok: true
-        error_message_path: error
-```
-
-## Restrictions
-
-Gestalt keeps the integration model simple. There is no plugin discovery protocol, no remote registry, and no dynamic loading at runtime. Integrations are declared in config and resolved at startup. Adding or changing integrations requires a restart.
+When there is exactly one matching connection, Gestalt auto-selects it. When there are multiple, callers must name the instance explicitly.
