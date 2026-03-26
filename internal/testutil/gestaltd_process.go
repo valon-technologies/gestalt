@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -84,6 +85,7 @@ func StartGestaltd(t *testing.T, configPath string, port int) *GestaltdProcess {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(gestaltdBinary(t), "--config", configPath)
 	cmd.Dir = RepoRoot(t)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -209,9 +211,10 @@ func (p *GestaltdProcess) stop(timeout time.Duration) error {
 	if p.cmd.Process == nil {
 		return nil
 	}
+	p.Client.CloseIdleConnections()
 
-	if err := p.cmd.Process.Signal(os.Interrupt); err != nil && !isDone(p.done) {
-		return fmt.Errorf("interrupt gestaltd: %w", err)
+	if err := syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM); err != nil && !isDone(p.done) {
+		return fmt.Errorf("terminate gestaltd: %w", err)
 	}
 
 	select {
@@ -223,7 +226,7 @@ func (p *GestaltdProcess) stop(timeout time.Duration) error {
 	case <-time.After(timeout):
 	}
 
-	if err := p.cmd.Process.Kill(); err != nil {
+	if err := syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL); err != nil {
 		return fmt.Errorf("kill gestaltd: %w", err)
 	}
 
