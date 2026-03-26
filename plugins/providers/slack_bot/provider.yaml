@@ -1,0 +1,140 @@
+provider: slack_bot
+display_name: Slack Bot
+description: Send messages, search conversations, and manage channels in Slack via bot token
+connection_mode: identity
+base_url: "https://slack.com/api"
+manual_auth: true
+
+auth:
+  type: manual
+
+response_check:
+  success_body_match:
+    ok: true
+  error_message_path: error
+
+operations:
+  list_channels:
+    description: List channels in the workspace
+    method: POST
+    path: /conversations.list
+    parameters:
+      - {name: limit, type: integer, description: "Max channels to return"}
+      - {name: cursor, type: string, description: "Pagination cursor"}
+      - {name: types, type: string, description: "Channel types to include"}
+
+  get_channel_history:
+    description: Get message history from a channel
+    method: POST
+    path: /conversations.history
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: limit, type: integer, description: "Number of messages to return"}
+      - {name: cursor, type: string, description: "Pagination cursor"}
+      - {name: oldest, type: string, description: "Unix timestamp, only messages after this"}
+      - {name: latest, type: string, description: "Unix timestamp, only messages before this"}
+      - {name: inclusive, type: boolean, description: "Include boundary timestamp messages"}
+
+  get_message:
+    description: Fetch a single message by channel and timestamp
+    method: POST
+    path: /conversations.history
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: latest, type: string, required: true, description: "Message timestamp"}
+      - {name: oldest, type: string, required: true, description: "Message timestamp"}
+      - {name: inclusive, type: boolean, description: "Include boundary timestamp messages"}
+      - {name: limit, type: integer, description: "Number of messages to return"}
+
+  search_messages:
+    description: Search for messages in the workspace
+    method: POST
+    path: /search.messages
+    parameters:
+      - {name: query, type: string, required: true, description: "Search query"}
+      - {name: count, type: integer, description: "Number of results"}
+      - {name: page, type: integer, description: "Page number"}
+
+  get_user_info:
+    description: Get user profile information
+    method: POST
+    path: /users.info
+    parameters:
+      - {name: user, type: string, required: true, description: "User ID"}
+
+  get_thread_replies:
+    description: Get all replies in a thread
+    method: POST
+    path: /conversations.replies
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID containing the thread"}
+      - {name: ts, type: string, required: true, description: "Timestamp of the parent message"}
+      - {name: limit, type: integer, description: "Max replies to return"}
+      - {name: cursor, type: string, description: "Pagination cursor"}
+      - {name: oldest, type: string, description: "Unix timestamp, only messages after this"}
+      - {name: latest, type: string, description: "Unix timestamp, only messages before this"}
+      - {name: inclusive, type: boolean, description: "Include boundary timestamp messages"}
+
+  send_message:
+    description: Send a message to a channel or thread
+    method: POST
+    path: /chat.postMessage
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: text, type: string, required: true, description: "Message text"}
+      - {name: thread_ts, type: string, description: "Thread timestamp to reply to"}
+      - {name: unfurl_links, type: boolean, description: "Enable link unfurling"}
+      - {name: unfurl_media, type: boolean, description: "Enable media unfurling"}
+
+  schedule_message:
+    description: Schedule a message to be sent at a future time
+    method: POST
+    path: /chat.scheduleMessage
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: text, type: string, required: true, description: "Message text"}
+      - {name: post_at, type: string, required: true, description: "Unix timestamp for when to send"}
+      - {name: thread_ts, type: string, description: "Thread timestamp to reply to"}
+
+  add_reaction:
+    description: Add an emoji reaction to a message
+    method: POST
+    path: /reactions.add
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: timestamp, type: string, required: true, description: "Timestamp of the message"}
+      - {name: name, type: string, required: true, description: "Emoji name without colons"}
+
+  set_channel_topic:
+    description: Set a channel topic
+    method: POST
+    path: /conversations.setTopic
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: topic, type: string, required: true, description: "New channel topic"}
+
+  create_channel:
+    description: Create a new public or private channel
+    method: POST
+    path: /conversations.create
+    parameters:
+      - {name: name, type: string, required: true, description: "Channel name"}
+      - {name: is_private, type: boolean, description: "Create as private channel"}
+
+  invite_to_channel:
+    description: Invite users to a channel
+    method: POST
+    path: /conversations.invite
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: users, type: string, required: true, description: "Comma-separated list of user IDs"}
+
+  send_message_draft:
+    description: Send an ephemeral message visible only to a specific user
+    method: POST
+    path: /chat.postEphemeral
+    parameters:
+      - {name: channel, type: string, required: true, description: "Channel ID"}
+      - {name: text, type: string, required: true, description: "Message text"}
+      - {name: user, type: string, required: true, description: "User ID who will see the message"}
+      - {name: thread_ts, type: string, description: "Thread timestamp to reply to"}
