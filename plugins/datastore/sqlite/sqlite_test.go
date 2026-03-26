@@ -88,7 +88,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 }
 
-func TestWALMode(t *testing.T) {
+func TestSQLiteRuntimeConfiguration(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
 	t.Cleanup(func() { _ = store.Close() })
@@ -100,6 +100,14 @@ func TestWALMode(t *testing.T) {
 	}
 	if mode != "wal" {
 		t.Errorf("journal_mode: got %q, want %q", mode, "wal")
+	}
+
+	warnings := store.Warnings()
+	if len(warnings) != 1 {
+		t.Fatalf("Warnings() returned %d entries, want 1", len(warnings))
+	}
+	if warnings[0] == "" {
+		t.Fatal("Warnings()[0] should not be empty")
 	}
 }
 

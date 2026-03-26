@@ -9,32 +9,32 @@ import (
 )
 
 func TestProvider(t *testing.T) {
-	t.Run("resolves env var", func(t *testing.T) {
-		t.Setenv("MY_SECRET", "hello")
-		p := &Provider{}
-		val, err := p.GetSecret(context.Background(), "my-secret")
+	t.Setenv("GENERIC_SECRET", "hello")
+	t.Setenv("APP_DB_PASSWORD", "pw123")
+
+	t.Run("resolves normalized names with and without prefixes", func(t *testing.T) {
+		ctx := context.Background()
+
+		base := &Provider{}
+		val, err := base.GetSecret(ctx, "generic-secret")
 		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
+			t.Fatalf("GetSecret(base): %v", err)
 		}
 		if val != "hello" {
-			t.Errorf("got %q, want %q", val, "hello")
+			t.Fatalf("GetSecret(base) = %q, want hello", val)
 		}
-	})
 
-	t.Run("applies prefix", func(t *testing.T) {
-		t.Setenv("APP_DB_PASSWORD", "pw123")
-		p := &Provider{prefix: "APP_"}
-		val, err := p.GetSecret(context.Background(), "db-password")
+		prefixed := &Provider{prefix: "APP_"}
+		val, err = prefixed.GetSecret(ctx, "db-password")
 		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
+			t.Fatalf("GetSecret(prefixed): %v", err)
 		}
 		if val != "pw123" {
-			t.Errorf("got %q, want %q", val, "pw123")
+			t.Fatalf("GetSecret(prefixed) = %q, want pw123", val)
 		}
 	})
 
-	t.Run("returns ErrSecretNotFound for missing var", func(t *testing.T) {
-		t.Parallel()
+	t.Run("returns ErrSecretNotFound for missing env vars", func(t *testing.T) {
 		p := &Provider{}
 		_, err := p.GetSecret(context.Background(), "nonexistent-var-xyz")
 		if err == nil {
@@ -44,5 +44,4 @@ func TestProvider(t *testing.T) {
 			t.Errorf("expected ErrSecretNotFound, got: %v", err)
 		}
 	})
-
 }

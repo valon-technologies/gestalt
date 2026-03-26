@@ -13,58 +13,43 @@ import (
 func TestProvider(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reads secret from file", func(t *testing.T) {
+	t.Run("reads trimmed secrets and rejects invalid lookups", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "my-secret"), []byte("hello"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "generic-secret"), []byte("hello"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "line-secret"), []byte("value\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
 		p := &Provider{dir: dir}
-		val, err := p.GetSecret(context.Background(), "my-secret")
+
+		val, err := p.GetSecret(context.Background(), "generic-secret")
 		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
+			t.Fatalf("GetSecret(generic-secret): %v", err)
 		}
 		if val != "hello" {
-			t.Errorf("got %q, want %q", val, "hello")
-		}
-	})
-
-	t.Run("trims trailing newline", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "newline-secret"), []byte("value\n"), 0o600); err != nil {
-			t.Fatal(err)
+			t.Fatalf("GetSecret(generic-secret) = %q, want hello", val)
 		}
 
-		p := &Provider{dir: dir}
-		val, err := p.GetSecret(context.Background(), "newline-secret")
+		val, err = p.GetSecret(context.Background(), "line-secret")
 		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
+			t.Fatalf("GetSecret(line-secret): %v", err)
 		}
 		if val != "value" {
-			t.Errorf("got %q, want %q", val, "value")
+			t.Fatalf("GetSecret(line-secret) = %q, want value", val)
 		}
-	})
 
-	t.Run("returns ErrSecretNotFound for missing file", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		p := &Provider{dir: dir}
-		_, err := p.GetSecret(context.Background(), "nonexistent")
+		_, err = p.GetSecret(context.Background(), "nonexistent")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 		if !errors.Is(err, core.ErrSecretNotFound) {
 			t.Errorf("expected ErrSecretNotFound, got: %v", err)
 		}
-	})
 
-	t.Run("rejects path traversal", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		p := &Provider{dir: dir}
-		_, err := p.GetSecret(context.Background(), "../../etc/shadow")
+		_, err = p.GetSecret(context.Background(), "../../etc/shadow")
 		if err == nil {
 			t.Fatal("expected error for path traversal, got nil")
 		}

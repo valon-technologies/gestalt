@@ -20,7 +20,7 @@ func (b *stubCapabilityLister) ListCapabilities() []core.Capability {
 	return b.caps
 }
 
-func TestRuntime(t *testing.T) {
+func TestRuntimeStartAndStopUseInjectedDeps(t *testing.T) {
 	t.Parallel()
 
 	lister := &stubCapabilityLister{
@@ -29,51 +29,33 @@ func TestRuntime(t *testing.T) {
 			{Provider: "alpha", Operation: "op2"},
 		},
 	}
-	deps := bootstrap.RuntimeDeps{
-		Invoker:          &testutil.StubInvoker{},
-		CapabilityLister: lister,
-	}
-
-	rt := echoruntime.New("test-echo", deps)
-
-	if rt.Name() != "test-echo" {
-		t.Fatalf("expected name test-echo, got %q", rt.Name())
-	}
-
-	if err := rt.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	if lister.calls != 1 {
-		t.Fatalf("expected capability lister to be called once, got %d", lister.calls)
-	}
-
-	if err := rt.Stop(context.Background()); err != nil {
-		t.Fatalf("Stop: %v", err)
-	}
-}
-
-func TestRuntime_UsesExplicitDeps(t *testing.T) {
-	t.Parallel()
-
-	caps := []core.Capability{
-		{Provider: "alpha", Operation: "op1"},
-	}
-	lister := &stubCapabilityLister{caps: caps}
-	rt := echoruntime.New("deps-test", bootstrap.RuntimeDeps{
+	rt := echoruntime.New("test-echo", bootstrap.RuntimeDeps{
 		Invoker:          &testutil.StubInvoker{},
 		CapabilityLister: lister,
 	})
 
+	if rt.Name() != "test-echo" {
+		t.Fatalf("expected name test-echo, got %q", rt.Name())
+	}
 	if err := rt.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if lister.calls != 1 {
 		t.Fatalf("expected capability lister to be called once, got %d", lister.calls)
 	}
-	if got := lister.ListCapabilities(); len(got) != 1 {
-		t.Fatalf("expected 1 capability, got %d", len(got))
-	} else if got[0].Provider != "alpha" || got[0].Operation != "op1" {
-		t.Fatalf("unexpected capability: %+v", got[0])
+
+	got := lister.ListCapabilities()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 capabilities, got %d", len(got))
+	}
+	if got[0].Provider != "alpha" || got[0].Operation != "op1" {
+		t.Fatalf("unexpected first capability: %+v", got[0])
+	}
+	if got[1].Provider != "alpha" || got[1].Operation != "op2" {
+		t.Fatalf("unexpected second capability: %+v", got[1])
+	}
+
+	if err := rt.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
 	}
 }
