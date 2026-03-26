@@ -155,8 +155,9 @@ func runServer(env *bootstrapEnv) error {
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
 			datastoreReadiness(result.Datastore),
 		),
-		MCPHandler: mcpHandler,
-		WebUI:      webui.Handler(),
+		MCPHandler:  mcpHandler,
+		WebUI:       webui.Handler(),
+		AdminEmails: env.Config.Server.AdminEmails,
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)

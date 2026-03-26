@@ -4699,3 +4699,181 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		}
 	})
 }
+
+func TestAdminDenyRules_CRUD(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@example.com"
+	var storedRules []*core.EgressDenyRule
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+			CreateEgressDenyRuleFn: func(_ context.Context, rule *core.EgressDenyRule) error {
+				storedRules = append(storedRules, rule)
+				return nil
+			},
+			ListEgressDenyRulesFn: func(_ context.Context, _ core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error) {
+				return storedRules, nil
+			},
+			DeleteEgressDenyRuleFn: func(_ context.Context, id string) error {
+				for i, r := range storedRules {
+					if r.ID == id {
+						storedRules = append(storedRules[:i], storedRules[i+1:]...)
+						return nil
+					}
+				}
+				return core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"host":"blocked.test","description":"test deny"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/deny-rules", body)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create: expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	ruleID, _ := created["id"].(string)
+	if ruleID == "" {
+		t.Fatal("expected id in create response")
+	}
+	if created["host"] != "blocked.test" {
+		t.Fatalf("expected host blocked.test, got %v", created["host"])
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/egress/deny-rules", nil)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp2.Body.Close() }()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("list: expected 200, got %d", resp2.StatusCode)
+	}
+
+	var listed []map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(listed))
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/egress/deny-rules/"+ruleID, nil)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	resp3, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	defer func() { _ = resp3.Body.Close() }()
+	if resp3.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp3.Body)
+		t.Fatalf("delete: expected 200, got %d: %s", resp3.StatusCode, respBody)
+	}
+}
+
+func TestAdminDenyRules_NonAdminForbidden(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{"admin@example.com"}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"host":"blocked.test"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/deny-rules", body)
+	req.Header.Set("X-Dev-User-Email", "nonadmin@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-admin, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminDenyRules_UnauthenticatedForbidden(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{"admin@example.com"}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"host":"blocked.test"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/deny-rules", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 401 for unauthenticated, got %d: %s", resp.StatusCode, respBody)
+	}
+}
+
+func TestAdminDenyRules_RequiresMatchCriterion(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{"admin@example.com"}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"description":"empty match"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/deny-rules", body)
+	req.Header.Set("X-Dev-User-Email", "admin@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty match criteria, got %d", resp.StatusCode)
+	}
+}

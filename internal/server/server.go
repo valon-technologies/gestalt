@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,6 +35,7 @@ type Server struct {
 	mcpHandler     http.Handler
 	webUI          http.Handler
 	connectHandler http.Handler // CONNECT dispatched outside chi (authority-form URIs bypass path routing)
+	adminEmails    map[string]struct{}
 }
 
 type Config struct {
@@ -49,6 +51,7 @@ type Config struct {
 	Readiness   ReadinessChecker
 	MCPHandler  http.Handler
 	WebUI       http.Handler
+	AdminEmails []string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -67,21 +70,28 @@ func New(cfg Config) (*Server, error) {
 	if now == nil {
 		now = time.Now
 	}
+
+	adminSet := make(map[string]struct{}, len(cfg.AdminEmails))
+	for _, email := range cfg.AdminEmails {
+		adminSet[strings.ToLower(email)] = struct{}{}
+	}
+
 	s := &Server{
-		router:     chi.NewRouter(),
-		auth:       cfg.Auth,
-		datastore:  cfg.Datastore,
-		providers:  cfg.Providers,
-		runtimes:   cfg.Runtimes,
-		bindings:   cfg.Bindings,
-		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore, resolverOpts(cfg.Datastore)...),
-		invoker:    cfg.Invoker,
-		devMode:    cfg.DevMode,
-		stateCodec: stateCodec,
-		now:        now,
-		readiness:  cfg.Readiness,
-		mcpHandler: cfg.MCPHandler,
-		webUI:      cfg.WebUI,
+		router:      chi.NewRouter(),
+		auth:        cfg.Auth,
+		datastore:   cfg.Datastore,
+		providers:   cfg.Providers,
+		runtimes:    cfg.Runtimes,
+		bindings:    cfg.Bindings,
+		resolver:    principal.NewResolver(cfg.Auth, cfg.Datastore, resolverOpts(cfg.Datastore)...),
+		invoker:     cfg.Invoker,
+		devMode:     cfg.DevMode,
+		stateCodec:  stateCodec,
+		now:         now,
+		readiness:   cfg.Readiness,
+		mcpHandler:  cfg.MCPHandler,
+		webUI:       cfg.WebUI,
+		adminEmails: adminSet,
 	}
 
 	s.routes()
@@ -118,6 +128,14 @@ func (s *Server) routes() {
 		r.Get("/auth/callback", s.integrationOAuthCallback)
 
 		s.mountBindingRoutes(r)
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			r.Use(s.adminMiddleware)
+			r.Post("/egress/deny-rules", s.createEgressDenyRule)
+			r.Get("/egress/deny-rules", s.listEgressDenyRules)
+			r.Delete("/egress/deny-rules/{id}", s.deleteEgressDenyRule)
+		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
