@@ -19,22 +19,31 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 }
 
 var _ core.StagedConnectionStore = (*StubDatastore)(nil)
+var _ core.EgressClientStore = (*StubDatastore)(nil)
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
-	PingFn                     func(context.Context) error
-	GetUserFn                  func(context.Context, string) (*core.User, error)
-	FindOrCreateUserFn         func(context.Context, string) (*core.User, error)
-	StoreTokenFn               func(context.Context, *core.IntegrationToken) error
-	TokenFn                    func(context.Context, string, string, string) (*core.IntegrationToken, error)
-	ListTokensFn               func(context.Context, string) ([]*core.IntegrationToken, error)
-	ListTokensForIntegrationFn func(context.Context, string, string) ([]*core.IntegrationToken, error)
-	DeleteTokenFn              func(context.Context, string) error
-	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
-	RevokeAPITokenFn           func(context.Context, string, string) error
-	StoreStagedConnectionFn    func(context.Context, *core.StagedConnection) error
-	GetStagedConnectionFn      func(context.Context, string) (*core.StagedConnection, error)
-	DeleteStagedConnectionFn   func(context.Context, string) error
+	PingFn                      func(context.Context) error
+	GetUserFn                   func(context.Context, string) (*core.User, error)
+	FindOrCreateUserFn          func(context.Context, string) (*core.User, error)
+	StoreTokenFn                func(context.Context, *core.IntegrationToken) error
+	TokenFn                     func(context.Context, string, string, string) (*core.IntegrationToken, error)
+	ListTokensFn                func(context.Context, string) ([]*core.IntegrationToken, error)
+	ListTokensForIntegrationFn  func(context.Context, string, string) ([]*core.IntegrationToken, error)
+	DeleteTokenFn               func(context.Context, string) error
+	ValidateAPITokenFn          func(context.Context, string) (*core.APIToken, error)
+	RevokeAPITokenFn            func(context.Context, string, string) error
+	StoreStagedConnectionFn     func(context.Context, *core.StagedConnection) error
+	GetStagedConnectionFn       func(context.Context, string) (*core.StagedConnection, error)
+	DeleteStagedConnectionFn    func(context.Context, string) error
+	CreateEgressClientFn        func(context.Context, *core.EgressClient) error
+	GetEgressClientFn           func(context.Context, string) (*core.EgressClient, error)
+	ListEgressClientsFn         func(context.Context, string) ([]*core.EgressClient, error)
+	DeleteEgressClientFn        func(context.Context, string) error
+	CreateEgressClientTokenFn   func(context.Context, *core.EgressClientToken) error
+	ValidateEgressClientTokenFn func(context.Context, string) (*core.EgressClientToken, error)
+	ListEgressClientTokensFn    func(context.Context, string) ([]*core.EgressClientToken, error)
+	RevokeEgressClientTokenFn   func(context.Context, string, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -131,6 +140,54 @@ func (s *StubDatastore) GetStagedConnection(ctx context.Context, id string) (*co
 func (s *StubDatastore) DeleteStagedConnection(ctx context.Context, id string) error {
 	if s.DeleteStagedConnectionFn != nil {
 		return s.DeleteStagedConnectionFn(ctx, id)
+	}
+	return nil
+}
+func (s *StubDatastore) CreateEgressClient(ctx context.Context, client *core.EgressClient) error {
+	if s.CreateEgressClientFn != nil {
+		return s.CreateEgressClientFn(ctx, client)
+	}
+	return nil
+}
+func (s *StubDatastore) GetEgressClient(ctx context.Context, id string) (*core.EgressClient, error) {
+	if s.GetEgressClientFn != nil {
+		return s.GetEgressClientFn(ctx, id)
+	}
+	return nil, core.ErrNotFound
+}
+func (s *StubDatastore) ListEgressClients(ctx context.Context, userID string) ([]*core.EgressClient, error) {
+	if s.ListEgressClientsFn != nil {
+		return s.ListEgressClientsFn(ctx, userID)
+	}
+	return nil, nil
+}
+func (s *StubDatastore) DeleteEgressClient(ctx context.Context, id string) error {
+	if s.DeleteEgressClientFn != nil {
+		return s.DeleteEgressClientFn(ctx, id)
+	}
+	return nil
+}
+func (s *StubDatastore) CreateEgressClientToken(ctx context.Context, token *core.EgressClientToken) error {
+	if s.CreateEgressClientTokenFn != nil {
+		return s.CreateEgressClientTokenFn(ctx, token)
+	}
+	return nil
+}
+func (s *StubDatastore) ValidateEgressClientToken(ctx context.Context, hashedToken string) (*core.EgressClientToken, error) {
+	if s.ValidateEgressClientTokenFn != nil {
+		return s.ValidateEgressClientTokenFn(ctx, hashedToken)
+	}
+	return nil, nil
+}
+func (s *StubDatastore) ListEgressClientTokens(ctx context.Context, clientID string) ([]*core.EgressClientToken, error) {
+	if s.ListEgressClientTokensFn != nil {
+		return s.ListEgressClientTokensFn(ctx, clientID)
+	}
+	return nil, nil
+}
+func (s *StubDatastore) RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error {
+	if s.RevokeEgressClientTokenFn != nil {
+		return s.RevokeEgressClientTokenFn(ctx, clientID, tokenID)
 	}
 	return nil
 }

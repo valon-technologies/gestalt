@@ -79,6 +79,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
+var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
@@ -150,6 +151,29 @@ func (s *Store) Migrate(ctx context.Context) error {
 				expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 			)`,
 		},
+		{
+			name: "EGRESS_CLIENTS",
+			ddl: `CREATE TABLE egress_clients (
+				id VARCHAR2(36) PRIMARY KEY,
+				name VARCHAR2(255) NOT NULL,
+				description CLOB,
+				created_by_id VARCHAR2(36) NOT NULL,
+				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+			)`,
+		},
+		{
+			name: "EGRESS_CLIENT_TOKENS",
+			ddl: `CREATE TABLE egress_client_tokens (
+				id VARCHAR2(36) PRIMARY KEY,
+				client_id VARCHAR2(36) NOT NULL,
+				name VARCHAR2(255) NOT NULL,
+				hashed_token VARCHAR2(255) NOT NULL,
+				expires_at TIMESTAMP WITH TIME ZONE,
+				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+			)`,
+		},
 	}
 
 	for _, tbl := range tables {
@@ -191,6 +215,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{
 			name: "FK_STAGED_CONN_USER",
 			ddl:  "ALTER TABLE staged_connections ADD CONSTRAINT fk_staged_conn_user FOREIGN KEY (user_id) REFERENCES users(id)",
+		},
+		{
+			name: "UQ_EGRESS_CLIENTS_OWNER_NAME",
+			ddl:  "ALTER TABLE egress_clients ADD CONSTRAINT uq_egress_clients_owner_name UNIQUE (created_by_id, name)",
+		},
+		{
+			name: "FK_EGRESS_CLIENTS_USER",
+			ddl:  "ALTER TABLE egress_clients ADD CONSTRAINT fk_egress_clients_user FOREIGN KEY (created_by_id) REFERENCES users(id)",
+		},
+		{
+			name: "UQ_ECLT_HASHED_TOKEN",
+			ddl:  "ALTER TABLE egress_client_tokens ADD CONSTRAINT uq_eclt_hashed_token UNIQUE (hashed_token)",
+		},
+		{
+			name: "FK_ECLT_CLIENT",
+			ddl:  "ALTER TABLE egress_client_tokens ADD CONSTRAINT fk_eclt_client FOREIGN KEY (client_id) REFERENCES egress_clients(id) ON DELETE CASCADE",
 		},
 	}
 
