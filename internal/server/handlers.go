@@ -20,7 +20,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
-	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 const defaultTokenInstance = "default"
@@ -803,25 +802,21 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plaintext, err := generateRandomHex(32)
+	issued, err := s.issueToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
 
-	hashed := principal.HashToken(plaintext)
-
-	now := s.now().UTC().Truncate(time.Second)
-	defaultExpiry := now.Add(90 * 24 * time.Hour)
 	apiToken := &core.APIToken{
 		ID:          uuid.NewString(),
 		UserID:      userID,
 		Name:        req.Name,
-		HashedToken: hashed,
+		HashedToken: issued.Hashed,
 		Scopes:      req.Scopes,
-		ExpiresAt:   &defaultExpiry,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ExpiresAt:   issued.ExpiresAt,
+		CreatedAt:   issued.CreatedAt,
+		UpdatedAt:   issued.UpdatedAt,
 	}
 
 	if err := s.datastore.StoreAPIToken(r.Context(), apiToken); err != nil {
@@ -832,7 +827,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, createTokenResponse{
 		ID:        apiToken.ID,
 		Name:      apiToken.Name,
-		Token:     plaintext,
+		Token:     issued.Plaintext,
 		ExpiresAt: apiToken.ExpiresAt,
 	})
 }
@@ -859,13 +854,7 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]apiTokenInfo, 0, len(tokens))
 	for _, t := range tokens {
-		out = append(out, apiTokenInfo{
-			ID:        t.ID,
-			Name:      t.Name,
-			Scopes:    t.Scopes,
-			CreatedAt: t.CreatedAt,
-			ExpiresAt: t.ExpiresAt,
-		})
+		out = append(out, apiTokenInfoFromCore(t))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
