@@ -63,22 +63,14 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimesWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)
+	extensions, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)
 	if err != nil {
 		return warnings, err
 	}
-	// Validation does not start runtimes, but factories may still allocate
-	// resources that need to be released after construction.
-	if runtimes != nil {
-		defer func() { _ = StopRuntimes(context.Background(), runtimes, runtimes.List()) }()
-	}
-
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
-	if err != nil {
-		return warnings, err
-	}
-	if bindings != nil {
-		defer func() { _ = CloseBindings(bindings, bindings.List()) }()
+	if extensions != nil {
+		// Validation does not start runtimes, but extension factories may still
+		// allocate resources that need to be released after construction.
+		defer func() { _ = extensions.Shutdown(context.Background()) }()
 	}
 
 	return warnings, nil

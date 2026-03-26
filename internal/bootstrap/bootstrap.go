@@ -32,19 +32,6 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
-type BindingDeps struct {
-	Invoker invocation.Invoker
-	Egress  EgressDeps
-}
-
-type RuntimeDeps struct {
-	Invoker          invocation.Invoker
-	CapabilityLister invocation.CapabilityLister
-	Egress           EgressDeps
-}
-
-type RuntimeFactory func(ctx context.Context, name string, cfg config.RuntimeDef, deps RuntimeDeps) (core.Runtime, error)
-type BindingFactory func(ctx context.Context, name string, cfg config.BindingDef, deps BindingDeps) (core.Binding, error)
 
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
@@ -145,32 +132,27 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
-	runtimes, err := buildRuntimes(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
+	extensions, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {
 		return nil, err
 	}
-	stopRuntimes := true
+	shutdownExtensions := true
 	defer func() {
-		if stopRuntimes {
-			_ = StopRuntimes(context.Background(), runtimes, runtimeNames(runtimes))
+		if shutdownExtensions {
+			_ = extensions.Shutdown(context.Background())
 		}
 	}()
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
-	if err != nil {
-		return nil, err
-	}
-
 	closeProviders = false
-	stopRuntimes = false
+	shutdownExtensions = false
 	closeSM = false
 	return &Result{
 		Auth:             auth,
 		Datastore:        ds,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
-		Runtimes:         runtimes,
-		Bindings:         bindings,
+		Runtimes:         extensions.Runtimes,
+		Bindings:         extensions.Bindings,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,
 		AuditSink:        audit,
@@ -440,70 +422,6 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, ready, nil
 }
 
-func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Runtime], error) {
-	return buildRuntimesWith(ctx, cfg, factories, invoker, lister, audit, egressDeps, buildRuntime)
-}
-
-func buildRuntimesWith(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps, buildRuntimeFn func(context.Context, string, config.RuntimeDef, *FactoryRegistry, RuntimeDeps) (core.Runtime, error)) (*registry.PluginMap[core.Runtime], error) {
-	if len(cfg.Runtimes) == 0 {
-		return nil, nil
-	}
-
-	runtimes := registry.NewRuntimeMap()
-
-	for name := range cfg.Runtimes {
-		def := cfg.Runtimes[name]
-		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
-		rt, err := buildRuntimeFn(ctx, name, def, factories, deps)
-		if err != nil {
-			_ = StopRuntimes(context.Background(), runtimes, runtimes.List())
-			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
-		}
-
-		if err := runtimes.Register(name, rt); err != nil {
-			_ = rt.Stop(context.Background())
-			_ = StopRuntimes(context.Background(), runtimes, runtimes.List())
-			return nil, fmt.Errorf("bootstrap: registering runtime %q: %w", name, err)
-		}
-		log.Printf("loaded runtime %s (type=%s, providers=%v)", name, def.Type, def.Providers)
-	}
-
-	return runtimes, nil
-}
-
-func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Binding], error) {
-	if len(cfg.Bindings) == 0 {
-		return nil, nil
-	}
-
-	bindings := registry.NewBindingMap()
-
-	for name := range cfg.Bindings {
-		def := cfg.Bindings[name]
-		factory, ok := factories.Bindings[def.Type]
-		if !ok {
-			_ = CloseBindings(bindings, bindings.List())
-			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
-		}
-
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
-		binding, err := factory(ctx, name, def, deps)
-		if err != nil {
-			_ = CloseBindings(bindings, bindings.List())
-			return nil, fmt.Errorf("bootstrap: binding %q: %w", name, err)
-		}
-
-		if err := bindings.Register(name, binding); err != nil {
-			_ = binding.Close()
-			_ = CloseBindings(bindings, bindings.List())
-			return nil, fmt.Errorf("bootstrap: registering binding %q: %w", name, err)
-		}
-		log.Printf("loaded binding %s (type=%s, providers=%v)", name, def.Type, def.Providers)
-	}
-
-	return bindings, nil
-}
-
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
 	if intg.Plugin != nil {
 		mode := intg.Plugin.Mode
@@ -609,34 +527,4 @@ func validateProviderBuildAvailable(name string, intg config.IntegrationDef, fac
 	}
 	_, err := providerFactoryForName(name, factories)
 	return err
-}
-
-func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
-	if cfg.Plugin != nil {
-		m, err := config.NodeToMap(cfg.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode runtime plugin config for %q: %w", name, err)
-		}
-		return pluginapi.NewExecutableRuntime(ctx, name, pluginapi.ExecConfig{
-			Command: cfg.Plugin.Command,
-			Args:    cfg.Plugin.Args,
-			Env:     cfg.Plugin.Env,
-			Name:    name,
-			Config:  m,
-			Mode:    cfg.Plugin.Mode,
-		}, deps.Invoker, deps.CapabilityLister)
-	}
-
-	factory, ok := factories.Runtimes[cfg.Type]
-	if !ok {
-		return nil, fmt.Errorf("unknown runtime type %q", cfg.Type)
-	}
-	return factory(ctx, name, cfg, deps)
-}
-
-func runtimeNames(runtimes *registry.PluginMap[core.Runtime]) []string {
-	if runtimes == nil {
-		return nil
-	}
-	return runtimes.List()
 }
