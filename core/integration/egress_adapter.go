@@ -17,6 +17,17 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
 
+	if len(b.DefaultParams) > 0 {
+		if params == nil {
+			params = make(map[string]any)
+		}
+		for k, v := range b.DefaultParams {
+			if _, exists := params[k]; !exists {
+				params[k] = v
+			}
+		}
+	}
+
 	baseURL, headers := b.resolvedURLAndHeaders(ctx)
 	req := apiexec.Request{
 		Method:        ep.Method,

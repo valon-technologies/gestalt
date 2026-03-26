@@ -22,6 +22,9 @@ func Compile(ctx context.Context, name string, upstream config.UpstreamDef, prep
 	if err != nil {
 		return nil, err
 	}
+	if len(upstream.DefaultParams) > 0 {
+		def.DefaultParams = upstream.DefaultParams
+	}
 	return &Result{
 		Definition: def,
 		Catalog:    provider.CatalogFromDefinition(def),
@@ -36,6 +39,9 @@ func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	def, err := loadDefinition(ctx, name, upstream, preparedProviders)
 	if err != nil {
 		return nil, err
+	}
+	if len(upstream.DefaultParams) > 0 {
+		def.DefaultParams = upstream.DefaultParams
 	}
 	return provider.Build(def, integrationWithUpstreamAuth(intg, upstream), map[string]string(upstream.AllowedOperations), opts...)
 }

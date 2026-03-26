@@ -153,10 +153,11 @@ const (
 )
 
 type UpstreamDef struct {
-	Type              string     `yaml:"type"`
-	URL               string     `yaml:"url"`
-	MCP               bool       `yaml:"mcp"`
-	AllowedOperations AllowedOps `yaml:"allowed_operations"`
+	Type              string         `yaml:"type"`
+	URL               string         `yaml:"url"`
+	MCP               bool           `yaml:"mcp"`
+	AllowedOperations AllowedOps     `yaml:"allowed_operations"`
+	DefaultParams     map[string]any `yaml:"default_params"`
 
 	// Per-upstream auth overrides. When set, these take precedence over
 	// integration-level auth for this upstream. When empty, the

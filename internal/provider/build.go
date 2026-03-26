@@ -84,6 +84,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		Endpoints:          endpoints,
 		Queries:            coreintegration.QueriesMap(cat),
 		Headers:            def.Headers,
+		DefaultParams:      def.DefaultParams,
 		Pagination:         buildPaginationConfigs(def),
 		EgressResolver:     bo.egress,
 	}
