@@ -9,7 +9,7 @@ import (
 	highbase "github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/integration"
+	coreintegration "github.com/valon-technologies/gestalt/core/integration"
 
 	"github.com/pb33f/libopenapi"
 )
@@ -122,7 +122,7 @@ func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allo
 				Path:        path,
 				Title:       title,
 				Description: desc,
-				Annotations: integration.AnnotationsFromMethod(upperMethod),
+				Annotations: coreintegration.AnnotationsFromMethod(upperMethod),
 			}
 
 			for _, p := range op.Parameters {

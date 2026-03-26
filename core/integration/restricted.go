@@ -159,12 +159,12 @@ func (r *restrictedOAuth) RefreshTokenWithURL(ctx context.Context, refreshToken,
 	return r.oauth.RefreshToken(ctx, refreshToken)
 }
 
-type oauthVerifierExchanger interface {
+type restrictedOAuthVerifierExchanger interface {
 	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
 }
 
 func (r *restrictedOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	if exchanger, ok := r.oauth.(oauthVerifierExchanger); ok {
+	if exchanger, ok := r.oauth.(restrictedOAuthVerifierExchanger); ok {
 		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
 	}
 	return r.oauth.ExchangeCode(ctx, code)

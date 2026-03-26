@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-EgressClient currently has a `UNIQUE(created_by_id, name)` constraint, and `resolveOwnedEgressClient` enforces strict creator ownership: a user can only see and manage clients they created. There is no mechanism for operator-managed or shared clients. This means an operator cannot provision a client for a workload and hand off the token, and two users cannot share a client identity for the same external service.
+EgressClient originally had a `UNIQUE(created_by_id, name)` constraint and strict creator ownership. There was no mechanism for operator-managed or shared clients. That meant an operator could not provision a client for a workload and hand off the token, and two users could not share a client identity for the same external service.
 
 The gateway deployment shape (ADR 002) defers shared/workload EgressClient scope, but the need is becoming concrete as operators want to pre-provision machine callers that are not tied to a specific user's session.
 
@@ -26,5 +26,5 @@ The gateway deployment shape (ADR 002) defers shared/workload EgressClient scope
 
 - A future schema migration adds a `scope` column (default `personal`) to the `egress_clients` table and updates the uniqueness constraint.
 - The API gains a `scope` parameter on create and a `scope` filter on list.
-- `resolveOwnedEgressClient` evolves into scope-aware authorization: personal clients check creator, global clients check admin status.
+- `resolveAuthorizedEgressClient` enforces scope-aware authorization: personal clients check creator, global clients check admin status.
 - Token authentication for egress clients is unaffected; `gst_ec_` tokens resolve to a client regardless of scope.

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
+	coreintegration "github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
-	"github.com/valon-technologies/gestalt/internal/integration"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
@@ -21,12 +21,12 @@ import (
 type BuildOption func(*buildOptions)
 
 type buildOptions struct {
-	authOverride integration.AuthHandler
+	authOverride coreintegration.AuthHandler
 	egress       *egress.Resolver
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
-func WithAuthHandler(h integration.AuthHandler) BuildOption {
+func WithAuthHandler(h coreintegration.AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
 }
 
@@ -53,7 +53,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	var auth integration.AuthHandler
+	var auth coreintegration.AuthHandler
 	var err error
 	if bo.authOverride != nil {
 		auth = bo.authOverride
@@ -66,23 +66,23 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	cat := CatalogFromDefinition(def)
 	cat.BaseURL = baseURL
-	integration.CompileSchemas(cat)
+	coreintegration.CompileSchemas(cat)
 
-	endpoints, err := integration.EndpointsMap(cat)
+	endpoints, err := coreintegration.EndpointsMap(cat)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}
 
-	base := &integration.Base{
+	base := &coreintegration.Base{
 		IntegrationName:    def.Provider,
 		IntegrationDisplay: def.DisplayName,
 		IntegrationDesc:    def.Description,
 		Auth:               auth,
 		BaseURL:            baseURL,
 		HTTPClient:         client,
-		Operations:         integration.OperationsList(cat),
+		Operations:         coreintegration.OperationsList(cat),
 		Endpoints:          endpoints,
-		Queries:            integration.QueriesMap(cat),
+		Queries:            coreintegration.QueriesMap(cat),
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
 		EgressResolver:     bo.egress,
@@ -104,11 +104,11 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	switch def.AuthStyle {
 	case "", "bearer":
 	case "raw":
-		base.AuthStyle = integration.AuthStyleRaw
+		base.AuthStyle = coreintegration.AuthStyleRaw
 	case "none":
-		base.AuthStyle = integration.AuthStyleNone
+		base.AuthStyle = coreintegration.AuthStyleNone
 	case "basic":
-		base.AuthStyle = integration.AuthStyleBasic
+		base.AuthStyle = coreintegration.AuthStyleBasic
 	default:
 		return nil, fmt.Errorf("%s: unknown auth_style %q", def.Provider, def.AuthStyle)
 	}
@@ -214,7 +214,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 			}
 			allowed = append(allowed, opName)
 		}
-		result = integration.NewRestricted(result, allowed)
+		result = coreintegration.NewRestricted(result, allowed)
 	}
 
 	return result, nil
@@ -314,7 +314,7 @@ func setStr(dst *string, val string) {
 	}
 }
 
-func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, client *http.Client) (integration.AuthHandler, error) {
+func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, client *http.Client) (coreintegration.AuthHandler, error) {
 	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
 		return oauth.ManualAuthHandler{}, nil
 	}
@@ -375,7 +375,7 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	}
 
 	upstream := oauth.NewUpstream(oauthCfg, opts...)
-	return integration.UpstreamAuth{Handler: upstream}, nil
+	return coreintegration.UpstreamAuth{Handler: upstream}, nil
 }
 
 func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
