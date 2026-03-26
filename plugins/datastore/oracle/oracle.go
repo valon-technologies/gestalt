@@ -79,7 +79,6 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
-var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
@@ -151,31 +150,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 				expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 			)`,
 		},
-		{
-			name: "EGRESS_CLIENTS",
-			ddl: `CREATE TABLE egress_clients (
-				id VARCHAR2(36) PRIMARY KEY,
-				name VARCHAR2(255) NOT NULL,
-				description CLOB,
-				scope VARCHAR2(255) DEFAULT 'personal' NOT NULL,
-				scope_key VARCHAR2(255) NOT NULL,
-				created_by_id VARCHAR2(36) NOT NULL,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
-		},
-		{
-			name: "EGRESS_CLIENT_TOKENS",
-			ddl: `CREATE TABLE egress_client_tokens (
-				id VARCHAR2(36) PRIMARY KEY,
-				client_id VARCHAR2(36) NOT NULL,
-				name VARCHAR2(255) NOT NULL,
-				hashed_token VARCHAR2(255) NOT NULL,
-				expires_at TIMESTAMP WITH TIME ZONE,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
-		},
 	}
 
 	for _, tbl := range tables {
@@ -218,22 +192,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			name: "FK_STAGED_CONN_USER",
 			ddl:  "ALTER TABLE staged_connections ADD CONSTRAINT fk_staged_conn_user FOREIGN KEY (user_id) REFERENCES users(id)",
 		},
-		{
-			name: "FK_EGRESS_CLIENTS_USER",
-			ddl:  "ALTER TABLE egress_clients ADD CONSTRAINT fk_egress_clients_user FOREIGN KEY (created_by_id) REFERENCES users(id)",
-		},
-		{
-			name: "UQ_ECLT_HASHED_TOKEN",
-			ddl:  "ALTER TABLE egress_client_tokens ADD CONSTRAINT uq_eclt_hashed_token UNIQUE (hashed_token)",
-		},
-		{
-			name: "FK_ECLT_CLIENT",
-			ddl:  "ALTER TABLE egress_client_tokens ADD CONSTRAINT fk_eclt_client FOREIGN KEY (client_id) REFERENCES egress_clients(id) ON DELETE CASCADE",
-		},
-	}
-
-	if err := s.migrateEgressClientScope(ctx); err != nil {
-		return err
 	}
 
 	for _, c := range constraints {
@@ -271,89 +229,4 @@ func (s *Store) constraintExists(ctx context.Context, name string) (bool, error)
 		return false, err
 	}
 	return count > 0, nil
-}
-
-func (s *Store) columnExists(ctx context.Context, table, column string) (bool, error) {
-	var count int
-	err := s.DB.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM user_tab_columns WHERE table_name = :1 AND column_name = :2",
-		strings.ToUpper(table), strings.ToUpper(column),
-	).Scan(&count)
-	return count > 0, err
-}
-
-func (s *Store) columnNullable(ctx context.Context, table, column string) (bool, error) {
-	var nullable string
-	err := s.DB.QueryRowContext(ctx,
-		"SELECT nullable FROM user_tab_columns WHERE table_name = :1 AND column_name = :2",
-		strings.ToUpper(table), strings.ToUpper(column),
-	).Scan(&nullable)
-	if err != nil {
-		return false, err
-	}
-	return nullable == "Y", nil
-}
-
-func (s *Store) migrateEgressClientScope(ctx context.Context) error {
-	exists, err := s.columnExists(ctx, "egress_clients", "scope")
-	if err != nil {
-		return fmt.Errorf("checking scope column: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD scope VARCHAR2(255) DEFAULT 'personal' NOT NULL"); err != nil {
-			return fmt.Errorf("adding scope column: %w", err)
-		}
-	}
-
-	exists, err = s.columnExists(ctx, "egress_clients", "scope_key")
-	if err != nil {
-		return fmt.Errorf("checking scope_key column: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD scope_key VARCHAR2(255)"); err != nil {
-			return fmt.Errorf("adding scope_key column: %w", err)
-		}
-	}
-
-	if _, err := s.DB.ExecContext(ctx,
-		"UPDATE egress_clients SET scope_key = created_by_id WHERE scope = 'personal' AND scope_key IS NULL"); err != nil {
-		return fmt.Errorf("backfilling scope_key: %w", err)
-	}
-
-	nullable, err := s.columnNullable(ctx, "egress_clients", "scope_key")
-	if err != nil {
-		return fmt.Errorf("checking scope_key nullable: %w", err)
-	}
-	if nullable {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients MODIFY scope_key NOT NULL"); err != nil {
-			return fmt.Errorf("setting scope_key NOT NULL: %w", err)
-		}
-	}
-
-	exists, err = s.constraintExists(ctx, "UQ_EGRESS_CLIENTS_OWNER_NAME")
-	if err != nil {
-		return fmt.Errorf("checking old constraint: %w", err)
-	}
-	if exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients DROP CONSTRAINT uq_egress_clients_owner_name"); err != nil {
-			return fmt.Errorf("dropping old constraint: %w", err)
-		}
-	}
-
-	exists, err = s.constraintExists(ctx, "UQ_EGRESS_CLIENTS_SCOPE_NAME")
-	if err != nil {
-		return fmt.Errorf("checking new constraint: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD CONSTRAINT uq_egress_clients_scope_name UNIQUE (scope_key, name)"); err != nil {
-			return fmt.Errorf("adding scope constraint: %w", err)
-		}
-	}
-
-	return nil
 }

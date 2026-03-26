@@ -10,7 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlstore"
 
-	_ "modernc.org/sqlite" // register database/sql driver
+	_ "modernc.org/sqlite" // register SQLite driver
 )
 
 // dialect implements sqlstore.Dialect for SQLite.
@@ -49,7 +49,6 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
-var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -116,117 +115,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL
 		);
-		CREATE TABLE IF NOT EXISTS egress_clients (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			description TEXT NOT NULL DEFAULT '',
-			scope TEXT NOT NULL DEFAULT 'personal',
-			scope_key TEXT NOT NULL DEFAULT '',
-			created_by_id TEXT NOT NULL REFERENCES users(id),
-			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL,
-			UNIQUE(scope_key, name)
-		);
-		CREATE TABLE IF NOT EXISTS egress_client_tokens (
-			id TEXT PRIMARY KEY,
-			client_id TEXT NOT NULL REFERENCES egress_clients(id) ON DELETE CASCADE,
-			name TEXT NOT NULL,
-			hashed_token TEXT UNIQUE NOT NULL,
-			expires_at DATETIME,
-			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL
-		);
 	`)
-	if err != nil {
-		return err
-	}
-	return s.migrateEgressClientScope(ctx)
-}
-
-func (s *Store) egressClientHasScopeColumns(ctx context.Context) (hasScope, hasScopeKey bool, err error) {
-	rows, err := s.DB.QueryContext(ctx, "PRAGMA table_info(egress_clients)")
-	if err != nil {
-		return false, false, fmt.Errorf("checking egress_clients schema: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notnull int
-		var dfltValue sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &dfltValue, &pk); err != nil {
-			return false, false, fmt.Errorf("scanning table_info: %w", err)
-		}
-		if name == "scope" {
-			hasScope = true
-		}
-		if name == "scope_key" {
-			hasScopeKey = true
-		}
-	}
-	return hasScope, hasScopeKey, rows.Err()
-}
-
-func (s *Store) migrateEgressClientScope(ctx context.Context) error {
-	hasScope, hasScopeKey, err := s.egressClientHasScopeColumns(ctx)
-	if err != nil {
-		return err
-	}
-	if hasScope && hasScopeKey {
-		return nil
-	}
-
-	if _, err := s.DB.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
-		return fmt.Errorf("disabling foreign keys: %w", err)
-	}
-	defer func() { _, _ = s.DB.ExecContext(ctx, "PRAGMA foreign_keys = ON") }()
-
-	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("beginning scope migration tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS egress_clients_new`); err != nil {
-		return fmt.Errorf("cleaning up prior failed migration: %w", err)
-	}
-
-	stmts := []string{
-		`CREATE TABLE egress_clients_new (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			description TEXT NOT NULL DEFAULT '',
-			scope TEXT NOT NULL DEFAULT 'personal',
-			scope_key TEXT NOT NULL DEFAULT '',
-			created_by_id TEXT NOT NULL REFERENCES users(id),
-			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL,
-			UNIQUE(scope_key, name)
-		)`,
-		`INSERT INTO egress_clients_new (id, name, description, scope, scope_key, created_by_id, created_at, updated_at)
-		 SELECT id, name, description, 'personal', created_by_id, created_by_id, created_at, updated_at
-		 FROM egress_clients`,
-		`DROP TABLE egress_clients`,
-		`ALTER TABLE egress_clients_new RENAME TO egress_clients`,
-	}
-	for _, stmt := range stmts {
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrating egress_clients scope: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing scope migration: %w", err)
-	}
-
-	fkRows, err := s.DB.QueryContext(ctx, "PRAGMA foreign_key_check(egress_client_tokens)")
-	if err != nil {
-		return fmt.Errorf("foreign key check: %w", err)
-	}
-	defer func() { _ = fkRows.Close() }()
-	if fkRows.Next() {
-		return fmt.Errorf("foreign key violations found in egress_client_tokens after migration")
-	}
-	return fkRows.Err()
+	return err
 }

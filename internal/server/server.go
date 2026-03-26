@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,7 +33,6 @@ type Server struct {
 	mcpHandler     http.Handler
 	webUI          http.Handler
 	connectHandler http.Handler // CONNECT dispatched outside chi (authority-form URIs bypass path routing)
-	adminEmails    map[string]struct{}
 }
 
 type Config struct {
@@ -50,7 +48,6 @@ type Config struct {
 	Readiness   ReadinessChecker
 	MCPHandler  http.Handler
 	WebUI       http.Handler
-	AdminEmails []string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -70,39 +67,25 @@ func New(cfg Config) (*Server, error) {
 		now = time.Now
 	}
 
-	adminSet := make(map[string]struct{}, len(cfg.AdminEmails))
-	for _, email := range cfg.AdminEmails {
-		adminSet[strings.ToLower(email)] = struct{}{}
-	}
-
 	s := &Server{
-		router:      chi.NewRouter(),
-		auth:        cfg.Auth,
-		datastore:   cfg.Datastore,
-		providers:   cfg.Providers,
-		runtimes:    cfg.Runtimes,
-		bindings:    cfg.Bindings,
-		resolver:    principal.NewResolver(cfg.Auth, cfg.Datastore, resolverOpts(cfg.Datastore)...),
-		invoker:     cfg.Invoker,
-		devMode:     cfg.DevMode,
-		stateCodec:  stateCodec,
-		now:         now,
-		readiness:   cfg.Readiness,
-		mcpHandler:  cfg.MCPHandler,
-		webUI:       cfg.WebUI,
-		adminEmails: adminSet,
+		router:     chi.NewRouter(),
+		auth:       cfg.Auth,
+		datastore:  cfg.Datastore,
+		providers:  cfg.Providers,
+		runtimes:   cfg.Runtimes,
+		bindings:   cfg.Bindings,
+		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore),
+		invoker:    cfg.Invoker,
+		devMode:    cfg.DevMode,
+		stateCodec: stateCodec,
+		now:        now,
+		readiness:  cfg.Readiness,
+		mcpHandler: cfg.MCPHandler,
+		webUI:      cfg.WebUI,
 	}
 
 	s.routes()
 	return s, nil
-}
-
-func resolverOpts(ds core.Datastore) []principal.ResolverOption {
-	var opts []principal.ResolverOption
-	if ecs, ok := ds.(core.EgressClientStore); ok {
-		opts = append(opts, principal.WithEgressClientStore(ecs))
-	}
-	return opts
 }
 
 func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
