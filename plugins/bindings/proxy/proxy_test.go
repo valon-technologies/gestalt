@@ -522,7 +522,7 @@ func TestProxyFactoryValidation(t *testing.T) {
 	}
 }
 
-func TestProxyFactoryRejectsNoProvider(t *testing.T) {
+func TestProxyFactoryAcceptsZeroProviders(t *testing.T) {
 	t.Parallel()
 
 	cfgYAML := `path: /proxy`
@@ -531,12 +531,15 @@ func TestProxyFactoryRejectsNoProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Factory(context.Background(), "no-prov", config.BindingDef{
+	binding, err := Factory(context.Background(), "no-prov", config.BindingDef{
 		Type:   "proxy",
 		Config: *node.Content[0],
 	}, bootstrap.BindingDeps{})
-	if err == nil {
-		t.Fatal("expected error for zero providers")
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+	if binding.Name() != "no-prov" {
+		t.Fatalf("name = %q, want no-prov", binding.Name())
 	}
 }
 
@@ -556,6 +559,60 @@ func TestProxyFactoryRejectsMultipleProviders(t *testing.T) {
 	}, bootstrap.BindingDeps{})
 	if err == nil {
 		t.Fatal("expected error for multiple providers")
+	}
+	if !strings.Contains(err.Error(), "at most one") {
+		t.Fatalf("error = %q, want it to contain %q", err.Error(), "at most one")
+	}
+}
+
+func TestProxyZeroProviderForwardsRequest(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"path":   r.URL.Path,
+			"method": r.Method,
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	cfgYAML := `path: /gw`
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatal(err)
+	}
+
+	binding, err := Factory(context.Background(), "gw-proxy", config.BindingDef{
+		Type:   "proxy",
+		Config: *node.Content[0],
+	}, bootstrap.BindingDeps{})
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	routes := binding.Routes()
+	if len(routes) == 0 {
+		t.Fatal("expected at least one route")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/gw/v1/healthz", nil)
+	w := httptest.NewRecorder()
+	routes[0].Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["path"] != "/v1/healthz" {
+		t.Fatalf("upstream path = %q, want /v1/healthz", body["path"])
+	}
+	if body["method"] != http.MethodGet {
+		t.Fatalf("upstream method = %q, want GET", body["method"])
 	}
 }
 

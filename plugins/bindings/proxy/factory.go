@@ -18,12 +18,16 @@ var Factory bootstrap.BindingFactory = func(_ context.Context, name string, def 
 	if err := cfg.validate(name); err != nil {
 		return nil, err
 	}
-	if len(def.Providers) != 1 {
-		return nil, fmt.Errorf("proxy %q: exactly one provider must be configured in bindings.%s.providers", name, name)
+	if len(def.Providers) > 1 {
+		return nil, fmt.Errorf("proxy %q: at most one provider may be configured in bindings.%s.providers", name, name)
+	}
+	var provider string
+	if len(def.Providers) == 1 {
+		provider = def.Providers[0]
 	}
 	resolver := egress.Resolver{}
 	if deps.Egress.Resolver != nil {
 		resolver = *deps.Egress.Resolver
 	}
-	return New(name, def.Providers[0], cfg, resolver, nil), nil
+	return New(name, provider, cfg, resolver, nil), nil
 }
