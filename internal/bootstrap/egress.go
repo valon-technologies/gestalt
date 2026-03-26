@@ -33,31 +33,39 @@ func newEgressDeps(cfg *config.Config, _ core.Datastore) EgressDeps {
 }
 
 func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider]) {
-	if len(deps.CredentialGrants) == 0 {
-		return
-	}
+	var sources []egress.CredentialResolver
 
-	grants := make([]egress.CredentialGrant, len(deps.CredentialGrants))
-	for i := range deps.CredentialGrants {
-		g := &deps.CredentialGrants[i]
-		grants[i] = egress.CredentialGrant{
-			Instance: g.Instance,
-			MatchCriteria: egress.MatchCriteria{
-				SubjectKind: egress.SubjectKind(g.SubjectKind),
-				SubjectID:   g.SubjectID,
-				Provider:    g.Provider,
-				Operation:   g.Operation,
-				Method:      g.Method,
-				Host:        g.Host,
-				PathPrefix:  g.PathPrefix,
-			},
+	if len(deps.CredentialGrants) > 0 {
+		grants := make([]egress.CredentialGrant, len(deps.CredentialGrants))
+		for i := range deps.CredentialGrants {
+			g := &deps.CredentialGrants[i]
+			grants[i] = egress.CredentialGrant{
+				Instance: g.Instance,
+				MatchCriteria: egress.MatchCriteria{
+					SubjectKind: egress.SubjectKind(g.SubjectKind),
+					SubjectID:   g.SubjectID,
+					Provider:    g.Provider,
+					Operation:   g.Operation,
+					Method:      g.Method,
+					Host:        g.Host,
+					PathPrefix:  g.PathPrefix,
+				},
+			}
 		}
+		sources = append(sources, &egress.ProviderCredentialResolver{
+			TokenResolver: &brokerTokenResolver{broker: broker},
+			Materializer:  &registryMaterializer{providers: providers},
+			Grants:        grants,
+		})
 	}
 
-	deps.Resolver.Credentials = &egress.ProviderCredentialResolver{
-		TokenResolver: &brokerTokenResolver{broker: broker},
-		Materializer:  &registryMaterializer{providers: providers},
-		Grants:        grants,
+	switch len(sources) {
+	case 0:
+		return
+	case 1:
+		deps.Resolver.Credentials = sources[0]
+	default:
+		deps.Resolver.Credentials = &egress.CredentialSourceChain{Sources: sources}
 	}
 }
 
