@@ -1,114 +1,38 @@
-import {
-  test,
-  expect,
-  mockTokens,
-  mockIntegrations,
-} from "./fixtures";
-import type { APIToken } from "../src/lib/api";
-
-const sampleTokens: APIToken[] = [
-  {
-    id: "tok-1",
-    name: "ci-pipeline",
-    scopes: "read",
-    created_at: "2026-01-15T10:00:00Z",
-  },
-  {
-    id: "tok-2",
-    name: "deploy-key",
-    scopes: "",
-    created_at: "2026-02-20T14:30:00Z",
-    expires_at: "2027-02-20T14:30:00Z",
-  },
-];
+import { test, expect, hasLiveBackend } from "./fixtures";
 
 test.describe("Token Management", () => {
-  test("displays token list", async ({ authenticatedPage }) => {
+  test.skip(!hasLiveBackend, "Requires PLAYWRIGHT_BASE_URL");
+
+  test("token list loads against the live backend", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
-    await mockTokens(page, sampleTokens);
-    await mockIntegrations(page, []);
 
     await page.goto("/tokens");
-    await expect(
-      page.getByRole("heading", { name: "API Tokens" }),
-    ).toBeVisible();
-    await expect(page.getByText("ci-pipeline")).toBeVisible();
-    await expect(page.getByText("deploy-key")).toBeVisible();
+
+    await expect(page.getByRole("heading", { name: "API Tokens" })).toBeVisible();
+    await expect(page.getByText("Manage tokens for programmatic access to the Gestalt API.")).toBeVisible();
+
+    const emptyState = page.getByText("No API tokens yet.");
+    if (await emptyState.count()) {
+      await expect(emptyState).toBeVisible();
+    } else {
+      await expect(page.locator("table")).toBeVisible();
+    }
   });
 
-  test("shows empty state when no tokens", async ({ authenticatedPage }) => {
+  test("creates and revokes a token against the live backend", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
-    await mockTokens(page, []);
-    await mockIntegrations(page, []);
+    const tokenName = `e2e-token-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     await page.goto("/tokens");
-    await expect(page.getByText("No API tokens yet.")).toBeVisible();
-  });
-
-  test("creates a token and shows plaintext", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    // Start with empty tokens, then after creation return the new one.
-    let tokens: APIToken[] = [];
-    await page.route("**/api/v1/tokens", (route, request) => {
-      if (request.method() === "GET") {
-        route.fulfill({ json: tokens });
-      } else if (request.method() === "POST") {
-        tokens = [
-          {
-            id: "tok-new",
-            name: "my-new-token",
-            scopes: "",
-            created_at: new Date().toISOString(),
-          },
-        ];
-        route.fulfill({
-          status: 201,
-          json: { id: "tok-new", name: "my-new-token", token: "gestalt_abc123secret" },
-        });
-      } else {
-        route.continue();
-      }
-    });
-    await mockIntegrations(page, []);
-
-    await page.goto("/tokens");
-    await page.getByLabel("Token name").fill("my-new-token");
+    await page.getByLabel("Token name").fill(tokenName);
     await page.getByRole("button", { name: "Create Token" }).click();
 
-    await expect(
-      page.getByText("Copy this token now"),
-    ).toBeVisible();
-    await expect(page.getByText("gestalt_abc123secret")).toBeVisible();
-    await expect(page.getByText("my-new-token")).toBeVisible();
-  });
+    await expect(page.getByText("Copy this token now. It will not be shown again.")).toBeVisible();
+    await expect(page.getByText(tokenName)).toBeVisible();
 
-  test("revokes a token", async ({ authenticatedPage }) => {
-    const page = authenticatedPage;
-    let tokens = [...sampleTokens];
-    await page.route("**/api/v1/tokens", (route, request) => {
-      if (request.method() === "GET") {
-        route.fulfill({ json: tokens });
-      } else {
-        route.continue();
-      }
-    });
-    await page.route("**/api/v1/tokens/*", (route, request) => {
-      if (request.method() === "DELETE") {
-        tokens = tokens.filter((t) => !request.url().includes(t.id));
-        route.fulfill({ json: { status: "revoked" } });
-      } else {
-        route.continue();
-      }
-    });
-    await mockIntegrations(page, []);
-
-    await page.goto("/tokens");
-    await expect(page.getByText("ci-pipeline")).toBeVisible();
-
-    // Click the first Revoke button.
-    await page.getByRole("button", { name: "Revoke" }).first().click();
-    await expect(page.getByText("ci-pipeline")).toBeHidden();
+    const row = page.locator("tr", { hasText: tokenName });
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "Revoke" }).click();
+    await expect(page.getByText(tokenName)).toHaveCount(0);
   });
 });

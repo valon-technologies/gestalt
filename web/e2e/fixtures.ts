@@ -1,74 +1,46 @@
-import { test as base, expect, type Page, type Route } from "@playwright/test";
-import type { Integration, APIToken } from "../src/lib/api";
+import { test as base, expect, type Page } from "@playwright/test";
 
-export async function mockIntegrations(
-  page: Page,
-  integrations: Integration[],
-  opts?: { onDisconnect?: (name: string) => void },
-) {
-  await page.route("**/api/v1/integrations", (route: Route, request) => {
-    if (request.method() === "GET") {
-      route.fulfill({ json: integrations });
-    } else {
-      route.fallback();
-    }
-  });
+export const hasLiveBackend = !!process.env.PLAYWRIGHT_BASE_URL;
 
-  await page.route("**/api/v1/integrations/*", (route: Route, request) => {
-    if (request.method() === "DELETE") {
-      const url = new URL(request.url());
-      const name = url.pathname.split("/").pop() || "";
-      opts?.onDisconnect?.(name);
-      route.fulfill({ json: { status: "disconnected" } });
-    } else {
-      route.fallback();
-    }
-  });
+function uniqueEmail(seed: string): string {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `e2e-${seed}-${suffix}@gestalt.dev`;
 }
 
-export async function mockManualConnect(
+export async function loginAsDevUser(
   page: Page,
-  opts?: { onConnect?: (integration: string, credential: string) => void },
-) {
-  await page.route("**/api/v1/auth/connect-manual", async (route: Route, request) => {
-    if (request.method() === "POST") {
-      const body = request.postDataJSON() as { integration: string; credential: string };
-      opts?.onConnect?.(body.integration, body.credential);
-      await route.fulfill({ json: { status: "connected" } });
-    } else {
-      await route.fallback();
-    }
-  });
-}
+  seed = "test",
+): Promise<string> {
+  const email = uniqueEmail(seed);
 
-export async function mockAuthInfo(
-  page: Page,
-  info: { provider: string; display_name: string },
-) {
-  await page.route("**/api/v1/auth/info", (route: Route) => {
-    route.fulfill({ json: info });
-  });
-}
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Gestalt" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Sign in with / }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dev Login" })).toBeVisible();
 
-export async function mockTokens(page: Page, tokens: APIToken[]) {
-  await page.route("**/api/v1/tokens", (route: Route, request) => {
-    if (request.method() === "GET") {
-      route.fulfill({ json: tokens });
-    } else {
-      route.fallback();
-    }
-  });
+  await page.locator('input[name="email"]').fill(email);
+  await page.getByRole("button", { name: "Dev Login" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.getByText(email)).toBeVisible();
+
+  return email;
 }
 
 type CustomFixtures = {
   authenticatedPage: Page;
+  authenticatedEmail: string;
 };
 
 export const test = base.extend<CustomFixtures>({
-  authenticatedPage: async ({ page }, use) => {
-    await page.addInitScript(() => {
-      localStorage.setItem("user_email", "test@gestalt.dev");
-    });
+  authenticatedEmail: async ({ page }, use) => {
+    const email = await loginAsDevUser(page, "authenticated");
+    await use(email);
+  },
+  authenticatedPage: async ({ page, authenticatedEmail }, use) => {
+    await expect(page.getByText(authenticatedEmail)).toBeVisible();
     await use(page);
   },
 });
