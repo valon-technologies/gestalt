@@ -242,6 +242,7 @@ providers:
       - get_thread
       - list_labels
       - list_messages
+      - list_threads
       - mark_as_read
       - remove_label
       - reply_to_message
