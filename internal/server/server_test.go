@@ -4263,6 +4263,7 @@ func TestProxyBinding_StaticPolicyDenyBlocksRequest(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/policy-proxy"+path, nil)
 		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request %s: %v", path, err)
@@ -4274,8 +4275,8 @@ func TestProxyBinding_StaticPolicyDenyBlocksRequest(t *testing.T) {
 	if status := doReq("/v1/admin/users"); status != http.StatusBadRequest {
 		t.Fatalf("denied path: expected 400, got %d", status)
 	}
-	if status := doReq("/v1/public/items"); status == http.StatusBadRequest {
-		t.Fatalf("allowed path: got 400, expected pass-through")
+	if status := doReq("/v1/public/items"); status != http.StatusOK {
+		t.Fatalf("allowed path: expected 200, got %d", status)
 	}
 }
 
@@ -4323,6 +4324,7 @@ func TestProxyBinding_StaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/deny-proxy"+path, nil)
 		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request %s: %v", path, err)
@@ -4331,8 +4333,8 @@ func TestProxyBinding_StaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	if status := doReq("/v1/allowed/items"); status == http.StatusBadRequest {
-		t.Fatal("allowed path should not be denied")
+	if status := doReq("/v1/allowed/items"); status != http.StatusOK {
+		t.Fatalf("allowed path: expected 200, got %d", status)
 	}
 	if status := doReq("/v1/other/items"); status != http.StatusBadRequest {
 		t.Fatalf("unmatched path: expected 400, got %d", status)
@@ -4387,6 +4389,7 @@ func TestProxyBinding_StaticPolicyFirstMatchWins(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/fmw-proxy"+path, nil)
 		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request %s: %v", path, err)
@@ -4398,8 +4401,8 @@ func TestProxyBinding_StaticPolicyFirstMatchWins(t *testing.T) {
 	if status := doReq("/v1/admin/settings"); status != http.StatusBadRequest {
 		t.Fatalf("/v1/admin should be denied by first rule, got %d", status)
 	}
-	if status := doReq("/v1/public/items"); status == http.StatusBadRequest {
-		t.Fatal("/v1/public should be allowed by second rule")
+	if status := doReq("/v1/public/items"); status != http.StatusOK {
+		t.Fatalf("/v1/public should be allowed by second rule, got %d", status)
 	}
 }
 
