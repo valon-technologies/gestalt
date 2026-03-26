@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"gopkg.in/yaml.v3"
 )
 
@@ -628,12 +629,19 @@ func validateEgress(cfg *EgressConfig) error {
 		}
 	}
 	for i := range cfg.Credentials {
-		if style := cfg.Credentials[i].AuthStyle; style != "" {
-			switch style {
-			case "bearer", "raw", "basic", "none":
-			default:
-				return fmt.Errorf("config validation: egress.credentials[%d].auth_style must be one of \"bearer\", \"raw\", \"basic\", \"none\", got %q", i, style)
-			}
+		c := &cfg.Credentials[i]
+		if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
+			SubjectKind: c.SubjectKind,
+			SubjectID:   c.SubjectID,
+			Provider:    c.Provider,
+			Instance:    c.Instance,
+			Operation:   c.Operation,
+			Method:      c.Method,
+			Host:        c.Host,
+			PathPrefix:  c.PathPrefix,
+			AuthStyle:   c.AuthStyle,
+		}); err != nil {
+			return fmt.Errorf("config validation: egress.credentials[%d]: %w", i, err)
 		}
 	}
 	return nil

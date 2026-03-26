@@ -5284,6 +5284,68 @@ func TestAdminCredentialGrants_RequiresMatchCriterion(t *testing.T) {
 	}
 }
 
+func TestAdminCredentialGrants_RejectsInvalidAuthStyle(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"host":"api.vendor.test","auth_style":"oauth2"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/credential-grants", body)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid auth_style, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminCredentialGrants_InstanceOnlyRejected(t *testing.T) {
+	t.Parallel()
+
+	const adminEmail = "admin@testcorp.example"
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.AdminEmails = []string{adminEmail}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u-admin", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"instance":"vendor-prod","secret_ref":"vendor-key"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/egress/credential-grants", body)
+	req.Header.Set("X-Dev-User-Email", adminEmail)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for instance-only grant, got %d", resp.StatusCode)
+	}
+}
+
 func TestAdminCredentialGrants_ListFilterByProvider(t *testing.T) {
 	t.Parallel()
 

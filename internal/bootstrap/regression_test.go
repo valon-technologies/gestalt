@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -664,5 +665,246 @@ func TestSecretBackedGrant_SecretURIPrefixStripped(t *testing.T) {
 	const wantAuth = "Bearer " + secretValue
 	if resolution.Credential.Authorization != wantAuth {
 		t.Fatalf("got Authorization %q, want %q", resolution.Credential.Authorization, wantAuth)
+	}
+}
+
+func TestSavedGrantOverridesConfigGrant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		configSecret = "config-key"
+		savedSecret  = "saved-key"
+		targetHost   = "api.precedence.test"
+	)
+
+	cfg := validConfig()
+	cfg.Egress = config.EgressConfig{
+		Credentials: []config.EgressCredentialGrant{
+			{Host: targetHost, SecretRef: configSecret, AuthStyle: "raw"},
+		},
+	}
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {Type: "test-binding"},
+	}
+
+	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{
+				configSecret: "val-from-config",
+				savedSecret:  "val-from-saved",
+			},
+		}, nil
+	}
+	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressCredentialGrantsFn: func(_ context.Context, _ core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+				return []*core.EgressCredentialGrant{
+					{ID: "ecg-saved", Host: targetHost, SecretRef: savedSecret, AuthStyle: "raw"},
+				}, nil
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
+		Target: egress.Target{Method: "GET", Host: targetHost, Path: "/v1"},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if resolution.Credential.Authorization != "val-from-saved" {
+		t.Fatalf("expected saved grant to win, got Authorization %q", resolution.Credential.Authorization)
+	}
+}
+
+func TestConfigGrantFallbackWhenNoSavedGrantMatches(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		configSecret = "fallback-key"
+		targetHost   = "api.fallback.test"
+	)
+
+	cfg := validConfig()
+	cfg.Egress = config.EgressConfig{
+		Credentials: []config.EgressCredentialGrant{
+			{Host: targetHost, SecretRef: configSecret, AuthStyle: "raw"},
+		},
+	}
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {Type: "test-binding"},
+	}
+
+	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{configSecret: "val-from-config"},
+		}, nil
+	}
+	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressCredentialGrantsFn: func(_ context.Context, _ core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+				return []*core.EgressCredentialGrant{
+					{ID: "ecg-other", Host: "other.host.test", SecretRef: "other-key", AuthStyle: "raw"},
+				}, nil
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
+		Target: egress.Target{Method: "GET", Host: targetHost, Path: "/v1"},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if resolution.Credential.Authorization != "val-from-config" {
+		t.Fatalf("expected config grant fallback, got Authorization %q", resolution.Credential.Authorization)
+	}
+}
+
+func TestSavedGrantStoreErrorBlocksConfigFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const targetHost = "api.storeerr.test"
+
+	cfg := validConfig()
+	cfg.Egress = config.EgressConfig{
+		Credentials: []config.EgressCredentialGrant{
+			{Host: targetHost, SecretRef: "config-key", AuthStyle: "raw"},
+		},
+	}
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {Type: "test-binding"},
+	}
+
+	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{"config-key": "val-from-config"},
+		}, nil
+	}
+	storeErr := fmt.Errorf("datastore unavailable")
+	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressCredentialGrantsFn: func(_ context.Context, _ core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+				return nil, storeErr
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	_, err = receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
+		Target: egress.Target{Method: "GET", Host: targetHost, Path: "/v1"},
+	})
+	if err == nil {
+		t.Fatal("expected store error to propagate, got nil")
+	}
+	if !strings.Contains(err.Error(), "datastore unavailable") {
+		t.Fatalf("expected store error in message, got: %v", err)
+	}
+}
+
+func TestInvalidSavedGrantAuthStyleBlocksConfigFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		targetHost  = "api.badstyle.test"
+		savedSecret = "saved-key"
+	)
+
+	cfg := validConfig()
+	cfg.Egress = config.EgressConfig{
+		Credentials: []config.EgressCredentialGrant{
+			{Host: targetHost, SecretRef: "config-key", AuthStyle: "raw"},
+		},
+	}
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {Type: "test-binding"},
+	}
+
+	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{
+				"config-key": "val-from-config",
+				savedSecret:  "val-from-saved",
+			},
+		}, nil
+	}
+	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressCredentialGrantsFn: func(_ context.Context, _ core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+				return []*core.EgressCredentialGrant{
+					{ID: "ecg-bad", Host: targetHost, SecretRef: savedSecret, AuthStyle: "oauth2"},
+				}, nil
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	_, err = receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
+		Target: egress.Target{Method: "GET", Host: targetHost, Path: "/v1"},
+	})
+	if err == nil {
+		t.Fatal("expected invalid auth_style error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown auth style") {
+		t.Fatalf("expected auth style error, got: %v", err)
 	}
 }
