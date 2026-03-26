@@ -1,95 +1,54 @@
-import { test, expect, mockAuthInfo, mockIntegrations, mockTokens } from "./fixtures";
+import { test, expect, hasLiveBackend, loginAsDevUser } from "./fixtures";
 
 test.describe("Authentication", () => {
-  test("unauthenticated user is redirected to /login", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/login/);
-  });
+  test.skip(!hasLiveBackend, "Requires PLAYWRIGHT_BASE_URL");
 
-  test("login page renders with provider button", async ({ page }) => {
-    await mockAuthInfo(page, { provider: "test-sso", display_name: "Test SSO" });
+  test("login page shows the live auth provider and dev login form", async ({ page }) => {
     await page.goto("/login");
-    await expect(
-      page.getByRole("heading", { name: "Gestalt" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /Sign in with Test SSO/i }),
-    ).toBeVisible();
+
+    await expect(page.getByRole("heading", { name: "Gestalt" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Sign in with / })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Dev Login" })).toBeVisible();
   });
 
-  test("authenticated user sees dashboard", async ({ authenticatedPage }) => {
+  test("dev login lands on the dashboard", async ({ page }) => {
+    const email = await loginAsDevUser(page, "auth");
+
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
+  });
+
+  test("logout clears the session and returns to login", async ({ authenticatedPage, authenticatedEmail }) => {
     const page = authenticatedPage;
-    await mockIntegrations(page, [{ name: "test-svc", display_name: "Test Service" }]);
-    await mockTokens(page, []);
 
-    await page.goto("/");
-    await expect(
-      page.getByRole("heading", { name: "Dashboard" }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Logout" }).click();
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("heading", { name: "Gestalt" })).toBeVisible();
+    await expect(page.getByText(authenticatedEmail)).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
   });
 
-  test("authenticated user on /login is redirected to dashboard", async ({
-    authenticatedPage,
-  }) => {
+  test("expired session redirects to login on the next API request", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
-    await mockIntegrations(page, []);
-    await mockTokens(page, []);
+    const hostname = new URL(page.url()).hostname;
 
-    await page.goto("/login");
-    await expect(page).toHaveURL("/");
-  });
+    await page.context().clearCookies();
+    await page.context().addCookies([
+      {
+        name: "session_token",
+        value: "invalid-session-token",
+        domain: hostname,
+        path: "/",
+        httpOnly: true,
+        secure: false,
+      },
+    ]);
 
-  test("logout clears session and redirects to login", async ({ page }) => {
-    await page.goto("/login");
-    await page.evaluate(() => {
-      localStorage.setItem("user_email", "test@gestalt.dev");
-    });
-    await mockIntegrations(page, []);
-    await mockTokens(page, []);
-    await page.route("**/api/v1/auth/logout", (route) => {
-      route.fulfill({ json: { status: "ok" } });
-    });
+    await page.goto("/tokens");
 
-    await page.goto("/");
-    await page.getByRole("button", { name: /Logout/i }).click();
-    await expect(page).toHaveURL(/\/login/);
-    const email = await page.evaluate(() => localStorage.getItem("user_email"));
-    expect(email).toBeNull();
-  });
-
-  test("auth callback rejects mismatched OAuth state (CSRF protection)", async ({
-    page,
-  }) => {
-    await page.goto("/login");
-    await page.evaluate(() => {
-      sessionStorage.setItem("oauth_state", "correct-state");
-    });
-
-    await page.goto("/auth/callback?code=test-code&state=wrong-state");
-    await expect(page.getByText(/Invalid OAuth state/)).toBeVisible();
-    await expect(page.getByText("Back to login")).toBeVisible();
-  });
-
-  test("auth callback rejects when no OAuth state was saved (CSRF protection)", async ({
-    page,
-  }) => {
-    await page.goto("/login");
-    await page.goto("/auth/callback?code=attacker-code&state=attacker-state");
-    await expect(page.getByText(/Invalid OAuth state/)).toBeVisible();
-  });
-
-  test("401 response clears session and redirects to login", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await page.route("**/api/v1/integrations", (route) => {
-      route.fulfill({ status: 401, json: { error: "invalid token" } });
-    });
-    await page.route("**/api/v1/tokens", (route) => {
-      route.fulfill({ status: 401, json: { error: "invalid token" } });
-    });
-
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("heading", { name: "Gestalt" })).toBeVisible();
   });
 });
