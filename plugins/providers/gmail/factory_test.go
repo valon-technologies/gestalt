@@ -12,6 +12,8 @@ import (
 const (
 	dummyClientID     = "dummy-client-id"
 	dummyClientSecret = "dummy-client-secret"
+
+	passthroughOpCount = 10
 )
 
 func TestDefinitionParses(t *testing.T) {
@@ -26,7 +28,7 @@ func TestDefinitionParses(t *testing.T) {
 	def := providertest.ParseDefinition(t, definitionYAML)
 	providertest.CheckDefinition(t, def, providertest.DefinitionExpect{
 		Name:           "gmail",
-		OperationCount: len(def.Operations),
+		OperationCount: passthroughOpCount,
 		AuthType:       spec.AuthType,
 		ConnectionMode: spec.ConnectionMode,
 	})
@@ -50,7 +52,7 @@ func TestBuildProvider(t *testing.T) {
 	providertest.CheckProvider(t, prov, providertest.ProviderExpect{
 		Name:           "gmail",
 		ConnectionMode: core.ConnectionMode(spec.ConnectionMode),
-		OperationCount: len(def.Operations),
+		OperationCount: passthroughOpCount,
 	})
 
 	providertest.CheckOAuth(t, prov)
