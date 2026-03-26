@@ -29,8 +29,9 @@ type Config struct {
 }
 
 type EgressConfig struct {
-	DefaultAction string             `yaml:"default_action"`
-	Policies      []EgressPolicyRule `yaml:"policies"`
+	DefaultAction string                  `yaml:"default_action"`
+	Policies      []EgressPolicyRule      `yaml:"policies"`
+	Credentials   []EgressCredentialGrant `yaml:"credentials"`
 }
 
 type EgressPolicyRule struct {
@@ -38,6 +39,17 @@ type EgressPolicyRule struct {
 	SubjectKind string `yaml:"subject_kind"`
 	SubjectID   string `yaml:"subject_id"`
 	Provider    string `yaml:"provider"`
+	Operation   string `yaml:"operation"`
+	Method      string `yaml:"method"`
+	Host        string `yaml:"host"`
+	PathPrefix  string `yaml:"path_prefix"`
+}
+
+type EgressCredentialGrant struct {
+	Provider    string `yaml:"provider"`
+	Instance    string `yaml:"instance"`
+	SubjectKind string `yaml:"subject_kind"`
+	SubjectID   string `yaml:"subject_id"`
 	Operation   string `yaml:"operation"`
 	Method      string `yaml:"method"`
 	Host        string `yaml:"host"`

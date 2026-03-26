@@ -228,35 +228,6 @@ integrations:
 	}
 }
 
-func TestValidateConfigRejectsLegacyEgressCredentials(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: google
-datastore:
-  provider: sqlite
-server:
-  dev_mode: true
-  encryption_key: test-key
-egress:
-  credentials:
-    - provider: sample
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	err := validateConfig(cfgPath)
-	if err == nil {
-		t.Fatal("expected validateConfig to reject legacy egress.credentials")
-	}
-	if !strings.Contains(err.Error(), "field credentials not found") {
-		t.Fatalf("expected unknown field error, got: %v", err)
-	}
-}
-
 func TestValidateConfigRejectsOverlayWithoutSingleBaseSource(t *testing.T) {
 	t.Parallel()
 
