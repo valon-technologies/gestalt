@@ -709,6 +709,70 @@ server:
 egress: {}
 `,
 		},
+		{
+			name: "egress credential auth_style bearer is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - host: api.vendor.test
+      secret_ref: vendor-key
+      auth_style: bearer
+`,
+		},
+		{
+			name: "egress credential auth_style raw is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - host: api.vendor.test
+      secret_ref: vendor-key
+      auth_style: raw
+`,
+		},
+		{
+			name: "egress credential auth_style omitted is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - host: api.vendor.test
+      secret_ref: vendor-key
+`,
+		},
+		{
+			name: "egress credential invalid auth_style rejected",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - host: api.vendor.test
+      secret_ref: vendor-key
+      auth_style: oauth2
+`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range cases {
