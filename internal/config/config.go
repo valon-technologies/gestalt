@@ -109,10 +109,11 @@ type DatastoreConfig struct {
 }
 
 type ServerConfig struct {
-	Port          int    `yaml:"port"`
-	BaseURL       string `yaml:"base_url"`
-	EncryptionKey string `yaml:"encryption_key"`
-	DevMode       bool   `yaml:"dev_mode"`
+	Port          int      `yaml:"port"`
+	BaseURL       string   `yaml:"base_url"`
+	EncryptionKey string   `yaml:"encryption_key"`
+	DevMode       bool     `yaml:"dev_mode"`
+	AdminEmails   []string `yaml:"admin_emails"`
 }
 
 type IntegrationDef struct {
