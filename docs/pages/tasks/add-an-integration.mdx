@@ -22,6 +22,7 @@ integrations:
   petstore:
     display_name: Swagger Petstore
     connection_mode: none
+    base_url: https://petstore3.swagger.io/api/v3
     upstreams:
       - type: rest
         url: https://petstore3.swagger.io/api/v3/openapi.json
@@ -30,7 +31,7 @@ integrations:
           getPetById: Fetch a pet by id
 ```
 
-That is enough to build a real provider.
+That is enough to build a real provider and invoke the public API.
 
 ## 3. Add Auth If The Upstream Needs It
 
