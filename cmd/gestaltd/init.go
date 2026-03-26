@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/operator"
 	"github.com/valon-technologies/gestalt/internal/provider"
+	providercompiler "github.com/valon-technologies/gestalt/internal/provider/compiler"
 )
 
 const (
@@ -37,7 +38,7 @@ func runInit(args []string) error {
 
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle(func(ctx context.Context, name string, upstream config.UpstreamDef) (*provider.Definition, error) {
-		return loadAPIUpstream(ctx, name, upstream, nil)
+		return providercompiler.LoadDefinition(ctx, name, upstream, nil)
 	})
 }
 
