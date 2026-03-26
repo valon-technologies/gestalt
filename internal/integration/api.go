@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"encoding/json"
-
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/core/integration"
@@ -31,10 +29,6 @@ func EndpointsMap(c *catalog.Catalog) (map[string]Endpoint, error) {
 
 func QueriesMap(c *catalog.Catalog) map[string]string {
 	return coreintegration.QueriesMap(c)
-}
-
-func SynthesizeInputSchema(params []catalog.CatalogParameter) json.RawMessage {
-	return coreintegration.SynthesizeInputSchema(params)
 }
 
 func NormalizeType(t string) string {

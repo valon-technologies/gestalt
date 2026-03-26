@@ -68,10 +68,23 @@ type Result struct {
 	SecretManager    core.SecretManager
 	Egress           EgressDeps
 	DevMode          bool
+
+	mu                sync.Mutex
+	extensionsStarted bool
+	closed            bool
 }
 
 func (r *Result) Start(ctx context.Context) error {
 	if r == nil {
+		return nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return fmt.Errorf("bootstrap result already closed")
+	}
+	if r.extensionsStarted {
 		return nil
 	}
 	if err := startRuntimes(ctx, r.Runtimes); err != nil {
@@ -80,6 +93,7 @@ func (r *Result) Start(ctx context.Context) error {
 	if err := startBindings(ctx, r.Bindings, r.Runtimes); err != nil {
 		return err
 	}
+	r.extensionsStarted = true
 	return nil
 }
 
@@ -87,13 +101,28 @@ func (r *Result) Close(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
-	return errors.Join(
-		CloseBindings(r.Bindings, bindingNames(r.Bindings)),
-		StopRuntimes(ctx, r.Runtimes, runtimeNames(r.Runtimes)),
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil
+	}
+
+	var errs []error
+	if r.extensionsStarted {
+		errs = append(errs,
+			CloseBindings(r.Bindings, bindingNames(r.Bindings)),
+			StopRuntimes(ctx, r.Runtimes, runtimeNames(r.Runtimes)),
+		)
+		r.extensionsStarted = false
+	}
+	errs = append(errs,
 		CloseProviders(r.Providers),
 		closeDatastore(r.Datastore),
 		closeResultSecretManager(r.SecretManager),
 	)
+	r.closed = true
+	return errors.Join(errs...)
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -217,7 +246,6 @@ func startRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtim
 		if err := rt.Start(ctx); err != nil {
 			return errors.Join(
 				fmt.Errorf("starting runtime %q: %w", name, err),
-				stopRuntime(ctx, name, rt),
 				StopRuntimes(ctx, runtimes, started),
 			)
 		}
@@ -245,7 +273,6 @@ func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Bindin
 		if err := binding.Start(ctx); err != nil {
 			return errors.Join(
 				fmt.Errorf("starting binding %q: %w", name, err),
-				closeBinding(name, binding),
 				CloseBindings(bindings, started),
 				StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
 			)
@@ -269,20 +296,6 @@ func closeResultSecretManager(sm core.SecretManager) error {
 		return nil
 	}
 	return closer.Close()
-}
-
-func stopRuntime(ctx context.Context, name string, rt core.Runtime) error {
-	if err := rt.Stop(ctx); err != nil {
-		return fmt.Errorf("stopping runtime %q: %w", name, err)
-	}
-	return nil
-}
-
-func closeBinding(name string, binding core.Binding) error {
-	if err := binding.Close(); err != nil {
-		return fmt.Errorf("closing binding %q: %w", name, err)
-	}
-	return nil
 }
 
 const secretPrefix = "secret://"
