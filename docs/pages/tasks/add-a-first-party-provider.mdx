@@ -142,3 +142,8 @@ func main() {
 ```
 
 The YAML definition handles the base operations; the overlay binary handles the rest. The bootstrap system composes them automatically when `mode: overlay` is set in the deployment config.
+
+Use exactly one base source for the overlay:
+
+- Keep `upstreams` in the integration config when the base comes from prepared REST/GraphQL/MCP definitions.
+- Set `plugin.base: <provider-name>` when the base comes from a registered first-party Go provider factory.

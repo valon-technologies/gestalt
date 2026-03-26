@@ -354,23 +354,6 @@ integrations:
 			wantErr: false,
 		},
 		{
-			name: "overlay plugin without upstreams allowed",
-			yaml: `
-auth:
-  provider: google
-datastore:
-  provider: sqlite
-server:
-  encryption_key: key123
-integrations:
-  gadget:
-    plugin:
-      mode: overlay
-      command: /tmp/plugin
-`,
-			wantErr: false,
-		},
-		{
 			name: "replace plugin with upstreams rejected",
 			yaml: `
 auth:
