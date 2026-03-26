@@ -65,6 +65,7 @@ type ExecutablePluginDef struct {
 	Mode    string            `yaml:"mode"`
 	Base    string            `yaml:"base"`
 	Command string            `yaml:"command"`
+	Ref     string            `yaml:"ref"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Config  yaml.Node         `yaml:"config"`
@@ -561,8 +562,13 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	if plugin == nil {
 		return nil
 	}
-	if plugin.Command == "" {
-		return fmt.Errorf("config validation: %s %q plugin.command is required", kind, name)
+	switch {
+	case plugin.Command == "" && plugin.Ref == "":
+		return fmt.Errorf("config validation: %s %q plugin.command or plugin.ref is required", kind, name)
+	case plugin.Command != "" && plugin.Ref != "":
+		return fmt.Errorf("config validation: %s %q plugin.command and plugin.ref are mutually exclusive", kind, name)
+	case plugin.Ref != "" && len(plugin.Args) > 0:
+		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	}
 	mode := plugin.Mode
 	if mode == "" {
