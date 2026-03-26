@@ -102,7 +102,7 @@ func TestLoadConfigForExecutionRequirePreparedRejectsUnpreparedRemote(t *testing
 	if err == nil {
 		t.Fatal("expected strict serve to reject unprepared remote upstream")
 	}
-	if !strings.Contains(err.Error(), "gestaltd init") {
+	if !strings.Contains(err.Error(), "gestaltd bundle") {
 		t.Fatalf("expected init guidance, got: %v", err)
 	}
 }
@@ -444,7 +444,7 @@ func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginPackage(t *testing.T
 	if err == nil {
 		t.Fatal("expected unprepared plugin package to fail")
 	}
-	if !strings.Contains(err.Error(), "gestaltd init") {
+	if !strings.Contains(err.Error(), "gestaltd bundle") {
 		t.Fatalf("expected init guidance, got: %v", err)
 	}
 }

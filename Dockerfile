@@ -21,4 +21,4 @@ FROM gcr.io/distroless/static-debian12
 COPY --from=builder /gestaltd /gestaltd
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
-CMD ["--config", "/etc/gestalt/config.yaml"]
+CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]
