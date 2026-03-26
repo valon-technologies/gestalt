@@ -14,12 +14,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
-	ci "github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	providercompiler "github.com/valon-technologies/gestalt/internal/provider/compiler"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
@@ -85,10 +85,9 @@ func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
 
 func (e *bootstrapEnv) Close() {
 	e.Stop()
-	_ = e.Result.Datastore.Close()
-	if closer, ok := e.Result.SecretManager.(interface{ Close() error }); ok {
-		_ = closer.Close()
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+	defer cancel()
+	_ = e.Result.Close(ctx)
 }
 
 func buildFactories(preparedProviders map[string]string, devMode bool) *bootstrap.FactoryRegistry {
@@ -148,72 +147,6 @@ func logDatastoreWarnings(ds core.Datastore) {
 }
 
 const gracefulShutdownTimeout = 15 * time.Second
-
-func startPlugins(env *bootstrapEnv) error {
-	result := env.Result
-	if result.Runtimes != nil {
-		var started []string
-		for _, name := range result.Runtimes.List() {
-			rt, err := result.Runtimes.Get(name)
-			if err != nil {
-				return fmt.Errorf("getting runtime %q: %v", name, err)
-			}
-			if err := rt.Start(env.Ctx); err != nil {
-				if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, started); stopErr != nil {
-					log.Printf("stopping runtimes after startup failure: %v", stopErr)
-				}
-				return fmt.Errorf("starting runtime %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
-	if result.Bindings != nil {
-		var started []string
-		for _, name := range result.Bindings.List() {
-			binding, err := result.Bindings.Get(name)
-			if err != nil {
-				if closeErr := bootstrap.CloseBindings(result.Bindings, started); closeErr != nil {
-					log.Printf("closing bindings after startup failure: %v", closeErr)
-				}
-				if result.Runtimes != nil {
-					if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List()); stopErr != nil {
-						log.Printf("stopping runtimes after startup failure: %v", stopErr)
-					}
-				}
-				return fmt.Errorf("getting binding %q: %v", name, err)
-			}
-			if err := binding.Start(env.Ctx); err != nil {
-				if closeErr := bootstrap.CloseBindings(result.Bindings, started); closeErr != nil {
-					log.Printf("closing bindings after startup failure: %v", closeErr)
-				}
-				if result.Runtimes != nil {
-					if stopErr := bootstrap.StopRuntimes(env.Ctx, result.Runtimes, result.Runtimes.List()); stopErr != nil {
-						log.Printf("stopping runtimes after startup failure: %v", stopErr)
-					}
-				}
-				return fmt.Errorf("starting binding %q: %v", name, err)
-			}
-			started = append(started, name)
-		}
-	}
-	return nil
-}
-
-func shutdownPlugins(ctx context.Context, env *bootstrapEnv) {
-	if env.Result.Bindings != nil {
-		if err := bootstrap.CloseBindings(env.Result.Bindings, env.Result.Bindings.List()); err != nil {
-			log.Printf("closing bindings: %v", err)
-		}
-	}
-	if env.Result.Runtimes != nil {
-		if err := bootstrap.StopRuntimes(ctx, env.Result.Runtimes, env.Result.Runtimes.List()); err != nil {
-			log.Printf("stopping runtimes: %v", err)
-		}
-	}
-	if err := bootstrap.CloseProviders(env.Result.Providers); err != nil {
-		log.Printf("closing providers: %v", err)
-	}
-}
 
 func defaultProviderFactory(preparedProviders map[string]string) bootstrap.ProviderFactory {
 	var regStoreOnce sync.Once
@@ -350,15 +283,81 @@ func buildMCPOAuthProvider(name string, intg config.IntegrationDef, us config.Up
 		connMode = core.ConnectionMode(intg.ConnectionMode)
 	}
 
-	baseProv := &ci.Base{
-		IntegrationName:    name,
-		IntegrationDisplay: intg.DisplayName,
-		IntegrationDesc:    intg.Description,
-		ConnMode:           connMode,
-		Auth:               handler,
-		ManualAuthEnabled:  true,
-		EgressResolver:     deps.Egress.Resolver,
+	baseProv := &mcpOAuthMetadataProvider{
+		name:        name,
+		displayName: intg.DisplayName,
+		description: intg.Description,
+		connMode:    connMode,
+		auth:        handler,
 	}
 
 	return composite.New(name, baseProv, mcpUp), nil
+}
+
+type mcpOAuthMetadataProvider struct {
+	name        string
+	displayName string
+	description string
+	connMode    core.ConnectionMode
+	auth        *mcpoauth.Handler
+}
+
+func (p *mcpOAuthMetadataProvider) Name() string        { return p.name }
+func (p *mcpOAuthMetadataProvider) DisplayName() string { return p.displayName }
+func (p *mcpOAuthMetadataProvider) Description() string { return p.description }
+func (p *mcpOAuthMetadataProvider) ListOperations() []core.Operation {
+	return nil
+}
+
+func (p *mcpOAuthMetadataProvider) ConnectionMode() core.ConnectionMode {
+	if p.connMode == "" {
+		return core.ConnectionModeUser
+	}
+	return p.connMode
+}
+
+func (p *mcpOAuthMetadataProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+	return nil, fmt.Errorf("integration %q does not expose executable api operations", p.name)
+}
+
+func (p *mcpOAuthMetadataProvider) SupportsManualAuth() bool { return true }
+
+func (p *mcpOAuthMetadataProvider) AuthTypes() []string {
+	return []string{"oauth", "manual"}
+}
+
+func (p *mcpOAuthMetadataProvider) AuthorizationURL(state string, scopes []string) string {
+	return p.auth.AuthorizationURL(state, scopes)
+}
+
+func (p *mcpOAuthMetadataProvider) StartOAuth(state string, scopes []string) (string, string) {
+	return p.auth.StartOAuth(state, scopes)
+}
+
+func (p *mcpOAuthMetadataProvider) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	return p.auth.StartOAuthWithOverride(authBaseURL, state, scopes)
+}
+
+func (p *mcpOAuthMetadataProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.auth.ExchangeCode(ctx, code)
+}
+
+func (p *mcpOAuthMetadataProvider) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	return p.auth.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
+}
+
+func (p *mcpOAuthMetadataProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.auth.RefreshToken(ctx, refreshToken)
+}
+
+func (p *mcpOAuthMetadataProvider) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	return p.auth.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
+}
+
+func (p *mcpOAuthMetadataProvider) TokenURL() string {
+	return p.auth.TokenURL()
+}
+
+func (p *mcpOAuthMetadataProvider) AuthorizationBaseURL() string {
+	return p.auth.AuthorizationBaseURL()
 }

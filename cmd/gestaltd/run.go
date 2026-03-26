@@ -103,31 +103,7 @@ func runServer(env *bootstrapEnv) error {
 
 	result := env.Result
 
-	var mcpProviders []string
-	mcpPrefixes := make(map[string]string)
-	includeREST := make(map[string]bool)
-	for name := range env.Config.Integrations {
-		intg := env.Config.Integrations[name]
-		hasMCP := false
-		apiMCP := false
-		for i := range intg.Upstreams {
-			us := &intg.Upstreams[i]
-			if us.Type == config.UpstreamTypeMCP {
-				hasMCP = true
-			}
-			if (us.Type == config.UpstreamTypeREST || us.Type == config.UpstreamTypeGraphQL) && us.MCP {
-				hasMCP = true
-				apiMCP = true
-			}
-		}
-		if hasMCP {
-			mcpProviders = append(mcpProviders, name)
-			includeREST[name] = apiMCP
-			if intg.MCPToolPrefix != "" {
-				mcpPrefixes[name] = intg.MCPToolPrefix
-			}
-		}
-	}
+	mcpSurface := buildMCPSurface(env.Config)
 
 	if env.Config.Server.BaseURL != "" {
 		log.Printf("gestaltd base URL: %s", env.Config.Server.BaseURL)
@@ -137,7 +113,7 @@ func runServer(env *bootstrapEnv) error {
 
 	var mcpSlot *lateHandler
 	var mcpHandler http.Handler
-	if len(mcpProviders) > 0 {
+	if mcpSurface.enabled() {
 		mcpSlot = &lateHandler{}
 		mcpHandler = mcpSlot
 	}
@@ -178,17 +154,11 @@ func runServer(env *bootstrapEnv) error {
 		}
 	}()
 
-	pluginsStarted := false
 	defer func() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer drainCancel()
 		if err := httpServer.Shutdown(drainCtx); err != nil {
 			log.Printf("server shutdown: %v", err)
-		}
-		if pluginsStarted {
-			pluginCtx, pluginCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-			defer pluginCancel()
-			shutdownPlugins(pluginCtx, env)
 		}
 	}()
 
@@ -201,28 +171,16 @@ func runServer(env *bootstrapEnv) error {
 		return nil
 	}
 
-	if err := startPlugins(env); err != nil {
+	if err := result.Start(env.Ctx); err != nil {
 		return err
 	}
-	pluginsStarted = true
 
 	if mcpSlot != nil {
-		broker, ok := result.Invoker.(*invocation.Broker)
-		if !ok {
-			return fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
+		handler, err := mcpSurface.handler(result)
+		if err != nil {
+			return err
 		}
-		mcpCfg := gestaltmcp.Config{
-			Invoker:          result.Invoker,
-			TokenResolver:    broker,
-			Providers:        result.Providers,
-			AllowedProviders: mcpProviders,
-			ToolPrefixes:     mcpPrefixes,
-			IncludeREST:      includeREST,
-		}
-		mcpSlot.Set(mcpserver.NewStreamableHTTPServer(
-			gestaltmcp.NewServer(mcpCfg),
-			mcpserver.WithStateLess(true),
-		))
+		mcpSlot.Set(handler)
 		log.Println("MCP endpoint enabled at /mcp")
 	}
 
@@ -233,6 +191,67 @@ func runServer(env *bootstrapEnv) error {
 	}
 
 	return nil
+}
+
+type mcpSurface struct {
+	providers    []string
+	toolPrefixes map[string]string
+	includeREST  map[string]bool
+}
+
+func buildMCPSurface(cfg *config.Config) mcpSurface {
+	surface := mcpSurface{
+		toolPrefixes: make(map[string]string),
+		includeREST:  make(map[string]bool),
+	}
+
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		hasMCP := false
+		apiMCP := false
+		for i := range intg.Upstreams {
+			us := &intg.Upstreams[i]
+			if us.Type == config.UpstreamTypeMCP {
+				hasMCP = true
+			}
+			if (us.Type == config.UpstreamTypeREST || us.Type == config.UpstreamTypeGraphQL) && us.MCP {
+				hasMCP = true
+				apiMCP = true
+			}
+		}
+		if !hasMCP {
+			continue
+		}
+		surface.providers = append(surface.providers, name)
+		surface.includeREST[name] = apiMCP
+		if intg.MCPToolPrefix != "" {
+			surface.toolPrefixes[name] = intg.MCPToolPrefix
+		}
+	}
+
+	return surface
+}
+
+func (s mcpSurface) enabled() bool {
+	return len(s.providers) > 0
+}
+
+func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {
+	broker, ok := result.Invoker.(*invocation.Broker)
+	if !ok {
+		return nil, fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
+	}
+	return mcpserver.NewStreamableHTTPServer(
+		gestaltmcp.NewServer(gestaltmcp.Config{
+			Invoker:          result.Invoker,
+			TokenResolver:    broker,
+			Providers:        result.Providers,
+			AllowedProviders: s.providers,
+			ToolPrefixes:     s.toolPrefixes,
+			IncludeREST:      s.includeREST,
+		}),
+		mcpserver.WithStateLess(true),
+	), nil
 }
 
 func runValidate(args []string) error {
