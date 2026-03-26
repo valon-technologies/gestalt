@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -125,7 +126,7 @@ func TestValidatePrefersPreparedProviders(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsTopLevelConfigForRuntimePlugins(t *testing.T) {
+func TestValidateRejectsPluginConfigForRuntimePlugins(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -148,8 +149,8 @@ runtimes:
     providers: []
     plugin:
       command: /tmp/runtime-plugin
-    config:
-      poll_interval: 30s
+      config:
+        poll_interval: 30s
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -157,7 +158,7 @@ runtimes:
 
 	err := validateConfig(cfgPath)
 	if err == nil {
-		t.Fatal("expected validateConfig to reject top-level config for runtime plugins")
+		t.Fatal("expected validateConfig to reject runtime plugin.config")
 	}
 	if !strings.Contains(err.Error(), "plugin.config") {
 		t.Fatalf("expected plugin.config guidance, got: %v", err)
@@ -362,11 +363,11 @@ func TestPluginFingerprintStable(t *testing.T) {
 		Env:     map[string]string{"API_KEY": "abc123"},
 	}
 
-	first, err := pluginFingerprint("external", plugin)
+	first, err := pluginFingerprint("external", plugin, nil)
 	if err != nil {
 		t.Fatalf("pluginFingerprint: %v", err)
 	}
-	second, err := pluginFingerprint("external", plugin)
+	second, err := pluginFingerprint("external", plugin, nil)
 	if err != nil {
 		t.Fatalf("pluginFingerprint second: %v", err)
 	}
@@ -375,12 +376,30 @@ func TestPluginFingerprintStable(t *testing.T) {
 	}
 
 	plugin.Ref = "acme/provider@0.1.0"
-	third, err := pluginFingerprint("external", plugin)
+	third, err := pluginFingerprint("external", plugin, nil)
 	if err != nil {
 		t.Fatalf("pluginFingerprint third: %v", err)
 	}
 	if third == first {
 		t.Fatal("expected ref change to affect fingerprint")
+	}
+}
+
+func TestPluginFingerprintIncludesPreparedConfig(t *testing.T) {
+	t.Parallel()
+
+	plugin := &config.ExecutablePluginDef{Ref: "acme/runtime@0.1.0"}
+
+	first, err := pluginFingerprint("runtime", plugin, map[string]any{"runtime_key": "one"})
+	if err != nil {
+		t.Fatalf("pluginFingerprint first: %v", err)
+	}
+	second, err := pluginFingerprint("runtime", plugin, map[string]any{"runtime_key": "two"})
+	if err != nil {
+		t.Fatalf("pluginFingerprint second: %v", err)
+	}
+	if first == second {
+		t.Fatal("expected prepared config to affect fingerprint")
 	}
 }
 
@@ -440,6 +459,83 @@ func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginRef(t *testing.T) {
 	}
 }
 
+func TestValidateConfigUsesPreparedManifestForPluginRef(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfigWithConfig(t, dir, "acme/provider@0.1.0", map[string]any{
+		"api_key": "sk-test",
+	})
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+  "type": "object",
+  "required": ["api_key"],
+  "properties": {
+    "api_key": { "type": "string" }
+  }
+}`)
+	store := pluginstore.New(cfgPath)
+	if _, err := store.Install(packagePath); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if err := prepareConfig(cfgPath); err != nil {
+		t.Fatalf("prepareConfig: %v", err)
+	}
+
+	if err := validateConfig(cfgPath); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+}
+
+func TestValidateConfigRejectsPreparedPluginRefSchemaViolation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedPluginRefConfigWithConfig(t, dir, "acme/provider@0.1.0", map[string]any{
+		"wrong_key": "value",
+	})
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+  "type": "object",
+  "required": ["api_key"],
+  "properties": {
+    "api_key": { "type": "string" }
+  }
+}`)
+	store := pluginstore.New(cfgPath)
+	if _, err := store.Install(packagePath); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if err := prepareConfig(cfgPath); err == nil {
+		t.Fatal("expected schema validation failure during prepare")
+	}
+}
+
+func TestValidateConfigUsesPreparedManifestForRuntimePluginRef(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writePreparedRuntimePluginRefConfigWithConfig(t, dir, "acme/runtime@0.1.0", map[string]any{
+		"runtime_key": "rk-test",
+	})
+	packagePath := buildPreparedTestRuntimePackageWithSchema(t, dir, "acme/runtime", "0.1.0", "not-an-executable", `{
+  "type": "object",
+  "required": ["runtime_key"],
+  "properties": {
+    "runtime_key": { "type": "string" }
+  }
+}`)
+	store := pluginstore.New(cfgPath)
+	if _, err := store.Install(packagePath); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if err := prepareConfig(cfgPath); err != nil {
+		t.Fatalf("prepareConfig: %v", err)
+	}
+
+	if err := validateConfig(cfgPath); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+}
+
 func newPreparedTestOpenAPIServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
@@ -492,17 +588,87 @@ integrations:
 
 func writePreparedPluginRefConfig(t *testing.T, dir, ref string) string {
 	t.Helper()
+	return writePreparedPluginRefConfigWithConfig(t, dir, ref, nil)
+}
+
+func writePreparedPluginRefConfigWithConfig(t *testing.T, dir, ref string, pluginConfig map[string]any) string {
+	t.Helper()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
+	var configBlock string
+	if pluginConfig != nil {
+		configBlock += "\n      config:"
+		payload, err := json.Marshal(pluginConfig)
+		if err != nil {
+			t.Fatalf("Marshal(pluginConfig): %v", err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("Unmarshal(pluginConfig): %v", err)
+		}
+		for key, value := range decoded {
+			configBlock += fmt.Sprintf("\n        %s: %q", key, value)
+		}
+	}
 	cfg := `auth:
   provider: google
+  config:
+    client_id: test-client
+    client_secret: test-secret
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
 datastore:
   provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
   dev_mode: true
   encryption_key: test-key
 integrations:
   example:
+    plugin:
+      ref: ` + ref + configBlock + `
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	return cfgPath
+}
+
+func writePreparedRuntimePluginRefConfigWithConfig(t *testing.T, dir, ref string, runtimeConfig map[string]any) string {
+	t.Helper()
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	var configBlock string
+	if runtimeConfig != nil {
+		configBlock += "\n    config:"
+		payload, err := json.Marshal(runtimeConfig)
+		if err != nil {
+			t.Fatalf("Marshal(runtimeConfig): %v", err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("Unmarshal(runtimeConfig): %v", err)
+		}
+		for key, value := range decoded {
+			configBlock += fmt.Sprintf("\n      %s: %q", key, value)
+		}
+	}
+	cfg := `auth:
+  provider: google
+  config:
+    client_id: test-client
+    client_secret: test-secret
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
+server:
+  dev_mode: true
+  encryption_key: test-key
+runtimes:
+  example:
+` + configBlock + `
     plugin:
       ref: ` + ref + `
 `
@@ -514,6 +680,11 @@ integrations:
 
 func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content string) string {
 	t.Helper()
+	return buildPreparedTestPluginPackageWithSchema(t, dir, id, version, content, "")
+}
+
+func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, id, version, content, schema string) string {
+	t.Helper()
 
 	source := filepath.Join(dir, "plugin-src")
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
@@ -523,6 +694,16 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content stri
 	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
+	var schemaPath string
+	if schema != "" {
+		schemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
+		if err := os.MkdirAll(filepath.Join(source, "schemas"), 0755); err != nil {
+			t.Fatalf("MkdirAll schema dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(schemaPath)), []byte(schema), 0644); err != nil {
+			t.Fatalf("WriteFile schema: %v", err)
+		}
+	}
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
@@ -530,7 +711,8 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content stri
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -555,6 +737,61 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content stri
 	}
 
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(source, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	return archivePath
+}
+
+func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, id, version, content, schema string) string {
+	t.Helper()
+
+	source := filepath.Join(dir, "runtime-plugin-src")
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "runtime"))
+	if err := os.MkdirAll(filepath.Join(source, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
+	if schema != "" {
+		schemaPath := filepath.Join(source, "schemas", "config.schema.json")
+		if err := os.MkdirAll(filepath.Dir(schemaPath), 0755); err != nil {
+			t.Fatalf("MkdirAll schema dir: %v", err)
+		}
+		if err := os.WriteFile(schemaPath, []byte(schema), 0644); err != nil {
+			t.Fatalf("WriteFile schema: %v", err)
+		}
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
+		ID:            id,
+		Version:       version,
+		Kinds:         []string{pluginmanifestv1.KindRuntime},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   artifactRel,
+				SHA256: sha256HexForPrepareTest(content),
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Runtime: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: artifactRel,
+			},
+		},
+	}
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, pluginpkg.ManifestFile), data, 0644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, "runtime-plugin.tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(source, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}

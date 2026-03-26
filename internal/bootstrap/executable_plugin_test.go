@@ -62,17 +62,17 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 		Runtimes: map[string]config.RuntimeDef{
 			"echoextrt": {
 				Providers: []string{"echoext"},
+				Config: mustNode(t, map[string]any{
+					"output_file":     outputFile,
+					"probe_provider":  "echoext",
+					"probe_operation": "echo",
+					"probe_params": map[string]any{
+						"message": "from runtime",
+					},
+				}),
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
-					Config: mustNode(t, map[string]any{
-						"output_file":     outputFile,
-						"probe_provider":  "echoext",
-						"probe_operation": "echo",
-						"probe_params": map[string]any{
-							"message": "from runtime",
-						},
-					}),
 				},
 			},
 		},
@@ -129,12 +129,12 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 		Runtimes: map[string]config.RuntimeDef{
 			"echoextrt": {
 				Providers: []string{"search"},
+				Config: mustNode(t, map[string]any{
+					"output_file": outputFile,
+				}),
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
-					Config: mustNode(t, map[string]any{
-						"output_file": outputFile,
-					}),
 				},
 			},
 		},
@@ -206,17 +206,17 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 		Runtimes: map[string]config.RuntimeDef{
 			"echoextrt": {
 				Providers: []string{"workspace"},
+				Config: mustNode(t, map[string]any{
+					"output_file":     outputFile,
+					"probe_provider":  "workspace",
+					"probe_operation": "fetch_record",
+					"probe_params": map[string]any{
+						"id": "abc123",
+					},
+				}),
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
-					Config: mustNode(t, map[string]any{
-						"output_file":     outputFile,
-						"probe_provider":  "workspace",
-						"probe_operation": "fetch_record",
-						"probe_params": map[string]any{
-							"id": "abc123",
-						},
-					}),
 				},
 			},
 		},
@@ -312,12 +312,12 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 		Runtimes: map[string]config.RuntimeDef{
 			"echoextrt": {
 				Providers: []string{"alpha"},
+				Config: mustNode(t, map[string]any{
+					"output_file": outputFile,
+				}),
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
-					Config: mustNode(t, map[string]any{
-						"output_file": outputFile,
-					}),
 				},
 			},
 		},
@@ -376,14 +376,14 @@ func TestExecutableRuntimeReceivesPluginConfig(t *testing.T) {
 	cfg := &config.Config{
 		Runtimes: map[string]config.RuntimeDef{
 			"echoextrt": {
+				Config: mustNode(t, map[string]any{
+					"output_file":  outputFile,
+					"plugin_only":  "from runtime config",
+					"runtime_only": "from runtime config",
+				}),
 				Plugin: &config.ExecutablePluginDef{
 					Command: bin,
 					Args:    []string{"runtime"},
-					Config: mustNode(t, map[string]any{
-						"output_file":  outputFile,
-						"plugin_only":  "from plugin config",
-						"runtime_only": "from plugin config",
-					}),
 				},
 			},
 		},
@@ -406,10 +406,10 @@ func TestExecutableRuntimeReceivesPluginConfig(t *testing.T) {
 	}
 
 	got := readRuntimeOutput(t, outputFile)
-	if got.Config["runtime_only"] != "from plugin config" {
+	if got.Config["runtime_only"] != "from runtime config" {
 		t.Fatalf("runtime config missing runtime_only: %+v", got.Config)
 	}
-	if got.Config["plugin_only"] != "from plugin config" {
+	if got.Config["plugin_only"] != "from runtime config" {
 		t.Fatalf("runtime config missing plugin_only: %+v", got.Config)
 	}
 }

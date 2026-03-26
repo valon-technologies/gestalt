@@ -69,6 +69,8 @@ type ExecutablePluginDef struct {
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Config  yaml.Node         `yaml:"config"`
+
+	PreparedManifestPath string `yaml:"-"`
 }
 
 type RuntimeDef struct {
@@ -540,14 +542,14 @@ func validate(cfg *Config) error {
 			return err
 		}
 		if rt.Plugin != nil {
+			if rt.Plugin.Config.Kind != 0 {
+				return fmt.Errorf("config validation: runtime %q must use config at runtimes.%s.config, not runtimes.%s.plugin.config", name, name, name)
+			}
 			if rt.Plugin.Mode == PluginModeOverlay {
 				return fmt.Errorf("config validation: runtime %q plugin.mode cannot be overlay", name)
 			}
 			if rt.Type != "" {
 				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
-			}
-			if rt.Config.Kind != 0 {
-				return fmt.Errorf("config validation: runtime %q uses plugin.config when plugin is set; top-level runtime config is not supported", name)
 			}
 			continue
 		}
@@ -578,6 +580,17 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 		return fmt.Errorf("config validation: %s %q plugin.base requires mode: overlay", kind, name)
 	}
 	return nil
+}
+
+func NodeToMap(node yaml.Node) (map[string]any, error) {
+	if node.Kind == 0 {
+		return nil, nil
+	}
+	var out map[string]any
+	if err := node.Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func validateEgress(cfg *EgressConfig) error {
