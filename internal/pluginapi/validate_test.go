@@ -22,148 +22,106 @@ const testConfigSchema = `{
 	"required": ["api_key"]
 }`
 
-func TestValidateConfigSchema_Valid(t *testing.T) {
-	t.Parallel()
-	config := map[string]any{"api_key": "sk-123", "retries": 3}
-	if err := validateConfigSchema(config, testConfigSchema); err != nil {
-		t.Fatalf("expected valid config to pass: %v", err)
-	}
-}
-
-func TestValidateConfigSchema_MissingRequired(t *testing.T) {
-	t.Parallel()
-	config := map[string]any{"retries": 3}
-	err := validateConfigSchema(config, testConfigSchema)
-	if err == nil {
-		t.Fatal("expected error for missing required field")
-	}
-	if !strings.Contains(err.Error(), "config validation failed") {
-		t.Fatalf("unexpected error message: %v", err)
-	}
-}
-
-func TestValidateConfigSchema_EmptyConfigWithRequired(t *testing.T) {
-	t.Parallel()
-	config := map[string]any{}
-	err := validateConfigSchema(config, testConfigSchema)
-	if err == nil {
-		t.Fatal("expected error for empty config with required fields")
-	}
-	if !strings.Contains(err.Error(), "config validation failed") {
-		t.Fatalf("unexpected error message: %v", err)
-	}
-}
-
-func TestValidateConfigSchema_InvalidSchema(t *testing.T) {
-	t.Parallel()
-	config := map[string]any{"key": "val"}
-	err := validateConfigSchema(config, `{not valid json`)
-	if err == nil {
-		t.Fatal("expected error for invalid schema JSON")
-	}
-}
-
-type stubProviderPluginServer struct {
+type schemaFixtureServer struct {
 	pluginapiv1.UnimplementedProviderPluginServer
 	metadata *pluginapiv1.ProviderMetadata
+	started  int
 }
 
-func (s *stubProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
+func (s *schemaFixtureServer) GetMetadata(context.Context, *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
 	return s.metadata, nil
 }
 
-func (s *stubProviderPluginServer) StartProvider(_ context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
+func (s *schemaFixtureServer) StartProvider(_ context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
+	s.started++
 	return &pluginapiv1.StartProviderResponse{
 		ProtocolVersion: req.GetProtocolVersion(),
 	}, nil
 }
 
-func (s *stubProviderPluginServer) ListOperations(context.Context, *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
+func (s *schemaFixtureServer) ListOperations(context.Context, *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
 	return &pluginapiv1.ListOperationsResponse{}, nil
 }
 
-func TestNewRemoteProvider_NoSchema(t *testing.T) {
+func TestNewRemoteProviderConfigValidation(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
-			Name:        "test-plugin",
-			DisplayName: "Test Plugin",
+	cases := []struct {
+		name        string
+		schema      string
+		config      map[string]any
+		wantErr     string
+		wantStarted int
+	}{
+		{
+			name:        "no schema",
+			config:      map[string]any{"anything": "goes"},
+			wantStarted: 1,
+		},
+		{
+			name:        "valid config",
+			schema:      testConfigSchema,
+			config:      map[string]any{"api_key": "token", "retries": 2},
+			wantStarted: 1,
+		},
+		{
+			name:    "missing required field",
+			schema:  testConfigSchema,
+			config:  map[string]any{"retries": 2},
+			wantErr: "config validation failed",
+		},
+		{
+			name:    "invalid schema document",
+			schema:  `{not valid json`,
+			config:  map[string]any{"api_key": "token"},
+			wantErr: "invalid config schema",
 		},
 	}
-	client := newStubProviderClient(t, stub)
-	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"anything": "goes"}, "")
-	if err != nil {
-		t.Fatalf("expected no error without schema: %v", err)
-	}
-	if prov.Name() != "test-plugin" {
-		t.Fatalf("unexpected name: %q", prov.Name())
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := &schemaFixtureServer{
+				metadata: &pluginapiv1.ProviderMetadata{
+					Name:             "fixture",
+					DisplayName:      "Fixture",
+					ConfigSchemaJson: tc.schema,
+				},
+			}
+
+			client := newSchemaFixtureClient(t, server)
+			prov, err := NewRemoteProvider(context.Background(), client, "fixture-instance", tc.config, "")
+
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want substring %q", err, tc.wantErr)
+				}
+				if server.started != 0 {
+					t.Fatalf("StartProvider should not be called on validation failure, got %d", server.started)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("NewRemoteProvider: %v", err)
+			}
+			if prov.Name() != "fixture" {
+				t.Fatalf("unexpected provider name: %q", prov.Name())
+			}
+			if server.started != tc.wantStarted {
+				t.Fatalf("StartProvider calls = %d, want %d", server.started, tc.wantStarted)
+			}
+		})
 	}
 }
 
-func TestNewRemoteProvider_SchemaRejectsInvalidConfig(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
-			Name:             "test-plugin",
-			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
-		},
-	}
-	client := newStubProviderClient(t, stub)
-	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"retries": 3}, "")
-	if err == nil {
-		t.Fatal("expected error for config missing required field")
-	}
-	if !strings.Contains(err.Error(), "config validation failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestNewRemoteProvider_SchemaAcceptsValidConfig(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
-			Name:             "test-plugin",
-			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
-		},
-	}
-	client := newStubProviderClient(t, stub)
-	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"api_key": "sk-test"}, "")
-	if err != nil {
-		t.Fatalf("expected valid config to pass: %v", err)
-	}
-	if prov.Name() != "test-plugin" {
-		t.Fatalf("unexpected name: %q", prov.Name())
-	}
-}
-
-func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
-			Name:             "test-plugin",
-			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
-		},
-	}
-	client := newStubProviderClient(t, stub)
-	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", nil, "")
-	if err == nil {
-		t.Fatal("expected nil config to fail validation against schema with required fields")
-	}
-}
-
-func newStubProviderClient(t *testing.T, stub pluginapiv1.ProviderPluginServer) pluginapiv1.ProviderPluginClient {
+func newSchemaFixtureClient(t *testing.T, server pluginapiv1.ProviderPluginServer) pluginapiv1.ProviderPluginClient {
 	t.Helper()
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, stub)
+	pluginapiv1.RegisterProviderPluginServer(srv, server)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() {
 		srv.Stop()

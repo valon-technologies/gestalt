@@ -248,7 +248,7 @@ func (p *pluginProcess) Close() error {
 			p.hostSrv.Stop()
 		}
 		if p.hostLis != nil {
-			if err := p.hostLis.Close(); err != nil {
+			if err := p.hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 				errs = append(errs, fmt.Errorf("close runtime host listener: %w", err))
 			}
 		}
