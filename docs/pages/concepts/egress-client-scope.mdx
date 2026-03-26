@@ -1,0 +1,70 @@
+# Egress Client Scope
+
+Egress clients have a `scope` that determines who can manage them and how they appear in listings. The two scopes are `personal` and `global`.
+
+## Personal Scope
+
+Personal clients are the default. When you create an egress client without specifying a scope, it gets `scope: personal`.
+
+A personal client is owned by its creator:
+
+- Only the creator can list, view, delete, or issue tokens for it
+- Names are unique per creator -- two different users can each have a personal client named `my-service`
+- Other users cannot see or access it, even admins
+
+```sh
+# Create a personal egress client (default scope)
+curl -X POST http://localhost:8080/api/v1/egress-clients \
+  -H "Authorization: Bearer gst_api_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-service"}'
+```
+
+## Global Scope
+
+Global clients are shared, operator-managed identities. They are useful when you want to provision a machine caller that is not tied to a specific user -- for example, a CI pipeline or a shared service account for a gateway deployment.
+
+Only admins (users listed in `server.admin_emails`) can create and manage global clients:
+
+- Any admin can list, view, delete, and issue tokens for any global client
+- Names are unique across the global scope -- two admins cannot create two global clients with the same name
+- Non-admin users cannot see or interact with global clients at all
+
+```sh
+# Create a global egress client (admin only)
+curl -X POST http://localhost:8080/api/v1/egress-clients \
+  -H "Authorization: Bearer gst_api_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ci-runner", "scope": "global"}'
+```
+
+A personal client and a global client can share the same name. They are in different scopes and do not collide.
+
+## Listing Behavior
+
+The list endpoint returns different results depending on the caller and the `scope` query parameter:
+
+| Caller | No filter | `scope=personal` | `scope=global` |
+| --- | --- | --- | --- |
+| Non-admin | Own personal clients | Own personal clients | 403 |
+| Admin | Own personal + all global | Own personal clients | All global clients |
+
+```sh
+# List all visible clients (admin sees personal + global)
+curl http://localhost:8080/api/v1/egress-clients \
+  -H "Authorization: Bearer gst_api_..."
+
+# List only global clients
+curl "http://localhost:8080/api/v1/egress-clients?scope=global" \
+  -H "Authorization: Bearer gst_api_..."
+```
+
+## Token Authentication
+
+Token behavior is the same regardless of scope. A `gst_ec_` token resolves to its parent egress client whether that client is personal or global. The scope controls who can manage the client and its tokens, not how those tokens authenticate at request time.
+
+## Relationship to Deny Rules and Credential Grants
+
+Deny rules and credential grants target subjects by kind and ID. When an egress client token authenticates a request, the subject is identified as kind `agent` with the client's ID as the subject ID. This is independent of scope -- a deny rule targeting a specific client ID applies whether the client is personal or global.
+
+Scope does not add a new subject dimension. It only governs who can manage the client through the API.
