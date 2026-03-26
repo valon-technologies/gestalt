@@ -29,10 +29,14 @@ type StagedConnectionStore interface {
 	DeleteStagedConnection(ctx context.Context, id string) error
 }
 
+type EgressClientFilter struct {
+	CreatedByID string // if non-empty, filter by creator
+}
+
 type EgressClientStore interface {
 	CreateEgressClient(ctx context.Context, client *EgressClient) error
 	GetEgressClient(ctx context.Context, id string) (*EgressClient, error)
-	ListEgressClients(ctx context.Context, userID string) ([]*EgressClient, error)
+	ListEgressClients(ctx context.Context, filter EgressClientFilter) ([]*EgressClient, error)
 	DeleteEgressClient(ctx context.Context, id string) error
 
 	CreateEgressClientToken(ctx context.Context, token *EgressClientToken) error

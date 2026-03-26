@@ -19,20 +19,21 @@ import (
 type ReadinessChecker func() string
 
 type Server struct {
-	router     chi.Router
-	auth       core.AuthProvider
-	datastore  core.Datastore
-	providers  *registry.PluginMap[core.Provider]
-	runtimes   *registry.PluginMap[core.Runtime]
-	bindings   *registry.PluginMap[core.Binding]
-	resolver   *principal.Resolver
-	invoker    invocation.Invoker
-	devMode    bool
-	stateCodec *integrationOAuthStateCodec
-	now        func() time.Time
-	readiness  ReadinessChecker
-	mcpHandler http.Handler
-	webUI      http.Handler
+	router         chi.Router
+	auth           core.AuthProvider
+	datastore      core.Datastore
+	providers      *registry.PluginMap[core.Provider]
+	runtimes       *registry.PluginMap[core.Runtime]
+	bindings       *registry.PluginMap[core.Binding]
+	resolver       *principal.Resolver
+	invoker        invocation.Invoker
+	devMode        bool
+	stateCodec     *integrationOAuthStateCodec
+	now            func() time.Time
+	readiness      ReadinessChecker
+	mcpHandler     http.Handler
+	webUI          http.Handler
+	connectHandler http.Handler // CONNECT dispatched outside chi (authority-form URIs bypass path routing)
 }
 
 type Config struct {
@@ -73,7 +74,7 @@ func New(cfg Config) (*Server, error) {
 		providers:  cfg.Providers,
 		runtimes:   cfg.Runtimes,
 		bindings:   cfg.Bindings,
-		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore),
+		resolver:   principal.NewResolver(cfg.Auth, cfg.Datastore, resolverOpts(cfg.Datastore)...),
 		invoker:    cfg.Invoker,
 		devMode:    cfg.DevMode,
 		stateCodec: stateCodec,
@@ -155,6 +156,14 @@ func (s *Server) routes() {
 	}
 }
 
+func resolverOpts(ds core.Datastore) []principal.ResolverOption {
+	var opts []principal.ResolverOption
+	if ecs, ok := ds.(core.EgressClientStore); ok {
+		opts = append(opts, principal.WithEgressClientStore(ecs))
+	}
+	return opts
+}
+
 func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 	scs, ok := s.datastore.(core.StagedConnectionStore)
 	if !ok {
@@ -176,7 +185,19 @@ func (s *Server) mountBindingRoutes(r chi.Router) {
 		for _, route := range binding.Routes() {
 			handler := route.Handler
 			if !route.Public {
-				handler = s.authMiddleware(handler)
+				if route.ProxyAuth {
+					handler = s.proxyAuthMiddleware(handler)
+				} else {
+					handler = s.authMiddleware(handler)
+				}
+			}
+			if route.Connect {
+				if s.connectHandler != nil {
+					log.Printf("warning: binding %q registers CONNECT but another binding already claimed it; skipping", name)
+					continue
+				}
+				s.connectHandler = handler
+				continue
 			}
 			r.Method(route.Method, "/bindings/"+name+route.Pattern, handler)
 		}
@@ -184,5 +205,9 @@ func (s *Server) mountBindingRoutes(r chi.Router) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodConnect && s.connectHandler != nil {
+		s.connectHandler.ServeHTTP(w, r)
+		return
+	}
 	s.router.ServeHTTP(w, r)
 }

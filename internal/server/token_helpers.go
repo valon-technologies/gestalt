@@ -22,7 +22,15 @@ func (s *Server) nowUTCSecond() time.Time {
 }
 
 func (s *Server) issueToken() (*issuedToken, error) {
-	plaintext, err := generateRandomHex(32)
+	return s.issueTokenWithType(principal.TokenTypeAPI)
+}
+
+func (s *Server) issueEgressClientToken() (*issuedToken, error) {
+	return s.issueTokenWithType(principal.TokenTypeEgressClient)
+}
+
+func (s *Server) issueTokenWithType(typ principal.TokenType) (*issuedToken, error) {
+	plaintext, hashed, err := principal.GenerateToken(typ)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +39,7 @@ func (s *Server) issueToken() (*issuedToken, error) {
 	expiry := now.Add(defaultIssuedTokenExpiry)
 	return &issuedToken{
 		Plaintext: plaintext,
-		Hashed:    principal.HashToken(plaintext),
+		Hashed:    hashed,
 		CreatedAt: now,
 		UpdatedAt: now,
 		ExpiresAt: &expiry,

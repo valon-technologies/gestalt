@@ -27,7 +27,6 @@ func (c proxyConfig) methods() []string {
 		http.MethodPatch,
 		http.MethodDelete,
 		http.MethodOptions,
-		http.MethodConnect,
 	}
 }
 
