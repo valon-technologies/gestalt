@@ -24,6 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
+	"github.com/valon-technologies/gestalt/plugins/auth/local"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
 	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
@@ -49,8 +50,8 @@ type bootstrapEnv struct {
 	Result *bootstrap.Result
 }
 
-func setupBootstrap(configFlag string, mode providerResolutionMode) (*bootstrapEnv, error) {
-	_, cfg, preparedProviders, err := loadConfigForExecution(configFlag, mode)
+func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
+	_, cfg, preparedProviders, err := loadConfigForExecution(configFlag, locked)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +95,7 @@ func (e *bootstrapEnv) Close() {
 func buildFactories(preparedProviders map[string]string, devMode bool) *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
+	factories.Auth["local"] = local.Factory
 	factories.Auth["oidc"] = oidc.Factory
 	factories.Datastores["sqlite"] = sqlite.Factory
 	factories.Datastores["postgres"] = postgres.Factory
@@ -126,6 +128,11 @@ func resolveConfigPath(flagValue string) string {
 	}
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
+	}
+	if p := defaultLocalConfigPath(); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
 	return "/etc/gestalt/config.yaml"
 }

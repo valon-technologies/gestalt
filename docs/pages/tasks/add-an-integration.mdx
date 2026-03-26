@@ -58,7 +58,7 @@ integrations:
       token_url: https://example.com/oauth/token
 ```
 
-Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are exposed with top-level type information for MCP clients. For deterministic production deployments, run `gestaltd prepare` during build and `gestaltd serve` at runtime so the GraphQL provider definition is compiled ahead of time.
+Gestalt introspects the GraphQL endpoint at startup and generates operations from queries and mutations. Arguments are exposed with top-level type information for MCP clients. For deterministic production deployments, run `gestaltd init` during build and `gestaltd serve` at runtime so the GraphQL provider definition is compiled ahead of time.
 
 ## 4. Manual auth for API-key services
 

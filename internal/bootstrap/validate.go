@@ -123,7 +123,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
-	if intg.Plugin == nil || intg.Plugin.Ref == "" || intg.Plugin.PreparedManifestPath == "" {
+	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
 		return buildProvider(ctx, name, intg, factories, deps)
 	}
 
@@ -132,7 +132,7 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 		mode = config.PluginModeReplace
 	}
 
-	overlayProv, err := newPreparedProviderStub(name, intg, intg.Plugin.PreparedManifestPath)
+	overlayProv, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 }
 
 func buildRuntimeForValidation(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
-	if cfg.Plugin != nil && cfg.Plugin.Ref != "" && cfg.Plugin.PreparedManifestPath != "" {
+	if cfg.Plugin != nil && cfg.Plugin.Package != "" && cfg.Plugin.ResolvedManifestPath != "" {
 		return &preparedRuntimeStub{name: name}, nil
 	}
 	return buildRuntime(ctx, name, cfg, factories, deps)

@@ -4,7 +4,7 @@
 
 Gestalt resolves providers at startup from the `upstreams` list. If no upstreams are configured, or a REST/GraphQL upstream is missing `url`, config loading fails. If `gestaltd serve` cannot find prepared artifacts for a remote REST/GraphQL upstream, startup fails.
 
-**Fix**: Ensure each integration has at least one upstream with a valid `type` and `url`. For deterministic production startup, run `gestaltd prepare --config your-config.yaml` during build, then `gestaltd serve --config your-config.yaml` at runtime.
+**Fix**: Ensure each integration has at least one upstream with a valid `type` and `url`. For deterministic production startup, run `gestaltd init --config your-config.yaml` during build, then `gestaltd serve --config your-config.yaml` at runtime.
 
 ## OAuth redirects are wrong
 

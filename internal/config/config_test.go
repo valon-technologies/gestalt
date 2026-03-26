@@ -172,6 +172,12 @@ integrations:
     icon_file: ../assets/service.svg
     plugin:
       command: ../bin/provider
+  service-b:
+    plugin:
+      package: ../plugins/dummy.tar.gz
+  service-c:
+    plugin:
+      package: https://example.com/dummy.tar.gz
 runtimes:
   worker:
     plugin:
@@ -190,6 +196,12 @@ runtimes:
 	}
 	if got := cfg.Integrations["service-a"].Plugin.Command; got != filepath.Join(dir, "bin", "provider") {
 		t.Fatalf("integration plugin command = %q", got)
+	}
+	if got := cfg.Integrations["service-b"].Plugin.Package; got != filepath.Join(dir, "plugins", "dummy.tar.gz") {
+		t.Fatalf("integration plugin package = %q, want %q", got, filepath.Join(dir, "plugins", "dummy.tar.gz"))
+	}
+	if got := cfg.Integrations["service-c"].Plugin.Package; got != "https://example.com/dummy.tar.gz" {
+		t.Fatalf("HTTPS plugin package should not be resolved = %q", got)
 	}
 	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
 		t.Fatalf("runtime plugin command = %q", got)
@@ -427,7 +439,7 @@ integrations:
 	}
 }
 
-func TestPluginRefValidation(t *testing.T) {
+func TestPluginValidation(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -436,7 +448,7 @@ func TestPluginRefValidation(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "integration plugin ref is valid",
+			name: "integration plugin package is valid",
 			yaml: `
 auth:
   provider: auth-provider
@@ -447,11 +459,26 @@ server:
 integrations:
   external:
     plugin:
-      ref: acme/provider@0.1.0
+      package: ./plugins/dummy.tar.gz
 `,
 		},
 		{
-			name: "integration plugin command and ref are mutually exclusive",
+			name: "runtime plugin package is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+runtimes:
+  worker:
+    plugin:
+      package: https://example.com/dummy.tar.gz
+`,
+		},
+		{
+			name: "plugin package and command are mutually exclusive",
 			yaml: `
 auth:
   provider: auth-provider
@@ -463,12 +490,12 @@ integrations:
   external:
     plugin:
       command: /tmp/plugin
-      ref: acme/provider@0.1.0
+      package: ./plugins/dummy.tar.gz
 `,
 			wantErr: true,
 		},
 		{
-			name: "integration plugin args require command",
+			name: "plugin args require command not package",
 			yaml: `
 auth:
   provider: auth-provider
@@ -479,14 +506,48 @@ server:
 integrations:
   external:
     plugin:
-      ref: acme/provider@0.1.0
+      package: ./plugins/dummy.tar.gz
       args:
         - --verbose
 `,
 			wantErr: true,
 		},
 		{
-			name: "runtime plugin ref is valid",
+			name: "plugin env with package is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      package: ./plugins/dummy.tar.gz
+      env:
+        FOO: bar
+`,
+		},
+		{
+			name: "plugin config with package is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      package: ./plugins/dummy.tar.gz
+      config:
+        base_url: https://example.com
+`,
+		},
+		{
+			name: "runtime plugin config must be sibling config block",
 			yaml: `
 auth:
   provider: auth-provider
@@ -497,23 +558,7 @@ server:
 runtimes:
   worker:
     plugin:
-      ref: acme/runtime@0.1.0
-`,
-			wantErr: false,
-		},
-		{
-			name: "runtime plugin config must be sibling config block",
-			yaml: `
-auth:
-  provider: google
-datastore:
-  provider: sqlite
-server:
-  encryption_key: key123
-runtimes:
-  worker:
-    plugin:
-      ref: acme/runtime@0.1.0
+      command: /tmp/runtime
       config:
         poll_interval: 30s
 `,
@@ -523,11 +568,11 @@ runtimes:
 			name: "runtime requires type or plugin",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 runtimes:
   worker: {}
 `,
@@ -537,11 +582,11 @@ runtimes:
 			name: "runtime plugin cannot also define type",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 runtimes:
   worker:
     type: echo
@@ -551,14 +596,14 @@ runtimes:
 			wantErr: true,
 		},
 		{
-			name: "plugin command is required",
+			name: "plugin command or package is required",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 integrations:
   external:
     plugin: {}
@@ -566,42 +611,56 @@ integrations:
 			wantErr: true,
 		},
 		{
+			name: "plugin ref field is rejected as unknown",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      ref: acme/provider@0.1.0
+`,
+			wantErr: true,
+		},
+		{
 			name: "egress default_action allow is valid",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress:
   default_action: allow
 `,
-			wantErr: false,
 		},
 		{
 			name: "egress default_action deny is valid",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress:
   default_action: deny
 `,
-			wantErr: false,
 		},
 		{
 			name: "egress default_action invalid",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress:
   default_action: block
 `,
@@ -611,27 +670,26 @@ egress:
 			name: "egress policy rule valid",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress:
   policies:
     - action: deny
       provider: restricted
 `,
-			wantErr: false,
 		},
 		{
 			name: "egress policy rule invalid action",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress:
   policies:
     - action: block
@@ -643,14 +701,13 @@ egress:
 			name: "egress empty is valid",
 			yaml: `
 auth:
-  provider: google
+  provider: auth-provider
 datastore:
-  provider: sqlite
+  provider: data-store
 server:
-  encryption_key: key123
+  encryption_key: server-key
 egress: {}
 `,
-			wantErr: false,
 		},
 	}
 

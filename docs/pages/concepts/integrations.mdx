@@ -16,7 +16,7 @@ An integration can combine upstream types. For example, a REST upstream and an M
 
 ## REST upstreams
 
-A REST upstream resolves its operations from an OpenAPI spec URL. For deterministic production startup, run `gestaltd prepare` ahead of time so Gestalt writes local provider artifacts into `.gestalt/providers/` and records them in `gestalt.lock.json`.
+A REST upstream resolves its operations from an OpenAPI spec URL. For deterministic production startup, run `gestaltd init` ahead of time so Gestalt writes local provider artifacts into `.gestalt/providers/` and records them in `gestalt.lock.json`.
 
 ```yaml
 integrations:
@@ -33,7 +33,7 @@ integrations:
 
 ## GraphQL upstreams
 
-A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field. For deterministic production boots, run `gestaltd prepare` so the provider definition is compiled ahead of time and `gestaltd serve` can start without live introspection.
+A GraphQL upstream introspects the endpoint at startup and generates one operation per query and mutation field. For deterministic production boots, run `gestaltd init` so the provider definition is compiled ahead of time and `gestaltd serve` can start without live introspection.
 
 ```yaml
 integrations:
