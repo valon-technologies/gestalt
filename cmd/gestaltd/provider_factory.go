@@ -75,7 +75,7 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 	}()
 
 	for i := range a.intg.Upstreams {
-		if err = a.addUpstream(&a.intg.Upstreams[i], connMode); err != nil {
+		if err := a.addUpstream(&a.intg.Upstreams[i], connMode); err != nil {
 			return nil, err
 		}
 	}
