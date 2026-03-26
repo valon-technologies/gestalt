@@ -41,6 +41,8 @@ func TestLoadManifestFromPath_DirectoryManifestFileAndArchive(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			data, parsed, gotPath, err := LoadManifestFromPath(tc.input)
 			if err != nil {
 				t.Fatalf("LoadManifestFromPath(%q): %v", tc.input, err)
