@@ -45,7 +45,7 @@ server:
 | `base_url` | no, but strongly recommended | Used to derive OAuth callback URLs when explicit redirect URLs are missing. |
 | `encryption_key` | yes unless `dev_mode: true` | Root deployment secret used for encryption and derived session material. |
 | `dev_mode` | no | Enables dev login, `X-Dev-User-Email`, dev CORS, and dev-only built-ins. |
-| `admin_emails` | no | Grants access to admin-only egress deny-rule endpoints. |
+| `admin_emails` | no | Grants access to admin-only egress deny-rule and credential-grant endpoints, and to global-scope egress client management. |
 
 ## `auth`
 

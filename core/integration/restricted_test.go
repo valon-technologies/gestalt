@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
+	coreintegration "github.com/valon-technologies/gestalt/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
-	"github.com/valon-technologies/gestalt/internal/integration"
 )
 
 // stubWithOps extends StubIntegration with concrete operations.
@@ -35,7 +35,7 @@ func TestListOperationsFilters(t *testing.T) {
 		ops:             sampleOps(),
 	}
 
-	r := integration.NewRestricted(inner, []string{"list_channels", "send_message"})
+	r := coreintegration.NewRestricted(inner, []string{"list_channels", "send_message"})
 	ops := r.ListOperations()
 
 	if len(ops) != 2 {
@@ -58,7 +58,7 @@ func TestListOperationsPreservesOrder(t *testing.T) {
 	}
 
 	// Allowlist in different order from inner; output should follow inner's order.
-	r := integration.NewRestricted(inner, []string{"delete_message", "list_channels"})
+	r := coreintegration.NewRestricted(inner, []string{"delete_message", "list_channels"})
 	ops := r.ListOperations()
 
 	if len(ops) != 2 {
@@ -86,7 +86,7 @@ func TestExecuteAllowed(t *testing.T) {
 		ops: sampleOps(),
 	}
 
-	r := integration.NewRestricted(inner, []string{"send_message"})
+	r := coreintegration.NewRestricted(inner, []string{"send_message"})
 	got, err := r.Execute(context.Background(), "send_message", nil, "tok")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -104,7 +104,7 @@ func TestExecuteDisallowed(t *testing.T) {
 		ops:             sampleOps(),
 	}
 
-	r := integration.NewRestricted(inner, []string{"list_channels"})
+	r := coreintegration.NewRestricted(inner, []string{"list_channels"})
 	_, err := r.Execute(context.Background(), "delete_message", nil, "tok")
 	if err == nil {
 		t.Fatal("Execute: expected error for disallowed op, got nil")
@@ -127,7 +127,7 @@ func TestDelegationMethods(t *testing.T) {
 		ops: sampleOps(),
 	}
 
-	r := integration.NewRestricted(inner, []string{"list_channels"})
+	r := coreintegration.NewRestricted(inner, []string{"list_channels"})
 
 	if got := r.Name(); got != "my-integration" {
 		t.Errorf("Name: got %q, want %q", got, "my-integration")

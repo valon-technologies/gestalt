@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
-	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 func (s *Server) egressClientStore() (core.EgressClientStore, error) {
@@ -23,7 +21,7 @@ func (s *Server) egressClientStore() (core.EgressClientStore, error) {
 }
 
 func (s *Server) resolveAuthorizedEgressClient(w http.ResponseWriter, r *http.Request, ecs core.EgressClientStore) (*core.EgressClient, bool) {
-	userID, ok := s.resolveUserID(w, r)
+	actor, ok := s.currentEgressClientActor(w, r)
 	if !ok {
 		return nil, false
 	}
@@ -37,24 +35,11 @@ func (s *Server) resolveAuthorizedEgressClient(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "failed to look up egress client")
 		return nil, false
 	}
-	p := principal.FromContext(r.Context())
-	switch client.Scope {
-	case core.EgressClientScopeGlobal:
-		if !s.isAdmin(p) {
-			writeError(w, http.StatusNotFound, "egress client not found")
-			return nil, false
-		}
-	default:
-		if client.CreatedByID != userID {
-			writeError(w, http.StatusNotFound, "egress client not found")
-			return nil, false
-		}
+	if !actor.canManage(client) {
+		writeError(w, http.StatusNotFound, "egress client not found")
+		return nil, false
 	}
 	return client, true
-}
-
-func validScope(scope string) bool {
-	return scope == core.EgressClientScopePersonal || scope == core.EgressClientScopeGlobal
 }
 
 type createEgressClientRequest struct {
@@ -74,7 +59,7 @@ type egressClientResponse struct {
 }
 
 func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
+	actor, ok := s.currentEgressClientActor(w, r)
 	if !ok {
 		return
 	}
@@ -95,17 +80,12 @@ func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scope := req.Scope
-	if scope == "" {
-		scope = core.EgressClientScopePersonal
-	}
-	if !validScope(scope) {
+	scope, err := normalizeEgressClientScope(req.Scope)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid scope")
 		return
 	}
-
-	p := principal.FromContext(r.Context())
-	if scope == core.EgressClientScopeGlobal && !s.isAdmin(p) {
+	if !actor.canCreate(scope) {
 		writeError(w, http.StatusForbidden, adminForbiddenMessage)
 		return
 	}
@@ -116,7 +96,7 @@ func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Description: req.Description,
 		Scope:       scope,
-		CreatedByID: userID,
+		CreatedByID: actor.userID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -134,7 +114,7 @@ func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listEgressClients(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
+	actor, ok := s.currentEgressClientActor(w, r)
 	if !ok {
 		return
 	}
@@ -146,54 +126,16 @@ func (s *Server) listEgressClients(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scopeParam := r.URL.Query().Get("scope")
-	p := principal.FromContext(r.Context())
-	admin := s.isAdmin(p)
-
-	if scopeParam != "" && !validScope(scopeParam) {
+	if err := validateOptionalEgressClientScope(scopeParam); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid scope")
 		return
 	}
 
-	if scopeParam == core.EgressClientScopeGlobal && !admin {
+	clients, err := listEgressClientsForActor(r.Context(), ecs, actor, scopeParam)
+	if errors.Is(err, errEgressClientScopeForbidden) {
 		writeError(w, http.StatusForbidden, adminForbiddenMessage)
 		return
 	}
-
-	var clients []*core.EgressClient
-
-	switch {
-	case scopeParam == core.EgressClientScopeGlobal:
-		clients, err = ecs.ListEgressClients(r.Context(), core.EgressClientFilter{
-			Scope: core.EgressClientScopeGlobal,
-		})
-	case admin && scopeParam == "":
-		personal, pErr := ecs.ListEgressClients(r.Context(), core.EgressClientFilter{
-			CreatedByID: userID,
-			Scope:       core.EgressClientScopePersonal,
-		})
-		if pErr != nil {
-			writeError(w, http.StatusInternalServerError, "failed to list egress clients")
-			return
-		}
-		global, gErr := ecs.ListEgressClients(r.Context(), core.EgressClientFilter{
-			Scope: core.EgressClientScopeGlobal,
-		})
-		if gErr != nil {
-			writeError(w, http.StatusInternalServerError, "failed to list egress clients")
-			return
-		}
-		personal = append(personal, global...)
-		clients = personal
-		sort.Slice(clients, func(i, j int) bool {
-			return clients[i].CreatedAt.Before(clients[j].CreatedAt)
-		})
-	default:
-		clients, err = ecs.ListEgressClients(r.Context(), core.EgressClientFilter{
-			CreatedByID: userID,
-			Scope:       core.EgressClientScopePersonal,
-		})
-	}
-
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list egress clients")
 		return
