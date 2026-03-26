@@ -30,7 +30,8 @@ type StagedConnectionStore interface {
 }
 
 type EgressClientFilter struct {
-	CreatedByID string // if non-empty, filter by creator
+	CreatedByID string
+	Scope       string
 }
 
 type EgressClientStore interface {
