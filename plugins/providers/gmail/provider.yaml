@@ -1,0 +1,93 @@
+provider: gmail
+display_name: Gmail
+description: Google Gmail email service
+connection_mode: user
+base_url: "https://gmail.googleapis.com/gmail/v1"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/gmail.modify
+    - https://www.googleapis.com/auth/gmail.send
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  list_messages:
+    description: List emails in the mailbox with optional filtering
+    method: GET
+    path: "/users/me/messages"
+    parameters:
+      - {name: q, type: string, description: "Search query using Gmail search syntax"}
+      - {name: max_results, type: integer, description: "Maximum number of messages to return (default 20, max 500)"}
+      - {name: page_token, type: string, description: "Token for pagination"}
+      - {name: label_ids, type: string, description: "Comma-separated label IDs to filter by"}
+      - {name: include_spam_trash, type: boolean, description: "Include spam and trash messages"}
+
+  get_message:
+    description: Get a specific email message with full content
+    method: GET
+    path: "/users/me/messages/{message_id}"
+    parameters:
+      - {name: message_id, type: string, required: true, description: "Message ID"}
+      - {name: format, type: string, description: "Response format: full, metadata, minimal, or raw"}
+
+  search_messages:
+    description: Search emails using Gmail search syntax
+    method: GET
+    path: "/users/me/messages"
+    parameters:
+      - {name: query, type: string, required: true, description: "Search query using Gmail search syntax"}
+      - {name: max_results, type: integer, description: "Maximum messages to return (default 20)"}
+      - {name: page_token, type: string, description: "Token for pagination"}
+
+  list_labels:
+    description: List all labels (folders/categories) in the mailbox
+    method: GET
+    path: "/users/me/labels"
+
+  get_thread:
+    description: Get an email thread (conversation) with all messages
+    method: GET
+    path: "/users/me/threads/{thread_id}"
+    parameters:
+      - {name: thread_id, type: string, required: true, description: "Thread ID"}
+      - {name: format, type: string, description: "Response format (default full)"}
+
+  get_profile:
+    description: "Get the current user's Gmail profile"
+    method: GET
+    path: "/users/me/profile"
+
+  add_label:
+    description: Add labels to a Gmail message
+    method: POST
+    path: "/users/me/messages/{message_id}/modify"
+    parameters:
+      - {name: message_id, type: string, required: true, description: "Message ID"}
+      - {name: label_ids, type: string, required: true, description: "Comma-separated label IDs to add"}
+
+  remove_label:
+    description: Remove labels from a Gmail message
+    method: POST
+    path: "/users/me/messages/{message_id}/modify"
+    parameters:
+      - {name: message_id, type: string, required: true, description: "Message ID"}
+      - {name: label_ids, type: string, required: true, description: "Comma-separated label IDs to remove"}
+
+  trash_message:
+    description: Move a message to trash
+    method: POST
+    path: "/users/me/messages/{message_id}/trash"
+    parameters:
+      - {name: message_id, type: string, required: true, description: "Message ID to move to trash"}
+
+  mark_as_read:
+    description: Mark a message as read by removing the UNREAD label
+    method: POST
+    path: "/users/me/messages/{message_id}/modify"
+    parameters:
+      - {name: message_id, type: string, required: true, description: "Message ID to mark as read"}

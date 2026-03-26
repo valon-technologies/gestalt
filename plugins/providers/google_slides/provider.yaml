@@ -1,0 +1,40 @@
+provider: google_slides
+display_name: Google Slides
+description: Google Slides presentation service
+connection_mode: user
+base_url: "https://slides.googleapis.com"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/presentations
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  get_presentation:
+    description: Get presentation metadata and content
+    method: GET
+    path: "/v1/presentations/{presentation_id}"
+    parameters:
+      - {name: presentation_id, type: string, required: true, description: "Presentation ID"}
+
+  get_page:
+    description: Get a specific page (slide) from a presentation
+    method: GET
+    path: "/v1/presentations/{presentation_id}/pages/{page_object_id}"
+    parameters:
+      - {name: presentation_id, type: string, required: true, description: "Presentation ID"}
+      - {name: page_object_id, type: string, required: true, description: "Page/slide object ID"}
+
+  get_thumbnail:
+    description: Get a thumbnail image of a page
+    method: GET
+    path: "/v1/presentations/{presentation_id}/pages/{page_object_id}/thumbnail"
+    parameters:
+      - {name: presentation_id, type: string, required: true, description: "Presentation ID"}
+      - {name: page_object_id, type: string, required: true, description: "Page/slide object ID"}
+      - {name: thumbnail_size, type: string, description: "Thumbnail size: SMALL (200px), MEDIUM (800px), or LARGE (1600px)"}
