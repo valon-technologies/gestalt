@@ -441,6 +441,10 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Runtime], error) {
+	return buildRuntimesWith(ctx, cfg, factories, invoker, lister, audit, egressDeps, buildRuntime)
+}
+
+func buildRuntimesWith(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps, buildRuntimeFn func(context.Context, string, config.RuntimeDef, *FactoryRegistry, RuntimeDeps) (core.Runtime, error)) (*registry.PluginMap[core.Runtime], error) {
 	if len(cfg.Runtimes) == 0 {
 		return nil, nil
 	}
@@ -450,7 +454,7 @@ func buildRuntimes(ctx context.Context, cfg *config.Config, factories *FactoryRe
 	for name := range cfg.Runtimes {
 		def := cfg.Runtimes[name]
 		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
-		rt, err := buildRuntime(ctx, name, def, factories, deps)
+		rt, err := buildRuntimeFn(ctx, name, def, factories, deps)
 		if err != nil {
 			_ = StopRuntimes(context.Background(), runtimes, runtimes.List())
 			return nil, fmt.Errorf("bootstrap: runtime %q: %w", name, err)
@@ -507,7 +511,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			mode = config.PluginModeReplace
 		}
 
-		pluginConfig, err := nodeToMap(intg.Plugin.Config)
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 		}
@@ -609,7 +613,7 @@ func validateProviderBuildAvailable(name string, intg config.IntegrationDef, fac
 
 func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
 	if cfg.Plugin != nil {
-		pluginConfig, err := nodeToMap(cfg.Plugin.Config)
+		m, err := config.NodeToMap(cfg.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode runtime plugin config for %q: %w", name, err)
 		}
@@ -618,7 +622,7 @@ func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, facto
 			Args:    cfg.Plugin.Args,
 			Env:     cfg.Plugin.Env,
 			Name:    name,
-			Config:  pluginConfig,
+			Config:  m,
 			Mode:    cfg.Plugin.Mode,
 		}, deps.Invoker, deps.CapabilityLister)
 	}
@@ -628,17 +632,6 @@ func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, facto
 		return nil, fmt.Errorf("unknown runtime type %q", cfg.Type)
 	}
 	return factory(ctx, name, cfg, deps)
-}
-
-func nodeToMap(node yaml.Node) (map[string]any, error) {
-	if node.Kind == 0 {
-		return nil, nil
-	}
-	var out map[string]any
-	if err := node.Decode(&out); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func runtimeNames(runtimes *registry.PluginMap[core.Runtime]) []string {

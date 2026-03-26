@@ -369,7 +369,8 @@ func preparedLockMatchesConfig(cfg *config.Config, paths preparedPaths, lock *pr
 			continue
 		}
 		entry, found := lock.Plugins[preparedPluginKey("integration", name)]
-		if !pluginEntryMatches(paths, name, intg.Plugin, entry, found) {
+		configMap, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil || !pluginEntryMatches(paths, name, intg.Plugin, configMap, entry, found) {
 			return false
 		}
 	}
@@ -379,7 +380,8 @@ func preparedLockMatchesConfig(cfg *config.Config, paths preparedPaths, lock *pr
 			continue
 		}
 		entry, found := lock.Plugins[preparedPluginKey("runtime", name)]
-		if !pluginEntryMatches(paths, name, rt.Plugin, entry, found) {
+		configMap, err := config.NodeToMap(rt.Config)
+		if err != nil || !pluginEntryMatches(paths, name, rt.Plugin, configMap, entry, found) {
 			return false
 		}
 	}
@@ -396,7 +398,7 @@ type preparedPluginFingerprintInput struct {
 	Config  map[string]any    `json:"config,omitempty"`
 }
 
-func pluginFingerprint(name string, plugin *config.ExecutablePluginDef) (string, error) {
+func pluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (string, error) {
 	if plugin == nil {
 		return "", nil
 	}
@@ -409,12 +411,8 @@ func pluginFingerprint(name string, plugin *config.ExecutablePluginDef) (string,
 		Args:    plugin.Args,
 		Env:     plugin.Env,
 	}
-	if plugin.Config.Kind != 0 {
-		var cfg map[string]any
-		if err := plugin.Config.Decode(&cfg); err != nil {
-			return "", fmt.Errorf("decoding plugin config fingerprint input: %w", err)
-		}
-		input.Config = cfg
+	if configMap != nil {
+		input.Config = configMap
 	}
 
 	payload, err := json.Marshal(input)
@@ -437,11 +435,11 @@ func resolveInstalledPluginRef(store *pluginstore.Store, raw string) (*pluginsto
 	return store.Resolve(ref)
 }
 
-func pluginEntryMatches(paths preparedPaths, name string, plugin *config.ExecutablePluginDef, entry preparedPluginEntry, found bool) bool {
+func pluginEntryMatches(paths preparedPaths, name string, plugin *config.ExecutablePluginDef, configMap map[string]any, entry preparedPluginEntry, found bool) bool {
 	if !found {
 		return false
 	}
-	fingerprint, err := pluginFingerprint(name, plugin)
+	fingerprint, err := pluginFingerprint(name, plugin, configMap)
 	if err != nil || entry.Fingerprint != fingerprint || entry.Ref != plugin.Ref {
 		return false
 	}
@@ -468,7 +466,11 @@ func writePreparedPlugins(configPath string, cfg *config.Config, paths preparedP
 		if intg.Plugin == nil || intg.Plugin.Ref == "" {
 			continue
 		}
-		entry, err := preparedPluginEntryForConfigItem(paths, store, "integration", name, intg.Plugin)
+		configMap, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for integration %q: %w", name, err)
+		}
+		entry, err := preparedPluginEntryForConfigItem(paths, store, "integration", name, intg.Plugin, configMap)
 		if err != nil {
 			return nil, err
 		}
@@ -479,7 +481,11 @@ func writePreparedPlugins(configPath string, cfg *config.Config, paths preparedP
 		if rt.Plugin == nil || rt.Plugin.Ref == "" {
 			continue
 		}
-		entry, err := preparedPluginEntryForConfigItem(paths, store, "runtime", name, rt.Plugin)
+		configMap, err := config.NodeToMap(rt.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode runtime config for runtime %q: %w", name, err)
+		}
+		entry, err := preparedPluginEntryForConfigItem(paths, store, "runtime", name, rt.Plugin, configMap)
 		if err != nil {
 			return nil, err
 		}
@@ -488,12 +494,15 @@ func writePreparedPlugins(configPath string, cfg *config.Config, paths preparedP
 	return written, nil
 }
 
-func preparedPluginEntryForConfigItem(paths preparedPaths, store *pluginstore.Store, kind, name string, plugin *config.ExecutablePluginDef) (preparedPluginEntry, error) {
+func preparedPluginEntryForConfigItem(paths preparedPaths, store *pluginstore.Store, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (preparedPluginEntry, error) {
 	installed, err := resolveInstalledPluginRef(store, plugin.Ref)
 	if err != nil {
 		return preparedPluginEntry{}, fmt.Errorf("%s %q plugin.ref %q is not installed; run `gestaltd plugin install --config %s <package>`: %w", kind, name, plugin.Ref, paths.configPath, err)
 	}
-	fingerprint, err := pluginFingerprint(name, plugin)
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKindForPreparedPlugin(kind), configMap); err != nil {
+		return preparedPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
+	fingerprint, err := pluginFingerprint(name, plugin, configMap)
 	if err != nil {
 		return preparedPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
@@ -533,7 +542,11 @@ func applyPreparedPlugins(configPath string, cfg *config.Config, mode providerRe
 		if intg.Plugin == nil || intg.Plugin.Ref == "" {
 			continue
 		}
-		if err := applyPreparedPluginEntry(paths, lock, "integration", name, intg.Plugin); err != nil {
+		configMap, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return fmt.Errorf("decode plugin config for integration %q: %w", name, err)
+		}
+		if err := applyPreparedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 			return err
 		}
 	}
@@ -542,20 +555,24 @@ func applyPreparedPlugins(configPath string, cfg *config.Config, mode providerRe
 		if rt.Plugin == nil || rt.Plugin.Ref == "" {
 			continue
 		}
-		if err := applyPreparedPluginEntry(paths, lock, "runtime", name, rt.Plugin); err != nil {
+		configMap, err := config.NodeToMap(rt.Config)
+		if err != nil {
+			return fmt.Errorf("decode runtime config for runtime %q: %w", name, err)
+		}
+		if err := applyPreparedPluginEntry(paths, lock, "runtime", name, rt.Plugin, configMap); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind, name string, plugin *config.ExecutablePluginDef) error {
+func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) error {
 	key := preparedPluginKey(kind, name)
 	entry, ok := lock.Plugins[key]
 	if !ok {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd prepare --config %s`", kind, name, paths.configPath)
 	}
-	fingerprint, err := pluginFingerprint(name, plugin)
+	fingerprint, err := pluginFingerprint(name, plugin, configMap)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
@@ -576,6 +593,9 @@ func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind,
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 	}
+	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, manifestKindForPreparedPlugin(kind), configMap); err != nil {
+		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
 	args, err := preparedEntrypointArgs(kind, manifest)
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
@@ -583,6 +603,7 @@ func applyPreparedPluginEntry(paths preparedPaths, lock *preparedLockfile, kind,
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
+	plugin.PreparedManifestPath = manifestPath
 	return nil
 }
 
@@ -600,6 +621,17 @@ func preparedEntrypointArgs(kind string, manifest *pluginmanifestv1.Manifest) ([
 		return nil, fmt.Errorf("manifest does not define an entrypoint for %s", kind)
 	}
 	return append([]string(nil), entry.Args...), nil
+}
+
+func manifestKindForPreparedPlugin(kind string) string {
+	switch kind {
+	case "integration":
+		return pluginmanifestv1.KindProvider
+	case "runtime":
+		return pluginmanifestv1.KindRuntime
+	default:
+		return ""
+	}
 }
 
 func integrationFingerprint(name string, intg config.IntegrationDef, upstream config.UpstreamDef) (string, error) {
