@@ -107,3 +107,18 @@ type EgressClientToken struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
+
+type EgressDenyRule struct {
+	ID          string
+	SubjectKind string
+	SubjectID   string
+	Provider    string
+	Operation   string
+	Method      string
+	Host        string
+	PathPrefix  string
+	CreatedByID string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}

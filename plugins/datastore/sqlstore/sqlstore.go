@@ -599,3 +599,101 @@ func (s *Store) RevokeEgressClientToken(ctx context.Context, clientID, tokenID s
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// EgressDenyRule methods
+// ---------------------------------------------------------------------------
+
+func scanEgressDenyRule(row Scanner) (*core.EgressDenyRule, error) {
+	var r core.EgressDenyRule
+	var description sql.NullString
+	if err := row.Scan(&r.ID, &r.SubjectKind, &r.SubjectID, &r.Provider,
+		&r.Operation, &r.Method, &r.Host, &r.PathPrefix,
+		&r.CreatedByID, &description, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		return nil, err
+	}
+	r.Description = description.String
+	return &r, nil
+}
+
+func (s *Store) CreateEgressDenyRule(ctx context.Context, rule *core.EgressDenyRule) error {
+	defaultTimestamps(&rule.CreatedAt, &rule.UpdatedAt)
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO egress_deny_rules (id, subject_kind, subject_id, provider, operation, method, host, path_prefix, created_by_id, description, created_at, updated_at)
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`, `+s.ph(12)+`)`,
+		rule.ID, rule.SubjectKind, rule.SubjectID, rule.Provider,
+		rule.Operation, rule.Method, rule.Host, rule.PathPrefix,
+		rule.CreatedByID, rule.Description, rule.CreatedAt, rule.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting egress deny rule: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetEgressDenyRule(ctx context.Context, id string) (*core.EgressDenyRule, error) {
+	row := s.DB.QueryRowContext(ctx, `
+		SELECT id, subject_kind, subject_id, provider, operation, method, host, path_prefix, created_by_id, description, created_at, updated_at
+		FROM egress_deny_rules WHERE id = `+s.ph(1), id)
+	r, err := scanEgressDenyRule(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, core.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying egress deny rule: %w", err)
+	}
+	return r, nil
+}
+
+func (s *Store) ListEgressDenyRules(ctx context.Context, filter core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error) {
+	query := `SELECT id, subject_kind, subject_id, provider, operation, method, host, path_prefix, created_by_id, description, created_at, updated_at FROM egress_deny_rules`
+	var args []any
+	var conditions []string
+	argN := 1
+	if filter.SubjectKind != "" {
+		conditions = append(conditions, `subject_kind = `+s.ph(argN))
+		args = append(args, filter.SubjectKind)
+		argN++
+	}
+	if filter.Host != "" {
+		conditions = append(conditions, `host = `+s.ph(argN))
+		args = append(args, filter.Host)
+	}
+	if len(conditions) > 0 {
+		query += ` WHERE ` + conditions[0]
+		for _, c := range conditions[1:] {
+			query += ` AND ` + c
+		}
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing egress deny rules: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var rules []*core.EgressDenyRule
+	for rows.Next() {
+		r, err := scanEgressDenyRule(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning egress deny rule row: %w", err)
+		}
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
+}
+
+func (s *Store) DeleteEgressDenyRule(ctx context.Context, id string) error {
+	result, err := s.DB.ExecContext(ctx, "DELETE FROM egress_deny_rules WHERE id = "+s.ph(1), id)
+	if err != nil {
+		return fmt.Errorf("deleting egress deny rule: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("deleting egress deny rule: %w", err)
+	}
+	if n == 0 {
+		return core.ErrNotFound
+	}
+	return nil
+}

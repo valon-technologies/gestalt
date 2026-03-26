@@ -16,11 +16,22 @@ type EgressDeps struct {
 	CredentialGrants []config.EgressCredentialGrant
 }
 
-func newEgressDeps(cfg *config.Config, _ core.Datastore) EgressDeps {
-	var policy egress.PolicyEnforcer
+func newEgressDeps(cfg *config.Config, ds core.Datastore) EgressDeps {
+	staticEnforcer := buildStaticPolicyEnforcer(cfg.Egress)
 	defaultAction := egress.PolicyAction(cfg.Egress.DefaultAction)
-	if len(cfg.Egress.Policies) > 0 || defaultAction == egress.PolicyDeny {
-		policy = buildStaticPolicyEnforcer(cfg.Egress)
+	hasStaticRules := len(cfg.Egress.Policies) > 0 || defaultAction == egress.PolicyDeny
+
+	denyStore, hasDenyStore := ds.(core.EgressDenyRuleStore)
+
+	var policy egress.PolicyEnforcer
+	switch {
+	case hasDenyStore:
+		policy = &egress.CompositePolicyEnforcer{
+			Static: staticEnforcer,
+			Store:  &denyRuleStoreAdapter{store: denyStore},
+		}
+	case hasStaticRules:
+		policy = staticEnforcer
 	}
 
 	return EgressDeps{
@@ -30,6 +41,31 @@ func newEgressDeps(cfg *config.Config, _ core.Datastore) EgressDeps {
 		},
 		CredentialGrants: cfg.Egress.Credentials,
 	}
+}
+
+type denyRuleStoreAdapter struct {
+	store core.EgressDenyRuleStore
+}
+
+func (a *denyRuleStoreAdapter) LoadDenyRules(ctx context.Context) ([]egress.DenyRuleRecord, error) {
+	rules, err := a.store.ListEgressDenyRules(ctx, core.EgressDenyRuleFilter{})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]egress.DenyRuleRecord, len(rules))
+	for i, r := range rules {
+		out[i] = egress.DenyRuleRecord{
+			ID:          r.ID,
+			SubjectKind: r.SubjectKind,
+			SubjectID:   r.SubjectID,
+			Provider:    r.Provider,
+			Operation:   r.Operation,
+			Method:      r.Method,
+			Host:        r.Host,
+			PathPrefix:  r.PathPrefix,
+		}
+	}
+	return out, nil
 }
 
 func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider]) {

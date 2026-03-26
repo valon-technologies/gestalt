@@ -64,6 +64,7 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
+var _ core.EgressDenyRuleStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("pgx", dsn, encryptionKey, dialect{})
@@ -161,6 +162,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL
 		)`); err != nil {
 		return fmt.Errorf("creating egress_client_tokens table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS egress_deny_rules (
+			id TEXT PRIMARY KEY,
+			subject_kind TEXT NOT NULL DEFAULT '',
+			subject_id TEXT NOT NULL DEFAULT '',
+			provider TEXT NOT NULL DEFAULT '',
+			operation TEXT NOT NULL DEFAULT '',
+			method TEXT NOT NULL DEFAULT '',
+			host TEXT NOT NULL DEFAULT '',
+			path_prefix TEXT NOT NULL DEFAULT '',
+			created_by_id TEXT NOT NULL REFERENCES users(id),
+			description TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("creating egress_deny_rules table: %w", err)
 	}
 	return tx.Commit()
 }
