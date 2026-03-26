@@ -7,6 +7,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type roundTripProvider struct{}
@@ -172,4 +176,57 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
 
+}
+
+type manualOnlyProviderServer struct {
+	pluginapiv1.UnimplementedProviderPluginServer
+}
+
+func (s *manualOnlyProviderServer) StartProvider(_ context.Context, _ *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
+	return &pluginapiv1.StartProviderResponse{ProtocolVersion: pluginapiv1.CurrentProtocolVersion}, nil
+}
+
+func (s *manualOnlyProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
+	return &pluginapiv1.ProviderMetadata{
+		Name:               "manual-only",
+		DisplayName:        "Manual Only",
+		ConnectionMode:     pluginapiv1.ConnectionMode_CONNECTION_MODE_IDENTITY,
+		AuthTypes:          []string{"manual"},
+		MinProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+		MaxProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+	}, nil
+}
+
+func (s *manualOnlyProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
+	return &pluginapiv1.ListOperationsResponse{}, nil
+}
+
+func (s *manualOnlyProviderServer) Execute(_ context.Context, _ *pluginapiv1.ExecuteRequest) (*pluginapiv1.OperationResult, error) {
+	return &pluginapiv1.OperationResult{Status: 200, Body: `{}`}, nil
+}
+
+func (s *manualOnlyProviderServer) AuthorizationURL(_ context.Context, _ *pluginapiv1.AuthorizationURLRequest) (*pluginapiv1.AuthorizationURLResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not supported")
+}
+
+func TestRemoteProviderManualAuthOnly(t *testing.T) {
+	t.Parallel()
+
+	client := newProviderPluginClient(t, &manualOnlyProviderServer{})
+	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil, "")
+	if err != nil {
+		t.Fatalf("NewRemoteProvider: %v", err)
+	}
+
+	mp, ok := prov.(core.ManualProvider)
+	if !ok {
+		t.Fatal("expected remote provider to implement core.ManualProvider")
+	}
+	if !mp.SupportsManualAuth() {
+		t.Fatal("expected SupportsManualAuth() == true")
+	}
+
+	if _, ok := prov.(core.OAuthProvider); ok {
+		t.Fatal("expected remote provider to NOT implement core.OAuthProvider")
+	}
 }

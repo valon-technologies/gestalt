@@ -63,6 +63,10 @@ type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
+type ManualAuthProvider interface {
+	SupportsManualAuth() bool
+}
+
 type connectionParamsKey struct{}
 
 func WithConnectionParams(ctx context.Context, params map[string]string) context.Context {
