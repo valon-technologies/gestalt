@@ -88,7 +88,6 @@ func NewExecutableRuntime(
 	ctx context.Context,
 	name string,
 	cfg ExecConfig,
-	config map[string]any,
 	invoker invocation.Invoker,
 	lister invocation.CapabilityLister,
 ) (core.Runtime, error) {
@@ -104,7 +103,7 @@ func NewExecutableRuntime(
 		initialCaps = lister.ListCapabilities()
 	}
 
-	rt, err := NewRemoteRuntime(name, pluginapiv1.NewRuntimePluginClient(proc.conn), config, initialCaps)
+	rt, err := NewRemoteRuntime(name, pluginapiv1.NewRuntimePluginClient(proc.conn), cfg.Config, initialCaps)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err

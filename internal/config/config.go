@@ -536,6 +536,9 @@ func validate(cfg *Config) error {
 			if rt.Type != "" {
 				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
 			}
+			if rt.Config.Kind != 0 {
+				return fmt.Errorf("config validation: runtime %q uses plugin.config when plugin is set; top-level runtime config is not supported", name)
+			}
 			continue
 		}
 		if rt.Type == "" {

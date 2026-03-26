@@ -22,6 +22,17 @@ func coreConnectionModeToProto(mode ConnectionMode) pluginapiv1.ConnectionMode {
 	}
 }
 
+func protoPluginMode(mode pluginapiv1.PluginMode) string {
+	switch mode {
+	case pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY:
+		return PluginModeOverlay
+	case pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE:
+		return PluginModeReplace
+	default:
+		return ""
+	}
+}
+
 func mapFromStruct(s *structpb.Struct) map[string]any {
 	if s == nil {
 		return nil
@@ -77,15 +88,6 @@ func operationsToProto(ops []Operation) ([]*pluginapiv1.Operation, error) {
 		})
 	}
 	return out, nil
-}
-
-func pluginModeFromProto(mode pluginapiv1.PluginMode) string {
-	switch mode {
-	case pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY:
-		return PluginModeOverlay
-	default:
-		return PluginModeReplace
-	}
 }
 
 func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*pluginapiv1.ConnectionParamDef {

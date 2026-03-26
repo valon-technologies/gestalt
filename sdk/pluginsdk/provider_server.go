@@ -9,10 +9,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type StartableProvider interface {
-	Start(ctx context.Context, name string, config map[string]any, mode string) error
-}
-
 type ConfigSchemaProvider interface {
 	ConfigSchemaJSON() string
 }
@@ -31,15 +27,16 @@ func NewProviderServer(provider Provider) *ProviderServer {
 }
 
 func (s *ProviderServer) StartProvider(ctx context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
-	if sp, ok := s.provider.(StartableProvider); ok {
-		config := mapFromStruct(req.GetConfig())
-		mode := pluginModeFromProto(req.GetMode())
-		if err := sp.Start(ctx, req.GetName(), config, mode); err != nil {
-			return nil, status.Errorf(codes.Internal, "start provider: %v", err)
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if starter, ok := s.provider.(ProviderStarter); ok {
+		if err := starter.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig()), protoPluginMode(req.GetMode())); err != nil {
+			return nil, status.Errorf(codes.Unknown, "start provider: %v", err)
 		}
 	}
 	return &pluginapiv1.StartProviderResponse{
-		ProtocolVersion: req.GetProtocolVersion(),
+		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	}, nil
 }
 
@@ -48,12 +45,10 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 	if cpp, ok := s.provider.(ConnectionParamProvider); ok {
 		connParams = connectionParamDefsToProto(cpp.ConnectionParamDefs())
 	}
-
 	var configSchema string
 	if csp, ok := s.provider.(ConfigSchemaProvider); ok {
 		configSchema = csp.ConfigSchemaJSON()
 	}
-
 	minPV, maxPV := protocolVersionRange(s.provider)
 
 	return &pluginapiv1.ProviderMetadata{

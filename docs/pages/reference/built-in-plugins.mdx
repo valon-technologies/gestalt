@@ -51,15 +51,6 @@ All SQL-based datastores (postgres, mysql, oracle, sqlserver) share a common imp
 |---|---|
 | `echo` | Dev-only provider that echoes input parameters as JSON. Single `echo` operation. Enabled only when `dev_mode: true`. |
 
-## Named providers
-
-Named providers are registered as factories that users reference by name in their config. No upstreams needed.
-
-| Name | Notes |
-|---|---|
-| `jira` | Jira Cloud with OAuth2 and post-connect discovery for cloud site resolution. Supports multi-site selection. 7 operations covering projects, issues, comments, and transitions. |
-| `bigquery` | Google BigQuery with OAuth2. REST metadata operations (list_datasets, get_dataset, list_tables, get_table, list_routines). Supports overlay mode with `gestalt-plugin-bigquery` for SQL query execution. |
-
 ## What is not pluginized
 
 The HTTP route structure, middleware chain, and operation dispatch loop are fixed in the binary. There is no plugin point for injecting custom routes or middleware. Custom behavior at that layer means contributing to the core runtime.

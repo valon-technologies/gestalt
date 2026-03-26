@@ -1,6 +1,8 @@
 package pluginsdk
 
-import "context"
+import (
+	"context"
+)
 
 type ConnectionMode string
 
@@ -23,6 +25,10 @@ type Provider interface {
 	ConnectionMode() ConnectionMode
 	ListOperations() []Operation
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
+}
+
+type ProviderStarter interface {
+	Start(ctx context.Context, name string, config map[string]any, mode string) error
 }
 
 type Operation struct {

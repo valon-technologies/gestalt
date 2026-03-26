@@ -9,34 +9,6 @@ type CredentialResolver interface {
 	ResolveCredential(ctx context.Context, subject Subject, target Target) (CredentialMaterialization, error)
 }
 
-// CredentialSource resolves outbound credentials for a given subject and target.
-// Implementations can resolve from provider-backed tokens, vault backends, or
-// other future credential stores.
-type CredentialSource = CredentialResolver
-
-// CredentialSourceChain evaluates sources in order and returns the first
-// non-empty materialization.
-type CredentialSourceChain struct {
-	Sources []CredentialSource
-}
-
-func (c CredentialSourceChain) ResolveCredential(ctx context.Context, subject Subject, target Target) (CredentialMaterialization, error) {
-	for i := range c.Sources {
-		source := c.Sources[i]
-		if source == nil {
-			continue
-		}
-		credential, err := source.ResolveCredential(ctx, subject, target)
-		if err != nil {
-			return CredentialMaterialization{}, err
-		}
-		if hasCredentialMaterialization(credential) {
-			return credential, nil
-		}
-	}
-	return CredentialMaterialization{}, nil
-}
-
 type ProviderTokenResolver interface {
 	ResolveProviderToken(ctx context.Context, subject Subject, provider, instance string) (string, error)
 }
