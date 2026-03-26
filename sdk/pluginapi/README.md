@@ -40,20 +40,16 @@ sdk/pluginapi/v0.1.0
 sdk/pluginsdk/v0.1.0
 ```
 
-When cutting a release:
+When cutting a release, use the automated script:
 
-1. Tag the pluginapi module first since pluginsdk depends on it:
-   ```sh
-   git tag sdk/pluginapi/v0.X.Y
-   git push origin sdk/pluginapi/v0.X.Y
-   ```
-2. Update the `pluginsdk/go.mod` require for pluginapi to the new tag, then tag:
-   ```sh
-   git tag sdk/pluginsdk/v0.X.Y
-   git push origin sdk/pluginsdk/v0.X.Y
-   ```
-3. Run `GOPROXY=proxy.golang.org go list -m` for both modules to warm the proxy
-   cache.
+```sh
+./scripts/release-sdk.sh 0.1.0        # release both modules
+./scripts/release-sdk.sh 0.1.0 --dry-run  # preview without executing
+```
+
+The script tags `pluginapi` first, creates a temporary git worktree to pin
+`pluginsdk` to the released `pluginapi` version, tags `pluginsdk`, pushes
+both tags, and cleans up. Main branch is never modified.
 
 The root module and example modules use `replace` directives to point at the
 local source tree, so they always build against HEAD regardless of published
