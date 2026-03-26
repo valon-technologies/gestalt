@@ -69,16 +69,11 @@ func (a *denyRuleStoreAdapter) LoadDenyRules(ctx context.Context) ([]egress.Deny
 }
 
 func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore, sm core.SecretManager) {
-	var sources []egress.CredentialResolver
+	var loaders []egress.CredentialGrantLoader
 
 	// Saved grants first: control-plane overlay takes precedence over config defaults.
 	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
-		sources = append(sources, &egress.SavedGrantCredentialResolver{
-			Store:          &credentialGrantStoreAdapter{store: grantStore},
-			TokenResolver:  &brokerTokenResolver{broker: broker},
-			Materializer:   &registryMaterializer{providers: providers},
-			SecretResolver: sm,
-		})
+		loaders = append(loaders, &credentialGrantStoreLoader{store: grantStore})
 	}
 
 	if len(deps.CredentialGrants) > 0 {
@@ -100,29 +95,26 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 				},
 			}
 		}
-		sources = append(sources, &egress.ProviderCredentialResolver{
-			TokenResolver:  &brokerTokenResolver{broker: broker},
-			Materializer:   &registryMaterializer{providers: providers},
-			SecretResolver: sm,
-			Grants:         grants,
-		})
+		loaders = append(loaders, &egress.StaticCredentialGrantLoader{Grants: grants})
 	}
 
-	switch len(sources) {
-	case 0:
+	if len(loaders) == 0 {
 		return
-	case 1:
-		deps.Resolver.Credentials = sources[0]
-	default:
-		deps.Resolver.Credentials = &egress.CredentialSourceChain{Sources: sources}
+	}
+
+	deps.Resolver.Credentials = &egress.CredentialGrantResolver{
+		Loaders:        loaders,
+		TokenResolver:  &brokerTokenResolver{broker: broker},
+		Materializer:   &registryMaterializer{providers: providers},
+		SecretResolver: sm,
 	}
 }
 
-type credentialGrantStoreAdapter struct {
+type credentialGrantStoreLoader struct {
 	store core.EgressCredentialGrantStore
 }
 
-func (a *credentialGrantStoreAdapter) ListCandidateCredentialGrants(ctx context.Context, _ egress.Subject, _ egress.Target) ([]egress.CredentialGrant, error) {
+func (a *credentialGrantStoreLoader) LoadCredentialGrants(ctx context.Context) ([]egress.CredentialGrant, error) {
 	grants, err := a.store.ListEgressCredentialGrants(ctx, core.EgressCredentialGrantFilter{})
 	if err != nil {
 		return nil, err
