@@ -7,10 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
+	sdkpluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 )
 
 type roundTripProvider struct{}
@@ -98,6 +95,26 @@ func (p *roundTripProvider) AuthTypes() []string {
 	return []string{"oauth", "manual"}
 }
 
+type manualOnlySDKProvider struct{}
+
+func (p *manualOnlySDKProvider) Name() string { return "manual-only" }
+
+func (p *manualOnlySDKProvider) DisplayName() string { return "Manual Only" }
+
+func (p *manualOnlySDKProvider) Description() string { return "manual auth provider" }
+
+func (p *manualOnlySDKProvider) ConnectionMode() sdkpluginsdk.ConnectionMode {
+	return sdkpluginsdk.ConnectionModeIdentity
+}
+
+func (p *manualOnlySDKProvider) ListOperations() []sdkpluginsdk.Operation { return nil }
+
+func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkpluginsdk.OperationResult, error) {
+	return &sdkpluginsdk.OperationResult{Status: 200, Body: `{}`}, nil
+}
+
+func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
+
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -178,41 +195,10 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 }
 
-type manualOnlyProviderServer struct {
-	pluginapiv1.UnimplementedProviderPluginServer
-}
-
-func (s *manualOnlyProviderServer) StartProvider(_ context.Context, _ *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
-	return &pluginapiv1.StartProviderResponse{ProtocolVersion: pluginapiv1.CurrentProtocolVersion}, nil
-}
-
-func (s *manualOnlyProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
-	return &pluginapiv1.ProviderMetadata{
-		Name:               "manual-only",
-		DisplayName:        "Manual Only",
-		ConnectionMode:     pluginapiv1.ConnectionMode_CONNECTION_MODE_IDENTITY,
-		AuthTypes:          []string{"manual"},
-		MinProtocolVersion: pluginapiv1.CurrentProtocolVersion,
-		MaxProtocolVersion: pluginapiv1.CurrentProtocolVersion,
-	}, nil
-}
-
-func (s *manualOnlyProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
-	return &pluginapiv1.ListOperationsResponse{}, nil
-}
-
-func (s *manualOnlyProviderServer) Execute(_ context.Context, _ *pluginapiv1.ExecuteRequest) (*pluginapiv1.OperationResult, error) {
-	return &pluginapiv1.OperationResult{Status: 200, Body: `{}`}, nil
-}
-
-func (s *manualOnlyProviderServer) AuthorizationURL(_ context.Context, _ *pluginapiv1.AuthorizationURLRequest) (*pluginapiv1.AuthorizationURLResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not supported")
-}
-
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &manualOnlyProviderServer{})
+	client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
 	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil, "")
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
