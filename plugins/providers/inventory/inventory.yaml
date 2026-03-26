@@ -269,7 +269,6 @@ providers:
       - get_event
       - list_calendars
       - list_events
-      - quick_add_event
       - update_event
 
   google_docs:

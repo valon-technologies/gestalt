@@ -1,0 +1,125 @@
+provider: google_drive
+display_name: Google Drive
+description: Google Drive file and permission management
+connection_mode: user
+base_url: "https://www.googleapis.com/drive/v3"
+
+auth:
+  type: oauth2
+  authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scopes:
+    - https://www.googleapis.com/auth/drive
+  authorization_params:
+    access_type: offline
+    prompt: consent
+
+operations:
+  list_files:
+    description: List and search files in Google Drive
+    method: GET
+    path: /files
+    parameters:
+      - {name: q, type: string, description: Search query (Drive query syntax)}
+      - {name: pageSize, type: integer, description: Number of files per page}
+      - {name: pageToken, type: string, description: Token for pagination}
+      - {name: orderBy, type: string, description: "Sort order (e.g. modifiedTime desc)"}
+      - {name: fields, type: string, description: Fields to include in response}
+      - {name: spaces, type: string, description: "Spaces to search (drive, appDataFolder)"}
+
+  get_file:
+    description: Get file metadata
+    method: GET
+    path: "/files/{fileId}"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: fields, type: string, description: Fields to include in response}
+
+  download_file:
+    description: Download file content
+    method: GET
+    path: "/files/{fileId}?alt=media"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+
+  export_file:
+    description: Export a Google Workspace document to a different format
+    method: GET
+    path: "/files/{fileId}/export"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: mimeType, type: string, required: true, description: Target MIME type for export}
+
+  create_file:
+    description: Create a new file or folder
+    method: POST
+    path: /files
+    parameters:
+      - {name: name, type: string, required: true, description: File name}
+      - {name: mimeType, type: string, description: MIME type}
+      - {name: parents, type: array, description: List of parent folder IDs}
+      - {name: description, type: string, description: File description}
+
+  update_file:
+    description: Update file metadata
+    method: PATCH
+    path: "/files/{fileId}"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: name, type: string, description: New name}
+      - {name: description, type: string, description: New description}
+
+  delete_file:
+    description: Permanently delete a file
+    method: DELETE
+    path: "/files/{fileId}"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+
+  copy_file:
+    description: Copy a file
+    method: POST
+    path: "/files/{fileId}/copy"
+    parameters:
+      - {name: fileId, type: string, required: true, description: Source file ID}
+      - {name: name, type: string, description: Name for the copy}
+      - {name: parents, type: array, description: Parent folder IDs for the copy}
+
+  list_permissions:
+    description: List permissions for a file
+    method: GET
+    path: "/files/{fileId}/permissions"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: pageSize, type: integer, description: Number of permissions per page}
+      - {name: pageToken, type: string, description: Token for pagination}
+
+  create_permission:
+    description: Create a permission to share a file
+    method: POST
+    path: "/files/{fileId}/permissions"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: type, type: string, required: true, description: "Permission type: user, group, domain, or anyone"}
+      - {name: role, type: string, required: true, description: "Permission role: reader, commenter, writer, etc."}
+      - {name: emailAddress, type: string, description: Email for user/group type}
+      - {name: domain, type: string, description: Domain for domain type}
+      - {name: sendNotificationEmail, type: boolean, description: Whether to send notification email}
+      - {name: emailMessage, type: string, description: Custom notification message}
+
+  update_permission:
+    description: Update a permission on a file
+    method: PATCH
+    path: "/files/{fileId}/permissions/{permissionId}"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: permissionId, type: string, required: true, description: Permission ID}
+      - {name: role, type: string, required: true, description: New role}
+
+  delete_permission:
+    description: Delete a permission to revoke access
+    method: DELETE
+    path: "/files/{fileId}/permissions/{permissionId}"
+    parameters:
+      - {name: fileId, type: string, required: true, description: File ID}
+      - {name: permissionId, type: string, required: true, description: Permission ID}
