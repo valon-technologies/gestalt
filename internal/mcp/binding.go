@@ -39,7 +39,7 @@ type Config struct {
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
-	IncludeHTTP      map[string]bool
+	IncludeREST      map[string]bool
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
@@ -252,7 +252,7 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 		if op.Visible != nil && !*op.Visible {
 			continue
 		}
-		if cfg.IncludeHTTP != nil && op.Transport == catalog.TransportHTTP && !cfg.IncludeHTTP[provName] {
+		if cfg.IncludeREST != nil && op.Transport == catalog.TransportREST && !cfg.IncludeREST[provName] {
 			continue
 		}
 
@@ -273,7 +273,7 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 		}
 
 		var handler mcpserver.ToolHandlerFunc
-		if isDirect && op.Transport != catalog.TransportHTTP && op.Transport != catalog.TransportPlugin {
+		if isDirect && op.Transport != catalog.TransportREST && op.Transport != catalog.TransportPlugin {
 			handler = makeDirectHandler(cfg, provName, op.ID, caller)
 		} else {
 			handler = makeHandler(cfg.Invoker, provName, op.ID)

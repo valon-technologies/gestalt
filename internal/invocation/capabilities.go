@@ -39,7 +39,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
 		transport := strings.TrimSpace(op.Transport)
 		if transport == "" && method != "" {
-			transport = catalog.TransportHTTP
+			transport = catalog.TransportREST
 		}
 
 		caps = append(caps, core.Capability{
@@ -72,7 +72,7 @@ func capabilitiesFromOperations(name string, ops []core.Operation) []core.Capabi
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
 		transport := ""
 		if method != "" {
-			transport = catalog.TransportHTTP
+			transport = catalog.TransportREST
 		}
 
 		caps = append(caps, core.Capability{

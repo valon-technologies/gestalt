@@ -1016,12 +1016,12 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 }
 
-func TestNewServer_IncludeHTTPFiltering(t *testing.T) {
+func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name        string
-		includeHTTP bool
+		includeREST bool
 		wantCount   int
 	}{
 		{"excluded", false, 1},
@@ -1035,7 +1035,7 @@ func TestNewServer_IncludeHTTPFiltering(t *testing.T) {
 			cat := &catalog.Catalog{
 				Name: "acme",
 				Operations: []catalog.CatalogOperation{
-					{ID: "api_op", Method: "GET", Path: "/api", Transport: catalog.TransportHTTP},
+					{ID: "api_op", Method: "GET", Path: "/api", Transport: catalog.TransportREST},
 					{ID: "mcp_op", Description: "passthrough", Transport: catalog.TransportMCPPassthrough},
 				},
 			}
@@ -1053,7 +1053,7 @@ func TestNewServer_IncludeHTTPFiltering(t *testing.T) {
 			srv := gestaltmcp.NewServer(gestaltmcp.Config{
 				Invoker:     broker,
 				Providers:   providers,
-				IncludeHTTP: map[string]bool{"acme": tc.includeHTTP},
+				IncludeREST: map[string]bool{"acme": tc.includeREST},
 			})
 
 			tools := srv.ListTools()

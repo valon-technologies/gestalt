@@ -72,7 +72,7 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 		DisplayName: "Round Trip",
 		Description: "test provider",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportHTTP},
+			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportREST},
 		},
 	}
 }
@@ -83,7 +83,7 @@ func (p *roundTripProvider) CatalogForRequest(_ context.Context, token string) (
 		DisplayName: token,
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportHTTP},
+			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportREST},
 		},
 	}, nil
 }

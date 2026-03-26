@@ -10,7 +10,7 @@ import (
 
 const (
 	TransportMCPPassthrough = "mcp-passthrough"
-	TransportHTTP           = "http"
+	TransportREST           = "rest"
 	TransportPlugin         = "plugin"
 )
 
