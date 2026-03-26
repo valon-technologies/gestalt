@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/egress"
 )
 
 func (s *Server) egressCredentialGrantStore() (core.EgressCredentialGrantStore, error) {
@@ -87,9 +88,18 @@ func (s *Server) createEgressCredentialGrant(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if req.Provider == "" && req.Host == "" && req.SubjectKind == "" && req.SubjectID == "" &&
-		req.Operation == "" && req.Method == "" && req.PathPrefix == "" && req.Instance == "" {
-		writeError(w, http.StatusBadRequest, "at least one match criterion is required")
+	if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
+		SubjectKind: req.SubjectKind,
+		SubjectID:   req.SubjectID,
+		Provider:    req.Provider,
+		Instance:    req.Instance,
+		Operation:   req.Operation,
+		Method:      req.Method,
+		Host:        req.Host,
+		PathPrefix:  req.PathPrefix,
+		AuthStyle:   req.AuthStyle,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

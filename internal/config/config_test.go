@@ -757,6 +757,38 @@ egress:
 `,
 		},
 		{
+			name: "egress credential with no match criterion rejected",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - secret_ref: vendor-key
+      auth_style: bearer
+`,
+			wantErr: true,
+		},
+		{
+			name: "egress credential with only instance rejected",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+egress:
+  credentials:
+    - instance: vendor-prod
+      secret_ref: vendor-key
+`,
+			wantErr: true,
+		},
+		{
 			name: "egress credential invalid auth_style rejected",
 			yaml: `
 auth:
