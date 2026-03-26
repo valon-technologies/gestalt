@@ -77,7 +77,7 @@ if [ "$DRY_RUN" = false ]; then
     cd "$WORK/sdk/pluginsdk"
     go mod edit -dropreplace="$API_MODULE"
     go mod edit -require="$API_MODULE@v$VERSION"
-    go mod tidy
+    GOPRIVATE="$REPO_MODULE" GONOSUMCHECK="$REPO_MODULE/*" go mod tidy
     cd "$WORK"
     git add sdk/pluginsdk/go.mod sdk/pluginsdk/go.sum
     git commit -m "sdk/pluginsdk: pin pluginapi v$VERSION for release"
@@ -85,7 +85,7 @@ else
     echo "+ cd $WORK/sdk/pluginsdk"
     echo "+ go mod edit -dropreplace=$API_MODULE"
     echo "+ go mod edit -require=$API_MODULE@v$VERSION"
-    echo "+ go mod tidy"
+    echo "+ GOPRIVATE=$REPO_MODULE GONOSUMCHECK=$REPO_MODULE/* go mod tidy"
     echo "+ git add sdk/pluginsdk/go.mod sdk/pluginsdk/go.sum"
     echo "+ git commit -m 'sdk/pluginsdk: pin pluginapi v$VERSION for release'"
 fi
