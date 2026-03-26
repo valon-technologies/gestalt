@@ -107,6 +107,8 @@ type Base struct {
 	HTTPClient         *http.Client
 	Pagination         map[string]apiexec.PaginationConfig
 
+	DefaultParams map[string]any
+
 	TokenParser    func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse  apiexec.ResponseChecker
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)

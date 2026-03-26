@@ -26,6 +26,8 @@ type Definition struct {
 
 	PostConnectDiscovery *PostConnectDiscoveryDef `yaml:"post_connect_discovery" json:"post_connect_discovery,omitempty"`
 
+	DefaultParams map[string]any `yaml:"default_params" json:"default_params"`
+
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
 }
