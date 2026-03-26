@@ -70,6 +70,19 @@ func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps 
 }
 ```
 
+## Provider metadata surfaces
+
+Connection metadata should be exposed through `core.ConnectionSpecProvider`. That is the preferred seam for auth types, manual-auth support, connection params, and post-connect discovery metadata. Providers built on `core/integration.Base` already get this surface.
+
+The older metadata interfaces remain available for compatibility while the host-side migration is still in flight:
+
+- `core.ManualProvider`
+- `core.AuthTypeLister`
+- `core.ConnectionParamProvider`
+- `core.DiscoveryConfigProvider`
+
+Treat those legacy interfaces as transitional shims. New provider code should prefer `ConnectionSpecProvider`, even if it also keeps the legacy methods for compatibility.
+
 ### `factory_test.go`
 
 Use the shared `providertest` harness and validate against the `inventory` contract:

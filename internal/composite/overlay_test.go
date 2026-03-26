@@ -67,6 +67,34 @@ func (s *stubConnectionParamProvider) ConnectionParamDefs() map[string]core.Conn
 	return s.defs
 }
 
+type stubConnectionSpecProvider struct {
+	stubProvider
+	spec core.ConnectionSpec
+}
+
+func (s *stubConnectionSpecProvider) ConnectionSpec() core.ConnectionSpec {
+	return s.spec
+}
+
+type stubDiscoveryConfigProvider struct {
+	stubProvider
+	cfg *core.DiscoveryConfig
+}
+
+func (s *stubDiscoveryConfigProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	if s.cfg == nil {
+		return nil
+	}
+	clone := *s.cfg
+	if s.cfg.MetadataMapping != nil {
+		clone.MetadataMapping = make(map[string]string, len(s.cfg.MetadataMapping))
+		for key, value := range s.cfg.MetadataMapping {
+			clone.MetadataMapping[key] = value
+		}
+	}
+	return &clone
+}
+
 func TestOverlayExecuteRouting(t *testing.T) {
 	t.Parallel()
 
@@ -290,6 +318,73 @@ func TestOverlayConnectionParamDefs(t *testing.T) {
 	got := p.ConnectionParamDefs()
 	if len(got) != 1 || got["project_id"].Description != "Project ID" {
 		t.Errorf("ConnectionParamDefs = %v", got)
+	}
+}
+
+func TestOverlayConnectionSpecDelegatesToBase(t *testing.T) {
+	t.Parallel()
+
+	base := &stubConnectionSpecProvider{
+		stubProvider: stubProvider{name: "base", operations: []core.Operation{{Name: "op1"}}},
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"manual"},
+			ConnectionParams: map[string]core.ConnectionParamDef{
+				"project_id": {Required: true, Description: "Project ID"},
+			},
+			Discovery: &core.DiscoveryConfig{
+				URL:             "https://example.com/discover",
+				MetadataMapping: map[string]string{"project_id": "id"},
+			},
+		},
+	}
+	overlay := &stubProvider{name: "overlay", operations: []core.Operation{{Name: "op2"}}}
+
+	prov := NewOverlay("test", base, overlay)
+	csp, ok := prov.(core.ConnectionSpecProvider)
+	if !ok {
+		t.Fatal("expected overlay provider to implement ConnectionSpecProvider")
+	}
+
+	got := csp.ConnectionSpec()
+	if got.Discovery == nil || got.Discovery.URL != "https://example.com/discover" {
+		t.Fatalf("ConnectionSpec().Discovery = %+v", got.Discovery)
+	}
+
+	got.AuthTypes[0] = "oauth"
+	got.ConnectionParams["project_id"] = core.ConnectionParamDef{Description: "mutated"}
+	got.Discovery.URL = "https://mutated.invalid"
+	got.Discovery.MetadataMapping["project_id"] = "mutated"
+
+	if base.spec.AuthTypes[0] != "manual" {
+		t.Fatalf("base auth types were mutated: %+v", base.spec.AuthTypes)
+	}
+	if base.spec.ConnectionParams["project_id"].Description != "Project ID" {
+		t.Fatalf("base connection params were mutated: %+v", base.spec.ConnectionParams["project_id"])
+	}
+	if base.spec.Discovery.URL != "https://example.com/discover" {
+		t.Fatalf("base discovery URL was mutated: %q", base.spec.Discovery.URL)
+	}
+	if base.spec.Discovery.MetadataMapping["project_id"] != "id" {
+		t.Fatalf("base discovery metadata was mutated: %+v", base.spec.Discovery.MetadataMapping)
+	}
+}
+
+func TestOverlayDiscoveryConfigDelegatesToBase(t *testing.T) {
+	t.Parallel()
+
+	base := &stubDiscoveryConfigProvider{
+		stubProvider: stubProvider{name: "base", operations: []core.Operation{{Name: "op1"}}},
+		cfg: &core.DiscoveryConfig{
+			URL:             "https://example.com/discover",
+			MetadataMapping: map[string]string{"project_id": "id"},
+		},
+	}
+	overlay := &stubProvider{name: "overlay", operations: []core.Operation{{Name: "op2"}}}
+
+	p := NewOverlay("test", base, overlay).(*OverlayProvider)
+	got := p.DiscoveryConfig()
+	if got == nil || got.URL != "https://example.com/discover" {
+		t.Fatalf("DiscoveryConfig() = %+v", got)
 	}
 }
 
