@@ -1,0 +1,83 @@
+provider: intercom
+display_name: Intercom
+description: Intercom customer messaging platform
+connection_mode: user
+base_url: "https://api.intercom.io"
+
+headers:
+  Intercom-Version: "2.11"
+
+auth:
+  type: oauth2
+  authorization_url: https://app.intercom.com/oauth
+  token_url: https://api.intercom.io/auth/eagle/token
+
+operations:
+  list_contacts:
+    description: List Intercom contacts with cursor-based pagination
+    method: GET
+    path: /contacts
+    parameters:
+      - {name: starting_after, type: string, description: Cursor for pagination}
+      - {name: per_page, type: integer, description: Results per page (default 50, max 150)}
+  get_contact:
+    description: Get details of a specific Intercom contact
+    method: GET
+    path: "/contacts/{contact_id}"
+    parameters:
+      - {name: contact_id, type: string, required: true, description: Contact ID}
+  create_contact:
+    description: Create a new Intercom contact (user or lead)
+    method: POST
+    path: /contacts
+    parameters:
+      - {name: role, type: string, required: true, description: "Contact role: 'user' or 'lead'"}
+      - {name: email, type: string, description: Contact email address}
+      - {name: external_id, type: string, description: External ID for the contact}
+      - {name: name, type: string, description: Contact full name}
+      - {name: phone, type: string, description: Contact phone number}
+  list_companies:
+    description: List Intercom companies with pagination
+    method: GET
+    path: /companies
+    parameters:
+      - {name: page, type: integer, description: Page number (default 1)}
+      - {name: per_page, type: integer, description: Results per page (default 50, max 60)}
+      - {name: order, type: string, description: "Sort order: 'asc' or 'desc'"}
+  get_company:
+    description: Get details of a specific Intercom company
+    method: GET
+    path: "/companies/{company_id}"
+    parameters:
+      - {name: company_id, type: string, required: true, description: Company ID}
+  list_conversations:
+    description: List Intercom conversations with cursor-based pagination
+    method: GET
+    path: /conversations
+    parameters:
+      - {name: starting_after, type: string, description: Cursor for pagination}
+      - {name: per_page, type: integer, description: Results per page (default 20)}
+  get_conversation:
+    description: Get an Intercom conversation with its message parts
+    method: GET
+    path: "/conversations/{conversation_id}"
+    parameters:
+      - {name: conversation_id, type: string, required: true, description: Conversation ID}
+  search_conversations:
+    description: Search Intercom conversations by field queries
+    method: POST
+    path: /conversations/search
+    parameters:
+      - {name: query, type: object, required: true, description: "Query object with field, operator, and value keys"}
+      - {name: pagination, type: object, description: "Pagination object with starting_after and per_page keys"}
+  list_tags:
+    description: List all Intercom tags
+    method: GET
+    path: /tags
+  create_note:
+    description: Create a note on an Intercom contact
+    method: POST
+    path: "/contacts/{contact_id}/notes"
+    parameters:
+      - {name: contact_id, type: string, required: true, description: Contact ID to add the note to}
+      - {name: body, type: string, required: true, description: Note body (supports HTML)}

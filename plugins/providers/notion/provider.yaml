@@ -1,0 +1,153 @@
+provider: notion
+display_name: Notion
+description: Notion workspace and knowledge management
+connection_mode: user
+base_url: "https://api.notion.com/v1"
+
+headers:
+  Notion-Version: "2022-06-28"
+
+auth:
+  type: oauth2
+  authorization_url: https://api.notion.com/v1/oauth/authorize
+  token_url: https://api.notion.com/v1/oauth/token
+  client_auth: header
+  token_exchange: json
+  scopes: []
+  authorization_params:
+    owner: user
+
+operations:
+  search:
+    description: Search Notion workspace for pages and databases
+    method: POST
+    path: /search
+    parameters:
+      - {name: query, type: string, description: Search query}
+      - {name: filter, type: object, description: "Filter by object type, e.g. {property: 'object', value: 'page'}"}
+      - {name: start_cursor, type: string, description: Pagination cursor}
+      - {name: page_size, type: integer, description: Results per page (default 100)}
+  get_page:
+    description: Get a Notion page by ID
+    method: GET
+    path: "/pages/{page_id}"
+    parameters:
+      - {name: page_id, type: string, required: true, description: Page ID}
+  get_page_content:
+    description: Get block content from a Notion page
+    method: GET
+    path: "/blocks/{page_id}/children"
+    parameters:
+      - {name: page_id, type: string, required: true, description: Page ID}
+      - {name: start_cursor, type: string, description: Pagination cursor}
+      - {name: page_size, type: integer, description: Results per page (default 100)}
+  query_database:
+    description: Query a Notion database with optional filters and sorts
+    method: POST
+    path: "/databases/{database_id}/query"
+    parameters:
+      - {name: database_id, type: string, required: true, description: Database ID}
+      - {name: filter, type: object, description: Filter object}
+      - {name: sorts, type: array, description: Sort array}
+      - {name: start_cursor, type: string, description: Pagination cursor}
+      - {name: page_size, type: integer, description: Results per page (default and max 100)}
+  get_database:
+    description: Get a Notion database schema
+    method: GET
+    path: "/databases/{database_id}"
+    parameters:
+      - {name: database_id, type: string, required: true, description: Database ID}
+  create_page:
+    description: Create a new Notion page in a database or as a child of another page
+    method: POST
+    path: /pages
+    parameters:
+      - {name: parent, type: object, required: true, description: Parent object (database_id or page_id)}
+      - {name: properties, type: object, required: true, description: Page properties}
+      - {name: children, type: array, description: Block children}
+  update_page:
+    description: Update an existing Notion page's properties, icon, or cover
+    method: PATCH
+    path: "/pages/{page_id}"
+    parameters:
+      - {name: page_id, type: string, required: true, description: Page ID}
+      - {name: properties, type: object, description: Properties to update}
+      - {name: archived, type: boolean, description: Set to true to archive the page}
+      - {name: icon, type: object, description: Page icon (emoji or external URL)}
+      - {name: cover, type: object, description: Page cover image (external URL)}
+  get_block:
+    description: Get a single Notion block by ID
+    method: GET
+    path: "/blocks/{block_id}"
+    parameters:
+      - {name: block_id, type: string, required: true, description: Block ID}
+  append_blocks:
+    description: Append child blocks to a page or existing block
+    method: PATCH
+    path: "/blocks/{block_id}/children"
+    parameters:
+      - {name: block_id, type: string, required: true, description: Parent block or page ID}
+      - {name: children, type: array, required: true, description: Array of block objects to append}
+      - {name: after, type: string, description: Block ID to insert children after}
+  update_block:
+    description: Update a Notion block's content
+    method: PATCH
+    path: "/blocks/{block_id}"
+    parameters:
+      - {name: block_id, type: string, required: true, description: Block ID}
+      - {name: block_content, type: object, required: true, description: Block type-specific content to update}
+      - {name: archived, type: boolean, description: Set to true to archive the block}
+  delete_block:
+    description: Delete (archive) a Notion block
+    method: DELETE
+    path: "/blocks/{block_id}"
+    parameters:
+      - {name: block_id, type: string, required: true, description: Block ID to delete}
+  create_database:
+    description: Create a new Notion database
+    method: POST
+    path: /databases
+    parameters:
+      - {name: parent, type: object, required: true, description: Parent object (page_id or block_id)}
+      - {name: title, type: array, required: true, description: Database title as rich text array}
+      - {name: properties, type: object, required: true, description: Property schema defining database columns}
+      - {name: icon, type: object, description: Database icon (emoji or external URL)}
+      - {name: cover, type: object, description: Database cover image (external URL)}
+  update_database:
+    description: Update a Notion database's title, properties, icon, or cover
+    method: PATCH
+    path: "/databases/{database_id}"
+    parameters:
+      - {name: database_id, type: string, required: true, description: Database ID}
+      - {name: title, type: array, description: New database title as rich text array}
+      - {name: properties, type: object, description: Property schema updates}
+      - {name: icon, type: object, description: Database icon (emoji or external URL)}
+      - {name: cover, type: object, description: Database cover image (external URL)}
+  list_users:
+    description: List all users in the Notion workspace
+    method: GET
+    path: /users
+    parameters:
+      - {name: start_cursor, type: string, description: Pagination cursor}
+      - {name: page_size, type: integer, description: Results per page (default 100)}
+  get_user:
+    description: Get a Notion user by ID
+    method: GET
+    path: "/users/{user_id}"
+    parameters:
+      - {name: user_id, type: string, required: true, description: User ID}
+  create_comment:
+    description: Create a comment on a Notion page or as a reply to a discussion
+    method: POST
+    path: /comments
+    parameters:
+      - {name: parent, type: object, required: true, description: Parent object (page_id or discussion_id)}
+      - {name: rich_text, type: array, required: true, description: Comment content as rich text array}
+  list_comments:
+    description: List comments on a Notion block or page
+    method: GET
+    path: /comments
+    parameters:
+      - {name: block_id, type: string, required: true, description: Block or page ID to get comments for}
+      - {name: start_cursor, type: string, description: Pagination cursor}
+      - {name: page_size, type: integer, description: Results per page (default 100)}
