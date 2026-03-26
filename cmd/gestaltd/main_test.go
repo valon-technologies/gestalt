@@ -39,6 +39,9 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd prepare") {
 		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
 	}
+	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
+		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
+	}
 	if !strings.Contains(string(out), "gestaltd serve") {
 		t.Fatalf("expected usage output containing 'gestaltd serve', got: %s", out)
 	}
@@ -68,6 +71,18 @@ func TestGestaltdPrepareHelpExitsCleanly(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "gestaltd prepare") {
 		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
+	}
+}
+
+func TestGestaltdPluginHelpExitsCleanly(t *testing.T) {
+	t.Parallel()
+	cmd := exec.Command("go", "run", ".", "plugin", "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected exit 0 for 'plugin --help', got error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
+		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
 	}
 }
 
