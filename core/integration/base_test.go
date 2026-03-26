@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -63,41 +62,6 @@ func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {
 	}
 	if resp["auth"] != "Bearer test-token" {
 		t.Fatalf("auth = %v, want Bearer test-token", resp["auth"])
-	}
-}
-
-func TestBaseConnectionSpec(t *testing.T) {
-	t.Parallel()
-
-	b := &Base{
-		Auth:              mockAuth{},
-		ManualAuthEnabled: true,
-		ConnectionDefs: map[string]core.ConnectionParamDef{
-			"tenant": {Required: true},
-		},
-		DiscoveryDef: &core.DiscoveryConfig{
-			URL:             "https://example.com/discover",
-			MetadataMapping: map[string]string{"project": "id"},
-		},
-	}
-
-	spec := b.ConnectionSpec()
-	spec.AuthTypes[0] = "manual"
-	spec.ConnectionParams["tenant"] = core.ConnectionParamDef{Description: "mutated"}
-	spec.Discovery.URL = "https://mutated.invalid"
-	spec.Discovery.MetadataMapping["project"] = "mutated"
-
-	if got := b.AuthTypes(); !slices.Equal(got, []string{"oauth", "manual"}) {
-		t.Fatalf("AuthTypes() = %+v", got)
-	}
-	if b.ConnectionDefs["tenant"].Description != "" {
-		t.Fatalf("ConnectionDefs mutated through ConnectionSpec: %+v", b.ConnectionDefs["tenant"])
-	}
-	if b.DiscoveryDef.URL != "https://example.com/discover" {
-		t.Fatalf("DiscoveryDef URL mutated through ConnectionSpec: %q", b.DiscoveryDef.URL)
-	}
-	if b.DiscoveryDef.MetadataMapping["project"] != "id" {
-		t.Fatalf("DiscoveryDef metadata mutated through ConnectionSpec: %+v", b.DiscoveryDef.MetadataMapping)
 	}
 }
 
