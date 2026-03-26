@@ -427,6 +427,100 @@ integrations:
 	}
 }
 
+func TestPluginRefValidation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{
+			name: "integration plugin ref is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      ref: acme/provider@0.1.0
+`,
+		},
+		{
+			name: "integration plugin command and ref are mutually exclusive",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      command: /tmp/plugin
+      ref: acme/provider@0.1.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "integration plugin args require command",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  external:
+    plugin:
+      ref: acme/provider@0.1.0
+      args:
+        - --verbose
+`,
+			wantErr: true,
+		},
+		{
+			name: "runtime plugin ref is valid",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+runtimes:
+  worker:
+    plugin:
+      ref: acme/runtime@0.1.0
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Load: expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+		})
+	}
+}
+
 func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
