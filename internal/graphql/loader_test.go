@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -16,64 +17,78 @@ func newTestSchema() Schema {
 		Types: []FullType{
 			{Kind: "OBJECT", Name: "Query", Fields: []Field{
 				{
-					Name:        "teams",
-					Description: "List all teams",
+					Name:        "records",
+					Description: "List available records",
 					Args: []InputValue{
 						{Name: "first", Type: TypeRef{Kind: "SCALAR", Name: strPtr("Int")}},
 					},
-					Type: TypeRef{Kind: "OBJECT", Name: strPtr("TeamConnection")},
+					Type: TypeRef{Kind: "OBJECT", Name: strPtr("RecordConnection")},
 				},
 				{
-					Name:        "issue",
-					Description: "Get an issue by ID",
+					Name:        "record",
+					Description: "Fetch a record by ID",
 					Args: []InputValue{
 						{Name: "id", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
 					},
-					Type: TypeRef{Kind: "OBJECT", Name: strPtr("Issue")},
+					Type: TypeRef{Kind: "OBJECT", Name: strPtr("Record")},
 				},
+				{Name: "viewer", Description: "Get the current viewer", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Viewer")}},
+				{Name: "node", Description: "Fetch a recursive node", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Node")}},
 			}},
 			{Kind: "OBJECT", Name: "Mutation", Fields: []Field{
 				{
-					Name:        "createIssue",
-					Description: "Create a new issue",
+					Name:        "createRecord",
+					Description: "Create a new record",
 					Args: []InputValue{
-						{Name: "input", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "INPUT_OBJECT", Name: strPtr("CreateIssueInput")}}},
+						{Name: "input", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "INPUT_OBJECT", Name: strPtr("CreateRecordInput")}}},
 					},
-					Type: TypeRef{Kind: "OBJECT", Name: strPtr("IssuePayload")},
+					Type: TypeRef{Kind: "OBJECT", Name: strPtr("RecordPayload")},
 				},
 			}},
-			{Kind: "OBJECT", Name: "TeamConnection", Fields: []Field{
-				{Name: "nodes", Type: TypeRef{Kind: "LIST", OfType: &TypeRef{Kind: "OBJECT", Name: strPtr("Team")}}},
+			{Kind: "OBJECT", Name: "RecordConnection", Fields: []Field{
+				{Name: "nodes", Type: TypeRef{Kind: "LIST", OfType: &TypeRef{Kind: "OBJECT", Name: strPtr("Record")}}},
 				{Name: "pageInfo", Type: TypeRef{Kind: "OBJECT", Name: strPtr("PageInfo")}},
 			}},
-			{Kind: "OBJECT", Name: "Team", Fields: []Field{
+			{Kind: "OBJECT", Name: "Record", Fields: []Field{
 				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
-				{Name: "name", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{Name: "label", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{Name: "status", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Status")}},
 			}},
-			{Kind: "OBJECT", Name: "Issue", Fields: []Field{
-				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
-				{Name: "title", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
-				{Name: "state", Type: TypeRef{Kind: "OBJECT", Name: strPtr("State")}},
-			}},
-			{Kind: "OBJECT", Name: "State", Fields: []Field{
+			{Kind: "OBJECT", Name: "Status", Fields: []Field{
 				{Name: "name", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{Name: "details", Type: TypeRef{Kind: "OBJECT", Name: strPtr("StatusDetails")}},
+			}},
+			{Kind: "OBJECT", Name: "StatusDetails", Fields: []Field{
+				{Name: "summary", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{Name: "owner", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Owner")}},
+			}},
+			{Kind: "OBJECT", Name: "Owner", Fields: []Field{
+				{Name: "handle", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
 			}},
 			{Kind: "OBJECT", Name: "PageInfo", Fields: []Field{
 				{Name: "hasNextPage", Type: TypeRef{Kind: "SCALAR", Name: strPtr("Boolean")}},
 				{Name: "endCursor", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
 			}},
-			{Kind: "INPUT_OBJECT", Name: "CreateIssueInput", InputFields: []InputValue{
-				{Name: "title", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
-				{Name: "teamId", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
-				{Name: "description", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
-				{Name: "priority", Type: TypeRef{Kind: "ENUM", Name: strPtr("IssuePriority")}},
+			{Kind: "INPUT_OBJECT", Name: "CreateRecordInput", InputFields: []InputValue{
+				{Name: "label", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
+				{Name: "externalID", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("ID")}}},
+				{Name: "notes", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{Name: "priority", Type: TypeRef{Kind: "ENUM", Name: strPtr("RecordPriority")}},
 			}},
-			{Kind: "ENUM", Name: "IssuePriority", EnumValues: []EnumValue{
+			{Kind: "ENUM", Name: "RecordPriority", EnumValues: []EnumValue{
 				{Name: "noPriority"}, {Name: "urgent"}, {Name: "high"}, {Name: "medium"}, {Name: "low"},
 			}},
-			{Kind: "OBJECT", Name: "IssuePayload", Fields: []Field{
+			{Kind: "OBJECT", Name: "RecordPayload", Fields: []Field{
 				{Name: "success", Type: TypeRef{Kind: "SCALAR", Name: strPtr("Boolean")}},
-				{Name: "issue", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Issue")}},
+				{Name: "record", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Record")}},
+			}},
+			{Kind: "OBJECT", Name: "Viewer", Fields: []Field{
+				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
+				{Name: "email", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+			}},
+			{Kind: "OBJECT", Name: "Node", Fields: []Field{
+				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
+				{Name: "parent", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Node")}},
 			}},
 		},
 	}
@@ -92,7 +107,7 @@ func startIntrospectionServer(t *testing.T, schema Schema) *httptest.Server {
 	}))
 }
 
-func TestLoadDefinitionAllOps(t *testing.T) {
+func TestLoadDefinitionBuildsGraphQLOperations(t *testing.T) {
 	t.Parallel()
 
 	srv := startIntrospectionServer(t, newTestSchema())
@@ -109,34 +124,72 @@ func TestLoadDefinitionAllOps(t *testing.T) {
 	if def.BaseURL != srv.URL {
 		t.Errorf("BaseURL: got %q, want %q", def.BaseURL, srv.URL)
 	}
-
-	if len(def.Operations) != 3 {
-		t.Fatalf("Operations: got %d, want 3 (teams, issue, createIssue)", len(def.Operations))
+	if len(def.Operations) != 5 {
+		t.Fatalf("Operations: got %d, want 5", len(def.Operations))
 	}
 
-	teams := def.Operations["teams"]
-	if teams.Transport != "graphql" {
-		t.Errorf("teams.Transport: got %q, want graphql", teams.Transport)
+	records := def.Operations["records"]
+	if records.Transport != "graphql" {
+		t.Errorf("records.Transport: got %q, want graphql", records.Transport)
 	}
-	if teams.Query == "" {
-		t.Error("teams.Query should not be empty")
+	if records.Query == "" {
+		t.Fatal("records.Query should not be empty")
 	}
-	if teams.Description != "List all teams" {
-		t.Errorf("teams.Description: got %q", teams.Description)
+	if records.Description != "List available records" {
+		t.Errorf("records.Description: got %q", records.Description)
+	}
+	if !strings.Contains(records.Query, "query($first: Int)") {
+		t.Fatalf("records.Query missing variable declaration: %s", records.Query)
+	}
+	if !strings.Contains(records.Query, "nodes { id label status { name } }") {
+		t.Fatalf("records.Query missing connection selection set: %s", records.Query)
+	}
+	if !strings.Contains(records.Query, "pageInfo { hasNextPage endCursor }") {
+		t.Fatalf("records.Query missing pageInfo selection: %s", records.Query)
+	}
+	if strings.Contains(records.Query, "details") || strings.Contains(records.Query, "owner") {
+		t.Fatalf("records.Query should stop before deeper nested owner fields: %s", records.Query)
 	}
 
-	createIssue := def.Operations["createIssue"]
-	if createIssue.Query == "" {
-		t.Error("createIssue.Query should not be empty")
+	record := def.Operations["record"]
+	if !strings.Contains(record.Query, "$id: String!") {
+		t.Fatalf("record.Query missing non-null variable: %s", record.Query)
 	}
-	if createIssue.InputSchema != nil {
-		t.Fatalf("createIssue.InputSchema: got %s, want nil so schema synthesis can stay shallow", createIssue.InputSchema)
+	if !strings.Contains(record.Query, "record(id: $id)") {
+		t.Fatalf("record.Query missing argument binding: %s", record.Query)
 	}
-	if len(createIssue.Parameters) != 1 {
-		t.Fatalf("createIssue.Parameters: got %d, want 1", len(createIssue.Parameters))
+	if !strings.Contains(record.Query, "status { name details { summary } }") {
+		t.Fatalf("record.Query missing nested detail selection: %s", record.Query)
 	}
-	if got := createIssue.Parameters[0].Type; got != "object" {
-		t.Fatalf("createIssue.Parameters[0].Type = %q, want object", got)
+	if strings.Contains(record.Query, "owner") {
+		t.Fatalf("record.Query should stop before owner fields: %s", record.Query)
+	}
+
+	viewer := def.Operations["viewer"]
+	if !strings.HasPrefix(viewer.Query, "query { viewer") {
+		t.Fatalf("viewer.Query should be a simple query without variables: %s", viewer.Query)
+	}
+
+	node := def.Operations["node"]
+	if strings.Contains(node.Query, "parent") {
+		t.Fatalf("node.Query should avoid recursive self-selection: %s", node.Query)
+	}
+
+	createRecord := def.Operations["createRecord"]
+	if !strings.HasPrefix(createRecord.Query, "mutation(") {
+		t.Fatalf("createRecord.Query should be a mutation: %s", createRecord.Query)
+	}
+	if !strings.Contains(createRecord.Query, "$input: CreateRecordInput!") {
+		t.Fatalf("createRecord.Query missing formatted input type: %s", createRecord.Query)
+	}
+	if createRecord.InputSchema != nil {
+		t.Fatalf("createRecord.InputSchema: got %s, want nil so schema synthesis stays shallow", createRecord.InputSchema)
+	}
+	if len(createRecord.Parameters) != 1 {
+		t.Fatalf("createRecord.Parameters: got %d, want 1", len(createRecord.Parameters))
+	}
+	if got := createRecord.Parameters[0].Type; got != "object" {
+		t.Fatalf("createRecord.Parameters[0].Type = %q, want object", got)
 	}
 }
 
@@ -147,19 +200,19 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	defer srv.Close()
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]string{
-		"teams": "My custom description",
+		"records": "Custom record listing",
 	})
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
 
 	if len(def.Operations) != 1 {
-		t.Fatalf("Operations: got %d, want 1 (only teams)", len(def.Operations))
+		t.Fatalf("Operations: got %d, want 1", len(def.Operations))
 	}
 
-	teams := def.Operations["teams"]
-	if teams.Description != "My custom description" {
-		t.Errorf("teams.Description: got %q, want custom override", teams.Description)
+	records := def.Operations["records"]
+	if records.Description != "Custom record listing" {
+		t.Errorf("records.Description: got %q, want custom override", records.Description)
 	}
 }
 
