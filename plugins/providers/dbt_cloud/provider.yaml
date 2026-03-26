@@ -1,0 +1,95 @@
+provider: dbt_cloud
+display_name: dbt Cloud
+description: dbt Cloud data transformation platform
+connection_mode: user
+base_url: "https://cloud.getdbt.com/api/v2"
+token_prefix: "Token "
+
+auth:
+  type: manual
+
+operations:
+  list_accounts:
+    description: List dbt Cloud accounts accessible with your token
+    method: GET
+    path: /accounts/
+  list_projects:
+    description: List projects in a dbt Cloud account
+    method: GET
+    path: "/accounts/{account_id}/projects/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+  list_environments:
+    description: List environments in a project
+    method: GET
+    path: "/accounts/{account_id}/projects/{project_id}/environments/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: project_id, type: integer, required: true, description: Project ID}
+  list_jobs:
+    description: List jobs in a dbt Cloud account
+    method: GET
+    path: "/accounts/{account_id}/jobs/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: project_id, type: integer, description: Filter by project ID}
+      - {name: environment_id, type: integer, description: Filter by environment ID}
+  get_job:
+    description: Get details of a specific job
+    method: GET
+    path: "/accounts/{account_id}/jobs/{job_id}/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: job_id, type: integer, required: true, description: Job ID}
+  trigger_job:
+    description: Trigger a job run with optional overrides
+    method: POST
+    path: "/accounts/{account_id}/jobs/{job_id}/run/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: job_id, type: integer, required: true, description: Job ID to trigger}
+      - {name: cause, type: string, description: Reason for the run}
+      - {name: git_sha, type: string, description: Git SHA to checkout}
+      - {name: git_branch, type: string, description: Git branch to checkout}
+      - {name: schema_override, type: string, description: Schema name override}
+      - {name: dbt_version_override, type: string, description: dbt version override}
+      - {name: threads_override, type: integer, description: Thread count override}
+      - {name: target_name_override, type: string, description: Target name override}
+      - {name: generate_docs_override, type: boolean, description: Override docs generation setting}
+      - {name: timeout_seconds_override, type: integer, description: Timeout override in seconds}
+      - {name: steps_override, type: array, description: Override job steps (list of dbt commands)}
+  list_runs:
+    description: List runs in a dbt Cloud account with filtering options
+    method: GET
+    path: "/accounts/{account_id}/runs/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: job_definition_id, type: integer, description: Filter by job ID}
+      - {name: project_id, type: integer, description: Filter by project ID}
+      - {name: status, type: integer, description: "Filter by status (1=queued, 2=starting, 3=running, 10=success, 20=error, 30=cancelled)"}
+      - {name: limit, type: integer, description: Max runs to return (default 100)}
+      - {name: offset, type: integer, description: Pagination offset (default 0)}
+  get_run:
+    description: Get details of a specific run including status
+    method: GET
+    path: "/accounts/{account_id}/runs/{run_id}/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: run_id, type: integer, required: true, description: Run ID}
+      - {name: include_related, type: array, description: "Related data to include: job, trigger, debug_logs, run_steps"}
+  cancel_run:
+    description: Cancel a run that is currently in progress
+    method: POST
+    path: "/accounts/{account_id}/runs/{run_id}/cancel/"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: run_id, type: integer, required: true, description: Run ID to cancel}
+  get_run_artifact:
+    description: Get an artifact from a completed run
+    method: GET
+    path: "/accounts/{account_id}/runs/{run_id}/artifacts/{path}"
+    parameters:
+      - {name: account_id, type: integer, required: true, description: dbt Cloud account ID}
+      - {name: run_id, type: integer, required: true, description: Run ID}
+      - {name: path, type: string, required: true, description: "Artifact path: manifest.json, catalog.json, run_results.json, or sources.json"}
+      - {name: step, type: integer, description: Step number for multi-step runs}

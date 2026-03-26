@@ -1,0 +1,75 @@
+provider: hex
+display_name: Hex
+description: Hex collaborative data workspace
+connection_mode: identity
+base_url: "https://app.hex.tech/api/v1"
+
+auth:
+  type: manual
+
+operations:
+  list_projects:
+    description: List Hex projects accessible with your token
+    method: GET
+    path: /projects
+    parameters:
+      - {name: limit, type: integer, description: Maximum number of projects to return}
+      - {name: after, type: string, description: Cursor for next page of results}
+  get_project:
+    description: Get details of a specific Hex project
+    method: GET
+    path: "/projects/{project_id}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+  run_project:
+    description: Run a published Hex project with optional input parameters
+    method: POST
+    path: "/projects/{project_id}/run"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+      - {name: input_params, type: object, description: Input parameters to override for this run}
+      - {name: update_cache, type: boolean, description: Whether to update cached data during the run}
+      - {name: notification_channels, type: array, description: Notification channels to send run completion to}
+  get_run_status:
+    description: Get the status of a project run
+    method: GET
+    path: "/projects/{project_id}/run/{run_id}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+      - {name: run_id, type: string, required: true, description: Run ID returned from run_project}
+  get_project_runs:
+    description: Get the run history of a project
+    method: GET
+    path: "/projects/{project_id}/runs"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+      - {name: limit, type: integer, description: Maximum number of runs to return}
+      - {name: after, type: string, description: Cursor for next page of results}
+  cancel_run:
+    description: Cancel a running project execution
+    method: POST
+    path: "/projects/{project_id}/run/{run_id}/cancel"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+      - {name: run_id, type: string, required: true, description: Run ID to cancel}
+  update_project:
+    description: Update a project's status
+    method: PATCH
+    path: "/projects/{project_id}"
+    parameters:
+      - {name: project_id, type: string, required: true, description: Hex project ID}
+      - {name: status, type: string, description: New status for the project}
+  list_cells:
+    description: List cells accessible with your token
+    method: GET
+    path: /cells
+    parameters:
+      - {name: project_id, type: string, description: Filter cells by project ID}
+  update_cell:
+    description: Update a cell's source code and/or data connection
+    method: PATCH
+    path: "/cells/{cell_id}"
+    parameters:
+      - {name: cell_id, type: string, required: true, description: Cell ID to update}
+      - {name: source, type: string, description: New source code for the cell}
+      - {name: data_connection_id, type: string, description: Data connection ID for SQL cells}
