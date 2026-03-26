@@ -10,6 +10,8 @@ import (
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
+const adminForbiddenMessage = "forbidden"
+
 type contextKey string
 
 const (
@@ -92,6 +94,21 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *Server) adminMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := principal.FromContext(r.Context())
+		if p == nil || p.Identity == nil || p.Identity.Email == "" {
+			writeError(w, http.StatusForbidden, adminForbiddenMessage)
+			return
+		}
+		if _, ok := s.adminEmails[strings.ToLower(p.Identity.Email)]; !ok {
+			writeError(w, http.StatusForbidden, adminForbiddenMessage)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
