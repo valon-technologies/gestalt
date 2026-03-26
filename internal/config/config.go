@@ -63,6 +63,7 @@ const (
 
 type ExecutablePluginDef struct {
 	Mode    string            `yaml:"mode"`
+	Base    string            `yaml:"base"`
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
@@ -497,6 +498,14 @@ func validate(cfg *Config) error {
 				}
 				continue
 			case PluginModeOverlay:
+				hasUpstreams := len(intg.Upstreams) > 0
+				hasBase := intg.Plugin.Base != ""
+				switch {
+				case hasUpstreams && hasBase:
+					return fmt.Errorf("config validation: integration %q overlay plugin must declare exactly one base source via upstreams or plugin.base", name)
+				case !hasUpstreams && !hasBase:
+					return fmt.Errorf("config validation: integration %q overlay plugin must declare a base source via upstreams or plugin.base", name)
+				}
 			default:
 				return fmt.Errorf("config validation: integration %q has unknown plugin mode %q", name, intg.Plugin.Mode)
 			}
@@ -554,6 +563,13 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	}
 	if plugin.Command == "" {
 		return fmt.Errorf("config validation: %s %q plugin.command is required", kind, name)
+	}
+	mode := plugin.Mode
+	if mode == "" {
+		mode = PluginModeReplace
+	}
+	if plugin.Base != "" && mode == PluginModeReplace {
+		return fmt.Errorf("config validation: %s %q plugin.base requires mode: overlay", kind, name)
 	}
 	return nil
 }

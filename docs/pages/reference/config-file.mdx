@@ -12,7 +12,7 @@
 | `runtimes` | Background processes that boot alongside the server with scoped provider access. |
 | `bindings` | Alternative request surfaces such as webhooks and proxy-oriented request normalizers. |
 | `server` | Port, base URL, encryption key, and development mode. |
-| `egress` | Policy and credential rules for outbound requests made by runtimes and bindings. |
+| `egress` | Policy and credential rules for outbound requests made by runtimes, bindings, and proxy surfaces. |
 
 ## Server block
 
@@ -87,11 +87,12 @@ secrets:
 
 ## Integration block
 
-Each integration is defined under `integrations.<name>` and contains one or more `upstreams` entries plus integration-level settings for auth and display.
+Each integration is defined under `integrations.<name>` and is backed by either `upstreams`, an executable `plugin`, or both when `plugin.mode: overlay` is used.
 
 | Field | Notes |
 |---|---|
-| `upstreams` | List of upstream definitions (see below). At least one is required. |
+| `upstreams` | List of upstream definitions (see below). Required unless the integration is fully served by `plugin.mode: replace`, and one of the two allowed base sources for `plugin.mode: overlay`. |
+| `plugin` | Executable provider plugin config. Use `mode: replace` to serve the whole provider from a binary, or `mode: overlay` to compose a binary on top of exactly one base source. |
 | `display_name` | Human-readable label for the integration. |
 | `description` | Short description shown in the web UI and CLI. |
 | `auth_profile` | Name of a reusable auth profile to inherit from. |
@@ -109,6 +110,21 @@ Each integration is defined under `integrations.<name>` and contains one or more
 | `icon_file` | Path to an SVG file used as the integration icon. Relative paths resolve from the config file's directory. |
 | `manual_auth` | Boolean. When `true`, the integration supports both OAuth and manual authentication. Users see both connection options in the web UI. The API returns `auth_types: ["oauth", "manual"]`. |
 | `error_message_path` | Dot-delimited path for extracting error messages from upstream JSON responses. |
+
+### Executable plugin config
+
+| Field | Notes |
+|---|---|
+| `command` | Required. Executable path. Relative paths resolve from the config file's directory. |
+| `args` | Optional argv passed to the executable. |
+| `env` | Optional extra environment variables for the plugin process. |
+| `mode` | `replace` (default) or `overlay`. |
+| `base` | `overlay` only. Names the registered first-party provider factory to compose under the plugin when `upstreams` are not used. |
+
+Overlay plugins must declare exactly one base source:
+
+- `upstreams` when the base provider comes from prepared REST/GraphQL/MCP config
+- `plugin.base` when the base provider comes from a registered Go factory
 
 ### Upstreams
 
