@@ -1,8 +1,6 @@
 package pluginpkg
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
@@ -114,9 +112,4 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 	if !ManifestEqual(manifest, got) {
 		t.Fatal("manifest changed across round trip")
 	}
-}
-
-func sha256Hex(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
 }

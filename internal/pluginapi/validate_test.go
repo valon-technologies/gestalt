@@ -2,14 +2,10 @@ package pluginapi
 
 import (
 	"context"
-	"net"
 	"strings"
 	"testing"
 
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -91,7 +87,7 @@ func TestNewRemoteProvider_NoSchema(t *testing.T) {
 			DisplayName: "Test Plugin",
 		},
 	}
-	client := newStubProviderClient(t, stub)
+	client := newProviderPluginClient(t, stub)
 	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"anything": "goes"}, "")
 	if err != nil {
 		t.Fatalf("expected no error without schema: %v", err)
@@ -111,7 +107,7 @@ func TestNewRemoteProvider_SchemaRejectsInvalidConfig(t *testing.T) {
 			ConfigSchemaJson: testConfigSchema,
 		},
 	}
-	client := newStubProviderClient(t, stub)
+	client := newProviderPluginClient(t, stub)
 	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"retries": 3}, "")
 	if err == nil {
 		t.Fatal("expected error for config missing required field")
@@ -131,7 +127,7 @@ func TestNewRemoteProvider_SchemaAcceptsValidConfig(t *testing.T) {
 			ConfigSchemaJson: testConfigSchema,
 		},
 	}
-	client := newStubProviderClient(t, stub)
+	client := newProviderPluginClient(t, stub)
 	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"api_key": "sk-test"}, "")
 	if err != nil {
 		t.Fatalf("expected valid config to pass: %v", err)
@@ -151,34 +147,9 @@ func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
 			ConfigSchemaJson: testConfigSchema,
 		},
 	}
-	client := newStubProviderClient(t, stub)
+	client := newProviderPluginClient(t, stub)
 	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", nil, "")
 	if err == nil {
 		t.Fatal("expected nil config to fail validation against schema with required fields")
 	}
-}
-
-func newStubProviderClient(t *testing.T, stub pluginapiv1.ProviderPluginServer) pluginapiv1.ProviderPluginClient {
-	t.Helper()
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, stub)
-	go func() { _ = srv.Serve(lis) }()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return pluginapiv1.NewProviderPluginClient(conn)
 }
