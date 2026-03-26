@@ -6,61 +6,45 @@ func TestLoadCatalogYAML(t *testing.T) {
 	t.Parallel()
 
 	cat, err := LoadCatalogYAML([]byte(`
-name: example
-display_name: Example
-description: Example integration
-base_url: https://api.example.com
+name: sample
+display_name: Sample Catalog
+description: Generic catalog fixture
 auth_style: bearer
 headers:
-  X-API-Version: "2026-03-17"
+  X-Config-Version: "1"
 operations:
-  - id: list_items
-    provider_id: items.list
-    method: GET
-    path: /items
-    description: List items
+  - id: list_records
+    provider_id: records.list
+    description: List records
     read_only: true
     parameters:
       - name: limit
         type: integer
-        description: Maximum items to return
+        description: Maximum number of records
         default: 100
+  - id: get_record
+    description: Get a record
 `))
 	if err != nil {
 		t.Fatalf("LoadCatalogYAML: %v", err)
 	}
 
-	if cat.Name != "example" {
-		t.Fatalf("Name = %q, want example", cat.Name)
+	if cat.Name != "sample" {
+		t.Fatalf("Name = %q, want sample", cat.Name)
 	}
-	if len(cat.Operations) != 1 {
-		t.Fatalf("len(Operations) = %d, want 1", len(cat.Operations))
+	if len(cat.Operations) != 2 {
+		t.Fatalf("len(Operations) = %d, want 2", len(cat.Operations))
 	}
-	if cat.Operations[0].ID != "list_items" {
-		t.Fatalf("operation id = %q, want list_items", cat.Operations[0].ID)
-	}
-}
-
-func TestValidateAcceptsMCPOnlyCatalog(t *testing.T) {
-	t.Parallel()
-
-	cat := &Catalog{
-		Name: "mcp-only",
-		Operations: []CatalogOperation{
-			{ID: "do_thing", Description: "Do a thing"},
-			{ID: "list_things", Description: "List things"},
-		},
-	}
-	if err := cat.Validate(); err != nil {
-		t.Fatalf("expected MCP-only catalog (no Method/Path) to be valid: %v", err)
+	if cat.Operations[0].ID != "list_records" {
+		t.Fatalf("operation[0].ID = %q, want list_records", cat.Operations[0].ID)
 	}
 }
 
-func TestLoadCatalogYAMLRejectsInvalidCatalog(t *testing.T) {
+func TestLoadCatalogYAMLRejectsDuplicateOperationIDs(t *testing.T) {
 	t.Parallel()
 
 	_, err := LoadCatalogYAML([]byte(`
-name: invalid
+name: broken
 operations:
   - id: duplicate
     method: GET
