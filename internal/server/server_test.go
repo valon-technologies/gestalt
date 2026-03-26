@@ -304,6 +304,123 @@ func TestAuthMiddleware_DevMode(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
+				return &core.APIToken{UserID: "u1", Name: "legacy-key"}, nil
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "legacy@example.test"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer unprefixed-legacy-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unprefixed token, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				t.Fatal("OAuth ValidateToken must not be called for prefixed API tokens")
+				return nil, nil
+			},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateAPITokenFn: func(_ context.Context, h string) (*core.APIToken, error) {
+				if h == hashed {
+					return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "api@example.test"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthMiddleware_EgressClientToken(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeEgressClient)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateEgressClientTokenFn: func(_ context.Context, h string) (*core.EgressClientToken, error) {
+				if h == hashed {
+					return &core.EgressClientToken{ID: "tok-1", ClientID: "ec-1"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
+				if id == "ec-1" {
+					return &core.EgressClient{ID: "ec-1", Name: "ci-bot"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestListIntegrations(t *testing.T) {
 	t.Parallel()
 
