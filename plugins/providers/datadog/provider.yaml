@@ -1,0 +1,160 @@
+provider: datadog
+display_name: Datadog
+description: Datadog monitoring, alerting, and incident management
+connection_mode: user
+base_url: "https://api.datadoghq.com"
+
+auth:
+  type: manual
+
+auth_style: none
+auth_mapping:
+  headers:
+    DD-API-KEY: api_key
+    DD-APPLICATION-KEY: app_key
+
+error_message_path: errors
+
+operations:
+  list_dashboards:
+    description: List dashboards
+    method: GET
+    path: /api/v1/dashboard
+    parameters:
+      - {name: filter_shared, type: boolean, description: Filter by shared dashboards}
+      - {name: filter_deleted, type: boolean, description: Include deleted dashboards}
+      - {name: count, type: integer, description: Max dashboards to return}
+      - {name: start, type: integer, description: Pagination offset}
+  get_dashboard:
+    description: Get a specific dashboard by ID
+    method: GET
+    path: "/api/v1/dashboard/{dashboard_id}"
+    parameters:
+      - {name: dashboard_id, type: string, required: true, description: Dashboard ID}
+  list_monitors:
+    description: List monitors
+    method: GET
+    path: /api/v1/monitor
+    parameters:
+      - {name: name, type: string, description: Filter by name}
+      - {name: tags, type: string, description: Filter by tags}
+      - {name: monitor_tags, type: string, description: Filter by monitor tags}
+      - {name: page, type: integer, description: Page number}
+      - {name: page_size, type: integer, description: Results per page}
+  get_monitor:
+    description: Get a specific monitor by ID
+    method: GET
+    path: "/api/v1/monitor/{monitor_id}"
+    parameters:
+      - {name: monitor_id, type: integer, required: true, description: Monitor ID}
+  create_monitor:
+    description: Create a monitor
+    method: POST
+    path: /api/v1/monitor
+    parameters:
+      - {name: name, type: string, required: true, description: Monitor name}
+      - {name: type, type: string, required: true, description: Monitor type}
+      - {name: query, type: string, required: true, description: Monitor query string}
+      - {name: message, type: string, description: Notification message}
+      - {name: tags, type: array, description: Tags for the monitor}
+      - {name: priority, type: integer, description: Monitor priority (1-5)}
+  update_monitor:
+    description: Update an existing monitor
+    method: PUT
+    path: "/api/v1/monitor/{monitor_id}"
+    parameters:
+      - {name: monitor_id, type: integer, required: true, description: Monitor ID}
+      - {name: name, type: string, description: Monitor name}
+      - {name: query, type: string, description: Monitor query string}
+      - {name: message, type: string, description: Notification message}
+      - {name: tags, type: array, description: Tags for the monitor}
+      - {name: priority, type: integer, description: Monitor priority (1-5)}
+  query_metrics:
+    description: Query metrics over a time range
+    method: GET
+    path: /api/v1/query
+    parameters:
+      - {name: from, type: integer, required: true, description: Start timestamp in seconds}
+      - {name: to, type: integer, required: true, description: End timestamp in seconds}
+      - {name: query, type: string, required: true, description: Metric query string}
+  list_incidents:
+    description: List incidents
+    method: GET
+    path: /api/v2/incidents
+    parameters:
+      - {name: "page[size]", type: integer, description: Results per page}
+      - {name: "page[offset]", type: integer, description: Page offset}
+  create_incident:
+    description: Create an incident
+    method: POST
+    path: /api/v2/incidents
+    parameters:
+      - {name: data, type: object, required: true, description: Incident create payload}
+  update_incident:
+    description: Update an existing incident
+    method: PATCH
+    path: "/api/v2/incidents/{incident_id}"
+    parameters:
+      - {name: incident_id, type: string, required: true, description: Incident ID}
+      - {name: data, type: object, required: true, description: Incident update payload}
+  search_logs:
+    description: Search logs with a query string
+    method: POST
+    path: /api/v2/logs/events/search
+    parameters:
+      - {name: filter, type: object, required: true, description: Log search filter with query, from, and to}
+      - {name: page, type: object, description: Pagination options}
+      - {name: sort, type: string, description: Sort order}
+  create_downtime:
+    description: Schedule a downtime
+    method: POST
+    path: /api/v2/downtime
+    parameters:
+      - {name: data, type: object, required: true, description: Downtime create payload}
+  create_dashboard:
+    description: Create a dashboard
+    method: POST
+    path: /api/v1/dashboard
+    parameters:
+      - {name: title, type: string, required: true, description: Dashboard title}
+      - {name: widgets, type: array, required: true, description: Dashboard widgets}
+      - {name: layout_type, type: string, required: true, description: Layout type (ordered or free)}
+      - {name: description, type: string, description: Dashboard description}
+      - {name: template_variables, type: array, description: Template variables}
+  update_dashboard:
+    description: Update an existing dashboard
+    method: PUT
+    path: "/api/v1/dashboard/{dashboard_id}"
+    parameters:
+      - {name: dashboard_id, type: string, required: true, description: Dashboard ID}
+      - {name: title, type: string, required: true, description: Dashboard title}
+      - {name: widgets, type: array, required: true, description: Dashboard widgets}
+      - {name: layout_type, type: string, required: true, description: Layout type}
+      - {name: description, type: string, description: Dashboard description}
+      - {name: template_variables, type: array, description: Template variables}
+  search_rum_events:
+    description: Search RUM events
+    method: POST
+    path: /api/v2/rum/events/search
+    parameters:
+      - {name: filter, type: object, required: true, description: RUM search filter}
+      - {name: page, type: object, description: Pagination options}
+      - {name: sort, type: string, description: Sort order}
+  aggregate_rum_events:
+    description: Aggregate RUM events
+    method: POST
+    path: /api/v2/rum/analytics/aggregate
+    parameters:
+      - {name: filter, type: object, required: true, description: RUM query filter}
+      - {name: compute, type: array, required: true, description: Aggregation compute definitions}
+      - {name: group_by, type: array, description: Group by definitions}
+  list_rum_events:
+    description: List RUM events
+    method: GET
+    path: /api/v2/rum/events
+    parameters:
+      - {name: "filter[query]", type: string, required: true, description: RUM filter query}
+      - {name: "filter[from]", type: string, description: Start time}
+      - {name: "filter[to]", type: string, description: End time}
+      - {name: "page[limit]", type: integer, description: Max events to return}
+      - {name: sort, type: string, description: Sort order}
