@@ -79,6 +79,7 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
+var _ core.EgressDenyRuleStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})
@@ -172,6 +173,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 				name NVARCHAR(255) NOT NULL,
 				hashed_token NVARCHAR(255) NOT NULL UNIQUE,
 				expires_at DATETIME2(6) NULL,
+				created_at DATETIME2(6) NOT NULL,
+				updated_at DATETIME2(6) NOT NULL
+			)`},
+		{"egress_deny_rules", `
+			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'egress_deny_rules')
+			CREATE TABLE egress_deny_rules (
+				id NVARCHAR(36) NOT NULL PRIMARY KEY,
+				subject_kind NVARCHAR(255) NOT NULL DEFAULT '',
+				subject_id NVARCHAR(255) NOT NULL DEFAULT '',
+				provider NVARCHAR(255) NOT NULL DEFAULT '',
+				operation NVARCHAR(255) NOT NULL DEFAULT '',
+				method NVARCHAR(255) NOT NULL DEFAULT '',
+				host NVARCHAR(255) NOT NULL DEFAULT '',
+				path_prefix NVARCHAR(255) NOT NULL DEFAULT '',
+				created_by_id NVARCHAR(36) NOT NULL REFERENCES users(id),
+				description NVARCHAR(MAX) NOT NULL DEFAULT '',
 				created_at DATETIME2(6) NOT NULL,
 				updated_at DATETIME2(6) NOT NULL
 			)`},

@@ -51,6 +51,7 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
+var _ core.EgressDenyRuleStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -132,6 +133,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 			name TEXT NOT NULL,
 			hashed_token TEXT UNIQUE NOT NULL,
 			expires_at DATETIME,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS egress_deny_rules (
+			id TEXT PRIMARY KEY,
+			subject_kind TEXT NOT NULL DEFAULT '',
+			subject_id TEXT NOT NULL DEFAULT '',
+			provider TEXT NOT NULL DEFAULT '',
+			operation TEXT NOT NULL DEFAULT '',
+			method TEXT NOT NULL DEFAULT '',
+			host TEXT NOT NULL DEFAULT '',
+			path_prefix TEXT NOT NULL DEFAULT '',
+			created_by_id TEXT NOT NULL REFERENCES users(id),
+			description TEXT NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
 		)
