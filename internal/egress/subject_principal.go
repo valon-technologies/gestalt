@@ -3,7 +3,6 @@ package egress
 import (
 	"context"
 
-	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
@@ -21,26 +20,6 @@ func SubjectForPrincipal(p *principal.Principal) (Subject, bool) {
 		return Subject{Kind: SubjectIdentity, ID: principal.IdentityPrincipal}, true
 	}
 	return Subject{}, false
-}
-
-func PrincipalForSubject(s Subject) (*principal.Principal, bool) {
-	switch s.Kind {
-	case SubjectUser:
-		if s.ID == "" {
-			return nil, false
-		}
-		return &principal.Principal{UserID: s.ID}, true
-	case SubjectIdentity:
-		if s.ID == principal.IdentityPrincipal {
-			return &principal.Principal{UserID: principal.IdentityPrincipal}, true
-		}
-		if s.ID == "" {
-			return nil, false
-		}
-		return &principal.Principal{Identity: &core.UserIdentity{Email: s.ID}}, true
-	default:
-		return nil, false
-	}
 }
 
 func WithSubjectFromPrincipal(ctx context.Context, p *principal.Principal) context.Context {

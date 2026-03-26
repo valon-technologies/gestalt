@@ -47,8 +47,6 @@ type EgressPolicyRule struct {
 }
 
 type EgressCredentialGrant struct {
-	Provider    string `yaml:"provider"`
-	Instance    string `yaml:"instance"`
 	SecretRef   string `yaml:"secret_ref"`
 	AuthStyle   string `yaml:"auth_style"`
 	SubjectKind string `yaml:"subject_kind"`
@@ -629,11 +627,12 @@ func validateEgress(cfg *EgressConfig) error {
 	}
 	for i := range cfg.Credentials {
 		c := &cfg.Credentials[i]
+		if c.SecretRef == "" {
+			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref is required", i)
+		}
 		if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
 			SubjectKind: c.SubjectKind,
 			SubjectID:   c.SubjectID,
-			Provider:    c.Provider,
-			Instance:    c.Instance,
 			Operation:   c.Operation,
 			Method:      c.Method,
 			Host:        c.Host,
