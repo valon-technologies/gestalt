@@ -15,6 +15,7 @@ import (
 
 var (
 	_ core.OAuthProvider           = (*Base)(nil)
+	_ core.ConnectionSpecProvider  = (*Base)(nil)
 	_ core.ManualProvider          = (*Base)(nil)
 	_ core.CatalogProvider         = (*Base)(nil)
 	_ core.ConnectionParamProvider = (*Base)(nil)
@@ -148,6 +149,14 @@ func (b *Base) AuthTypes() []string {
 		return []string{"oauth", "manual"}
 	}
 	return []string{"oauth"}
+}
+
+func (b *Base) ConnectionSpec() core.ConnectionSpec {
+	return (core.ConnectionSpec{
+		AuthTypes:        b.AuthTypes(),
+		ConnectionParams: b.ConnectionDefs,
+		Discovery:        b.DiscoveryDef,
+	}).Clone()
 }
 
 func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {
