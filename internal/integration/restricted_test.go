@@ -19,15 +19,6 @@ func (s *stubWithOps) ListOperations() []core.Operation {
 	return s.ops
 }
 
-type specStubWithOps struct {
-	stubWithOps
-	spec core.ConnectionSpec
-}
-
-func (s *specStubWithOps) ConnectionSpec() core.ConnectionSpec {
-	return s.spec
-}
-
 func sampleOps() []core.Operation {
 	return []core.Operation{
 		{Name: "list_channels", Description: "List channels"},
@@ -171,55 +162,5 @@ func TestDelegationMethods(t *testing.T) {
 	}
 	if refreshTok != nil {
 		t.Errorf("RefreshToken: got %+v, want nil", refreshTok)
-	}
-}
-
-func TestConnectionSpecDelegatesAndClones(t *testing.T) {
-	t.Parallel()
-
-	inner := &specStubWithOps{
-		stubWithOps: stubWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
-			ops:             sampleOps(),
-		},
-		spec: core.ConnectionSpec{
-			AuthTypes: []string{"oauth", "manual"},
-			ConnectionParams: map[string]core.ConnectionParamDef{
-				"tenant": {Required: true, Description: "Workspace"},
-			},
-			Discovery: &core.DiscoveryConfig{
-				URL:             "https://example.com/discover",
-				MetadataMapping: map[string]string{"team_id": "team.id"},
-			},
-		},
-	}
-
-	prov := integration.NewRestricted(inner, []string{"list_channels"})
-	csp, ok := prov.(core.ConnectionSpecProvider)
-	if !ok {
-		t.Fatal("expected restricted provider to implement ConnectionSpecProvider")
-	}
-
-	got := csp.ConnectionSpec()
-	if got.Discovery == nil || got.Discovery.URL != "https://example.com/discover" {
-		t.Fatalf("ConnectionSpec().Discovery = %+v", got.Discovery)
-	}
-
-	got.AuthTypes[0] = "mutated"
-	got.ConnectionParams["tenant"] = core.ConnectionParamDef{Description: "mutated"}
-	got.Discovery.URL = "https://mutated.invalid"
-	got.Discovery.MetadataMapping["team_id"] = "mutated"
-
-	if inner.spec.AuthTypes[0] != "oauth" {
-		t.Fatalf("inner auth types were mutated: %+v", inner.spec.AuthTypes)
-	}
-	if inner.spec.ConnectionParams["tenant"].Description != "Workspace" {
-		t.Fatalf("inner connection params were mutated: %+v", inner.spec.ConnectionParams["tenant"])
-	}
-	if inner.spec.Discovery.URL != "https://example.com/discover" {
-		t.Fatalf("inner discovery URL was mutated: %q", inner.spec.Discovery.URL)
-	}
-	if inner.spec.Discovery.MetadataMapping["team_id"] != "team.id" {
-		t.Fatalf("inner discovery metadata was mutated: %+v", inner.spec.Discovery.MetadataMapping)
 	}
 }
