@@ -122,3 +122,20 @@ type EgressDenyRule struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
+
+type EgressCredentialGrant struct {
+	ID          string
+	Provider    string
+	Instance    string
+	SecretRef   string
+	AuthStyle   string
+	SubjectKind string
+	SubjectID   string
+	Operation   string
+	Method      string
+	Host        string
+	PathPrefix  string
+	CreatedByID string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}

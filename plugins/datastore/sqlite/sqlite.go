@@ -52,6 +52,7 @@ var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
 var _ core.EgressDenyRuleStore = (*Store)(nil)
+var _ core.EgressCredentialGrantStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -147,6 +148,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 			path_prefix TEXT NOT NULL DEFAULT '',
 			created_by_id TEXT NOT NULL REFERENCES users(id),
 			description TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS egress_credential_grants (
+			id TEXT PRIMARY KEY,
+			provider TEXT NOT NULL DEFAULT '',
+			instance TEXT NOT NULL DEFAULT '',
+			secret_ref TEXT NOT NULL DEFAULT '',
+			auth_style TEXT NOT NULL DEFAULT '',
+			subject_kind TEXT NOT NULL DEFAULT '',
+			subject_id TEXT NOT NULL DEFAULT '',
+			operation TEXT NOT NULL DEFAULT '',
+			method TEXT NOT NULL DEFAULT '',
+			host TEXT NOT NULL DEFAULT '',
+			path_prefix TEXT NOT NULL DEFAULT '',
+			created_by_id TEXT NOT NULL REFERENCES users(id),
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
 		)

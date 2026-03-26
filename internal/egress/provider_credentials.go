@@ -22,6 +22,24 @@ type CredentialGrant struct {
 	MatchCriteria
 }
 
+func (g *CredentialGrant) ResolveProvider(target Target) (provider, instance string, ok bool) {
+	p := g.Provider
+	if p == "" {
+		p = target.Provider
+	}
+	if p == "" {
+		return "", "", false
+	}
+	inst := g.Instance
+	if inst == "" {
+		inst = target.Instance
+	}
+	if inst == "" {
+		inst = p
+	}
+	return p, inst, true
+}
+
 type ProviderCredentialResolver struct {
 	TokenResolver ProviderTokenResolver
 	Materializer  CredentialMaterializer
@@ -59,19 +77,9 @@ func (r *ProviderCredentialResolver) matchGrant(subject Subject, target Target) 
 		if !g.Matches(subject, target) {
 			continue
 		}
-		p := g.Provider
-		if p == "" {
-			p = target.Provider
-		}
-		if p == "" {
+		p, inst, ok := g.ResolveProvider(target)
+		if !ok {
 			continue
-		}
-		inst := g.Instance
-		if inst == "" {
-			inst = target.Instance
-		}
-		if inst == "" {
-			inst = p
 		}
 		return p, inst, true
 	}

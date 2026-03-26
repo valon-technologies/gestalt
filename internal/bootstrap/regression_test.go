@@ -315,3 +315,77 @@ func TestEgressCredentialGrantWiredThroughBootstrap(t *testing.T) {
 		t.Fatal("expected credential resolver to be wired when grants are configured")
 	}
 }
+
+func TestSavedCredentialGrantResolvesThroughBootstrap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {
+			Type:      "test-binding",
+			Providers: []string{"alpha"},
+		},
+	}
+
+	factories := validFactories()
+
+	const tokenValue = "tok-saved-grant"
+	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		return &stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "alpha"},
+			ops:             []core.Operation{{Name: "do", Method: "POST"}},
+		}, nil
+	}
+
+	savedGrants := []*core.EgressCredentialGrant{
+		{
+			ID:       "ecg-saved-1",
+			Provider: "alpha",
+			Host:     "api.saved.test",
+		},
+	}
+	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressCredentialGrantsFn: func(_ context.Context, _ core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
+				return savedGrants, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: tokenValue}, nil
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	if receivedEgress.Resolver == nil {
+		t.Fatal("expected egress resolver to be wired")
+	}
+	if receivedEgress.Resolver.Credentials == nil {
+		t.Fatal("expected credential resolver to be wired for DB-backed grant store")
+	}
+
+	userCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-123"})
+	resolution, err := receivedEgress.Resolver.Resolve(userCtx, egress.ResolutionInput{
+		Target: egress.Target{Provider: "alpha", Method: "GET", Host: "api.saved.test", Path: "/data"},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if resolution.Credential.Authorization == "" {
+		t.Fatal("expected saved DB grant to produce a credential, got empty authorization")
+	}
+	if !strings.Contains(resolution.Credential.Authorization, tokenValue) {
+		t.Errorf("expected authorization to contain %q, got %q", tokenValue, resolution.Credential.Authorization)
+	}
+}
