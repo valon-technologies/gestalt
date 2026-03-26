@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
-	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
 func (s *Server) egressClientStore() (core.EgressClientStore, error) {
@@ -79,7 +78,7 @@ func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := s.now().UTC().Truncate(time.Second)
+	now := s.nowUTCSecond()
 	client := &core.EgressClient{
 		ID:          uuid.NewString(),
 		Name:        req.Name,
@@ -98,14 +97,7 @@ func (s *Server) createEgressClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, egressClientResponse{
-		ID:          client.ID,
-		Name:        client.Name,
-		Description: client.Description,
-		CreatedByID: client.CreatedByID,
-		CreatedAt:   client.CreatedAt,
-		UpdatedAt:   client.UpdatedAt,
-	})
+	writeJSON(w, http.StatusCreated, egressClientResponseFromCore(client))
 }
 
 func (s *Server) listEgressClients(w http.ResponseWriter, r *http.Request) {
@@ -128,14 +120,7 @@ func (s *Server) listEgressClients(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]egressClientResponse, 0, len(clients))
 	for _, c := range clients {
-		out = append(out, egressClientResponse{
-			ID:          c.ID,
-			Name:        c.Name,
-			Description: c.Description,
-			CreatedByID: c.CreatedByID,
-			CreatedAt:   c.CreatedAt,
-			UpdatedAt:   c.UpdatedAt,
-		})
+		out = append(out, egressClientResponseFromCore(c))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -181,8 +166,6 @@ type egressClientTokenInfo struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-const defaultEgressClientTokenExpiry = 90 * 24 * time.Hour
-
 func (s *Server) createEgressClientToken(w http.ResponseWriter, r *http.Request) {
 	ecs, err := s.egressClientStore()
 	if err != nil {
@@ -206,24 +189,20 @@ func (s *Server) createEgressClientToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	plaintext, err := generateRandomHex(32)
+	issued, err := s.issueToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
 
-	hashed := principal.HashToken(plaintext)
-	now := s.now().UTC().Truncate(time.Second)
-	expiry := now.Add(defaultEgressClientTokenExpiry)
-
 	token := &core.EgressClientToken{
 		ID:          uuid.NewString(),
 		ClientID:    clientID,
 		Name:        req.Name,
-		HashedToken: hashed,
-		ExpiresAt:   &expiry,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		HashedToken: issued.Hashed,
+		ExpiresAt:   issued.ExpiresAt,
+		CreatedAt:   issued.CreatedAt,
+		UpdatedAt:   issued.UpdatedAt,
 	}
 
 	if err := ecs.CreateEgressClientToken(r.Context(), token); err != nil {
@@ -234,7 +213,7 @@ func (s *Server) createEgressClientToken(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, createEgressClientTokenResponse{
 		ID:        token.ID,
 		Name:      token.Name,
-		Token:     plaintext,
+		Token:     issued.Plaintext,
 		ExpiresAt: token.ExpiresAt,
 	})
 }
@@ -259,12 +238,7 @@ func (s *Server) listEgressClientTokens(w http.ResponseWriter, r *http.Request) 
 
 	out := make([]egressClientTokenInfo, 0, len(tokens))
 	for _, t := range tokens {
-		out = append(out, egressClientTokenInfo{
-			ID:        t.ID,
-			Name:      t.Name,
-			CreatedAt: t.CreatedAt,
-			ExpiresAt: t.ExpiresAt,
-		})
+		out = append(out, egressClientTokenInfoFromCore(t))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
