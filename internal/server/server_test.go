@@ -2914,6 +2914,186 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 	}
 }
 
+func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "shared",
+			ConnMode: core.ConnectionModeIdentity,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				body, _ := json.Marshal(map[string]any{"token": token})
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "ping", Method: "GET"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+				if userID == principal.IdentityPrincipal && integration == "shared" && instance == "default" {
+					return &core.IntegrationToken{AccessToken: "identity-token"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/shared/ping", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["token"] != "identity-token" {
+		t.Fatalf("expected identity-token, got %v", result["token"])
+	}
+}
+
+func TestExecuteOperation_ConnectionModeEitherFallsBackToIdentity(t *testing.T) {
+	t.Parallel()
+
+	var lookups []string
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "hybrid",
+			ConnMode: core.ConnectionModeEither,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				body, _ := json.Marshal(map[string]any{"token": token})
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "ping", Method: "GET"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
+				return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "dev@example.com"}, nil
+			},
+			TokenFn: func(_ context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+				lookups = append(lookups, userID)
+				if userID == principal.IdentityPrincipal && integration == "hybrid" && instance == "default" {
+					return &core.IntegrationToken{AccessToken: "identity-token"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/hybrid/ping", nil)
+	req.Header.Set("Authorization", "Bearer api-key")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["token"] != "identity-token" {
+		t.Fatalf("expected identity-token fallback, got %v", result["token"])
+	}
+	if len(lookups) != 2 || lookups[0] != "u1" || lookups[1] != principal.IdentityPrincipal {
+		t.Fatalf("expected user then identity lookup, got %v", lookups)
+	}
+}
+
+func TestExecuteOperation_PassesConnectionMetadataToProvider(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "contextual",
+			ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, _ := json.Marshal(core.ConnectionParams(ctx))
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "describe", Method: "GET"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			ListTokensForIntegrationFn: func(_ context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+				return []*core.IntegrationToken{{
+					UserID:       userID,
+					Integration:  integration,
+					Instance:     "default",
+					AccessToken:  "stored-token",
+					MetadataJSON: `{"account":"sample","region":"test"}`,
+				}}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/contextual/describe", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["account"] != "sample" || result["region"] != "test" {
+		t.Fatalf("expected connection metadata, got %v", result)
+	}
+}
+
 func TestExecuteOperation_EchoProvider(t *testing.T) {
 	t.Parallel()
 
@@ -4533,59 +4713,6 @@ func (f tokenResolverFunc) ResolveProviderToken(ctx context.Context, subject egr
 func staticTokenResolverFunc(token string) tokenResolverFunc {
 	return func(_ context.Context, _ egress.Subject, _, _ string) (string, error) {
 		return token, nil
-	}
-}
-
-func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "svc",
-			ConnMode: core.ConnectionModeIdentity,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
-			},
-		},
-		ops: []core.Operation{{Name: "do", Method: "GET"}},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			TokenFn: func(_ context.Context, userID, integration, _ string) (*core.IntegrationToken, error) {
-				if userID == principal.IdentityPrincipal && integration == "svc" {
-					return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
-				}
-				return nil, core.ErrNotFound
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["token"] != "identity-tok" {
-		t.Fatalf("expected identity-tok, got %v", result["token"])
 	}
 }
 

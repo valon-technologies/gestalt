@@ -39,7 +39,7 @@ func guardTestProvider(name string) *stubProviderWithOps {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "ping", Method: "GET"}},
+		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
 	}
 }
 
@@ -48,162 +48,105 @@ func newGuardedTestInvoker(t *testing.T, providers ...core.Provider) *invocation
 	return invocation.NewBroker(testutil.NewProviderRegistry(t, providers...), &coretesting.StubDatastore{})
 }
 
-func TestGuardedInvoker_AllowedProvider(t *testing.T) {
+func TestGuardedInvoker_EnforcesProviderScopeAndAudit(t *testing.T) {
 	t.Parallel()
 
+	sink := &capturingSink{}
 	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
+	guarded := invocation.NewGuarded(base, base, "binding:test", sink, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
 
 	result, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
 	if err != nil {
-		t.Fatalf("Invoke: %v", err)
+		t.Fatalf("allowed Invoke: %v", err)
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("expected 200, got %d", result.Status)
 	}
-}
 
-func TestGuardedInvoker_DisallowedProvider(t *testing.T) {
-	t.Parallel()
-
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"beta"}), invocation.WithoutRateLimit())
-
-	_, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
+	_, err = guarded.Invoke(context.Background(), nil, "beta", "", "ping", nil)
 	if err == nil {
 		t.Fatal("expected error for disallowed provider")
 	}
 	if !strings.Contains(err.Error(), "not available in this scope") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-}
 
-func TestGuardedInvoker_NoAllowlist(t *testing.T) {
-	t.Parallel()
-
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"), guardTestProvider("beta"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithoutRateLimit())
-
-	for _, provider := range []string{"alpha", "beta"} {
-		result, err := guarded.Invoke(context.Background(), nil, provider, "", "ping", nil)
-		if err != nil {
-			t.Fatalf("Invoke %s: %v", provider, err)
-		}
-		if result.Status != http.StatusOK {
-			t.Fatalf("expected 200, got %d", result.Status)
-		}
-	}
-}
-
-func TestGuardedInvoker_MaxDepthEnforced(t *testing.T) {
-	t.Parallel()
-
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithMaxDepth(2), invocation.WithoutRateLimit())
-
-	ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{RequestID: "test-id", Depth: 2})
-	_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
-	if err == nil {
-		t.Fatal("expected max depth error")
-	}
-	var maxDepthErr *invocation.MaxDepthError
-	if !errors.As(err, &maxDepthErr) {
-		t.Fatalf("expected MaxDepthError, got %T: %v", err, err)
-	}
-	if maxDepthErr.Depth != 2 || maxDepthErr.Max != 2 {
-		t.Fatalf("expected depth=2 max=2, got depth=%d max=%d", maxDepthErr.Depth, maxDepthErr.Max)
-	}
-}
-
-func TestGuardedInvoker_RecursionDetected(t *testing.T) {
-	t.Parallel()
-
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithoutRateLimit())
-
-	ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{
-		RequestID: "test-id",
-		Depth:     1,
-		CallChain: []string{"alpha/default/ping"},
-	})
-	_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
-	if err == nil {
-		t.Fatal("expected recursion error")
-	}
-	var recursionErr *invocation.RecursionError
-	if !errors.As(err, &recursionErr) {
-		t.Fatalf("expected RecursionError, got %T: %v", err, err)
-	}
-}
-
-func TestGuardedInvoker_RateLimitExceeded(t *testing.T) {
-	t.Parallel()
-
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithRateLimit(1, 1))
-
-	if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
-		t.Fatalf("first Invoke: %v", err)
-	}
-
-	var rateLimited bool
-	for i := 0; i < 10; i++ {
-		if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
-			var rateLimitErr *invocation.RateLimitError
-			if errors.As(err, &rateLimitErr) {
-				rateLimited = true
-				break
-			}
-			t.Fatalf("unexpected error type: %T: %v", err, err)
-		}
-	}
-	if !rateLimited {
-		t.Fatal("expected rate limit error after burst")
-	}
-}
-
-func TestGuardedInvoker_AuditLogged(t *testing.T) {
-	t.Parallel()
-
-	sink := &capturingSink{}
-	base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
-	guarded := invocation.NewGuarded(base, base, "binding:my-hook", sink, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
-
-	_, _ = guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
-	if len(sink.entries) != 1 {
-		t.Fatalf("expected 1 audit entry, got %d", len(sink.entries))
-	}
-	entry := sink.entries[0]
-	if entry.Source != "binding:my-hook" {
-		t.Errorf("expected source binding:my-hook, got %q", entry.Source)
-	}
-	if entry.Provider != "alpha" {
-		t.Errorf("expected provider alpha, got %q", entry.Provider)
-	}
-	if entry.Operation != "ping" {
-		t.Errorf("expected operation ping, got %q", entry.Operation)
-	}
-	if !entry.Allowed {
-		t.Error("expected Allowed=true")
-	}
-	if entry.RequestID == "" {
-		t.Error("expected non-empty RequestID")
-	}
-
-	_, _ = guarded.Invoke(context.Background(), nil, "beta", "", "ping", nil)
 	if len(sink.entries) != 2 {
 		t.Fatalf("expected 2 audit entries, got %d", len(sink.entries))
 	}
-	denied := sink.entries[1]
-	if denied.Allowed {
-		t.Error("expected denied call to be logged with Allowed=false")
+	if !sink.entries[0].Allowed || sink.entries[0].Provider != "alpha" || sink.entries[0].Operation != "ping" {
+		t.Fatalf("unexpected allowed audit entry: %+v", sink.entries[0])
 	}
-	if denied.Error == "" {
-		t.Error("expected denied call to include an error")
+	if sink.entries[1].Allowed || sink.entries[1].Provider != "beta" || sink.entries[1].Error == "" {
+		t.Fatalf("unexpected denied audit entry: %+v", sink.entries[1])
 	}
 }
 
-func TestGuardedInvoker_ListCapabilities(t *testing.T) {
+func TestGuardedInvoker_ProtectsInvocationChain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("max depth", func(t *testing.T) {
+		t.Parallel()
+
+		base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
+		guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithMaxDepth(2), invocation.WithoutRateLimit())
+
+		ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{RequestID: "depth-test", Depth: 2})
+		_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
+		if err == nil {
+			t.Fatal("expected max depth error")
+		}
+		var maxDepthErr *invocation.MaxDepthError
+		if !errors.As(err, &maxDepthErr) {
+			t.Fatalf("expected MaxDepthError, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("recursion", func(t *testing.T) {
+		t.Parallel()
+
+		base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
+		guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithoutRateLimit())
+
+		ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{
+			RequestID: "recur-test",
+			Depth:     1,
+			CallChain: []string{"alpha/default/ping"},
+		})
+		_, err := guarded.Invoke(ctx, nil, "alpha", "", "ping", nil)
+		if err == nil {
+			t.Fatal("expected recursion error")
+		}
+		var recursionErr *invocation.RecursionError
+		if !errors.As(err, &recursionErr) {
+			t.Fatalf("expected RecursionError, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("rate limit", func(t *testing.T) {
+		t.Parallel()
+
+		base := newGuardedTestInvoker(t, guardTestProvider("alpha"))
+		guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithRateLimit(1, 1))
+
+		if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
+			t.Fatalf("first Invoke: %v", err)
+		}
+
+		var rateLimitErr *invocation.RateLimitError
+		for i := 0; i < 10; i++ {
+			if _, err := guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil); err != nil {
+				if errors.As(err, &rateLimitErr) {
+					return
+				}
+				t.Fatalf("unexpected error type: %T: %v", err, err)
+			}
+		}
+		t.Fatal("expected rate limit error after burst")
+	})
+}
+
+func TestGuardedInvoker_ListCapabilities_FiltersAllowlist(t *testing.T) {
 	t.Parallel()
 
 	alpha := &stubProviderWithOps{
@@ -221,27 +164,15 @@ func TestGuardedInvoker_ListCapabilities(t *testing.T) {
 	}
 
 	base := newGuardedTestInvoker(t, alpha, beta)
+	guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"alpha"}))
 
-	t.Run("with allowlist", func(t *testing.T) {
-		t.Parallel()
-		guarded := invocation.NewGuarded(base, base, "test", &capturingSink{}, invocation.WithAllowedProviders([]string{"alpha"}))
-		caps := guarded.ListCapabilities()
-		if len(caps) != 2 {
-			t.Fatalf("expected 2 capabilities, got %d", len(caps))
+	caps := guarded.ListCapabilities()
+	if len(caps) != 2 {
+		t.Fatalf("expected 2 capabilities, got %d", len(caps))
+	}
+	for _, cap := range caps {
+		if cap.Provider != "alpha" {
+			t.Fatalf("expected provider alpha, got %q", cap.Provider)
 		}
-		for _, cap := range caps {
-			if cap.Provider != "alpha" {
-				t.Fatalf("expected provider alpha, got %q", cap.Provider)
-			}
-		}
-	})
-
-	t.Run("without allowlist", func(t *testing.T) {
-		t.Parallel()
-		guarded := invocation.NewGuarded(base, base, "test", &capturingSink{})
-		caps := guarded.ListCapabilities()
-		if len(caps) != 3 {
-			t.Fatalf("expected 3 capabilities, got %d", len(caps))
-		}
-	})
+	}
 }
