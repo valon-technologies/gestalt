@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/egress/egresstest"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"gopkg.in/yaml.v3"
 )
@@ -339,32 +340,32 @@ func TestProxyDerivesPrincipalSubject(t *testing.T) {
 func TestProxyFallsBackToSubjectSystem(t *testing.T) {
 	t.Parallel()
 
-	var capturedSubject egress.Subject
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(upstream.Close)
-
-	resolver := egress.Resolver{
+	var got egress.PolicyInput
+	b := New("my-proxy", "test-provider", proxyConfig{Path: "/proxy"}, egress.Resolver{
+		Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
+			got = input
+			return nil
+		}),
 		Subjects: egress.ContextSubjectResolver{},
-		Credentials: subjectCapturingResolver{
-			capture: func(s egress.Subject) {
-				capturedSubject = s
-			},
-		},
-	}
+	}, nil)
 
-	b := New("my-proxy", "test-provider", proxyConfig{Path: "/proxy"}, resolver, upstream.Client())
-
-	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/proxy/check", nil)
+	req := httptest.NewRequest(http.MethodPost, "/proxy/messages?cursor=123", bytes.NewBufferString("hello"))
+	req.Host = "api.example.com"
+	req.Header.Set("X-Proxy-Token", "abc")
 	w := httptest.NewRecorder()
 	b.Routes()[0].Handler.ServeHTTP(w, req)
 
-	if capturedSubject.Kind != egress.SubjectSystem {
-		t.Fatalf("subject kind = %q, want %q", capturedSubject.Kind, egress.SubjectSystem)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
 	}
-	if capturedSubject.ID != "my-proxy" {
-		t.Fatalf("subject ID = %q, want my-proxy", capturedSubject.ID)
+	if got.Subject != (egress.Subject{Kind: egress.SubjectSystem, ID: "my-proxy"}) {
+		t.Fatalf("subject = %+v, want system my-proxy", got.Subject)
+	}
+	if got.Target.Path != "/messages?cursor=123" {
+		t.Fatalf("target path = %q, want /messages?cursor=123", got.Target.Path)
+	}
+	if got.Headers["X-Proxy-Token"] != "abc" {
+		t.Fatalf("header = %q, want abc", got.Headers["X-Proxy-Token"])
 	}
 }
 
