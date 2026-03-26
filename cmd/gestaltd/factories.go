@@ -18,11 +18,10 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
-	graphqlupstream "github.com/valon-technologies/gestalt/internal/graphql"
 	"github.com/valon-technologies/gestalt/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
-	"github.com/valon-technologies/gestalt/internal/openapi"
 	"github.com/valon-technologies/gestalt/internal/provider"
+	providercompiler "github.com/valon-technologies/gestalt/internal/provider/compiler"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/local"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
@@ -251,19 +250,13 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 					cleanup()
 					return nil, fmt.Errorf("multiple api upstreams not supported")
 				}
-				def, err := loadAPIUpstream(ctx, name, *us, preparedProviders)
-				if err != nil {
-					cleanup()
-					return nil, err
-				}
-				intgForBuild := intgWithUpstreamAuth(intg, *us)
 				var buildOpts []provider.BuildOption
 				buildOpts = append(buildOpts, provider.WithEgressResolver(deps.Egress.Resolver))
 				if us.Auth.Type == "mcp_oauth" {
 					handler := buildMCPOAuthHandlerFromUpstream(*us, regStore, deps)
 					buildOpts = append(buildOpts, provider.WithAuthHandler(handler))
 				}
-				p, err := provider.Build(def, intgForBuild, map[string]string(us.AllowedOperations), buildOpts...)
+				p, err := providercompiler.BuildProvider(ctx, name, intg, *us, preparedProviders, buildOpts...)
 				if err != nil {
 					cleanup()
 					return nil, err
@@ -306,24 +299,6 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 			return nil, fmt.Errorf("no upstreams configured")
 		}
 	}
-}
-
-// Empty upstream fields are left as-is so integration-level defaults
-// (including redirect_url resolved later by resolveBaseURL) are preserved.
-func intgWithUpstreamAuth(intg config.IntegrationDef, us config.UpstreamDef) config.IntegrationDef {
-	if us.Auth.Type != "" {
-		intg.Auth = us.Auth
-	}
-	if us.ClientID != "" {
-		intg.ClientID = us.ClientID
-	}
-	if us.ClientSecret != "" {
-		intg.ClientSecret = us.ClientSecret
-	}
-	if us.RedirectURL != "" {
-		intg.RedirectURL = us.RedirectURL
-	}
-	return intg
 }
 
 func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
@@ -386,25 +361,4 @@ func buildMCPOAuthProvider(name string, intg config.IntegrationDef, us config.Up
 	}
 
 	return composite.New(name, baseProv, mcpUp), nil
-}
-
-func loadAPIUpstream(ctx context.Context, name string, us config.UpstreamDef, preparedProviders map[string]string) (*provider.Definition, error) {
-	if preparedPath := preparedProviders[name]; preparedPath != "" {
-		return provider.LoadFile(preparedPath)
-	}
-
-	switch us.Type {
-	case config.UpstreamTypeREST:
-		if us.URL != "" {
-			return openapi.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
-		}
-	case config.UpstreamTypeGraphQL:
-		if us.URL != "" {
-			return graphqlupstream.LoadDefinition(ctx, name, us.URL, map[string]string(us.AllowedOperations))
-		}
-	default:
-		return nil, fmt.Errorf("unsupported api upstream type %q", us.Type)
-	}
-
-	return nil, fmt.Errorf("api upstream %q requires a url or prepared artifact", name)
 }
