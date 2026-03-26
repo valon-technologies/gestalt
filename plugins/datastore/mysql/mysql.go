@@ -46,6 +46,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
+var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -121,6 +122,29 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at DATETIME(6) NOT NULL,
 			expires_at DATETIME(6) NOT NULL,
 			CONSTRAINT fk_staged_connections_user FOREIGN KEY (user_id) REFERENCES users(id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+		`CREATE TABLE IF NOT EXISTS egress_clients (
+			id VARCHAR(36) NOT NULL PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			description TEXT NOT NULL,
+			created_by_id VARCHAR(36) NOT NULL,
+			created_at DATETIME(6) NOT NULL,
+			updated_at DATETIME(6) NOT NULL,
+			UNIQUE KEY idx_egress_clients_owner_name (created_by_id, name),
+			CONSTRAINT fk_egress_clients_user FOREIGN KEY (created_by_id) REFERENCES users(id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+		`CREATE TABLE IF NOT EXISTS egress_client_tokens (
+			id VARCHAR(36) NOT NULL PRIMARY KEY,
+			client_id VARCHAR(36) NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			hashed_token VARCHAR(255) NOT NULL,
+			expires_at DATETIME(6) NULL,
+			created_at DATETIME(6) NOT NULL,
+			updated_at DATETIME(6) NOT NULL,
+			UNIQUE KEY idx_egress_client_tokens_hashed (hashed_token),
+			CONSTRAINT fk_egress_client_tokens_client FOREIGN KEY (client_id) REFERENCES egress_clients(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 

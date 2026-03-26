@@ -27,6 +27,12 @@ func RunDatastoreTests(t *testing.T, newStore func(t *testing.T) core.Datastore)
 	t.Run("StagedConnections", func(t *testing.T) {
 		testDatastoreStagedConnections(t, newStore)
 	})
+	t.Run("EgressClients", func(t *testing.T) {
+		testDatastoreEgressClients(t, newStore)
+	})
+	t.Run("EgressClientTokens", func(t *testing.T) {
+		testDatastoreEgressClientTokens(t, newStore)
+	})
 }
 
 func mustCreateUser(t *testing.T, ctx context.Context, ds core.Datastore, email string) *core.User {
@@ -414,7 +420,7 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 		ctx := context.Background()
 
 		user := mustCreateUser(t, ctx, ds, "staged@example.com")
-		now := time.Now().UTC().Truncate(time.Second)
+		now := time.Now().Truncate(time.Second)
 		expiry := now.Add(10 * time.Minute)
 
 		sc := &core.StagedConnection{
@@ -482,6 +488,383 @@ func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) co
 		_, err := scs.GetStagedConnection(ctx, "nonexistent-id")
 		if !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+}
+
+func testDatastoreEgressClients(t *testing.T, newStore func(t *testing.T) core.Datastore) {
+	t.Run("create get and list lifecycle", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "egress-admin@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		client := &core.EgressClient{
+			ID:          "ec-1",
+			Name:        "ci-bot",
+			Description: "CI/CD pipeline agent",
+			CreatedByID: user.ID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := ecs.CreateEgressClient(ctx, client); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		got, err := ecs.GetEgressClient(ctx, "ec-1")
+		if err != nil {
+			t.Fatalf("GetEgressClient: %v", err)
+		}
+		if got.Name != "ci-bot" {
+			t.Errorf("Name: got %q, want %q", got.Name, "ci-bot")
+		}
+		if got.Description != "CI/CD pipeline agent" {
+			t.Errorf("Description: got %q, want %q", got.Description, "CI/CD pipeline agent")
+		}
+		if got.CreatedByID != user.ID {
+			t.Errorf("CreatedByID: got %q, want %q", got.CreatedByID, user.ID)
+		}
+
+		clients, err := ecs.ListEgressClients(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("ListEgressClients: %v", err)
+		}
+		if len(clients) != 1 {
+			t.Fatalf("ListEgressClients: got %d, want 1", len(clients))
+		}
+	})
+
+	t.Run("delete removes client", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "egress-del@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-del", Name: "deletable", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		if err := ecs.DeleteEgressClient(ctx, "ec-del"); err != nil {
+			t.Fatalf("DeleteEgressClient: %v", err)
+		}
+
+		_, err := ecs.GetEgressClient(ctx, "ec-del")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetEgressClient after delete: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("delete nonexistent returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		err := ecs.DeleteEgressClient(ctx, "nonexistent-id")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("duplicate name for same user returns ErrAlreadyRegistered", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "egress-dup@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-dup-1", Name: "same-name", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("first CreateEgressClient: %v", err)
+		}
+
+		err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-dup-2", Name: "same-name", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		})
+		if !errors.Is(err, core.ErrAlreadyRegistered) {
+			t.Fatalf("expected ErrAlreadyRegistered, got %v", err)
+		}
+	})
+
+	t.Run("same name allowed for different users and list is scoped", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		userA := mustCreateUser(t, ctx, ds, "egress-a@example.com")
+		userB := mustCreateUser(t, ctx, ds, "egress-b@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-a", Name: "shared-name", CreatedByID: userA.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient userA: %v", err)
+		}
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-b", Name: "shared-name", CreatedByID: userB.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient userB: %v", err)
+		}
+
+		clientsA, err := ecs.ListEgressClients(ctx, userA.ID)
+		if err != nil {
+			t.Fatalf("ListEgressClients userA: %v", err)
+		}
+		if len(clientsA) != 1 || clientsA[0].ID != "ec-a" {
+			t.Fatalf("ListEgressClients userA: got %+v, want only ec-a", clientsA)
+		}
+
+		clientsB, err := ecs.ListEgressClients(ctx, userB.ID)
+		if err != nil {
+			t.Fatalf("ListEgressClients userB: %v", err)
+		}
+		if len(clientsB) != 1 || clientsB[0].ID != "ec-b" {
+			t.Fatalf("ListEgressClients userB: got %+v, want only ec-b", clientsB)
+		}
+	})
+}
+
+func testDatastoreEgressClientTokens(t *testing.T, newStore func(t *testing.T) core.Datastore) {
+	t.Run("create validate and list lifecycle", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "token-admin@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-tok", Name: "token-client", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		token := &core.EgressClientToken{
+			ID:          "eclt-1",
+			ClientID:    "ec-tok",
+			Name:        "deploy-token",
+			HashedToken: "sha256:eclt-hash-1",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := ecs.CreateEgressClientToken(ctx, token); err != nil {
+			t.Fatalf("CreateEgressClientToken: %v", err)
+		}
+
+		got, err := ecs.ValidateEgressClientToken(ctx, "sha256:eclt-hash-1")
+		if err != nil {
+			t.Fatalf("ValidateEgressClientToken: %v", err)
+		}
+		if got == nil {
+			t.Fatal("ValidateEgressClientToken returned nil")
+		}
+		if got.ClientID != "ec-tok" {
+			t.Errorf("ClientID: got %q, want %q", got.ClientID, "ec-tok")
+		}
+		if got.Name != "deploy-token" {
+			t.Errorf("Name: got %q, want %q", got.Name, "deploy-token")
+		}
+
+		tokens, err := ecs.ListEgressClientTokens(ctx, "ec-tok")
+		if err != nil {
+			t.Fatalf("ListEgressClientTokens: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("ListEgressClientTokens: got %d, want 1", len(tokens))
+		}
+	})
+
+	t.Run("validate expired token returns nil", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "expired-ect@example.com")
+		now := time.Now().Truncate(time.Second)
+		pastExpiry := now.Add(-1 * time.Hour)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-exp", Name: "expired-client", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		if err := ecs.CreateEgressClientToken(ctx, &core.EgressClientToken{
+			ID: "eclt-exp", ClientID: "ec-exp", Name: "expired",
+			HashedToken: "sha256:eclt-expired", ExpiresAt: &pastExpiry,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClientToken: %v", err)
+		}
+
+		got, err := ecs.ValidateEgressClientToken(ctx, "sha256:eclt-expired")
+		if err != nil {
+			t.Fatalf("ValidateEgressClientToken: %v", err)
+		}
+		if got != nil {
+			t.Errorf("expected nil for expired token, got %+v", got)
+		}
+	})
+
+	t.Run("revoke removes token", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "revoke-ect@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-rev", Name: "revoke-client", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		if err := ecs.CreateEgressClientToken(ctx, &core.EgressClientToken{
+			ID: "eclt-rev", ClientID: "ec-rev", Name: "revokable",
+			HashedToken: "sha256:eclt-revoke", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClientToken: %v", err)
+		}
+
+		if err := ecs.RevokeEgressClientToken(ctx, "ec-rev", "eclt-rev"); err != nil {
+			t.Fatalf("RevokeEgressClientToken: %v", err)
+		}
+
+		got, err := ecs.ValidateEgressClientToken(ctx, "sha256:eclt-revoke")
+		if err != nil {
+			t.Fatalf("ValidateEgressClientToken after revoke: %v", err)
+		}
+		if got != nil {
+			t.Errorf("expected nil after revoke, got %+v", got)
+		}
+	})
+
+	t.Run("revoke with wrong client_id returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "wrong-client-ect@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-owner", Name: "owner-client", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		if err := ecs.CreateEgressClientToken(ctx, &core.EgressClientToken{
+			ID: "eclt-owned", ClientID: "ec-owner", Name: "owned-token",
+			HashedToken: "sha256:eclt-owned", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClientToken: %v", err)
+		}
+
+		err := ecs.RevokeEgressClientToken(ctx, "wrong-client-id", "eclt-owned")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("cascade delete removes tokens", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		ecs, ok := ds.(core.EgressClientStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressClientStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "cascade-ect@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := ecs.CreateEgressClient(ctx, &core.EgressClient{
+			ID: "ec-cascade", Name: "cascade-client", CreatedByID: user.ID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClient: %v", err)
+		}
+
+		if err := ecs.CreateEgressClientToken(ctx, &core.EgressClientToken{
+			ID: "eclt-cascade", ClientID: "ec-cascade", Name: "cascade-token",
+			HashedToken: "sha256:eclt-cascade", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressClientToken: %v", err)
+		}
+
+		if err := ecs.DeleteEgressClient(ctx, "ec-cascade"); err != nil {
+			t.Fatalf("DeleteEgressClient: %v", err)
+		}
+
+		got, err := ecs.ValidateEgressClientToken(ctx, "sha256:eclt-cascade")
+		if err != nil {
+			t.Fatalf("ValidateEgressClientToken after cascade delete: %v", err)
+		}
+		if got != nil {
+			t.Errorf("expected nil after cascade delete, got %+v", got)
 		}
 	})
 }

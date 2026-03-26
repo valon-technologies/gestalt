@@ -431,3 +431,168 @@ func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// EgressClient methods
+// ---------------------------------------------------------------------------
+
+func scanEgressClient(row Scanner) (*core.EgressClient, error) {
+	var c core.EgressClient
+	var description sql.NullString
+	if err := row.Scan(&c.ID, &c.Name, &description, &c.CreatedByID,
+		&c.CreatedAt, &c.UpdatedAt); err != nil {
+		return nil, err
+	}
+	c.Description = description.String
+	return &c, nil
+}
+
+func scanEgressClientToken(row Scanner) (*core.EgressClientToken, error) {
+	var t core.EgressClientToken
+	var expiresAt sql.NullTime
+	if err := row.Scan(&t.ID, &t.ClientID, &t.Name, &t.HashedToken,
+		&expiresAt, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if expiresAt.Valid {
+		t.ExpiresAt = &expiresAt.Time
+	}
+	return &t, nil
+}
+
+func (s *Store) CreateEgressClient(ctx context.Context, client *core.EgressClient) error {
+	defaultTimestamps(&client.CreatedAt, &client.UpdatedAt)
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO egress_clients (id, name, description, created_by_id, created_at, updated_at)
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`)`,
+		client.ID, client.Name, client.Description, client.CreatedByID,
+		client.CreatedAt, client.UpdatedAt,
+	)
+	if err != nil {
+		if s.Dialect.IsDuplicateKeyError(err) {
+			return core.ErrAlreadyRegistered
+		}
+		return fmt.Errorf("inserting egress client: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetEgressClient(ctx context.Context, id string) (*core.EgressClient, error) {
+	row := s.DB.QueryRowContext(ctx, `
+		SELECT id, name, description, created_by_id, created_at, updated_at
+		FROM egress_clients WHERE id = `+s.ph(1), id)
+	c, err := scanEgressClient(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, core.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying egress client: %w", err)
+	}
+	return c, nil
+}
+
+func (s *Store) ListEgressClients(ctx context.Context, userID string) ([]*core.EgressClient, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, name, description, created_by_id, created_at, updated_at
+		FROM egress_clients
+		WHERE created_by_id = `+s.ph(1)+`
+		ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing egress clients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var clients []*core.EgressClient
+	for rows.Next() {
+		c, err := scanEgressClient(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning egress client row: %w", err)
+		}
+		clients = append(clients, c)
+	}
+	return clients, rows.Err()
+}
+
+func (s *Store) DeleteEgressClient(ctx context.Context, id string) error {
+	result, err := s.DB.ExecContext(ctx, "DELETE FROM egress_clients WHERE id = "+s.ph(1), id)
+	if err != nil {
+		return fmt.Errorf("deleting egress client: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("deleting egress client: %w", err)
+	}
+	if n == 0 {
+		return core.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) CreateEgressClientToken(ctx context.Context, token *core.EgressClientToken) error {
+	defaultTimestamps(&token.CreatedAt, &token.UpdatedAt)
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO egress_client_tokens (id, client_id, name, hashed_token, expires_at, created_at, updated_at)
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`)`,
+		token.ID, token.ClientID, token.Name, token.HashedToken,
+		NullableTime(token.ExpiresAt), token.CreatedAt, token.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting egress client token: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) ValidateEgressClientToken(ctx context.Context, hashedToken string) (*core.EgressClientToken, error) {
+	row := s.DB.QueryRowContext(ctx, `
+		SELECT id, client_id, name, hashed_token, expires_at, created_at, updated_at
+		FROM egress_client_tokens WHERE hashed_token = `+s.ph(1)+`
+		AND (expires_at IS NULL OR expires_at > `+s.ph(2)+`)`,
+		hashedToken, time.Now(),
+	)
+	t, err := scanEgressClientToken(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("validating egress client token: %w", err)
+	}
+	return t, nil
+}
+
+func (s *Store) ListEgressClientTokens(ctx context.Context, clientID string) ([]*core.EgressClientToken, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, client_id, name, hashed_token, expires_at, created_at, updated_at
+		FROM egress_client_tokens WHERE client_id = `+s.ph(1), clientID)
+	if err != nil {
+		return nil, fmt.Errorf("listing egress client tokens: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tokens []*core.EgressClientToken
+	for rows.Next() {
+		t, err := scanEgressClientToken(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning egress client token row: %w", err)
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, rows.Err()
+}
+
+func (s *Store) RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error {
+	result, err := s.DB.ExecContext(ctx,
+		"DELETE FROM egress_client_tokens WHERE id = "+s.ph(1)+" AND client_id = "+s.ph(2),
+		tokenID, clientID,
+	)
+	if err != nil {
+		return fmt.Errorf("revoking egress client token: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoking egress client token: %w", err)
+	}
+	if n == 0 {
+		return core.ErrNotFound
+	}
+	return nil
+}
