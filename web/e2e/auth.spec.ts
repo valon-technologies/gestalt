@@ -78,6 +78,38 @@ test.describe("Authentication", () => {
     await expect(page.getByText(/Invalid OAuth state/)).toBeVisible();
   });
 
+  test("auth callback hands off CLI state without navigating to localhost", async ({
+    page,
+  }) => {
+    const code = "test-code";
+    const state = "original-state";
+    const port = 12345;
+    let callbackRequestUrl: string | null = null;
+
+    await page.route(`**://127.0.0.1:${port}/**`, async (route, request) => {
+      callbackRequestUrl = request.url();
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html><body>ok</body></html>",
+      });
+    });
+
+    await page.goto(`/auth/callback?code=${code}&state=cli:${port}:${state}`);
+
+    await expect.poll(() => callbackRequestUrl).toBeTruthy();
+    expect(callbackRequestUrl).toContain(`http://127.0.0.1:${port}/`);
+
+    const callbackUrl = new URL(callbackRequestUrl as string);
+    expect(callbackUrl.searchParams.get("code")).toBe(code);
+    expect(callbackUrl.searchParams.get("state")).toBe(state);
+
+    await expect(page).not.toHaveURL(new RegExp(`127\\.0\\.0\\.1:${port}`));
+    await expect(
+      page.getByText("Login successful! You can close this tab."),
+    ).toBeVisible();
+  });
+
   test("401 response clears session and redirects to login", async ({
     authenticatedPage,
   }) => {
