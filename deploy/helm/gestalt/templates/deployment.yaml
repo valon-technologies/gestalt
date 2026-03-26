@@ -35,6 +35,38 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
+      {{- if .Values.pluginInit.enabled }}
+      initContainers:
+        - name: plugin-init
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              cp /etc/gestalt-config/config.yaml /etc/gestalt/config.yaml
+              /gestaltd init --config /etc/gestalt/config.yaml
+          {{- with .Values.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/gestalt-config
+              readOnly: true
+            - name: gestalt-state
+              mountPath: /etc/gestalt
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -49,6 +81,8 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
+            - serve
+            - --locked
             - --config
             - /etc/gestalt/config.yaml
           ports:
@@ -72,10 +106,16 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.pluginInit.enabled }}
+            - name: gestalt-state
+              mountPath: /etc/gestalt
+              readOnly: true
+            {{- else }}
             - name: config
               mountPath: /etc/gestalt/config.yaml
               subPath: config.yaml
               readOnly: true
+            {{- end }}
             - name: data
               mountPath: /data
             - name: tmp
@@ -93,6 +133,10 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.pluginInit.enabled }}
+        - name: gestalt-state
+          emptyDir: {}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

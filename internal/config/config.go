@@ -65,12 +65,12 @@ type ExecutablePluginDef struct {
 	Mode    string            `yaml:"mode"`
 	Base    string            `yaml:"base"`
 	Command string            `yaml:"command"`
-	Ref     string            `yaml:"ref"`
+	Package string            `yaml:"package"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Config  yaml.Node         `yaml:"config"`
 
-	PreparedManifestPath string `yaml:"-"`
+	ResolvedManifestPath string `yaml:"-"`
 }
 
 type RuntimeDef struct {
@@ -441,6 +441,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 		if intg.Plugin != nil {
 			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
+			intg.Plugin.Package = resolvePackagePath(baseDir, intg.Plugin.Package)
 		}
 		cfg.Integrations[name] = intg
 	}
@@ -449,6 +450,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		rt := cfg.Runtimes[name]
 		if rt.Plugin != nil {
 			rt.Plugin.Command = resolveExecutablePath(baseDir, rt.Plugin.Command)
+			rt.Plugin.Package = resolvePackagePath(baseDir, rt.Plugin.Package)
 		}
 		cfg.Runtimes[name] = rt
 	}
@@ -469,6 +471,13 @@ func resolveExecutablePath(baseDir, value string) string {
 		return filepath.Clean(filepath.Join(baseDir, value))
 	}
 	return value
+}
+
+func resolvePackagePath(baseDir, value string) string {
+	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
+		return value
+	}
+	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
 func validate(cfg *Config) error {
@@ -564,13 +573,22 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	if plugin == nil {
 		return nil
 	}
+	sourceCount := 0
+	if plugin.Command != "" {
+		sourceCount++
+	}
+	if plugin.Package != "" {
+		sourceCount++
+	}
 	switch {
-	case plugin.Command == "" && plugin.Ref == "":
-		return fmt.Errorf("config validation: %s %q plugin.command or plugin.ref is required", kind, name)
-	case plugin.Command != "" && plugin.Ref != "":
-		return fmt.Errorf("config validation: %s %q plugin.command and plugin.ref are mutually exclusive", kind, name)
-	case plugin.Ref != "" && len(plugin.Args) > 0:
+	case sourceCount == 0:
+		return fmt.Errorf("config validation: %s %q plugin.command or plugin.package is required", kind, name)
+	case sourceCount > 1:
+		return fmt.Errorf("config validation: %s %q plugin.command and plugin.package are mutually exclusive", kind, name)
+	case plugin.Command == "" && len(plugin.Args) > 0:
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
+	case strings.HasPrefix(plugin.Package, "http://"):
+		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
 	mode := plugin.Mode
 	if mode == "" {

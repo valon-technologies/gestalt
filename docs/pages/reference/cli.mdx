@@ -9,8 +9,8 @@ Gestalt ships two binaries: the Go server (`gestaltd`) and the Rust client (`ges
 ### Usage
 
 ```sh
-gestaltd dev --config config.yaml
-gestaltd prepare --config config.yaml
+gestaltd --config config.yaml
+gestaltd init --config config.yaml
 gestaltd serve --config config.yaml
 gestaltd validate --config config.yaml
 ```
@@ -19,8 +19,8 @@ gestaltd validate --config config.yaml
 
 | Command | Purpose |
 |---|---|
-| `gestaltd dev --config config.yaml` | Prepare REST/GraphQL providers if needed, then start the server from the source config. |
-| `gestaltd prepare --config config.yaml` | Write `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. |
+| `gestaltd --config config.yaml` | Prepare REST/GraphQL providers if needed, then start the server from the source config. |
+| `gestaltd init --config config.yaml` | Write `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. |
 | `gestaltd serve --config config.yaml` | Start the server strictly from the source config plus prepared provider artifacts. |
 | `gestaltd validate --config config.yaml` | Load and validate config, then exit without starting the server. |
 
@@ -37,18 +37,19 @@ Prints: config file path, server settings, auth provider, datastore, secrets pro
 ### Prepare for deployment
 
 ```sh
-gestaltd prepare --config config.yaml
+gestaltd init --config config.yaml
 gestaltd serve --config config.yaml
 ```
 
-`gestaltd prepare` writes a lockfile and hidden provider cache next to the source config. `gestaltd serve` reads the same source config and uses the prepared artifacts, so production startup no longer depends on live spec downloads or GraphQL introspection.
+`gestaltd init` writes a lockfile and hidden provider cache next to the source config. `gestaltd serve` reads the same source config and uses the prepared artifacts, so production startup no longer depends on live spec downloads or GraphQL introspection.
 
 ### Config file resolution
 
 1. `--config` flag.
 2. `GESTALT_CONFIG` environment variable.
 3. `./config.yaml` in the current directory.
-4. `/etc/gestalt/config.yaml`.
+4. `~/.gestalt/config.yaml`.
+5. `/etc/gestalt/config.yaml`.
 
 ## Client CLI (`gestalt`)
 

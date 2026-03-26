@@ -36,8 +36,8 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd validate") {
 		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd prepare") {
-		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd init") {
+		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
 	}
 	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
 		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
@@ -45,8 +45,11 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd serve") {
 		t.Fatalf("expected usage output containing 'gestaltd serve', got: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd dev") {
-		t.Fatalf("expected usage output containing 'gestaltd dev', got: %s", out)
+	if strings.Contains(string(out), "gestaltd dev") {
+		t.Fatalf("expected dev to be removed from usage, got: %s", out)
+	}
+	if !strings.Contains(string(out), "--locked") {
+		t.Fatalf("expected usage output containing '--locked', got: %s", out)
 	}
 }
 
@@ -62,15 +65,15 @@ func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
 	}
 }
 
-func TestGestaltdPrepareHelpExitsCleanly(t *testing.T) {
+func TestGestaltdInitHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "prepare", "--help")
+	cmd := exec.Command("go", "run", ".", "init", "--help")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'prepare --help', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'init --help', got error: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "gestaltd prepare") {
-		t.Fatalf("expected usage output containing 'gestaltd prepare', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd init") {
+		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
 	}
 }
 

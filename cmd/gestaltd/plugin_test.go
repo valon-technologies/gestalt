@@ -29,6 +29,9 @@ func TestRun_PluginHelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
 		t.Fatalf("expected plugin usage output, got: %s", out)
 	}
+	if strings.Contains(string(out), "install") || strings.Contains(string(out), "inspect") || strings.Contains(string(out), "list") {
+		t.Fatalf("expected removed commands absent from help, got: %s", out)
+	}
 }
 
 func TestRun_PluginPackageHelpExitsCleanly(t *testing.T) {
@@ -68,101 +71,6 @@ func TestRun_PluginPackageCreatesArchive(t *testing.T) {
 	}
 	if !strings.Contains(output, "packaged") {
 		t.Fatalf("expected package output, got: %q", output)
-	}
-}
-
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
-func TestRun_PluginInspectPrintsManifestSummary(t *testing.T) {
-	dir := t.TempDir()
-	src := newPluginPackageFixture(t, dir)
-	outPath := filepath.Join(dir, "acme-provider-0.1.0.tar.gz")
-	captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--input", src, "--output", outPath})
-	})
-
-	output := captureStdout(t, func() error {
-		return run([]string{"plugin", "inspect", outPath})
-	})
-
-	if !strings.Contains(output, "id: acme/provider") {
-		t.Fatalf("expected manifest summary, got: %q", output)
-	}
-	if !strings.Contains(output, "artifact:") {
-		t.Fatalf("expected artifact summary, got: %q", output)
-	}
-}
-
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
-func TestRun_PluginInstallAndListUseLocalStore(t *testing.T) {
-	dir := t.TempDir()
-	src := newPluginPackageFixture(t, dir)
-	outPath := filepath.Join(dir, "acme-provider-0.1.0.tar.gz")
-	captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--input", src, "--output", outPath})
-	})
-	configPath := filepath.Join(dir, "config", "gestalt.yaml")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
-		t.Fatalf("MkdirAll(config): %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte("auth:\n  provider: google\ndatastore:\n  provider: sqlite\nserver:\n  encryption_key: key123\n"), 0644); err != nil {
-		t.Fatalf("WriteFile(config): %v", err)
-	}
-
-	installOutput := captureStdout(t, func() error {
-		return run([]string{"plugin", "install", "--config", configPath, outPath})
-	})
-	if !strings.Contains(installOutput, "installed acme/provider@0.1.0") {
-		t.Fatalf("expected install output, got: %q", installOutput)
-	}
-
-	executablePath := filepath.Join(filepath.Dir(configPath), ".gestalt", "plugins", "acme", "provider", "0.1.0", "artifacts", runtime.GOOS, runtime.GOARCH, "provider")
-	if _, err := os.Stat(executablePath); err != nil {
-		t.Fatalf("expected installed executable at %s: %v", executablePath, err)
-	}
-
-	listOutput := captureStdout(t, func() error {
-		return run([]string{"plugin", "list", "--config", configPath})
-	})
-	if !strings.Contains(listOutput, "acme/provider@0.1.0") {
-		t.Fatalf("expected list output to contain installed ref, got: %q", listOutput)
-	}
-}
-
-func TestRun_PluginInstallRejectsMissingPackageArgument(t *testing.T) {
-	t.Parallel()
-
-	err := run([]string{"plugin", "install", "--config", "config.yaml"})
-	if err == nil {
-		t.Fatal("expected usage error")
-	}
-	if !strings.Contains(err.Error(), "usage: gestaltd plugin install") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRun_PluginListRejectsTrailingArguments(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{name: "list", args: []string{"plugin", "list", "--config", "config.yaml", "extra"}},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := run(tt.args)
-			if err == nil {
-				t.Fatalf("expected error for %s", tt.name)
-			}
-			if !strings.Contains(err.Error(), "unexpected arguments") {
-				t.Fatalf("expected trailing args error, got: %v", err)
-			}
-		})
 	}
 }
 
@@ -228,8 +136,6 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 func captureStdout(t *testing.T, fn func() error) string {
 	t.Helper()
 
-	// This helper swaps the process-global os.Stdout, so callers must not run in
-	// parallel with other tests in this package.
 	stdoutMu.Lock()
 	defer stdoutMu.Unlock()
 
