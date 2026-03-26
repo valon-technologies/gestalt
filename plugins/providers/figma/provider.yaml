@@ -1,0 +1,147 @@
+provider: figma
+display_name: Figma
+description: Figma design platform for files, comments, and dev resources
+connection_mode: user
+base_url: "https://api.figma.com/v1"
+
+auth:
+  type: oauth2
+  authorization_url: https://www.figma.com/oauth
+  token_url: https://api.figma.com/v1/oauth/token
+  scopes:
+    - current_user:read
+    - file_content:read
+    - file_metadata:read
+    - projects:read
+    - file_comments:write
+    - file_dev_resources:read
+    - file_dev_resources:write
+
+operations:
+  get_file:
+    description: Get a Figma file by key
+    method: GET
+    path: "/files/{file_key}"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: depth, type: integer, description: Depth of nodes to return}
+      - {name: geometry, type: string, description: "Include geometry data ('paths')"}
+      - {name: plugin_data, type: string, description: Return plugin data}
+      - {name: branch_data, type: boolean, description: Return branch metadata}
+  get_file_nodes:
+    description: Get specific nodes from a Figma file
+    method: GET
+    path: "/files/{file_key}/nodes"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: ids, type: string, required: true, description: Comma-separated list of node IDs}
+      - {name: depth, type: integer, description: Depth of nodes to return}
+      - {name: geometry, type: string, description: Include geometry data}
+      - {name: plugin_data, type: string, description: Return plugin data}
+  list_team_projects:
+    description: List projects in a team
+    method: GET
+    path: "/teams/{team_id}/projects"
+    parameters:
+      - {name: team_id, type: string, required: true, description: The team ID}
+  list_project_files:
+    description: List files in a project
+    method: GET
+    path: "/projects/{project_id}/files"
+    parameters:
+      - {name: project_id, type: string, required: true, description: The project ID}
+      - {name: branch_data, type: boolean, description: Include branch metadata}
+  export_images:
+    description: Export images from a Figma file as jpg, png, svg, or pdf
+    method: GET
+    path: "/images/{file_key}"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: ids, type: string, required: true, description: Comma-separated list of node IDs to export}
+      - {name: format, type: string, description: "Image format: jpg, png, svg, pdf"}
+      - {name: scale, type: number, description: Image scale 0.01 to 4}
+      - {name: svg_include_id, type: boolean, description: Include id attribute in SVG}
+      - {name: svg_simplify_stroke, type: boolean, description: Simplify strokes in SVG}
+      - {name: use_absolute_bounds, type: boolean, description: Use full dimensions}
+  get_comments:
+    description: Get comments on a Figma file
+    method: GET
+    path: "/files/{file_key}/comments"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: as_md, type: boolean, description: Return comments as markdown}
+  post_comment:
+    description: Post a comment on a Figma file
+    method: POST
+    path: "/files/{file_key}/comments"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: message, type: string, required: true, description: Comment text}
+      - {name: comment_id, type: string, description: Parent comment ID for replies}
+      - {name: client_meta, type: object, description: Position for pinned comments}
+  delete_comment:
+    description: Delete a comment on a Figma file
+    method: DELETE
+    path: "/files/{file_key}/comments/{comment_id}"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: comment_id, type: string, required: true, description: The comment ID to delete}
+  add_reaction:
+    description: Add an emoji reaction to a comment
+    method: POST
+    path: "/files/{file_key}/comments/{comment_id}/reactions"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: comment_id, type: string, required: true, description: The comment ID to react to}
+      - {name: emoji, type: string, required: true, description: Emoji shortcode}
+  delete_reaction:
+    description: Delete an emoji reaction from a comment
+    method: DELETE
+    path: "/files/{file_key}/comments/{comment_id}/reactions"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: comment_id, type: string, required: true, description: The comment ID}
+      - {name: emoji, type: string, required: true, description: Emoji shortcode to remove}
+  get_file_components:
+    description: Get components from a Figma file
+    method: GET
+    path: "/files/{file_key}/components"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+  get_file_styles:
+    description: Get styles from a Figma file
+    method: GET
+    path: "/files/{file_key}/styles"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+  get_me:
+    description: Get the current user's information
+    method: GET
+    path: /me
+    parameters: []
+  get_dev_resources:
+    description: Get dev resources from a Figma file
+    method: GET
+    path: "/files/{file_key}/dev_resources"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: node_ids, type: string, description: Comma-separated node IDs to filter by}
+  create_dev_resources:
+    description: Bulk create dev resources across Figma files
+    method: POST
+    path: /dev_resources
+    parameters:
+      - {name: dev_resources, type: array, required: true, description: "List of dev resource objects (each needs: name, url, file_key, node_id)"}
+  update_dev_resources:
+    description: Bulk update dev resources across Figma files
+    method: PUT
+    path: /dev_resources
+    parameters:
+      - {name: dev_resources, type: array, required: true, description: "List of dev resource objects to update (each needs: id and fields to update)"}
+  delete_dev_resource:
+    description: Delete a dev resource from a Figma file
+    method: DELETE
+    path: "/files/{file_key}/dev_resources/{dev_resource_id}"
+    parameters:
+      - {name: file_key, type: string, required: true, description: The file key}
+      - {name: dev_resource_id, type: string, required: true, description: The dev resource ID to delete}

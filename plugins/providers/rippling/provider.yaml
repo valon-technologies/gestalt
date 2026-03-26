@@ -1,0 +1,68 @@
+provider: rippling
+display_name: Rippling
+description: Rippling HR platform for managing employees, departments, and leave
+connection_mode: identity
+base_url: "https://api.rippling.com/platform/api"
+
+auth:
+  type: manual
+
+operations:
+  list_employees:
+    description: List employees with optional filtering by department, work location, or employment type
+    method: GET
+    path: /employees
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+      - {name: department_id, type: string, description: Filter by department ID}
+      - {name: work_location_id, type: string, description: Filter by work location ID}
+      - {name: employment_type, type: string, description: Filter by employment type}
+  get_employee:
+    description: Get details of a specific employee
+    method: GET
+    path: "/employees/{employee_id}"
+    parameters:
+      - {name: employee_id, type: string, required: true, description: Employee ID}
+  list_departments:
+    description: List departments
+    method: GET
+    path: /departments
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+  list_groups:
+    description: List employee groups
+    method: GET
+    path: /groups
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+  list_work_locations:
+    description: List work locations
+    method: GET
+    path: /work_locations
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+  get_company:
+    description: Get company information
+    method: GET
+    path: /companies/current
+    parameters: []
+  list_leave_requests:
+    description: List leave/time-off requests
+    method: GET
+    path: /leave_requests
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+      - {name: status, type: string, description: Filter by status (PENDING, APPROVED, DENIED, CANCELLED)}
+  list_leave_balances:
+    description: List leave balances
+    method: GET
+    path: /leave_balances
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: limit, type: integer, description: Number of results per page}
+      - {name: employee_id, type: string, description: Filter by employee ID}

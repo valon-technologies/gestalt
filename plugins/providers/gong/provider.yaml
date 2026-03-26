@@ -1,0 +1,30 @@
+provider: gong
+display_name: Gong
+description: Gong conversation intelligence for calls and transcripts
+connection_mode: identity
+base_url: "https://api.gong.io/v2"
+
+auth:
+  type: manual
+
+operations:
+  list_calls:
+    description: List Gong calls with optional date filtering and cursor-based pagination
+    method: GET
+    path: /calls
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
+      - {name: fromDateTime, type: string, description: Start of date range (ISO 8601)}
+      - {name: toDateTime, type: string, description: End of date range (ISO 8601)}
+  get_call:
+    description: Get details of a specific Gong call by ID
+    method: GET
+    path: "/calls/{call_id}"
+    parameters:
+      - {name: call_id, type: string, required: true, description: Gong call ID}
+  list_users:
+    description: List Gong users with cursor-based pagination
+    method: GET
+    path: /users
+    parameters:
+      - {name: cursor, type: string, description: Cursor for pagination}
