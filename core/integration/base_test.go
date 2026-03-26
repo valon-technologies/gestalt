@@ -127,7 +127,7 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		},
 		EgressResolver: &egress.Resolver{
 			Subjects: egress.StaticSubjectResolver{
-				Subject: egress.Subject{Kind: egress.SubjectAgent, ID: "agent-1"},
+				Subject: egress.Subject{Kind: egress.SubjectUser, ID: "user-1"},
 			},
 			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
 				gotPolicy = input
@@ -140,8 +140,8 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if gotPolicy.Subject.Kind != egress.SubjectAgent || gotPolicy.Subject.ID != "agent-1" {
-		t.Fatalf("subject = %+v, want agent-1", gotPolicy.Subject)
+	if gotPolicy.Subject.Kind != egress.SubjectUser || gotPolicy.Subject.ID != "user-1" {
+		t.Fatalf("subject = %+v, want user-1", gotPolicy.Subject)
 	}
 	if gotPolicy.Target.Provider != "test-provider" || gotPolicy.Target.Operation != "op" {
 		t.Fatalf("target = %+v, want test-provider/op", gotPolicy.Target)
@@ -297,7 +297,7 @@ func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		},
 	}
 
-	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectAgent, ID: "agent-graphql"})
+	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "user-graphql"})
 	result, err := b.Execute(ctx, "get_viewer", nil, "gql-token")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -306,8 +306,8 @@ func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200", result.Status)
 	}
 
-	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectAgent, ID: "agent-graphql"}) {
-		t.Fatalf("subject = %+v, want agent-graphql", gotPolicy.Subject)
+	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectUser, ID: "user-graphql"}) {
+		t.Fatalf("subject = %+v, want user-graphql", gotPolicy.Subject)
 	}
 	if gotPolicy.Target.Provider != "github" || gotPolicy.Target.Operation != "get_viewer" {
 		t.Fatalf("target = %+v, want github/get_viewer", gotPolicy.Target)

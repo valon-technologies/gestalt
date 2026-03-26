@@ -12,16 +12,14 @@ const (
 	SourceSession Source = iota
 	SourceAPIToken
 	SourceEnv
-	SourceEgressClient
 )
 
 const IdentityPrincipal = "__identity__"
 
 type Principal struct {
-	Identity       *core.UserIdentity
-	UserID         string
-	EgressClientID string
-	Source         Source
+	Identity *core.UserIdentity
+	UserID   string
+	Source   Source
 }
 
 type contextKey struct{}

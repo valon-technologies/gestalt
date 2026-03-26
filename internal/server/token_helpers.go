@@ -25,10 +25,6 @@ func (s *Server) issueToken() (*issuedToken, error) {
 	return s.issueTokenWithType(principal.TokenTypeAPI)
 }
 
-func (s *Server) issueEgressClientToken() (*issuedToken, error) {
-	return s.issueTokenWithType(principal.TokenTypeEgressClient)
-}
-
 func (s *Server) issueTokenWithType(typ principal.TokenType) (*issuedToken, error) {
 	plaintext, hashed, err := principal.GenerateToken(typ)
 	if err != nil {
@@ -51,27 +47,6 @@ func apiTokenInfoFromCore(token *core.APIToken) apiTokenInfo {
 		ID:        token.ID,
 		Name:      token.Name,
 		Scopes:    token.Scopes,
-		CreatedAt: token.CreatedAt,
-		ExpiresAt: token.ExpiresAt,
-	}
-}
-
-func egressClientResponseFromCore(client *core.EgressClient) egressClientResponse {
-	return egressClientResponse{
-		ID:          client.ID,
-		Name:        client.Name,
-		Description: client.Description,
-		Scope:       client.Scope,
-		CreatedByID: client.CreatedByID,
-		CreatedAt:   client.CreatedAt,
-		UpdatedAt:   client.UpdatedAt,
-	}
-}
-
-func egressClientTokenInfoFromCore(token *core.EgressClientToken) egressClientTokenInfo {
-	return egressClientTokenInfo{
-		ID:        token.ID,
-		Name:      token.Name,
 		CreatedAt: token.CreatedAt,
 		ExpiresAt: token.ExpiresAt,
 	}

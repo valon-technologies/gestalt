@@ -16,8 +16,7 @@ For proxy routes, Gestalt also understands:
 Valid bearer tokens are:
 
 - platform session tokens
-- Gestalt API tokens
-- egress client tokens, where supported by the route
+- Gestalt API tokens (`gst_api_...`)
 
 ## Unauthenticated Routes
 
@@ -66,27 +65,12 @@ In dev mode only:
 | `GET` | `/api/v1/tokens` | List API tokens for the current user. |
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 
-### Egress Clients
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/v1/egress-clients` | Create a personal egress client, or a global one when the caller is an admin and sends `scope: "global"`. |
-| `GET` | `/api/v1/egress-clients` | List visible egress clients. Admins can also filter `scope=global` or view their personal plus all global clients by default. |
-| `DELETE` | `/api/v1/egress-clients/{id}` | Delete an authorized egress client. Personal clients are creator-managed; global clients are admin-managed. |
-| `POST` | `/api/v1/egress-clients/{id}/tokens` | Create a token for an authorized egress client. |
-| `GET` | `/api/v1/egress-clients/{id}/tokens` | List tokens for an authorized egress client. |
-| `DELETE` | `/api/v1/egress-clients/{id}/tokens/{tokenID}` | Revoke a token for an authorized egress client. |
-
 ### Runtime And Binding Discovery
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/runtimes` | List configured runtimes. |
 | `GET` | `/api/v1/bindings` | List configured bindings. |
-
-## Admin-Only Routes
-
-The `server.admin_emails` gate controls global-scope egress client creation, listing, deletion, and token management through the regular `/api/v1/egress-clients` routes.
 
 ## Dynamic Binding Routes
 
