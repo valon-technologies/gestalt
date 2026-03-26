@@ -8,6 +8,10 @@ RUN npm run build
 FROM golang:1.26-alpine AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
+COPY sdk/pluginapi/go.mod sdk/pluginapi/go.sum sdk/pluginapi/
+COPY sdk/pluginsdk/go.mod sdk/pluginsdk/go.sum sdk/pluginsdk/
+COPY examples/plugins/provider-go/go.mod examples/plugins/provider-go/go.sum examples/plugins/provider-go/
+COPY examples/plugins/runtime-go/go.mod examples/plugins/runtime-go/go.sum examples/plugins/runtime-go/
 RUN go mod download
 COPY . .
 COPY --from=frontend /web/out/ internal/webui/out/
