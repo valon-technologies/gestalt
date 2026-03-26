@@ -1,0 +1,153 @@
+# Write a Plugin
+
+This guide covers writing, packaging, and running a provider plugin from an external repository.
+
+## Install the SDK
+
+```sh
+GOPRIVATE=github.com/valon-technologies/gestalt \
+  go get github.com/valon-technologies/gestalt/sdk/pluginsdk@latest
+```
+
+## Implement the provider interface
+
+Create `main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+)
+
+type myProvider struct{}
+
+func (p *myProvider) Name() string                        { return "my-tool" }
+func (p *myProvider) DisplayName() string                 { return "My Tool" }
+func (p *myProvider) Description() string                 { return "A custom provider plugin" }
+func (p *myProvider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeNone }
+
+func (p *myProvider) ListOperations() []pluginsdk.Operation {
+	return []pluginsdk.Operation{
+		{
+			Name:        "hello",
+			Description: "Return a greeting",
+			Method:      "GET",
+			Parameters: []pluginsdk.Parameter{
+				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
+			},
+		},
+	}
+}
+
+func (p *myProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*pluginsdk.OperationResult, error) {
+	switch operation {
+	case "hello":
+		name, _ := params["name"].(string)
+		if name == "" {
+			name = "World"
+		}
+		body, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("Hello, %s!", name)})
+		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
+	default:
+		return &pluginsdk.OperationResult{Status: 404, Body: `{"error":"unknown operation"}`}, nil
+	}
+}
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := pluginsdk.ServeProvider(ctx, &myProvider{}); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+```
+
+## Build
+
+```sh
+go build -o ./my-tool .
+```
+
+## Scaffold and package
+
+Use `gestaltd plugin init` to generate the manifest and artifact layout, then package:
+
+```sh
+gestaltd plugin init --id myorg/my-tool --kind provider --binary ./my-tool --output ./pkg
+gestaltd plugin package --input ./pkg --output ./my-tool.tar.gz
+```
+
+The `--os` and `--arch` flags default to your current platform. For cross-compilation:
+
+```sh
+GOOS=linux GOARCH=amd64 go build -o ./my-tool-linux .
+gestaltd plugin init --id myorg/my-tool --kind provider --binary ./my-tool-linux \
+  --os linux --arch amd64 --output ./pkg
+```
+
+## Configure and run
+
+Reference the package in your Gestalt config:
+
+```yaml
+integrations:
+  my-tool:
+    connection_mode: none
+    plugin:
+      package: ./my-tool.tar.gz
+```
+
+Then hydrate and serve:
+
+```sh
+gestaltd init --config config.yaml
+gestaltd serve --locked --config config.yaml
+```
+
+## Overlay plugins
+
+An overlay plugin adds custom operations on top of an existing REST or GraphQL upstream. The base upstream handles its own operations; the plugin handles only the operations it declares.
+
+```yaml
+integrations:
+  enhanced-api:
+    connection_mode: none
+    auth_style: none
+    plugin:
+      mode: overlay
+      package: ./my-overlay.tar.gz
+    upstreams:
+      - type: rest
+        url: https://api.example.com/openapi.json
+```
+
+The overlay plugin receives `mode: "overlay"` during startup via the `Start` method. It should return only its custom operations from `ListOperations`; the host merges them with the base upstream's operations.
+
+### Auth inheritance
+
+Overlay plugins inherit auth and connection behavior from the base declarative integration. If your overlay does not need OAuth tokens, set both `connection_mode: none` and `auth_style: none` on the integration. Without both, invocations will fail because the host expects a connected session.
+
+For overlays on OAuth-protected APIs (Gmail, Slack, etc.), keep the normal auth configuration. The resolved token is passed to `Execute` so the plugin can make its own authenticated API calls.
+
+## Optional interfaces
+
+The SDK supports several optional interfaces beyond the core `Provider`:
+
+| Interface | Purpose |
+|---|---|
+| `ProviderStarter` | Receive integration name, config, and mode at startup. |
+| `ConfigSchemaProvider` | Advertise a JSON Schema for the `plugin.config` block. |
+| `ConnectionParamProvider` | Define parameters required to connect (shown in the UI). |
+| `ProtocolVersionProvider` | Declare supported protocol version range. |
+
+Implement any of these on your provider struct to opt in. See the [Plugin Protocol](/concepts/plugin-protocol) reference for details.

@@ -173,5 +173,5 @@ func printPluginInitUsage(w io.Writer) {
 	writeUsageLine(w, "  --binary    Path to pre-built binary (optional)")
 	writeUsageLine(w, "  --os        Target OS (default: current platform)")
 	writeUsageLine(w, "  --arch      Target architecture (default: current platform)")
-	writeUsageLine(w, "  --version   Manifest version (default: 0.1.0)")
+	writeUsageLine(w, "  --version   Manifest version (default: 0.0.0-alpha.1)")
 }
