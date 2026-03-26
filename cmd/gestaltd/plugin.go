@@ -21,6 +21,8 @@ func runPlugin(args []string) error {
 	case "-h", "--help", "help":
 		printPluginUsage(os.Stderr)
 		return flag.ErrHelp
+	case "init":
+		return runPluginInit(args[1:])
 	case "package":
 		return runPluginPackage(args[1:])
 	default:
@@ -65,6 +67,7 @@ func printPluginUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  init        Scaffold a plugin package directory")
 	writeUsageLine(w, "  package     Build a plugin package archive")
 }
 
