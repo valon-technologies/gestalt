@@ -47,6 +47,9 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Enforce Functional-Only Test Policy
+        run: bash scripts/check-functional-tests.sh
+
       - name: Run tests
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 

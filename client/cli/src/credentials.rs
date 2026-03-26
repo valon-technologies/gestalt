@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ pub struct Credentials {
 }
 
 pub struct CredentialStore {
-    path: PathBuf,
+    path: std::path::PathBuf,
 }
 
 impl CredentialStore {
@@ -22,11 +21,6 @@ impl CredentialStore {
         Ok(Self {
             path: config_dir.join("credentials.json"),
         })
-    }
-
-    #[cfg(test)]
-    pub fn with_path(path: PathBuf) -> Self {
-        Self { path }
     }
 
     pub fn load(&self) -> Result<Option<Credentials>> {
@@ -71,73 +65,4 @@ fn set_permissions(path: &std::path::Path) -> Result<()> {
 #[cfg(not(unix))]
 fn set_permissions(_path: &std::path::Path) -> Result<()> {
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_save_and_load() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            session_token: "test-token".to_string(),
-        };
-
-        store.save(&creds).unwrap();
-        let loaded = store.load().unwrap().unwrap();
-        assert_eq!(loaded.session_token, "test-token");
-        assert_eq!(loaded.api_url, "http://localhost:8080");
-    }
-
-    #[test]
-    fn test_load_nonexistent() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("does-not-exist.json");
-        let store = CredentialStore::with_path(path);
-
-        assert!(store.load().unwrap().is_none());
-    }
-
-    #[test]
-    fn test_delete() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            session_token: "test-token".to_string(),
-        };
-
-        store.save(&creds).unwrap();
-        assert!(path.exists());
-
-        store.delete().unwrap();
-        assert!(!path.exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_permissions() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            session_token: "test-token".to_string(),
-        };
-
-        store.save(&creds).unwrap();
-        let metadata = std::fs::metadata(&path).unwrap();
-        let mode = metadata.permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
-    }
 }

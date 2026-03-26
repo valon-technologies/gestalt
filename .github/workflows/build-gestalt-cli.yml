@@ -51,6 +51,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Enforce Functional-Only Test Policy
+        run: bash ../scripts/check-functional-tests.sh
+
       - name: Run tests
         run: cargo test --workspace
 

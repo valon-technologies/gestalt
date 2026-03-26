@@ -18,7 +18,7 @@
 1. Implement the interface from `core` (e.g. `core.AuthProvider`, `core.Datastore`, `core.SecretManager`).
 2. Expose a factory function that accepts the provider config and returns an initialized instance.
 3. Register the factory in `cmd/gestaltd/factories.go` so the runtime resolves it by name from config.
-4. Add tests that exercise the plugin through the same interface the runtime uses.
+4. Add functional tests that exercise the plugin through the same interface the runtime uses. Do not add package-level unit tests.
 
 ## Add integration-specific behavior
 
@@ -27,7 +27,8 @@ Integration-specific behavior is handled through structured config fields (like 
 ## Development workflow
 
 ```sh
-# Run tests
+# Enforce the test policy and run the functional suite
+bash scripts/check-functional-tests.sh
 cd gestalt
 go test ./...
 
@@ -42,6 +43,15 @@ cd web
 npm run check
 npm run build
 ```
+
+## Test policy
+
+This repository keeps functional tests only.
+
+- Go tests live under `test/functional`.
+- CLI tests live in `client/cli/tests/functional.rs` and run the compiled binary.
+- Web tests live in `web/e2e`.
+- Inline Rust `#[cfg(test)]` modules and package-level/unit-style Go tests are not allowed.
 
 ## Pre-push hook
 
