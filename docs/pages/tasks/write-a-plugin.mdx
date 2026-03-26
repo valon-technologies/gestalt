@@ -139,6 +139,18 @@ Overlay plugins inherit auth and connection behavior from the base declarative i
 
 For overlays on OAuth-protected APIs (Gmail, Slack, etc.), keep the normal auth configuration. The resolved token is passed to `Execute` so the plugin can make its own authenticated API calls.
 
+## Manual auth plugins
+
+Plugins that need operator-provided credentials (API keys, tokens) can opt into the manual auth flow by implementing `ManualAuthProvider`:
+
+```go
+func (p *myProvider) SupportsManualAuth() bool { return true }
+```
+
+With this, operators can connect credentials through `gestalt auth connect-manual` or the web UI. The token is passed to `Execute` on each invocation. No-auth plugins (the default) do not need this interface.
+
+OAuth provider authoring is not yet part of the public SDK contract.
+
 ## Optional interfaces
 
 The SDK supports several optional interfaces beyond the core `Provider`:
@@ -146,6 +158,7 @@ The SDK supports several optional interfaces beyond the core `Provider`:
 | Interface | Purpose |
 |---|---|
 | `ProviderStarter` | Receive integration name, config, and mode at startup. |
+| `ManualAuthProvider` | Opt into manual credential connection. |
 | `ConfigSchemaProvider` | Advertise a JSON Schema for the `plugin.config` block. |
 | `ConnectionParamProvider` | Define parameters required to connect (shown in the UI). |
 | `ProtocolVersionProvider` | Declare supported protocol version range. |
