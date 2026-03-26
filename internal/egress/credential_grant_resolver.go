@@ -24,12 +24,10 @@ func (l *StaticCredentialGrantLoader) LoadCredentialGrants(_ context.Context) ([
 }
 
 // CredentialGrantResolver resolves credentials by iterating ordered loaders,
-// finding the first matching grant, and materializing it. Loaders are evaluated
-// in order; within each loader the first matching grant wins.
+// finding the first matching grant, and materializing it via secret lookup.
+// Loaders are evaluated in order; within each loader the first matching grant wins.
 type CredentialGrantResolver struct {
 	Loaders        []CredentialGrantLoader
-	TokenResolver  ProviderTokenResolver
-	Materializer   CredentialMaterializer
 	SecretResolver SecretResolver
 }
 
@@ -45,7 +43,7 @@ func (r *CredentialGrantResolver) ResolveCredential(ctx context.Context, subject
 			continue
 		}
 
-		mat, err := r.resolveGrantCredential(ctx, subject, target, grant)
+		mat, err := resolveSecretGrant(ctx, r.SecretResolver, grant)
 		if err != nil {
 			return CredentialMaterialization{}, err
 		}
@@ -65,41 +63,8 @@ func firstMatchingGrant(grants []CredentialGrant, subject Subject, target Target
 		if g.SecretRef != "" {
 			return g, true
 		}
-		if _, _, ok := g.ResolveProvider(target); !ok {
-			continue
-		}
-		return g, true
 	}
 	return nil, false
-}
-
-func (r *CredentialGrantResolver) resolveGrantCredential(ctx context.Context, subject Subject, target Target, grant *CredentialGrant) (CredentialMaterialization, error) {
-	if grant.SecretRef != "" {
-		return resolveSecretGrant(ctx, r.SecretResolver, grant)
-	}
-
-	if _, canResolve := PrincipalForSubject(subject); !canResolve {
-		return CredentialMaterialization{}, nil
-	}
-
-	provider, instance, ok := grant.ResolveProvider(target)
-	if !ok {
-		return CredentialMaterialization{}, nil
-	}
-
-	if r.TokenResolver == nil {
-		return CredentialMaterialization{}, fmt.Errorf("egress credentials: no token resolver configured")
-	}
-
-	token, err := r.TokenResolver.ResolveProviderToken(ctx, subject, provider, instance)
-	if err != nil {
-		return CredentialMaterialization{}, fmt.Errorf("egress credentials: resolving token for %q: %w", provider, err)
-	}
-
-	if r.Materializer == nil {
-		return MaterializeCredential(token, AuthStyleBearer, nil)
-	}
-	return r.Materializer.MaterializeProviderCredential(provider, token)
 }
 
 func resolveSecretGrant(ctx context.Context, sr SecretResolver, grant *CredentialGrant) (CredentialMaterialization, error) {

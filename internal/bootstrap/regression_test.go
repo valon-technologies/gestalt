@@ -224,7 +224,7 @@ func TestEgressCredentialGrantWiredThroughBootstrap(t *testing.T) {
 	cfg := validConfig()
 	cfg.Egress = config.EgressConfig{
 		Credentials: []config.EgressCredentialGrant{
-			{Provider: "alpha", Host: "api.test"},
+			{Host: "api.test"},
 		},
 	}
 	cfg.Bindings = map[string]config.BindingDef{
@@ -378,76 +378,6 @@ func TestSecretBackedCredentialGrant_MultiTenantHostMatching(t *testing.T) {
 	}
 	if auth := resolve(hostShop2); auth != secretShop2 {
 		t.Fatalf("shop-2: got %q, want %q", auth, secretShop2)
-	}
-}
-
-func TestSecretBackedGrant_CoexistsWithProviderTokenGrant(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	const (
-		secretName  = "ext-api-key"
-		secretValue = "sk-external-key"
-		tokenValue  = "tok-provider-token"
-	)
-
-	cfg := validConfig()
-	cfg.Egress = config.EgressConfig{
-		Credentials: []config.EgressCredentialGrant{
-			{Host: "api.external.test", SecretRef: secretName, AuthStyle: "bearer"},
-			{Provider: "alpha", Host: "api.provider.test"},
-		},
-	}
-	cfg.Bindings = map[string]config.BindingDef{
-		"my-binding": {Type: "test-binding", Providers: []string{"alpha"}},
-	}
-
-	factories := validFactories()
-	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-		return &coretesting.StubSecretManager{
-			Secrets: map[string]string{secretName: secretValue},
-		}, nil
-	}
-	factories.Datastores["test-store"] = func(_ yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
-		return &coretesting.StubDatastore{
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
-				return &core.IntegrationToken{AccessToken: tokenValue}, nil
-			},
-		}, nil
-	}
-
-	var receivedEgress bootstrap.EgressDeps
-	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
-		receivedEgress = deps.Egress
-		return &coretesting.StubBinding{N: name}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
-	secretRes, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
-		Target: egress.Target{Method: "GET", Host: "api.external.test", Path: "/v1/data"},
-	})
-	if err != nil {
-		t.Fatalf("Resolve secret grant: %v", err)
-	}
-	if secretRes.Credential.Authorization != "Bearer "+secretValue {
-		t.Fatalf("secret grant: got %q, want %q", secretRes.Credential.Authorization, "Bearer "+secretValue)
-	}
-
-	userCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-456"})
-	providerRes, err := receivedEgress.Resolver.Resolve(userCtx, egress.ResolutionInput{
-		Target: egress.Target{Provider: "alpha", Method: "GET", Host: "api.provider.test", Path: "/v1/data"},
-	})
-	if err != nil {
-		t.Fatalf("Resolve provider grant: %v", err)
-	}
-	if !strings.Contains(providerRes.Credential.Authorization, tokenValue) {
-		t.Fatalf("provider grant: got %q, want to contain %q", providerRes.Credential.Authorization, tokenValue)
 	}
 }
 

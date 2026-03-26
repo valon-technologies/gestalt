@@ -448,12 +448,9 @@ egress:
       host: api.github.com
       path_prefix: /repos
   credentials:
-    - provider: github
-      instance: default
-      subject_kind: user
-      method: GET
-      host: api.github.com
-      path_prefix: /repos
+    - host: api.github.com
+      secret_ref: github-api-key
+      auth_style: bearer
     - host: api.openai.com
       secret_ref: openai-api-key
       auth_style: bearer
@@ -476,12 +473,10 @@ egress:
 
 | Field | Notes |
 | --- | --- |
-| `provider` | Credential source provider. Not required when `secret_ref` is set. |
-| `instance` | Credential instance. |
-| `secret_ref` | Secret manager key. When set, the credential is resolved from the secret manager instead of a provider token. |
-| `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Required when `secret_ref` is set. |
-| `subject_kind` | Subject filter. |
-| `subject_id` | Subject filter. |
+| `secret_ref` | Required. Secret manager key resolved at request time. |
+| `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Defaults to `bearer`. |
+| `subject_kind` | Optional subject filter. |
+| `subject_id` | Optional subject filter. |
 | `operation` | Optional operation filter. |
 | `method` | Optional HTTP-method filter. |
 | `host` | Optional host filter. |
