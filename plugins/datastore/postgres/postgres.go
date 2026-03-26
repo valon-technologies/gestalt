@@ -145,12 +145,46 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
+			scope TEXT NOT NULL DEFAULT 'personal',
+			scope_key TEXT NOT NULL DEFAULT '',
 			created_by_id TEXT NOT NULL REFERENCES users(id),
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL,
-			UNIQUE(created_by_id, name)
+			CONSTRAINT uq_egress_clients_scope_name UNIQUE (scope_key, name)
 		)`); err != nil {
 		return fmt.Errorf("creating egress_clients table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		ALTER TABLE egress_clients ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'personal'`); err != nil {
+		return fmt.Errorf("adding scope column: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		ALTER TABLE egress_clients ADD COLUMN IF NOT EXISTS scope_key TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("adding scope_key column: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE egress_clients SET scope_key = created_by_id WHERE scope = 'personal' AND scope_key = ''`); err != nil {
+		return fmt.Errorf("backfilling scope_key: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DO $$ BEGIN
+		  IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+		    WHERE table_schema = current_schema() AND table_name = 'egress_clients'
+		    AND constraint_name = 'egress_clients_created_by_id_name_key')
+		  THEN ALTER TABLE egress_clients DROP CONSTRAINT egress_clients_created_by_id_name_key;
+		  END IF;
+		END $$`); err != nil {
+		return fmt.Errorf("dropping old egress_clients constraint: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DO $$ BEGIN
+		  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+		    WHERE table_schema = current_schema() AND table_name = 'egress_clients'
+		    AND constraint_name = 'uq_egress_clients_scope_name')
+		  THEN ALTER TABLE egress_clients ADD CONSTRAINT uq_egress_clients_scope_name UNIQUE (scope_key, name);
+		  END IF;
+		END $$`); err != nil {
+		return fmt.Errorf("adding egress_clients scope constraint: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS egress_client_tokens (

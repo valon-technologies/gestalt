@@ -400,7 +400,7 @@ func TestAuthMiddleware_EgressClientToken(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-1" {
-					return &core.EgressClient{ID: "ec-1", Name: "ci-bot"}, nil
+					return &core.EgressClient{ID: "ec-1", Name: "ci-bot", Scope: core.EgressClientScopePersonal}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -1651,7 +1651,7 @@ func TestDeleteEgressClient(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-123" {
-					return &core.EgressClient{ID: "ec-123", Name: "test", CreatedByID: "u1"}, nil
+					return &core.EgressClient{ID: "ec-123", Name: "test", Scope: core.EgressClientScopePersonal, CreatedByID: "u1"}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -1727,7 +1727,7 @@ func TestCreateAndListEgressClientTokens(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-1" {
-					return &core.EgressClient{ID: "ec-1", Name: "test-client", CreatedByID: "u1"}, nil
+					return &core.EgressClient{ID: "ec-1", Name: "test-client", Scope: core.EgressClientScopePersonal, CreatedByID: "u1"}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -1808,7 +1808,7 @@ func TestCreateEgressClientToken_DefaultExpiry(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-1" {
-					return &core.EgressClient{ID: "ec-1", Name: "test-client", CreatedByID: "u1"}, nil
+					return &core.EgressClient{ID: "ec-1", Name: "test-client", Scope: core.EgressClientScopePersonal, CreatedByID: "u1"}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -1864,7 +1864,7 @@ func TestRevokeEgressClientToken(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-1" {
-					return &core.EgressClient{ID: "ec-1", Name: "test", CreatedByID: "u1"}, nil
+					return &core.EgressClient{ID: "ec-1", Name: "test", Scope: core.EgressClientScopePersonal, CreatedByID: "u1"}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -1910,7 +1910,7 @@ func TestDeleteEgressClient_WrongOwner(t *testing.T) {
 			},
 			GetEgressClientFn: func(_ context.Context, id string) (*core.EgressClient, error) {
 				if id == "ec-owned" {
-					return &core.EgressClient{ID: "ec-owned", Name: "owned", CreatedByID: "u-owner"}, nil
+					return &core.EgressClient{ID: "ec-owned", Name: "owned", Scope: core.EgressClientScopePersonal, CreatedByID: "u-owner"}, nil
 				}
 				return nil, core.ErrNotFound
 			},
@@ -5169,6 +5169,7 @@ func TestAdminCredentialGrants_EgressClientPrincipalForbidden(t *testing.T) {
 	ecClient := &core.EgressClient{
 		ID:          "ec-1",
 		Name:        "test-machine",
+		Scope:       core.EgressClientScopePersonal,
 		CreatedByID: "u-owner",
 	}
 
