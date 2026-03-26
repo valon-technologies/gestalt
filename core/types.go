@@ -89,10 +89,16 @@ type OperationResult struct {
 	Body    string
 }
 
+const (
+	EgressClientScopePersonal = "personal"
+	EgressClientScopeGlobal   = "global"
+)
+
 type EgressClient struct {
 	ID          string
 	Name        string
 	Description string
+	Scope       string
 	CreatedByID string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

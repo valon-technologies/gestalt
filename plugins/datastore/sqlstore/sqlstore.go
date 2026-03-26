@@ -436,14 +436,35 @@ func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
 // EgressClient methods
 // ---------------------------------------------------------------------------
 
+const egressClientScopeKeyGlobal = "__global__"
+
+func egressClientScopeKey(scope, createdByID string) (string, error) {
+	switch scope {
+	case core.EgressClientScopePersonal, "":
+		if createdByID == "" {
+			return "", fmt.Errorf("personal scope requires created_by_id")
+		}
+		return createdByID, nil
+	case core.EgressClientScopeGlobal:
+		return egressClientScopeKeyGlobal, nil
+	default:
+		return "", fmt.Errorf("unknown egress client scope: %q", scope)
+	}
+}
+
 func scanEgressClient(row Scanner) (*core.EgressClient, error) {
 	var c core.EgressClient
 	var description sql.NullString
-	if err := row.Scan(&c.ID, &c.Name, &description, &c.CreatedByID,
+	var scope sql.NullString
+	if err := row.Scan(&c.ID, &c.Name, &description, &scope, &c.CreatedByID,
 		&c.CreatedAt, &c.UpdatedAt); err != nil {
 		return nil, err
 	}
 	c.Description = description.String
+	c.Scope = scope.String
+	if c.Scope == "" {
+		c.Scope = core.EgressClientScopePersonal
+	}
 	return &c, nil
 }
 
@@ -462,10 +483,17 @@ func scanEgressClientToken(row Scanner) (*core.EgressClientToken, error) {
 
 func (s *Store) CreateEgressClient(ctx context.Context, client *core.EgressClient) error {
 	defaultTimestamps(&client.CreatedAt, &client.UpdatedAt)
-	_, err := s.DB.ExecContext(ctx, `
-		INSERT INTO egress_clients (id, name, description, created_by_id, created_at, updated_at)
-		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`)`,
-		client.ID, client.Name, client.Description, client.CreatedByID,
+	if client.Scope == "" {
+		client.Scope = core.EgressClientScopePersonal
+	}
+	scopeKey, err := egressClientScopeKey(client.Scope, client.CreatedByID)
+	if err != nil {
+		return fmt.Errorf("computing scope key: %w", err)
+	}
+	_, err = s.DB.ExecContext(ctx, `
+		INSERT INTO egress_clients (id, name, description, scope, scope_key, created_by_id, created_at, updated_at)
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`)`,
+		client.ID, client.Name, client.Description, client.Scope, scopeKey, client.CreatedByID,
 		client.CreatedAt, client.UpdatedAt,
 	)
 	if err != nil {
@@ -479,7 +507,7 @@ func (s *Store) CreateEgressClient(ctx context.Context, client *core.EgressClien
 
 func (s *Store) GetEgressClient(ctx context.Context, id string) (*core.EgressClient, error) {
 	row := s.DB.QueryRowContext(ctx, `
-		SELECT id, name, description, created_by_id, created_at, updated_at
+		SELECT id, name, description, scope, created_by_id, created_at, updated_at
 		FROM egress_clients WHERE id = `+s.ph(1), id)
 	c, err := scanEgressClient(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -492,11 +520,24 @@ func (s *Store) GetEgressClient(ctx context.Context, id string) (*core.EgressCli
 }
 
 func (s *Store) ListEgressClients(ctx context.Context, filter core.EgressClientFilter) ([]*core.EgressClient, error) {
-	query := `SELECT id, name, description, created_by_id, created_at, updated_at FROM egress_clients`
+	query := `SELECT id, name, description, scope, created_by_id, created_at, updated_at FROM egress_clients`
 	var args []any
+	var conditions []string
+	argN := 1
 	if filter.CreatedByID != "" {
-		query += ` WHERE created_by_id = ` + s.ph(1)
+		conditions = append(conditions, `created_by_id = `+s.ph(argN))
 		args = append(args, filter.CreatedByID)
+		argN++
+	}
+	if filter.Scope != "" {
+		conditions = append(conditions, `scope = `+s.ph(argN))
+		args = append(args, filter.Scope)
+	}
+	if len(conditions) > 0 {
+		query += ` WHERE ` + conditions[0]
+		for _, c := range conditions[1:] {
+			query += ` AND ` + c
+		}
 	}
 	query += ` ORDER BY created_at`
 	rows, err := s.DB.QueryContext(ctx, query, args...)
