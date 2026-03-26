@@ -71,6 +71,16 @@ func (a *denyRuleStoreAdapter) LoadDenyRules(ctx context.Context) ([]egress.Deny
 func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore, sm core.SecretManager) {
 	var sources []egress.CredentialResolver
 
+	// Saved grants first: control-plane overlay takes precedence over config defaults.
+	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
+		sources = append(sources, &egress.SavedGrantCredentialResolver{
+			Store:          &credentialGrantStoreAdapter{store: grantStore},
+			TokenResolver:  &brokerTokenResolver{broker: broker},
+			Materializer:   &registryMaterializer{providers: providers},
+			SecretResolver: sm,
+		})
+	}
+
 	if len(deps.CredentialGrants) > 0 {
 		grants := make([]egress.CredentialGrant, len(deps.CredentialGrants))
 		for i := range deps.CredentialGrants {
@@ -95,15 +105,6 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 			Materializer:   &registryMaterializer{providers: providers},
 			SecretResolver: sm,
 			Grants:         grants,
-		})
-	}
-
-	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
-		sources = append(sources, &egress.SavedGrantCredentialResolver{
-			Store:          &credentialGrantStoreAdapter{store: grantStore},
-			TokenResolver:  &brokerTokenResolver{broker: broker},
-			Materializer:   &registryMaterializer{providers: providers},
-			SecretResolver: sm,
 		})
 	}
 
