@@ -13,6 +13,15 @@ import (
 	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
+type stubProviderWithOps struct {
+	coretesting.StubIntegration
+	ops []core.Operation
+}
+
+func (s *stubProviderWithOps) ListOperations() []core.Operation {
+	return s.ops
+}
+
 type capturingSink struct {
 	entries []core.AuditEntry
 }
