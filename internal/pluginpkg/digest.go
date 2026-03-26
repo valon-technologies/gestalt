@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -43,6 +44,15 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		sum, err := fileSHA256(filepath.Join(dirPath, filepath.FromSlash(manifest.Provider.ConfigSchemaPath)))
 		if err != nil {
 			return "", fmt.Errorf("digest provider config schema: %w", err)
+		}
+		digests = append(digests, sum)
+	}
+
+	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(runtimeConfigSchemaPath))
+	if _, err := os.Stat(runtimeSchema); err == nil {
+		sum, err := fileSHA256(runtimeSchema)
+		if err != nil {
+			return "", fmt.Errorf("digest runtime config schema: %w", err)
 		}
 		digests = append(digests, sum)
 	}
