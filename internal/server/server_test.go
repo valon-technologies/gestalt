@@ -4605,11 +4605,15 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	resolver := &egress.Resolver{
-		Credentials: &egress.ProviderCredentialResolver{
-			TokenResolver: staticTokenResolverFunc("injected-token"),
-			Grants: []egress.CredentialGrant{
-				{MatchCriteria: egress.MatchCriteria{Provider: "test-provider"}},
+		Credentials: &egress.CredentialGrantResolver{
+			Loaders: []egress.CredentialGrantLoader{
+				&egress.StaticCredentialGrantLoader{
+					Grants: []egress.CredentialGrant{
+						{MatchCriteria: egress.MatchCriteria{Provider: "test-provider"}},
+					},
+				},
 			},
+			TokenResolver: staticTokenResolverFunc("injected-token"),
 		},
 	}
 
