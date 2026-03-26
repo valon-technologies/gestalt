@@ -21,6 +21,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
+	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -4253,4 +4254,428 @@ func TestLogout(t *testing.T) {
 	if !found {
 		t.Fatal("expected session_token cookie to be cleared")
 	}
+}
+
+func newTestProxyBindingWithEgress(t *testing.T, name, path string, deps bootstrap.BindingDeps) core.Binding {
+	t.Helper()
+
+	cfgYAML := "path: " + path
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(cfgYAML), &node); err != nil {
+		t.Fatalf("unmarshal proxy config: %v", err)
+	}
+
+	binding, err := proxy.Factory(context.Background(), name, config.BindingDef{
+		Type:      "proxy",
+		Providers: []string{"test-provider"},
+		Config:    *node.Content[0],
+	}, deps)
+	if err != nil {
+		t.Fatalf("proxy factory: %v", err)
+	}
+	return binding
+}
+
+func TestProxyBinding_StaticPolicyDenyBlocksRequest(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := &egress.Resolver{
+		Policy: egress.StaticPolicyEnforcer{
+			DefaultAction: egress.PolicyAllow,
+			Rules: []egress.StaticPolicyRule{
+				{
+					Action:        egress.PolicyDeny,
+					MatchCriteria: egress.MatchCriteria{PathPrefix: "/v1/admin"},
+				},
+			},
+		},
+	}
+
+	binding := newTestProxyBindingWithEgress(t, "policy-proxy", "/", bootstrap.BindingDeps{
+		Egress: bootstrap.EgressDeps{Resolver: resolver},
+	})
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("policy-proxy", binding); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doReq := func(path string) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/policy-proxy"+path, nil)
+		req.Header.Set("X-Dev-User-Email", "dev@example.com")
+		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if status := doReq("/v1/admin/users"); status != http.StatusBadRequest {
+		t.Fatalf("denied path: expected 400, got %d", status)
+	}
+	if status := doReq("/v1/public/items"); status != http.StatusOK {
+		t.Fatalf("allowed path: expected 200, got %d", status)
+	}
+}
+
+func TestProxyBinding_StaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := &egress.Resolver{
+		Policy: egress.StaticPolicyEnforcer{
+			DefaultAction: egress.PolicyDeny,
+			Rules: []egress.StaticPolicyRule{
+				{
+					Action:        egress.PolicyAllow,
+					MatchCriteria: egress.MatchCriteria{PathPrefix: "/v1/allowed"},
+				},
+			},
+		},
+	}
+
+	binding := newTestProxyBindingWithEgress(t, "deny-proxy", "/", bootstrap.BindingDeps{
+		Egress: bootstrap.EgressDeps{Resolver: resolver},
+	})
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("deny-proxy", binding); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doReq := func(path string) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/deny-proxy"+path, nil)
+		req.Header.Set("X-Dev-User-Email", "dev@example.com")
+		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if status := doReq("/v1/allowed/items"); status != http.StatusOK {
+		t.Fatalf("allowed path: expected 200, got %d", status)
+	}
+	if status := doReq("/v1/other/items"); status != http.StatusBadRequest {
+		t.Fatalf("unmatched path: expected 400, got %d", status)
+	}
+}
+
+func TestProxyBinding_StaticPolicyFirstMatchWins(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := &egress.Resolver{
+		Policy: egress.StaticPolicyEnforcer{
+			DefaultAction: egress.PolicyAllow,
+			Rules: []egress.StaticPolicyRule{
+				{
+					Action:        egress.PolicyDeny,
+					MatchCriteria: egress.MatchCriteria{PathPrefix: "/v1/admin"},
+				},
+				{
+					Action:        egress.PolicyAllow,
+					MatchCriteria: egress.MatchCriteria{PathPrefix: "/v1"},
+				},
+			},
+		},
+	}
+
+	binding := newTestProxyBindingWithEgress(t, "fmw-proxy", "/", bootstrap.BindingDeps{
+		Egress: bootstrap.EgressDeps{Resolver: resolver},
+	})
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("fmw-proxy", binding); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doReq := func(path string) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/fmw-proxy"+path, nil)
+		req.Header.Set("X-Dev-User-Email", "dev@example.com")
+		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+		req.Header.Set("X-Forwarded-Proto", "http")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if status := doReq("/v1/admin/settings"); status != http.StatusBadRequest {
+		t.Fatalf("/v1/admin should be denied by first rule, got %d", status)
+	}
+	if status := doReq("/v1/public/items"); status != http.StatusOK {
+		t.Fatalf("/v1/public should be allowed by second rule, got %d", status)
+	}
+}
+
+func TestProxyBinding_CredentialInjection(t *testing.T) {
+	t.Parallel()
+
+	var receivedAuth atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	resolver := &egress.Resolver{
+		Credentials: &egress.ProviderCredentialResolver{
+			TokenResolver: staticTokenResolverFunc("injected-token"),
+			Grants: []egress.CredentialGrant{
+				{MatchCriteria: egress.MatchCriteria{Provider: "test-provider"}},
+			},
+		},
+	}
+
+	binding := newTestProxyBindingWithEgress(t, "cred-proxy", "/", bootstrap.BindingDeps{
+		Egress: bootstrap.EgressDeps{Resolver: resolver},
+	})
+	bindings := registry.NewBindingMap()
+	if err := bindings.Register("cred-proxy", binding); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Bindings = bindings
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/cred-proxy/items", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
+	req.Header.Set("X-Forwarded-Proto", "http")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	auth, _ := receivedAuth.Load().(string)
+	if auth != "Bearer injected-token" {
+		t.Fatalf("upstream received Authorization = %q, want %q", auth, "Bearer injected-token")
+	}
+}
+
+type tokenResolverFunc func(ctx context.Context, subject egress.Subject, provider, instance string) (string, error)
+
+func (f tokenResolverFunc) ResolveProviderToken(ctx context.Context, subject egress.Subject, provider, instance string) (string, error) {
+	return f(ctx, subject, provider, instance)
+}
+
+func staticTokenResolverFunc(token string) tokenResolverFunc {
+	return func(_ context.Context, _ egress.Subject, _, _ string) (string, error) {
+		return token, nil
+	}
+}
+
+func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "svc",
+			ConnMode: core.ConnectionModeIdentity,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do", Method: "GET"}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, userID, integration, _ string) (*core.IntegrationToken, error) {
+				if userID == principal.IdentityPrincipal && integration == "svc" {
+					return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["token"] != "identity-tok" {
+		t.Fatalf("expected identity-tok, got %v", result["token"])
+	}
+}
+
+func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "svc",
+			ConnMode: core.ConnectionModeEither,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do", Method: "GET"}},
+	}
+
+	t.Run("prefers user token", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.Datastore = &coretesting.StubDatastore{
+				ValidateAPITokenFn: func(_ context.Context, _ string) (*core.APIToken, error) {
+					return &core.APIToken{UserID: "u1", Name: "test-key"}, nil
+				},
+				GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+					return &core.User{ID: id, Email: "dev@example.com"}, nil
+				},
+				TokenFn: func(_ context.Context, userID, _, _ string) (*core.IntegrationToken, error) {
+					switch userID {
+					case "u1":
+						return &core.IntegrationToken{AccessToken: "user-tok"}, nil
+					case principal.IdentityPrincipal:
+						return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
+					}
+					return nil, core.ErrNotFound
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+		req.Header.Set("Authorization", "Bearer test-api-key")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var result map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&result)
+		if result["token"] != "user-tok" {
+			t.Fatalf("expected user-tok (preferred), got %v", result["token"])
+		}
+	})
+
+	t.Run("falls back to identity", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.DevMode = true
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				TokenFn: func(_ context.Context, userID, _, _ string) (*core.IntegrationToken, error) {
+					if userID == principal.IdentityPrincipal {
+						return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
+					}
+					return nil, core.ErrNotFound
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+		req.Header.Set("X-Dev-User-Email", "dev@example.com")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var result map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&result)
+		if result["token"] != "identity-tok" {
+			t.Fatalf("expected identity-tok (fallback), got %v", result["token"])
+		}
+	})
 }
