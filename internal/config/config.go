@@ -48,6 +48,8 @@ type EgressPolicyRule struct {
 type EgressCredentialGrant struct {
 	Provider    string `yaml:"provider"`
 	Instance    string `yaml:"instance"`
+	SecretRef   string `yaml:"secret_ref"`
+	AuthStyle   string `yaml:"auth_style"`
 	SubjectKind string `yaml:"subject_kind"`
 	SubjectID   string `yaml:"subject_id"`
 	Operation   string `yaml:"operation"`
@@ -623,6 +625,15 @@ func validateEgress(cfg *EgressConfig) error {
 		case "allow", "deny":
 		default:
 			return fmt.Errorf("config validation: egress.policies[%d].action must be \"allow\" or \"deny\", got %q", i, cfg.Policies[i].Action)
+		}
+	}
+	for i := range cfg.Credentials {
+		if style := cfg.Credentials[i].AuthStyle; style != "" {
+			switch style {
+			case "bearer", "raw", "basic", "none":
+			default:
+				return fmt.Errorf("config validation: egress.credentials[%d].auth_style must be one of \"bearer\", \"raw\", \"basic\", \"none\", got %q", i, style)
+			}
 		}
 	}
 	return nil
