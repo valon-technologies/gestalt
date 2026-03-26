@@ -1,149 +1,77 @@
 # Add a First-Party Provider
 
-A **first-party provider** ships with gestaltd and has its operation inventory checked into the repo. Use this approach for stable integrations that are tested in CI and versioned alongside the server.
+Most integrations should stay config-defined. Add a compiled-in first-party provider only when the behavior belongs in the `gestaltd` binary itself.
 
-For ad-hoc or user-configured integrations that point at remote OpenAPI/GraphQL specs, see [Add an Integration](/tasks/add-an-integration).
+## When A Built-In Provider Is Appropriate
 
-## 1. Create the provider package
+A built-in provider makes sense when:
 
-Every first-party provider lives under `plugins/providers/<name>/` with three files:
+- the provider is part of the product, not just one deployment
+- config-defined upstreams are not expressive enough
+- the code needs to ship and test with the host binary
 
-### `provider.yaml`
+## 1. Implement The Provider Package
 
-Declarative definition of the API surface. See `internal/provider/definition.go` for the full schema.
+Create a package under:
+
+```text
+plugins/providers/<name>
+```
+
+It should expose a factory with the provider signature used by bootstrap and return a `core.Provider`.
+
+Depending on behavior, the provider may also implement:
+
+- `core.OAuthProvider`
+- `core.ManualProvider`
+- `core.CatalogProvider`
+- connection-parameter interfaces used by the UI and MCP
+
+## 2. Register It
+
+Built-in named providers are registered in:
+
+```text
+cmd/gestaltd/providers.go
+```
+
+If the provider is intended to ship in the binary, it must be added there.
+
+## 3. Decide How Operators Compose It
+
+Built-in providers usually show up in one of two ways:
+
+### Directly
+
+An integration uses the registered provider as its entire implementation.
+
+### As An Overlay Base
+
+An integration uses:
 
 ```yaml
-provider: myservice
-display_name: My Service
-description: One-line description
-connection_mode: user   # none | user | identity | either
-base_url: "https://api.example.com/v1"
-
-auth:
-  type: oauth2          # oauth2 | manual
-  authorization_url: https://example.com/oauth/authorize
-  token_url: https://example.com/oauth/token
-  scopes: [read, write]
-
-operations:
-  list_items:
-    description: List all items
-    method: GET
-    path: /items
-    parameters:
-      - {name: limit, type: integer, description: Max results}
-  get_item:
-    description: Get an item by ID
-    method: GET
-    path: "/items/{id}"
-    parameters:
-      - {name: id, type: string, required: true, description: Item ID}
+plugin:
+  mode: overlay
+  base: <built-in-provider-name>
 ```
 
-### `factory.go`
+That lets an executable plugin extend the built-in provider.
 
-Embed the YAML, unmarshal, and call `provider.Build()`:
+## 4. Test It At The Provider Boundary
 
-```go
-package myservice
+Tests should validate:
 
-import (
-	"context"
-	_ "embed"
+- operation inventory
+- connection mode
+- auth behavior
+- execution behavior
 
-	"github.com/valon-technologies/gestalt/core"
-	"github.com/valon-technologies/gestalt/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/internal/config"
-	"github.com/valon-technologies/gestalt/internal/provider"
-	"gopkg.in/yaml.v3"
-)
+The important boundary is the provider contract the rest of Gestalt sees, not just internal helper functions.
 
-//go:embed provider.yaml
-var definitionYAML []byte
+## 5. Update The Docs
 
-func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (core.Provider, error) {
-	var def provider.Definition
-	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
-		return nil, err
-	}
-	return provider.Build(&def, intg, nil, provider.WithEgressResolver(deps.Egress.Resolver))
-}
-```
+If you add a new first-party provider, update:
 
-### `factory_test.go`
-
-Use the shared `providertest` harness and validate against the `inventory` contract:
-
-```go
-package myservice
-
-import (
-	"testing"
-
-	"github.com/valon-technologies/gestalt/core"
-	"github.com/valon-technologies/gestalt/internal/config"
-	"github.com/valon-technologies/gestalt/plugins/providers/inventory"
-	"github.com/valon-technologies/gestalt/plugins/providers/providertest"
-)
-
-func TestBuildProvider(t *testing.T) {
-	t.Parallel()
-
-	inv, err := inventory.Load()
-	if err != nil {
-		t.Fatalf("inventory.Load: %v", err)
-	}
-	spec := inv.Providers["myservice"]
-
-	def := providertest.ParseDefinition(t, definitionYAML)
-	prov := providertest.BuildProvider(t, def, config.IntegrationDef{
-		ClientID: "dummy", ClientSecret: "dummy",
-	})
-
-	providertest.CheckProvider(t, prov, providertest.ProviderExpect{
-		Name:           "myservice",
-		ConnectionMode: core.ConnectionMode(spec.ConnectionMode),
-		OperationCount: len(spec.Operations),
-		OperationNames: spec.Operations,
-	})
-}
-```
-
-## 2. Registration
-
-Factory registration in `cmd/gestaltd/providers.go` is handled by the integrator, not the provider author. Your PR should only contain the `plugins/providers/<name>/` package.
-
-## 3. Overlay providers
-
-When Go code is needed for operations that cannot be expressed as REST/GraphQL YAML (custom request shaping, SDK calls, multi-step workflows), create an **overlay binary**:
-
-1. Implement a `core.Provider` with only the custom operations in your provider package
-2. Create `cmd/gestalt-plugin-<name>/main.go` that serves it via gRPC:
-
-```go
-package main
-
-import (
-	"context"
-	"log"
-	"os/signal"
-	"syscall"
-
-	"github.com/valon-technologies/gestalt/internal/pluginapi"
-)
-
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := pluginapi.ServeProvider(ctx, newOverlayProvider()); err != nil {
-		log.Fatal(err)
-	}
-}
-```
-
-The YAML definition handles the base operations; the overlay binary handles the rest. The bootstrap system composes them automatically when `mode: overlay` is set in the deployment config.
-
-Use exactly one base source for the overlay:
-
-- Keep `upstreams` in the integration config when the base comes from prepared REST/GraphQL/MCP definitions.
-- Set `plugin.base: <provider-name>` when the base comes from a registered first-party Go provider factory.
+- [Built-in Plugins](/reference/built-in-plugins)
+- any task docs that rely on that provider
+- deploy or config examples if the provider becomes part of a recommended path

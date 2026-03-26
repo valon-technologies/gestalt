@@ -1,59 +1,110 @@
 # Plugin Packaging
 
-Phase 3 adds a local-first packaging workflow for third-party plugins. Instead of distributing a raw executable and pointing `plugin.command` at it, an author can ship a package archive and an operator can install it into a project-local store.
+Gestalt can run plugins directly from a local executable, but it can also install and lock packaged plugins. Packaged plugins are the better fit for deployment because they give `gestaltd init` something explicit to verify and install.
 
-## What a package contains
+## The Manifest
 
-A plugin package is a `.tar.gz` archive with:
+Every package is rooted by `plugin.json`.
 
-- `plugin.json`: the manifest
-- `artifacts/<os>/<arch>/...`: platform-specific executables
-- optional schema files such as `schemas/config.schema.json`
+A minimal provider package manifest looks like this:
 
-The manifest is the static source of truth for:
-
-- plugin ID and version
-- supported kinds (`provider`, `runtime`)
-- protocol compatibility
-- artifact inventory
-- packaged config schema path
-
-## Project-local store
-
-Installed packages live next to the config file:
-
-```text
-.gestalt/plugins/<publisher>/<name>/<version>/
+```json
+{
+  "schema_version": 1,
+  "id": "example-provider",
+  "version": "1.0.0",
+  "display_name": "Example Provider",
+  "description": "Minimal packaged provider",
+  "kinds": ["provider"],
+  "provider": {
+    "protocol": {
+      "min": 1,
+      "max": 1
+    },
+    "config_schema_path": "schemas/provider-config.json"
+  },
+  "artifacts": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "path": "bin/example-provider-linux-amd64",
+      "sha256": "..."
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "bin/example-provider-linux-amd64"
+    }
+  }
+}
 ```
 
-This keeps deploys self-contained and reproducible. `gestaltd init` records the resolved manifest and executable path in `gestalt.lock.json`.
+The important ideas are:
 
-## CLI workflow
+- the package declares which kinds it supports
+- the manifest names platform-specific artifacts
+- entrypoints point at one of those packaged artifacts
+- provider packages may also ship a JSON Schema for config validation
 
-Package a plugin from a prepared directory:
+## Creating A Package
 
-```bash
-gestaltd plugin package --input ./package-dir --output ./acme-provider-0.1.0.tar.gz
+Build a directory that contains `plugin.json` plus the referenced artifacts, then run:
+
+```sh
+gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider.tar.gz
 ```
 
-Reference the package in your config:
+That creates a distributable archive.
+
+## Using A Package In Config
+
+Packages can come from:
+
+- a local `.tar.gz`
+- a local directory
+- an HTTPS URL
+
+Example:
 
 ```yaml
 integrations:
-  acme:
+  example:
     plugin:
-      package: ./acme-provider-0.1.0.tar.gz
+      package: https://example.com/example-provider.tar.gz
+      config:
+        greeting: hello
 ```
 
-Prepare the config to extract and lock the package:
+or:
 
-```bash
-gestaltd init --config ./gestalt.yaml
+```yaml
+integrations:
+  example:
+    plugin:
+      package: ./dist/example-provider.tar.gz
 ```
 
-## `plugin.command` vs `plugin.package`
+Plain `http://` is rejected. Remote packages must use HTTPS.
 
-- `plugin.command` is the development path. Gestalt launches a local executable directly.
-- `plugin.package` is the distribution path. Points at a `.tar.gz` archive (local path or HTTPS URL). `gestaltd init` extracts it into `.gestalt/plugins/` and writes locked paths into `gestalt.lock.json`.
+## What `init` Does
 
-Use `plugin.command` while authoring and iterating locally. Use `plugin.package` for deterministic deployments and handoff to other operators.
+`gestaltd init` installs packaged plugins into local prepared state and records them in `gestalt.lock.json`.
+
+That prepared state lives under:
+
+- `.gestalt/plugins/...`
+- `gestalt.lock.json`
+
+When you later run `gestaltd serve --locked`, startup succeeds only if those prepared artifacts still match the config.
+
+## Why Packaging Matters
+
+Packaging gives you:
+
+- repeatable installs
+- artifact digest verification
+- platform-specific binaries in one archive
+- optional config schema validation
+- deterministic production startup
+
+For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd init` is the stronger model.

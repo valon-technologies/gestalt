@@ -1,97 +1,106 @@
-import { Callout, Cards } from 'nextra/components'
+import { Cards } from 'nextra/components'
 
 # Deploy
 
-Gestalt compiles to a single statically-linked Go binary and ships as a minimal Docker image. It runs anywhere you can run a container or a Linux binary.
+`gestaltd` deploys as a single HTTP service. The API, embedded web UI, health endpoints, and optional `/mcp` endpoint all come from the same server process and normally the same port.
 
-## Resource requirements
+## Deployment Checklist
 
-| | Minimum | Recommended |
-|---|---|---|
-| CPU | 1 vCPU | 2 vCPU |
-| Memory | 256 MB | 512 MB |
-| Disk | 1 GB (SQLite) | Managed database |
+Every deployment needs the same inputs:
 
-## What every deployment needs
+1. A `gestaltd` binary or container image.
+2. A `config.yaml`.
+3. Environment variables or secret-manager entries for sensitive values.
+4. A datastore choice that matches your scaling model.
+5. A clear startup mode: mutable startup or locked startup.
 
-1. **Gestalt image or binary.** Build from `Dockerfile` or compile with `CGO_ENABLED=0 go build ./cmd/gestaltd`.
-2. **Config YAML file.** Mounted or bundled. See [Config File](/reference/config-file) for the schema.
-3. **Environment variables for secrets.** The config supports `${VAR}` placeholders expanded at startup. Never hardcode secrets.
-4. **A database.** SQLite with a persistent volume, Postgres, MySQL, or any [supported datastore](/reference/built-in-plugins#datastores).
-5. **A stable `base_url`.** Gestalt derives OAuth callback URLs from this. It must be the externally-reachable URL.
+## Choose A Startup Mode
 
-## Environment variables
+| Mode | Command | When to use it |
+| --- | --- | --- |
+| Mutable | `gestaltd --config ...` or `gestaltd serve --config ...` | Local development or simple single-node deployments. |
+| Locked | `gestaltd init --config ...` then `gestaltd serve --locked --config ...` | Production deployments that should not fetch remote specs or mutate local state at boot. |
 
-### Server
+If your config depends on remote REST or GraphQL upstreams, or packaged plugins, the locked flow is the safer deployment model.
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `GESTALT_BASE_URL` | External URL for OAuth callbacks | Yes |
-| `GESTALT_ENCRYPTION_KEY` | Symmetric key for encrypting stored tokens. Generate: `openssl rand -base64 32` | Yes |
-| `GESTALT_SESSION_SECRET` | Signs session cookies. Generate: `openssl rand -base64 32` | Yes |
+## Bundled Deployment Paths
 
-### Auth
+The repository ships these deployment assets:
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | If using Google auth |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | If using Google auth |
+| Path | What it gives you |
+| --- | --- |
+| `gestaltd` with no config | True out-of-the-box local startup. |
+| `Dockerfile` | Single-container image with `gestaltd` as the entrypoint. |
+| `docker-compose.yml` | Single-container local deployment with mounted config and SQLite volume. |
+| `deploy/helm/gestalt` | Helm chart for Kubernetes. |
 
-### Datastore
+## Docker And Compose
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `DATABASE_URL` | Connection string for Postgres, MySQL, or other SQL datastores | If not using SQLite |
+The root `Dockerfile` builds:
 
-### Integrations
+- the frontend static export
+- the `gestaltd` binary
+- one final image that serves both API and UI
 
-Each integration needs its own OAuth credentials. Follow the pattern `<INTEGRATION>_CLIENT_ID` and `<INTEGRATION>_CLIENT_SECRET`.
-
-## Minimal production config
-
-```yaml
-server:
-  port: 8080
-  base_url: "${GESTALT_BASE_URL}"
-  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
-
-auth:
-  provider: google
-  config:
-    client_id: "${GOOGLE_CLIENT_ID}"
-    client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${GESTALT_SESSION_SECRET}"
-
-datastore:
-  provider: postgres
-  config:
-    dsn: "${DATABASE_URL}"
-```
-
-## Validate before deploying
+The image defaults to:
 
 ```sh
-gestaltd validate --config your-config.yaml
+/gestaltd --config /etc/gestalt/config.yaml
 ```
 
-`gestaltd validate` warns when SQLite is configured as the datastore, since it is not recommended for production.
+That is a mutable-startup path. If you want locked startup, override the command and make sure the lockfile and prepared artifacts exist next to the mounted config.
 
-## Choose a platform
+The bundled `docker-compose.yml` is the quickest containerized path:
+
+```sh
+docker compose up --build
+```
+
+It mounts:
+
+- `./deploy/docker/config.yaml` to `/etc/gestalt/config.yaml`
+- a named volume at `/data` for SQLite
+
+## Bare Binary
+
+The bare-binary model is straightforward:
+
+```sh
+gestaltd validate --init --config ./gestalt.yaml
+gestaltd serve --locked --config ./gestalt.yaml
+```
+
+That is often the cleanest way to run Gestalt on a VM, inside systemd, or in a custom container build.
+
+## Kubernetes
+
+The bundled Helm chart is the most complete production deployment path in the repo. It uses one Deployment for `gestaltd` and can optionally add an init container that runs `gestaltd init` before the main container starts.
+
+See [Kubernetes](/deploy/kubernetes) for the exact chart behavior.
+
+## Other Platforms
+
+Fly.io, Railway, Render, and Lambda are valid targets, but they are manual deployment patterns rather than separately maintained runtimes. The key idea is always the same:
+
+- run the same single `gestaltd` service
+- provide `config.yaml`
+- expose the public base URL
+- choose mutable or locked startup intentionally
 
 <Cards>
+  <Cards.Card title="Kubernetes" href="/deploy/kubernetes">
+    The bundled Helm chart. One Deployment, one Service, optional init container, and locked startup.
+  </Cards.Card>
   <Cards.Card title="Fly.io" href="/deploy/fly-io">
-    Container PaaS with built-in Postgres and persistent volumes.
+    Single-container deployment with either a Fly volume for SQLite or an external SQL datastore.
   </Cards.Card>
   <Cards.Card title="Railway" href="/deploy/railway">
-    Deploy from GitHub with one-click Postgres provisioning.
+    Manual Docker deployment. Best with Postgres and either baked or pre-prepared lock state.
   </Cards.Card>
   <Cards.Card title="Render" href="/deploy/render">
-    Managed web services with optional persistent disks.
+    Docker web service with either a persistent disk for SQLite or an external SQL datastore.
   </Cards.Card>
   <Cards.Card title="AWS Lambda" href="/deploy/aws-lambda">
-    Serverless with pay-per-request pricing and RDS.
-  </Cards.Card>
-  <Cards.Card title="Kubernetes" href="/deploy/kubernetes">
-    Helm chart for clusters you already operate.
+    Adapter-based deployment for a server that is fundamentally HTTP-first.
   </Cards.Card>
 </Cards>

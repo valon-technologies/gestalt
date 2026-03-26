@@ -1,52 +1,69 @@
 # Troubleshooting
 
-## Integration is missing its provider
+## The UI Is Not On The Port I Expected
 
-Gestalt resolves providers at startup from the `upstreams` list. If no upstreams are configured, or a REST/GraphQL upstream is missing `url`, config loading fails. If `gestaltd serve` cannot find prepared artifacts for a remote REST/GraphQL upstream, startup fails.
+In normal runtime, the web UI is embedded in `gestaltd` and served from the same HTTP port as the API. If your server listens on `8080`, the UI is also on `8080`.
 
-**Fix**: Ensure each integration has at least one upstream with a valid `type` and `url`. For deterministic production startup, run `gestaltd init --config your-config.yaml` during build, then `gestaltd serve --config your-config.yaml` at runtime.
+## `serve --locked` Says Prepared Artifacts Are Missing
 
-## OAuth redirects are wrong
+Your config references something that must be prepared first, usually:
 
-Gestalt derives callback URLs from `server.base_url`. If it is unset or points to the wrong host, the identity provider rejects the redirect.
+- a remote REST upstream
+- a remote GraphQL upstream
+- a packaged plugin
 
-**Fix**: Set `server.base_url` to the externally-reachable URL of your deployment.
+Run:
 
-## Login works in dev but not production
+```sh
+gestaltd init --config ./gestalt.yaml
+```
 
-Dev mode enables a bypass login path. In production, a real auth provider must be configured.
+and then start again with `serve --locked`.
 
-**Fix**: Verify `dev_mode: false`, and that your auth provider config (issuer URL, client ID, client secret) is correct. Confirm the callback URL registered with your identity provider matches `server.base_url`.
+## OAuth Redirects Are Wrong
 
-## "No token stored" on invocation
+`server.base_url` is either missing or incorrect.
 
-The calling user has not connected the target integration. Each user must complete the OAuth flow (or paste manual credentials) for every integration they want to invoke.
+Gestalt derives callback URLs from it when explicit `redirect_url` fields are not set. Make sure it matches the external URL users and identity providers actually reach.
 
-**Fix**: Run `gestalt integrations connect <name>` or use the web UI.
+## Startup Fails Because `server.encryption_key` Is Missing
 
-## API token auth fails
+Outside dev mode, `server.encryption_key` is required. Set it explicitly or use a `secret://...` reference.
 
-- Verify the `Authorization` header uses the `Bearer` prefix.
-- Use the plaintext token returned at creation time, not the hash stored in the datastore.
-- If using the CLI, note that `GESTALT_API_KEY` takes priority over session tokens from `gestalt auth login`. Run `gestalt auth status` to see which credential source is active.
+## An Integration Cannot Find Credentials
 
-## Web UI does not talk to the local API
+Check the integration's `connection_mode` first.
 
-The web UI needs to know where the API server lives.
+- `user` expects a connection for the current user
+- `identity` expects a shared identity connection
+- `either` tries user first, then identity
+- `none` uses no credential
 
-**Fix**: Use `gestaltd` which starts both and wires them together automatically. If running separately, set `GESTALT_URL` to point to the API server.
+If the wrong mode is set, invocation fails even if a token exists somewhere else.
 
-## Config validation fails
+## Invocation Fails Because Multiple Connections Exist
 
-Run `gestaltd validate --config your-config.yaml` to see exactly which field is invalid. Common causes:
+The target integration has more than one stored instance and the caller did not choose one.
 
-- Missing `encryption_key` when `dev_mode` is not `true`.
-- Invalid provider name in `auth`, `datastore`, or `secrets`.
-- Integration references an `auth_profile` that does not exist.
+Pass an explicit instance when invoking, or disconnect the extra connection you do not want.
 
-## MCP tools do not appear
+## `/mcp` Is Missing
 
-1. Verify the integration has either `mcp: true` on a REST/GraphQL upstream or a `type: mcp` upstream.
-2. Check that your API token is valid.
-3. Confirm the token's owner has connected the integration.
-4. For MCP-only integrations, remember they only appear in the MCP endpoint, not the HTTP API.
+`/mcp` is only mounted when at least one integration is MCP-enabled.
+
+Enable it by either:
+
+- setting `mcp: true` on a REST or GraphQL upstream
+- or configuring an upstream with `type: mcp`
+
+## Webhook Or Proxy Behavior Is Missing
+
+Bindings are only available if they are declared in `bindings:` and start successfully after providers are ready. Check:
+
+- the binding type
+- the binding config
+- the binding's provider allowlist
+
+## Some Auth Or Connection Features Fail On My Datastore
+
+Some features rely on datastore capabilities beyond the base user and token store. SQL-backed datastores are the safest choice if you need the full platform surface.

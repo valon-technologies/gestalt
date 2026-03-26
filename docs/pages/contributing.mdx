@@ -1,48 +1,45 @@
 # Contributing
 
-## Repository layout
+## Repository Layout
 
-| Directory | Purpose |
-|---|---|
-| `cmd/gestaltd` | Main Go binary. Registers all plugins and starts the server. |
-| `core` | Public interfaces: `AuthProvider`, `Datastore`, `SecretManager`, `Provider`, `OAuthProvider`, `ManualProvider`, `CatalogProvider`, `Runtime`, `Binding`. See `core/auth.go`, `core/datastore.go`, `core/secrets.go`, `core/provider.go`, `core/runtime.go`, `core/binding.go`. |
-| `internal` | Runtime packages: config loading, HTTP routing, middleware, invocation, token management, bootstrap. |
-| `plugins` | Implementations of core interfaces: auth, datastores, secrets, integrations, bindings, runtimes. |
-| `docs` | Nextra documentation site. |
-| `client/cli` | Rust CLI source. Produces the `gestalt` binary. |
-| `web` | Next.js web UI. |
-| `deploy` | Helm chart, Dockerfiles, and CI workflows. |
+| Path | Purpose |
+| --- | --- |
+| `cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
+| `core` | Public interfaces for auth, datastore, secrets, providers, runtimes, and bindings. |
+| `internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other runtime internals. |
+| `plugins` | Built-in auth providers, datastores, secrets, bindings, runtimes, and named providers. |
+| `sdk` | Public SDKs and plugin manifest definitions. |
+| `web` | Frontend that is embedded into the server build. |
+| `docs` | Documentation site. |
+| `deploy` | Docker and Helm deployment assets. |
 
-## Add a new plugin
+## Working Principles
 
-1. Implement the interface from `core` (e.g. `core.AuthProvider`, `core.Datastore`, `core.SecretManager`).
-2. Expose a factory function that accepts the provider config and returns an initialized instance.
-3. Register the factory in `cmd/gestaltd/factories.go` so the runtime resolves it by name from config.
-4. Add tests that exercise the plugin through the same interface the runtime uses.
+When you update docs, keep them aligned with:
 
-## Add integration-specific behavior
+- config structs in `internal/config`
+- runtime wiring in `cmd/gestaltd` and `internal/bootstrap`
+- HTTP routes in `internal/server`
+- deployment assets in `Dockerfile`, `docker-compose.yml`, and `deploy/helm`
 
-Integration-specific behavior is handled through structured config fields (like `response_check` and `post_connect_discovery`) or gRPC plugins. See the [config file reference](/reference/config-file) and [gRPC plugin protocol](/reference/grpc-plugin-protocol) for details.
+The easiest way to make docs drift is to copy previous prose instead of reading the code path that actually implements the feature.
 
-## Development workflow
+## Useful Commands
 
 ```sh
-# Run tests
-cd gestalt
 go test ./...
 
-# Validate config
-gestaltd validate --config gestalt.dev.yaml
+gestaltd validate --init --config ./gestalt.dev.yaml
 
-# Run locally
-gestaltd --config gestalt.dev.yaml
-
-# Web UI
-cd web
-npm run check
+cd docs
 npm run build
 ```
 
-## Pre-push hook
+## Adding New Built-Ins
 
-The repository includes a managed pre-push hook at `.githooks/pre-push`. Git is configured to use this directory via `core.hooksPath`. The hook runs automatically when you push — do not bypass it with `--no-verify`.
+If you add a new built-in auth provider, datastore, secret manager, binding, runtime, or named provider:
+
+1. register it in the relevant `cmd/gestaltd` file
+2. add or update tests
+3. update [Built-in Plugins](/reference/built-in-plugins)
+4. update any docs or examples that describe the supported inventory
