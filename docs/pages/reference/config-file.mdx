@@ -457,6 +457,9 @@ egress:
       method: GET
       host: api.github.com
       path_prefix: /repos
+    - host: api.openai.com
+      secret_ref: openai-api-key
+      auth_style: bearer
 ```
 
 ### `policies`
@@ -476,8 +479,10 @@ egress:
 
 | Field | Notes |
 | --- | --- |
-| `provider` | Credential source provider. |
+| `provider` | Credential source provider. Not required when `secret_ref` is set. |
 | `instance` | Credential instance. |
+| `secret_ref` | Secret manager key. When set, the credential is resolved from the secret manager instead of a provider token. |
+| `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Required when `secret_ref` is set. |
 | `subject_kind` | Subject filter. |
 | `subject_id` | Subject filter. |
 | `operation` | Optional operation filter. |
