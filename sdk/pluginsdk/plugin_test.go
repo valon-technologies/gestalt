@@ -53,6 +53,12 @@ type schemaStubProvider struct {
 
 func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schema }
 
+type manualAuthStubProvider struct {
+	stubProvider
+}
+
+func (p *manualAuthStubProvider) SupportsManualAuth() bool { return true }
+
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -77,6 +83,27 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	}
 	if meta.GetConnectionMode() != pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE {
 		t.Errorf("ConnectionMode = %v, want CONNECTION_MODE_NONE", meta.GetConnectionMode())
+	}
+	if len(meta.GetAuthTypes()) != 0 {
+		t.Errorf("AuthTypes = %v, want empty for plain provider", meta.GetAuthTypes())
+	}
+}
+
+func TestProviderServerGetMetadata_ManualAuth(t *testing.T) {
+	t.Parallel()
+
+	prov := &manualAuthStubProvider{
+		stubProvider: stubProvider{name: "manual-prov"},
+	}
+
+	client := newProviderPluginClient(t, prov)
+	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("GetMetadata: %v", err)
+	}
+	authTypes := meta.GetAuthTypes()
+	if len(authTypes) != 1 || authTypes[0] != "manual" {
+		t.Fatalf("AuthTypes = %v, want [manual]", authTypes)
 	}
 }
 

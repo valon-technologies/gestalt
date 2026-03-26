@@ -60,6 +60,7 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 		ConfigSchemaJson:   configSchema,
 		MinProtocolVersion: minPV,
 		MaxProtocolVersion: maxPV,
+		AuthTypes:          authTypes(s.provider),
 	}, nil
 }
 
@@ -89,6 +90,13 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 		Status: int32(result.Status),
 		Body:   result.Body,
 	}, nil
+}
+
+func authTypes(p Provider) []string {
+	if mp, ok := p.(ManualAuthProvider); ok && mp.SupportsManualAuth() {
+		return []string{"manual"}
+	}
+	return nil
 }
 
 func protocolVersionRange(p Provider) (min, max int32) {
