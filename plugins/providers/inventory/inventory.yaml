@@ -255,7 +255,6 @@ providers:
     connection_mode: identity
     operations:
       - get_call
-      - get_call_transcript
       - list_calls
       - list_users
 

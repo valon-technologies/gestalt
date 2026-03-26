@@ -1,0 +1,66 @@
+provider: ramp
+display_name: Ramp
+description: Ramp corporate card and expense management
+connection_mode: identity
+base_url: "https://api.ramp.com/developer/v1"
+
+auth:
+  type: oauth2
+  authorization_url: https://app.ramp.com/v1/authorize
+  token_url: https://api.ramp.com/developer/v1/token
+  client_auth: header
+  scopes:
+    - transactions:read
+    - cards:read
+    - users:read
+    - departments:read
+
+operations:
+  list_transactions:
+    description: List Ramp transactions with optional date filtering
+    method: GET
+    path: /transactions
+    parameters:
+      - {name: start, type: string, description: Cursor for pagination}
+      - {name: page_size, type: integer, description: Number of results per page}
+      - {name: from_date, type: string, description: Filter by start date (ISO 8601)}
+      - {name: to_date, type: string, description: Filter by end date (ISO 8601)}
+  get_transaction:
+    description: Get details of a specific Ramp transaction
+    method: GET
+    path: "/transactions/{transaction_id}"
+    parameters:
+      - {name: transaction_id, type: string, required: true, description: Transaction ID}
+  list_cards:
+    description: List Ramp cards with pagination
+    method: GET
+    path: /cards
+    parameters:
+      - {name: start, type: string, description: Cursor for pagination}
+      - {name: page_size, type: integer, description: Number of results per page}
+  get_card:
+    description: Get details of a specific Ramp card
+    method: GET
+    path: "/cards/{card_id}"
+    parameters:
+      - {name: card_id, type: string, required: true, description: Card ID}
+  list_users:
+    description: List Ramp users with pagination
+    method: GET
+    path: /users
+    parameters:
+      - {name: start, type: string, description: Cursor for pagination}
+      - {name: page_size, type: integer, description: Number of results per page}
+  get_user:
+    description: Get details of a specific Ramp user
+    method: GET
+    path: "/users/{user_id}"
+    parameters:
+      - {name: user_id, type: string, required: true, description: User ID}
+  list_departments:
+    description: List Ramp departments with pagination
+    method: GET
+    path: /departments
+    parameters:
+      - {name: start, type: string, description: Cursor for pagination}
+      - {name: page_size, type: integer, description: Number of results per page}

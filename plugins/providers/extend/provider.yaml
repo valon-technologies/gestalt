@@ -1,0 +1,380 @@
+provider: extend
+display_name: Extend
+description: Document processing platform for parsing, extracting, and classifying files
+connection_mode: identity
+base_url: "https://api.extend.ai/v1"
+
+auth:
+  type: manual
+
+operations:
+  upload_file:
+    description: Upload a file from a URL or base64 content
+    method: POST
+    path: /files
+    parameters:
+      - {name: file_url, type: string, description: URL of the file to upload}
+      - {name: file_base64, type: string, description: Base64-encoded file content}
+      - {name: file_name, type: string, description: Filename (used with file_base64)}
+  list_files:
+    description: List uploaded files
+    method: GET
+    path: /files
+    parameters:
+      - {name: name_contains, type: string, description: Filter by filename substring}
+      - {name: sort_dir, type: string, description: "Sort direction: asc or desc"}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_file:
+    description: Get a file by ID
+    method: GET
+    path: "/files/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: File ID}
+      - {name: raw_text, type: boolean, description: Include raw text output}
+      - {name: markdown, type: boolean, description: Include markdown output}
+  delete_file:
+    description: Delete a file
+    method: DELETE
+    path: "/files/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: File ID}
+  parse_file:
+    description: Parse a document synchronously
+    method: POST
+    path: /parse
+    parameters:
+      - {name: file_url, type: string, description: URL of the file to parse}
+      - {name: file_id, type: string, description: ID of an uploaded file to parse}
+  parse_file_async:
+    description: Start an async parse run
+    method: POST
+    path: /parse_runs
+    parameters:
+      - {name: file_url, type: string, description: URL of the file to parse}
+      - {name: file_id, type: string, description: ID of an uploaded file to parse}
+  get_parse_run:
+    description: Get parse run status and results
+    method: GET
+    path: "/parse_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Parse run ID}
+  delete_parse_run:
+    description: Delete a parse run
+    method: DELETE
+    path: "/parse_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Parse run ID}
+  extract_file:
+    description: Extract structured data synchronously
+    method: POST
+    path: /extract
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: extractor_id, type: string, description: Extractor ID to use}
+  extract_file_async:
+    description: Start an async extract run
+    method: POST
+    path: /extract_runs
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: extractor_id, type: string, description: Extractor ID to use}
+  list_extract_runs:
+    description: List extract runs
+    method: GET
+    path: /extract_runs
+    parameters:
+      - {name: status, type: string, description: Filter by status}
+      - {name: extractor_id, type: string, description: Filter by extractor ID}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_extract_run:
+    description: Get extract run status and results
+    method: GET
+    path: "/extract_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Extract run ID}
+  delete_extract_run:
+    description: Delete an extract run
+    method: DELETE
+    path: "/extract_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Extract run ID}
+  cancel_extract_run:
+    description: Cancel an extract run
+    method: POST
+    path: "/extract_runs/{id}/cancel"
+    parameters:
+      - {name: id, type: string, required: true, description: Extract run ID}
+  create_extractor:
+    description: Create an extractor
+    method: POST
+    path: /extractors
+    parameters:
+      - {name: name, type: string, required: true, description: Extractor name}
+      - {name: clone_extractor_id, type: string, description: Clone from existing extractor}
+  list_extractors:
+    description: List extractors
+    method: GET
+    path: /extractors
+    parameters:
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+      - {name: sort_by, type: string, description: Sort field}
+      - {name: sort_dir, type: string, description: "Sort direction: asc or desc"}
+  get_extractor:
+    description: Get an extractor by ID
+    method: GET
+    path: "/extractors/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Extractor ID}
+  update_extractor:
+    description: Update an extractor
+    method: PATCH
+    path: "/extractors/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Extractor ID}
+      - {name: name, type: string, description: New name}
+  classify_file:
+    description: Classify a document synchronously
+    method: POST
+    path: /classify
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: classifier_id, type: string, description: Classifier ID to use}
+  classify_file_async:
+    description: Start an async classify run
+    method: POST
+    path: /classify_runs
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: classifier_id, type: string, description: Classifier ID to use}
+  list_classify_runs:
+    description: List classify runs
+    method: GET
+    path: /classify_runs
+    parameters:
+      - {name: status, type: string, description: Filter by status}
+      - {name: classifier_id, type: string, description: Filter by classifier ID}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_classify_run:
+    description: Get classify run status and results
+    method: GET
+    path: "/classify_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Classify run ID}
+  delete_classify_run:
+    description: Delete a classify run
+    method: DELETE
+    path: "/classify_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Classify run ID}
+  cancel_classify_run:
+    description: Cancel a classify run
+    method: POST
+    path: "/classify_runs/{id}/cancel"
+    parameters:
+      - {name: id, type: string, required: true, description: Classify run ID}
+  create_classifier:
+    description: Create a classifier
+    method: POST
+    path: /classifiers
+    parameters:
+      - {name: name, type: string, required: true, description: Classifier name}
+      - {name: clone_classifier_id, type: string, description: Clone from existing classifier}
+  list_classifiers:
+    description: List classifiers
+    method: GET
+    path: /classifiers
+    parameters:
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+      - {name: sort_by, type: string, description: Sort field}
+      - {name: sort_dir, type: string, description: "Sort direction: asc or desc"}
+  get_classifier:
+    description: Get a classifier by ID
+    method: GET
+    path: "/classifiers/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Classifier ID}
+  update_classifier:
+    description: Update a classifier
+    method: PATCH
+    path: "/classifiers/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Classifier ID}
+      - {name: name, type: string, description: New name}
+  split_file:
+    description: Split a multi-document file synchronously
+    method: POST
+    path: /split
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: splitter_id, type: string, description: Splitter ID to use}
+  split_file_async:
+    description: Start an async split run
+    method: POST
+    path: /split_runs
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+      - {name: splitter_id, type: string, description: Splitter ID to use}
+  list_split_runs:
+    description: List split runs
+    method: GET
+    path: /split_runs
+    parameters:
+      - {name: status, type: string, description: Filter by status}
+      - {name: splitter_id, type: string, description: Filter by splitter ID}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_split_run:
+    description: Get split run status and results
+    method: GET
+    path: "/split_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Split run ID}
+  delete_split_run:
+    description: Delete a split run
+    method: DELETE
+    path: "/split_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Split run ID}
+  cancel_split_run:
+    description: Cancel a split run
+    method: POST
+    path: "/split_runs/{id}/cancel"
+    parameters:
+      - {name: id, type: string, required: true, description: Split run ID}
+  create_splitter:
+    description: Create a splitter
+    method: POST
+    path: /splitters
+    parameters:
+      - {name: name, type: string, required: true, description: Splitter name}
+      - {name: clone_splitter_id, type: string, description: Clone from existing splitter}
+  list_splitters:
+    description: List splitters
+    method: GET
+    path: /splitters
+    parameters:
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+      - {name: sort_by, type: string, description: Sort field}
+      - {name: sort_dir, type: string, description: "Sort direction: asc or desc"}
+  get_splitter:
+    description: Get a splitter by ID
+    method: GET
+    path: "/splitters/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Splitter ID}
+  update_splitter:
+    description: Update a splitter
+    method: PATCH
+    path: "/splitters/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Splitter ID}
+      - {name: name, type: string, description: New name}
+  edit_file:
+    description: Edit a PDF synchronously
+    method: POST
+    path: /edit
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+  edit_file_async:
+    description: Start an async edit run
+    method: POST
+    path: /edit_runs
+    parameters:
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+  get_edit_run:
+    description: Get edit run status and results
+    method: GET
+    path: "/edit_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Edit run ID}
+  delete_edit_run:
+    description: Delete an edit run
+    method: DELETE
+    path: "/edit_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Edit run ID}
+  create_workflow:
+    description: Create a workflow
+    method: POST
+    path: /workflows
+    parameters:
+      - {name: name, type: string, required: true, description: Workflow name}
+  run_workflow:
+    description: Run a workflow on a file
+    method: POST
+    path: /workflow_runs
+    parameters:
+      - {name: workflow_id, type: string, required: true, description: Workflow ID}
+      - {name: file_url, type: string, description: URL of the file}
+      - {name: file_id, type: string, description: ID of an uploaded file}
+  list_workflow_runs:
+    description: List workflow runs
+    method: GET
+    path: /workflow_runs
+    parameters:
+      - {name: status, type: string, description: Filter by status}
+      - {name: workflow_id, type: string, description: Filter by workflow ID}
+      - {name: batch_id, type: string, description: Filter by batch ID}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_workflow_run:
+    description: Get workflow run status and results
+    method: GET
+    path: "/workflow_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Workflow run ID}
+  update_workflow_run:
+    description: Update a workflow run
+    method: PATCH
+    path: "/workflow_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Workflow run ID}
+      - {name: name, type: string, description: New name}
+  delete_workflow_run:
+    description: Delete a workflow run
+    method: DELETE
+    path: "/workflow_runs/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Workflow run ID}
+  cancel_workflow_run:
+    description: Cancel a workflow run
+    method: POST
+    path: "/workflow_runs/{id}/cancel"
+    parameters:
+      - {name: id, type: string, required: true, description: Workflow run ID}
+  create_evaluation_set:
+    description: Create an evaluation set
+    method: POST
+    path: /evaluation_sets
+    parameters:
+      - {name: name, type: string, required: true, description: Evaluation set name}
+      - {name: entity_id, type: string, required: true, description: Entity ID}
+      - {name: description, type: string, description: Description}
+  list_evaluation_sets:
+    description: List evaluation sets
+    method: GET
+    path: /evaluation_sets
+    parameters:
+      - {name: entity_id, type: string, description: Filter by entity ID}
+      - {name: next_page_token, type: string, description: Pagination token}
+      - {name: max_page_size, type: integer, description: Max results per page}
+  get_evaluation_set:
+    description: Get an evaluation set by ID
+    method: GET
+    path: "/evaluation_sets/{id}"
+    parameters:
+      - {name: id, type: string, required: true, description: Evaluation set ID}
