@@ -67,6 +67,7 @@ integrations:
     display_name: Swagger Petstore
     description: Public example API
     connection_mode: none
+    base_url: https://petstore3.swagger.io/api/v3
     upstreams:
       - type: rest
         url: https://petstore3.swagger.io/api/v3/openapi.json
@@ -80,6 +81,7 @@ This is the smallest useful production-shaped config:
 - explicit `server`, `auth`, and `datastore`
 - one named integration
 - one REST upstream
+- an explicit integration `base_url` for live requests
 - no per-user credential requirement because `connection_mode: none`
 
 ## 4. Prepare And Validate It
