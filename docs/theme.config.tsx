@@ -4,10 +4,10 @@ import type { DocsThemeConfig } from "nextra-theme-docs";
 const config: DocsThemeConfig = {
   logo: <strong>Gestalt</strong>,
   project: {
-    link: "https://github.com/valon-technologies/toolshed",
+    link: "https://github.com/valon-technologies/gestalt",
   },
   docsRepositoryBase:
-    "https://github.com/valon-technologies/toolshed/tree/main/toolshed/docs",
+    "https://github.com/valon-technologies/gestalt/tree/main/docs",
   head: function Head() {
     const { title } = useConfig();
     const fullTitle = title ? `${title} – Gestalt` : "Gestalt";

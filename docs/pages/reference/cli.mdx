@@ -1,131 +1,95 @@
 # CLI
 
-Gestalt ships two binaries: the Go server (`gestaltd`) and the Rust client (`gestalt`).
+The most important CLI surface in this repo is the `gestaltd` server binary.
 
-## Server (`gestaltd`)
-
-`gestaltd` is the Gestalt API server. It loads configuration, manages auth providers and token storage, dispatches operations, and serves the MCP endpoint and webhook bindings.
+## `gestaltd`
 
 ### Usage
 
 ```sh
-gestaltd --config config.yaml
-gestaltd init --config config.yaml
-gestaltd serve --config config.yaml
-gestaltd validate --config config.yaml
+gestaltd [--config PATH]
+gestaltd plugin <command> [flags]
+gestaltd serve [--config PATH] [--locked]
+gestaltd init [--config PATH]
+gestaltd validate [--config PATH] [--init]
 ```
 
-### Commands
+## Command Meanings
 
-| Command | Purpose |
-|---|---|
-| `gestaltd --config config.yaml` | Prepare REST/GraphQL providers if needed, then start the server from the source config. |
-| `gestaltd init --config config.yaml` | Write `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. |
-| `gestaltd serve --config config.yaml` | Start the server strictly from the source config plus prepared provider artifacts. |
-| `gestaltd validate --config config.yaml` | Load and validate config, then exit without starting the server. |
+| Command | What it does |
+| --- | --- |
+| `gestaltd` | Default start command. Can auto-generate a local config and can auto-init missing prepared state. |
+| `gestaltd serve` | Start the server from an explicit config path. |
+| `gestaltd serve --locked` | Require exact prepared state. Do not auto-init. |
+| `gestaltd init` | Prepare remote provider artifacts and packaged plugins into locked local state. |
+| `gestaltd validate` | Load and validate config without starting the server. |
+| `gestaltd validate --init` | Prepare locked state first, then validate it. |
+| `gestaltd plugin package` | Build a distributable plugin archive from a manifest directory. |
 
-### Validate configuration
+## Default Command Behavior
+
+The plain `gestaltd` command has one extra convenience feature:
+
+- if you do not pass `--config`
+- and no config file can be found in the normal search path
+- it generates `~/.gestalt/config.yaml`
+
+That generated config is intentionally local-only:
+
+- `local` auth
+- SQLite
+- `env` secrets
+- dev mode enabled
+
+## Config Path Resolution
+
+When a command needs a config path, Gestalt resolves it in this order:
+
+1. `--config`
+2. `GESTALT_CONFIG`
+3. `./config.yaml`
+4. `~/.gestalt/config.yaml`
+5. `/etc/gestalt/config.yaml`
+
+## `init`
+
+`gestaltd init --config ./gestalt.yaml` writes:
+
+- `gestalt.lock.json`
+- `.gestalt/providers/*.json`
+- `.gestalt/plugins/...`
+
+Use it whenever your config contains:
+
+- remote REST upstreams
+- remote GraphQL upstreams
+- `plugin.package`
+
+## `serve --locked`
+
+Use locked mode in production:
 
 ```sh
-gestaltd validate --config config.yaml
+gestaltd init --config ./gestalt.yaml
+gestaltd serve --locked --config ./gestalt.yaml
 ```
 
-Prints: config file path, server settings, auth provider, datastore, secrets provider, integration count and details, runtime count, binding count. Exits with "config ok" if valid.
+If prepared state is missing or stale, startup fails instead of mutating local state.
 
-`gestaltd` prints datastore warnings at startup and during `validate`. SQLite always triggers a warning since it is not recommended for production.
+## `validate`
 
-### Prepare for deployment
+`gestaltd validate` is non-mutating by default. It expects lock state to already exist when the config depends on prepared artifacts.
+
+`gestaltd validate --init` is the most useful CI command for production-shaped configs.
+
+## `plugin package`
+
+Build a plugin archive from a manifest directory:
 
 ```sh
-gestaltd init --config config.yaml
-gestaltd serve --config config.yaml
+gestaltd plugin package --input ./build/my-plugin --output ./dist/my-plugin.tar.gz
 ```
 
-`gestaltd init` writes a lockfile and hidden provider cache next to the source config. `gestaltd serve` reads the same source config and uses the prepared artifacts, so production startup no longer depends on live spec downloads or GraphQL introspection.
+## Companion Client
 
-### Config file resolution
-
-1. `--config` flag.
-2. `GESTALT_CONFIG` environment variable.
-3. `./config.yaml` in the current directory.
-4. `~/.gestalt/config.yaml`.
-5. `/etc/gestalt/config.yaml`.
-
-## Client CLI (`gestalt`)
-
-### Install
-
-```sh
-brew install valon-technologies/toolshed/gestalt
-```
-
-Or build from source:
-
-```sh
-cd client/cli
-cargo build --release
-./target/release/gestalt --version
-```
-
-### Commands
-
-| Command | Purpose |
-|---|---|
-| `gestalt init` | Interactive setup wizard. |
-| `gestalt auth login` | Open browser for OAuth login. Refuses if `GESTALT_API_KEY` is set (unset it first or use the key directly). |
-| `gestalt auth logout` | Clear stored credentials. |
-| `gestalt auth status` | Show authentication status and credential source. |
-| `gestalt config get <key>` | Read a config value. |
-| `gestalt config set <key> <value>` | Write a config value. |
-| `gestalt config unset <key>` | Remove a config value. |
-| `gestalt config list` | List all config values. |
-| `gestalt integrations list` | List available integrations with name, display name, auth types, connected status, instance names, and description. |
-| `gestalt integrations connect <name>` | Start an OAuth connection flow. |
-| `gestalt invoke <integration> <operation> -p key=value` | Execute an operation. When multiple connections exist, pass `-p _instance=NAME` to select which one to use. |
-| `gestalt tokens create [--name <name>]` | Create an API token. |
-| `gestalt tokens list` | List API tokens. |
-| `gestalt tokens revoke <id>` | Revoke an API token. |
-
-### URL resolution order
-
-1. `--url` flag.
-2. `GESTALT_URL` environment variable.
-3. `.gestalt.json` in the current or ancestor directory.
-4. Global config file.
-5. `credentials.json` stored by `gestalt auth login`.
-6. `http://localhost:8080` as fallback.
-
-### Authentication
-
-The CLI resolves credentials in this order:
-
-1. **`GESTALT_API_KEY` environment variable** — if set and non-empty, used as the Bearer token on every request, overriding any session token. When active, `gestalt auth login` refuses to run and prints a message to unset the variable first.
-2. **Session token** — stored by `gestalt auth login` in the local credential store.
-
-`gestalt auth status` reports which source is active:
-
-- **`--format json`** returns `{"authenticated": bool, "source": "env"|"session"|"none", "env_var_set": bool, "session_stored": bool}`.
-- **`--format table`** prints a human-readable summary. If both `GESTALT_API_KEY` and a session token exist, it warns that the session token is being ignored.
-
-If a request fails with 401 while using `GESTALT_API_KEY`, the error message notes that the key came from the environment and suggests unsetting it.
-
-Credential files are written with `0600` permissions. Output formats: `--format json` (default) or `--format table`.
-
-### Common workflows
-
-```sh
-# Initial setup
-gestalt init
-gestalt auth login
-
-# Browse and connect
-gestalt integrations list --format table
-gestalt integrations connect slack
-
-# Invoke operations
-gestalt invoke slack conversations_list
-gestalt invoke slack chat_postMessage -p channel=C123 -p text=hello
-
-# API tokens for CI
-gestalt tokens create --name "ci-token"
-```
+The repo also contains a separate `gestalt` client binary, but the deployment and platform model documented here are centered on `gestaltd`.

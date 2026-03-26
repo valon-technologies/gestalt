@@ -1,93 +1,164 @@
 # Configuration
 
-Gestalt boots entirely from a YAML config file plus environment and secret resolution. The config is the contract between your deployment and the runtime.
+The Gestalt config file is the platform's control plane. `gestaltd` does not have a large imperative setup process; instead, it reads one YAML document and derives the runtime from it.
 
-## How config files are found
+## Config Discovery
 
-1. Explicit `--config` flag passed to the binary.
-2. `GESTALT_CONFIG` environment variable.
-3. `./config.yaml` in the current working directory.
-4. `~/.gestalt/config.yaml` as a user-level fallback.
-5. `/etc/gestalt/config.yaml` as a system-wide fallback.
+When you do not pass `--config`, `gestaltd` resolves the config path in this order:
 
-The first match wins. Gestalt does not merge multiple config files. When no config file is found and the command supports auto-generation (bare `gestaltd`), a default config is written to `~/.gestalt/config.yaml` with local auth, sqlite, and env secrets.
+1. `GESTALT_CONFIG`
+2. `./config.yaml`
+3. `~/.gestalt/config.yaml`
+4. `/etc/gestalt/config.yaml`
 
-## How values are resolved
+The default command `gestaltd` has one extra behavior: if no config exists anywhere in that search path, it generates `~/.gestalt/config.yaml` and starts with a local-only configuration.
 
-1. Raw YAML is parsed into the config struct.
-2. Environment variable references (`${VAR}`) are expanded from the process environment.
-3. Defaults are applied for any fields not explicitly set.
-4. `auth_profiles` entries are merged into integration configs that reference them by name.
-5. `base_url` from the server block is injected into OAuth callback URL construction.
-6. `secret://` references are resolved through the configured secret manager. This happens last so that secrets can contain values that would otherwise look like env vars.
+## What Happens During Load
 
-## Annotated example
+Loading a config is more than YAML parsing:
+
+1. `${ENV_VAR}` placeholders are expanded first.
+2. YAML is decoded with known-field checking.
+3. Defaults are applied.
+4. `auth_profiles` are merged into integrations and upstreams.
+5. Missing redirect URLs are derived from `server.base_url` where possible.
+6. Relative paths are resolved against the directory that contains the config file.
+7. Validation runs.
+8. During bootstrap, `secret://...` values are resolved through the configured secret manager.
+
+`secret://...` resolution is intentionally later than basic config parsing. That keeps the config loader simple and lets the secret manager itself be configured normally.
+
+## The Top-Level Feature Sets
+
+This is the complete top-level shape of the config:
+
+```yaml
+auth: {}
+datastore: {}
+secrets: {}
+auth_profiles: {}
+integrations: {}
+runtimes: {}
+bindings: {}
+server: {}
+egress: {}
+```
+
+Each block controls a distinct part of the runtime:
+
+| Block | What it defines |
+| --- | --- |
+| `server` | Port, base URL, encryption key, dev mode, and admin email allowlist. |
+| `auth` | How users authenticate to Gestalt itself. |
+| `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
+| `secrets` | How `secret://...` values are resolved. |
+| `auth_profiles` | Reusable integration auth settings shared across integrations or upstreams. |
+| `integrations` | The provider graph users call. |
+| `runtimes` | Background workers. |
+| `bindings` | Additional inbound surfaces. |
+| `egress` | Outbound allow or deny policy plus credential grants. |
+
+## Defaults And Required Fields
+
+The loader applies a small number of defaults:
+
+- `server.port` defaults to `8080`
+- `secrets.provider` defaults to `env`
+
+Some fields are effectively mandatory:
+
+- `auth.provider`
+- `datastore.provider`
+- `server.encryption_key`, unless `server.dev_mode: true`
+
+`server.encryption_key` is the root secret for the deployment. Gestalt derives other cryptographic material from it, including session-related secrets for some auth providers.
+
+## Prepared State: `init`, `validate`, And `serve --locked`
+
+Gestalt supports both mutable startup and deterministic startup.
+
+### Mutable Startup
+
+`gestaltd` or `gestaltd serve` without `--locked` may mutate local state at startup:
+
+- remote REST or GraphQL upstreams can be fetched and compiled
+- packaged plugins can be prepared locally
+- missing or stale lock state can be regenerated
+
+This is convenient for development.
+
+### Deterministic Startup
+
+`gestaltd init` writes prepared artifacts next to the config:
+
+- `gestalt.lock.json`
+- `.gestalt/providers/*.json`
+- `.gestalt/plugins/...`
+
+After that, `gestaltd serve --locked` starts only if the prepared state exactly matches the config.
+
+### Validation
+
+`gestaltd validate --config PATH` is non-mutating and expects existing lock state.
+
+`gestaltd validate --init --config PATH` first prepares remote dependencies, then validates the resulting locked deployment.
+
+## Relative Paths
+
+Paths in config are resolved relative to the config file directory, not the process working directory. This matters for:
+
+- `integrations.<name>.icon_file`
+- `plugin.command`
+- local `plugin.package` paths
+
+That makes configs portable across local runs, Docker mounts, and Kubernetes volumes.
+
+## Secret References
+
+Any string value outside `secrets.config` may use the `secret://` scheme:
 
 ```yaml
 auth:
   provider: oidc
   config:
-    issuer_url: https://auth.example.com
-    client_id: ${GESTALT_OIDC_CLIENT_ID}
     client_secret: secret://oidc-client-secret
-    allowed_domains:
-      - example.com
-    session_ttl: 24h
-    pkce: true
-
-datastore:
-  provider: postgres
-  config:
-    dsn: secret://gestalt-postgres-dsn
-
-secrets:
-  provider: gcp_secret_manager
-  config:
-    project: platform-prod
-
-auth_profiles:
-  slack_shared:
-    client_id: secret://slack-client-id
-    client_secret: secret://slack-client-secret
-    auth:
-      authorization_url: https://slack.com/oauth/v2/authorize
-      token_url: https://slack.com/api/oauth.v2.access
-      response_check:
-        success_body_match:
-          ok: true
-        error_message_path: error
-
-integrations:
-  slack:
-    auth_profile: slack_shared
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
-        allowed_operations:
-          conversations_list: ""
-          chat_postMessage: Send a message to a Slack channel
-    response_check:
-      success_body_match:
-        ok: true
-      error_message_path: error
-    connection_mode: user
-
-server:
-  port: 8080
-  base_url: https://gestalt.example.com
-  encryption_key: secret://gestalt-encryption-key
 ```
 
-## Key behaviors
+The secret manager resolves the part after `secret://`:
 
-**auth_profiles inheritance**: When an integration references an `auth_profile`, the profile's fields are merged into the integration config. Fields set directly on the integration override the profile.
+- `env` reads it from an environment variable name
+- `file` reads it from a file inside a configured directory
+- `gcp_secret_manager` reads it from Google Secret Manager
 
-**base_url for OAuth**: The server's `base_url` is used to construct OAuth redirect URIs. If it is wrong or missing, OAuth flows will fail with a redirect mismatch.
+## Dev Mode
 
-**relative paths**: `icon_file` resolves relative to the config file's directory, not the current shell working directory.
+`server.dev_mode: true` changes the server in a few important ways:
 
-**provider preparation**: `gestaltd init --config ...` writes `gestalt.lock.json` plus `.gestalt/providers/*.json` next to the source config. `gestaltd serve --config ...` uses that prepared state so runtime startup is deterministic without rewriting the config.
+- enables `POST /api/dev-login`
+- accepts `X-Dev-User-Email` for local testing
+- enables permissive dev CORS
+- registers dev-only built-ins such as the `echo` provider and `echo` runtime
 
-**allowed_operations**: A positive allow-list. Only operations listed here are callable. An empty map means no operations are exposed. The value is a human-readable description; an empty string means no custom description.
+That makes dev mode useful for local setup, but it is not a production setting.
 
-**connection_mode**: Controls credential resolution per integration. See [Platform Model](/concepts/platform-model#connection-modes) for the available modes.
+## The Smallest Explicit Config
+
+```yaml
+server:
+  port: 8080
+  base_url: http://localhost:8080
+  dev_mode: true
+  encryption_key: change-me
+
+auth:
+  provider: local
+
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+
+integrations: {}
+```
+
+That is enough to boot a real server. Everything else is additive.

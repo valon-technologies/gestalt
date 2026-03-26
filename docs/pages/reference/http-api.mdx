@@ -1,84 +1,148 @@
 # HTTP API
 
-## Unauthenticated endpoints
+This page documents the HTTP surface exposed by `gestaltd`.
+
+## Authentication Model
+
+Authenticated routes accept:
+
+- the `session_token` cookie
+- or `Authorization: Bearer <token>`
+
+For proxy routes, Gestalt also understands:
+
+- `Proxy-Authorization: Bearer <token>`
+
+Valid bearer tokens are:
+
+- platform session tokens
+- Gestalt API tokens
+- egress client tokens, where supported by the route
+
+## Unauthenticated Routes
 
 | Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | Health check. Returns `{"status":"ok"}`. |
-| GET | `/ready` | Readiness check. Returns `{"status":"ok"}` when providers are initialized and the datastore is reachable. Otherwise returns a 503 with a reason such as `{"status":"providers loading"}` or `{"status":"datastore unavailable"}`. |
-| POST | `/api/v1/auth/login` | Start platform login. Accepts `{"state": "...", "callback_port": 12345}`. Returns `{"url": "..."}` with the provider's login URL. |
-| GET | `/api/v1/auth/login/callback` | Complete platform login. Exchanges the authorization code for a session token. Returns `{"email": "...", "display_name": "...", "token": "..."}`. |
-| GET | `/api/v1/auth/info` | Returns `{"provider": "...", "display_name": "...", "dev_mode": true/false}`. |
+| --- | --- | --- |
+| `GET` | `/health` | Basic liveness check. |
+| `GET` | `/ready` | Readiness check. Returns `503` until providers and datastore are ready. |
+| `GET` | `/api/v1/auth/info` | Returns platform auth metadata. |
+| `POST` | `/api/v1/auth/login` | Starts platform login. |
+| `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
+| `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
+| `GET` | `/api/v1/auth/callback` | Completes integration OAuth. |
 
-In dev mode, an additional endpoint is available:
+In dev mode only:
 
 | Method | Path | Purpose |
-|---|---|---|
-| POST | `/api/dev-login` | Dev-only login. Accepts `{"email": "..."}` and returns a session token without OAuth. |
+| --- | --- | --- |
+| `POST` | `/api/dev-login` | Dev-only login shortcut. |
 
-## Authenticated endpoints
-
-All authenticated endpoints require an `Authorization: Bearer <token>` header. The token can be a session token from login or an API token.
+## Authenticated User Routes
 
 ### Integrations
 
 | Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/v1/integrations` | List loaded integrations. Returns an array of objects with `name`, `display_name`, `description`, `icon_svg`, `connected` (boolean), `instances` (array of `{"name": "..."}` objects), and `auth_types` (array of strings, e.g. `["oauth"]`, `["manual"]`, or `["oauth", "manual"]`). |
-| DELETE | `/api/v1/integrations/{name}` | Disconnect an integration. Removes the stored token for the calling user. Pass `?instance=NAME` to disconnect a specific instance. When multiple connections exist and no instance is specified, returns 409 with the available instance names. Returns `{"status":"disconnected"}`. |
-| GET | `/api/v1/integrations/{name}/operations` | List operations exposed by an integration. |
-| GET or POST | `/api/v1/{integration}/{operation}` | Execute an integration operation. MCP-only integrations return a 400 error. |
+| --- | --- | --- |
+| `GET` | `/api/v1/integrations` | List integrations, connection state, auth types, instances, icons, and connection parameter hints. |
+| `DELETE` | `/api/v1/integrations/{name}` | Disconnect an integration. Use `?instance=...` when more than one connection exists. |
+| `GET` | `/api/v1/integrations/{name}/operations` | List operations for one integration. |
+| `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke an integration operation. |
 
-### Auth flows
-
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. Accepts `{"integration": "...", "scopes": [...]}`. Returns `{"url": "...", "state": "..."}`. |
-| GET | `/api/v1/auth/callback` | Complete integration OAuth. Exchanges code for tokens and stores them. Redirects to the web UI on success. |
-| POST | `/api/v1/auth/connect-manual` | Submit manual credentials. Accepts `{"integration": "...", "credential": "..."}`. Returns `{"status":"connected"}`. |
-
-### API tokens
+### Integration Connection Flows
 
 | Method | Path | Purpose |
-|---|---|---|
-| POST | `/api/v1/tokens` | Create an API token. Returns `{"id": "...", "name": "...", "token": "...", "expires_at": "..."}`. The plaintext token is shown only once. |
-| GET | `/api/v1/tokens` | List API tokens for the current user. Returns `id`, `name`, `scopes`, `created_at`, `expires_at`. |
-| DELETE | `/api/v1/tokens/{id}` | Revoke an API token. Returns `{"status":"revoked"}`. |
+| --- | --- | --- |
+| `POST` | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. |
+| `POST` | `/api/v1/auth/connect-manual` | Submit manual integration credentials. |
+| `GET` | `/api/v1/connections/staged/{id}` | Inspect a staged connection. |
+| `POST` | `/api/v1/connections/staged/{id}/select` | Finalize a staged connection choice. |
+| `DELETE` | `/api/v1/connections/staged/{id}` | Cancel a staged connection. |
 
-### Runtimes and bindings
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/v1/runtimes` | List configured runtimes. |
-| GET | `/api/v1/bindings` | List configured bindings. |
-
-Bindings register dynamic routes at `/api/v1/bindings/{name}/*` based on their config.
-
-### MCP
+### API Tokens
 
 | Method | Path | Purpose |
-|---|---|---|
-| GET or POST | `/mcp` | Model Context Protocol endpoint. Mounted when at least one integration exposes MCP tools, either via `mcp: true` on a REST/GraphQL upstream or via a `type: mcp` upstream. |
+| --- | --- | --- |
+| `POST` | `/api/v1/tokens` | Create an API token. Plaintext is returned once. |
+| `GET` | `/api/v1/tokens` | List API tokens for the current user. |
+| `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 
-## Execution semantics
+### Egress Clients
 
-- **GET** requests pass parameters as query string key-value pairs.
-- **POST** requests pass parameters as a JSON body.
-- Path placeholders like `{integration}` and `{operation}` are resolved from the URL. Remaining parameters are sent as query or body values depending on the method.
-- When a user has multiple connections to an integration, pass `_instance` as a parameter to specify which connection to use. If omitted when multiple connections exist, the request returns `409 Conflict` with the available instance names.
-- Integrations backed only by a `type: mcp` upstream cannot be invoked over HTTP. Attempting to do so returns `400: this integration is accessible only via MCP`.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/egress-clients` | Create an egress client. |
+| `GET` | `/api/v1/egress-clients` | List egress clients. |
+| `DELETE` | `/api/v1/egress-clients/{id}` | Delete an egress client. |
+| `POST` | `/api/v1/egress-clients/{id}/tokens` | Create an egress client token. |
+| `GET` | `/api/v1/egress-clients/{id}/tokens` | List egress client tokens. |
+| `DELETE` | `/api/v1/egress-clients/{id}/tokens/{tokenID}` | Revoke an egress client token. |
 
-## Authentication
+### Runtime And Binding Discovery
 
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/runtimes` | List configured runtimes. |
+| `GET` | `/api/v1/bindings` | List configured bindings. |
+
+## Admin-Only Routes
+
+These routes require a logged-in or token-authenticated user whose email appears in `server.admin_emails`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/egress/deny-rules` | Create an egress deny rule. |
+| `GET` | `/api/v1/egress/deny-rules` | List egress deny rules. |
+| `DELETE` | `/api/v1/egress/deny-rules/{id}` | Delete an egress deny rule. |
+
+## Dynamic Binding Routes
+
+Bindings may add routes under:
+
+```text
+/api/v1/bindings/{binding-name}/...
 ```
-Authorization: Bearer <session-token-or-api-token>
+
+The exact paths and auth behavior depend on the binding type and its config.
+
+## MCP
+
+If any integration is MCP-enabled, Gestalt also mounts:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` or `POST` | `/mcp` | Model Context Protocol endpoint. |
+
+`/mcp` is authenticated with the same session or bearer-token middleware as the rest of the authenticated API.
+
+## Invocation Semantics
+
+When you call:
+
+```text
+/api/v1/{integration}/{operation}
 ```
+
+Gestalt:
+
+1. authenticates the caller
+2. resolves the target provider and operation
+3. resolves credentials based on `connection_mode`
+4. auto-selects an instance when there is exactly one
+5. fails with an ambiguity error when there are multiple instances and none is specified
+6. refreshes OAuth tokens when needed
+7. executes the provider operation
+
+## Parameter Conventions
+
+- `GET` invocations read parameters from the query string
+- `POST` invocations read parameters from a JSON body
+- `_instance` can be supplied when an integration has more than one stored connection
 
 ## Example
 
 ```sh
-curl -X POST http://localhost:8080/api/v1/slack/chat_postMessage \
-  -H "Authorization: Bearer $GESTALT_API_KEY" \
+curl -X POST http://localhost:8080/api/v1/github/repos_listForAuthenticatedUser \
+  -H "Authorization: Bearer gst_api_..." \
   -H "Content-Type: application/json" \
-  -d '{"channel":"C123","text":"hello from gestalt"}'
+  -d '{}'
 ```

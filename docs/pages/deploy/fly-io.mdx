@@ -1,77 +1,55 @@
-import { Callout } from 'nextra/components'
-
 # Deploy to Fly.io
 
-## Before you begin
+Fly.io is a good fit when you want to run the standard Gestalt container as a single service close to users. Treat it as a manual single-container deployment, not as a separate Fly-specific runtime.
 
-- A [Fly.io](https://fly.io) account.
-- [`flyctl`](https://fly.io/docs/flyctl/install/) installed and authenticated (`fly auth login`).
+## Recommended Shape
 
-## Create the app
+Use:
 
-```sh
-fly launch --no-deploy \
-  --name gestalt \
-  --region iad \
-  --dockerfile Dockerfile
-```
+- the repo `Dockerfile`
+- a stable public hostname for `server.base_url`
+- Postgres for multi-machine deployments
+- a Fly volume only if you intentionally want SQLite
 
-Edit `fly.toml` to expose port 8080 and configure the health check:
+## Core Requirements
 
-```toml
-[http_service]
-  internal_port = 8080
-  force_https = true
+Your deployment must provide:
 
-  [[http_service.checks]]
-    grace_period = "5s"
-    interval = "15s"
-    method = "GET"
-    path = "/health"
-    timeout = "2s"
-```
+- the public base URL
+- an encryption key
+- auth-provider secrets
+- a config file mounted or baked into the image
 
-## Provision a database
+If you use SQLite, also mount persistent storage and stay on one machine.
 
-### Option A: Fly Postgres (recommended)
+## Startup Options
+
+### Simplest
+
+Start the container with:
 
 ```sh
-fly postgres create --name gestalt-db --region iad
-fly postgres attach gestalt-db --app gestalt
+/gestaltd --config /etc/gestalt/config.yaml
 ```
 
-This sets `DATABASE_URL` automatically.
+This allows mutable startup.
 
-### Option B: SQLite with a persistent volume
+### Preferred Production Shape
+
+Run `gestaltd init` before the main process starts, then run:
 
 ```sh
-fly volumes create gestalt_data --region iad --size 1
+/gestaltd serve --locked --config /etc/gestalt/config.yaml
 ```
 
-Add a mount in `fly.toml`:
+On Fly, that usually means either:
 
-```toml
-[mounts]
-  source = "gestalt_data"
-  destination = "/data"
-```
+- baking prepared state into the image
+- or using a release/init step that writes lock state to attached storage
 
-<Callout>
-  SQLite limits you to a single instance. Set `fly scale count 1` to prevent multiple machines from competing for the same file.
-</Callout>
+## Config Guidance
 
-## Configure
-
-```sh
-fly secrets set \
-  GESTALT_BASE_URL="https://gestalt.fly.dev" \
-  GESTALT_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  GESTALT_SESSION_SECRET="$(openssl rand -base64 32)" \
-  GOOGLE_CLIENT_ID="your-google-client-id" \
-  GOOGLE_CLIENT_SECRET="your-google-client-secret"
-```
-
-Create `config.fly.yaml`:
+Use a config shaped like this:
 
 ```yaml
 server:
@@ -84,7 +62,6 @@ auth:
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -92,36 +69,18 @@ datastore:
     dsn: "${DATABASE_URL}"
 ```
 
-Point the process at the config in `fly.toml`:
+If you use SQLite instead:
 
-```toml
-[processes]
-  app = "/gestaltd --config /etc/gestalt/config.yaml"
+```yaml
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
 ```
 
-## Deploy
+## Operational Notes
 
-```sh
-fly deploy
-```
-
-## Verify
-
-```sh
-fly status
-curl -s https://gestalt.fly.dev/health
-```
-
-You should see `{"status":"ok"}`.
-
-## Custom domain
-
-```sh
-fly certs add gestalt.example.com
-```
-
-Create a CNAME record pointing `gestalt.example.com` to `gestalt.fly.dev`, then update the base URL:
-
-```sh
-fly secrets set GESTALT_BASE_URL="https://gestalt.example.com"
-```
+- expose port `8080`
+- keep `server.base_url` aligned with the external Fly hostname or custom domain
+- use one machine when SQLite is active
+- prefer locked startup if your config depends on remote upstream definitions or packaged plugins

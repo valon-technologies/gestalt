@@ -1,48 +1,62 @@
-import { Callout } from 'nextra/components'
-
 # Deploy to Railway
 
-## Before you begin
+Railway is a manual Docker deployment target for Gestalt. The core model stays the same: one `gestaltd` service, one config file, one public base URL, and either mutable or locked startup.
 
-- A [Railway](https://railway.app) account.
-- Your Gestalt repository on GitHub.
+## Recommended Shape
 
-## Deploy from GitHub
+For Railway, prefer:
 
-1. Create a new project in the Railway dashboard.
-2. Select **Deploy from GitHub repo** and connect your repository.
-3. Set **Root Directory** to `toolshed/`.
-4. Railway detects the Dockerfile and begins the first build.
+- Postgres over SQLite
+- a committed or baked config file
+- locked startup if your config references remote upstreams or packaged plugins
 
-<Callout>
-  The app will crash without a database and environment variables. Cancel the initial deploy or let it fail, then continue below.
-</Callout>
+## Port Handling
 
-## Add a database
-
-1. In your Railway project, click **New** then **Database** then **PostgreSQL**.
-2. Link the variable: in the Gestalt service's **Variables** tab, add `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}`.
-
-## Set environment variables
-
-Add these in the Gestalt service's **Variables** tab:
-
-| Variable | Value |
-|---|---|
-| `GESTALT_BASE_URL` | `https://<domain>.up.railway.app` |
-| `GESTALT_ENCRYPTION_KEY` | Output of `openssl rand -base64 32` |
-| `GESTALT_SESSION_SECRET` | Output of `openssl rand -base64 32` |
-| `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-
-## Configure
-
-Commit a config file at `config.railway.yaml`:
+If your Railway service injects a dynamic port, wire it straight into config:
 
 ```yaml
 server:
-  port: 8080
+  port: ${PORT}
+  base_url: "${GESTALT_BASE_URL}"
+  encryption_key: "${GESTALT_ENCRYPTION_KEY}"
+```
+
+If you control the container port directly, `8080` is the natural default.
+
+## Datastore Guidance
+
+Use Postgres for normal Railway deployments:
+
+```yaml
+datastore:
+  provider: postgres
+  config:
+    dsn: "${DATABASE_URL}"
+```
+
+SQLite is possible only if you accept a single-instance deployment and durable mounted storage.
+
+## Startup Guidance
+
+Mutable startup:
+
+```sh
+/gestaltd --config /app/config.yaml
+```
+
+Locked startup:
+
+```sh
+/gestaltd serve --locked --config /app/config.yaml
+```
+
+If you choose locked startup, make sure `gestalt.lock.json` and `.gestalt/` exist next to the config inside the container image or on attached storage.
+
+## Minimum Config
+
+```yaml
+server:
+  port: ${PORT}
   base_url: "${GESTALT_BASE_URL}"
   encryption_key: "${GESTALT_ENCRYPTION_KEY}"
 
@@ -51,7 +65,6 @@ auth:
   config:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
-    session_secret: "${GESTALT_SESSION_SECRET}"
 
 datastore:
   provider: postgres
@@ -59,26 +72,8 @@ datastore:
     dsn: "${DATABASE_URL}"
 ```
 
-Override the container start command in Railway's service settings:
+## Operational Notes
 
-```
-/gestaltd --config /build/toolshed/config.railway.yaml
-```
-
-<Callout>
-  The path depends on how Railway copies your repo into the build context. Check the build logs if `/build/toolshed/` does not resolve.
-</Callout>
-
-## Verify
-
-Find the public URL in **Settings** then **Networking** then **Public Networking**.
-
-```sh
-curl -s https://<domain>.up.railway.app/health
-```
-
-## Custom domain
-
-1. Go to **Networking** then **Custom Domain** in service settings.
-2. Follow the DNS instructions Railway provides.
-3. Update `GESTALT_BASE_URL` to the new domain.
+- set `server.base_url` to the public Railway URL or your custom domain
+- keep secrets out of YAML and feed them via env vars or a secret manager
+- prefer locked startup for deterministic deploys

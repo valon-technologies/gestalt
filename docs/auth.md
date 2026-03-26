@@ -1,10 +1,25 @@
 # Authentication
 
-Gestalt supports pluggable user authentication. Configure your provider under `auth:` in config.yaml.
+Gestalt has pluggable platform authentication. Configure it under `auth:` in `config.yaml`.
 
-## Google
+## Available Providers
 
-Uses Google's OAuth2 endpoints directly. Best for Google Workspace organizations.
+### `local`
+
+The built-in local provider is the simplest way to run Gestalt without any external identity system.
+
+```yaml
+auth:
+  provider: local
+  config:
+    email: local@example.com
+```
+
+`email` is optional. If omitted, Gestalt uses `local@gestalt.local`.
+
+### `google`
+
+Google uses Google's OAuth endpoints directly.
 
 ```yaml
 auth:
@@ -12,20 +27,19 @@ auth:
   config:
     client_id: ${GOOGLE_CLIENT_ID}
     client_secret: ${GOOGLE_CLIENT_SECRET}
-    allowed_domains:              # optional; empty = allow all
+    allowed_domains:
       - example.com
 ```
 
-### Setup
+If `redirect_url` is omitted and `server.base_url` is set, Gestalt derives the callback automatically as:
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create an OAuth 2.0 Client ID (Web application)
-3. Add `<your-base-url>/api/v1/auth/login/callback` as an authorized redirect URI
-4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+```text
+<base-url>/api/v1/auth/login/callback
+```
 
-## OIDC
+### `oidc`
 
-Generic OpenID Connect provider. Works with any IdP that supports OIDC discovery, including Okta, Azure AD, Auth0, Keycloak, Firebase Auth, Rippling, OneLogin, and others.
+OIDC works with providers such as Okta, Auth0, Azure AD, and Keycloak.
 
 ```yaml
 auth:
@@ -34,53 +48,39 @@ auth:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
     client_secret: ${OIDC_CLIENT_SECRET}
-    session_secret: ${GESTALT_SESSION_SECRET}
-    display_name: "Okta"          # shown on the login button
-    scopes:                       # optional; defaults to openid, email, profile
+    session_secret: ${OIDC_SESSION_SECRET}
+    display_name: Company SSO
+    scopes:
       - openid
       - email
       - profile
-    allowed_domains:              # optional; empty = allow all
+    allowed_domains:
       - example.com
-    pkce: false                   # set true for public clients
+    pkce: true
 ```
 
-### Common issuer URLs
+## Field Summary
 
-| Provider     | Issuer URL                                             |
-|-------------|--------------------------------------------------------|
-| Okta         | `https://<your-org>.okta.com`                          |
-| Azure AD     | `https://login.microsoftonline.com/<tenant-id>/v2.0`   |
-| Auth0        | `https://<your-tenant>.auth0.com`                      |
-| Keycloak     | `https://<host>/realms/<realm>`                        |
-| Google       | `https://accounts.google.com`                          |
-| Firebase     | `https://securetoken.google.com/<project-id>`          |
-| OneLogin     | `https://<your-org>.onelogin.com/oidc/2`               |
+| Field | Provider | Notes |
+| --- | --- | --- |
+| `email` | `local` | Optional local-login email. |
+| `client_id` | `google`, `oidc` | OAuth client ID. |
+| `client_secret` | `google`, `oidc` | OAuth client secret. |
+| `redirect_url` | `google`, `oidc` | Optional explicit callback URL. |
+| `allowed_domains` | `google`, `oidc` | Optional email-domain allowlist. |
+| `issuer_url` | `oidc` | OIDC discovery URL. |
+| `session_secret` | `oidc` | Secret used to sign OIDC-backed sessions. |
+| `session_ttl` | `oidc` | Optional session lifetime, defaults to `24h`. |
+| `scopes` | `oidc` | Optional scope list, defaults to `openid`, `email`, `profile`. |
+| `pkce` | `oidc` | Optional PKCE flag. |
+| `display_name` | `oidc` | Optional login button label, defaults to `SSO`. |
 
-### Setup (Okta example)
+## Callback Path
 
-1. Create a new OIDC Web Application in the Okta admin console
-2. Set the redirect URI to `<your-base-url>/api/v1/auth/login/callback`
-3. Copy the Client ID and Client Secret
-4. Set `issuer_url` to `https://<your-org>.okta.com`
-5. Set `display_name` to `"Okta"` so the login button reads "Sign in with Okta"
+Platform login callbacks always land on:
 
-## Config reference
+```text
+/api/v1/auth/login/callback
+```
 
-| Field            | Required | Default                     | Description                                     |
-|------------------|----------|-----------------------------|-------------------------------------------------|
-| `provider`       | yes      |                             | `google` or `oidc`                              |
-| `client_id`      | yes      |                             | OAuth client ID                                 |
-| `client_secret`  | yes*     |                             | OAuth client secret (*not needed with PKCE)     |
-| `issuer_url`     | oidc     |                             | OIDC discovery base URL                         |
-| `redirect_url`   | no       | derived from `base_url`     | OAuth callback URL                              |
-| `display_name`   | no       | `SSO`                       | Label on the login button (OIDC only)           |
-| `allowed_domains`| no       | allow all                   | Restrict login to these email domains           |
-| `scopes`         | no       | `openid`, `email`, `profile`| OIDC scopes to request                          |
-| `pkce`           | no       | `false`                     | Enable PKCE (OIDC only)                         |
-| `session_secret` | no       | derived from `encryption_key`| Key for signing session JWTs                   |
-| `session_ttl`    | no       | `24h`                       | Session token lifetime                          |
-
-## Domain restriction
-
-Both providers support `allowed_domains` to restrict which email domains can log in. When set, only users with an email address matching one of the listed domains are allowed to authenticate. An empty list (or omitting the field) allows all domains.
+That is distinct from the integration OAuth callback path used for upstream provider connections.
