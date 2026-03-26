@@ -16,11 +16,12 @@ import (
 )
 
 type remoteProviderBase struct {
-	client   pluginapiv1.ProviderPluginClient
-	metadata *pluginapiv1.ProviderMetadata
-	ops      []core.Operation
-	catalog  *catalog.Catalog
-	closer   io.Closer
+	client         pluginapiv1.ProviderPluginClient
+	metadata       *pluginapiv1.ProviderMetadata
+	connectionSpec core.ConnectionSpec
+	ops            []core.Operation
+	catalog        *catalog.Catalog
+	closer         io.Closer
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -70,16 +71,17 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 	}
 
 	base := &remoteProviderBase{
-		client:   client,
-		metadata: meta,
-		ops:      operationsFromProto(opsResp.GetOperations()),
-		catalog:  staticCatalog,
+		client:         client,
+		metadata:       meta,
+		connectionSpec: connectionSpecFromMetadata(meta),
+		ops:            operationsFromProto(opsResp.GetOperations()),
+		catalog:        staticCatalog,
 	}
 	for _, opt := range opts {
 		opt(base)
 	}
 
-	hasOAuth := slices.Contains(meta.GetAuthTypes(), "oauth")
+	hasOAuth := slices.Contains(base.connectionSpec.AuthTypes, "oauth")
 	hasSessionCatalog := meta.GetSupportsSessionCatalog()
 
 	switch {
@@ -102,6 +104,10 @@ func (p *remoteProviderBase) Description() string { return p.metadata.GetDescrip
 
 func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 	return protoConnectionModeToCore(p.metadata.GetConnectionMode())
+}
+
+func (p *remoteProviderBase) ConnectionSpec() core.ConnectionSpec {
+	return p.connectionSpec.Clone()
 }
 
 func (p *remoteProviderBase) ListOperations() []core.Operation {
@@ -131,7 +137,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 }
 
 func (p *remoteProviderBase) SupportsManualAuth() bool {
-	return slices.Contains(p.metadata.GetAuthTypes(), "manual")
+	return slices.Contains(p.connectionSpec.AuthTypes, "manual")
 }
 
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
@@ -142,11 +148,11 @@ func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 }
 
 func (p *remoteProviderBase) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return connectionParamDefsFromProto(p.metadata.GetConnectionParams())
+	return p.connectionSpec.Clone().ConnectionParams
 }
 
 func (p *remoteProviderBase) AuthTypes() []string {
-	return slices.Clone(p.metadata.GetAuthTypes())
+	return slices.Clone(p.connectionSpec.AuthTypes)
 }
 
 func (p *remoteProviderBase) authorizationURL(state string, scopes []string) string {
@@ -223,6 +229,17 @@ func (p *remoteProviderWithOAuthSessionCatalog) RefreshToken(ctx context.Context
 
 func (p *remoteProviderWithOAuthSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
+}
+
+func connectionSpecFromMetadata(meta *pluginapiv1.ProviderMetadata) core.ConnectionSpec {
+	spec := core.ConnectionSpec{
+		AuthTypes:        slices.Clone(meta.GetAuthTypes()),
+		ConnectionParams: connectionParamDefsFromProto(meta.GetConnectionParams()),
+	}
+	if len(spec.AuthTypes) == 0 {
+		spec.AuthTypes = []string{"oauth"}
+	}
+	return spec
 }
 
 func checkProtocolCompatibility(meta *pluginapiv1.ProviderMetadata) error {

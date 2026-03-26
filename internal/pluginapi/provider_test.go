@@ -64,8 +64,6 @@ func (p *roundTripProvider) RefreshToken(_ context.Context, refreshToken string)
 	}, nil
 }
 
-func (p *roundTripProvider) SupportsManualAuth() bool { return true }
-
 func (p *roundTripProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
 		Name:        "roundtrip",
@@ -88,15 +86,14 @@ func (p *roundTripProvider) CatalogForRequest(_ context.Context, token string) (
 	}, nil
 }
 
-func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return map[string]core.ConnectionParamDef{
-		"tenant":  {Required: true, Description: "Tenant slug"},
-		"team_id": {From: "token_response", Field: "team_id"},
+func (p *roundTripProvider) ConnectionSpec() core.ConnectionSpec {
+	return core.ConnectionSpec{
+		AuthTypes: []string{"oauth", "manual"},
+		ConnectionParams: map[string]core.ConnectionParamDef{
+			"tenant":  {Required: true, Description: "Tenant slug"},
+			"team_id": {From: "token_response", Field: "team_id"},
+		},
 	}
-}
-
-func (p *roundTripProvider) AuthTypes() []string {
-	return []string{"oauth", "manual"}
 }
 
 func TestRemoteProviderRoundTrip(t *testing.T) {
@@ -135,6 +132,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 	if _, ok := prov.(core.AuthTypeLister); !ok {
 		t.Fatal("expected remote provider to implement AuthTypeLister")
+	}
+	if _, ok := prov.(core.ConnectionSpecProvider); !ok {
+		t.Fatal("expected remote provider to implement ConnectionSpecProvider")
 	}
 
 	ctx := core.WithConnectionParams(context.Background(), map[string]string{"tenant": "acme"})
@@ -176,7 +176,27 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if defs := cpp.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
+	csp := prov.(core.ConnectionSpecProvider)
+	if spec := csp.ConnectionSpec(); len(spec.AuthTypes) != 2 || spec.ConnectionParams["team_id"].Field != "team_id" {
+		t.Fatalf("unexpected connection spec: %+v", spec)
+	}
+}
 
+func TestConnectionSpecFromMetadata_DefaultsOAuthWhenAuthTypesMissing(t *testing.T) {
+	t.Parallel()
+
+	spec := connectionSpecFromMetadata(&pluginapiv1.ProviderMetadata{
+		ConnectionParams: map[string]*pluginapiv1.ConnectionParamDef{
+			"tenant": {Required: true, Description: "Tenant slug"},
+		},
+	})
+
+	if len(spec.AuthTypes) != 1 || spec.AuthTypes[0] != "oauth" {
+		t.Fatalf("auth types = %+v, want [oauth]", spec.AuthTypes)
+	}
+	if spec.ConnectionParams["tenant"].Description != "Tenant slug" {
+		t.Fatalf("connection params = %+v", spec.ConnectionParams)
+	}
 }
 
 func newProviderTestClient(t *testing.T, prov core.Provider) pluginapiv1.ProviderPluginClient {

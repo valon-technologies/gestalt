@@ -1244,6 +1244,181 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	}
 }
 
+func TestIntegrationOAuthCallback_ConnectionSpecProviderMetadata(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.IntegrationToken
+	prov := &specBackedIntegration{
+		StubIntegration: coretesting.StubIntegration{
+			N: "spec-oauth",
+			ExchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code != "good-code" {
+					return nil, fmt.Errorf("bad code")
+				}
+				return &core.TokenResponse{
+					AccessToken: "spec-token",
+					Extra:       map[string]any{"team_id": "team-123"},
+				}, nil
+			},
+		},
+		authURL: "https://example.com/oauth/authorize",
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"oauth"},
+			ConnectionParams: map[string]core.ConnectionParamDef{
+				"tenant":  {Required: true},
+				"team_id": {From: "token_response", Field: "team_id", Required: true},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"integration":"spec-oauth","connection_params":{"tenant":"acme"}}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", resp.StatusCode)
+	}
+	if stored == nil {
+		t.Fatal("expected token to be stored")
+	}
+	if stored.MetadataJSON != `{"team_id":"team-123","tenant":"acme"}` && stored.MetadataJSON != `{"tenant":"acme","team_id":"team-123"}` {
+		t.Fatalf("metadata JSON = %q, want tenant and team_id metadata", stored.MetadataJSON)
+	}
+}
+
+func TestIntegrationOAuthCallback_ConnectionSpecProviderDiscovery(t *testing.T) {
+	t.Parallel()
+
+	discoveryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer spec-token" {
+			t.Fatalf("Authorization header = %q, want Bearer spec-token", got)
+		}
+		_, _ = io.WriteString(w, `[{"id":"acct-1","name":"Primary","region":"us-east-1"}]`)
+	}))
+	defer discoveryServer.Close()
+
+	var stored *core.IntegrationToken
+	prov := &specBackedIntegration{
+		StubIntegration: coretesting.StubIntegration{
+			N: "discover-spec",
+			ExchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code != "good-code" {
+					return nil, fmt.Errorf("bad code")
+				}
+				return &core.TokenResponse{AccessToken: "spec-token"}, nil
+			},
+		},
+		authURL: "https://example.com/oauth/authorize",
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"oauth"},
+			Discovery: &core.DiscoveryConfig{
+				URL:             discoveryServer.URL,
+				IDPath:          "id",
+				NamePath:        "name",
+				MetadataMapping: map[string]string{"region": "region"},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"integration":"discover-spec"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", resp.StatusCode)
+	}
+	if stored == nil {
+		t.Fatal("expected token to be stored")
+	}
+	if stored.MetadataJSON != `{"region":"us-east-1"}` {
+		t.Fatalf("metadata JSON = %q, want discovery metadata", stored.MetadataJSON)
+	}
+}
+
 func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	t.Parallel()
 
@@ -2669,10 +2844,39 @@ func TestListRuntimes_WithRuntimes(t *testing.T) {
 }
 
 type stubManualProvider struct {
-	coretesting.StubIntegration
+	StubIntegration coretesting.StubIntegration
 }
 
+func (s *stubManualProvider) Name() string        { return s.StubIntegration.Name() }
+func (s *stubManualProvider) DisplayName() string { return s.StubIntegration.DisplayName() }
+func (s *stubManualProvider) Description() string { return s.StubIntegration.Description() }
+func (s *stubManualProvider) ConnectionMode() core.ConnectionMode {
+	return s.StubIntegration.ConnectionMode()
+}
+func (s *stubManualProvider) ListOperations() []core.Operation {
+	return s.StubIntegration.ListOperations()
+}
+func (s *stubManualProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+	return s.StubIntegration.Execute(ctx, op, params, token)
+}
 func (s *stubManualProvider) SupportsManualAuth() bool { return true }
+
+type specBackedIntegration struct {
+	coretesting.StubIntegration
+	spec    core.ConnectionSpec
+	authURL string
+}
+
+func (s *specBackedIntegration) ConnectionSpec() core.ConnectionSpec {
+	return s.spec.Clone()
+}
+
+func (s *specBackedIntegration) AuthorizationURL(_ string, _ []string) string {
+	if s.authURL != "" {
+		return s.authURL
+	}
+	return s.StubIntegration.AuthorizationURL("", nil)
+}
 
 func TestConnectManual(t *testing.T) {
 	t.Parallel()
@@ -2727,6 +2931,118 @@ func TestConnectManual(t *testing.T) {
 	}
 	if stored.AccessToken != "my-api-key" {
 		t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
+	}
+}
+
+func TestListIntegrations_ConnectionSpecProviderMetadata(t *testing.T) {
+	t.Parallel()
+
+	prov := &specBackedIntegration{
+		StubIntegration: coretesting.StubIntegration{N: "spec-svc", DN: "Spec Service"},
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"manual"},
+			ConnectionParams: map[string]core.ConnectionParamDef{
+				"tenant":  {Required: true, Description: "Tenant slug"},
+				"team_id": {From: "token_response", Field: "team_id"},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name             string                    `json:"name"`
+		AuthTypes        []string                  `json:"auth_types"`
+		ConnectionParams map[string]map[string]any `json:"connection_params"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if len(integrations[0].AuthTypes) != 1 || integrations[0].AuthTypes[0] != "manual" {
+		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	}
+	if len(integrations[0].ConnectionParams) != 1 {
+		t.Fatalf("connection params = %+v, want only user-provided params", integrations[0].ConnectionParams)
+	}
+	if _, ok := integrations[0].ConnectionParams["tenant"]; !ok {
+		t.Fatalf("tenant missing from connection params: %+v", integrations[0].ConnectionParams)
+	}
+	if _, ok := integrations[0].ConnectionParams["team_id"]; ok {
+		t.Fatalf("team_id should not be exposed in connection params: %+v", integrations[0].ConnectionParams)
+	}
+}
+
+func TestConnectManual_ConnectionSpecProvider(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.IntegrationToken
+	prov := &specBackedIntegration{
+		StubIntegration: coretesting.StubIntegration{N: "manual-spec"},
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"manual"},
+			ConnectionParams: map[string]core.ConnectionParamDef{
+				"tenant": {Required: true},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"manual-spec","credential":"my-api-key","connection_params":{"tenant":"acme"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if stored == nil {
+		t.Fatal("expected StoreToken to be called")
+	}
+	if stored.MetadataJSON != `{"tenant":"acme"}` {
+		t.Fatalf("metadata JSON = %q, want tenant metadata", stored.MetadataJSON)
 	}
 }
 
@@ -2831,6 +3147,37 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 	}
 	if result["error"] == "" {
 		t.Fatal("expected error message in response")
+	}
+}
+
+func TestStartOAuth_ConnectionSpecProviderManualRejected(t *testing.T) {
+	t.Parallel()
+
+	prov := &specBackedIntegration{
+		StubIntegration: coretesting.StubIntegration{N: "manual-spec"},
+		spec: core.ConnectionSpec{
+			AuthTypes: []string{"manual"},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.DevMode = true
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"manual-spec","scopes":[]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 

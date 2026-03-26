@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/internal/principal"
+	"github.com/valon-technologies/gestalt/internal/providerinfo"
 )
 
 const defaultTokenInstance = "default"
@@ -98,14 +100,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		var authTypes []string
-		if atl, ok := prov.(core.AuthTypeLister); ok {
-			authTypes = atl.AuthTypes()
-		} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
-			authTypes = []string{"manual"}
-		} else {
-			authTypes = []string{"oauth"}
-		}
+		spec := providerinfo.ResolveConnectionSpec(prov)
 		instances := connected[name]
 		info := integrationInfo{
 			Name:        name,
@@ -113,23 +108,20 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			Description: prov.Description(),
 			Connected:   len(instances) > 0,
 			Instances:   instances,
-			AuthTypes:   authTypes,
+			AuthTypes:   spec.AuthTypes,
 		}
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
 				info.IconSVG = cat.IconSVG
 			}
 		}
-		if cpp, ok := prov.(core.ConnectionParamProvider); ok {
-			defs := cpp.ConnectionParamDefs()
+		if defs := providerinfo.UserConnectionParams(spec); len(defs) > 0 {
 			userParams := make(map[string]connectionParamInfo)
 			for name, def := range defs {
-				if def.From == "" {
-					userParams[name] = connectionParamInfo{
-						Required:    def.Required,
-						Description: def.Description,
-						Default:     def.Default,
-					}
+				userParams[name] = connectionParamInfo{
+					Required:    def.Required,
+					Description: def.Description,
+					Default:     def.Default,
 				}
 			}
 			if len(userParams) > 0 {
@@ -245,20 +237,8 @@ func (s *Server) requireOAuthProvider(w http.ResponseWriter, name string) (core.
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", name))
 		return nil, false
 	}
-	if atl, ok := prov.(core.AuthTypeLister); ok {
-		hasOAuth := false
-		for _, t := range atl.AuthTypes() {
-			if t == "oauth" {
-				hasOAuth = true
-				break
-			}
-		}
-		if !hasOAuth {
-			writeError(w, http.StatusBadRequest,
-				fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
-			return nil, false
-		}
-	} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+	spec := providerinfo.ResolveConnectionSpec(prov)
+	if !slices.Contains(spec.AuthTypes, "oauth") {
 		writeError(w, http.StatusBadRequest,
 			fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
 		return nil, false
@@ -511,6 +491,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prov, _ := s.providers.Get(req.Integration)
+	spec := providerinfo.ResolveConnectionSpec(prov)
 
 	if s.stateCodec == nil {
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
@@ -532,13 +513,11 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var connParams map[string]string
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
-		var valErr error
-		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
-		if valErr != nil {
-			writeError(w, http.StatusBadRequest, valErr.Error())
-			return
-		}
+	var valErr error
+	connParams, valErr = validateConnectionParams(spec.ConnectionParams, req.ConnectionParams)
+	if valErr != nil {
+		writeError(w, http.StatusBadRequest, valErr.Error())
+		return
 	}
 
 	var (
@@ -647,7 +626,8 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	metadata, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
+	spec := providerinfo.ResolveConnectionSpec(prov)
+	metadata, metaErr := buildConnectionMetadata(spec, connParams, tokenResp)
 	if metaErr != nil {
 		log.Printf("connection metadata extraction failed for %s: %v", providerName, metaErr)
 		writeError(w, http.StatusBadGateway, "failed to extract connection metadata from token response")
@@ -713,8 +693,8 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mp, ok := prov.(core.ManualProvider)
-	if !ok || !mp.SupportsManualAuth() {
+	spec := providerinfo.ResolveConnectionSpec(prov)
+	if !slices.Contains(spec.AuthTypes, "manual") {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
 	}
@@ -741,16 +721,14 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var connParams map[string]string
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
-		var valErr error
-		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
-		if valErr != nil {
-			writeError(w, http.StatusBadRequest, valErr.Error())
-			return
-		}
+	var valErr error
+	connParams, valErr = validateConnectionParams(spec.ConnectionParams, req.ConnectionParams)
+	if valErr != nil {
+		writeError(w, http.StatusBadRequest, valErr.Error())
+		return
 	}
 
-	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
+	manualMeta, metaErr := buildConnectionMetadata(spec, connParams, nil)
 	if metaErr != nil {
 		writeError(w, http.StatusBadRequest, metaErr.Error())
 		return
@@ -973,32 +951,33 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 	return result, nil
 }
 
-func buildConnectionMetadata(prov core.Provider, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
+func buildConnectionMetadata(spec core.ConnectionSpec, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
 	metadata := make(map[string]string)
 	for k, v := range userParams {
 		metadata[k] = v
 	}
 
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok && tokenResp != nil && tokenResp.Extra != nil {
-		for name, def := range cpp.ConnectionParamDefs() {
-			if def.From == "token_response" {
-				field := def.Field
-				if field == "" {
-					field = name
-				}
-				val, ok := tokenResp.Extra[field]
-				if !ok {
-					if def.Required {
-						return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
-					}
-					continue
-				}
-				s := fmt.Sprintf("%v", val)
-				if !safeTokenResponseValue.MatchString(s) {
-					return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
-				}
-				metadata[name] = s
+	if tokenResp != nil && tokenResp.Extra != nil {
+		for name, def := range spec.ConnectionParams {
+			if def.From != "token_response" {
+				continue
 			}
+			field := def.Field
+			if field == "" {
+				field = name
+			}
+			val, ok := tokenResp.Extra[field]
+			if !ok {
+				if def.Required {
+					return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
+				}
+				continue
+			}
+			s := fmt.Sprintf("%v", val)
+			if !safeTokenResponseValue.MatchString(s) {
+				return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
+			}
+			metadata[name] = s
 		}
 	}
 
@@ -1083,62 +1062,61 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 }
 
 func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
-	if dcp, ok := prov.(core.DiscoveryConfigProvider); ok {
-		if cfg := dcp.DiscoveryConfig(); cfg != nil {
-			client := &http.Client{
-				Timeout:   30 * time.Second,
-				Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
+	spec := providerinfo.ResolveConnectionSpec(prov)
+	if cfg := spec.Discovery; cfg != nil {
+		client := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
+		}
+		candidates, err := discovery.Run(ctx, cfg, client)
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %w", err)
+		}
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("no resources discovered")
+		}
+		if len(candidates) == 1 {
+			if err := validateDiscoveryMetadata(candidates[0].Metadata); err != nil {
+				return nil, err
 			}
-			candidates, err := discovery.Run(ctx, cfg, client)
-			if err != nil {
-				return nil, fmt.Errorf("discovery: %w", err)
-			}
-			if len(candidates) == 0 {
-				return nil, fmt.Errorf("no resources discovered")
-			}
-			if len(candidates) == 1 {
-				if err := validateDiscoveryMetadata(candidates[0].Metadata); err != nil {
-					return nil, err
-				}
-				merged, err := mergeMetadataJSON(tm.MetadataJSON, candidates[0].Metadata)
-				if err != nil {
-					return nil, err
-				}
-				tm.MetadataJSON = merged
-				if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
-					return nil, err
-				}
-				return &postConnectResult{Status: "connected"}, nil
-			}
-
-			scs, err := s.stagedConnectionStore()
+			merged, err := mergeMetadataJSON(tm.MetadataJSON, candidates[0].Metadata)
 			if err != nil {
 				return nil, err
 			}
-			candidatesJSON, _ := json.Marshal(candidates)
-			now := s.now().UTC().Truncate(time.Second)
-			sc := &core.StagedConnection{
-				ID:             uuid.NewString(),
-				UserID:         tm.UserID,
-				Integration:    tm.Integration,
-				Instance:       tm.Instance,
-				AccessToken:    tm.AccessToken,
-				RefreshToken:   tm.RefreshToken,
-				TokenExpiresAt: tm.TokenExpiresAt,
-				MetadataJSON:   tm.MetadataJSON,
-				CandidatesJSON: string(candidatesJSON),
-				CreatedAt:      now,
-				ExpiresAt:      now.Add(stagedConnectionTTL),
+			tm.MetadataJSON = merged
+			if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
+				return nil, err
 			}
-			if err := scs.StoreStagedConnection(ctx, sc); err != nil {
-				return nil, fmt.Errorf("storing staged connection: %w", err)
-			}
-			return &postConnectResult{
-				Status:     "selection_required",
-				StagedID:   sc.ID,
-				Candidates: candidates,
-			}, nil
+			return &postConnectResult{Status: "connected"}, nil
 		}
+
+		scs, err := s.stagedConnectionStore()
+		if err != nil {
+			return nil, err
+		}
+		candidatesJSON, _ := json.Marshal(candidates)
+		now := s.now().UTC().Truncate(time.Second)
+		sc := &core.StagedConnection{
+			ID:             uuid.NewString(),
+			UserID:         tm.UserID,
+			Integration:    tm.Integration,
+			Instance:       tm.Instance,
+			AccessToken:    tm.AccessToken,
+			RefreshToken:   tm.RefreshToken,
+			TokenExpiresAt: tm.TokenExpiresAt,
+			MetadataJSON:   tm.MetadataJSON,
+			CandidatesJSON: string(candidatesJSON),
+			CreatedAt:      now,
+			ExpiresAt:      now.Add(stagedConnectionTTL),
+		}
+		if err := scs.StoreStagedConnection(ctx, sc); err != nil {
+			return nil, fmt.Errorf("storing staged connection: %w", err)
+		}
+		return &postConnectResult{
+			Status:     "selection_required",
+			StagedID:   sc.ID,
+			Candidates: candidates,
+		}, nil
 	}
 
 	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
