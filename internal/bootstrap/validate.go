@@ -60,7 +60,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	defer func() { _ = CloseProviders(providers) }()
 
 	sharedInvoker := invocation.NewBroker(providers, ds)
-	wireCredentialResolver(&deps.Egress, sharedInvoker, providers)
+	wireCredentialResolver(&deps.Egress, sharedInvoker, providers, ds)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
 	runtimes, err := buildRuntimesWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)

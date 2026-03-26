@@ -48,6 +48,7 @@ var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
 var _ core.EgressDenyRuleStore = (*Store)(nil)
+var _ core.EgressCredentialGrantStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -162,6 +163,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at DATETIME(6) NOT NULL,
 			updated_at DATETIME(6) NOT NULL,
 			CONSTRAINT fk_egress_deny_rules_user FOREIGN KEY (created_by_id) REFERENCES users(id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+		`CREATE TABLE IF NOT EXISTS egress_credential_grants (
+			id VARCHAR(36) NOT NULL PRIMARY KEY,
+			provider VARCHAR(255) NOT NULL DEFAULT '',
+			instance VARCHAR(255) NOT NULL DEFAULT '',
+			secret_ref VARCHAR(255) NOT NULL DEFAULT '',
+			auth_style VARCHAR(255) NOT NULL DEFAULT '',
+			subject_kind VARCHAR(255) NOT NULL DEFAULT '',
+			subject_id VARCHAR(255) NOT NULL DEFAULT '',
+			operation VARCHAR(255) NOT NULL DEFAULT '',
+			method VARCHAR(255) NOT NULL DEFAULT '',
+			host VARCHAR(255) NOT NULL DEFAULT '',
+			path_prefix VARCHAR(255) NOT NULL DEFAULT '',
+			created_by_id VARCHAR(36) NOT NULL,
+			created_at DATETIME(6) NOT NULL,
+			updated_at DATETIME(6) NOT NULL,
+			CONSTRAINT fk_egress_cred_grants_user FOREIGN KEY (created_by_id) REFERENCES users(id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 
