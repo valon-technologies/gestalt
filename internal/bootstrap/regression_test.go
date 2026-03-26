@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
+	"gopkg.in/yaml.v3"
 )
 
 func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
@@ -213,6 +214,66 @@ func TestEgressPolicyWiredThroughBootstrap(t *testing.T) {
 	}
 	if err := resolve("/v1/admin/users"); err == nil {
 		t.Fatal("default-deny should block unmatched path")
+	}
+}
+
+func TestSavedDenyRuleBlocksEgressThroughCompositeEnforcer(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-binding": {
+			Type:      "test-binding",
+			Providers: []string{"alpha"},
+		},
+	}
+
+	factories := validFactories()
+
+	rules := []*core.EgressDenyRule{
+		{ID: "dr-1", Host: "blocked.test"},
+	}
+
+	factories.Datastores["test-store"] = func(cfg2 yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			ListEgressDenyRulesFn: func(_ context.Context, _ core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error) {
+				return rules, nil
+			},
+		}, nil
+	}
+
+	var receivedEgress bootstrap.EgressDeps
+	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
+		receivedEgress = deps.Egress
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	if receivedEgress.Resolver == nil {
+		t.Fatal("expected egress resolver to be wired")
+	}
+	if receivedEgress.Resolver.Policy == nil {
+		t.Fatal("expected composite policy enforcer to be set for SQL-backed store")
+	}
+
+	resolve := func(host string) error {
+		_, err := receivedEgress.Resolver.Resolve(ctx, egress.ResolutionInput{
+			Target: egress.Target{Method: "GET", Host: host, Path: "/"},
+		})
+		return err
+	}
+
+	if err := resolve("allowed.test"); err != nil {
+		t.Fatalf("unblocked host should pass: %v", err)
+	}
+	if err := resolve("blocked.test"); err == nil {
+		t.Fatal("blocked host should be denied by saved deny rule")
 	}
 }
 

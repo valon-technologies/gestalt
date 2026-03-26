@@ -33,6 +33,9 @@ func RunDatastoreTests(t *testing.T, newStore func(t *testing.T) core.Datastore)
 	t.Run("EgressClientTokens", func(t *testing.T) {
 		testDatastoreEgressClientTokens(t, newStore)
 	})
+	t.Run("EgressDenyRules", func(t *testing.T) {
+		testDatastoreEgressDenyRules(t, newStore)
+	})
 }
 
 func mustCreateUser(t *testing.T, ctx context.Context, ds core.Datastore, email string) *core.User {
@@ -873,6 +876,144 @@ func testDatastoreEgressClientTokens(t *testing.T, newStore func(t *testing.T) c
 		}
 		if got != nil {
 			t.Errorf("expected nil after cascade delete, got %+v", got)
+		}
+	})
+}
+
+func testDatastoreEgressDenyRules(t *testing.T, newStore func(t *testing.T) core.Datastore) {
+	t.Run("create get list and delete lifecycle", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		edrs, ok := ds.(core.EgressDenyRuleStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressDenyRuleStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "deny-admin@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		rule := &core.EgressDenyRule{
+			ID:          "edr-1",
+			SubjectKind: "agent",
+			Host:        "blocked.test",
+			CreatedByID: user.ID,
+			Description: "block agent access to blocked.test",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := edrs.CreateEgressDenyRule(ctx, rule); err != nil {
+			t.Fatalf("CreateEgressDenyRule: %v", err)
+		}
+
+		got, err := edrs.GetEgressDenyRule(ctx, "edr-1")
+		if err != nil {
+			t.Fatalf("GetEgressDenyRule: %v", err)
+		}
+		if got.SubjectKind != "agent" {
+			t.Errorf("SubjectKind: got %q, want %q", got.SubjectKind, "agent")
+		}
+		if got.Host != "blocked.test" {
+			t.Errorf("Host: got %q, want %q", got.Host, "blocked.test")
+		}
+		if got.CreatedByID != user.ID {
+			t.Errorf("CreatedByID: got %q, want %q", got.CreatedByID, user.ID)
+		}
+		if got.Description != "block agent access to blocked.test" {
+			t.Errorf("Description: got %q, want %q", got.Description, "block agent access to blocked.test")
+		}
+
+		rules, err := edrs.ListEgressDenyRules(ctx, core.EgressDenyRuleFilter{})
+		if err != nil {
+			t.Fatalf("ListEgressDenyRules (unfiltered): %v", err)
+		}
+		if len(rules) != 1 {
+			t.Fatalf("ListEgressDenyRules: got %d, want 1", len(rules))
+		}
+
+		if err := edrs.DeleteEgressDenyRule(ctx, "edr-1"); err != nil {
+			t.Fatalf("DeleteEgressDenyRule: %v", err)
+		}
+
+		_, err = edrs.GetEgressDenyRule(ctx, "edr-1")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetEgressDenyRule after delete: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("list filters by subject_kind and host", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		edrs, ok := ds.(core.EgressDenyRuleStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressDenyRuleStore")
+		}
+
+		ctx := context.Background()
+		user := mustCreateUser(t, ctx, ds, "deny-filter@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		if err := edrs.CreateEgressDenyRule(ctx, &core.EgressDenyRule{
+			ID: "edr-a", SubjectKind: "user", Host: "alpha.test",
+			CreatedByID: user.ID, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateEgressDenyRule a: %v", err)
+		}
+		if err := edrs.CreateEgressDenyRule(ctx, &core.EgressDenyRule{
+			ID: "edr-b", SubjectKind: "agent", Host: "beta.test",
+			CreatedByID: user.ID, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second),
+		}); err != nil {
+			t.Fatalf("CreateEgressDenyRule b: %v", err)
+		}
+
+		byKind, err := edrs.ListEgressDenyRules(ctx, core.EgressDenyRuleFilter{SubjectKind: "user"})
+		if err != nil {
+			t.Fatalf("ListEgressDenyRules by kind: %v", err)
+		}
+		if len(byKind) != 1 || byKind[0].ID != "edr-a" {
+			t.Fatalf("filter by subject_kind: got %d rules, want 1 (edr-a)", len(byKind))
+		}
+
+		byHost, err := edrs.ListEgressDenyRules(ctx, core.EgressDenyRuleFilter{Host: "beta.test"})
+		if err != nil {
+			t.Fatalf("ListEgressDenyRules by host: %v", err)
+		}
+		if len(byHost) != 1 || byHost[0].ID != "edr-b" {
+			t.Fatalf("filter by host: got %d rules, want 1 (edr-b)", len(byHost))
+		}
+	})
+
+	t.Run("get nonexistent returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		edrs, ok := ds.(core.EgressDenyRuleStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressDenyRuleStore")
+		}
+
+		ctx := context.Background()
+		_, err := edrs.GetEgressDenyRule(ctx, "nonexistent-id")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("delete nonexistent returns ErrNotFound", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+
+		edrs, ok := ds.(core.EgressDenyRuleStore)
+		if !ok {
+			t.Skip("datastore does not implement EgressDenyRuleStore")
+		}
+
+		ctx := context.Background()
+		err := edrs.DeleteEgressDenyRule(ctx, "nonexistent-id")
+		if !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
 		}
 	})
 }

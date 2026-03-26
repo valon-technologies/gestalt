@@ -20,6 +20,7 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 
 var _ core.StagedConnectionStore = (*StubDatastore)(nil)
 var _ core.EgressClientStore = (*StubDatastore)(nil)
+var _ core.EgressDenyRuleStore = (*StubDatastore)(nil)
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
@@ -44,6 +45,10 @@ type StubDatastore struct {
 	ValidateEgressClientTokenFn func(context.Context, string) (*core.EgressClientToken, error)
 	ListEgressClientTokensFn    func(context.Context, string) ([]*core.EgressClientToken, error)
 	RevokeEgressClientTokenFn   func(context.Context, string, string) error
+	CreateEgressDenyRuleFn      func(context.Context, *core.EgressDenyRule) error
+	GetEgressDenyRuleFn         func(context.Context, string) (*core.EgressDenyRule, error)
+	ListEgressDenyRulesFn       func(context.Context, core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error)
+	DeleteEgressDenyRuleFn      func(context.Context, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -188,6 +193,30 @@ func (s *StubDatastore) ListEgressClientTokens(ctx context.Context, clientID str
 func (s *StubDatastore) RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error {
 	if s.RevokeEgressClientTokenFn != nil {
 		return s.RevokeEgressClientTokenFn(ctx, clientID, tokenID)
+	}
+	return nil
+}
+func (s *StubDatastore) CreateEgressDenyRule(ctx context.Context, rule *core.EgressDenyRule) error {
+	if s.CreateEgressDenyRuleFn != nil {
+		return s.CreateEgressDenyRuleFn(ctx, rule)
+	}
+	return nil
+}
+func (s *StubDatastore) GetEgressDenyRule(ctx context.Context, id string) (*core.EgressDenyRule, error) {
+	if s.GetEgressDenyRuleFn != nil {
+		return s.GetEgressDenyRuleFn(ctx, id)
+	}
+	return nil, core.ErrNotFound
+}
+func (s *StubDatastore) ListEgressDenyRules(ctx context.Context, filter core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error) {
+	if s.ListEgressDenyRulesFn != nil {
+		return s.ListEgressDenyRulesFn(ctx, filter)
+	}
+	return nil, nil
+}
+func (s *StubDatastore) DeleteEgressDenyRule(ctx context.Context, id string) error {
+	if s.DeleteEgressDenyRuleFn != nil {
+		return s.DeleteEgressDenyRuleFn(ctx, id)
 	}
 	return nil
 }
