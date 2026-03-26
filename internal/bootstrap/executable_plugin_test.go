@@ -251,7 +251,7 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 						Description: "Fetch record",
 						Method:      http.MethodGet,
 						Path:        "/records/{id}",
-						Transport:   catalog.TransportHTTP,
+						Transport:   catalog.TransportREST,
 					},
 					{
 						ID:          "search_workspace",
@@ -331,7 +331,7 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 				ConnMode: core.ConnectionModeNone,
 			},
 			ops: []core.Operation{
-				{Name: "http_op", Description: "HTTP op", Method: http.MethodPost},
+				{Name: "rest_op", Description: "REST op", Method: http.MethodPost},
 				{Name: "hidden_op", Description: "Hidden op"},
 			},
 		}, nil
@@ -362,8 +362,8 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 	if got.CapabilityCount != 2 {
 		t.Fatalf("runtime output capability_count = %d, want 2", got.CapabilityCount)
 	}
-	if !slices.Equal(got.Capabilities, []string{"alpha.http_op", "alpha.hidden_op"}) {
-		t.Fatalf("runtime output capabilities = %v, want [alpha.http_op alpha.hidden_op]", got.Capabilities)
+	if !slices.Equal(got.Capabilities, []string{"alpha.rest_op", "alpha.hidden_op"}) {
+		t.Fatalf("runtime output capabilities = %v, want [alpha.rest_op alpha.hidden_op]", got.Capabilities)
 	}
 }
 

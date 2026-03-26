@@ -235,7 +235,7 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 	}
 }
 
-func TestComposite_IncludeHTTPFalseExcludesAPITools(t *testing.T) {
+func TestComposite_IncludeRESTFalseExcludesAPITools(t *testing.T) {
 	t.Parallel()
 
 	apiCat := &catalog.Catalog{
@@ -265,7 +265,7 @@ func TestComposite_IncludeHTTPFalseExcludesAPITools(t *testing.T) {
 		Invoker:       &testutil.StubInvoker{},
 		TokenResolver: &stubTokenResolver{token: "t"},
 		Providers:     providers,
-		IncludeHTTP:   map[string]bool{"alpha": false},
+		IncludeREST:   map[string]bool{"alpha": false},
 	})
 
 	tools := srv.ListTools()
@@ -273,7 +273,7 @@ func TestComposite_IncludeHTTPFalseExcludesAPITools(t *testing.T) {
 		t.Fatal("expected alpha_search from MCP upstream")
 	}
 	if tools["alpha_list_items"] != nil {
-		t.Fatal("expected alpha_list_items to be excluded when IncludeHTTP=false")
+		t.Fatal("expected alpha_list_items to be excluded when IncludeREST=false")
 	}
 	if len(tools) != 1 {
 		names := make([]string, 0, len(tools))
