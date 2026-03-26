@@ -8,9 +8,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	ci "github.com/valon-technologies/gestalt/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/composite"
+	"github.com/valon-technologies/gestalt/internal/integration"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
 	"github.com/valon-technologies/gestalt/internal/testutil"
@@ -57,7 +57,7 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
 			},
 		},
-		ops:     ci.OperationsList(apiCat),
+		ops:     integration.OperationsList(apiCat),
 		catalog: apiCat,
 	}
 
@@ -130,7 +130,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
 			},
 		},
-		ops:     ci.OperationsList(apiCat),
+		ops:     integration.OperationsList(apiCat),
 		catalog: apiCat,
 	}
 
@@ -210,7 +210,7 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"id":"page1"}`}, nil
 			},
 		},
-		ops:     ci.OperationsList(apiCat),
+		ops:     integration.OperationsList(apiCat),
 		catalog: apiCat,
 	}
 
@@ -246,7 +246,7 @@ func TestComposite_IncludeRESTFalseExcludesAPITools(t *testing.T) {
 	}
 	apiProv := &catalogProvider{
 		StubIntegration: coretesting.StubIntegration{N: "alpha"},
-		ops:             ci.OperationsList(apiCat),
+		ops:             integration.OperationsList(apiCat),
 		catalog:         apiCat,
 	}
 

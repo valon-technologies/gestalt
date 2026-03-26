@@ -5,7 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	ci "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/integration"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -23,7 +23,7 @@ func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov co
 		name := toolName(cfg.ToolPrefixes, provName, op.Name)
 
 		opts := []mcpgo.ToolOption{mcpgo.WithDescription(op.Description)}
-		annot := mapAnnotations(ci.AnnotationsFromMethod(op.Method))
+		annot := mapAnnotations(integration.AnnotationsFromMethod(op.Method))
 		annot.Title = op.Name
 		opts = append(opts, mcpgo.WithToolAnnotation(annot))
 
@@ -130,7 +130,7 @@ func buildPropertyOpts(param core.Parameter) []mcpgo.PropertyOption {
 }
 
 func paramToOption(param core.Parameter) mcpgo.ToolOption {
-	switch ci.NormalizeType(param.Type) {
+	switch integration.NormalizeType(param.Type) {
 	case "integer", "number":
 		return mcpgo.WithNumber(param.Name, buildPropertyOpts(param)...)
 	case "boolean":
