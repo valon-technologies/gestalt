@@ -9,38 +9,55 @@ and its provider/runtime plugins. It defines three services:
 - **RuntimeHost** -- implemented by the Gestalt host for runtime callbacks
   (capability listing, cross-provider invocation).
 
-## Sub-module usage
+## Using the SDK as a dependency
 
-This package is a standalone Go module so external plugins can depend on it
-without pulling in the full Gestalt dependency tree:
+External plugins should depend on the `pluginsdk` module, which re-exports
+everything needed to serve a provider or runtime plugin:
+
+```sh
+go get github.com/valon-technologies/gestalt/sdk/pluginsdk@latest
+```
+
+The `pluginsdk` module depends on `pluginapi` transitively, so you do not need
+to add `pluginapi` to your `go.mod` explicitly unless you reference the
+generated proto types directly:
 
 ```sh
 go get github.com/valon-technologies/gestalt/sdk/pluginapi@latest
 ```
 
-For most provider plugins, prefer depending on `sdk/pluginsdk` instead, which
-wraps the raw proto types with a higher-level `Provider` interface and helpers
-like `ServeProvider`.
+Working examples live in `examples/plugins/provider-go/` and
+`examples/plugins/runtime-go/`.
 
-For local development within the monorepo, the root `go.mod` uses a `replace`
-directive:
+## Sub-module versioning
 
-```
-replace github.com/valon-technologies/gestalt/sdk/pluginapi => ./sdk/pluginapi
-```
-
-## Tagging conventions
-
-This module is tagged independently from the root module using the prefix
-`sdk/pluginapi/`:
+Both `sdk/pluginapi` and `sdk/pluginsdk` are independent Go modules with their
+own `go.mod` files. They are tagged separately from the root module using the
+Go sub-module convention:
 
 ```
 sdk/pluginapi/v0.1.0
-sdk/pluginapi/v0.2.0
+sdk/pluginsdk/v0.1.0
 ```
 
-Go resolves module versions from these tags automatically when using
-`go get github.com/valon-technologies/gestalt/sdk/pluginapi@vX.Y.Z`.
+When cutting a release:
+
+1. Tag the pluginapi module first since pluginsdk depends on it:
+   ```sh
+   git tag sdk/pluginapi/v0.X.Y
+   git push origin sdk/pluginapi/v0.X.Y
+   ```
+2. Update the `pluginsdk/go.mod` require for pluginapi to the new tag, then tag:
+   ```sh
+   git tag sdk/pluginsdk/v0.X.Y
+   git push origin sdk/pluginsdk/v0.X.Y
+   ```
+3. Run `GOPROXY=proxy.golang.org go list -m` for both modules to warm the proxy
+   cache.
+
+The root module and example modules use `replace` directives to point at the
+local source tree, so they always build against HEAD regardless of published
+tags.
 
 ## Regenerating stubs
 

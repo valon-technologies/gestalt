@@ -4,45 +4,49 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 )
 
-const defaultGreeting = "Hello"
-
 type exampleProvider struct {
-	greeting string
+	greeting    string
+	startedName string
+	startedMode string
 }
 
-func (p *exampleProvider) Name() string                                { return "example" }
-func (p *exampleProvider) DisplayName() string                         { return "Example Provider" }
-func (p *exampleProvider) Description() string                         { return "A minimal provider plugin demonstrating the Gestalt plugin SDK." }
-func (p *exampleProvider) ConnectionMode() pluginsdk.ConnectionMode    { return pluginsdk.ConnectionModeNone }
+func (p *exampleProvider) Name() string        { return "example" }
+func (p *exampleProvider) DisplayName() string { return "Example Provider" }
+func (p *exampleProvider) Description() string {
+	return "A minimal example provider built with the public SDK"
+}
+func (p *exampleProvider) ConnectionMode() pluginsdk.ConnectionMode {
+	return pluginsdk.ConnectionModeNone
+}
 
 func (p *exampleProvider) ListOperations() []pluginsdk.Operation {
 	return []pluginsdk.Operation{
 		{
 			Name:        "greet",
-			Description: "Returns a greeting for the given name.",
+			Description: "Return a greeting message",
 			Method:      "GET",
 			Parameters: []pluginsdk.Parameter{
-				{Name: "name", Type: "string", Description: "Name to greet.", Required: true},
+				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
 			},
 		},
 		{
 			Name:        "echo",
-			Description: "Echoes back the input message.",
+			Description: "Echo back the input",
 			Method:      "POST",
 			Parameters: []pluginsdk.Parameter{
-				{Name: "message", Type: "string", Description: "Message to echo.", Required: true},
+				{Name: "message", Type: "string", Description: "Message to echo", Required: true},
 			},
 		},
 		{
-			Name:        "list_items",
-			Description: "Returns a static list of sample items.",
+			Name:        "status",
+			Description: "Return provider startup state",
 			Method:      "GET",
 		},
 	}
@@ -53,50 +57,45 @@ func (p *exampleProvider) Execute(_ context.Context, operation string, params ma
 	case "greet":
 		name, _ := params["name"].(string)
 		if name == "" {
-			return &pluginsdk.OperationResult{Status: 400, Body: `{"error":"name is required"}`}, nil
+			name = "World"
 		}
 		greeting := p.greeting
 		if greeting == "" {
-			greeting = defaultGreeting
+			greeting = "Hello"
 		}
-		return jsonResult(200, map[string]string{"greeting": fmt.Sprintf("%s, %s!", greeting, name)})
-
+		body, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("%s, %s!", greeting, name)})
+		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
 	case "echo":
-		message, _ := params["message"].(string)
-		if message == "" {
-			return &pluginsdk.OperationResult{Status: 400, Body: `{"error":"message is required"}`}, nil
-		}
-		return jsonResult(200, map[string]string{"echo": message})
-
-	case "list_items":
-		items := []map[string]any{
-			{"id": 1, "name": "alpha"},
-			{"id": 2, "name": "bravo"},
-			{"id": 3, "name": "charlie"},
-		}
-		return jsonResult(200, map[string]any{"items": items})
-
+		msg, _ := params["message"].(string)
+		body, _ := json.Marshal(map[string]string{"echo": msg})
+		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
+	case "status":
+		body, _ := json.Marshal(map[string]string{
+			"name":     p.startedName,
+			"mode":     p.startedMode,
+			"greeting": p.greeting,
+		})
+		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
 	default:
-		return &pluginsdk.OperationResult{Status: 404, Body: fmt.Sprintf(`{"error":"unknown operation %q"}`, operation)}, nil
+		return &pluginsdk.OperationResult{Status: 404, Body: `{"error":"unknown operation"}`}, nil
 	}
+}
+
+func (p *exampleProvider) Start(_ context.Context, name string, config map[string]any, mode string) error {
+	p.startedName = name
+	p.startedMode = mode
+	if g, ok := config["greeting"].(string); ok {
+		p.greeting = g
+	}
+	return nil
 }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	provider := &exampleProvider{greeting: defaultGreeting}
-
-	log.Println("starting example provider plugin")
-	if err := pluginsdk.ServeProvider(ctx, provider); err != nil {
-		log.Fatalf("serve: %v", err)
+	if err := pluginsdk.ServeProvider(ctx, &exampleProvider{}); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-}
-
-func jsonResult(status int, v any) (*pluginsdk.OperationResult, error) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("marshal response: %w", err)
-	}
-	return &pluginsdk.OperationResult{Status: status, Body: string(body)}, nil
 }

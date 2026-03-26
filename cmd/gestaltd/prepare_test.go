@@ -111,6 +111,45 @@ func TestValidatePrefersPreparedProviders(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsTopLevelConfigForRuntimePlugins(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: google
+  config:
+    client_id: test-client
+    client_secret: test-secret
+    redirect_url: http://localhost:8080/api/v1/auth/login/callback
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
+server:
+  dev_mode: true
+  encryption_key: test-key
+runtimes:
+  worker:
+    providers: []
+    plugin:
+      command: /tmp/runtime-plugin
+    config:
+      poll_interval: 30s
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	err := validateConfig(cfgPath)
+	if err == nil {
+		t.Fatal("expected validateConfig to reject top-level config for runtime plugins")
+	}
+	if !strings.Contains(err.Error(), "plugin.config") {
+		t.Fatalf("expected plugin.config guidance, got: %v", err)
+	}
+}
+
 func TestPrepareConfigGraphQLUpstream(t *testing.T) {
 	t.Parallel()
 

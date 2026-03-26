@@ -585,15 +585,18 @@ func providerBuildAvailable(name string, intg config.IntegrationDef, factories *
 
 func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
 	if cfg.Plugin != nil {
-		m, err := nodeToMap(cfg.Config)
+		pluginConfig, err := nodeToMap(cfg.Plugin.Config)
 		if err != nil {
-			return nil, fmt.Errorf("decode runtime config: %w", err)
+			return nil, fmt.Errorf("decode runtime plugin config for %q: %w", name, err)
 		}
 		return pluginapi.NewExecutableRuntime(ctx, name, pluginapi.ExecConfig{
 			Command: cfg.Plugin.Command,
 			Args:    cfg.Plugin.Args,
 			Env:     cfg.Plugin.Env,
-		}, m, deps.Invoker, deps.CapabilityLister)
+			Name:    name,
+			Config:  pluginConfig,
+			Mode:    cfg.Plugin.Mode,
+		}, deps.Invoker, deps.CapabilityLister)
 	}
 
 	factory, ok := factories.Runtimes[cfg.Type]

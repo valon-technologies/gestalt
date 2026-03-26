@@ -40,14 +40,6 @@ Gestalt supports two plugin types, each defined as a separate gRPC service:
 
 A single binary can serve either role. The echo plugin (`cmd/gestalt-plugin-echo`) demonstrates both modes, selected by a command-line argument.
 
-## Protocol version handshake
-
-The host and plugin negotiate a protocol version during startup. The plugin advertises its supported range via `min_protocol_version` and `max_protocol_version` in `ProviderMetadata`. The host checks that its own version falls within that range, then sends the chosen version in `StartProviderRequest.protocol_version`. The plugin echoes it back in `StartProviderResponse.protocol_version` to confirm.
-
-If the versions are incompatible, the host refuses to start the plugin. Plugins that omit the version fields (both zero) are treated as compatible for backward compatibility.
-
-The current protocol version is `1`, defined as `CurrentProtocolVersion` in `sdk/pluginapi/v1`.
-
 ## Provider plugins
 
 A provider plugin implements the `ProviderPlugin` gRPC service. Four RPCs are required; five are optional.
@@ -56,7 +48,7 @@ A provider plugin implements the `ProviderPlugin` gRPC service. Four RPCs are re
 
 **`GetMetadata(google.protobuf.Empty) → ProviderMetadata`**
 
-Called once at startup immediately after the gRPC connection is established. Returns the provider's identity, connection mode, supported auth types, connection parameter definitions, protocol version range, and feature flags.
+Called once at startup immediately after the gRPC connection is established. Returns the provider's identity, connection mode, supported auth types, connection parameter definitions, and feature flags.
 
 Key fields in `ProviderMetadata`:
 
@@ -71,28 +63,19 @@ Key fields in `ProviderMetadata`:
 | `static_catalog_json` | `string` | Optional JSON-encoded catalog for resource discovery. |
 | `supports_session_catalog` | `bool` | Set `true` if you implement `GetSessionCatalog`. |
 | `supports_post_connect` | `bool` | Set `true` if you implement `PostConnect`. |
-| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` block. Currently used for documentation only; runtime validation requires executing the binary until static manifests land in a future release. |
-| `min_protocol_version` | `int32` | Minimum protocol version the plugin supports. |
-| `max_protocol_version` | `int32` | Maximum protocol version the plugin supports. |
+| `config_schema_json` | `string` | Optional JSON Schema describing the `plugin.config` structure. Currently advisory only; validation requires executing the binary. Phase 3 will introduce static manifests that allow validation without a running process. |
+| `min_protocol_version` | `int32` | Minimum protocol version the plugin supports (for handshake). |
+| `max_protocol_version` | `int32` | Maximum protocol version the plugin supports (for handshake). |
 
 **`StartProvider(StartProviderRequest) → StartProviderResponse`**
 
-Called once after `GetMetadata`, before `ListOperations`. Delivers the integration name, the `plugin.config` values from YAML, the plugin mode (`REPLACE` or `OVERLAY`), and the negotiated protocol version.
+Called after `GetMetadata`, before `ListOperations`. The host sends the integration name, any `plugin.config` values from the YAML config, the plugin mode (`REPLACE` or `OVERLAY`), and the negotiated protocol version. The plugin returns its accepted protocol version.
 
-The plugin should use this call to apply config and confirm the protocol version. Return the same `protocol_version` that was sent in the request. If the plugin returns `UNIMPLEMENTED`, the host treats it as a legacy plugin and continues without error.
-
-Key fields in `StartProviderRequest`:
-
-| Field | Type | Notes |
-|---|---|---|
-| `name` | `string` | The integration name from `gestalt.yaml`. |
-| `config` | `google.protobuf.Struct` | The `plugin.config` values from YAML. |
-| `mode` | `PluginMode` | `REPLACE` (full provider) or `OVERLAY` (only operations, host handles auth/session). |
-| `protocol_version` | `int32` | The protocol version the host selected. |
+This is where the plugin should perform any one-time initialization such as loading configuration, opening database connections, or starting background goroutines. The `config` struct contains the deserialized contents of `plugin.config` from the YAML file, with any `secret://` references already resolved by the host.
 
 **`ListOperations(google.protobuf.Empty) → ListOperationsResponse`**
 
-Called once at startup, right after `StartProvider`. Returns the full list of operations this provider exposes. Each `Operation` has a `name`, `description`, HTTP `method`, and a list of `Parameter` definitions.
+Called once at startup, after `StartProvider`. Returns the full list of operations this provider exposes. Each `Operation` has a `name`, `description`, HTTP `method`, and a list of `Parameter` definitions.
 
 **`Execute(ExecuteRequest) → OperationResult`**
 
@@ -115,24 +98,7 @@ Implement these if your provider manages its own OAuth flow (when `auth_types` i
 | RPC | Request | Response | Purpose |
 |---|---|---|---|
 | `GetSessionCatalog` | `token`, `connection_params` | `catalog_json` | Returns a per-session resource catalog. Only called if `supports_session_catalog` is `true` in metadata. |
-
-### Overlay plugins
-
-An overlay plugin uses `PLUGIN_MODE_OVERLAY` mode. It only owns its operations and `Execute` logic; authentication, session management, and connection parameters are handled by the host using the declarative config for that integration. This is useful when you want to add custom operations to a provider that already has working auth configured via `upstreams`.
-
-Overlay plugins must still implement `GetMetadata`, `StartProvider`, `ListOperations`, and `Execute`. The host ignores the overlay plugin's `auth_types` and `connection_mode` in metadata, using the declarative config values instead.
-
-## Provider boot sequence
-
-The full startup sequence for a provider plugin:
-
-1. Host spawns the plugin process with `GESTALT_PLUGIN_SOCKET`.
-2. Plugin binds a gRPC server on the socket.
-3. Host connects and calls `GetMetadata` to learn the plugin's identity and protocol version range.
-4. Host calls `checkProtocolCompatibility` to verify its version falls within `[min_protocol_version, max_protocol_version]`.
-5. Host calls `StartProvider` with the integration name, config, mode, and protocol version.
-6. Host calls `ListOperations` to discover available operations.
-7. The plugin is now live and ready to receive `Execute` calls.
+| `PostConnect` | `IntegrationToken` | `metadata` | Hook called after a user completes OAuth. Returns metadata to store alongside the token. Only called if `supports_post_connect` is `true` in metadata. |
 
 ## Runtime plugins
 
@@ -163,8 +129,19 @@ To use host callbacks, dial the `GESTALT_RUNTIME_HOST_SOCKET` address as a stand
 2. Gestalt sets `GESTALT_PLUGIN_SOCKET` (and `GESTALT_RUNTIME_HOST_SOCKET` for runtimes) in the subprocess environment.
 3. Gestalt spawns the plugin process. The plugin's stdout and stderr are forwarded to the host's stderr.
 4. The plugin reads `GESTALT_PLUGIN_SOCKET`, binds a gRPC server to that Unix socket path, and starts serving.
-5. Gestalt polls the socket every 25ms. Once the connection succeeds, it runs the boot sequence: `GetMetadata` → `checkProtocolCompatibility` → `StartProvider` → `ListOperations` (for providers) or `Start` (for runtimes).
+5. Gestalt polls the socket every 25ms. Once the connection succeeds:
+   - **Providers:** `GetMetadata` → protocol version compatibility check → `StartProvider` (with config and mode) → `ListOperations`.
+   - **Runtimes:** `Start` (with config and initial capabilities).
 6. If the plugin does not begin accepting connections within **10 seconds**, startup fails.
+
+### Provider startup lifecycle
+
+For provider plugins, the host follows this exact sequence:
+
+1. **`GetMetadata`** — The host reads the provider's identity and protocol version range (`min_protocol_version`, `max_protocol_version`).
+2. **Protocol compatibility check** — The host verifies that its protocol version falls within the plugin's declared range. If there is no overlap, startup fails with a version mismatch error.
+3. **`StartProvider`** — The host sends the integration name, the deserialized `plugin.config` map, the plugin mode (`REPLACE` or `OVERLAY`), and the negotiated protocol version. The plugin performs initialization and returns its accepted version.
+4. **`ListOperations`** — The host fetches the operation catalog. For overlay plugins, these operations are merged into the declarative provider's catalog.
 
 ## Shutdown
 
@@ -198,12 +175,10 @@ integrations:
       args: [provider]
       env:
         MY_API_KEY: ${API_KEY}
-      config:
-        some_setting: value
     connection_mode: user
 ```
 
-When `plugin` is set, `upstreams` cannot be used on the same integration (unless using overlay mode). The `plugin.config` map is delivered to the plugin via `StartProvider`.
+When `plugin` is set, `upstreams` cannot be used on the same integration. The plugin fully replaces the upstream-based provider.
 
 ### Runtime plugin
 
@@ -215,11 +190,11 @@ runtimes:
       args: [runtime]
       env:
         LOG_LEVEL: debug
+      config:
+        poll_interval: 30s
     providers:
       - slack
       - linear
-    config:
-      poll_interval: 30s
 ```
 
 When `plugin` is set, `type` cannot be used on the same runtime.
@@ -231,7 +206,60 @@ When `plugin` is set, `type` cannot be used on the same runtime.
 | `command` | Yes | Path to the executable. Relative paths resolve from the config file's directory. Bare names are looked up in `$PATH`. |
 | `args` | No | Arguments passed to the command. |
 | `env` | No | Map of additional environment variables. Supports `${VAR}` expansion from the host environment. |
-| `config` | No | Arbitrary key-value map delivered to the plugin at startup via `StartProvider` or `StartRuntime`. |
+| `config` | No | Arbitrary key-value map passed to the plugin via `StartProvider` (providers) or `Start` (runtimes). See below. |
+
+### Plugin config
+
+The `plugin.config` block holds plugin-specific configuration. It is sent as a `google.protobuf.Struct` to the plugin during the `StartProvider` or `Start` RPC, so the plugin receives it as a generic map of key-value pairs.
+
+```yaml
+integrations:
+  my-provider:
+    plugin:
+      command: ./my-plugin
+      config:
+        api_endpoint: https://api.example.com
+        max_retries: 3
+        credentials: secret://my-vault/api-key
+```
+
+Values prefixed with `secret://` are resolved by the host before being sent to the plugin. The host replaces them with the actual secret value from the configured secret manager, so the plugin never sees the `secret://` URI.
+
+Plugins can declare a `config_schema_json` field in their `ProviderMetadata` to advertise a JSON Schema for their config block. This is currently advisory only: because the schema is only available after the binary is running, the host cannot validate config before starting the process. Phase 3 will introduce static plugin manifests that allow pre-execution validation.
+
+## Protocol version handshake
+
+The plugin protocol uses a version negotiation scheme to allow the host and plugin to agree on compatible behavior.
+
+1. The plugin declares its supported range in `ProviderMetadata` via `min_protocol_version` and `max_protocol_version`.
+2. The host checks that its own protocol version falls within this range. If there is no overlap, the host rejects the plugin with a clear version mismatch error.
+3. During `StartProvider`, the host sends its chosen `protocol_version`. The plugin confirms by returning its accepted version in `StartProviderResponse`.
+
+Plugins that do not set `min_protocol_version` / `max_protocol_version` (i.e. they remain 0) are treated as compatible with any host version. This keeps older plugins forward-compatible until they adopt the versioned protocol.
+
+## Overlay plugins
+
+An overlay plugin extends a declarative integration rather than replacing it. When a plugin is configured with `mode: overlay`, the host composes the plugin's operations on top of the declarative provider's catalog.
+
+```yaml
+integrations:
+  jira:
+    upstreams:
+      - type: rest
+        base_url: https://api.atlassian.com
+    plugin:
+      command: ./jira-custom-ops
+      mode: overlay
+      config:
+        custom_field_id: "10042"
+```
+
+The overlay contract:
+
+- **Operations only.** The overlay plugin owns only the operations it returns from `ListOperations`. Authentication, session management, connection parameters, and catalog metadata all come from the declarative provider.
+- **No auth RPCs.** Overlay plugins should not implement `AuthorizationURL`, `ExchangeCode`, or `RefreshToken`. The host routes all auth through the declarative provider.
+- **Execute routing.** When a caller invokes an operation, the host checks the overlay's operation list first. If the operation matches, it is routed to the plugin. Otherwise, it falls through to the declarative upstream.
+- **Plugin mode.** The host sends `PLUGIN_MODE_OVERLAY` in the `StartProvider` call so the plugin knows it is running as an overlay.
 
 ## Error handling
 
@@ -249,31 +277,18 @@ Return `UNIMPLEMENTED` for optional RPCs you do not support. The Go SDK helper `
 
 ## Example: minimal Go provider
 
-A complete working example lives in `examples/plugins/provider-go/`. Here is the minimal structure for a provider plugin using `sdk/pluginsdk`:
+The echo plugin (`cmd/gestalt-plugin-echo`) is a working reference. A complete example using only the public SDK lives in `examples/plugins/provider-go/`. Here is the minimal structure:
 
 ```go
 package main
 
 import (
     "context"
-    "log"
     "os/signal"
     "syscall"
 
-    "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+    pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 )
-
-type myProvider struct{}
-
-func (p *myProvider) Name() string                             { return "my-plugin" }
-func (p *myProvider) DisplayName() string                      { return "My Plugin" }
-func (p *myProvider) Description() string                      { return "A custom provider." }
-func (p *myProvider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeNone }
-func (p *myProvider) ListOperations() []pluginsdk.Operation    { return nil }
-
-func (p *myProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
-    return &pluginsdk.OperationResult{Status: 200, Body: `{}`}, nil
-}
 
 func main() {
     ctx, stop := signal.NotifyContext(
@@ -281,8 +296,9 @@ func main() {
     )
     defer stop()
 
-    if err := pluginsdk.ServeProvider(ctx, &myProvider{}); err != nil {
-        log.Fatal(err)
+    // myProvider implements pluginsdk.Provider
+    if err := pluginsdk.ServeProvider(ctx, myProvider); err != nil {
+        panic(err)
     }
 }
 ```

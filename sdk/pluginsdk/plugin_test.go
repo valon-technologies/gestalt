@@ -5,7 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -22,9 +23,9 @@ type stubProvider struct {
 	ops         []pluginsdk.Operation
 }
 
-func (p *stubProvider) Name() string                        { return p.name }
-func (p *stubProvider) DisplayName() string                 { return p.displayName }
-func (p *stubProvider) Description() string                 { return p.description }
+func (p *stubProvider) Name() string                             { return p.name }
+func (p *stubProvider) DisplayName() string                      { return p.displayName }
+func (p *stubProvider) Description() string                      { return p.description }
 func (p *stubProvider) ConnectionMode() pluginsdk.ConnectionMode { return p.connMode }
 func (p *stubProvider) ListOperations() []pluginsdk.Operation    { return p.ops }
 
@@ -81,11 +82,12 @@ func newTestProviderClient(t *testing.T, prov pluginsdk.Provider) pluginapiv1.Pr
 }
 
 func TestProviderServerGetMetadata(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:        "test-provider",
 		displayName: "Test Provider",
 		description: "A test provider for SDK validation",
-		connMode:    pluginsdk.ConnectionModeNone,
 	}
 
 	client := newTestProviderClient(t, prov)
@@ -107,6 +109,8 @@ func TestProviderServerGetMetadata(t *testing.T) {
 }
 
 func TestProviderServerListOperations(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: pluginsdk.ConnectionModeNone,
@@ -158,6 +162,8 @@ func TestProviderServerListOperations(t *testing.T) {
 }
 
 func TestProviderServerExecute(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: pluginsdk.ConnectionModeNone,
@@ -184,6 +190,8 @@ func TestProviderServerExecute(t *testing.T) {
 }
 
 func TestProviderServerStartProvider(t *testing.T) {
+	t.Parallel()
+
 	prov := &startableStubProvider{
 		stubProvider: stubProvider{
 			name:     "test-provider",
@@ -199,13 +207,13 @@ func TestProviderServerStartProvider(t *testing.T) {
 		Name:            "my-instance",
 		Config:          cfg,
 		Mode:            pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY,
-		ProtocolVersion: 1,
+		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("StartProvider: %v", err)
 	}
-	if resp.GetProtocolVersion() != 1 {
-		t.Errorf("ProtocolVersion = %d, want 1", resp.GetProtocolVersion())
+	if resp.GetProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
+		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
 	}
 	if prov.startName != "my-instance" {
 		t.Errorf("startName = %q, want %q", prov.startName, "my-instance")
@@ -219,6 +227,8 @@ func TestProviderServerStartProvider(t *testing.T) {
 }
 
 func TestProviderServerStartProviderNoOp(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: pluginsdk.ConnectionModeNone,
@@ -229,17 +239,19 @@ func TestProviderServerStartProviderNoOp(t *testing.T) {
 
 	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
 		Name:            "my-instance",
-		ProtocolVersion: 1,
+		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("StartProvider: %v", err)
 	}
-	if resp.GetProtocolVersion() != 1 {
-		t.Errorf("ProtocolVersion = %d, want 1", resp.GetProtocolVersion())
+	if resp.GetProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
+		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
 	}
 }
 
 func TestProviderServerConfigSchema(t *testing.T) {
+	t.Parallel()
+
 	prov := &schemaStubProvider{
 		stubProvider: stubProvider{
 			name:     "test-provider",
@@ -260,7 +272,9 @@ func TestProviderServerConfigSchema(t *testing.T) {
 	}
 }
 
-func TestProviderServerProtocolVersion(t *testing.T) {
+func TestProviderServerMetadataProtocolVersions(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: pluginsdk.ConnectionModeNone,
@@ -282,6 +296,8 @@ func TestProviderServerProtocolVersion(t *testing.T) {
 }
 
 func TestProviderServerUnimplementedRPCs(t *testing.T) {
+	t.Parallel()
+
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: pluginsdk.ConnectionModeNone,
