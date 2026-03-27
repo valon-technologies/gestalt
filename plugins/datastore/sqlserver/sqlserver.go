@@ -26,10 +26,10 @@ func (dialect) Placeholder(n int) string { return fmt.Sprintf("@p%d", n) }
 func (dialect) UpsertTokenSQL() string {
 	return `
 		MERGE integration_tokens WITH (HOLDLOCK) AS tgt
-		USING (VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13))
-			AS src (id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		USING (VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14))
+			AS src (id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 					scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at)
-		ON tgt.user_id = src.user_id AND tgt.integration = src.integration AND tgt.instance = src.instance
+		ON tgt.user_id = src.user_id AND tgt.integration = src.integration AND tgt.connection = src.connection AND tgt.instance = src.instance
 		WHEN MATCHED THEN UPDATE SET
 			tgt.access_token_encrypted = src.access_token_encrypted,
 			tgt.refresh_token_encrypted = src.refresh_token_encrypted,
@@ -38,9 +38,9 @@ func (dialect) UpsertTokenSQL() string {
 			tgt.refresh_error_count = src.refresh_error_count,
 			tgt.metadata_json = src.metadata_json, tgt.updated_at = src.updated_at
 		WHEN NOT MATCHED THEN INSERT
-			(id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+			(id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 			 scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at)
-		VALUES (src.id, src.user_id, src.integration, src.instance, src.access_token_encrypted,
+		VALUES (src.id, src.user_id, src.integration, src.connection, src.instance, src.access_token_encrypted,
 				src.refresh_token_encrypted, src.scopes, src.expires_at, src.last_refreshed_at,
 				src.refresh_error_count, src.metadata_json, src.created_at, src.updated_at);`
 }
@@ -113,6 +113,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				id NVARCHAR(36) NOT NULL PRIMARY KEY,
 				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
 				integration NVARCHAR(255) NOT NULL,
+				connection NVARCHAR(255) NOT NULL DEFAULT '',
 				instance NVARCHAR(255) NOT NULL,
 				access_token_encrypted NVARCHAR(MAX) NOT NULL,
 				refresh_token_encrypted NVARCHAR(MAX) NOT NULL DEFAULT '',
@@ -123,7 +124,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				metadata_json NVARCHAR(MAX) NOT NULL DEFAULT '',
 				created_at DATETIME2(6) NOT NULL,
 				updated_at DATETIME2(6) NOT NULL,
-				UNIQUE(user_id, integration, instance)
+				UNIQUE(user_id, integration, connection, instance)
 			)`},
 		{"api_tokens", `
 			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'api_tokens')
@@ -143,6 +144,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				id NVARCHAR(36) NOT NULL PRIMARY KEY,
 				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
 				integration NVARCHAR(255) NOT NULL,
+				connection NVARCHAR(255) NOT NULL DEFAULT '',
 				instance NVARCHAR(255) NOT NULL,
 				access_token_encrypted NVARCHAR(MAX) NOT NULL,
 				refresh_token_encrypted NVARCHAR(MAX) NOT NULL DEFAULT '',

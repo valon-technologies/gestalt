@@ -33,6 +33,7 @@ type integrationTokenDoc struct {
 	ID                    string     `bson:"_id"`
 	UserID                string     `bson:"user_id"`
 	Integration           string     `bson:"integration"`
+	Connection            string     `bson:"connection"`
 	Instance              string     `bson:"instance"`
 	AccessTokenEncrypted  string     `bson:"access_token_encrypted"`
 	RefreshTokenEncrypted string     `bson:"refresh_token_encrypted"`
@@ -93,7 +94,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 
 	_, err = s.db.Collection(datastore.IntegrationTokensCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "user_id", Value: 1}, {Key: "integration", Value: 1}, {Key: "instance", Value: 1}},
+		Keys:    bson.D{{Key: "user_id", Value: 1}, {Key: "integration", Value: 1}, {Key: "connection", Value: 1}, {Key: "instance", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	if err != nil {
@@ -165,7 +166,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		return fmt.Errorf("mongodb: %w", err)
 	}
 
-	filter := bson.M{"user_id": token.UserID, "integration": token.Integration, "instance": token.Instance}
+	filter := bson.M{"user_id": token.UserID, "integration": token.Integration, "connection": token.Connection, "instance": token.Instance}
 	update := bson.M{
 		"$set": bson.M{
 			"access_token_encrypted":  accessEnc,
@@ -181,6 +182,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 			"_id":         token.ID,
 			"user_id":     token.UserID,
 			"integration": token.Integration,
+			"connection":  token.Connection,
 			"instance":    token.Instance,
 			"created_at":  token.CreatedAt,
 		},
@@ -193,8 +195,8 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	return nil
 }
 
-func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
-	filter := bson.M{"user_id": userID, "integration": integration, "instance": instance}
+func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	filter := bson.M{"user_id": userID, "integration": integration, "connection": connection, "instance": instance}
 	var doc integrationTokenDoc
 	err := s.db.Collection(datastore.IntegrationTokensCollection).FindOne(ctx, filter).Decode(&doc)
 	if errors.Is(err, mongo.ErrNoDocuments) {
@@ -232,6 +234,28 @@ func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integratio
 	cursor, err := s.db.Collection(datastore.IntegrationTokensCollection).Find(ctx, bson.M{"user_id": userID, "integration": integration})
 	if err != nil {
 		return nil, fmt.Errorf("mongodb: listing tokens for integration: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var tokens []*core.IntegrationToken
+	for cursor.Next(ctx) {
+		var doc integrationTokenDoc
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("mongodb: decoding token: %w", err)
+		}
+		t, err := s.integrationTokenFromDoc(&doc)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, cursor.Err()
+}
+
+func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	cursor, err := s.db.Collection(datastore.IntegrationTokensCollection).Find(ctx, bson.M{"user_id": userID, "integration": integration, "connection": connection})
+	if err != nil {
+		return nil, fmt.Errorf("mongodb: listing tokens for connection: %w", err)
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
@@ -344,6 +368,7 @@ func (s *Store) integrationTokenFromDoc(doc *integrationTokenDoc) (*core.Integra
 		ID:                doc.ID,
 		UserID:            doc.UserID,
 		Integration:       doc.Integration,
+		Connection:        doc.Connection,
 		Instance:          doc.Instance,
 		AccessToken:       access,
 		RefreshToken:      refresh,

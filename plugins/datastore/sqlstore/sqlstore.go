@@ -25,7 +25,7 @@ type Dialect interface {
 
 	// UpsertTokenSQL returns the full INSERT ... ON CONFLICT / ON
 	// DUPLICATE KEY UPDATE statement for integration_tokens. The
-	// statement must accept 13 bind parameters.
+	// statement must accept 14 bind parameters.
 	UpsertTokenSQL() string
 
 	// IsDuplicateKeyError reports whether err is a driver-specific
@@ -80,7 +80,7 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 	var scopes, metadataJSON sql.NullString
 	var expiresAt, lastRefreshedAt sql.NullTime
 
-	if err := row.Scan(&t.ID, &t.UserID, &t.Integration, &t.Instance,
+	if err := row.Scan(&t.ID, &t.UserID, &t.Integration, &t.Connection, &t.Instance,
 		&accessEnc, &refreshEnc,
 		&scopes, &expiresAt, &lastRefreshedAt, &t.RefreshErrorCount,
 		&metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
@@ -221,7 +221,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	}
 
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
-		token.ID, token.UserID, token.Integration, token.Instance,
+		token.ID, token.UserID, token.Integration, token.Connection, token.Instance,
 		accessEnc, refreshEnc,
 		token.Scopes, NullableTime(token.ExpiresAt), NullableTime(token.LastRefreshedAt),
 		token.RefreshErrorCount, token.MetadataJSON, token.CreatedAt, token.UpdatedAt,
@@ -232,13 +232,13 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	return nil
 }
 
-func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
 	row := s.DB.QueryRowContext(ctx, `
-		SELECT id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
 		FROM integration_tokens
-		WHERE user_id = `+s.ph(1)+` AND integration = `+s.ph(2)+` AND instance = `+s.ph(3),
-		userID, integration, instance,
+		WHERE user_id = `+s.ph(1)+` AND integration = `+s.ph(2)+` AND connection = `+s.ph(3)+` AND instance = `+s.ph(4),
+		userID, integration, connection, instance,
 	)
 	t, err := s.scanIntegrationToken(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -252,7 +252,7 @@ func (s *Store) Token(ctx context.Context, userID, integration, instance string)
 
 func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
 		FROM integration_tokens WHERE user_id = `+s.ph(1), userID)
 	if err != nil {
@@ -273,11 +273,32 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 
 func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
 		FROM integration_tokens WHERE user_id = `+s.ph(1)+` AND integration = `+s.ph(2), userID, integration)
 	if err != nil {
 		return nil, fmt.Errorf("listing tokens for integration: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tokens []*core.IntegrationToken
+	for rows.Next() {
+		t, err := s.scanIntegrationToken(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning token row: %w", err)
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, rows.Err()
+}
+
+func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
+		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
+		FROM integration_tokens WHERE user_id = `+s.ph(1)+` AND integration = `+s.ph(2)+` AND connection = `+s.ph(3), userID, integration, connection)
+	if err != nil {
+		return nil, fmt.Errorf("listing tokens for connection: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -375,11 +396,11 @@ func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnec
 
 	_, err = s.DB.ExecContext(ctx, `
 		INSERT INTO staged_connections
-			(id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+			(id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 			 token_expires_at, metadata_json, candidates_json, created_at, expires_at)
-		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`,
-				`+s.ph(7)+`, `+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`)`,
-		sc.ID, sc.UserID, sc.Integration, sc.Instance,
+		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`,
+				`+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`, `+s.ph(12)+`)`,
+		sc.ID, sc.UserID, sc.Integration, sc.Connection, sc.Instance,
 		accessEnc, refreshEnc,
 		NullableTime(sc.TokenExpiresAt), sc.MetadataJSON, sc.CandidatesJSON,
 		sc.CreatedAt, sc.ExpiresAt,
@@ -392,7 +413,7 @@ func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnec
 
 func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
 	row := s.DB.QueryRowContext(ctx, `
-		SELECT id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       token_expires_at, metadata_json, candidates_json, created_at, expires_at
 		FROM staged_connections WHERE id = `+s.ph(1), id)
 
@@ -401,7 +422,7 @@ func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.Stage
 	var metadataJSON sql.NullString
 	var tokenExpiresAt sql.NullTime
 
-	if err := row.Scan(&sc.ID, &sc.UserID, &sc.Integration, &sc.Instance,
+	if err := row.Scan(&sc.ID, &sc.UserID, &sc.Integration, &sc.Connection, &sc.Instance,
 		&accessEnc, &refreshEnc,
 		&tokenExpiresAt, &metadataJSON, &sc.CandidatesJSON,
 		&sc.CreatedAt, &sc.ExpiresAt); err != nil {

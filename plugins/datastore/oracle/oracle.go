@@ -20,12 +20,12 @@ func (dialect) Placeholder(n int) string { return fmt.Sprintf(":%d", n) }
 
 func (dialect) UpsertTokenSQL() string {
 	return `MERGE INTO integration_tokens tgt
-USING (SELECT :1 AS id, :2 AS user_id, :3 AS integration, :4 AS instance,
-              :5 AS access_token_encrypted, :6 AS refresh_token_encrypted,
-              :7 AS scopes, :8 AS expires_at, :9 AS last_refreshed_at,
-              :10 AS refresh_error_count, :11 AS metadata_json,
-              :12 AS created_at, :13 AS updated_at FROM DUAL) src
-ON (tgt.user_id = src.user_id AND tgt.integration = src.integration AND tgt.instance = src.instance)
+USING (SELECT :1 AS id, :2 AS user_id, :3 AS integration, :4 AS connection,
+              :5 AS instance, :6 AS access_token_encrypted, :7 AS refresh_token_encrypted,
+              :8 AS scopes, :9 AS expires_at, :10 AS last_refreshed_at,
+              :11 AS refresh_error_count, :12 AS metadata_json,
+              :13 AS created_at, :14 AS updated_at FROM DUAL) src
+ON (tgt.user_id = src.user_id AND tgt.integration = src.integration AND tgt.connection = src.connection AND tgt.instance = src.instance)
 WHEN MATCHED THEN UPDATE SET
     tgt.access_token_encrypted = src.access_token_encrypted,
     tgt.refresh_token_encrypted = src.refresh_token_encrypted,
@@ -34,9 +34,9 @@ WHEN MATCHED THEN UPDATE SET
     tgt.refresh_error_count = src.refresh_error_count,
     tgt.metadata_json = src.metadata_json, tgt.updated_at = src.updated_at
 WHEN NOT MATCHED THEN INSERT
-    (id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+    (id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
      scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at)
-VALUES (src.id, src.user_id, src.integration, src.instance, src.access_token_encrypted,
+VALUES (src.id, src.user_id, src.integration, src.connection, src.instance, src.access_token_encrypted,
         src.refresh_token_encrypted, src.scopes, src.expires_at, src.last_refreshed_at,
         src.refresh_error_count, src.metadata_json, src.created_at, src.updated_at)`
 }
@@ -109,6 +109,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				id VARCHAR2(36) PRIMARY KEY,
 				user_id VARCHAR2(36) NOT NULL,
 				integration VARCHAR2(255) NOT NULL,
+				connection VARCHAR2(255) DEFAULT '' NOT NULL,
 				instance VARCHAR2(255) NOT NULL,
 				access_token_encrypted CLOB NOT NULL,
 				refresh_token_encrypted CLOB,
@@ -140,6 +141,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 				id VARCHAR2(36) PRIMARY KEY,
 				user_id VARCHAR2(36) NOT NULL,
 				integration VARCHAR2(255) NOT NULL,
+				connection VARCHAR2(255) DEFAULT '' NOT NULL,
 				instance VARCHAR2(255) NOT NULL,
 				access_token_encrypted CLOB NOT NULL,
 				refresh_token_encrypted CLOB,
@@ -173,8 +175,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			ddl:  "ALTER TABLE users ADD CONSTRAINT uq_users_email UNIQUE (email)",
 		},
 		{
-			name: "UQ_IT_USER_INTEG_INST",
-			ddl:  "ALTER TABLE integration_tokens ADD CONSTRAINT uq_it_user_integ_inst UNIQUE (user_id, integration, instance)",
+			name: "UQ_IT_USER_INTEG_CONN_INST",
+			ddl:  "ALTER TABLE integration_tokens ADD CONSTRAINT uq_it_user_integ_conn_inst UNIQUE (user_id, integration, connection, instance)",
 		},
 		{
 			name: "FK_IT_USER",

@@ -8,9 +8,10 @@ type Datastore interface {
 	FindOrCreateUser(ctx context.Context, email string) (*User, error)
 
 	StoreToken(ctx context.Context, token *IntegrationToken) error
-	Token(ctx context.Context, userID, integration, instance string) (*IntegrationToken, error)
+	Token(ctx context.Context, userID, integration, connection, instance string) (*IntegrationToken, error)
 	ListTokens(ctx context.Context, userID string) ([]*IntegrationToken, error)
 	ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*IntegrationToken, error)
+	ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*IntegrationToken, error)
 	DeleteToken(ctx context.Context, id string) error
 
 	StoreAPIToken(ctx context.Context, token *APIToken) error
