@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/discovery"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
 )
 
