@@ -454,10 +454,6 @@ export interface StartProviderRequest {
      */
     config?: Struct;
     /**
-     * @generated from protobuf field: gestalt.plugin.v1.PluginMode mode = 3
-     */
-    mode: PluginMode;
-    /**
      * @generated from protobuf field: int32 protocol_version = 4
      */
     protocolVersion: number;
@@ -512,23 +508,6 @@ export enum ConnectionMode {
      * @generated from protobuf enum value: CONNECTION_MODE_EITHER = 4;
      */
     EITHER = 4
-}
-/**
- * @generated from protobuf enum gestalt.plugin.v1.PluginMode
- */
-export enum PluginMode {
-    /**
-     * @generated from protobuf enum value: PLUGIN_MODE_UNSPECIFIED = 0;
-     */
-    UNSPECIFIED = 0,
-    /**
-     * @generated from protobuf enum value: PLUGIN_MODE_REPLACE = 1;
-     */
-    REPLACE = 1,
-    /**
-     * @generated from protobuf enum value: PLUGIN_MODE_OVERLAY = 2;
-     */
-    OVERLAY = 2
 }
 /**
  * @generated from protobuf enum gestalt.plugin.v1.PrincipalSource
@@ -2088,14 +2067,12 @@ class StartProviderRequest$Type extends MessageType<StartProviderRequest> {
         super("gestalt.plugin.v1.StartProviderRequest", [
             { no: 1, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "config", kind: "message", T: () => Struct },
-            { no: 3, name: "mode", kind: "enum", T: () => ["gestalt.plugin.v1.PluginMode", PluginMode, "PLUGIN_MODE_"] },
             { no: 4, name: "protocol_version", kind: "scalar", T: 5 /*ScalarType.INT32*/ }
         ]);
     }
     create(value?: PartialMessage<StartProviderRequest>): StartProviderRequest {
         const message = globalThis.Object.create((this.messagePrototype!));
         message.name = "";
-        message.mode = 0;
         message.protocolVersion = 0;
         if (value !== undefined)
             reflectionMergePartial<StartProviderRequest>(this, message, value);
@@ -2111,9 +2088,6 @@ class StartProviderRequest$Type extends MessageType<StartProviderRequest> {
                     break;
                 case /* google.protobuf.Struct config */ 2:
                     message.config = Struct.internalBinaryRead(reader, reader.uint32(), options, message.config);
-                    break;
-                case /* gestalt.plugin.v1.PluginMode mode */ 3:
-                    message.mode = reader.int32();
                     break;
                 case /* int32 protocol_version */ 4:
                     message.protocolVersion = reader.int32();
@@ -2136,9 +2110,6 @@ class StartProviderRequest$Type extends MessageType<StartProviderRequest> {
         /* google.protobuf.Struct config = 2; */
         if (message.config)
             Struct.internalBinaryWrite(message.config, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
-        /* gestalt.plugin.v1.PluginMode mode = 3; */
-        if (message.mode !== 0)
-            writer.tag(3, WireType.Varint).int32(message.mode);
         /* int32 protocol_version = 4; */
         if (message.protocolVersion !== 0)
             writer.tag(4, WireType.Varint).int32(message.protocolVersion);

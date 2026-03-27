@@ -22,7 +22,7 @@ When `gestaltd` starts a plugin process, it:
 3. for runtime plugins, also starts a host callback socket and sets `GESTALT_RUNTIME_HOST_SOCKET`
 4. launches the plugin executable
 5. dials the plugin and validates protocol compatibility
-6. sends the plugin its name, config, and mode
+6. sends the plugin its name and config
 
 The public Go SDK in `sdk/pluginsdk` handles this for you.
 
@@ -40,7 +40,6 @@ The SDK's `ProviderStarter` path receives:
 
 - the configured integration name
 - the plugin config block as a map
-- the plugin mode
 
 ## Runtime Plugin Contract
 
@@ -83,4 +82,3 @@ runtimes:
 ```
 
 That distinction matters because runtime plugin config belongs at `runtimes.<name>.config`, not under `runtimes.<name>.plugin.config`.
-

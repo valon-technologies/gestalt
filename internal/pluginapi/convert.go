@@ -306,12 +306,3 @@ func catalogFromJSON(raw string) (*catalog.Catalog, error) {
 	}
 	return &cat, nil
 }
-
-func protoPluginMode(mode string) pluginapiv1.PluginMode {
-	switch mode {
-	case "replace", "":
-		return pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE
-	default:
-		return pluginapiv1.PluginMode_PLUGIN_MODE_UNSPECIFIED
-	}
-}
