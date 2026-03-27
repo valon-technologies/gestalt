@@ -22,15 +22,6 @@ func coreConnectionModeToProto(mode ConnectionMode) pluginapiv1.ConnectionMode {
 	}
 }
 
-func protoPluginMode(mode pluginapiv1.PluginMode) string {
-	switch mode {
-	case pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE:
-		return PluginModeReplace
-	default:
-		return ""
-	}
-}
-
 func mapFromStruct(s *structpb.Struct) map[string]any {
 	if s == nil {
 		return nil

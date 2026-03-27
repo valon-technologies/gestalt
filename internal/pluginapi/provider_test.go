@@ -119,7 +119,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, "")
+	prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
 	client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil, "")
+	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}

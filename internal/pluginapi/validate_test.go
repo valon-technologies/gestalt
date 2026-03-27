@@ -88,7 +88,7 @@ func TestNewRemoteProvider_NoSchema(t *testing.T) {
 		},
 	}
 	client := newProviderPluginClient(t, stub)
-	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"anything": "goes"}, "")
+	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"anything": "goes"})
 	if err != nil {
 		t.Fatalf("expected no error without schema: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestNewRemoteProvider_SchemaRejectsInvalidConfig(t *testing.T) {
 		},
 	}
 	client := newProviderPluginClient(t, stub)
-	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"retries": 3}, "")
+	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"retries": 3})
 	if err == nil {
 		t.Fatal("expected error for config missing required field")
 	}
@@ -128,7 +128,7 @@ func TestNewRemoteProvider_SchemaAcceptsValidConfig(t *testing.T) {
 		},
 	}
 	client := newProviderPluginClient(t, stub)
-	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"api_key": "sk-test"}, "")
+	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"api_key": "sk-test"})
 	if err != nil {
 		t.Fatalf("expected valid config to pass: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
 		},
 	}
 	client := newProviderPluginClient(t, stub)
-	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", nil, "")
+	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", nil)
 	if err == nil {
 		t.Fatal("expected nil config to fail validation against schema with required fields")
 	}

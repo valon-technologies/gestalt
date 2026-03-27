@@ -14,7 +14,6 @@ import (
 type exampleProvider struct {
 	greeting    string
 	startedName string
-	startedMode string
 }
 
 func (p *exampleProvider) Name() string        { return "example" }
@@ -72,7 +71,6 @@ func (p *exampleProvider) Execute(_ context.Context, operation string, params ma
 	case "status":
 		body, _ := json.Marshal(map[string]string{
 			"name":     p.startedName,
-			"mode":     p.startedMode,
 			"greeting": p.greeting,
 		})
 		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
@@ -81,9 +79,8 @@ func (p *exampleProvider) Execute(_ context.Context, operation string, params ma
 	}
 }
 
-func (p *exampleProvider) Start(_ context.Context, name string, config map[string]any, mode string) error {
+func (p *exampleProvider) Start(_ context.Context, name string, config map[string]any) error {
 	p.startedName = name
-	p.startedMode = mode
 	if g, ok := config["greeting"].(string); ok {
 		p.greeting = g
 	}

@@ -36,13 +36,11 @@ type startableStubProvider struct {
 	stubProvider
 	startName   string
 	startConfig map[string]any
-	startMode   string
 }
 
-func (p *startableStubProvider) Start(_ context.Context, name string, config map[string]any, mode string) error {
+func (p *startableStubProvider) Start(_ context.Context, name string, config map[string]any) error {
 	p.startName = name
 	p.startConfig = config
-	p.startMode = mode
 	return nil
 }
 
@@ -205,7 +203,6 @@ func TestProviderServerStartProvider(t *testing.T) {
 	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
 		Name:            "my-instance",
 		Config:          cfg,
-		Mode:            pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE,
 		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	})
 	if err != nil {
@@ -219,9 +216,6 @@ func TestProviderServerStartProvider(t *testing.T) {
 	}
 	if prov.startConfig["key"] != "val" {
 		t.Errorf("startConfig[key] = %v, want %q", prov.startConfig["key"], "val")
-	}
-	if prov.startMode != pluginsdk.PluginModeReplace {
-		t.Errorf("startMode = %q, want %q", prov.startMode, pluginsdk.PluginModeReplace)
 	}
 }
 

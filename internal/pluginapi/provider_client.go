@@ -39,7 +39,7 @@ func (p *remoteProviderBase) Close() error {
 	return nil
 }
 
-func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, mode string, opts ...RemoteProviderOption) (core.Provider, error) {
+func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 			return nil, err
 		}
 	}
-	if err := callStartProvider(ctx, client, name, config, mode); err != nil {
+	if err := callStartProvider(ctx, client, name, config); err != nil {
 		return nil, err
 	}
 	opsResp, err := client.ListOperations(ctx, &emptypb.Empty{})
@@ -245,7 +245,7 @@ func checkProtocolCompatibility(meta *pluginapiv1.ProviderMetadata) error {
 	return nil
 }
 
-func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, mode string) error {
+func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any) error {
 	cfgStruct, err := structFromMap(config)
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)
@@ -253,7 +253,6 @@ func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
 		Name:            name,
 		Config:          cfgStruct,
-		Mode:            protoPluginMode(mode),
 		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	})
 	if err != nil {

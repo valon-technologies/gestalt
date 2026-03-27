@@ -469,9 +469,6 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	if got["name"] != "example" {
 		t.Fatalf("status.name = %q", got["name"])
 	}
-	if got["mode"] != "replace" {
-		t.Fatalf("status.mode = %q", got["mode"])
-	}
 	if got["greeting"] != "Hello from config" {
 		t.Fatalf("status.greeting = %q", got["greeting"])
 	}
