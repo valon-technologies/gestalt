@@ -32,12 +32,12 @@ func testDefinition(name string) *Definition {
 	}
 }
 
-func testCreds() config.IntegrationDef {
-	return config.IntegrationDef{
+func testCreds() config.ConnectionDef {
+	return config.ConnectionDef{Auth: config.ConnectionAuthDef{
 		ClientID:     "test",
 		ClientSecret: "test",
 		RedirectURL:  "http://localhost/callback",
-	}
+	}}
 }
 
 func TestBuild(t *testing.T) {
@@ -68,7 +68,7 @@ func TestBuildManualAuth(t *testing.T) {
 			"list": {Description: "List", Method: "GET", Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.IntegrationDef{}, nil)
+	intg, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -81,10 +81,10 @@ func TestBuildDoesNotMutateDefinition(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("original")
-	_, err := Build(def, config.IntegrationDef{
+	_, err := Build(def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
 		ClientID: "test",
-		Auth:     config.AuthOverrides{TokenURL: "https://override.example.com/token"},
-	}, nil)
+		TokenURL: "https://override.example.com/token",
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -97,11 +97,11 @@ func TestBuildAllowedOperations(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("filtered")
-	intg, err := Build(def, config.IntegrationDef{
+	intg, err := Build(def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
 		ClientID:     "test",
 		ClientSecret: "test",
 		RedirectURL:  "http://localhost/callback",
-	}, map[string]string{"list_items": ""})
+	}}, map[string]string{"list_items": ""})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBuildAllowedOperationsUnknown(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.IntegrationDef{}, map[string]string{"nonexistent": ""})
+	_, err := Build(def, config.ConnectionDef{}, map[string]string{"nonexistent": ""})
 	if err == nil {
 		t.Fatal("expected error for unknown allowed operation")
 	}
@@ -124,7 +124,7 @@ func TestBuildAllowedOperationsEmpty(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.IntegrationDef{}, map[string]string{})
+	_, err := Build(def, config.ConnectionDef{}, map[string]string{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
 	}
@@ -154,7 +154,7 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 			"list": {Description: "List", Method: "GET", Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.IntegrationDef{}, nil)
+	intg, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		},
 	}
 
-	provider, err := Build(def, config.IntegrationDef{}, nil)
+	provider, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -253,7 +253,8 @@ func TestBuildAppliesIconFile(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{IconFile: iconPath}, nil)
+	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: iconPath})
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -284,7 +285,8 @@ func TestBuildIconFileMissing(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"}, nil)
+	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build should succeed with missing icon: %v", err)
 	}
@@ -320,7 +322,7 @@ func TestBuildAuthHeader(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -371,7 +373,7 @@ func TestBuildAuthMapping(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -418,7 +420,7 @@ func TestBuildAuthMappingMissingField(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -457,7 +459,7 @@ func TestBuildErrorMessagePath(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -494,7 +496,7 @@ func TestBuildErrorMessagePathSuccessPassthrough(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -531,11 +533,9 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 		},
 	}
 
-	intg := config.IntegrationDef{
-		AuthHeader: "X-Override-Key",
-	}
+	def.AuthHeader = "X-Override-Key"
 
-	prov, err := Build(def, intg, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestBuildConnectionParams(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -621,7 +621,7 @@ func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -661,7 +661,7 @@ func TestBuildResponseCheck_SuccessMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -704,7 +704,7 @@ func TestBuildResponseCheck_FailureMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -742,7 +742,7 @@ func TestBuildResponseCheck_NonJSON200(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -779,7 +779,7 @@ func TestBuildResponseCheck_NonJSON500(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -806,7 +806,7 @@ func TestBuildResponseCheck_SuccessMatchOnly(t *testing.T) {
 		},
 	}
 
-	_, err := Build(def, config.IntegrationDef{}, nil)
+	_, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build should succeed with structured response check: %v", err)
 	}
@@ -840,7 +840,7 @@ func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.IntegrationDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

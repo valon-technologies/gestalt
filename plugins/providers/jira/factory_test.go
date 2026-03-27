@@ -45,10 +45,10 @@ func TestBuildProvider(t *testing.T) {
 	t.Parallel()
 
 	def := providertest.ParseDefinition(t, definitionYAML)
-	prov := providertest.BuildProvider(t, def, config.IntegrationDef{
+	prov := providertest.BuildProvider(t, def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
 		ClientID:     dummyClientID,
 		ClientSecret: dummyClientSecret,
-	})
+	}})
 
 	providertest.CheckProvider(t, prov, providertest.ProviderExpect{
 		Name:           "jira",

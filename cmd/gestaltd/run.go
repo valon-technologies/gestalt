@@ -204,25 +204,15 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 		includeREST:  make(map[string]bool),
 	}
 
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		hasMCP := false
-		apiMCP := false
-		for i := range intg.Upstreams {
-			us := &intg.Upstreams[i]
-			if us.Type == config.UpstreamTypeMCP {
-				hasMCP = true
-			}
-			if (us.Type == config.UpstreamTypeREST || us.Type == config.UpstreamTypeGraphQL) && us.MCP {
-				hasMCP = true
-				apiMCP = true
+	for name, intg := range cfg.Integrations {
+		if intg.Plugin != nil {
+			surface.providers = append(surface.providers, name)
+		} else if intg.API != nil || intg.MCP != nil {
+			surface.providers = append(surface.providers, name)
+			if intg.API != nil {
+				surface.includeREST[name] = true
 			}
 		}
-		if !hasMCP {
-			continue
-		}
-		surface.providers = append(surface.providers, name)
-		surface.includeREST[name] = apiMCP
 		if intg.MCPToolPrefix != "" {
 			surface.toolPrefixes[name] = intg.MCPToolPrefix
 		}
@@ -309,17 +299,19 @@ func logConfigSummary(path string, cfg *config.Config) {
 
 	if len(cfg.Integrations) > 0 {
 		log.Printf("integrations: %d", len(cfg.Integrations))
-		for name := range cfg.Integrations {
-			intg := cfg.Integrations[name]
-			var sources []string
-			for i := range intg.Upstreams {
-				sources = append(sources, intg.Upstreams[i].Type)
+		for name, intg := range cfg.Integrations {
+			if intg.Plugin != nil {
+				log.Printf("  %s: plugin", name)
+			} else {
+				var surfaces []string
+				if intg.API != nil {
+					surfaces = append(surfaces, intg.API.Type)
+				}
+				if intg.MCP != nil {
+					surfaces = append(surfaces, "mcp")
+				}
+				log.Printf("  %s: surfaces=[%s] connections=%d", name, strings.Join(surfaces, ","), len(intg.Connections))
 			}
-			auth := "oauth"
-			if intg.Auth.Type == "manual" || intg.ConnectionMode == "manual" {
-				auth = "manual"
-			}
-			log.Printf("  %s: upstreams=[%s] auth=%s", name, strings.Join(sources, ","), auth)
 		}
 	}
 

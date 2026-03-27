@@ -212,9 +212,13 @@ server:
   encryption_key: test-key
 integrations:
   graphapi:
-    upstreams:
-      - type: graphql
-        url: ` + graphQLServer.URL + `
+    connections:
+      default:
+        mode: user
+    api:
+      type: graphql
+      url: ` + graphQLServer.URL + `
+      connection: default
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -242,7 +246,7 @@ integrations:
 	}
 }
 
-func TestValidateConfigRejectsOverlayWithoutSingleBaseSource(t *testing.T) {
+func TestValidateConfigRejectsPluginWithConnectionsOrAPI(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -251,28 +255,29 @@ func TestValidateConfigRejectsOverlayWithoutSingleBaseSource(t *testing.T) {
 		wantContain string
 	}{
 		{
-			name: "missing base source",
+			name: "plugin with connections",
 			body: `integrations:
   sample:
+    connections:
+      default:
+        mode: user
     plugin:
-      mode: overlay
       command: /tmp/plugin
 `,
-			wantContain: "must declare a base source",
+			wantContain: "cannot set both plugin and connections",
 		},
 		{
-			name: "multiple base sources",
+			name: "plugin with api",
 			body: `integrations:
   sample:
     plugin:
-      mode: overlay
-      base: sample-base
       command: /tmp/plugin
-    upstreams:
-      - type: rest
-        url: https://example.com/spec.json
+    api:
+      type: rest
+      openapi: https://example.com/spec.json
+      connection: default
 `,
-			wantContain: "exactly one base source",
+			wantContain: "cannot set both plugin and api",
 		},
 	}
 
@@ -355,7 +360,6 @@ func TestPluginFingerprintStable(t *testing.T) {
 	t.Parallel()
 
 	plugin := &config.ExecutablePluginDef{
-		Mode:    config.PluginModeReplace,
 		Command: "/tmp/plugin",
 		Args:    []string{"--verbose"},
 		Env:     map[string]string{"API_KEY": "abc123"},
@@ -555,9 +559,13 @@ server:
 integrations:
   restapi:
     display_name: REST API
-    upstreams:
-      - type: rest
-        url: ` + upstreamURL + `
+    connections:
+      default:
+        mode: user
+    api:
+      type: rest
+      openapi: ` + upstreamURL + `
+      connection: default
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)

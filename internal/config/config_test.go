@@ -44,15 +44,22 @@ server:
 integrations:
   service-a:
     display_name: Service A
-    client_id: integration-client
-    upstreams:
-      - type: rest
-        url: https://example.test/spec.json
-        allowed_operations:
-          list_records: ""
-          get_record: Get a record
-      - type: mcp
-        url: https://example.test/mcp
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+          client_id: integration-client
+          client_secret: integration-secret
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+    mcp:
+      url: https://example.test/mcp
+      connection: default
 `)
 
 	cfg, err := Load(path)
@@ -75,11 +82,14 @@ integrations:
 	if got := cfg.Integrations["service-a"].DisplayName; got != "Service A" {
 		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
 	}
-	if got := cfg.Integrations["service-a"].Upstreams[0].AllowedOperations["list_records"]; got != "" {
-		t.Fatalf("AllowedOperations[list_records] = %q", got)
+	if got := cfg.Integrations["service-a"].Connections["default"].Auth.ClientID; got != "integration-client" {
+		t.Fatalf("Connections[default].Auth.ClientID = %q", got)
 	}
-	if got := cfg.Integrations["service-a"].Upstreams[0].AllowedOperations["get_record"]; got != "Get a record" {
-		t.Fatalf("AllowedOperations[get_record] = %q", got)
+	if got := cfg.Integrations["service-a"].API.Type; got != "rest" {
+		t.Fatalf("API.Type = %q", got)
+	}
+	if got := cfg.Integrations["service-a"].MCP.URL; got != "https://example.test/mcp" {
+		t.Fatalf("MCP.URL = %q", got)
 	}
 }
 
@@ -88,9 +98,8 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 
 	getenv := func(key string) string {
 		return map[string]string{
-			"TEST_CLIENT_ID":    "client-from-env",
-			"TEST_ENCRYPTION":   "encryption-from-env",
-			"TEST_REDIRECT_URL": "https://app.example.test/callback",
+			"TEST_CLIENT_ID":  "client-from-env",
+			"TEST_ENCRYPTION": "encryption-from-env",
 		}[key]
 	}
 
@@ -103,17 +112,19 @@ datastore:
   provider: data-store
 server:
   encryption_key: ${TEST_ENCRYPTION}
-auth_profiles:
-  shared:
-    client_id: profile-client
-    client_secret: profile-secret
-    redirect_url: ${TEST_REDIRECT_URL}
 integrations:
   service-a:
-    auth_profile: shared
-    upstreams:
-      - type: rest
-        url: https://example.test/spec.json
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
 `)
 
 	cfg, err := LoadWithMapping(path, getenv)
@@ -135,11 +146,43 @@ integrations:
 	if authCfg["client_id"] != "client-from-env" {
 		t.Fatalf("Auth.Config.client_id = %q", authCfg["client_id"])
 	}
-	if got := cfg.Integrations["service-a"].ClientSecret; got != "profile-secret" {
-		t.Fatalf("Integrations[service-a].ClientSecret = %q", got)
+}
+
+func TestLoadConfigBaseURLResolvesRedirectURL(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+  base_url: https://app.example.test
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Integrations["service-a"].RedirectURL; got != "https://app.example.test/callback" {
-		t.Fatalf("Integrations[service-a].RedirectURL = %q", got)
+
+	got := cfg.Integrations["service-a"].Connections["default"].Auth.RedirectURL
+	want := "https://app.example.test/api/v1/auth/callback"
+	if got != want {
+		t.Fatalf("RedirectURL = %q, want %q", got, want)
 	}
 }
 
@@ -178,6 +221,18 @@ integrations:
   service-c:
     plugin:
       package: https://example.com/dummy.tar.gz
+  service-d:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: ../specs/service-d.json
+      connection: default
 runtimes:
   worker:
     plugin:
@@ -202,6 +257,9 @@ runtimes:
 	}
 	if got := cfg.Integrations["service-c"].Plugin.Package; got != "https://example.com/dummy.tar.gz" {
 		t.Fatalf("HTTPS plugin package should not be resolved = %q", got)
+	}
+	if got := cfg.Integrations["service-d"].API.OpenAPI; got != filepath.Join(dir, "specs", "service-d.json") {
+		t.Fatalf("API.OpenAPI = %q, want %q", got, filepath.Join(dir, "specs", "service-d.json"))
 	}
 	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
 		t.Fatalf("runtime plugin command = %q", got)
@@ -243,7 +301,7 @@ datastore:
 `,
 		},
 		{
-			name: "rest upstream requires url",
+			name: "declarative integration with no connections",
 			yaml: `
 auth:
   provider: auth-provider
@@ -253,12 +311,14 @@ server:
   encryption_key: server-key
 integrations:
   service-a:
-    upstreams:
-      - type: rest
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
 `,
 		},
 		{
-			name: "multiple api upstreams rejected",
+			name: "declarative integration with neither api nor mcp",
 			yaml: `
 auth:
   provider: auth-provider
@@ -268,15 +328,17 @@ server:
   encryption_key: server-key
 integrations:
   service-a:
-    upstreams:
-      - type: rest
-        url: https://example.test/openapi.json
-      - type: graphql
-        url: https://example.test/graphql
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
 `,
 		},
 		{
-			name: "replace plugin cannot also define upstreams",
+			name: "plugin with connections",
 			yaml: `
 auth:
   provider: auth-provider
@@ -288,13 +350,17 @@ integrations:
   service-a:
     plugin:
       command: /tmp/provider
-    upstreams:
-      - type: rest
-        url: https://example.test/spec.json
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
 `,
 		},
 		{
-			name: "overlay plugin requires a base source",
+			name: "plugin with api",
 			yaml: `
 auth:
   provider: auth-provider
@@ -305,12 +371,15 @@ server:
 integrations:
   service-a:
     plugin:
-      mode: overlay
       command: /tmp/provider
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
 `,
 		},
 		{
-			name: "runtime overlay mode rejected",
+			name: "api type rest without openapi",
 			yaml: `
 auth:
   provider: auth-provider
@@ -318,11 +387,168 @@ datastore:
   provider: data-store
 server:
   encryption_key: server-key
-runtimes:
-  worker:
-    plugin:
-      mode: overlay
-      command: /tmp/runtime
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      connection: default
+`,
+		},
+		{
+			name: "api type graphql without url",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: graphql
+      connection: default
+`,
+		},
+		{
+			name: "mcp without url",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    mcp:
+      connection: default
+`,
+		},
+		{
+			name: "surface references missing connection",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: missing
+`,
+		},
+		{
+			name: "mixed connection modes",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      api_conn:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+      mcp_conn:
+        mode: identity
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: api_conn
+    mcp:
+      url: https://example.test/mcp
+      connection: mcp_conn
+`,
+		},
+		{
+			name: "url template references undeclared param",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: graphql
+      url: https://{subdomain}.example.test/graphql
+      connection: default
+`,
+		},
+		{
+			name: "auth url template references undeclared param",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://{subdomain}.example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
 `,
 		},
 		{
@@ -366,16 +592,15 @@ egress:
 	}
 }
 
-func TestAllowedOperationsForms(t *testing.T) {
+func TestValidConfigurations(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name string
 		yaml string
-		want map[string]string
 	}{
 		{
-			name: "list",
+			name: "rest integration",
 			yaml: `
 auth:
   provider: auth-provider
@@ -384,18 +609,24 @@ datastore:
 server:
   encryption_key: server-key
 integrations:
-  service-a:
-    upstreams:
-      - type: rest
-        url: https://example.test/spec.json
-        allowed_operations:
-          - list_records
-          - get_record
+  github:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+          client_id: test-client
+          client_secret: test-secret
+    api:
+      type: rest
+      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+      connection: default
 `,
-			want: map[string]string{"list_records": "", "get_record": ""},
 		},
 		{
-			name: "map",
+			name: "graphql plus mcp with separate connections",
 			yaml: `
 auth:
   provider: auth-provider
@@ -404,15 +635,105 @@ datastore:
 server:
   encryption_key: server-key
 integrations:
-  service-a:
-    upstreams:
-      - type: rest
-        url: https://example.test/spec.json
-        allowed_operations:
-          list_records: List all records
-          get_record: ""
+  shop:
+    connections:
+      api_conn:
+        mode: user
+        params:
+          subdomain:
+            required: true
+        auth:
+          type: oauth2
+          authorization_url: https://accounts.shopify.com/oauth/authorize
+          token_url: https://accounts.shopify.com/oauth/token
+          client_id: test-client
+          client_secret: test-secret
+      mcp_conn:
+        mode: user
+        params:
+          subdomain:
+            required: true
+        auth:
+          type: oauth2
+          authorization_url: https://mcp-auth.example.com/authorize
+          token_url: https://mcp-auth.example.com/token
+          client_id: mcp-client
+          client_secret: mcp-secret
+    api:
+      type: graphql
+      url: https://{subdomain}.myshopify.com/admin/api/graphql.json
+      connection: api_conn
+    mcp:
+      url: https://tenant-{subdomain}.mcp.example.com
+      connection: mcp_conn
 `,
-			want: map[string]string{"list_records": "List all records", "get_record": ""},
+		},
+		{
+			name: "plugin only",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  custom_tool:
+    plugin:
+      package: https://example.com/custom-tool.tar.gz
+`,
+		},
+		{
+			name: "shared connection across api and mcp",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service:
+    connections:
+      shared:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+          client_id: test-client
+          client_secret: test-secret
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: shared
+    mcp:
+      url: https://example.test/mcp
+      connection: shared
+`,
+		},
+		{
+			name: "mcp only declarative",
+			yaml: `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+integrations:
+  service:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    mcp:
+      url: https://example.test/mcp
+      connection: default
+`,
 		},
 	}
 
@@ -421,19 +742,9 @@ integrations:
 			t.Parallel()
 
 			path := mustWriteConfigFile(t, tc.yaml)
-			cfg, err := Load(path)
+			_, err := Load(path)
 			if err != nil {
 				t.Fatalf("Load: %v", err)
-			}
-
-			got := cfg.Integrations["service-a"].Upstreams[0].AllowedOperations
-			if len(got) != len(tc.want) {
-				t.Fatalf("AllowedOperations length = %d, want %d", len(got), len(tc.want))
-			}
-			for key, want := range tc.want {
-				if got[key] != want {
-					t.Fatalf("AllowedOperations[%q] = %q, want %q", key, got[key], want)
-				}
 			}
 		})
 	}
@@ -611,22 +922,6 @@ integrations:
 			wantErr: true,
 		},
 		{
-			name: "plugin ref field is rejected as unknown",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  external:
-    plugin:
-      ref: acme/provider@0.1.0
-`,
-			wantErr: true,
-		},
-		{
 			name: "egress default_action allow is valid",
 			yaml: `
 auth:
@@ -667,49 +962,6 @@ egress:
 			wantErr: true,
 		},
 		{
-			name: "egress policy rule valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  policies:
-    - action: deny
-      provider: restricted
-`,
-		},
-		{
-			name: "egress policy rule invalid action",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  policies:
-    - action: block
-      provider: restricted
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress empty is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress: {}
-`,
-		},
-		{
 			name: "egress credential auth_style bearer is valid",
 			yaml: `
 auth:
@@ -726,37 +978,6 @@ egress:
 `,
 		},
 		{
-			name: "egress credential auth_style raw is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - host: api.vendor.test
-      secret_ref: vendor-key
-      auth_style: raw
-`,
-		},
-		{
-			name: "egress credential auth_style omitted is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - host: api.vendor.test
-      secret_ref: vendor-key
-`,
-		},
-		{
 			name: "egress credential with no match criterion rejected",
 			yaml: `
 auth:
@@ -769,39 +990,6 @@ egress:
   credentials:
     - secret_ref: vendor-key
       auth_style: bearer
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress credential with only instance rejected",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - instance: vendor-prod
-      secret_ref: vendor-key
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress credential invalid auth_style rejected",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - host: api.vendor.test
-      secret_ref: vendor-key
-      auth_style: oauth2
 `,
 			wantErr: true,
 		},

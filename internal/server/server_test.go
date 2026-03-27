@@ -546,7 +546,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 			"op": {Description: "An op", Method: "GET", Path: "/op"},
 		},
 	}
-	prov, err := provider.Build(def, config.IntegrationDef{}, nil)
+	prov, err := provider.Build(def, config.ConnectionDef{}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
-	"github.com/valon-technologies/gestalt/internal/config"
+
 	"github.com/valon-technologies/gestalt/internal/principal"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -309,9 +309,7 @@ func catalogFromJSON(raw string) (*catalog.Catalog, error) {
 
 func protoPluginMode(mode string) pluginapiv1.PluginMode {
 	switch mode {
-	case config.PluginModeOverlay:
-		return pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY
-	case config.PluginModeReplace, "":
+	case "replace", "":
 		return pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE
 	default:
 		return pluginapiv1.PluginMode_PLUGIN_MODE_UNSPECIFIED
