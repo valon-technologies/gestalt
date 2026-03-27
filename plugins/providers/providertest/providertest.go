@@ -74,9 +74,9 @@ func CheckDefinition(t *testing.T, def *provider.Definition, expect DefinitionEx
 	}
 }
 
-func BuildProvider(t *testing.T, def *provider.Definition, intg config.IntegrationDef, opts ...provider.BuildOption) core.Provider {
+func BuildProvider(t *testing.T, def *provider.Definition, conn config.ConnectionDef, opts ...provider.BuildOption) core.Provider {
 	t.Helper()
-	prov, err := provider.Build(def, intg, nil, opts...)
+	prov, err := provider.Build(def, conn, nil, opts...)
 	if err != nil {
 		t.Fatalf("provider.Build: %v", err)
 	}

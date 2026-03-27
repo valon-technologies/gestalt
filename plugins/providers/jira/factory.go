@@ -3,6 +3,7 @@ package jira
 import (
 	"context"
 	_ "embed"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
@@ -19,5 +20,10 @@ func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps 
 	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
 		return nil, err
 	}
-	return provider.Build(&def, intg, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+	conn, err := bootstrap.ResolveAPIConnection(intg)
+	if err != nil {
+		return nil, fmt.Errorf("jira: %w", err)
+	}
+	provider.ApplyDisplayOverrides(&def, intg)
+	return provider.Build(&def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 }

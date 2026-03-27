@@ -65,7 +65,6 @@ func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, facto
 			Env:     cfg.Plugin.Env,
 			Name:    name,
 			Config:  m,
-			Mode:    cfg.Plugin.Mode,
 		}, deps.Invoker, deps.CapabilityLister)
 	}
 

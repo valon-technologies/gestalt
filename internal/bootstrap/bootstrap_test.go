@@ -330,30 +330,6 @@ func TestBootstrapNilProviderFactoryFailsFast(t *testing.T) {
 		}
 	})
 
-	t.Run("overlay base provider", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		delete(cfg.Integrations, "alpha")
-		cfg.Integrations["beta"] = config.IntegrationDef{
-			Plugin: &config.ExecutablePluginDef{
-				Mode:    config.PluginModeOverlay,
-				Base:    "alpha",
-				Command: "/tmp/plugin",
-			},
-		}
-
-		factories := validFactories()
-		factories.Providers["alpha"] = nil
-
-		_, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `no provider factory for overlay base "alpha"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
 }
 
 func TestBootstrapFactoryError(t *testing.T) {
@@ -531,7 +507,9 @@ func TestBootstrapBaseURL(t *testing.T) {
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
 	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		receivedRedirectURL = def.RedirectURL
+		if conn, ok := def.Connections["default"]; ok {
+			receivedRedirectURL = conn.Auth.RedirectURL
+		}
 		return &coretesting.StubIntegration{N: "alpha"}, nil
 	}
 	// config.Load defaults secrets.provider to "env"
@@ -548,7 +526,19 @@ server:
   encryption_key: test-key
 integrations:
   alpha:
-    client_id: cid
+    connections:
+      default:
+        mode: none
+        auth:
+          type: oauth2
+          authorization_url: https://example.com/auth
+          token_url: https://example.com/token
+          client_id: cid
+          client_secret: csec
+    api:
+      type: rest
+      openapi: https://example.com/spec.json
+      connection: default
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0644); err != nil {
 		t.Fatal(err)
@@ -635,7 +625,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in integration client_secret", func(t *testing.T) {
+	t.Run("resolves secret:// in connection client_secret", func(t *testing.T) {
 		t.Parallel()
 
 		var receivedDef config.IntegrationDef
@@ -651,17 +641,26 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		intg := cfg.Integrations["alpha"]
-		intg.ClientSecret = "secret://slack-secret"
-		cfg.Integrations["alpha"] = intg
+		cfg.Integrations["alpha"] = config.IntegrationDef{
+			Connections: map[string]config.ConnectionDef{
+				"default": {
+					Mode: "none",
+					Auth: config.ConnectionAuthDef{
+						Type:         "oauth2",
+						ClientSecret: "secret://slack-secret",
+					},
+				},
+			},
+		}
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		if receivedDef.ClientSecret != "resolved-secret" {
-			t.Errorf("ClientSecret: got %q, want %q", receivedDef.ClientSecret, "resolved-secret")
+		conn := receivedDef.Connections["default"]
+		if conn.Auth.ClientSecret != "resolved-secret" {
+			t.Errorf("ClientSecret: got %q, want %q", conn.Auth.ClientSecret, "resolved-secret")
 		}
 	})
 
@@ -806,17 +805,26 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		intg := cfg.Integrations["alpha"]
-		intg.Headers = map[string]string{"Authorization": "secret://api-key"}
-		cfg.Integrations["alpha"] = intg
+		cfg.Integrations["alpha"] = config.IntegrationDef{
+			Connections: map[string]config.ConnectionDef{
+				"default": {
+					Mode: "none",
+					Auth: config.ConnectionAuthDef{
+						Type:                "oauth2",
+						AuthorizationParams: map[string]string{"api_key": "secret://api-key"},
+					},
+				},
+			},
+		}
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		if receivedDef.Headers["Authorization"] != "resolved-key" {
-			t.Errorf("Headers[Authorization]: got %q, want %q", receivedDef.Headers["Authorization"], "resolved-key")
+		conn := receivedDef.Connections["default"]
+		if conn.Auth.AuthorizationParams["api_key"] != "resolved-key" {
+			t.Errorf("AuthorizationParams[api_key]: got %q, want %q", conn.Auth.AuthorizationParams["api_key"], "resolved-key")
 		}
 	})
 
@@ -836,17 +844,26 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		intg := cfg.Integrations["alpha"]
-		intg.Auth.TokenMetadata = []string{"secret://meta-val"}
-		cfg.Integrations["alpha"] = intg
+		cfg.Integrations["alpha"] = config.IntegrationDef{
+			Connections: map[string]config.ConnectionDef{
+				"default": {
+					Mode: "none",
+					Auth: config.ConnectionAuthDef{
+						Type:          "oauth2",
+						TokenMetadata: []string{"secret://meta-val"},
+					},
+				},
+			},
+		}
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		if len(receivedDef.Auth.TokenMetadata) != 1 || receivedDef.Auth.TokenMetadata[0] != "resolved-meta" {
-			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Auth.TokenMetadata)
+		conn := receivedDef.Connections["default"]
+		if len(conn.Auth.TokenMetadata) != 1 || conn.Auth.TokenMetadata[0] != "resolved-meta" {
+			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", conn.Auth.TokenMetadata)
 		}
 	})
 }

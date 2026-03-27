@@ -21,5 +21,10 @@ func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps 
 	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
 		return nil, fmt.Errorf("bigquery: parsing embedded definition: %w", err)
 	}
-	return provider.Build(&def, intg, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+	conn, err := bootstrap.ResolveAPIConnection(intg)
+	if err != nil {
+		return nil, fmt.Errorf("bigquery: %w", err)
+	}
+	provider.ApplyDisplayOverrides(&def, intg)
+	return provider.Build(&def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 }

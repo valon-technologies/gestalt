@@ -363,7 +363,6 @@ server:
   encryption_key: test-e2e-key
 integrations:
   example:
-    connection_mode: none
     plugin:
       package: %s
 `, filepath.Join(dir, "gestalt.db"), port, packageRef)

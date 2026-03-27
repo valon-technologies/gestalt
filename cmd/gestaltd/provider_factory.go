@@ -59,14 +59,11 @@ type providerAssembly struct {
 
 	apiProv core.Provider
 	mcpUp   *mcpupstream.Upstream
-	mcpDef  *config.UpstreamDef
+	mcpConn *config.ConnectionDef
 }
 
 func (a *providerAssembly) build() (_ core.Provider, err error) {
-	connMode, err := connectionModeForIntegration(a.intg)
-	if err != nil {
-		return nil, err
-	}
+	connMode := connectionModeForIntegration(a.intg)
 
 	defer func() {
 		if err != nil {
@@ -74,79 +71,48 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 		}
 	}()
 
-	for i := range a.intg.Upstreams {
-		if err := a.addUpstream(&a.intg.Upstreams[i], connMode); err != nil {
+	if a.intg.API != nil {
+		conn := a.intg.Connections[a.intg.API.Connection]
+		buildOpts := []provider.BuildOption{
+			provider.WithEgressResolver(a.deps.Egress.Resolver),
+		}
+		if conn.Auth.Type == "mcp_oauth" {
+			mcpURL := ""
+			if a.intg.MCP != nil {
+				mcpURL = a.intg.MCP.URL
+			}
+			buildOpts = append(buildOpts, provider.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, a.regStore, a.deps)))
+		}
+
+		p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, *a.intg.API, conn, a.preparedProviders, buildOpts...)
+		if err != nil {
 			return nil, err
 		}
-	}
-	return a.compose(connMode)
-}
-
-func (a *providerAssembly) addUpstream(us *config.UpstreamDef, connMode core.ConnectionMode) error {
-	switch us.Type {
-	case config.UpstreamTypeREST, config.UpstreamTypeGraphQL:
-		return a.addAPIUpstream(*us)
-	case config.UpstreamTypeMCP:
-		return a.addMCPUpstream(us, connMode)
-	default:
-		return fmt.Errorf("unknown upstream type %q", us.Type)
-	}
-}
-
-func (a *providerAssembly) addAPIUpstream(us config.UpstreamDef) error {
-	if a.apiProv != nil {
-		return fmt.Errorf("multiple api upstreams not supported")
+		a.apiProv = p
 	}
 
-	buildOpts := []provider.BuildOption{
-		provider.WithEgressResolver(a.deps.Egress.Resolver),
-	}
-	if us.Auth.Type == "mcp_oauth" {
-		buildOpts = append(buildOpts, provider.WithAuthHandler(buildMCPOAuthHandlerFromUpstream(us, a.regStore, a.deps)))
-	}
-
-	p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, us, a.preparedProviders, buildOpts...)
-	if err != nil {
-		return err
-	}
-	a.apiProv = p
-	return nil
-}
-
-func (a *providerAssembly) addMCPUpstream(us *config.UpstreamDef, connMode core.ConnectionMode) error {
-	if a.mcpUp != nil {
-		return fmt.Errorf("multiple mcp upstreams not supported")
-	}
-
-	up, err := mcpupstream.New(a.ctx, a.name, us.URL, connMode, a.deps.Egress.Resolver)
-	if err != nil {
-		return err
-	}
-	if us.AllowedOperations != nil {
-		if err := up.FilterOperations(map[string]string(us.AllowedOperations)); err != nil {
-			_ = up.Close()
-			return err
+	if a.intg.MCP != nil {
+		conn := a.intg.Connections[a.intg.MCP.Connection]
+		up, err := mcpupstream.New(a.ctx, a.name, a.intg.MCP.URL, connMode, a.deps.Egress.Resolver)
+		if err != nil {
+			return nil, err
 		}
+		a.mcpUp = up
+		a.mcpConn = &conn
 	}
 
-	a.mcpUp = up
-	a.mcpDef = us
-	return nil
-}
-
-func (a *providerAssembly) compose(connMode core.ConnectionMode) (core.Provider, error) {
 	switch {
 	case a.apiProv != nil && a.mcpUp != nil:
 		return composite.New(a.name, a.apiProv, a.mcpUp), nil
 	case a.apiProv != nil:
 		return a.apiProv, nil
 	case a.mcpUp != nil:
-		if a.mcpDef != nil && a.mcpDef.Auth.Type == "mcp_oauth" {
-			return buildMCPOAuthProvider(a.name, a.intg, *a.mcpDef, a.mcpUp, a.regStore, a.deps, connMode)
+		if a.mcpConn != nil && a.mcpConn.Auth.Type == "mcp_oauth" {
+			return buildMCPOAuthProvider(a.name, a.intg, *a.mcpConn, a.mcpUp, a.regStore, a.deps, connMode)
 		}
 		return a.mcpUp, nil
 	default:
-		return nil, fmt.Errorf("no upstreams configured")
+		return nil, fmt.Errorf("no surfaces configured")
 	}
 }
 
@@ -156,17 +122,8 @@ func (a *providerAssembly) cleanup() {
 	}
 }
 
-func connectionModeForIntegration(intg config.IntegrationDef) (core.ConnectionMode, error) {
-	connMode := core.ConnectionModeUser
-	switch core.ConnectionMode(intg.ConnectionMode) {
-	case "", core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModeIdentity, core.ConnectionModeEither:
-		if intg.ConnectionMode != "" {
-			connMode = core.ConnectionMode(intg.ConnectionMode)
-		}
-	default:
-		return "", fmt.Errorf("unknown connection_mode %q", intg.ConnectionMode)
-	}
-	return connMode, nil
+func connectionModeForIntegration(intg config.IntegrationDef) core.ConnectionMode {
+	return core.ConnectionMode(config.ConnectionMode(intg.Connections))
 }
 
 func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
@@ -190,28 +147,27 @@ func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
 	return store
 }
 
-func buildMCPOAuthHandlerFromUpstream(us config.UpstreamDef, store mcpoauth.RegistrationStore, deps bootstrap.Deps) *mcpoauth.Handler {
-	redirectURL := us.RedirectURL
+func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoauth.RegistrationStore, deps bootstrap.Deps) *mcpoauth.Handler {
+	redirectURL := conn.Auth.RedirectURL
 	if redirectURL == "" {
 		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
-	}
-
-	mcpURL := us.URL
-	if us.MCPURL != "" {
-		mcpURL = us.MCPURL
 	}
 
 	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
 		MCPURL:       mcpURL,
 		Store:        store,
 		RedirectURL:  redirectURL,
-		ClientID:     us.ClientID,
-		ClientSecret: us.ClientSecret,
+		ClientID:     conn.Auth.ClientID,
+		ClientSecret: conn.Auth.ClientSecret,
 	})
 }
 
-func buildMCPOAuthProvider(name string, intg config.IntegrationDef, us config.UpstreamDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps, connMode core.ConnectionMode) (core.Provider, error) {
-	handler := buildMCPOAuthHandlerFromUpstream(us, store, deps)
+func buildMCPOAuthProvider(name string, intg config.IntegrationDef, conn config.ConnectionDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps, connMode core.ConnectionMode) (core.Provider, error) {
+	mcpURL := ""
+	if intg.MCP != nil {
+		mcpURL = intg.MCP.URL
+	}
+	handler := buildMCPOAuthHandler(conn, mcpURL, store, deps)
 
 	baseProv := &mcpOAuthMetadataProvider{
 		name:        name,

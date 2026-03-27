@@ -11,7 +11,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
-	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
@@ -330,19 +329,29 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&intg, resolve); err != nil {
 			return err
 		}
+		for cname := range intg.Connections {
+			conn := intg.Connections[cname]
+			if err := resolveStringFields(&conn, resolve); err != nil {
+				return err
+			}
+			intg.Connections[cname] = conn
+		}
+		if intg.API != nil {
+			if err := resolveStringFields(intg.API, resolve); err != nil {
+				return err
+			}
+		}
+		if intg.MCP != nil {
+			if err := resolveStringFields(intg.MCP, resolve); err != nil {
+				return err
+			}
+		}
 		if intg.Plugin != nil {
 			if err := resolveYAMLNode(&intg.Plugin.Config, resolve); err != nil {
 				return err
 			}
 		}
 		cfg.Integrations[name] = intg
-	}
-	for name := range cfg.AuthProfiles {
-		profile := cfg.AuthProfiles[name]
-		if err := resolveStringFields(&profile, resolve); err != nil {
-			return err
-		}
-		cfg.AuthProfiles[name] = profile
 	}
 
 	// Skip cfg.Secrets.Config to avoid self-referential resolution.
@@ -548,51 +557,16 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
 	if intg.Plugin != nil {
-		mode := intg.Plugin.Mode
-		if mode == "" {
-			mode = config.PluginModeReplace
-		}
-
 		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 		}
-
-		if mode == config.PluginModeOverlay {
-			baseIntg := intg
-			baseIntg.Plugin = nil
-			baseFactory, err := overlayBaseFactory(name, intg, factories)
-			if err != nil {
-				return nil, err
-			}
-			baseProv, err := baseFactory(ctx, name, baseIntg, deps)
-			if err != nil {
-				return nil, fmt.Errorf("building overlay base: %w", err)
-			}
-			overlayProv, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
-				Command: intg.Plugin.Command,
-				Args:    intg.Plugin.Args,
-				Env:     intg.Plugin.Env,
-				Name:    name,
-				Config:  pluginConfig,
-				Mode:    mode,
-			})
-			if err != nil {
-				if c, ok := baseProv.(interface{ Close() error }); ok {
-					_ = c.Close()
-				}
-				return nil, fmt.Errorf("building overlay plugin: %w", err)
-			}
-			return composite.NewOverlay(name, baseProv, overlayProv), nil
-		}
-
 		return pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
 			Command: intg.Plugin.Command,
 			Args:    intg.Plugin.Args,
 			Env:     intg.Plugin.Env,
 			Name:    name,
 			Config:  pluginConfig,
-			Mode:    mode,
 		})
 	}
 
@@ -614,41 +588,24 @@ func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFa
 	return factory, nil
 }
 
-func overlayBaseFactory(name string, intg config.IntegrationDef, factories *FactoryRegistry) (ProviderFactory, error) {
-	if len(intg.Upstreams) > 0 {
-		if factories.DefaultProvider == nil {
-			return nil, fmt.Errorf("no default provider factory for overlay base %q", name)
-		}
-		return factories.DefaultProvider, nil
-	}
-	baseName := intg.Plugin.Base
-	factory, err := registeredProviderFactory(baseName, factories)
-	if err != nil {
-		return nil, fmt.Errorf("no provider factory for overlay base %q", baseName)
-	}
-	return factory, nil
-}
-
-func registeredProviderFactory(name string, factories *FactoryRegistry) (ProviderFactory, error) {
-	factory, ok := factories.Providers[name]
-	if !ok || factory == nil {
-		return nil, fmt.Errorf("no provider factory for %q", name)
-	}
-	return factory, nil
-}
-
 func validateProviderBuildAvailable(name string, intg config.IntegrationDef, factories *FactoryRegistry) error {
 	if intg.Plugin != nil {
-		mode := intg.Plugin.Mode
-		if mode == "" {
-			mode = config.PluginModeReplace
-		}
-		if mode == config.PluginModeOverlay {
-			_, err := overlayBaseFactory(name, intg, factories)
-			return err
-		}
 		return nil
 	}
 	_, err := providerFactoryForName(name, factories)
 	return err
+}
+
+// ResolveAPIConnection returns the ConnectionDef referenced by the
+// integration's API surface. Named provider factories use this to extract
+// auth configuration from the V1 manifest.
+func ResolveAPIConnection(intg config.IntegrationDef) (config.ConnectionDef, error) {
+	if intg.API == nil {
+		return config.ConnectionDef{}, fmt.Errorf("integration has no api surface")
+	}
+	conn, ok := intg.Connections[intg.API.Connection]
+	if !ok {
+		return config.ConnectionDef{}, fmt.Errorf("api.connection %q not found in connections", intg.API.Connection)
+	}
+	return conn, nil
 }
