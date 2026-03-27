@@ -440,6 +440,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
+		for i := range intg.Upstreams {
+			intg.Upstreams[i].URL = resolveUpstreamURL(baseDir, intg.Upstreams[i].URL)
+		}
 		if intg.Plugin != nil {
 			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
 			intg.Plugin.Package = resolvePackagePath(baseDir, intg.Plugin.Package)
@@ -472,6 +475,13 @@ func resolveExecutablePath(baseDir, value string) string {
 		return filepath.Clean(filepath.Join(baseDir, value))
 	}
 	return value
+}
+
+func resolveUpstreamURL(baseDir, value string) string {
+	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
+		return value
+	}
+	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
 func resolvePackagePath(baseDir, value string) string {
