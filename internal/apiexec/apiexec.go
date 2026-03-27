@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 )
+
+var ErrMissingPathParam = errors.New("missing required path parameter")
 
 const (
 	defaultMaxRetries   = 3
@@ -351,7 +354,7 @@ func substitutePath(path string, params map[string]any) (string, error) {
 		key := match[1 : len(match)-1]
 		v, ok := params[key]
 		if !ok {
-			missingErr = fmt.Errorf("missing required path parameter: %s", key)
+			missingErr = fmt.Errorf("%w: %s", ErrMissingPathParam, key)
 			return match
 		}
 		delete(params, key)
