@@ -556,9 +556,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 
 	connection := req.Connection
 	if connection == "" {
-		connection = s.defaultConnection[req.Integration]
-	}
-	if connection == "" {
 		connection = config.PluginConnectionName
 	}
 	if !safeParamValue.MatchString(connection) {
@@ -779,9 +776,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	manualConnection := req.Connection
-	if manualConnection == "" {
-		manualConnection = s.defaultConnection[req.Integration]
-	}
 	if manualConnection == "" {
 		manualConnection = config.PluginConnectionName
 	}
