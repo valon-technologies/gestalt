@@ -1067,120 +1067,127 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 	}
 }
 
-func TestNewServer_DirectCallerForwardsMeta(t *testing.T) {
+func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	t.Parallel()
 
+	const (
+		providerName  = "svc"
+		operationName = "do_thing"
+		toolName      = providerName + "_" + operationName
+		tokenValue    = "test-token-abc"
+	)
+
+	var gotName string
+	var gotArgs map[string]any
 	var gotMeta *mcpgo.Meta
+	var gotToken string
+
+	inputSchema := json.RawMessage(`{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}`)
+	outputSchema := json.RawMessage(`{"type":"object","properties":{"items":{"type":"array"}}}`)
 
 	cat := &catalog.Catalog{
-		Name: "upstream",
+		Name: providerName,
 		Operations: []catalog.CatalogOperation{
 			{
-				ID:          "do_thing",
-				Description: "Do a thing",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           operationName,
+				Description:  "A passthrough operation",
+				Transport:    catalog.TransportMCPPassthrough,
+				InputSchema:  inputSchema,
+				OutputSchema: outputSchema,
 			},
 		},
 	}
 
 	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "upstream"},
-		ops:             []core.Operation{{Name: "do_thing", Description: "Do a thing"}},
+		StubIntegration: coretesting.StubIntegration{N: providerName},
+		ops:             []core.Operation{{Name: operationName, Description: "A passthrough operation"}},
 		cat:             cat,
 		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			gotName = name
+			gotArgs = args
 			gotMeta = mcpupstream.CallToolMetaFromContext(ctx)
-			return mcpgo.NewToolResultText("ok"), nil
+			gotToken = mcpupstream.UpstreamTokenFromContext(ctx)
+			return &mcpgo.CallToolResult{
+				Content:           []mcpgo.Content{mcpgo.NewTextContent(`{"ok":true}`)},
+				StructuredContent: map[string]any{"ok": true},
+			}, nil
 		},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "t"},
+		TokenResolver: &stubTokenResolver{token: tokenValue},
 		Providers:     providers,
 	})
 
-	tool := srv.GetTool("upstream_do_thing")
-	if tool == nil {
-		t.Fatal("tool not found")
-	}
-
-	ctx := ctxWithPrincipal()
-	req := mcpgo.CallToolRequest{}
-	req.Params.Name = "upstream_do_thing"
-	req.Params.Meta = &mcpgo.Meta{ProgressToken: mcpgo.ProgressToken("prog-1")}
-
-	result, err := tool.Handler(ctx, req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if gotMeta == nil {
-		t.Fatal("expected meta to be forwarded via context")
-	}
-	if gotMeta.ProgressToken != mcpgo.ProgressToken("prog-1") {
-		t.Fatalf("expected progress token prog-1, got %v", gotMeta.ProgressToken)
-	}
-}
-
-func TestNewServer_OutputSchemaPreserved(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "upstream",
-		Operations: []catalog.CatalogOperation{
-			{
-				ID:           "typed_op",
-				Description:  "Has output schema",
-				Transport:    catalog.TransportMCPPassthrough,
-				InputSchema:  json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`),
-				OutputSchema: json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"}}}`),
-			},
-		},
-	}
-
-	prov := &catalogProvider{
-		StubIntegration: coretesting.StubIntegration{N: "upstream"},
-		ops:             coreintegration.OperationsList(cat),
-		catalog:         cat,
-	}
-
-	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
-
-	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
-	})
-
 	tools := srv.ListTools()
-	st := tools["upstream_typed_op"]
+	st := tools[toolName]
 	if st == nil {
-		t.Fatal("expected upstream_typed_op tool")
+		t.Fatalf("tool %q not in list", toolName)
 	}
 
 	raw, err := json.Marshal(st.Tool)
 	if err != nil {
 		t.Fatalf("marshal tool: %v", err)
 	}
-
 	var toolJSON map[string]any
 	if err := json.Unmarshal(raw, &toolJSON); err != nil {
-		t.Fatalf("unmarshal tool JSON: %v", err)
+		t.Fatalf("unmarshal: %v", err)
 	}
-	os, ok := toolJSON["outputSchema"]
-	if !ok {
-		t.Fatal("expected outputSchema in tool JSON")
+	if toolJSON["inputSchema"] == nil {
+		t.Fatal("inputSchema missing from tool definition")
 	}
-	osMap, ok := os.(map[string]any)
-	if !ok {
-		t.Fatalf("expected outputSchema to be a map, got %T", os)
+	if toolJSON["outputSchema"] == nil {
+		t.Fatal("outputSchema missing from tool definition")
 	}
-	if osMap["type"] != "object" {
-		t.Fatalf("expected outputSchema type=object, got %v", osMap["type"])
+
+	tool := srv.GetTool(toolName)
+	if tool == nil {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	ctx := ctxWithPrincipal()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = toolName
+	req.Params.Arguments = map[string]any{"input": "hello"}
+	req.Params.Meta = &mcpgo.Meta{
+		ProgressToken:    mcpgo.ProgressToken("pt-1"),
+		AdditionalFields: map[string]any{"custom_field": "custom_value"},
+	}
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotName != operationName {
+		t.Fatalf("upstream received name %q, want %q", gotName, operationName)
+	}
+	if gotArgs["input"] != "hello" {
+		t.Fatalf("upstream received args %v, want input=hello", gotArgs)
+	}
+	if gotToken != tokenValue {
+		t.Fatalf("upstream received token %q, want %q", gotToken, tokenValue)
+	}
+	if gotMeta == nil {
+		t.Fatal("upstream did not receive _meta")
+	}
+	if gotMeta.ProgressToken != mcpgo.ProgressToken("pt-1") {
+		t.Fatalf("upstream received progressToken %v, want pt-1", gotMeta.ProgressToken)
+	}
+	if gotMeta.AdditionalFields["custom_field"] != "custom_value" {
+		t.Fatal("upstream did not receive _meta additional fields")
+	}
+
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if result.StructuredContent == nil {
+		t.Fatal("structuredContent not passed through from upstream")
+	}
+	if len(result.Content) != 1 {
+		t.Fatalf("expected 1 content item, got %d", len(result.Content))
 	}
 }
 
