@@ -31,7 +31,7 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *pluginapiv1.Sta
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	if starter, ok := s.provider.(ProviderStarter); ok {
-		if err := starter.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig()), protoPluginMode(req.GetMode())); err != nil {
+		if err := starter.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig())); err != nil {
 			return nil, status.Errorf(codes.Unknown, "start provider: %v", err)
 		}
 	}

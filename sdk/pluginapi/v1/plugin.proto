@@ -16,12 +16,6 @@ enum ConnectionMode {
   CONNECTION_MODE_EITHER = 4;
 }
 
-enum PluginMode {
-  PLUGIN_MODE_UNSPECIFIED = 0;
-  PLUGIN_MODE_REPLACE = 1;
-  PLUGIN_MODE_OVERLAY = 2;
-}
-
 enum PrincipalSource {
   PRINCIPAL_SOURCE_UNSPECIFIED = 0;
   PRINCIPAL_SOURCE_SESSION = 1;
@@ -175,7 +169,6 @@ message InvokeRequest {
 message StartProviderRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
-  PluginMode mode = 3;
   int32 protocol_version = 4;
 }
 

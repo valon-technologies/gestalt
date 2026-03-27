@@ -13,8 +13,6 @@ const (
 	ConnectionModeEither   ConnectionMode = "either"
 )
 
-const PluginModeReplace = "replace"
-
 type Provider interface {
 	Name() string
 	DisplayName() string
@@ -25,7 +23,7 @@ type Provider interface {
 }
 
 type ProviderStarter interface {
-	Start(ctx context.Context, name string, config map[string]any, mode string) error
+	Start(ctx context.Context, name string, config map[string]any) error
 }
 
 type Operation struct {
