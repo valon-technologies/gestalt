@@ -163,6 +163,16 @@ func (g *GuardedInvoker) check(meta *InvocationMeta, providerName, instance, ope
 	return nil
 }
 
+func (g *GuardedInvoker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+	type resolver interface {
+		ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error)
+	}
+	if r, ok := g.inner.(resolver); ok {
+		return r.ResolveToken(ctx, p, providerName, connection, instance)
+	}
+	return "", fmt.Errorf("token resolution not supported")
+}
+
 func (g *GuardedInvoker) logAudit(entry core.AuditEntry) {
 	if g.audit != nil {
 		g.audit.Log(entry)

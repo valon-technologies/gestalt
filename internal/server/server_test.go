@@ -788,7 +788,12 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 func TestListOperations(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "test-int"}
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+		},
+	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
@@ -810,6 +815,23 @@ func TestListOperations(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	if _, ok := ops[0]["id"]; !ok {
+		t.Fatal("expected camelCase 'id' key in response")
+	}
+	if _, ok := ops[0]["Name"]; ok {
+		t.Fatal("expected camelCase keys, found PascalCase 'Name'")
+	}
+	if ops[0]["id"] != "do_thing" {
+		t.Fatalf("expected id 'do_thing', got %v", ops[0]["id"])
 	}
 }
 

@@ -287,11 +287,22 @@ func (s *Server) requireOAuthProvider(w http.ResponseWriter, name string) (core.
 }
 
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
-	prov, ok := s.getProvider(w, chi.URLParam(r, "name"))
+	name := chi.URLParam(r, "name")
+	prov, ok := s.getProvider(w, name)
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, prov.ListOperations())
+	p := PrincipalFromContext(r.Context())
+	var resolver tokenResolver
+	if tr, ok := s.invoker.(tokenResolver); ok {
+		resolver = tr
+	}
+	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, s.defaultConnection[name])
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve catalog")
+		return
+	}
+	writeJSON(w, http.StatusOK, cat.Operations)
 }
 
 func (s *Server) listRuntimes(w http.ResponseWriter, _ *http.Request) {
