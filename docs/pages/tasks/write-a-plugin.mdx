@@ -101,7 +101,6 @@ Reference the package in your Gestalt config:
 ```yaml
 integrations:
   my-tool:
-    connection_mode: none
     plugin:
       package: ./my-tool.tar.gz
 ```
@@ -112,31 +111,6 @@ Then bundle and serve:
 gestaltd bundle --config config.yaml --output ./bundle
 gestaltd serve --locked --config ./bundle/config.yaml
 ```
-
-## Overlay plugins
-
-An overlay plugin adds custom operations on top of an existing REST or GraphQL upstream. The base upstream handles its own operations; the plugin handles only the operations it declares.
-
-```yaml
-integrations:
-  enhanced-api:
-    connection_mode: none
-    auth_style: none
-    plugin:
-      mode: overlay
-      package: ./my-overlay.tar.gz
-    upstreams:
-      - type: rest
-        url: https://api.example.com/openapi.json
-```
-
-The overlay plugin receives `mode: "overlay"` during startup via the `Start` method. It should return only its custom operations from `ListOperations`; the host merges them with the base upstream's operations.
-
-### Auth inheritance
-
-Overlay plugins inherit auth and connection behavior from the base declarative integration. If your overlay does not need OAuth tokens, set both `connection_mode: none` and `auth_style: none` on the integration. Without both, invocations will fail because the host expects a connected session.
-
-For overlays on OAuth-protected APIs (Gmail, Slack, etc.), keep the normal auth configuration. The resolved token is passed to `Execute` so the plugin can make its own authenticated API calls.
 
 ## Manual auth plugins
 

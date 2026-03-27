@@ -8,8 +8,8 @@ import (
 )
 
 // oauthDelegator implements all OAuth-related methods by delegating to a
-// core.OAuthProvider. Both oauthProvider and overlayOAuthProvider embed
-// this to avoid duplicating the delegation logic.
+// core.OAuthProvider. oauthProvider embeds this to avoid duplicating the
+// delegation logic.
 type oauthDelegator struct {
 	oauth core.OAuthProvider
 }

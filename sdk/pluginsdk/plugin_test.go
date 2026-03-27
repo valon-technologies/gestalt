@@ -205,7 +205,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
 		Name:            "my-instance",
 		Config:          cfg,
-		Mode:            pluginapiv1.PluginMode_PLUGIN_MODE_OVERLAY,
+		Mode:            pluginapiv1.PluginMode_PLUGIN_MODE_REPLACE,
 		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
 	})
 	if err != nil {
@@ -220,8 +220,8 @@ func TestProviderServerStartProvider(t *testing.T) {
 	if prov.startConfig["key"] != "val" {
 		t.Errorf("startConfig[key] = %v, want %q", prov.startConfig["key"], "val")
 	}
-	if prov.startMode != pluginsdk.PluginModeOverlay {
-		t.Errorf("startMode = %q, want %q", prov.startMode, pluginsdk.PluginModeOverlay)
+	if prov.startMode != pluginsdk.PluginModeReplace {
+		t.Errorf("startMode = %q, want %q", prov.startMode, pluginsdk.PluginModeReplace)
 	}
 }
 

@@ -18,7 +18,7 @@ At the highest level, `gestaltd` does four things:
 | `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
 | `datastore` | Persists users, API tokens, integration tokens, staged connections, and some egress data. |
 | `secrets` | Resolves `secret://...` references during bootstrap. |
-| `integrations` | Define the user-facing provider graph: upstreams, auth behavior, connection mode, operation allowlists, overlays, and metadata. |
+| `integrations` | Define the user-facing provider graph: connections, API/MCP surfaces, plugins, and metadata. |
 | `runtimes` | Long-lived background workers with scoped access to selected providers. |
 | `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
 | `egress` | Policy and credential rules for outbound traffic. |
@@ -30,7 +30,7 @@ This is the actual shape of startup:
 1. Load YAML from the resolved config path.
 2. Expand `${ENV_VAR}` placeholders.
 3. Apply defaults such as `server.port: 8080` and `secrets.provider: env`.
-4. Resolve auth profiles and inherited upstream auth.
+4. Resolve connection auth and inherited parameters.
 5. Fill redirect URLs from `server.base_url` when possible.
 6. Resolve relative paths against the config file directory.
 7. Validate the config.
@@ -57,19 +57,18 @@ Providers can come from three sources:
 
 | Source | How it works |
 | --- | --- |
-| Built-in named provider | `plugin.base` or a registered provider name such as `bigquery` or `jira`. |
-| Upstream-defined provider | Built from a REST, GraphQL, or MCP upstream in config. |
+| Built-in named provider | A registered provider name such as `bigquery` or `jira`. |
+| Surface-defined provider | Built from a REST, GraphQL, or MCP surface in config. |
 | Executable plugin | Spawned as a separate process and connected over the plugin protocol. |
 
 ## Composition Rules
 
 The composition rules are intentionally narrow:
 
-- an integration may have at most one REST or GraphQL upstream
-- an integration may have at most one MCP upstream
-- one API upstream plus one MCP upstream is valid
-- a provider plugin normally replaces upstreams entirely
-- `plugin.mode: overlay` lets a provider plugin wrap exactly one base source
+- an integration may have at most one `api` surface (REST or GraphQL)
+- an integration may have at most one `mcp` surface
+- one `api` surface plus one `mcp` surface is valid
+- a `plugin` block replaces declarative surfaces entirely
 
 That gives you a predictable composition model:
 
@@ -78,7 +77,7 @@ That gives you a predictable composition model:
 - MCP only
 - REST plus MCP
 - GraphQL plus MCP
-- overlay plugin on top of one of the above
+- plugin only
 
 ## The Shared Invocation Broker
 
@@ -87,7 +86,7 @@ Every execution path in Gestalt goes through the same invocation broker. That is
 The broker is responsible for:
 
 - locating the target provider and operation
-- resolving credentials based on `connection_mode`
+- resolving credentials based on connection mode
 - choosing an instance when multiple connections exist
 - refreshing expiring OAuth tokens
 - injecting connection metadata into execution context
@@ -123,7 +122,7 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 | --- | --- |
 | HTTP API | `/api/v1/...` for integration listing, auth flows, invocation, and token management. |
 | Embedded web UI | Served by the same server process and port as the API. |
-| MCP endpoint | `/mcp`, mounted only when at least one integration is MCP-enabled. |
+| MCP endpoint | `/mcp`, mounted when at least one integration exposes tools. |
 | Bindings | Additional routes and triggers declared under `bindings:`. |
 | Runtimes | Background workers declared under `runtimes:`. |
 
@@ -133,8 +132,8 @@ As a Gestalt operator, the main primitives you compose are:
 
 - top-level config blocks
 - integration definitions
-- upstream definitions
-- auth profiles
+- connection definitions
+- API and MCP surface definitions
 - runtime definitions
 - binding definitions
 - egress rules
