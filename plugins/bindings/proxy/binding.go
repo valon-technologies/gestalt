@@ -134,7 +134,6 @@ func (b *Binding) resolve(r *http.Request) (egress.Resolution, []byte, error) {
 	headers := sanitizeForwardHeaders(normalizeHeaders(r.Header))
 	target := egress.Target{
 		Provider: b.provider,
-		Instance: b.cfg.Instance,
 		Method:   r.Method,
 		Host:     resolveHost(r),
 		Path:     resolvePath(r, b.cfg.normalizedPath()),
