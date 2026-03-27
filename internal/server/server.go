@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/registry"
@@ -27,6 +28,7 @@ type Server struct {
 	resolver          *principal.Resolver
 	invoker           invocation.Invoker
 	defaultConnection map[string]string
+	integrationDefs   map[string]config.IntegrationDef
 	devMode           bool
 	stateCodec        *integrationOAuthStateCodec
 	now               func() time.Time
@@ -42,7 +44,8 @@ type Config struct {
 	Runtimes          *registry.PluginMap[core.Runtime]
 	Bindings          *registry.PluginMap[core.Binding]
 	Invoker           invocation.Invoker
-	DefaultConnection map[string]string // integration name -> default connection name
+	DefaultConnection map[string]string
+	IntegrationDefs   map[string]config.IntegrationDef
 	DevMode           bool
 	StateSecret       []byte
 	Now               func() time.Time
@@ -78,6 +81,7 @@ func New(cfg Config) (*Server, error) {
 		resolver:          principal.NewResolver(cfg.Auth, cfg.Datastore),
 		invoker:           cfg.Invoker,
 		defaultConnection: cfg.DefaultConnection,
+		integrationDefs:   cfg.IntegrationDefs,
 		devMode:           cfg.DevMode,
 		stateCodec:        stateCodec,
 		now:               now,

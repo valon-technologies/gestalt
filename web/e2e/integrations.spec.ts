@@ -212,11 +212,11 @@ test.describe("Integrations", () => {
 
     await page.goto("/integrations");
     await page.getByRole("button", { name: "Manual Service settings" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Connect" }).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible();
-    await expect(page.getByLabel("API Token")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Submit" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Connect" }).click();
+    await expect(dialog.getByLabel(/API token/i)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Submit" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
   });
 
   test("manual auth submits credential and refreshes", async ({
@@ -239,9 +239,9 @@ test.describe("Integrations", () => {
 
     await page.goto("/integrations");
     await page.getByRole("button", { name: "Manual Service settings" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Connect" }).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible();
-    await page.getByLabel("API Token").fill("test-api-key-123");
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Connect" }).click();
+    await dialog.getByLabel(/API token/i).fill("test-api-key-123");
 
     await page.route("**/api/v1/integrations", (route, request) => {
       if (request.method() === "GET") {
@@ -251,7 +251,7 @@ test.describe("Integrations", () => {
       }
     });
 
-    await page.getByRole("button", { name: "Submit" }).click();
+    await dialog.getByRole("button", { name: "Submit" }).click();
     await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
     expect(receivedCredential).toBe("test-api-key-123");
   });
@@ -264,12 +264,11 @@ test.describe("Integrations", () => {
 
     await page.goto("/integrations");
     await page.getByRole("button", { name: "Manual Service settings" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Connect" }).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible();
-    await expect(page.getByLabel("API Token")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByLabel("API Token")).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Connect" }).click();
+    await expect(dialog.getByLabel(/API token/i)).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog.getByText("Not connected")).toBeVisible();
   });
 
   test("manual auth reconnect opens token form via settings modal", async ({
@@ -283,11 +282,9 @@ test.describe("Integrations", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("default")).toBeVisible();
     await dialog.getByRole("button", { name: "Add Connection" }).click();
-    // Modal closes and instance name form appears
-    await expect(page.getByRole("dialog")).not.toBeVisible();
-    await expect(page.getByLabel("Connection name")).toBeVisible();
-    await page.getByLabel("Connection name").fill("second");
-    await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByLabel("API Token")).toBeVisible();
+    await expect(dialog.getByLabel("Connection name")).toBeVisible();
+    await dialog.getByLabel("Connection name").fill("second");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByLabel(/API token/i)).toBeVisible();
   });
 });
