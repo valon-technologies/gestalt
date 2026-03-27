@@ -27,8 +27,7 @@ gestaltd serve --locked --config ./bundle/config.yaml
 | `gestaltd bundle --config PATH --output DIR` | Production prep: produces a self-contained deployable bundle. |
 | `gestaltd serve --locked --config PATH` | Production runtime: serves from prepared state only. |
 | `gestaltd validate --config PATH` | CI: validates config without starting the server. |
-| `gestaltd plugin package --input DIR --output FILE` | Authoring: packages a plugin for distribution. |
-| `gestaltd plugin init --id ID --kind KIND --output DIR` | Authoring: scaffolds a plugin package directory. |
+| `gestaltd plugin package --binary PATH --id ID --output FILE` | Authoring: packages a plugin binary for distribution. |
 
 ## Docker
 
