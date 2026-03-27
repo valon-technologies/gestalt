@@ -35,8 +35,8 @@ func run(args []string) error {
 			return runPlugin(args[1:])
 		case "serve":
 			return runServe(args[1:])
-		case "init":
-			return runInit(args[1:])
+		case "bundle":
+			return runBundle(args[1:])
 		case "validate":
 			return runValidate(args[1:])
 		}
@@ -358,15 +358,15 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]")
-	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
+	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR [--plugin ID=PATH ...]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--locked]")
-	writeUsageLine(w, "  gestaltd init [--config PATH]")
+	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--init]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  plugin      Package plugins for distribution")
+	writeUsageLine(w, "  bundle      Prepare a self-contained bundle for production deployment")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
-	writeUsageLine(w, "  init        Hydrate plugin packages and provider artifacts into locked local state")
+	writeUsageLine(w, "  plugin      Package plugins for distribution")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
@@ -379,20 +379,7 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
 	writeUsageLine(w, "Use --locked for production deployments to prevent automatic mutation")
-	writeUsageLine(w, "at startup. When locked, run `gestaltd init` first to hydrate state.")
-}
-
-func printInitUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd init [--config PATH]")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Hydrate plugin packages and remote provider specs into locked local state:")
-	writeUsageLine(w, "  - gestalt.lock.json")
-	writeUsageLine(w, "  - .gestalt/providers/*.json")
-	writeUsageLine(w, "  - .gestalt/plugins/...")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "HTTPS URL packages are always re-fetched. Run init explicitly to pick")
-	writeUsageLine(w, "up remote content changes.")
+	writeUsageLine(w, "at startup. When locked, run `gestaltd bundle` first to prepare state.")
 }
 
 func printValidateUsage(w io.Writer) {
