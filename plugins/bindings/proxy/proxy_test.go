@@ -1,11 +1,9 @@
 package proxy
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,27 +22,7 @@ func TestProxyRoutes(t *testing.T) {
 	b := testBinding(t, "/proxy", nil)
 	routes := b.Routes()
 	if len(routes) != 14 {
-		t.Fatalf("expected 14 routes (7 methods x 2 patterns, no CONNECT without policy), got %d", len(routes))
-	}
-	for _, route := range routes {
-		if route.Connect {
-			t.Fatal("CONNECT should not be registered without a policy enforcer")
-		}
-	}
-
-	withPolicy := New("test-proxy", "test-provider", proxyConfig{Path: "/proxy"}, egress.Resolver{
-		Subjects: egress.ContextSubjectResolver{},
-		Policy:   egress.StaticPolicyEnforcer{DefaultAction: egress.PolicyAllow},
-	}, nil)
-	policyRoutes := withPolicy.Routes()
-	var hasConnect bool
-	for _, route := range policyRoutes {
-		if route.Connect {
-			hasConnect = true
-		}
-	}
-	if !hasConnect {
-		t.Fatal("expected CONNECT route when policy enforcer is configured")
+		t.Fatalf("expected 14 routes (7 methods x 2 patterns), got %d", len(routes))
 	}
 
 	patterns := map[string]int{}
@@ -215,105 +193,6 @@ func TestProxyForwardsUpstreamErrors(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
 		t.Fatalf("Content-Type = %q, want application/json", ct)
-	}
-}
-
-func TestProxyCONNECTEstablishesTunnel(t *testing.T) {
-	t.Parallel()
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-
-	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		buf := make([]byte, 256)
-		n, _ := conn.Read(buf)
-		if n > 0 {
-			_, _ = conn.Write(buf[:n])
-		}
-	}()
-
-	host := ln.Addr().String()
-	b := testBinding(t, "/proxy", nil)
-
-	clientConn, serverConn := net.Pipe()
-	defer func() { _ = clientConn.Close() }()
-
-	hijacker := &fakeHijacker{
-		ResponseRecorder: httptest.NewRecorder(),
-		conn:             serverConn,
-	}
-
-	req := httptest.NewRequest(http.MethodConnect, host, nil)
-	req.Host = host
-	req.RequestURI = host
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		b.Routes()[0].Handler.ServeHTTP(hijacker, req)
-	}()
-
-	buf := make([]byte, 256)
-	n, err := clientConn.Read(buf)
-	if err != nil {
-		t.Fatalf("read from tunnel: %v", err)
-	}
-	response := string(buf[:n])
-	if !strings.Contains(response, "200 Connection Established") {
-		t.Fatalf("expected 200 Connection Established, got: %s", response)
-	}
-
-	_, err = clientConn.Write([]byte("hello"))
-	if err != nil {
-		t.Fatalf("write to tunnel: %v", err)
-	}
-
-	n, err = clientConn.Read(buf)
-	if err != nil {
-		t.Fatalf("read echo: %v", err)
-	}
-	if string(buf[:n]) != "hello" {
-		t.Fatalf("echo = %q, want hello", string(buf[:n]))
-	}
-
-	_ = clientConn.Close()
-	<-done
-}
-
-func TestProxyCONNECTPolicyDenied(t *testing.T) {
-	t.Parallel()
-
-	policy := egress.StaticPolicyEnforcer{
-		DefaultAction: egress.PolicyDeny,
-	}
-
-	resolver := egress.Resolver{
-		Subjects: egress.ContextSubjectResolver{},
-		Policy:   policy,
-	}
-
-	b := New("test-proxy", "test-provider", proxyConfig{Path: "/proxy"}, resolver, nil)
-
-	req := httptest.NewRequest(http.MethodConnect, "api.example.com:443", nil)
-	req.Host = "api.example.com:443"
-	req.RequestURI = "api.example.com:443"
-
-	ctx := principal.WithPrincipal(req.Context(), &principal.Principal{UserID: "user-1"})
-	req = req.WithContext(ctx)
-
-	w := httptest.NewRecorder()
-	b.Routes()[0].Handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
 
@@ -638,14 +517,4 @@ type subjectCapturingResolver struct {
 func (r subjectCapturingResolver) ResolveCredential(_ context.Context, subject egress.Subject, _ egress.Target) (egress.CredentialMaterialization, error) {
 	r.capture(subject)
 	return egress.CredentialMaterialization{}, nil
-}
-
-type fakeHijacker struct {
-	*httptest.ResponseRecorder
-	conn net.Conn
-}
-
-func (h *fakeHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	rw := bufio.NewReadWriter(bufio.NewReader(h.conn), bufio.NewWriter(h.conn))
-	return h.conn, rw, nil
 }

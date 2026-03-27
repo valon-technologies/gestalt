@@ -25,14 +25,6 @@ func (s *Server) mountBindingRoutes(r chi.Router) {
 					handler = s.authMiddleware(handler)
 				}
 			}
-			if route.Connect {
-				if s.connectHandler != nil {
-					log.Printf("warning: binding %q registers CONNECT but another binding already claimed it; skipping", name)
-					continue
-				}
-				s.connectHandler = handler
-				continue
-			}
 			r.Method(route.Method, "/bindings/"+name+route.Pattern, handler)
 		}
 	}

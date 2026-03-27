@@ -18,5 +18,4 @@ type Route struct {
 	Handler   http.Handler
 	Public    bool
 	ProxyAuth bool // use proxy auth semantics (Proxy-Authorization, 407 responses)
-	Connect   bool // handle CONNECT method (dispatched outside path-based routing)
 }
