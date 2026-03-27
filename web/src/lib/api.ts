@@ -9,6 +9,12 @@ export interface ConnectionParamDef {
 
 export interface InstanceInfo {
   name: string;
+  connection?: string;
+}
+
+export interface ConnectionDefInfo {
+  name: string;
+  auth_type: "oauth" | "manual";
 }
 
 export interface Integration {
@@ -20,6 +26,7 @@ export interface Integration {
   instances?: InstanceInfo[];
   auth_types?: ("oauth" | "manual")[];
   connection_params?: Record<string, ConnectionParamDef>;
+  connections?: ConnectionDefInfo[];
 }
 
 export interface APIToken {
@@ -123,12 +130,14 @@ export async function startIntegrationOAuth(
   scopes?: string[],
   connectionParams?: Record<string, string>,
   instance?: string,
+  connection?: string,
 ): Promise<{ url: string; state: string }> {
   return fetchAPI("/api/v1/auth/start-oauth", {
     method: "POST",
     body: JSON.stringify({
       integration,
       instance,
+      connection,
       scopes: scopes || [],
       connection_params: connectionParams,
     }),
@@ -140,12 +149,14 @@ export async function connectManualIntegration(
   credential: string,
   connectionParams?: Record<string, string>,
   instance?: string,
+  connection?: string,
 ): Promise<{ status: string }> {
   return fetchAPI("/api/v1/auth/connect-manual", {
     method: "POST",
     body: JSON.stringify({
       integration,
       instance,
+      connection,
       credential,
       connection_params: connectionParams,
     }),
