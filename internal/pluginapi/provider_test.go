@@ -115,6 +115,45 @@ func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[strin
 
 func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
 
+type oauthOnlySDKProvider struct{}
+
+func (p *oauthOnlySDKProvider) Name() string { return "oauth-only" }
+
+func (p *oauthOnlySDKProvider) DisplayName() string { return "OAuth Only" }
+
+func (p *oauthOnlySDKProvider) Description() string { return "oauth provider" }
+
+func (p *oauthOnlySDKProvider) ConnectionMode() sdkpluginsdk.ConnectionMode {
+	return sdkpluginsdk.ConnectionModeUser
+}
+
+func (p *oauthOnlySDKProvider) ListOperations() []sdkpluginsdk.Operation { return nil }
+
+func (p *oauthOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkpluginsdk.OperationResult, error) {
+	return &sdkpluginsdk.OperationResult{Status: 200, Body: `{}`}, nil
+}
+
+func (p *oauthOnlySDKProvider) AuthorizationURL(state string, scopes []string) string {
+	return fmt.Sprintf("https://example.com/sdk-oauth?state=%s&scope=%d", state, len(scopes))
+}
+
+func (p *oauthOnlySDKProvider) ExchangeCode(_ context.Context, code string) (*sdkpluginsdk.TokenResponse, error) {
+	return &sdkpluginsdk.TokenResponse{
+		AccessToken:  "sdk-access:" + code,
+		RefreshToken: "sdk-refresh:" + code,
+		ExpiresIn:    1800,
+		TokenType:    "Bearer",
+		Extra:        map[string]any{"workspace": "acme"},
+	}, nil
+}
+
+func (p *oauthOnlySDKProvider) RefreshToken(_ context.Context, refreshToken string) (*sdkpluginsdk.TokenResponse, error) {
+	return &sdkpluginsdk.TokenResponse{
+		AccessToken: "sdk-fresh:" + refreshToken,
+		TokenType:   "Bearer",
+	}, nil
+}
+
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -214,5 +253,63 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 
 	if _, ok := prov.(core.OAuthProvider); ok {
 		t.Fatal("expected remote provider to NOT implement core.OAuthProvider")
+	}
+}
+
+func TestRemoteProviderOAuthOnlySDK(t *testing.T) {
+	t.Parallel()
+
+	client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&oauthOnlySDKProvider{}))
+	prov, err := NewRemoteProvider(context.Background(), client, "oauth-only", nil)
+	if err != nil {
+		t.Fatalf("NewRemoteProvider: %v", err)
+	}
+
+	if prov.Name() != "oauth-only" {
+		t.Fatalf("unexpected provider name: %q", prov.Name())
+	}
+	if prov.ConnectionMode() != core.ConnectionModeUser {
+		t.Fatalf("unexpected connection mode: %q", prov.ConnectionMode())
+	}
+
+	oauthProv, ok := prov.(core.OAuthProvider)
+	if !ok {
+		t.Fatal("expected remote provider to implement core.OAuthProvider")
+	}
+
+	authTypes, ok := prov.(core.AuthTypeLister)
+	if !ok {
+		t.Fatal("expected remote provider to implement core.AuthTypeLister")
+	}
+	if got := authTypes.AuthTypes(); len(got) != 1 || got[0] != "oauth" {
+		t.Fatalf("unexpected auth types: %v", got)
+	}
+
+	mp, ok := prov.(core.ManualProvider)
+	if !ok {
+		t.Fatal("expected remote provider to implement core.ManualProvider")
+	}
+	if mp.SupportsManualAuth() {
+		t.Fatal("expected SupportsManualAuth() == false")
+	}
+
+	if got := oauthProv.AuthorizationURL("state-xyz", []string{"read", "write"}); got != "https://example.com/sdk-oauth?state=state-xyz&scope=2" {
+		t.Fatalf("unexpected authorization url: %q", got)
+	}
+
+	tok, err := oauthProv.ExchangeCode(context.Background(), "abc")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "sdk-access:abc" || tok.RefreshToken != "sdk-refresh:abc" || tok.Extra["workspace"] != "acme" {
+		t.Fatalf("unexpected exchange token response: %+v", tok)
+	}
+
+	fresh, err := oauthProv.RefreshToken(context.Background(), "sdk-refresh:abc")
+	if err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if fresh.AccessToken != "sdk-fresh:sdk-refresh:abc" {
+		t.Fatalf("unexpected refresh token response: %+v", fresh)
 	}
 }

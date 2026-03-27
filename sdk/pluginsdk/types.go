@@ -58,8 +58,26 @@ type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
+type TokenResponse struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresIn    int
+	TokenType    string
+	Extra        map[string]any
+}
+
+type OAuthProvider interface {
+	AuthorizationURL(state string, scopes []string) string
+	ExchangeCode(ctx context.Context, code string) (*TokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
+}
+
 type ManualAuthProvider interface {
 	SupportsManualAuth() bool
+}
+
+type AuthTypeLister interface {
+	AuthTypes() []string
 }
 
 type connectionParamsKey struct{}
