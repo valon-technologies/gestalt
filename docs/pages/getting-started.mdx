@@ -4,6 +4,22 @@ import { Callout, Steps } from 'nextra/components'
 
 This guide starts with the true out-of-the-box flow, then moves to an explicit config and a production-style startup path.
 
+## 0. Install
+
+**Go**
+
+```sh
+go install github.com/valon-technologies/gestalt/cmd/gestaltd@latest
+```
+
+**Docker**
+
+The `valontechnologies/gestalt` image ships `gestaltd` and supports both `amd64` and `arm64` (Apple Silicon).
+
+```sh
+docker run -p 8080:8080 -v ./gestalt.yaml:/etc/gestalt/config.yaml valontechnologies/gestalt:latest
+```
+
 ## 1. Run `gestaltd` With No Config
 
 ```sh
