@@ -14,6 +14,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
@@ -21,7 +22,7 @@ const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
-func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*provider.OperationOverride) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -160,7 +161,7 @@ func extractScopes(scopes *orderedmap.Map[string, string]) []string {
 	return result
 }
 
-func collectOperationScopes(model *v3high.Document, allowedOps map[string]*provider.OperationOverride) []string {
+func collectOperationScopes(model *v3high.Document, allowedOps map[string]*config.OperationOverride) []string {
 	seen := make(map[string]struct{})
 	collect := func(reqs []*base.SecurityRequirement) {
 		for _, req := range reqs {
@@ -203,7 +204,7 @@ func collectOperationScopes(model *v3high.Document, allowedOps map[string]*provi
 	return result
 }
 
-func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]*provider.OperationOverride) {
+func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]*config.OperationOverride) {
 	def.Operations = make(map[string]provider.OperationDef)
 
 	if model.Paths == nil || model.Paths.PathItems == nil {

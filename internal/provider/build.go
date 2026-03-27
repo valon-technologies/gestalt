@@ -17,12 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
-// OperationOverride holds optional alias and description for an allowed operation.
-type OperationOverride struct {
-	Alias       string `yaml:"alias" json:"alias,omitempty"`
-	Description string `yaml:"description" json:"description,omitempty"`
-}
-
 // BuildOption configures optional aspects of provider construction.
 type BuildOption func(*buildOptions)
 
@@ -44,7 +38,7 @@ func WithEgressResolver(r *egress.Resolver) BuildOption {
 // owns auth configuration. Display metadata (display_name, description, icon)
 // should be applied to the Definition before calling Build via
 // ApplyDisplayOverrides.
-func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[string]*OperationOverride, opts ...BuildOption) (core.Provider, error) {
+func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[string]*config.OperationOverride, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
 		opt(&bo)

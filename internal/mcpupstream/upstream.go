@@ -11,8 +11,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/egress"
-	"github.com/valon-technologies/gestalt/internal/provider"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -37,7 +37,7 @@ type Upstream struct {
 	cat         *catalog.Catalog
 	ops         []core.Operation
 	client      mcpclient.MCPClient
-	allowed     map[string]*provider.OperationOverride
+	allowed     map[string]*config.OperationOverride
 	aliasToOrig map[string]string
 	resolver    *egress.Resolver
 }
@@ -121,12 +121,12 @@ func (u *Upstream) Close() error {
 	return u.client.Close()
 }
 
-func (u *Upstream) FilterOperations(allowed map[string]*provider.OperationOverride) error {
+func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride) error {
 	if len(allowed) == 0 {
 		return fmt.Errorf("allowed_operations cannot be empty; omit the field to allow all")
 	}
 
-	u.allowed = make(map[string]*provider.OperationOverride, len(allowed))
+	u.allowed = make(map[string]*config.OperationOverride, len(allowed))
 	u.aliasToOrig = make(map[string]string)
 	exposedNames := make(map[string]string, len(allowed))
 	var collisions []string
@@ -275,7 +275,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Ope
 	return cat, ops
 }
 
-func filterDiscovered(cat *catalog.Catalog, ops *[]core.Operation, allowed map[string]*provider.OperationOverride) error {
+func filterDiscovered(cat *catalog.Catalog, ops *[]core.Operation, allowed map[string]*config.OperationOverride) error {
 	if len(allowed) == 0 {
 		return nil
 	}

@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*provider.OperationOverride) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
 	schema, err := introspect(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
@@ -30,7 +31,7 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	return def, nil
 }
 
-func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*provider.OperationOverride) {
+func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride) {
 	if root == nil {
 		return
 	}
