@@ -26,9 +26,10 @@ type StubDatastore struct {
 	GetUserFn                  func(context.Context, string) (*core.User, error)
 	FindOrCreateUserFn         func(context.Context, string) (*core.User, error)
 	StoreTokenFn               func(context.Context, *core.IntegrationToken) error
-	TokenFn                    func(context.Context, string, string, string) (*core.IntegrationToken, error)
+	TokenFn                    func(context.Context, string, string, string, string) (*core.IntegrationToken, error)
 	ListTokensFn               func(context.Context, string) ([]*core.IntegrationToken, error)
 	ListTokensForIntegrationFn func(context.Context, string, string) ([]*core.IntegrationToken, error)
+	ListTokensForConnectionFn  func(context.Context, string, string, string) ([]*core.IntegrationToken, error)
 	DeleteTokenFn              func(context.Context, string) error
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
@@ -63,9 +64,9 @@ func (s *StubDatastore) StoreToken(ctx context.Context, token *core.IntegrationT
 	}
 	return nil
 }
-func (s *StubDatastore) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+func (s *StubDatastore) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
 	if s.TokenFn != nil {
-		return s.TokenFn(ctx, userID, integration, instance)
+		return s.TokenFn(ctx, userID, integration, connection, instance)
 	}
 	return nil, nil
 }
@@ -80,7 +81,26 @@ func (s *StubDatastore) ListTokensForIntegration(ctx context.Context, userID, in
 		return s.ListTokensForIntegrationFn(ctx, userID, integration)
 	}
 	if s.TokenFn != nil {
-		tok, err := s.TokenFn(ctx, userID, integration, "default")
+		tok, err := s.TokenFn(ctx, userID, integration, "", "default")
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		if tok == nil {
+			return nil, nil
+		}
+		return []*core.IntegrationToken{tok}, nil
+	}
+	return nil, nil
+}
+func (s *StubDatastore) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	if s.ListTokensForConnectionFn != nil {
+		return s.ListTokensForConnectionFn(ctx, userID, integration, connection)
+	}
+	if s.TokenFn != nil {
+		tok, err := s.TokenFn(ctx, userID, integration, connection, "default")
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return nil, nil

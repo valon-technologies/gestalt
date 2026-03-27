@@ -191,6 +191,7 @@ func snapToUser(snap *gcpfirestore.DocumentSnapshot) (*core.User, error) {
 type integrationTokenDoc struct {
 	UserID                string     `firestore:"user_id"`
 	Integration           string     `firestore:"integration"`
+	Connection            string     `firestore:"connection"`
 	Instance              string     `firestore:"instance"`
 	AccessTokenEncrypted  string     `firestore:"access_token_encrypted"`
 	RefreshTokenEncrypted string     `firestore:"refresh_token_encrypted"`
@@ -212,6 +213,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	doc := integrationTokenDoc{
 		UserID:                token.UserID,
 		Integration:           token.Integration,
+		Connection:            token.Connection,
 		Instance:              token.Instance,
 		AccessTokenEncrypted:  accessEnc,
 		RefreshTokenEncrypted: refreshEnc,
@@ -231,6 +233,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		query := s.client.Collection(datastore.IntegrationTokensCollection).
 			Where("user_id", "==", token.UserID).
 			Where("integration", "==", token.Integration).
+			Where("connection", "==", token.Connection).
 			Where("instance", "==", token.Instance).
 			Limit(1)
 		iter := tx.Documents(query)
@@ -249,10 +252,11 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	})
 }
 
-func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
 	iter := s.client.Collection(datastore.IntegrationTokensCollection).
 		Where("user_id", "==", userID).
 		Where("integration", "==", integration).
+		Where("connection", "==", connection).
 		Where("instance", "==", instance).
 		Limit(1).
 		Documents(ctx)
@@ -317,6 +321,32 @@ func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integratio
 	return tokens, nil
 }
 
+func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	iter := s.client.Collection(datastore.IntegrationTokensCollection).
+		Where("user_id", "==", userID).
+		Where("integration", "==", integration).
+		Where("connection", "==", connection).
+		Documents(ctx)
+	defer iter.Stop()
+
+	var tokens []*core.IntegrationToken
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("firestore: listing tokens for connection: %w", err)
+		}
+		t, err := s.snapToIntegrationToken(snap)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, nil
+}
+
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
 	_, err := s.client.Collection(datastore.IntegrationTokensCollection).Doc(id).Delete(ctx)
 	if err != nil {
@@ -340,6 +370,7 @@ func (s *Store) snapToIntegrationToken(snap *gcpfirestore.DocumentSnapshot) (*co
 		ID:                snap.Ref.ID,
 		UserID:            doc.UserID,
 		Integration:       doc.Integration,
+		Connection:        doc.Connection,
 		Instance:          doc.Instance,
 		AccessToken:       access,
 		RefreshToken:      refresh,

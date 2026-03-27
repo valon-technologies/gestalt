@@ -161,7 +161,7 @@ func testDatastoreIntegrationTokens(t *testing.T, newStore func(t *testing.T) co
 
 		mustStoreToken(t, ctx, ds, token)
 
-		got, err := ds.Token(ctx, user.ID, "test-service", "instance-1")
+		got, err := ds.Token(ctx, user.ID, "test-service", "", "instance-1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -222,7 +222,7 @@ func testDatastoreIntegrationTokens(t *testing.T, newStore func(t *testing.T) co
 			t.Fatalf("DeleteToken: %v", err)
 		}
 
-		got, err := ds.Token(ctx, user.ID, "svc", "i1")
+		got, err := ds.Token(ctx, user.ID, "svc", "", "i1")
 		if err != nil {
 			t.Fatalf("Token after delete: unexpected error: %v", err)
 		}
@@ -236,7 +236,7 @@ func testDatastoreIntegrationTokens(t *testing.T, newStore func(t *testing.T) co
 		t.Cleanup(func() { ds.Close() })
 		ctx := context.Background()
 
-		got, err := ds.Token(ctx, "no-user", "no-svc", "no-instance")
+		got, err := ds.Token(ctx, "no-user", "no-svc", "", "no-instance")
 		if err != nil {
 			t.Fatalf("Token for nonexistent: unexpected error: %v", err)
 		}

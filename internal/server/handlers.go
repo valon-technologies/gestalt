@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/discovery"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -61,7 +62,8 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 }
 
 type instanceInfo struct {
-	Name string `json:"name"`
+	Name       string `json:"name"`
+	Connection string `json:"connection,omitempty"`
 }
 
 type integrationInfo struct {
@@ -161,7 +163,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 	}
 	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
-		m[tok.Integration] = append(m[tok.Integration], instanceInfo{Name: tok.Instance})
+		m[tok.Integration] = append(m[tok.Integration], instanceInfo{Name: tok.Instance, Connection: tok.Connection})
 	}
 	return m, nil
 }
@@ -178,6 +180,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestedInstance := r.URL.Query().Get("instance")
+	requestedConnection := r.URL.Query().Get("connection")
 
 	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
 	if err != nil {
@@ -185,30 +188,49 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(tokens) == 0 {
+	var matched []*core.IntegrationToken
+	for _, tok := range tokens {
+		if requestedConnection != "" && tok.Connection != requestedConnection {
+			continue
+		}
+		matched = append(matched, tok)
+	}
+
+	if len(matched) == 0 {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
 
-	if requestedInstance == "" && len(tokens) > 1 {
-		instances := make([]string, len(tokens))
-		for i, t := range tokens {
-			instances[i] = t.Instance
+	if requestedInstance != "" {
+		var instanceMatched []*core.IntegrationToken
+		for _, tok := range matched {
+			if tok.Instance == requestedInstance {
+				instanceMatched = append(instanceMatched, tok)
+			}
 		}
-		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify ?instance=NAME", name, instances))
+		matched = instanceMatched
+	}
+
+	if len(matched) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
+		return
+	}
+	if len(matched) > 1 {
+		labels := make([]string, len(matched))
+		for i, t := range matched {
+			labels[i] = fmt.Sprintf("%s/%s", t.Connection, t.Instance)
+		}
+		hint := "?instance=NAME"
+		if requestedInstance != "" {
+			hint = "?connection=NAME"
+		}
+		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify %s", name, labels, hint))
 		return
 	}
 
-	var tokenID string
-	for _, tok := range tokens {
-		if requestedInstance == "" || tok.Instance == requestedInstance {
-			tokenID = tok.ID
-			break
-		}
-	}
-
+	tokenID := matched[0].ID
 	if tokenID == "" {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
 
@@ -485,6 +507,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
+	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connection_params"`
@@ -531,6 +554,18 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connection := req.Connection
+	if connection == "" {
+		connection = s.defaultConnection[req.Integration]
+	}
+	if connection == "" {
+		connection = config.PluginConnectionName
+	}
+	if !safeParamValue.MatchString(connection) {
+		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+		return
+	}
+
 	var connParams map[string]string
 	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 		var valErr error
@@ -573,6 +608,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	state, err := s.stateCodec.Encode(integrationOAuthState{
 		UserID:           dbUserID,
 		Integration:      req.Integration,
+		Connection:       connection,
 		Instance:         instance,
 		Verifier:         verifier,
 		ConnectionParams: connParams,
@@ -668,6 +704,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	tm := tokenMaterial{
 		UserID:         state.UserID,
 		Integration:    providerName,
+		Connection:     state.Connection,
 		Instance:       callbackInstance,
 		AccessToken:    tokenResp.AccessToken,
 		RefreshToken:   tokenResp.RefreshToken,
@@ -692,6 +729,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 type connectManualRequest struct {
 	Integration      string            `json:"integration"`
+	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
 	Credential       string            `json:"credential"`
 	ConnectionParams map[string]string `json:"connection_params"`
@@ -740,6 +778,18 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	manualConnection := req.Connection
+	if manualConnection == "" {
+		manualConnection = s.defaultConnection[req.Integration]
+	}
+	if manualConnection == "" {
+		manualConnection = config.PluginConnectionName
+	}
+	if !safeParamValue.MatchString(manualConnection) {
+		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+		return
+	}
+
 	var connParams map[string]string
 	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 		var valErr error
@@ -759,6 +809,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	tm := tokenMaterial{
 		UserID:       dbUser.ID,
 		Integration:  req.Integration,
+		Connection:   manualConnection,
 		Instance:     manualInstance,
 		AccessToken:  req.Credential,
 		MetadataJSON: manualMeta,
@@ -1009,6 +1060,7 @@ const stagedConnectionTTL = 30 * time.Minute
 type tokenMaterial struct {
 	UserID         string
 	Integration    string
+	Connection     string
 	Instance       string
 	AccessToken    string
 	RefreshToken   string
@@ -1028,6 +1080,7 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 		ID:              uuid.NewString(),
 		UserID:          tm.UserID,
 		Integration:     tm.Integration,
+		Connection:      tm.Connection,
 		Instance:        tm.Instance,
 		AccessToken:     tm.AccessToken,
 		RefreshToken:    tm.RefreshToken,
@@ -1104,6 +1157,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				ID:             uuid.NewString(),
 				UserID:         tm.UserID,
 				Integration:    tm.Integration,
+				Connection:     tm.Connection,
 				Instance:       tm.Instance,
 				AccessToken:    tm.AccessToken,
 				RefreshToken:   tm.RefreshToken,
@@ -1241,6 +1295,7 @@ func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) 
 	tm := tokenMaterial{
 		UserID:         sc.UserID,
 		Integration:    sc.Integration,
+		Connection:     sc.Connection,
 		Instance:       sc.Instance,
 		AccessToken:    sc.AccessToken,
 		RefreshToken:   sc.RefreshToken,

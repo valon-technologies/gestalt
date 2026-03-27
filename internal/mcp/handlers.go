@@ -12,7 +12,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.ToolHandlerFunc {
+func makeHandler(invoker invocation.Invoker, provName, opName, connection string) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		p := principal.FromContext(ctx)
 		if p == nil {
@@ -23,6 +23,9 @@ func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.
 		instance, _ := args["_instance"].(string)
 		delete(args, "_instance")
 
+		if connection != "" {
+			ctx = invocation.WithConnection(ctx, connection)
+		}
 		result, err := invoker.Invoke(ctx, p, provName, instance, opName, args)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
@@ -36,7 +39,7 @@ func makeHandler(invoker invocation.Invoker, provName, opName string) mcpserver.
 	}
 }
 
-func makeDirectHandler(cfg Config, provName, opName string, caller directToolCaller) mcpserver.ToolHandlerFunc {
+func makeDirectHandler(cfg Config, provName, opName, connection string, caller directToolCaller) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		p := principal.FromContext(ctx)
 		if p == nil {
@@ -48,7 +51,7 @@ func makeDirectHandler(cfg Config, provName, opName string, caller directToolCal
 		instance, _ := args["_instance"].(string)
 		delete(args, "_instance")
 
-		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, instance)
+		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}

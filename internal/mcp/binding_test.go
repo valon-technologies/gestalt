@@ -41,7 +41,7 @@ func (p *flatProvider) ListOperations() []core.Operation { return p.ops }
 
 func stubDatastoreWithToken() *coretesting.StubDatastore {
 	return &coretesting.StubDatastore{
-		TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+		TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 			return &core.IntegrationToken{AccessToken: "test-token"}, nil
 		},
 	}
@@ -636,7 +636,7 @@ type stubTokenResolver struct {
 	err   error
 }
 
-func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _, _ string) (string, error) {
+func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _, _, _ string) (string, error) {
 	return r.token, r.err
 }
 

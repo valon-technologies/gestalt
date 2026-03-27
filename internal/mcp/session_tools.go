@@ -86,5 +86,5 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return "", fmt.Errorf("not authenticated")
 	}
-	return cfg.TokenResolver.ResolveToken(ctx, p, provName, "")
+	return cfg.TokenResolver.ResolveToken(ctx, p, provName, cfg.MCPConnection[provName], "")
 }
