@@ -63,6 +63,12 @@ type Request struct {
 	// path parameter substitution and query strings on GET/DELETE.
 	Body []byte
 
+	// QueryParams are always applied as URL query parameters, regardless of
+	// HTTP method. When set on a POST/PUT/PATCH, these go on the URL while
+	// Params become the JSON body. When nil, the existing method-based
+	// routing applies (backward compatible).
+	QueryParams map[string]any
+
 	// CheckResponse, when set, replaces the default status >= 400 check.
 	CheckResponse ResponseChecker
 
@@ -83,6 +89,13 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 	}
 
 	fullURL := req.BaseURL + path
+	if len(req.QueryParams) > 0 {
+		q := url.Values{}
+		for k, v := range req.QueryParams {
+			addQueryValue(q, k, v)
+		}
+		fullURL += "?" + q.Encode()
+	}
 
 	var bodyBytes []byte
 	var contentType string
@@ -168,7 +181,7 @@ func doOnce(
 		if len(params) > 0 {
 			q := httpReq.URL.Query()
 			for k, v := range params {
-				q.Set(k, fmt.Sprintf("%v", v))
+				addQueryValue(q, k, v)
 			}
 			httpReq.URL.RawQuery = q.Encode()
 		}
@@ -319,22 +332,44 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 }
 
 func ExpandedPath(method, path string, params map[string]any) string {
+	return ExpandedPathWithQuery(method, path, params, nil)
+}
+
+func ExpandedPathWithQuery(method, path string, params map[string]any, queryParams map[string]any) string {
 	params = copyParams(params)
 	expanded, err := substitutePath(path, params)
 	if err != nil {
 		return path
 	}
+	q := url.Values{}
+	for k, v := range queryParams {
+		addQueryValue(q, k, v)
+	}
 	switch method {
 	case http.MethodGet, http.MethodDelete:
-		if len(params) > 0 {
-			q := url.Values{}
-			for k, v := range params {
-				q.Set(k, fmt.Sprintf("%v", v))
-			}
-			return expanded + "?" + q.Encode()
+		for k, v := range params {
+			addQueryValue(q, k, v)
 		}
 	}
+	if len(q) > 0 {
+		return expanded + "?" + q.Encode()
+	}
 	return expanded
+}
+
+func addQueryValue(q url.Values, key string, value any) {
+	switch v := value.(type) {
+	case []any:
+		for _, item := range v {
+			q.Add(key, fmt.Sprintf("%v", item))
+		}
+	case []string:
+		for _, item := range v {
+			q.Add(key, item)
+		}
+	default:
+		q.Add(key, fmt.Sprintf("%v", value))
+	}
 }
 
 func copyParams(params map[string]any) map[string]any {
