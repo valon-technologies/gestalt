@@ -29,4 +29,4 @@ jobs:
             valontechnologies/gestalt:latest
             valontechnologies/gestalt:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
