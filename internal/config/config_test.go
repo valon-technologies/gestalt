@@ -266,7 +266,7 @@ runtimes:
 	}
 }
 
-func TestLoadConfigValidation(t *testing.T) {
+func TestValidateRuntime(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -300,6 +300,71 @@ datastore:
   provider: data-store
 `,
 		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteConfigFile(t, tc.yaml)
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if err := ValidateRuntime(cfg); err == nil {
+				t.Fatal("ValidateRuntime: expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+integrations:
+  custom_tool:
+    plugin:
+      package: https://example.com/custom-tool.tar.gz
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Integrations["custom_tool"].Plugin.Package != "https://example.com/custom-tool.tar.gz" {
+		t.Fatalf("unexpected plugin package: %q", cfg.Integrations["custom_tool"].Plugin.Package)
+	}
+}
+
+func TestValidateRuntimeAcceptsDevMode(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  dev_mode: true
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := ValidateRuntime(cfg); err != nil {
+		t.Fatalf("ValidateRuntime: %v", err)
+	}
+}
+
+func TestLoadConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+	}{
 		{
 			name: "declarative integration with no connections",
 			yaml: `

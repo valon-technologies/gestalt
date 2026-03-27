@@ -103,6 +103,9 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
+	if err := config.ValidateRuntime(cfg); err != nil {
+		return nil, nil, err
+	}
 
 	preparedProviders, err := l.providersForConfig(configPath, cfg, locked)
 	if err != nil {

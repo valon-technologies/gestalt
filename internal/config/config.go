@@ -203,7 +203,7 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	resolveBaseURL(&cfg)
 	resolveRelativePaths(path, &cfg)
 
-	if err := validate(&cfg); err != nil {
+	if err := ValidateStructure(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -304,16 +304,11 @@ func resolvePackagePath(baseDir, value string) string {
 
 var templateParamRe = regexp.MustCompile(`\{(\w+)\}`)
 
-func validate(cfg *Config) error {
-	if cfg.Auth.Provider == "" {
-		return fmt.Errorf("config validation: auth.provider is required")
-	}
-	if cfg.Datastore.Provider == "" {
-		return fmt.Errorf("config validation: datastore.provider is required")
-	}
-	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
-		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")
-	}
+// ValidateStructure checks config shape: integration references, plugin
+// declarations, connection references, URL template params, egress rules.
+// Called by Load (and therefore by bundle and validate). Does not require
+// runtime secrets like encryption_key, auth.provider, or datastore.provider.
+func ValidateStructure(cfg *Config) error {
 	if err := validateEgress(&cfg.Egress); err != nil {
 		return err
 	}
@@ -340,6 +335,23 @@ func validate(cfg *Config) error {
 		if rt.Type == "" {
 			return fmt.Errorf("config validation: runtime %q requires either type or plugin", name)
 		}
+	}
+	return nil
+}
+
+// ValidateRuntime checks runtime-only requirements: encryption key, auth
+// provider, and datastore provider. Callers that need a fully operational
+// config (serve) should call this after Load. Callers that only need
+// structural correctness (bundle, validate) should not.
+func ValidateRuntime(cfg *Config) error {
+	if cfg.Auth.Provider == "" {
+		return fmt.Errorf("config validation: auth.provider is required")
+	}
+	if cfg.Datastore.Provider == "" {
+		return fmt.Errorf("config validation: datastore.provider is required")
+	}
+	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
+		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")
 	}
 	return nil
 }
