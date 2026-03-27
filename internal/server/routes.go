@@ -46,7 +46,6 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api/v1", func(r chi.Router) {
 		s.mountAuthRoutes(r)
 		s.mountBindingRoutes(r)
-		s.mountAdminRoutes(r)
 		s.mountAuthenticatedRoutes(r)
 	})
 }

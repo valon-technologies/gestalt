@@ -45,26 +45,3 @@ type EgressClientStore interface {
 	ListEgressClientTokens(ctx context.Context, clientID string) ([]*EgressClientToken, error)
 	RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error
 }
-
-type EgressDenyRuleFilter struct {
-	SubjectKind string
-	Host        string
-}
-
-type EgressDenyRuleStore interface {
-	CreateEgressDenyRule(ctx context.Context, rule *EgressDenyRule) error
-	GetEgressDenyRule(ctx context.Context, id string) (*EgressDenyRule, error)
-	ListEgressDenyRules(ctx context.Context, filter EgressDenyRuleFilter) ([]*EgressDenyRule, error)
-	DeleteEgressDenyRule(ctx context.Context, id string) error
-}
-
-type EgressCredentialGrantFilter struct {
-	Provider string
-}
-
-type EgressCredentialGrantStore interface {
-	CreateEgressCredentialGrant(ctx context.Context, grant *EgressCredentialGrant) error
-	GetEgressCredentialGrant(ctx context.Context, id string) (*EgressCredentialGrant, error)
-	ListEgressCredentialGrants(ctx context.Context, filter EgressCredentialGrantFilter) ([]*EgressCredentialGrant, error)
-	DeleteEgressCredentialGrant(ctx context.Context, id string) error
-}
