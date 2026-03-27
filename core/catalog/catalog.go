@@ -36,6 +36,7 @@ type CatalogOperation struct {
 	Title          string               `yaml:"title,omitempty"          json:"title,omitempty"`
 	Description    string               `yaml:"description,omitempty"    json:"description,omitempty"`
 	InputSchema    json.RawMessage      `yaml:"-"                        json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage      `yaml:"-"                        json:"outputSchema,omitempty"`
 	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
 	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
 	RequiredScopes []string             `yaml:"required_scopes,omitempty" json:"requiredScopes,omitempty"`
