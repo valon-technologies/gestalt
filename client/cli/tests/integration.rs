@@ -159,12 +159,12 @@ fn test_list_operations_formats_parameters() {
         .with_header("Content-Type", "application/json")
         .with_body(
             r#"[{
-                "Name": "do_thing",
-                "Description": "Does a thing",
-                "Method": "POST",
-                "Parameters": [
-                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"},
-                    {"Name": "mode", "Type": "string", "Required": false, "Default": null, "Description": "Mode"}
+                "id": "do_thing",
+                "description": "Does a thing",
+                "method": "POST",
+                "parameters": [
+                    {"name": "id", "type": "string", "location": "path", "required": true, "description": "The ID"},
+                    {"name": "mode", "type": "string", "location": "query", "required": false, "description": "Mode"}
                 ]
             }]"#,
         )
@@ -188,11 +188,11 @@ fn test_list_operations_json_format() {
         .with_header("Content-Type", "application/json")
         .with_body(
             r#"[{
-                "Name": "do_thing",
-                "Description": "Does a thing",
-                "Method": "POST",
-                "Parameters": [
-                    {"Name": "id", "Type": "string", "Required": true, "Default": null, "Description": "The ID"}
+                "id": "do_thing",
+                "description": "Does a thing",
+                "method": "POST",
+                "parameters": [
+                    {"name": "id", "type": "string", "location": "path", "required": true, "description": "The ID"}
                 ]
             }]"#,
         )
@@ -214,7 +214,7 @@ fn test_list_operations_empty_parameters() {
         .mock("GET", "/api/v1/integrations/test_svc/operations")
         .with_status(200)
         .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"Name": "list_items", "Description": "Lists items", "Method": "GET", "Parameters": []}]"#)
+        .with_body(r#"[{"id": "list_items", "description": "Lists items", "method": "GET", "parameters": []}]"#)
         .create();
 
     std::env::set_var("GESTALT_API_KEY", "test-token");
@@ -244,4 +244,91 @@ fn test_start_oauth() {
     mock.assert();
     assert_eq!(resp["url"], "https://example.com/oauth");
     assert_eq!(resp["state"], "abc123");
+}
+
+fn catalog_body() -> &'static str {
+    r#"[{
+        "id": "do_thing",
+        "title": "Do Thing",
+        "description": "Does a thing",
+        "method": "POST",
+        "parameters": [
+            {"name": "name", "type": "string", "location": "query", "required": true},
+            {"name": "count", "type": "integer", "location": "query"}
+        ],
+        "transport": "rest"
+    }]"#
+}
+
+#[test]
+fn test_invoke_typed_params() {
+    let mut server = Server::new();
+
+    let _catalog_mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(catalog_body())
+        .create();
+
+    let invoke_mock = server
+        .mock("POST", "/api/v1/test_svc/do_thing")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"count":42,"name":"test"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"ok": true}"#)
+        .create();
+
+    let params = vec![
+        gestalt::params::ParamEntry {
+            key: "count".to_string(),
+            value: gestalt::params::ParamValue::JsonVal(serde_json::json!(42)),
+        },
+        gestalt::params::ParamEntry {
+            key: "name".to_string(),
+            value: gestalt::params::ParamValue::StringVal("test".to_string()),
+        },
+    ];
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result = gestalt::commands::invoke::invoke(
+        Some(&server.url()),
+        "test_svc",
+        "do_thing",
+        &params,
+        None,
+        None,
+        Format::Json,
+    );
+    std::env::remove_var("GESTALT_API_KEY");
+
+    invoke_mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_describe_operation() {
+    let mut server = Server::new();
+
+    let mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(catalog_body())
+        .create();
+
+    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let result = gestalt::commands::describe::describe(
+        Some(&server.url()),
+        "test_svc",
+        "do_thing",
+        Format::Table,
+    );
+    std::env::remove_var("GESTALT_API_KEY");
+
+    mock.assert();
+    assert!(result.is_ok());
 }

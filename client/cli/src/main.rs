@@ -50,9 +50,25 @@ enum Commands {
         /// Operation name (e.g., search_code, list_channels). Omit to list available operations.
         operation: Option<String>,
 
-        /// Parameters as key=value pairs
-        #[arg(short = 'p', long = "param", value_parser = parse_key_val)]
-        params: Vec<(String, String)>,
+        /// Parameters as key=value or key:=json pairs
+        #[arg(short = 'p', long = "param", value_parser = gestalt::params::parse_param_entry)]
+        params: Vec<gestalt::params::ParamEntry>,
+
+        /// Select a sub-path from the response (e.g., "data.items")
+        #[arg(long = "select")]
+        select: Option<String>,
+
+        /// Load parameters from a JSON file (use "-" for stdin)
+        #[arg(long = "input-file")]
+        input_file: Option<String>,
+    },
+
+    /// Describe an integration operation
+    Describe {
+        /// Integration name
+        integration: String,
+        /// Operation name
+        operation: String,
     },
 
     /// Manage API tokens
@@ -123,13 +139,6 @@ enum TokenCommands {
     },
 }
 
-fn parse_key_val(s: &str) -> Result<(String, String), String> {
-    let pos = s
-        .find('=')
-        .ok_or_else(|| format!("invalid KEY=VALUE: no '=' found in '{s}'"))?;
-    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
-}
-
 fn main() {
     let cli = Cli::parse();
     let format = cli.format;
@@ -156,8 +165,18 @@ fn main() {
             integration,
             operation,
             params,
+            select,
+            input_file,
         } => match operation {
-            Some(op) => commands::invoke::invoke(url, &integration, &op, &params, format),
+            Some(op) => commands::invoke::invoke(
+                url,
+                &integration,
+                &op,
+                &params,
+                select.as_deref(),
+                input_file.as_deref(),
+                format,
+            ),
             None => {
                 if !params.is_empty() {
                     output::print_warning("parameters ignored; no operation specified");
@@ -165,6 +184,10 @@ fn main() {
                 commands::invoke::list_operations(url, &integration, format)
             }
         },
+        Commands::Describe {
+            integration,
+            operation,
+        } => commands::describe::describe(url, &integration, &operation, format),
         Commands::Tokens { command } => match command {
             TokenCommands::Create { name } => {
                 commands::tokens::create(url, name.as_deref(), format)
