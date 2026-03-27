@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
-	"fmt"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/operator"
@@ -21,20 +18,6 @@ const (
 type initLockfile = operator.Lockfile
 type lockProviderEntry = operator.LockProviderEntry
 type lockPluginEntry = operator.LockPluginEntry
-
-func runInit(args []string) error {
-	fs := flag.NewFlagSet("gestaltd init", flag.ContinueOnError)
-	fs.Usage = func() { printInitUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-
-	return initConfig(*configPath)
-}
 
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle(func(ctx context.Context, name string, upstream config.UpstreamDef) (*provider.Definition, error) {

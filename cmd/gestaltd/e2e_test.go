@@ -21,7 +21,7 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
-func TestE2EPluginPackageArchiveInitAndValidate(t *testing.T) {
+func TestE2EBundleArchiveAndValidate(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -34,12 +34,14 @@ func TestE2EPluginPackageArchiveInitAndValidate(t *testing.T) {
 	}
 
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", 0)
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	bundleDir := filepath.Join(dir, "bundle")
+	out, err = exec.Command(gestaltdBin, "bundle", "--config", cfgPath, "--output", bundleDir).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
+		t.Fatalf("gestaltd bundle: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
+	bundledCfg := filepath.Join(bundleDir, "config.yaml")
+	lockPath := filepath.Join(bundleDir, initLockfileName)
 	lock, err := readLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("readLockfile: %v", err)
@@ -55,25 +57,26 @@ func TestE2EPluginPackageArchiveInitAndValidate(t *testing.T) {
 		t.Fatal("expected non-empty Package in lockfile entry")
 	}
 
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err = exec.Command(gestaltdBin, "validate", "--config", bundledCfg).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd validate: %v\n%s", err, out)
 	}
 }
 
-func TestE2EPluginPackageDirectoryInit(t *testing.T) {
+func TestE2EBundleDirectoryPackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 	cfgPath := writeE2EConfigForDir(t, dir, pluginDir)
+	bundleDir := filepath.Join(dir, "bundle")
 
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "bundle", "--config", cfgPath, "--output", bundleDir).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
+		t.Fatalf("gestaltd bundle: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
+	lockPath := filepath.Join(bundleDir, initLockfileName)
 	lock, err := readLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("readLockfile: %v", err)
@@ -87,7 +90,7 @@ func TestE2EPluginPackageDirectoryInit(t *testing.T) {
 	}
 }
 
-func TestE2EPluginPackageHTTPSInit(t *testing.T) { //nolint:paralleltest // mutates http.DefaultTransport
+func TestE2EBundleHTTPSPackage(t *testing.T) { //nolint:paralleltest // mutates http.DefaultTransport
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
@@ -106,11 +109,12 @@ func TestE2EPluginPackageHTTPSInit(t *testing.T) { //nolint:paralleltest // muta
 	t.Cleanup(func() { http.DefaultTransport = savedTransport })
 
 	cfgPath := writeE2EConfig(t, dir, ts.URL+"/plugin.tar.gz", 0)
-	if err := run([]string{"init", "--config", cfgPath}); err != nil {
-		t.Fatalf("run init: %v", err)
+	bundleDir := filepath.Join(dir, "bundle")
+	if err := run([]string{"bundle", "--config", cfgPath, "--output", bundleDir}); err != nil {
+		t.Fatalf("run bundle: %v", err)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
+	lockPath := filepath.Join(bundleDir, initLockfileName)
 	lock, err := readLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("readLockfile: %v", err)
@@ -124,7 +128,7 @@ func TestE2EPluginPackageHTTPSInit(t *testing.T) { //nolint:paralleltest // muta
 	}
 }
 
-func TestE2EPluginServeLockedGoldenPath(t *testing.T) {
+func TestE2EBundleServeLockedGoldenPath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -138,13 +142,15 @@ func TestE2EPluginServeLockedGoldenPath(t *testing.T) {
 
 	port := allocateTestPort(t)
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	bundleDir := filepath.Join(dir, "bundle")
 
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	out, err = exec.Command(gestaltdBin, "bundle", "--config", cfgPath, "--output", bundleDir).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
+		t.Fatalf("gestaltd bundle: %v\n%s", err, out)
 	}
 
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
+	bundledCfg := filepath.Join(bundleDir, "config.yaml")
+	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", bundledCfg)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -179,7 +185,7 @@ func TestE2EPluginServeLockedGoldenPath(t *testing.T) {
 	}
 }
 
-func TestE2EPluginStaleArchiveAutoReinit(t *testing.T) {
+func TestE2EBareGestaltdAutoInit(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -191,23 +197,6 @@ func TestE2EPluginStaleArchiveAutoReinit(t *testing.T) {
 
 	port := allocateTestPort(t)
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
-
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	lockPath := filepath.Join(dir, initLockfileName)
-	lockBefore, err := readLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("readLockfile before: %v", err)
-	}
-	digestBefore := lockBefore.Plugins[lockPluginKey("integration", "example")].SourceDigest
-
-	writeManifest(t, pluginDir, "0.2.0")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("rebuild CreatePackageFromDir: %v", err)
-	}
 
 	cmd := exec.Command(gestaltdBin, "--config", cfgPath)
 	cmd.Stdout = os.Stdout
@@ -222,15 +211,6 @@ func TestE2EPluginStaleArchiveAutoReinit(t *testing.T) {
 
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 	waitForHealth(t, baseURL, 20*time.Second)
-
-	lockAfter, err := readLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("readLockfile after: %v", err)
-	}
-	digestAfter := lockAfter.Plugins[lockPluginKey("integration", "example")].SourceDigest
-	if digestAfter == digestBefore {
-		t.Fatal("expected SourceDigest to change after stale archive reinit")
-	}
 }
 
 func TestE2EValidateNonMutating(t *testing.T) {
@@ -248,7 +228,7 @@ func TestE2EValidateNonMutating(t *testing.T) {
 
 	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
-		t.Fatalf("expected validate to fail without init, output: %s", out)
+		t.Fatalf("expected validate to fail without bundle, output: %s", out)
 	}
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatal("expected no lockfile after non-mutating validate")

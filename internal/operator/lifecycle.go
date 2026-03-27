@@ -155,7 +155,7 @@ func (l *Lifecycle) providersForConfig(configPath string, cfg *config.Config, lo
 	}
 	if err != nil {
 		if locked {
-			return nil, fmt.Errorf("remote REST/GraphQL upstreams require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+			return nil, fmt.Errorf("remote REST/GraphQL upstreams require prepared artifacts; run `gestaltd bundle --config %s --output DIR`: %w", configPath, err)
 		}
 		return nil, nil
 	}
@@ -176,7 +176,7 @@ func (l *Lifecycle) providersForConfig(configPath string, cfg *config.Config, lo
 		entry, ok := lock.Providers[name]
 		if !ok || entry.Fingerprint != fingerprint {
 			if locked {
-				return nil, fmt.Errorf("prepared artifact for integration %q is missing or stale; run `gestaltd init --config %s`", name, configPath)
+				return nil, fmt.Errorf("prepared artifact for integration %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", name, configPath)
 			}
 			continue
 		}
@@ -184,7 +184,7 @@ func (l *Lifecycle) providersForConfig(configPath string, cfg *config.Config, lo
 		absPath := resolveLockPath(paths.configDir, entry.Provider)
 		if _, statErr := os.Stat(absPath); statErr != nil {
 			if locked {
-				return nil, fmt.Errorf("prepared artifact for integration %q not found at %s; run `gestaltd init --config %s`", name, absPath, configPath)
+				return nil, fmt.Errorf("prepared artifact for integration %q not found at %s; run `gestaltd bundle --config %s --output DIR`", name, absPath, configPath)
 			}
 			continue
 		}
@@ -554,7 +554,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		lock, err = l.InitAtPath(configPath)
 	}
 	if err != nil {
-		return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+		return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd bundle --config %s --output DIR`: %w", configPath, err)
 	}
 
 	for name := range cfg.Integrations {
@@ -590,23 +590,23 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	key := LockPluginKey(kind, name)
 	entry, ok := lock.Plugins[key]
 	if !ok {
-		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", kind, name, paths.configPath)
 	}
 	fingerprint, err := PluginFingerprint(name, plugin, configMap)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
 	if entry.Fingerprint != fingerprint || entry.Package != plugin.Package {
-		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", kind, name, paths.configPath)
 	}
 
 	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
 	executablePath := resolveLockPath(paths.configDir, entry.Executable)
 	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, manifestPath, paths.configPath)
+		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd bundle --config %s --output DIR`", kind, name, manifestPath, paths.configPath)
 	}
 	if _, err := os.Stat(executablePath); err != nil {
-		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, executablePath, paths.configPath)
+		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd bundle --config %s --output DIR`", kind, name, executablePath, paths.configPath)
 	}
 
 	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
