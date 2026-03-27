@@ -137,7 +137,8 @@ func (a *providerAssembly) build() (_ *bootstrap.ProviderBuildResult, err error)
 func (a *providerAssembly) buildConnectionAuth() map[string]bootstrap.OAuthHandler {
 	authMap := make(map[string]bootstrap.OAuthHandler)
 
-	for connName, conn := range a.intg.Connections {
+	for connName := range a.intg.Connections {
+		conn := a.intg.Connections[connName]
 		switch conn.Auth.Type {
 		case "oauth2", "":
 			if conn.Auth.AuthorizationURL == "" && conn.Auth.ClientID == "" {

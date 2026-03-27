@@ -78,15 +78,15 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 // server tests. Only the methods actually exercised by each test need non-nil
 // implementations.
 type testOAuthHandler struct {
-	authorizationURLFn      func(state string, scopes []string) string
-	startOAuthFn            func(state string, scopes []string) (string, string)
+	authorizationURLFn       func(state string, scopes []string) string
+	startOAuthFn             func(state string, scopes []string) (string, string)
 	startOAuthWithOverrideFn func(authBaseURL, state string, scopes []string) (string, string)
-	exchangeCodeFn          func(ctx context.Context, code string) (*core.TokenResponse, error)
-	exchangeCodeWithVerFn   func(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-	refreshTokenFn          func(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
-	refreshTokenWithURLFn   func(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-	authorizationBaseURLVal string
-	tokenURLVal             string
+	exchangeCodeFn           func(ctx context.Context, code string) (*core.TokenResponse, error)
+	exchangeCodeWithVerFn    func(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	refreshTokenFn           func(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	refreshTokenWithURLFn    func(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	authorizationBaseURLVal  string
+	tokenURLVal              string
 }
 
 func (h *testOAuthHandler) AuthorizationURL(state string, scopes []string) string {
