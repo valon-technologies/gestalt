@@ -497,6 +497,62 @@ func TestExtractAuthHTTPBasic(t *testing.T) {
 	}
 }
 
+func TestLoadDefinitionRelativeServerURL(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		servers []any
+		want    string
+	}{
+		{
+			name:    "absolute URL unchanged",
+			servers: []any{map[string]string{"url": "https://api.example.com/v1"}},
+			want:    "https://api.example.com/v1",
+		},
+		{
+			name:    "relative path resolved against spec URL",
+			servers: []any{map[string]string{"url": "/v1"}},
+		},
+		{
+			name:    "no servers leaves BaseURL empty",
+			servers: nil,
+			want:    "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			spec := map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Test"},
+				"paths":   map[string]any{},
+			}
+			if tc.servers != nil {
+				spec["servers"] = tc.servers
+			}
+
+			srv := serveJSON(t, spec)
+			testutil.CloseOnCleanup(t, srv)
+
+			want := tc.want
+			if tc.name == "relative path resolved against spec URL" {
+				want = srv.URL + "/v1"
+			}
+
+			def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+			if err != nil {
+				t.Fatalf("LoadDefinition: %v", err)
+			}
+			if def.BaseURL != want {
+				t.Errorf("BaseURL = %q, want %q", def.BaseURL, want)
+			}
+		})
+	}
+}
+
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 
