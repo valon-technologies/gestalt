@@ -1,0 +1,180 @@
+name: Release Gestaltd
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-assets
+          path: web/out/
+          if-no-files-found: error
+
+  build:
+    name: Build - ${{ matrix.platform.name }}
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: macOS-ARM64
+            goos: darwin
+            goarch: arm64
+            suffix: macos-arm64
+          - name: macOS-x86_64
+            goos: darwin
+            goarch: amd64
+            suffix: macos-x86_64
+          - name: Linux-x86_64
+            goos: linux
+            goarch: amd64
+            suffix: linux-x86_64
+          - name: Linux-ARM64
+            goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-assets
+          path: internal/webui/out/
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.platform.goos }}
+          GOARCH: ${{ matrix.platform.goarch }}
+        run: |
+          go build \
+            -ldflags "-X main.version=${{ steps.version.outputs.version }}" \
+            -o gestaltd \
+            ./cmd/gestaltd
+      - name: Package
+        run: |
+          tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz gestaltd
+          shasum -a 256 gestaltd-${{ matrix.platform.suffix }}.tar.gz > gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gestaltd-${{ matrix.platform.suffix }}
+          path: |
+            gestaltd-${{ matrix.platform.suffix }}.tar.gz
+            gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    name: Attach to Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten artifacts
+        run: |
+          mkdir release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} release/ \;
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+
+  update-formula:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.PAT_TOKEN }}
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Download SHA256 files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p checksums
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "gestaltd-*.sha256" \
+            --dir checksums
+      - name: Parse checksums
+        id: checksums
+        run: |
+          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-x86_64; do
+            hash=$(awk '{print $1}' "checksums/gestaltd-${platform}.tar.gz.sha256")
+            echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
+          done
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos-arm64 }}
+          SHA_MACOS_X86: ${{ steps.checksums.outputs.macos-x86_64 }}
+          SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
+          SHA_LINUX_X86: ${{ steps.checksums.outputs.linux-x86_64 }}
+        run: |
+          FORMULA="Formula/gestaltd.rb"
+          OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
+          sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
+          sed -i "s|/download/v${OLD_VERSION}/|/download/v${VERSION}/|g" "$FORMULA"
+          awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
+              -v sha_macos_x86="$SHA_MACOS_X86" \
+              -v sha_linux_arm64="$SHA_LINUX_ARM64" \
+              -v sha_linux_x86="$SHA_LINUX_X86" \
+          '
+          /gestaltd-macos-arm64\.tar\.gz/ { found="macos-arm64" }
+          /gestaltd-macos-x86_64\.tar\.gz/ { found="macos-x86" }
+          /gestaltd-linux-arm64\.tar\.gz/ { found="linux-arm64" }
+          /gestaltd-linux-x86_64\.tar\.gz/ { found="linux-x86" }
+          /sha256 "/ {
+            if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
+            if (found == "macos-x86") { sub(/"[^"]*"/, "\"" sha_macos_x86 "\"") }
+            if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
+            if (found == "linux-x86") { sub(/"[^"]*"/, "\"" sha_linux_x86 "\"") }
+            found=""
+          }
+          { print }
+          ' "$FORMULA" > "${FORMULA}.tmp" && mv "${FORMULA}.tmp" "$FORMULA"
+      - name: Verify formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          grep -q "version \"${VERSION}\"" Formula/gestaltd.rb
+          echo "Formula verified"
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gestaltd.rb
+          git diff --cached --quiet && { echo "No formula changes"; exit 0; }
+          git commit -m "Update gestaltd formula to v${{ steps.version.outputs.version }}"
+          git pull --rebase origin main
+          git push

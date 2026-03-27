@@ -31,6 +31,9 @@ func run(args []string) error {
 		case "-h", "--help", "help":
 			printMainUsage(os.Stderr)
 			return flag.ErrHelp
+		case "version", "--version", "-v":
+			fmt.Println(version)
+			return nil
 		case "plugin":
 			return runPlugin(args[1:])
 		case "serve":
@@ -372,6 +375,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
 	writeUsageLine(w, "  plugin      Package plugins for distribution")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
+	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config    Path to the config file")
