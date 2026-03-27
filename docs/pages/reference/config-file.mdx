@@ -8,7 +8,6 @@ This page is the authoritative reference for `gestaltd` configuration.
 auth: {}
 datastore: {}
 secrets: {}
-auth_profiles: {}
 integrations: {}
 runtimes: {}
 bindings: {}
@@ -157,116 +156,112 @@ Any string value outside `secrets.config` may use:
 secret://name-of-secret
 ```
 
-## `auth_profiles`
-
-Auth profiles let you define shared integration auth once and reference it from integrations or individual upstreams.
-
-```yaml
-auth_profiles:
-  github_oauth:
-    client_id: ${GITHUB_CLIENT_ID}
-    client_secret: secret://github-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/callback
-    auth:
-      type: oauth2
-      authorization_url: https://github.com/login/oauth/authorize
-      token_url: https://github.com/login/oauth/access_token
-```
-
-Profile fields are inherited unless the integration or upstream overrides them locally.
-
 ## `integrations`
 
-Integrations are the main user-facing primitive.
+Integrations are the main user-facing primitive. Each integration follows one of two patterns: declarative (`connections` + `api`/`mcp`) or plugin-only.
+
+### Declarative integration
 
 ```yaml
 integrations:
   github:
     display_name: GitHub
     description: GitHub REST API
-    auth_profile: github_oauth
-    connection_mode: user
     mcp_tool_prefix: github_
-    plugin: {}
-    client_id: ${GITHUB_CLIENT_ID}
-    client_secret: secret://github-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/callback
-    base_url: https://api.github.com
-    auth: {}
-    auth_header: Authorization
-    auth_mapping: {}
-    error_message_path: error.message
-    response_check: {}
-    manual_auth: false
-    token_prefix: Bearer
-    auth_style: bearer
     icon_file: ./icons/github.svg
-    headers:
-      X-GitHub-Api-Version: "2022-11-28"
-    upstreams: []
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: ${GITHUB_CLIENT_SECRET}
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+    api:
+      type: rest
+      openapi: https://raw.githubusercontent.com/.../api.github.com.json
+      connection: default
+      allowed_operations:
+        repos_listForAuthenticatedUser: List repositories
+        issues_listForAuthenticatedUser: List issues
 ```
 
 | Field | Notes |
 | --- | --- |
-| `upstreams` | Source operations from REST, GraphQL, or MCP. |
 | `display_name`, `description` | Presentation metadata. |
-| `auth_profile` | Reuse shared auth values. |
-| `connection_mode` | `user`, `identity`, `either`, or `none`. Defaults to `user`. |
 | `mcp_tool_prefix` | Prefix tool names when exposing this integration over MCP. |
-| `plugin` | Executable provider plugin config. |
-| `client_id`, `client_secret`, `redirect_url` | Integration-level auth values that upstreams inherit unless they override them. |
-| `base_url` | Advanced override used by some provider builds. |
-| `auth` | Advanced auth override block. |
-| `auth_header` | Custom token header name. |
-| `auth_mapping` | Maps header names to fields extracted from structured token payloads. |
-| `error_message_path` | Error extraction path for upstream responses. |
-| `response_check` | Declarative success and error checks. |
-| `manual_auth` | Expose both OAuth and manual connection paths when supported. |
-| `token_prefix` | Prefix inserted before a raw token string. |
-| `auth_style` | `bearer`, `raw`, `none`, or `basic`. |
 | `icon_file` | SVG path, resolved relative to the config file. |
-| `headers` | Static request headers added to upstream calls. |
+| `connections` | Named connections that own mode, auth, and params. |
+| `api` | REST or GraphQL surface. |
+| `mcp` | Upstream MCP surface. |
 
-### `upstreams`
+### `connections`
 
 ```yaml
-upstreams:
-  - type: rest
-    url: https://example.com/openapi.json
-    mcp: true
-    allowed_operations:
-      listThings: List things
-    auth_profile: shared_auth
-    auth: {}
-    client_id: ${CLIENT_ID}
-    client_secret: secret://client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/callback
+connections:
+  default:
+    mode: user
+    params:
+      subdomain:
+        required: true
+    auth:
+      type: oauth2
+      authorization_url: https://accounts.example.com/oauth/authorize
+      token_url: https://accounts.example.com/oauth/token
+      client_id: ${CLIENT_ID}
+      client_secret: ${CLIENT_SECRET}
 ```
 
 | Field | Notes |
 | --- | --- |
-| `type` | `rest`, `graphql`, or `mcp`. |
-| `url` | Required for all upstream types. |
-| `mcp` | For `rest` and `graphql`, also expose operations through `/mcp`. |
+| `mode` | `user`, `identity`, or `none`. All connections in an integration must share the same mode. |
+| `params` | Named parameters callers supply when connecting. Used for URL template expansion. |
+| `auth` | Auth configuration for this connection. |
+
+### `api`
+
+```yaml
+api:
+  type: rest
+  openapi: https://example.com/openapi.json
+  connection: default
+  allowed_operations:
+    listThings: List things
+```
+
+| Field | Notes |
+| --- | --- |
+| `type` | `rest` or `graphql`. |
+| `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
+| `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
+| `connection` | References a named connection in the same integration. |
 | `allowed_operations` | Either a YAML list of names or a YAML map of name to description override. |
-| `auth_profile` | Optional upstream-specific auth profile. |
-| `auth`, `client_id`, `client_secret`, `redirect_url` | Upstream-level auth overrides. |
 
-Rules:
+### `mcp`
 
-- at most one REST or GraphQL upstream per integration
-- at most one MCP upstream per integration
-- one API upstream plus one MCP upstream is valid
+```yaml
+mcp:
+  url: https://mcp.example.com
+  connection: mcp_conn
+```
+
+| Field | Notes |
+| --- | --- |
+| `url` | Required. The upstream MCP server URL. |
+| `connection` | References a named connection in the same integration. |
 
 ### `auth`
 
-This block is used at integration level or upstream level.
+This block is used inside a connection.
 
 ```yaml
 auth:
   type: oauth2
   authorization_url: https://provider.example.com/oauth/authorize
   token_url: https://provider.example.com/oauth/token
+  client_id: ${CLIENT_ID}
+  client_secret: ${CLIENT_SECRET}
   client_auth: body
   token_exchange: form
   scopes:
@@ -282,11 +277,6 @@ auth:
   accept_header: application/json
   token_metadata:
     - workspace_id
-  response_check:
-    success_body_match:
-      ok: true
-    error_message_path: error
-  auth_header: Authorization
 ```
 
 Supported or notable fields:
@@ -294,6 +284,7 @@ Supported or notable fields:
 - `type`
 - `authorization_url`
 - `token_url`
+- `client_id`, `client_secret`
 - `client_auth`
 - `token_exchange`
 - `scopes`
@@ -304,17 +295,22 @@ Supported or notable fields:
 - `refresh_params`
 - `accept_header`
 - `token_metadata`
-- `response_check`
-- `auth_header`
 
 The normal auth types are `oauth2` and `manual`. `mcp_oauth` also exists as an advanced mode for MCP-driven OAuth discovery.
 
 ### `plugin`
 
+Plugin-only integrations cannot also declare `connections`, `api`, or `mcp`.
+
+```yaml
+integrations:
+  custom_tool:
+    plugin:
+      package: ./custom-tool.tar.gz
+```
+
 ```yaml
 plugin:
-  mode: overlay
-  base: jira
   command: ./my-plugin
   package: https://example.com/my-plugin.tar.gz
   args:
@@ -327,8 +323,6 @@ plugin:
 
 | Field | Notes |
 | --- | --- |
-| `mode` | `replace` or `overlay`. Defaults to `replace`. |
-| `base` | Only valid with `mode: overlay`. Names a built-in provider base. |
 | `command` | Local executable path. Mutually exclusive with `package`. |
 | `package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `command`. |
 | `args` | Only valid with `command`. |
@@ -339,7 +333,7 @@ Validation rules:
 
 - exactly one of `command` or `package`
 - plain `http://` package URLs are rejected
-- overlay integrations must declare exactly one base source via `upstreams` or `plugin.base`
+- plugin integrations cannot declare `connections`, `api`, or `mcp`
 
 ## `runtimes`
 
@@ -486,7 +480,12 @@ egress:
 - `auth.provider` is required
 - `datastore.provider` is required
 - `server.encryption_key` is required outside dev mode
-- integrations cannot mix `plugin` and `upstreams` unless `plugin.mode: overlay`
+- integrations are either declarative (`connections` + `api`/`mcp`) or plugin-only
+- all connections in an integration must share the same mode
+- `api` surfaces reference connections by name; `api.connection` must exist in `connections`
+- `mcp` surfaces reference connections by name; `mcp.connection` must exist in `connections`
+- REST API surfaces require `api.openapi`; GraphQL surfaces require `api.url`
+- URL templates in surface URLs and auth URLs must reference required params
 - runtime plugins must use `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`
 - runtime plugins cannot use overlay mode
 - `egress.default_action` and policy `action` must be `allow` or `deny`

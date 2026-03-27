@@ -9,49 +9,154 @@ integrations:
   github:
     display_name: GitHub
     description: GitHub REST API
-    auth_profile: github_oauth
-    connection_mode: user
     mcp_tool_prefix: github_
-    headers:
-      X-GitHub-Api-Version: "2022-11-28"
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-        mcp: true
-        allowed_operations:
-          repos_listForAuthenticatedUser: List repositories
-          issues_listForAuthenticatedUser: List assigned issues
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: ${GITHUB_CLIENT_SECRET}
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+    api:
+      type: rest
+      openapi: https://raw.githubusercontent.com/.../api.github.com.json
+      connection: default
+      allowed_operations:
+        repos_listForAuthenticatedUser: List repositories
+        issues_listForAuthenticatedUser: List assigned issues
 ```
 
-This one block answers five questions:
+This one block answers four questions:
 
 1. What should the provider be called
-2. Where do its operations come from
-3. How should credentials be resolved
+2. How should credentials be resolved (connections)
+3. Where do its operations come from (api/mcp surfaces)
 4. Which operations should be exposed
-5. Whether those operations should also appear on `/mcp`
 
-## Upstreams
+## Two Lanes
 
-An integration must declare a base source of operations unless it fully replaces that source with a plugin.
+Every integration follows one of two patterns:
 
-Supported upstream types are:
+- **Declarative**: `connections` + one or both of `api` and `mcp`
+- **Plugin-only**: just a `plugin` block
 
-| Type | What it does |
+You cannot mix plugin and declarative surfaces.
+
+## Connections
+
+Connections own credential resolution for an integration. Each named connection declares a mode, optional auth, and optional params.
+
+```yaml
+connections:
+  default:
+    mode: user
+    params:
+      subdomain:
+        required: true
+    auth:
+      type: oauth2
+      authorization_url: https://accounts.example.com/oauth/authorize
+      token_url: https://accounts.example.com/oauth/token
+      client_id: ${CLIENT_ID}
+      client_secret: ${CLIENT_SECRET}
+```
+
+All connections within a single integration must share the same mode.
+
+### Connection Modes
+
+| Value | Behavior |
 | --- | --- |
-| `rest` | Loads operations from an OpenAPI document. |
-| `graphql` | Introspects a GraphQL endpoint and exposes query and mutation fields as operations. |
-| `mcp` | Imports tools from an upstream MCP server. |
+| `user` | Use the authenticated caller's token. |
+| `identity` | Use a shared identity token. |
+| `none` | Use no credential. |
 
-Composition is deliberately constrained:
+### Params
 
-- one `rest` or `graphql` upstream maximum
-- one `mcp` upstream maximum
-- one API upstream plus one MCP upstream is valid
+Connections can declare named parameters that callers supply when connecting. Required params are used for URL template expansion in surface URLs and auth URLs.
+
+```yaml
+params:
+  subdomain:
+    required: true
+```
+
+A URL like `https://{subdomain}.example.com/api` is expanded using the connection's params at request time.
+
+## Surfaces: `api` And `mcp`
+
+Surfaces define where operations come from. An integration can declare one `api` surface, one `mcp` surface, or both.
+
+### `api`
+
+```yaml
+api:
+  type: rest
+  openapi: https://example.com/openapi.json
+  connection: default
+  allowed_operations:
+    listThings: List things
+```
+
+| Field | Notes |
+| --- | --- |
+| `type` | `rest` or `graphql`. |
+| `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
+| `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
+| `connection` | Name of a connection defined in the same integration. |
+| `allowed_operations` | Narrows exposed operations. List of names or map of name to description override. |
+
+### `mcp`
+
+```yaml
+mcp:
+  url: https://mcp.example.com
+  connection: mcp_conn
+```
+
+| Field | Notes |
+| --- | --- |
+| `url` | Required. The upstream MCP server URL. |
+| `connection` | Name of a connection defined in the same integration. |
+
+### Multiple Connections
+
+An integration can define separate connections for its API and MCP surfaces. This is useful when the two surfaces authenticate through different providers.
+
+```yaml
+integrations:
+  shop:
+    connections:
+      api_conn:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://accounts.shopify.com/oauth/authorize
+          token_url: https://accounts.shopify.com/oauth/token
+          client_id: ${SHOP_CLIENT_ID}
+          client_secret: ${SHOP_SECRET}
+      mcp_conn:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://mcp-auth.example.com/authorize
+          token_url: https://mcp-auth.example.com/token
+          client_id: ${MCP_CLIENT_ID}
+          client_secret: ${MCP_SECRET}
+    api:
+      type: graphql
+      url: https://{subdomain}.myshopify.com/admin/api/graphql.json
+      connection: api_conn
+    mcp:
+      url: https://tenant-{subdomain}.mcp.example.com
+      connection: mcp_conn
+```
 
 ## Operation Exposure
 
-`allowed_operations` narrows what a provider exposes.
+`allowed_operations` on `api` narrows what a provider exposes.
 
 It supports two forms:
 
@@ -71,85 +176,20 @@ allowed_operations:
 
 The list form keeps upstream descriptions. The map form lets you override descriptions.
 
-If you omit `allowed_operations`, Gestalt exposes every operation from the upstream.
-
-## Auth Inheritance
-
-Auth configuration can live at three layers:
-
-1. `auth_profiles.<name>`
-2. `integrations.<name>`
-3. `integrations.<name>.upstreams[]`
-
-Resolution is cascading:
-
-- an integration may reference `auth_profile`
-- an upstream may reference its own `auth_profile`
-- integration-level auth fields flow down to upstreams that do not override them
-
-That lets you centralize OAuth details once and reuse them across multiple integrations.
-
-## Connection Modes
-
-`connection_mode` controls where credentials come from:
-
-| Value | Behavior |
-| --- | --- |
-| `user` | Use the authenticated caller's token. |
-| `identity` | Use a shared identity token. |
-| `either` | Prefer the user token, fall back to the identity token. |
-| `none` | Use no credential. |
-
-If you do not set it, Gestalt uses `user`.
-
-## Integration-Level Auth Behavior
-
-In addition to upstream auth config, integrations expose a few convenience fields:
-
-| Field | Purpose |
-| --- | --- |
-| `client_id`, `client_secret`, `redirect_url` | Common OAuth values applied to upstreams unless an upstream overrides them. |
-| `auth` | Low-level auth override block for OAuth or manual auth behavior. |
-| `auth_header` | Custom header used for token placement. |
-| `auth_mapping` | Maps header names to fields extracted from structured tokens. |
-| `token_prefix` | Prefix inserted before the raw token string. |
-| `auth_style` | Token style such as `bearer`, `raw`, `basic`, or `none`. |
-| `manual_auth` | Expose a manual-auth connection path alongside OAuth when supported. |
-| `response_check` | Declare success matching and error extraction. |
-| `headers` | Static request headers added to upstream calls. |
+If you omit `allowed_operations`, Gestalt exposes every operation from the source.
 
 ## Plugins
 
-An integration can also be backed by an executable provider plugin:
+An integration can be backed by an executable provider plugin instead of declarative surfaces:
 
 ```yaml
 integrations:
-  example:
+  custom_tool:
     plugin:
-      command: ./example-provider
-      config:
-        greeting: hello
+      package: ./custom-tool.tar.gz
 ```
 
-By default, that replaces upstreams entirely.
-
-If you need to wrap an existing integration, use overlay mode:
-
-```yaml
-integrations:
-  github:
-    upstreams:
-      - type: rest
-        url: https://example.com/openapi.json
-    plugin:
-      mode: overlay
-      command: ./github-overlay
-```
-
-Overlay providers are only valid for integrations, not runtimes, and they must declare exactly one base source:
-
-- either `upstreams`
-- or `plugin.base`
+Plugin integrations cannot also declare `connections`, `api`, or `mcp`.
 
 ## Metadata And Presentation
 
