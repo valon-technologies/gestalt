@@ -12,13 +12,13 @@ class Gestaltd < Formula
     on_arm do
       url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.6/gestaltd-macos-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "8a2e67f2d3829d832b020affed4c42f83a4a30ad0e42b17e96229f3fc3840af6"
+      sha256 "4af2a70f4496470de0388df8efe1a3306e82acb3592bfc86836073160b4f180b"
     end
 
     on_intel do
       url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.6/gestaltd-macos-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "babf6c30b3b4714ce3bd65ae79dcef71acca6357ef2bb000aa074aafd321adf9"
+      sha256 "17a64c6a40fd01f3346ea5c1c9902ee505e1c4a7797f3a88a6c50ddfbfb74dbd"
     end
   end
 
@@ -26,13 +26,13 @@ class Gestaltd < Formula
     on_arm do
       url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.6/gestaltd-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "b676fa4924e7fe60d58f0482f2ebe0a918fb2c5ecebd0271320a7e2bd860e972"
+      sha256 "608e19ca6ad7351c7ea3d66bc4b183c28fd57acbe1437236f14392c6a3772b0d"
     end
 
     on_intel do
       url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.6/gestaltd-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "ec62b12f05ad5c65b5d3b7ecdf274698e86daac5c5adf5ee68d622caece4165d"
+      sha256 "fc1349d6cbd8e6fa52fdae535b77a4350643d8fe9914bd35fa656c8ce4428a27"
     end
   end
 
