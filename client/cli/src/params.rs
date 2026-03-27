@@ -16,7 +16,16 @@ pub struct ParamEntry {
 }
 
 pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
-    if let Some(pos) = s.find(":=") {
+    let eq_pos = s.find('=');
+    let colon_eq_pos = s.find(":=");
+
+    let use_json = match (eq_pos, colon_eq_pos) {
+        (_, Some(ce)) if eq_pos.is_none() || ce < eq_pos.unwrap() => true,
+        _ => false,
+    };
+
+    if use_json {
+        let pos = colon_eq_pos.unwrap();
         let key = &s[..pos];
         let raw_json = &s[pos + 2..];
         if key.is_empty() {
@@ -30,9 +39,7 @@ pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
         });
     }
 
-    let pos = s
-        .find('=')
-        .ok_or_else(|| format!("invalid param: no '=' or ':=' found in '{s}'"))?;
+    let pos = eq_pos.ok_or_else(|| format!("invalid param: no '=' or ':=' found in '{s}'"))?;
     let key = &s[..pos];
     if key.is_empty() {
         return Err(format!("invalid KEY=VALUE: empty key in '{s}'"));
@@ -204,5 +211,15 @@ mod tests {
     fn test_parse_no_delimiter() {
         let result = parse_param_entry("nodelimiter");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_value_containing_colon_equals() {
+        let entry = parse_param_entry("query=SELECT @a:=1").unwrap();
+        assert_eq!(entry.key, "query");
+        assert_eq!(
+            entry.value,
+            ParamValue::StringVal("SELECT @a:=1".to_string())
+        );
     }
 }

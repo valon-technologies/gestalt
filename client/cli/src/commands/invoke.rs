@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::api::ApiClient;
-use crate::catalog::{self, CatalogOperation};
+use crate::catalog;
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
@@ -53,21 +53,19 @@ pub fn list_operations(
     format: Format,
 ) -> Result<()> {
     let client = ApiClient::from_env(url_override)?;
-    let path = format!("/api/v1/integrations/{}/operations", integration);
-    let resp = client
-        .get(&path)
-        .with_context(|| format!("failed to list operations for {}", integration))?;
+    let cat = catalog::fetch_catalog(&client, integration)?;
 
     match format {
-        Format::Json => output::print_json(&resp),
+        Format::Json => {
+            output::print_json(&serde_json::to_value(cat.operations()).unwrap());
+        }
         Format::Table => {
-            let operations: Vec<CatalogOperation> =
-                serde_json::from_value(resp).context("failed to parse operations response")?;
-            let rows: Vec<Vec<String>> = operations
-                .into_iter()
+            let rows: Vec<Vec<String>> = cat
+                .operations()
+                .iter()
                 .map(|op| {
                     let params = format_parameters(&op.parameters);
-                    vec![op.id, op.description, op.method, params]
+                    vec![op.id.clone(), op.description.clone(), op.method.clone(), params]
                 })
                 .collect();
             output::print_table(&["Name", "Description", "Method", "Parameters"], &rows);
