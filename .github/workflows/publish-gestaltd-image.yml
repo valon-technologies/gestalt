@@ -8,7 +8,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -28,4 +28,5 @@ jobs:
           tags: |
             valontechnologies/gestalt:latest
             valontechnologies/gestalt:${{ github.sha }}
-          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
