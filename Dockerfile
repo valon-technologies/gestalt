@@ -5,7 +5,8 @@ RUN npm ci
 COPY web/ .
 RUN npm run build
 
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
 WORKDIR /build
 COPY go.mod go.sum ./
 COPY sdk/pluginapi/go.mod sdk/pluginapi/go.sum sdk/pluginapi/
@@ -17,8 +18,12 @@ COPY . .
 COPY --from=frontend /web/out/ internal/webui/out/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /gestaltd ./cmd/gestaltd
 
+FROM build AS builder
+COPY --from=build /gestaltd /usr/local/bin/gestaltd
+WORKDIR /workspace
+
 FROM gcr.io/distroless/static-debian12
-COPY --from=builder /gestaltd /gestaltd
+COPY --from=build /gestaltd /gestaltd
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]
