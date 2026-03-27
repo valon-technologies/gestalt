@@ -33,7 +33,6 @@ func (b *Binding) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	target := egress.Target{
 		Provider: b.provider,
-		Instance: b.cfg.Instance,
 		Method:   http.MethodConnect,
 		Host:     targetHost,
 	}

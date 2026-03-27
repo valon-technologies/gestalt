@@ -18,7 +18,6 @@ type Subject struct {
 // Target describes the destination and logical source for an outbound request.
 type Target struct {
 	Provider  string
-	Instance  string
 	Operation string
 	Method    string
 	Host      string
