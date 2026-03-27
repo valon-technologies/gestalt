@@ -137,4 +137,5 @@ jobs:
           git add Formula/gestalt.rb
           git diff --cached --quiet && { echo "No formula changes to commit"; exit 0; }
           git commit -m "Update gestalt formula to v${{ steps.version.outputs.version }}"
+          git pull --rebase origin main
           git push
