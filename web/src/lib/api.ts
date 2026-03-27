@@ -94,7 +94,6 @@ export async function fetchAPI<T>(
 export interface AuthInfo {
   provider: string;
   display_name: string;
-  dev_mode: boolean;
 }
 
 export async function getAuthInfo(): Promise<AuthInfo> {

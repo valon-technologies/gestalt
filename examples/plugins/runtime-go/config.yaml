@@ -10,7 +10,6 @@ datastore:
     path: ./example.db
 
 server:
-  dev_mode: true
   encryption_key: dev-key-for-example-only
 
 integrations:

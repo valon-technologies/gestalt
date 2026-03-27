@@ -1,9 +1,5 @@
 auth:
-  provider: google  # or "oidc" — see docs/auth.md
-  config:
-    client_id: dev-placeholder
-    client_secret: dev-placeholder
-    redirect_url: http://localhost:8080/auth/callback
+  provider: none
 
 datastore:
   provider: sqlite
@@ -12,5 +8,4 @@ datastore:
 
 server:
   port: 8080
-  dev_mode: true
   encryption_key: dev-encryption-key-not-for-production

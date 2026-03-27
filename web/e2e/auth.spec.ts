@@ -1,6 +1,9 @@
 import { test, expect, mockAuthInfo, mockIntegrations, mockTokens } from "./fixtures";
 
+const hasBackend = !!process.env.PLAYWRIGHT_BASE_URL;
+
 test.describe("Authentication", () => {
+  test.skip(hasBackend, "Auth flow tests use mocked routes and do not apply when running against a real server");
   test("unauthenticated user is redirected to /login", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/login/);

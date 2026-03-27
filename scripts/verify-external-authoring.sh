@@ -93,7 +93,7 @@ echo "=== packaging ==="
 echo "=== writing config ==="
 cat > config.yaml <<CFG
 auth:
-  provider: local
+  provider: none
 datastore:
   provider: sqlite
   config:
@@ -102,7 +102,6 @@ secrets:
   provider: env
 server:
   port: $PORT
-  dev_mode: true
   encryption_key: verify-external-key
 integrations:
   external:
@@ -153,8 +152,7 @@ if [ $TRIES -ge 30 ]; then
 fi
 
 echo "=== invoking plugin ==="
-RESPONSE=$(curl -s -X GET "http://localhost:$PORT/api/v1/external/ping" \
-    -H "X-Dev-User-Email: test@example.com") || true
+RESPONSE=$(curl -s -X GET "http://localhost:$PORT/api/v1/external/ping") || true
 
 echo "response: $RESPONSE"
 

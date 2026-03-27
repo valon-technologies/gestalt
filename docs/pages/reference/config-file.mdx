@@ -33,15 +33,13 @@ server:
   port: 8080
   base_url: https://gestalt.example.com
   encryption_key: secret://gestalt-encryption-key
-  dev_mode: false
 ```
 
 | Field | Required | Notes |
 | --- | --- | --- |
 | `port` | no | Defaults to `8080`. |
 | `base_url` | no, but strongly recommended | Used to derive OAuth callback URLs when explicit redirect URLs are missing. |
-| `encryption_key` | yes unless `dev_mode: true` | Root deployment secret used for encryption and derived session material. |
-| `dev_mode` | no | Enables dev login, `X-Dev-User-Email`, dev CORS, and dev-only built-ins. |
+| `encryption_key` | yes | Root deployment secret used for encryption and derived session material. |
 
 ## `auth`
 

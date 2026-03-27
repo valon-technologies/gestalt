@@ -66,7 +66,7 @@ Some fields are effectively mandatory:
 
 - `auth.provider`
 - `datastore.provider`
-- `server.encryption_key`, unless `server.dev_mode: true`
+- `server.encryption_key`
 
 `server.encryption_key` is the root secret for the deployment. Gestalt derives other cryptographic material from it, including session-related secrets for some auth providers.
 
@@ -130,28 +130,16 @@ The secret manager resolves the part after `secret://`:
 - `file` reads it from a file inside a configured directory
 - `gcp_secret_manager` reads it from Google Secret Manager
 
-## Dev Mode
-
-`server.dev_mode: true` changes the server in a few important ways:
-
-- enables `POST /api/dev-login`
-- accepts `X-Dev-User-Email` for local testing
-- enables permissive dev CORS
-- registers dev-only built-ins such as the `echo` provider and `echo` runtime
-
-That makes dev mode useful for local setup, but it is not a production setting.
-
 ## The Smallest Explicit Config
 
 ```yaml
 server:
   port: 8080
   base_url: http://localhost:8080
-  dev_mode: true
   encryption_key: change-me
 
 auth:
-  provider: local
+  provider: none
 
 datastore:
   provider: sqlite

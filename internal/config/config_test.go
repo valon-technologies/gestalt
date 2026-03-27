@@ -337,7 +337,7 @@ integrations:
 	}
 }
 
-func TestValidateRuntimeAcceptsDevMode(t *testing.T) {
+func TestValidateRuntimeRequiresEncryptionKey(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -345,16 +345,14 @@ auth:
   provider: auth-provider
 datastore:
   provider: data-store
-server:
-  dev_mode: true
 `)
 
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if err := ValidateRuntime(cfg); err != nil {
-		t.Fatalf("ValidateRuntime: %v", err)
+	if err := ValidateRuntime(cfg); err == nil {
+		t.Fatal("expected error for missing encryption_key, got nil")
 	}
 }
 

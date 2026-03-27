@@ -48,7 +48,7 @@ func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
-	factories := buildFactories(preparedProviders, cfg.Server.DevMode)
+	factories := buildFactories(preparedProviders)
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -81,7 +81,7 @@ func (e *bootstrapEnv) Close() {
 	_ = e.Result.Close(ctx)
 }
 
-func buildFactories(preparedProviders map[string]string, devMode bool) *bootstrap.FactoryRegistry {
+func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
 	factories.Auth["local"] = local.Factory
@@ -97,10 +97,8 @@ func buildFactories(preparedProviders map[string]string, devMode bool) *bootstra
 	factories.Datastores["sqlserver"] = sqlserver.Factory
 	registerProviders(factories)
 	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
-	if devMode {
-		factories.Builtins = append(factories.Builtins, echo.New())
-		factories.Runtimes["echo"] = echoruntime.Factory
-	}
+	factories.Builtins = append(factories.Builtins, echo.New())
+	factories.Runtimes["echo"] = echoruntime.Factory
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Bindings["proxy"] = proxy.Factory
 	factories.Secrets["env"] = secretsenv.Factory

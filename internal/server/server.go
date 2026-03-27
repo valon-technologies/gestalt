@@ -19,23 +19,24 @@ import (
 type ReadinessChecker func() string
 
 type Server struct {
-	router            chi.Router
-	auth              core.AuthProvider
-	datastore         core.Datastore
-	providers         *registry.PluginMap[core.Provider]
-	runtimes          *registry.PluginMap[core.Runtime]
-	bindings          *registry.PluginMap[core.Binding]
-	resolver          *principal.Resolver
-	invoker           invocation.Invoker
-	defaultConnection map[string]string
-	integrationDefs   map[string]config.IntegrationDef
-	devMode           bool
-	noAuth            bool
-	stateCodec        *integrationOAuthStateCodec
-	now               func() time.Time
-	readiness         ReadinessChecker
-	mcpHandler        http.Handler
-	webUI             http.Handler
+	router             chi.Router
+	auth               core.AuthProvider
+	datastore          core.Datastore
+	providers          *registry.PluginMap[core.Provider]
+	runtimes           *registry.PluginMap[core.Runtime]
+	bindings           *registry.PluginMap[core.Binding]
+	resolver           *principal.Resolver
+	invoker            invocation.Invoker
+	defaultConnection  map[string]string
+	integrationDefs    map[string]config.IntegrationDef
+	noAuth             bool
+	anonymousPrincipal *principal.Principal
+	secureCookies      bool
+	stateCodec         *integrationOAuthStateCodec
+	now                func() time.Time
+	readiness          ReadinessChecker
+	mcpHandler         http.Handler
+	webUI              http.Handler
 }
 
 type Config struct {
@@ -47,7 +48,7 @@ type Config struct {
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
 	IntegrationDefs   map[string]config.IntegrationDef
-	DevMode           bool
+	SecureCookies     bool
 	StateSecret       []byte
 	Now               func() time.Time
 	Readiness         ReadinessChecker
@@ -72,6 +73,9 @@ func New(cfg Config) (*Server, error) {
 		now = time.Now
 	}
 
+	resolver := principal.NewResolver(cfg.Auth, cfg.Datastore)
+	noAuth := cfg.Auth.Name() == "none"
+
 	s := &Server{
 		router:            chi.NewRouter(),
 		auth:              cfg.Auth,
@@ -79,17 +83,20 @@ func New(cfg Config) (*Server, error) {
 		providers:         cfg.Providers,
 		runtimes:          cfg.Runtimes,
 		bindings:          cfg.Bindings,
-		resolver:          principal.NewResolver(cfg.Auth, cfg.Datastore),
+		resolver:          resolver,
 		invoker:           cfg.Invoker,
 		defaultConnection: cfg.DefaultConnection,
 		integrationDefs:   cfg.IntegrationDefs,
-		devMode:           cfg.DevMode,
-		noAuth:            cfg.Auth.Name() == "none" && cfg.DevMode,
+		noAuth:            noAuth,
+		secureCookies:     cfg.SecureCookies,
 		stateCodec:        stateCodec,
 		now:               now,
 		readiness:         cfg.Readiness,
 		mcpHandler:        cfg.MCPHandler,
 		webUI:             cfg.WebUI,
+	}
+	if noAuth {
+		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
 
 	s.routes()
