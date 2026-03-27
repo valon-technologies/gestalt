@@ -31,11 +31,11 @@ func TestListOperationsFilters(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		StubIntegration: coretesting.StubIntegration{N: "test_provider"},
 		ops:             sampleOps(),
 	}
 
-	r := coreintegration.NewRestricted(inner, []string{"list_channels", "send_message"})
+	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": "", "send_message": ""})
 	ops := r.ListOperations()
 
 	if len(ops) != 2 {
@@ -53,12 +53,11 @@ func TestListOperationsPreservesOrder(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		StubIntegration: coretesting.StubIntegration{N: "test_provider"},
 		ops:             sampleOps(),
 	}
 
-	// Allowlist in different order from inner; output should follow inner's order.
-	r := coreintegration.NewRestricted(inner, []string{"delete_message", "list_channels"})
+	r := coreintegration.NewRestricted(inner, map[string]string{"delete_message": "", "list_channels": ""})
 	ops := r.ListOperations()
 
 	if len(ops) != 2 {
@@ -78,7 +77,7 @@ func TestExecuteAllowed(t *testing.T) {
 	want := &core.OperationResult{Status: 200, Body: "ok"}
 	inner := &stubWithOps{
 		StubIntegration: coretesting.StubIntegration{
-			N: "slack",
+			N: "test_provider",
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return want, nil
 			},
@@ -86,7 +85,7 @@ func TestExecuteAllowed(t *testing.T) {
 		ops: sampleOps(),
 	}
 
-	r := coreintegration.NewRestricted(inner, []string{"send_message"})
+	r := coreintegration.NewRestricted(inner, map[string]string{"send_message": ""})
 	got, err := r.Execute(context.Background(), "send_message", nil, "tok")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -100,14 +99,64 @@ func TestExecuteDisallowed(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		StubIntegration: coretesting.StubIntegration{N: "test_provider"},
 		ops:             sampleOps(),
 	}
 
-	r := coreintegration.NewRestricted(inner, []string{"list_channels"})
+	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
 	_, err := r.Execute(context.Background(), "delete_message", nil, "tok")
 	if err == nil {
 		t.Fatal("Execute: expected error for disallowed op, got nil")
+	}
+}
+
+func TestRestrictedWithAliases(t *testing.T) {
+	t.Parallel()
+
+	var executedOp string
+	inner := &stubWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test_provider",
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				executedOp = op
+				return &core.OperationResult{Status: 200, Body: "ok"}, nil
+			},
+		},
+		ops: sampleOps(),
+	}
+
+	r := coreintegration.NewRestricted(inner, map[string]string{
+		"my_channels": "list_channels",
+		"send":        "send_message",
+	})
+
+	ops := r.ListOperations()
+	if len(ops) != 2 {
+		t.Fatalf("ListOperations: got %d ops, want 2", len(ops))
+	}
+
+	names := make(map[string]bool)
+	for _, op := range ops {
+		names[op.Name] = true
+	}
+	if !names["my_channels"] {
+		t.Error("expected aliased name my_channels")
+	}
+	if !names["send"] {
+		t.Error("expected aliased name send")
+	}
+
+	_, err := r.Execute(context.Background(), "my_channels", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(my_channels): %v", err)
+	}
+	if executedOp != "list_channels" {
+		t.Errorf("inner received op %q, want list_channels", executedOp)
+	}
+
+	_, err = r.Execute(context.Background(), "list_channels", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error when calling by original name after aliasing")
 	}
 }
 
@@ -127,7 +176,7 @@ func TestDelegationMethods(t *testing.T) {
 		ops: sampleOps(),
 	}
 
-	r := coreintegration.NewRestricted(inner, []string{"list_channels"})
+	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
 
 	if got := r.Name(); got != "my-integration" {
 		t.Errorf("Name: got %q, want %q", got, "my-integration")

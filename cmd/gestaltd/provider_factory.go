@@ -84,7 +84,7 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 			buildOpts = append(buildOpts, provider.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, a.regStore, a.deps)))
 		}
 
-		p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, *a.intg.API, conn, a.preparedProviders, buildOpts...)
+		p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, *a.intg.API, conn, a.preparedProviders, nil, buildOpts...)
 		if err != nil {
 			return nil, err
 		}

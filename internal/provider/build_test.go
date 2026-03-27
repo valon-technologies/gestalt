@@ -101,7 +101,7 @@ func TestBuildAllowedOperations(t *testing.T) {
 		ClientID:     "test",
 		ClientSecret: "test",
 		RedirectURL:  "http://localhost/callback",
-	}}, map[string]string{"list_items": ""})
+	}}, map[string]*OperationOverride{"list_items": nil})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBuildAllowedOperationsUnknown(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]string{"nonexistent": ""})
+	_, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{"nonexistent": nil})
 	if err == nil {
 		t.Fatal("expected error for unknown allowed operation")
 	}
@@ -124,9 +124,173 @@ func TestBuildAllowedOperationsEmpty(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]string{})
+	_, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
+	}
+}
+
+func TestBuildWithAlias(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "alias_test",
+		DisplayName: "Alias Test",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op_alpha": {Description: "Alpha op", Method: "GET", Path: "/alpha"},
+			"op_beta":  {Description: "Beta op", Method: "GET", Path: "/beta"},
+		},
+	}
+
+	intg, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{
+		"op_alpha": {Alias: "my_alpha"},
+		"op_beta":  nil,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ops := intg.ListOperations()
+	if len(ops) != 2 {
+		t.Fatalf("got %d operations, want 2", len(ops))
+	}
+	names := make(map[string]bool, len(ops))
+	for _, op := range ops {
+		names[op.Name] = true
+	}
+	if !names["my_alpha"] {
+		t.Error("expected aliased name my_alpha in ListOperations")
+	}
+	if !names["op_beta"] {
+		t.Error("expected original name op_beta in ListOperations")
+	}
+
+	result, err := intg.Execute(context.Background(), "my_alpha", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(my_alpha): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Errorf("status = %d, want 200", result.Status)
+	}
+
+	_, err = intg.Execute(context.Background(), "op_alpha", nil, "tok")
+	if err == nil {
+		t.Fatal("expected error when calling by original name after aliasing")
+	}
+}
+
+func TestBuildWithAliasAndDescription(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "alias_desc_test",
+		DisplayName: "Alias Desc Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op_gamma": {Description: "Gamma op", Method: "GET", Path: "/gamma"},
+		},
+	}
+
+	intg, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{
+		"op_gamma": {Alias: "renamed_gamma", Description: "Custom gamma description"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ops := intg.ListOperations()
+	if len(ops) != 1 {
+		t.Fatalf("got %d operations, want 1", len(ops))
+	}
+	if ops[0].Name != "renamed_gamma" {
+		t.Errorf("operation name = %q, want renamed_gamma", ops[0].Name)
+	}
+	if ops[0].Description != "Custom gamma description" {
+		t.Errorf("description = %q, want custom override", ops[0].Description)
+	}
+
+	cp, ok := intg.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("expected CatalogProvider")
+	}
+	cat := cp.Catalog()
+	if len(cat.Operations) != 1 {
+		t.Fatalf("got %d catalog operations, want 1", len(cat.Operations))
+	}
+	if cat.Operations[0].ID != "renamed_gamma" {
+		t.Errorf("catalog operation ID = %q, want renamed_gamma", cat.Operations[0].ID)
+	}
+	if cat.Operations[0].Description != "Custom gamma description" {
+		t.Errorf("catalog description = %q, want custom override", cat.Operations[0].Description)
+	}
+}
+
+func TestBuildWithNullOverride(t *testing.T) {
+	t.Parallel()
+
+	def := testDefinition("null_override")
+	intg, err := Build(def, testCreds(), map[string]*OperationOverride{
+		"list_items": nil,
+		"get_item":   nil,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	ops := intg.ListOperations()
+	if len(ops) != 2 {
+		t.Fatalf("got %d operations, want 2", len(ops))
+	}
+	for _, op := range ops {
+		if op.Name != "list_items" && op.Name != "get_item" {
+			t.Errorf("unexpected operation %q", op.Name)
+		}
+	}
+}
+
+func TestBuildWithDescriptionOnly(t *testing.T) {
+	t.Parallel()
+
+	def := testDefinition("desc_only")
+	intg, err := Build(def, testCreds(), map[string]*OperationOverride{
+		"list_items": {Description: "Overridden list description"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	ops := intg.ListOperations()
+	if len(ops) != 1 {
+		t.Fatalf("got %d operations, want 1", len(ops))
+	}
+	if ops[0].Name != "list_items" {
+		t.Errorf("name = %q, want list_items", ops[0].Name)
+	}
+	if ops[0].Description != "Overridden list description" {
+		t.Errorf("description = %q, want override", ops[0].Description)
+	}
+}
+
+func TestBuildAliasCollision(t *testing.T) {
+	t.Parallel()
+
+	def := testDefinition("collision")
+	_, err := Build(def, testCreds(), map[string]*OperationOverride{
+		"list_items": {Alias: "get_item"},
+		"get_item":   nil,
+	})
+	if err == nil {
+		t.Fatal("expected error for alias collision")
+	}
+	if !strings.Contains(err.Error(), "alias collision") {
+		t.Errorf("error = %q, want alias collision message", err)
 	}
 }
 

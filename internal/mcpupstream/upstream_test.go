@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/egress/egresstest"
+	"github.com/valon-technologies/gestalt/internal/provider"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -165,7 +166,7 @@ func TestUpstream_FilterOperations(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]string{"run_query": ""})
+	err := u.FilterOperations(map[string]*provider.OperationOverride{"run_query": nil})
 	if err != nil {
 		t.Fatalf("FilterOperations: %v", err)
 	}
@@ -196,9 +197,9 @@ func TestUpstream_FilterOperationsWithOverride(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]string{
-		"run_query":      "Custom query description",
-		"list_databases": "",
+	err := u.FilterOperations(map[string]*provider.OperationOverride{
+		"run_query":      {Description: "Custom query description"},
+		"list_databases": nil,
 	})
 	if err != nil {
 		t.Fatalf("FilterOperations: %v", err)
@@ -229,7 +230,7 @@ func TestUpstream_FilterOperationsUnknown(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]string{"nonexistent": ""})
+	err := u.FilterOperations(map[string]*provider.OperationOverride{"nonexistent": nil})
 	if err == nil {
 		t.Fatal("expected error for unknown operation")
 	}
@@ -241,9 +242,34 @@ func TestUpstream_FilterOperationsEmpty(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]string{})
+	err := u.FilterOperations(map[string]*provider.OperationOverride{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
+	}
+}
+
+func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUpstream(t)
+	t.Cleanup(func() { _ = u.Close() })
+
+	err := u.FilterOperations(map[string]*provider.OperationOverride{
+		"run_query": {Alias: "query"},
+	})
+	if err != nil {
+		t.Fatalf("FilterOperations: %v", err)
+	}
+
+	cat, _, err := u.discover(context.Background(), "")
+	if err != nil {
+		t.Fatalf("discover after filter with alias: %v", err)
+	}
+	if len(cat.Operations) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(cat.Operations))
+	}
+	if cat.Operations[0].ID != "query" {
+		t.Errorf("expected aliased ID %q, got %q", "query", cat.Operations[0].ID)
 	}
 }
 
