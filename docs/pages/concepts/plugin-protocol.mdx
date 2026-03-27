@@ -10,7 +10,7 @@ Two plugin kinds are supported:
 
 | Kind | Purpose |
 | --- | --- |
-| Provider plugin | Adds or overlays a provider for `integrations:`. |
+| Provider plugin | Adds a provider for `integrations:`. |
 | Runtime plugin | Adds a background runtime under `runtimes:`. |
 
 ## Startup Model
@@ -40,7 +40,7 @@ The SDK's `ProviderStarter` path receives:
 
 - the configured integration name
 - the plugin config block as a map
-- the plugin mode, such as replace or overlay
+- the plugin mode
 
 ## Runtime Plugin Contract
 
@@ -84,39 +84,3 @@ runtimes:
 
 That distinction matters because runtime plugin config belongs at `runtimes.<name>.config`, not under `runtimes.<name>.plugin.config`.
 
-## Overlay Semantics
-
-Only provider plugins may use `mode: overlay`.
-
-Overlay means:
-
-- Gestalt first builds a base provider
-- then the plugin wraps that provider
-
-The base must come from exactly one source:
-
-- the integration's own `upstreams`
-- or `plugin.base`, which names a registered built-in provider factory
-
-Runtime plugins cannot use overlay mode.
-
-### Auth and connection inheritance
-
-Overlay plugins inherit auth, session, and connection behavior from the base declarative integration. The plugin owns only its custom operations; the host handles token storage, OAuth flows, and credential resolution for the base upstream.
-
-If the overlay plugin does not need OAuth tokens (common for plugins that add operations without calling external APIs that require user credentials), set both `connection_mode: none` and `auth_style: none` on the integration. Without both, invocations will fail with "no token stored" because the host expects a connected OAuth session from the base provider.
-
-```yaml
-integrations:
-  my_tool:
-    connection_mode: none
-    auth_style: none
-    plugin:
-      mode: overlay
-      package: ./my-overlay.tar.gz
-    upstreams:
-      - type: rest
-        url: https://api.example.com/openapi.json
-```
-
-For overlays on top of OAuth-protected APIs (e.g. Gmail, Slack), keep the normal auth configuration. The overlay plugin receives the resolved token in its `Execute` call and can use it for its own API requests.

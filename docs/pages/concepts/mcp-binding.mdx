@@ -1,51 +1,58 @@
 # MCP Binding
 
-Gestalt exposes MCP as an HTTP surface mounted at `/mcp`. It is not configured under `bindings:`; instead, it appears automatically when at least one integration is MCP-enabled.
+Gestalt exposes MCP as an HTTP surface mounted at `/mcp`. It is not configured under `bindings:`; instead, it appears automatically when at least one integration exposes tools.
 
-## How An Integration Becomes MCP-Visible
+## Automatic MCP Projection
 
-There are two ways to expose tools on `/mcp`:
-
-### 1. Project REST Or GraphQL Operations Into MCP
+All declarative API operations are automatically projected as MCP tools. If an integration has an `api` surface, its operations are available on `/mcp` without any additional configuration.
 
 ```yaml
 integrations:
   github:
     mcp_tool_prefix: github_
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-        mcp: true
-        allowed_operations:
-          - repos_listForAuthenticatedUser
-          - issues_listForAuthenticatedUser
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: ${GITHUB_CLIENT_SECRET}
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+    api:
+      type: rest
+      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+      connection: default
+      allowed_operations:
+        - repos_listForAuthenticatedUser
+        - issues_listForAuthenticatedUser
 ```
 
-Setting `mcp: true` on a REST or GraphQL upstream tells Gestalt to surface those operations as MCP tools in addition to the normal HTTP API.
+## Import Tools From An Upstream MCP Server
 
-### 2. Import Tools From An Upstream MCP Server
+Adding an `mcp` surface connects Gestalt to an upstream MCP server and republishes its tools:
 
 ```yaml
 integrations:
   remote_tools:
-    connection_mode: user
-    upstreams:
-      - type: mcp
-        url: https://mcp.example.com
+    connections:
+      default:
+        mode: user
+    mcp:
+      url: https://mcp.example.com
+      connection: default
 ```
-
-In this case, Gestalt imports the upstream MCP server's tools and republishes them as part of the integration.
 
 ## Composition Rules
 
 An integration may combine:
 
-- one REST or GraphQL upstream
-- one MCP upstream
+- one `api` surface (REST or GraphQL)
+- one `mcp` surface
 
 That gives you one provider namespace that can contain:
 
-- generated HTTP operations
+- generated HTTP operations (automatically projected as MCP tools)
 - imported MCP tools
 
 `mcp_tool_prefix` exists to avoid tool-name collisions when multiple integrations export similarly named operations.
@@ -55,7 +62,7 @@ That gives you one provider namespace that can contain:
 The MCP client does not talk directly to your upstream APIs. It talks to Gestalt:
 
 1. the client connects to `/mcp`
-2. Gestalt advertises tools from MCP-enabled integrations
+2. Gestalt advertises tools from all integrations that expose operations
 3. tool invocations flow through the same invocation broker as HTTP requests
 4. the broker resolves credentials, instances, refresh, and connection metadata
 5. Gestalt executes the underlying provider operation
@@ -71,7 +78,7 @@ That means callers authenticate with:
 - a browser session cookie
 - or `Authorization: Bearer ...` using a Gestalt API token
 
-Once the request is authenticated, the integration's own `connection_mode` determines which upstream credential is used.
+Once the request is authenticated, the integration's connection mode determines which upstream credential is used.
 
 ## When To Use MCP In Gestalt
 
@@ -81,7 +88,7 @@ Use the built-in MCP surface when:
 - you want one MCP endpoint backed by many integrations
 - you want the same allowlists and connection rules to apply to both HTTP clients and MCP clients
 
-Use a direct `mcp` upstream when:
+Use a direct `mcp` surface when:
 
 - the upstream system already exposes MCP-native tools
 - you want to republish those tools through Gestalt's auth and connection model

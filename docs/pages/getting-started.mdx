@@ -66,23 +66,24 @@ integrations:
   petstore:
     display_name: Swagger Petstore
     description: Public example API
-    connection_mode: none
-    base_url: https://petstore3.swagger.io/api/v3
-    upstreams:
-      - type: rest
-        url: https://petstore3.swagger.io/api/v3/openapi.json
-        allowed_operations:
-          findPetsByStatus: List pets by status
-          getPetById: Fetch a pet by id
+    connections:
+      default:
+        mode: none
+    api:
+      type: rest
+      openapi: https://petstore3.swagger.io/api/v3/openapi.json
+      connection: default
+      allowed_operations:
+        findPetsByStatus: List pets by status
+        getPetById: Fetch a pet by id
 ```
 
 This is the smallest useful production-shaped config:
 
 - explicit `server`, `auth`, and `datastore`
 - one named integration
-- one REST upstream
-- an explicit integration `base_url` for live requests
-- no per-user credential requirement because `connection_mode: none`
+- one connection with `mode: none` (no per-user credential requirement)
+- one REST API surface pointing at an OpenAPI spec
 
 ## 4. Bundle And Validate It
 

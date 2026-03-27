@@ -104,7 +104,7 @@ Gestalt:
 
 1. authenticates the caller
 2. resolves the target provider and operation
-3. resolves credentials based on `connection_mode`
+3. resolves credentials based on the connection's `mode`
 4. auto-selects an instance when there is exactly one
 5. fails with an ambiguity error when there are multiple instances and none is specified
 6. refreshes OAuth tokens when needed
