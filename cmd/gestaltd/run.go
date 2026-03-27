@@ -362,7 +362,7 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]")
-	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR [--plugin ID=PATH ...]")
+	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--init]")

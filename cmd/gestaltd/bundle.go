@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -10,40 +8,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/internal/pluginpkg"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
-
-const bundleScheme = "bundle://"
-
-type pluginMapping struct {
-	id     string
-	binary string
-}
-
-type pluginMappingList []pluginMapping
-
-func (l *pluginMappingList) String() string { return "" }
-func (l *pluginMappingList) Set(value string) error {
-	parts := strings.SplitN(value, "=", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return fmt.Errorf("plugin flag must be id=path, got %q", value)
-	}
-	*l = append(*l, pluginMapping{id: parts[0], binary: parts[1]})
-	return nil
-}
 
 func runBundle(args []string) error {
 	fs := flag.NewFlagSet("gestaltd bundle", flag.ContinueOnError)
 	fs.Usage = func() { printBundleUsage(fs.Output()) }
 	configPath := fs.String("config", "", "path to config file")
 	outputDir := fs.String("output", "", "output directory for bundled artifacts")
-	var plugins pluginMappingList
-	fs.Var(&plugins, "plugin", "plugin binary: id=path (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,12 +56,6 @@ func runBundle(args []string) error {
 		return fmt.Errorf("computing bundled config path: %w", err)
 	}
 	bundledConfigPath := filepath.Join(absOutput, bundledConfig)
-
-	if len(plugins) > 0 {
-		if err := resolveBundlePlugins(bundledConfigPath, plugins); err != nil {
-			return fmt.Errorf("resolving bundle plugins: %w", err)
-		}
-	}
 
 	if err := initConfig(bundledConfigPath); err != nil {
 		return fmt.Errorf("hydrating bundle: %w", err)
@@ -148,7 +116,7 @@ func collectLocalRefs(configPath string) ([]string, error) {
 
 		if intg.Plugin != nil && intg.Plugin.Package != "" {
 			pkg := intg.Plugin.Package
-			if !strings.HasPrefix(pkg, bundleScheme) && !strings.HasPrefix(pkg, "https://") && !filepath.IsAbs(pkg) {
+			if !strings.HasPrefix(pkg, "https://") && !filepath.IsAbs(pkg) {
 				resolved := filepath.Clean(filepath.Join(baseDir, pkg))
 				if _, err := os.Stat(resolved); err != nil {
 					return nil, fmt.Errorf("integration %q plugin.package %q: %w", name, pkg, err)
@@ -161,7 +129,7 @@ func collectLocalRefs(configPath string) ([]string, error) {
 	for name, rt := range raw.Runtimes {
 		if rt.Plugin != nil && rt.Plugin.Package != "" {
 			pkg := rt.Plugin.Package
-			if !strings.HasPrefix(pkg, bundleScheme) && !strings.HasPrefix(pkg, "https://") && !filepath.IsAbs(pkg) {
+			if !strings.HasPrefix(pkg, "https://") && !filepath.IsAbs(pkg) {
 				resolved := filepath.Clean(filepath.Join(baseDir, pkg))
 				if _, err := os.Stat(resolved); err != nil {
 					return nil, fmt.Errorf("runtime %q plugin.package %q: %w", name, pkg, err)
@@ -259,201 +227,13 @@ func bundleCopyFile(src, dst string) error {
 	return out.Close()
 }
 
-func resolveBundlePlugins(bundledConfigPath string, plugins pluginMappingList) error {
-	data, err := os.ReadFile(bundledConfigPath)
-	if err != nil {
-		return err
-	}
-
-	bundledDir := filepath.Dir(bundledConfigPath)
-	pluginMap := make(map[string]string, len(plugins))
-	for _, p := range plugins {
-		pluginMap[p.id] = p.binary
-	}
-
-	var raw map[string]any
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parsing config: %w", err)
-	}
-
-	integrations, _ := raw["integrations"].(map[string]any)
-	for name, v := range integrations {
-		intg, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		plugin, ok := intg["plugin"].(map[string]any)
-		if !ok {
-			continue
-		}
-		pkg, _ := plugin["package"].(string)
-		if !strings.HasPrefix(pkg, bundleScheme) {
-			continue
-		}
-
-		pluginID := strings.TrimPrefix(pkg, bundleScheme)
-		binaryPath, ok := pluginMap[pluginID]
-		if !ok {
-			return fmt.Errorf("integration %q references %s but no --plugin %s=... flag was provided", name, pkg, pluginID)
-		}
-
-		archivePath, err := packageBinaryForBundle(bundledDir, pluginID, binaryPath)
-		if err != nil {
-			return fmt.Errorf("packaging plugin %q for integration %q: %w", pluginID, name, err)
-		}
-
-		relArchive, err := filepath.Rel(bundledDir, archivePath)
-		if err != nil {
-			return err
-		}
-		plugin["package"] = relArchive
-		intg["plugin"] = plugin
-		integrations[name] = intg
-	}
-
-	runtimes, _ := raw["runtimes"].(map[string]any)
-	for name, v := range runtimes {
-		rt, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		plugin, ok := rt["plugin"].(map[string]any)
-		if !ok {
-			continue
-		}
-		pkg, _ := plugin["package"].(string)
-		if !strings.HasPrefix(pkg, bundleScheme) {
-			continue
-		}
-
-		pluginID := strings.TrimPrefix(pkg, bundleScheme)
-		binaryPath, ok := pluginMap[pluginID]
-		if !ok {
-			return fmt.Errorf("runtime %q references %s but no --plugin %s=... flag was provided", name, pkg, pluginID)
-		}
-
-		archivePath, err := packageBinaryForBundle(bundledDir, pluginID, binaryPath)
-		if err != nil {
-			return fmt.Errorf("packaging plugin %q for runtime %q: %w", pluginID, name, err)
-		}
-
-		relArchive, err := filepath.Rel(bundledDir, archivePath)
-		if err != nil {
-			return err
-		}
-		plugin["package"] = relArchive
-		rt["plugin"] = plugin
-		runtimes[name] = rt
-	}
-
-	if integrations != nil {
-		raw["integrations"] = integrations
-	}
-	if runtimes != nil {
-		raw["runtimes"] = runtimes
-	}
-
-	out, err := yaml.Marshal(raw)
-	if err != nil {
-		return fmt.Errorf("marshaling rewritten config: %w", err)
-	}
-	return os.WriteFile(bundledConfigPath, out, 0o644)
-}
-
-func packageBinaryForBundle(bundledDir, pluginID, binaryPath string) (string, error) {
-	absBinary, err := filepath.Abs(binaryPath)
-	if err != nil {
-		return "", err
-	}
-
-	targetOS := runtime.GOOS
-	targetArch := runtime.GOARCH
-
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", targetOS, targetArch, "provider"))
-
-	workDir, err := os.MkdirTemp("", "gestalt-bundle-plugin-*")
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = os.RemoveAll(workDir) }()
-
-	artifactAbs := filepath.Join(workDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0o755); err != nil {
-		return "", err
-	}
-	if err := bundleCopyFile(absBinary, artifactAbs); err != nil {
-		return "", fmt.Errorf("copying binary: %w", err)
-	}
-
-	digest, err := bundleFileSHA256(artifactAbs)
-	if err != nil {
-		return "", err
-	}
-
-	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            pluginID,
-		Version:       "0.0.0-bundle",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     targetOS,
-				Arch:   targetArch,
-				Path:   artifactRel,
-				SHA256: digest,
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: artifactRel,
-			},
-		},
-	}
-	data, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(workDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
-		return "", err
-	}
-
-	pluginsDir := filepath.Join(bundledDir, ".gestalt", "bundle-packages")
-	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
-		return "", err
-	}
-
-	safeName := strings.ReplaceAll(pluginID, "/", "-")
-	archivePath := filepath.Join(pluginsDir, safeName+".tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(workDir, archivePath); err != nil {
-		return "", err
-	}
-
-	return archivePath, nil
-}
-
-func bundleFileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 func isRemoteURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 func printBundleUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR [--plugin ID=PATH ...]")
+	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Prepare a self-contained bundle for production deployment.")
 	writeUsageLine(w, "Copies the config tree, resolves providers and plugins, and writes")
@@ -462,5 +242,4 @@ func printBundleUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config    Path to the config file")
 	writeUsageLine(w, "  --output    Output directory for the bundle")
-	writeUsageLine(w, "  --plugin    Plugin binary mapping: id=path (repeatable)")
 }
