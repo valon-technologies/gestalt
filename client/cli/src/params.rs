@@ -19,10 +19,10 @@ pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
     let eq_pos = s.find('=');
     let colon_eq_pos = s.find(":=");
 
-    let use_json = match (eq_pos, colon_eq_pos) {
-        (_, Some(ce)) if eq_pos.is_none() || ce < eq_pos.unwrap() => true,
-        _ => false,
-    };
+    let use_json = matches!(
+        (eq_pos, colon_eq_pos),
+        (_, Some(ce)) if eq_pos.is_none() || ce < eq_pos.unwrap()
+    );
 
     if use_json {
         let pos = colon_eq_pos.unwrap();
