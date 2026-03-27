@@ -14,6 +14,7 @@ type HTTPRequestSpec struct {
 	Target      Target
 	BaseURL     string
 	Params      map[string]any
+	QueryParams map[string]any
 	Headers     map[string]string
 	Body        []byte
 	ContentType string
@@ -31,6 +32,7 @@ func BuildRequest(spec HTTPRequestSpec) apiexec.Request {
 		BaseURL:       spec.BaseURL,
 		Path:          spec.Target.Path,
 		Params:        spec.Params,
+		QueryParams:   spec.QueryParams,
 		AuthHeader:    spec.Credential.Authorization,
 		CustomHeaders: headers,
 		ContentType:   spec.ContentType,
