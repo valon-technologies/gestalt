@@ -28,8 +28,8 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 		},
 	})
 
-	result, err := Compile(context.Background(), "prepared", config.UpstreamDef{
-		Type: config.UpstreamTypeREST,
+	result, err := Compile(context.Background(), "prepared", config.APIDef{
+		Type: config.APITypeREST,
 	}, map[string]string{
 		"prepared": preparedPath,
 	})
@@ -57,7 +57,7 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 	}
 }
 
-func TestBuildProviderAppliesRuntimeOverridesAndAllowedOperations(t *testing.T) {
+func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
 	t.Parallel()
 
 	preparedPath := writePreparedDefinition(t, provider.Definition{
@@ -86,12 +86,9 @@ func TestBuildProviderAppliesRuntimeOverridesAndAllowedOperations(t *testing.T) 
 	built, err := BuildProvider(context.Background(), "prepared", config.IntegrationDef{
 		DisplayName: "Runtime Provider",
 		Description: "Runtime description",
-	}, config.UpstreamDef{
-		Type: config.UpstreamTypeREST,
-		AllowedOperations: config.AllowedOps{
-			"list_users": "List only active users",
-		},
-	}, map[string]string{
+	}, config.APIDef{
+		Type: config.APITypeREST,
+	}, config.ConnectionDef{}, map[string]string{
 		"prepared": preparedPath,
 	})
 	if err != nil {
@@ -112,14 +109,8 @@ func TestBuildProviderAppliesRuntimeOverridesAndAllowedOperations(t *testing.T) 
 	if cat.Description != "Runtime description" {
 		t.Fatalf("Catalog.Description = %q, want %q", cat.Description, "Runtime description")
 	}
-	if len(cat.Operations) != 1 {
-		t.Fatalf("len(Catalog.Operations) = %d, want %d", len(cat.Operations), 1)
-	}
-	if cat.Operations[0].ID != "list_users" {
-		t.Fatalf("Catalog.Operations[0].ID = %q, want %q", cat.Operations[0].ID, "list_users")
-	}
-	if cat.Operations[0].Description != "List only active users" {
-		t.Fatalf("Catalog.Operations[0].Description = %q, want %q", cat.Operations[0].Description, "List only active users")
+	if len(cat.Operations) != 2 {
+		t.Fatalf("len(Catalog.Operations) = %d, want %d", len(cat.Operations), 2)
 	}
 }
 

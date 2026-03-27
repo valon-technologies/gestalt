@@ -34,22 +34,21 @@ func WithEgressResolver(r *egress.Resolver) BuildOption {
 	return func(o *buildOptions) { o.egress = r }
 }
 
-func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[string]string, opts ...BuildOption) (core.Provider, error) {
+// Build constructs a provider from a spec Definition and a ConnectionDef that
+// owns auth configuration. Display metadata (display_name, description, icon)
+// should be applied to the Definition before calling Build via
+// ApplyDisplayOverrides.
+func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[string]string, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
 		opt(&bo)
 	}
 
-	d := *def // shallow copy so we don't mutate the caller's definition
+	d := *def
 	def = &d
-	if err := ApplyIntegrationOverrides(def, intg); err != nil {
-		return nil, fmt.Errorf("%s: %w", def.Provider, err)
-	}
+	applyConnectionAuth(def, conn)
 
 	baseURL := def.BaseURL
-	if intg.BaseURL != "" {
-		baseURL = intg.BaseURL
-	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
@@ -58,7 +57,7 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	if bo.authOverride != nil {
 		auth = bo.authOverride
 	} else {
-		auth, err = buildAuth(def, intg, baseURL, client)
+		auth, err = buildAuth(def, conn, baseURL, client)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", def.Provider, err)
@@ -88,9 +87,9 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 		EgressResolver:     bo.egress,
 	}
 
-	connMode := def.ConnectionMode
-	if intg.ConnectionMode != "" {
-		connMode = intg.ConnectionMode
+	connMode := conn.Mode
+	if connMode == "" {
+		connMode = def.ConnectionMode
 	}
 	switch connMode {
 	case "", "none", "user", "identity", "either":
@@ -168,7 +167,14 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 
 	base.ManualAuthEnabled = def.ManualAuth
 
-	if len(def.Connection) > 0 {
+	if len(conn.Params) > 0 {
+		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(conn.Params))
+		for name, cpd := range conn.Params {
+			base.ConnectionDefs[name] = core.ConnectionParamDef{
+				Required: cpd.Required,
+			}
+		}
+	} else if len(def.Connection) > 0 {
 		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(def.Connection))
 		for name, cpd := range def.Connection {
 			base.ConnectionDefs[name] = core.ConnectionParamDef{
@@ -220,11 +226,10 @@ func Build(def *Definition, intg config.IntegrationDef, allowedOperations map[st
 	return result, nil
 }
 
-// ApplyArtifactOverrides merges only non-secret, structural overrides into a
-// provider definition for compile-time artifact generation. Fields that could
-// contain expanded environment variables (headers, auth_mapping) are excluded
-// so that secrets are never baked into provider JSON files.
-func ApplyArtifactOverrides(def *Definition, intg config.IntegrationDef) error {
+// ApplyDisplayOverrides merges display metadata from an IntegrationDef into a
+// provider Definition. Call this before Build to set display_name, description,
+// and icon from the integration config.
+func ApplyDisplayOverrides(def *Definition, intg config.IntegrationDef) {
 	setStr(&def.DisplayName, intg.DisplayName)
 	setStr(&def.Description, intg.Description)
 	if intg.IconFile != "" {
@@ -235,16 +240,11 @@ func ApplyArtifactOverrides(def *Definition, intg config.IntegrationDef) error {
 			def.IconSVG = strings.TrimSpace(string(data))
 		}
 	}
-	return nil
 }
 
-// ApplyIntegrationOverrides merges integration config into a provider definition
-// at runtime. This includes all overrides, including headers and auth mapping
-// which may contain expanded secrets. Only call this in the live server path.
-func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) error {
-	setStr(&def.DisplayName, intg.DisplayName)
-	setStr(&def.Description, intg.Description)
-	o := intg.Auth
+// applyConnectionAuth merges connection auth overrides into the Definition.
+func applyConnectionAuth(def *Definition, conn config.ConnectionDef) {
+	o := conn.Auth
 	setStr(&def.Auth.Type, o.Type)
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
 	setStr(&def.Auth.TokenURL, o.TokenURL)
@@ -270,42 +270,6 @@ func ApplyIntegrationOverrides(def *Definition, intg config.IntegrationDef) erro
 	if o.TokenMetadata != nil {
 		def.Auth.TokenMetadata = o.TokenMetadata
 	}
-
-	setStr(&def.AuthHeader, intg.Auth.AuthHeader)
-	setStr(&def.AuthHeader, intg.AuthHeader)
-	if intg.AuthMapping != nil {
-		def.AuthMapping = &AuthMappingDef{Headers: intg.AuthMapping.Headers}
-	}
-	if intg.ResponseCheck != nil {
-		def.ResponseCheck = &ResponseCheckDef{
-			SuccessBodyMatch: intg.ResponseCheck.SuccessBodyMatch,
-			ErrorMessagePath: intg.ResponseCheck.ErrorMessagePath,
-		}
-	}
-	if intg.Auth.ResponseCheck != nil {
-		def.Auth.ResponseCheck = &ResponseCheckDef{
-			SuccessBodyMatch: intg.Auth.ResponseCheck.SuccessBodyMatch,
-			ErrorMessagePath: intg.Auth.ResponseCheck.ErrorMessagePath,
-		}
-	}
-	setStr(&def.ErrorMessagePath, intg.ErrorMessagePath)
-	if intg.ManualAuth {
-		def.ManualAuth = true
-	}
-	setStr(&def.TokenPrefix, intg.TokenPrefix)
-	setStr(&def.AuthStyle, intg.AuthStyle)
-	if intg.IconFile != "" {
-		data, err := os.ReadFile(intg.IconFile)
-		if err != nil {
-			log.Printf("WARNING: could not read icon_file %q: %v", intg.IconFile, err)
-		} else {
-			def.IconSVG = strings.TrimSpace(string(data))
-		}
-	}
-	if intg.Headers != nil {
-		def.Headers = intg.Headers
-	}
-	return nil
 }
 
 func setStr(dst *string, val string) {
@@ -314,7 +278,7 @@ func setStr(dst *string, val string) {
 	}
 }
 
-func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, client *http.Client) (coreintegration.AuthHandler, error) {
+func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (coreintegration.AuthHandler, error) {
 	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
 		return oauth.ManualAuthHandler{}, nil
 	}
@@ -333,11 +297,11 @@ func buildAuth(def *Definition, intg config.IntegrationDef, baseURL string, clie
 	tokenURL := resolveURL(baseURL, def.Auth.TokenURL)
 
 	oauthCfg := oauth.UpstreamConfig{
-		ClientID:            intg.ClientID,
-		ClientSecret:        intg.ClientSecret,
+		ClientID:            conn.Auth.ClientID,
+		ClientSecret:        conn.Auth.ClientSecret,
 		AuthorizationURL:    authURL,
 		TokenURL:            tokenURL,
-		RedirectURL:         intg.RedirectURL,
+		RedirectURL:         conn.Auth.RedirectURL,
 		PKCE:                def.Auth.PKCE,
 		DefaultScopes:       def.Auth.Scopes,
 		ScopeSeparator:      def.Auth.ScopeSeparator,

@@ -10,7 +10,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
-	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
@@ -118,34 +117,7 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
 		return buildProvider(ctx, name, intg, factories, deps)
 	}
-
-	mode := intg.Plugin.Mode
-	if mode == "" {
-		mode = config.PluginModeReplace
-	}
-
-	overlayProv, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
-	if err != nil {
-		return nil, err
-	}
-	if mode != config.PluginModeOverlay {
-		return overlayProv, nil
-	}
-
-	baseIntg := intg
-	baseIntg.Plugin = nil
-	factory, ok := factories.Providers[name]
-	if !ok {
-		factory = factories.DefaultProvider
-	}
-	if factory == nil {
-		return nil, fmt.Errorf("no provider factory for overlay base %q", name)
-	}
-	baseProv, err := factory(ctx, name, baseIntg, deps)
-	if err != nil {
-		return nil, fmt.Errorf("building overlay base: %w", err)
-	}
-	return composite.NewOverlay(name, baseProv, overlayProv), nil
+	return newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
 }
 
 func buildRuntimeForValidation(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
@@ -179,7 +151,7 @@ func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPa
 		name:           name,
 		displayName:    displayName,
 		description:    description,
-		connectionMode: connectionModeForValidation(intg.ConnectionMode),
+		connectionMode: connectionModeFromConnections(intg.Connections),
 	}, nil
 }
 
@@ -200,19 +172,8 @@ func (r *preparedRuntimeStub) Name() string                { return r.name }
 func (r *preparedRuntimeStub) Start(context.Context) error { return nil }
 func (r *preparedRuntimeStub) Stop(context.Context) error  { return nil }
 
-func connectionModeForValidation(raw string) core.ConnectionMode {
-	switch raw {
-	case string(core.ConnectionModeUser):
-		return core.ConnectionModeUser
-	case string(core.ConnectionModeIdentity):
-		return core.ConnectionModeIdentity
-	case string(core.ConnectionModeEither):
-		return core.ConnectionModeEither
-	case string(core.ConnectionModeNone), "":
-		return core.ConnectionModeNone
-	default:
-		return core.ConnectionModeNone
-	}
+func connectionModeFromConnections(conns map[string]config.ConnectionDef) core.ConnectionMode {
+	return core.ConnectionMode(config.ConnectionMode(conns))
 }
 
 func closeSecretManager(sm core.SecretManager) {

@@ -46,7 +46,7 @@ type LockPluginEntry struct {
 	Executable   string `json:"executable"`
 }
 
-type UpstreamLoader func(ctx context.Context, name string, upstream config.UpstreamDef) (*provider.Definition, error)
+type UpstreamLoader func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error)
 
 type Lifecycle struct {
 	loadAPIUpstream UpstreamLoader
@@ -123,19 +123,17 @@ type initPaths struct {
 }
 
 type providerFingerprintInput struct {
-	Type              string            `json:"type"`
-	URL               string            `json:"url"`
-	AllowedOperations map[string]string `json:"allowed_operations,omitempty"`
-	DisplayName       string            `json:"display_name,omitempty"`
-	Description       string            `json:"description,omitempty"`
-	HasIcon           bool              `json:"has_icon,omitempty"`
-	IconSHA256        string            `json:"icon_sha256,omitempty"`
-	IconReadError     string            `json:"icon_read_error,omitempty"`
+	Type          string `json:"type"`
+	URL           string `json:"url"`
+	DisplayName   string `json:"display_name,omitempty"`
+	Description   string `json:"description,omitempty"`
+	HasIcon       bool   `json:"has_icon,omitempty"`
+	IconSHA256    string `json:"icon_sha256,omitempty"`
+	IconReadError string `json:"icon_read_error,omitempty"`
 }
 
 type pluginFingerprintInput struct {
 	Name    string            `json:"name"`
-	Mode    string            `json:"mode,omitempty"`
 	Command string            `json:"command,omitempty"`
 	Package string            `json:"package,omitempty"`
 	Args    []string          `json:"args,omitempty"`
@@ -210,9 +208,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 		}
 		copied := *def
 		def = &copied
-		if err := provider.ApplyArtifactOverrides(def, intg); err != nil {
-			return nil, fmt.Errorf("applying artifact overrides for %q: %w", name, err)
-		}
+		provider.ApplyDisplayOverrides(def, intg)
 
 		outPath := filepath.Join(paths.providersDir, name+".json")
 		if err := writeJSONFile(outPath, def); err != nil {
@@ -237,17 +233,21 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 	return written, nil
 }
 
-func remoteAPIUpstreamForPrepare(intg config.IntegrationDef) (config.UpstreamDef, bool) {
-	for i := range intg.Upstreams {
-		us := &intg.Upstreams[i]
-		switch us.Type {
-		case config.UpstreamTypeREST, config.UpstreamTypeGraphQL:
-			if us.URL != "" {
-				return *us, true
-			}
+func remoteAPIUpstreamForPrepare(intg config.IntegrationDef) (config.APIDef, bool) {
+	if intg.API == nil {
+		return config.APIDef{}, false
+	}
+	switch intg.API.Type {
+	case config.APITypeREST:
+		if intg.API.OpenAPI != "" {
+			return *intg.API, true
+		}
+	case config.APITypeGraphQL:
+		if intg.API.URL != "" {
+			return *intg.API, true
 		}
 	}
-	return config.UpstreamDef{}, false
+	return config.APIDef{}, false
 }
 
 func configHasRemoteAPIUpstreams(cfg *config.Config) bool {
@@ -385,7 +385,6 @@ func PluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMa
 
 	input := pluginFingerprintInput{
 		Name:    name,
-		Mode:    plugin.Mode,
 		Command: plugin.Command,
 		Package: plugin.Package,
 		Args:    plugin.Args,
@@ -654,14 +653,17 @@ func manifestKind(kind string) string {
 	}
 }
 
-func integrationFingerprint(name string, intg config.IntegrationDef, upstream config.UpstreamDef) (string, error) {
+func integrationFingerprint(name string, intg config.IntegrationDef, api config.APIDef) (string, error) {
+	specURL := api.URL
+	if api.Type == config.APITypeREST {
+		specURL = api.OpenAPI
+	}
 	input := providerFingerprintInput{
-		Type:              upstream.Type,
-		URL:               upstream.URL,
-		AllowedOperations: map[string]string(upstream.AllowedOperations),
-		DisplayName:       intg.DisplayName,
-		Description:       intg.Description,
-		HasIcon:           intg.IconFile != "",
+		Type:        api.Type,
+		URL:         specURL,
+		DisplayName: intg.DisplayName,
+		Description: intg.Description,
+		HasIcon:     intg.IconFile != "",
 	}
 	if intg.IconFile != "" {
 		data, err := os.ReadFile(intg.IconFile)

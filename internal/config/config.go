@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/internal/egress"
@@ -17,11 +18,14 @@ const (
 	IntegrationCallbackPath = "/api/v1/auth/callback"
 )
 
+// PluginConnectionName is the implicit connection name used when storing
+// tokens for plugin-only integrations that do not declare YAML connections.
+const PluginConnectionName = "_plugin"
+
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
-	AuthProfiles map[string]AuthProfile    `yaml:"auth_profiles"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
 	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
@@ -57,14 +61,7 @@ type EgressCredentialGrant struct {
 	PathPrefix  string `yaml:"path_prefix"`
 }
 
-const (
-	PluginModeReplace = "replace"
-	PluginModeOverlay = "overlay"
-)
-
 type ExecutablePluginDef struct {
-	Mode    string            `yaml:"mode"`
-	Base    string            `yaml:"base"`
 	Command string            `yaml:"command"`
 	Package string            `yaml:"package"`
 	Args    []string          `yaml:"args"`
@@ -92,13 +89,6 @@ type SecretsConfig struct {
 	Config   yaml.Node `yaml:"config"`
 }
 
-type AuthProfile struct {
-	ClientID     string        `yaml:"client_id"`
-	ClientSecret string        `yaml:"client_secret"`
-	RedirectURL  string        `yaml:"redirect_url"`
-	Auth         AuthOverrides `yaml:"auth"`
-}
-
 type AuthConfig struct {
 	Provider string    `yaml:"provider"`
 	Config   yaml.Node `yaml:"config"`
@@ -116,88 +106,35 @@ type ServerConfig struct {
 	DevMode       bool   `yaml:"dev_mode"`
 }
 
+// IntegrationDef represents either a declarative integration (connections +
+// api/mcp surfaces) or a plugin-only integration. The two lanes are mutually
+// exclusive: if Plugin is set, Connections/API/MCP must be nil and vice versa.
 type IntegrationDef struct {
-	Upstreams      []UpstreamDef        `yaml:"upstreams"`
-	DisplayName    string               `yaml:"display_name"`
-	Description    string               `yaml:"description"`
-	AuthProfile    string               `yaml:"auth_profile"`
-	ConnectionMode string               `yaml:"connection_mode"`
-	MCPToolPrefix  string               `yaml:"mcp_tool_prefix"`
-	Plugin         *ExecutablePluginDef `yaml:"plugin"`
-
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	RedirectURL  string `yaml:"redirect_url"`
-	BaseURL      string `yaml:"base_url"`
-
-	Auth AuthOverrides `yaml:"auth"`
-
-	AuthHeader       string            `yaml:"auth_header"`
-	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping"`
-	ErrorMessagePath string            `yaml:"error_message_path"`
-	ResponseCheck    *ResponseCheckDef `yaml:"response_check"`
-	ManualAuth       bool              `yaml:"manual_auth"`
-	TokenPrefix      string            `yaml:"token_prefix"`
-	AuthStyle        string            `yaml:"auth_style"`
-	IconFile         string            `yaml:"icon_file"`
-	Headers          map[string]string `yaml:"headers"`
+	Connections   map[string]ConnectionDef `yaml:"connections"`
+	API           *APIDef                  `yaml:"api"`
+	MCP           *MCPDef                  `yaml:"mcp"`
+	Plugin        *ExecutablePluginDef     `yaml:"plugin"`
+	DisplayName   string                   `yaml:"display_name"`
+	Description   string                   `yaml:"description"`
+	MCPToolPrefix string                   `yaml:"mcp_tool_prefix"`
+	IconFile      string                   `yaml:"icon_file"`
 }
 
-const (
-	UpstreamTypeREST    = "rest"
-	UpstreamTypeGraphQL = "graphql"
-	UpstreamTypeMCP     = "mcp"
-)
-
-type UpstreamDef struct {
-	Type              string     `yaml:"type"`
-	URL               string     `yaml:"url"`
-	MCP               bool       `yaml:"mcp"`
-	AllowedOperations AllowedOps `yaml:"allowed_operations"`
-
-	// Per-upstream auth overrides. When set, these take precedence over
-	// integration-level auth for this upstream. When empty, the
-	// integration-level values are inherited during config resolution.
-	AuthProfile  string        `yaml:"auth_profile"`
-	Auth         AuthOverrides `yaml:"auth"`
-	ClientID     string        `yaml:"client_id"`
-	ClientSecret string        `yaml:"client_secret"`
-	RedirectURL  string        `yaml:"redirect_url"`
-
-	// MCPURL is set during config resolution for non-MCP upstreams that use
-	// mcp_oauth auth. It points to the sibling MCP upstream's URL so that
-	// OAuth discovery probes the correct endpoint.
-	MCPURL string `yaml:"-"`
+// ConnectionDef owns authentication and connection parameters for a named
+// connection. All connections in a single integration must share the same Mode.
+type ConnectionDef struct {
+	Mode   string                        `yaml:"mode"`
+	Auth   ConnectionAuthDef             `yaml:"auth"`
+	Params map[string]ConnectionParamDef `yaml:"params"`
 }
 
-// AllowedOps is a map of operation name to optional description override.
-// It can be unmarshaled from either a YAML list (names only, descriptions
-// from upstream spec) or a YAML map (names to description overrides).
-type AllowedOps map[string]string
-
-func (a *AllowedOps) UnmarshalYAML(value *yaml.Node) error {
-	switch value.Kind {
-	case yaml.SequenceNode:
-		*a = make(AllowedOps, len(value.Content))
-		for _, item := range value.Content {
-			(*a)[item.Value] = ""
-		}
-	case yaml.MappingNode:
-		m := make(map[string]string)
-		if err := value.Decode(&m); err != nil {
-			return err
-		}
-		*a = m
-	default:
-		return fmt.Errorf("allowed_operations must be a list or map")
-	}
-	return nil
-}
-
-type AuthOverrides struct {
+type ConnectionAuthDef struct {
 	Type                string            `yaml:"type"`
 	AuthorizationURL    string            `yaml:"authorization_url"`
 	TokenURL            string            `yaml:"token_url"`
+	ClientID            string            `yaml:"client_id"`
+	ClientSecret        string            `yaml:"client_secret"`
+	RedirectURL         string            `yaml:"redirect_url"`
 	ClientAuth          string            `yaml:"client_auth"`
 	TokenExchange       string            `yaml:"token_exchange"`
 	Scopes              []string          `yaml:"scopes"`
@@ -208,17 +145,39 @@ type AuthOverrides struct {
 	RefreshParams       map[string]string `yaml:"refresh_params"`
 	AcceptHeader        string            `yaml:"accept_header"`
 	TokenMetadata       []string          `yaml:"token_metadata"`
-	ResponseCheck       *ResponseCheckDef `yaml:"response_check"`
-	AuthHeader          string            `yaml:"auth_header"`
 }
 
-type AuthMappingDef struct {
-	Headers map[string]string `yaml:"headers"`
+type ConnectionParamDef struct {
+	Required bool `yaml:"required"`
 }
 
-type ResponseCheckDef struct {
-	SuccessBodyMatch map[string]any `yaml:"success_body_match"`
-	ErrorMessagePath string         `yaml:"error_message_path"`
+const (
+	APITypeREST    = "rest"
+	APITypeGraphQL = "graphql"
+)
+
+// ConnectionMode returns the shared connection mode for a set of connections.
+// All connections are validated to have the same mode; this returns the first
+// non-empty mode found, defaulting to "user".
+func ConnectionMode(connections map[string]ConnectionDef) string {
+	for cname := range connections {
+		if connections[cname].Mode != "" {
+			return connections[cname].Mode
+		}
+	}
+	return "user"
+}
+
+type APIDef struct {
+	Type       string `yaml:"type"`
+	OpenAPI    string `yaml:"openapi"`
+	URL        string `yaml:"url"`
+	Connection string `yaml:"connection"`
+}
+
+type MCPDef struct {
+	URL        string `yaml:"url"`
+	Connection string `yaml:"connection"`
 }
 
 func Load(path string) (*Config, error) {
@@ -241,16 +200,7 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	}
 
 	applyDefaults(&cfg)
-
-	if err := resolveAuthProfiles(&cfg); err != nil {
-		return nil, err
-	}
-
-	if err := resolveUpstreamAuth(&cfg); err != nil {
-		return nil, err
-	}
-
-	resolveBaseURL(&cfg) // after resolveAuthProfiles so inherited fields take priority
+	resolveBaseURL(&cfg)
 	resolveRelativePaths(path, &cfg)
 
 	if err := validate(&cfg); err != nil {
@@ -269,142 +219,6 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-func resolveAuthProfiles(cfg *Config) error {
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		if intg.AuthProfile == "" {
-			continue
-		}
-		profile, ok := cfg.AuthProfiles[intg.AuthProfile]
-		if !ok {
-			return fmt.Errorf("integration %q references unknown auth_profile %q", name, intg.AuthProfile)
-		}
-		if intg.ClientID == "" {
-			intg.ClientID = profile.ClientID
-		}
-		if intg.ClientSecret == "" {
-			intg.ClientSecret = profile.ClientSecret
-		}
-		if intg.RedirectURL == "" {
-			intg.RedirectURL = profile.RedirectURL
-		}
-		fillAuthDefaults(&intg.Auth, &profile.Auth)
-		cfg.Integrations[name] = intg
-	}
-	return nil
-}
-
-// resolveUpstreamAuth cascades integration-level auth to upstreams that don't
-// specify their own, and resolves upstream-level auth profiles.
-func resolveUpstreamAuth(cfg *Config) error {
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		for i := range intg.Upstreams {
-			us := &intg.Upstreams[i]
-
-			if us.AuthProfile != "" {
-				profile, ok := cfg.AuthProfiles[us.AuthProfile]
-				if !ok {
-					return fmt.Errorf("integration %q upstream %d references unknown auth_profile %q", name, i, us.AuthProfile)
-				}
-				fillUpstreamFromProfile(us, profile)
-			}
-
-			if us.Auth.Type == "" {
-				us.Auth.Type = intg.Auth.Type
-			}
-			if us.ClientID == "" {
-				us.ClientID = intg.ClientID
-			}
-			if us.ClientSecret == "" {
-				us.ClientSecret = intg.ClientSecret
-			}
-			if us.RedirectURL == "" {
-				us.RedirectURL = intg.RedirectURL
-			}
-			fillAuthDefaults(&us.Auth, &intg.Auth)
-		}
-
-		// Populate MCPURL so non-MCP upstreams with mcp_oauth can discover
-		// OAuth endpoints from the sibling MCP server.
-		for i := range intg.Upstreams {
-			us := &intg.Upstreams[i]
-			if us.Auth.Type == "mcp_oauth" && us.Type != UpstreamTypeMCP && us.MCPURL == "" {
-				for j := range intg.Upstreams {
-					if intg.Upstreams[j].Type == UpstreamTypeMCP {
-						us.MCPURL = intg.Upstreams[j].URL
-						break
-					}
-				}
-			}
-		}
-
-		cfg.Integrations[name] = intg
-	}
-	return nil
-}
-
-func fillUpstreamFromProfile(us *UpstreamDef, profile AuthProfile) {
-	if us.ClientID == "" {
-		us.ClientID = profile.ClientID
-	}
-	if us.ClientSecret == "" {
-		us.ClientSecret = profile.ClientSecret
-	}
-	if us.RedirectURL == "" {
-		us.RedirectURL = profile.RedirectURL
-	}
-	fillAuthDefaults(&us.Auth, &profile.Auth)
-}
-
-func fillAuthDefaults(dst, src *AuthOverrides) {
-	if dst.Type == "" {
-		dst.Type = src.Type
-	}
-	if dst.AuthorizationURL == "" {
-		dst.AuthorizationURL = src.AuthorizationURL
-	}
-	if dst.TokenURL == "" {
-		dst.TokenURL = src.TokenURL
-	}
-	if dst.ClientAuth == "" {
-		dst.ClientAuth = src.ClientAuth
-	}
-	if dst.TokenExchange == "" {
-		dst.TokenExchange = src.TokenExchange
-	}
-	if !dst.PKCE && src.PKCE {
-		dst.PKCE = true
-	}
-	if dst.Scopes == nil {
-		dst.Scopes = src.Scopes
-	}
-	if dst.ScopeSeparator == "" {
-		dst.ScopeSeparator = src.ScopeSeparator
-	}
-	if dst.AuthorizationParams == nil {
-		dst.AuthorizationParams = src.AuthorizationParams
-	}
-	if dst.TokenParams == nil {
-		dst.TokenParams = src.TokenParams
-	}
-	if dst.RefreshParams == nil {
-		dst.RefreshParams = src.RefreshParams
-	}
-	if dst.AcceptHeader == "" {
-		dst.AcceptHeader = src.AcceptHeader
-	}
-	if dst.TokenMetadata == nil {
-		dst.TokenMetadata = src.TokenMetadata
-	}
-	if dst.ResponseCheck == nil {
-		dst.ResponseCheck = src.ResponseCheck
-	}
-	if dst.AuthHeader == "" {
-		dst.AuthHeader = src.AuthHeader
-	}
-}
-
 func resolveBaseURL(cfg *Config) {
 	base := strings.TrimRight(cfg.Server.BaseURL, "/")
 	if base == "" {
@@ -412,20 +226,17 @@ func resolveBaseURL(cfg *Config) {
 	}
 	cfg.Server.BaseURL = base
 
-	for name := range cfg.AuthProfiles {
-		p := cfg.AuthProfiles[name]
-		if p.RedirectURL == "" {
-			p.RedirectURL = base + IntegrationCallbackPath
-			cfg.AuthProfiles[name] = p
-		}
-	}
-
+	redirectURL := base + IntegrationCallbackPath
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if intg.RedirectURL == "" {
-			intg.RedirectURL = base + IntegrationCallbackPath
-			cfg.Integrations[name] = intg
+		for cname := range intg.Connections {
+			conn := intg.Connections[cname]
+			if conn.Auth.RedirectURL == "" {
+				conn.Auth.RedirectURL = redirectURL
+				intg.Connections[cname] = conn
+			}
 		}
+		cfg.Integrations[name] = intg
 	}
 }
 
@@ -440,8 +251,8 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
-		for i := range intg.Upstreams {
-			intg.Upstreams[i].URL = resolveUpstreamURL(baseDir, intg.Upstreams[i].URL)
+		if intg.API != nil && intg.API.OpenAPI != "" {
+			intg.API.OpenAPI = resolveUpstreamURL(baseDir, intg.API.OpenAPI)
 		}
 		if intg.Plugin != nil {
 			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
@@ -491,6 +302,8 @@ func resolvePackagePath(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
+var templateParamRe = regexp.MustCompile(`\{(\w+)\}`)
+
 func validate(cfg *Config) error {
 	if cfg.Auth.Provider == "" {
 		return fmt.Errorf("config validation: auth.provider is required")
@@ -506,54 +319,8 @@ func validate(cfg *Config) error {
 	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
+		if err := validateIntegration(name, intg); err != nil {
 			return err
-		}
-		if intg.Plugin != nil {
-			mode := intg.Plugin.Mode
-			if mode == "" {
-				mode = PluginModeReplace
-			}
-			switch mode {
-			case PluginModeReplace:
-				if len(intg.Upstreams) > 0 {
-					return fmt.Errorf("config validation: integration %q cannot set both plugin and upstreams; use mode: overlay to combine them", name)
-				}
-				continue
-			case PluginModeOverlay:
-				hasUpstreams := len(intg.Upstreams) > 0
-				hasBase := intg.Plugin.Base != ""
-				switch {
-				case hasUpstreams && hasBase:
-					return fmt.Errorf("config validation: integration %q overlay plugin must declare exactly one base source via upstreams or plugin.base", name)
-				case !hasUpstreams && !hasBase:
-					return fmt.Errorf("config validation: integration %q overlay plugin must declare a base source via upstreams or plugin.base", name)
-				}
-			default:
-				return fmt.Errorf("config validation: integration %q has unknown plugin mode %q", name, intg.Plugin.Mode)
-			}
-		}
-		apiCount := 0
-		for i := range intg.Upstreams {
-			us := &intg.Upstreams[i]
-			switch us.Type {
-			case UpstreamTypeREST, UpstreamTypeGraphQL:
-				apiCount++
-				if us.URL == "" {
-					return fmt.Errorf("config validation: integration %q %s upstream requires url", name, us.Type)
-				}
-			case UpstreamTypeMCP:
-				if us.URL == "" {
-					return fmt.Errorf("config validation: integration %q mcp upstream requires url", name)
-				}
-			case "":
-				return fmt.Errorf("config validation: integration %q has upstream with empty type", name)
-			default:
-				return fmt.Errorf("config validation: integration %q has unknown upstream type %q", name, us.Type)
-			}
-		}
-		if apiCount > 1 {
-			return fmt.Errorf("config validation: integration %q has multiple REST/GraphQL upstreams; only one is supported", name)
 		}
 	}
 	for name := range cfg.Runtimes {
@@ -565,9 +332,6 @@ func validate(cfg *Config) error {
 			if rt.Plugin.Config.Kind != 0 {
 				return fmt.Errorf("config validation: runtime %q must use config at runtimes.%s.config, not runtimes.%s.plugin.config", name, name, name)
 			}
-			if rt.Plugin.Mode == PluginModeOverlay {
-				return fmt.Errorf("config validation: runtime %q plugin.mode cannot be overlay", name)
-			}
 			if rt.Type != "" {
 				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
 			}
@@ -575,6 +339,158 @@ func validate(cfg *Config) error {
 		}
 		if rt.Type == "" {
 			return fmt.Errorf("config validation: runtime %q requires either type or plugin", name)
+		}
+	}
+	return nil
+}
+
+func validateIntegration(name string, intg IntegrationDef) error {
+	if intg.Plugin != nil {
+		if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
+			return err
+		}
+		if len(intg.Connections) > 0 {
+			return fmt.Errorf("config validation: integration %q cannot set both plugin and connections", name)
+		}
+		if intg.API != nil {
+			return fmt.Errorf("config validation: integration %q cannot set both plugin and api", name)
+		}
+		if intg.MCP != nil {
+			return fmt.Errorf("config validation: integration %q cannot set both plugin and mcp", name)
+		}
+		return nil
+	}
+
+	if len(intg.Connections) == 0 {
+		return fmt.Errorf("config validation: integration %q requires connections (or use plugin for plugin-only integrations)", name)
+	}
+	if intg.API == nil && intg.MCP == nil {
+		return fmt.Errorf("config validation: integration %q requires at least one of api or mcp", name)
+	}
+
+	if err := validateConnectionModes(name, intg.Connections); err != nil {
+		return err
+	}
+
+	if intg.API != nil {
+		if err := validateAPIDef(name, intg.API, intg.Connections); err != nil {
+			return err
+		}
+	}
+	if intg.MCP != nil {
+		if err := validateMCPDef(name, intg.MCP, intg.Connections); err != nil {
+			return err
+		}
+	}
+
+	for cname := range intg.Connections {
+		if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateConnectionModes(intgName string, connections map[string]ConnectionDef) error {
+	var firstMode string
+	var firstName string
+	for cname := range connections {
+		mode := connections[cname].Mode
+		if mode == "" {
+			mode = "user"
+		}
+		switch mode {
+		case "user", "identity", "either", "none":
+		default:
+			return fmt.Errorf("config validation: integration %q connection %q has unknown mode %q", intgName, cname, mode)
+		}
+		if firstName == "" {
+			firstName = cname
+			firstMode = mode
+		} else if mode != firstMode {
+			return fmt.Errorf("config validation: integration %q connections have mixed modes (%q=%q, %q=%q); all connections must share the same mode", intgName, firstName, firstMode, cname, mode)
+		}
+	}
+	return nil
+}
+
+func validateAPIDef(intgName string, api *APIDef, connections map[string]ConnectionDef) error {
+	switch api.Type {
+	case APITypeREST:
+		if api.OpenAPI == "" {
+			return fmt.Errorf("config validation: integration %q api.type rest requires api.openapi", intgName)
+		}
+	case APITypeGraphQL:
+		if api.URL == "" {
+			return fmt.Errorf("config validation: integration %q api.type graphql requires api.url", intgName)
+		}
+	case "":
+		return fmt.Errorf("config validation: integration %q api.type is required", intgName)
+	default:
+		return fmt.Errorf("config validation: integration %q has unknown api.type %q", intgName, api.Type)
+	}
+
+	conn, err := resolveConnectionRef(intgName, "api", api.Connection, connections)
+	if err != nil {
+		return err
+	}
+	if api.URL != "" {
+		if err := validateURLTemplateParams(intgName, "api.url", api.URL, conn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateMCPDef(intgName string, mcp *MCPDef, connections map[string]ConnectionDef) error {
+	if mcp.URL == "" {
+		return fmt.Errorf("config validation: integration %q mcp.url is required", intgName)
+	}
+	conn, err := resolveConnectionRef(intgName, "mcp", mcp.Connection, connections)
+	if err != nil {
+		return err
+	}
+	return validateURLTemplateParams(intgName, "mcp.url", mcp.URL, conn)
+}
+
+func resolveConnectionRef(intgName, surface, connName string, connections map[string]ConnectionDef) (ConnectionDef, error) {
+	if connName == "" {
+		return ConnectionDef{}, fmt.Errorf("config validation: integration %q %s.connection is required", intgName, surface)
+	}
+	conn, ok := connections[connName]
+	if !ok {
+		return ConnectionDef{}, fmt.Errorf("config validation: integration %q %s.connection references unknown connection %q", intgName, surface, connName)
+	}
+	return conn, nil
+}
+
+func validateConnectionAuthURLParams(intgName, connName string, conn ConnectionDef) error {
+	if conn.Auth.AuthorizationURL != "" {
+		field := fmt.Sprintf("connections.%s.auth.authorization_url", connName)
+		if err := validateURLTemplateParams(intgName, field, conn.Auth.AuthorizationURL, conn); err != nil {
+			return err
+		}
+	}
+	if conn.Auth.TokenURL != "" {
+		field := fmt.Sprintf("connections.%s.auth.token_url", connName)
+		if err := validateURLTemplateParams(intgName, field, conn.Auth.TokenURL, conn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateURLTemplateParams(intgName, field, url string, conn ConnectionDef) error {
+	matches := templateParamRe.FindAllStringSubmatch(url, -1)
+	for _, m := range matches {
+		paramName := m[1]
+		p, ok := conn.Params[paramName]
+		if !ok {
+			return fmt.Errorf("config validation: integration %q %s references param {%s} not declared in connection params", intgName, field, paramName)
+		}
+		if !p.Required {
+			return fmt.Errorf("config validation: integration %q %s references param {%s} which must be required", intgName, field, paramName)
 		}
 	}
 	return nil
@@ -600,13 +516,6 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	case strings.HasPrefix(plugin.Package, "http://"):
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
-	}
-	mode := plugin.Mode
-	if mode == "" {
-		mode = PluginModeReplace
-	}
-	if plugin.Base != "" && mode == PluginModeReplace {
-		return fmt.Errorf("config validation: %s %q plugin.base requires mode: overlay", kind, name)
 	}
 	return nil
 }
