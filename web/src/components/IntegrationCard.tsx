@@ -90,8 +90,8 @@ export default function IntegrationCard({
   }
 
   async function handleStartOAuth(instance?: string, connection?: string) {
-    if (instance) setPendingInstance(instance);
-    if (connection) setPendingConnection(connection);
+    setPendingInstance(instance || "");
+    setPendingConnection(connection);
     if (needsParams && !showParamForm) {
       setSettingsOpen(false);
       setShowParamForm(true);
