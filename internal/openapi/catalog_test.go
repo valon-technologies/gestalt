@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
@@ -200,7 +200,7 @@ func TestLoadCatalogAllowedOpsFiltering(t *testing.T) {
 	srv := serveJSON(t, nestedBodySpec())
 	testutil.CloseOnCleanup(t, srv)
 
-	allowed := map[string]*provider.OperationOverride{
+	allowed := map[string]*config.OperationOverride{
 		"list_items":  {Description: "Custom list description"},
 		"create_item": nil,
 	}

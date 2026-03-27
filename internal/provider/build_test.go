@@ -101,7 +101,7 @@ func TestBuildAllowedOperations(t *testing.T) {
 		ClientID:     "test",
 		ClientSecret: "test",
 		RedirectURL:  "http://localhost/callback",
-	}}, map[string]*OperationOverride{"list_items": nil})
+	}}, map[string]*config.OperationOverride{"list_items": nil})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBuildAllowedOperationsUnknown(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{"nonexistent": nil})
+	_, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{"nonexistent": nil})
 	if err == nil {
 		t.Fatal("expected error for unknown allowed operation")
 	}
@@ -124,7 +124,7 @@ func TestBuildAllowedOperationsEmpty(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{})
+	_, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
 	}
@@ -150,7 +150,7 @@ func TestBuildWithAlias(t *testing.T) {
 		},
 	}
 
-	intg, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{
+	intg, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{
 		"op_alpha": {Alias: "my_alpha"},
 		"op_beta":  nil,
 	})
@@ -200,7 +200,7 @@ func TestBuildWithAliasAndDescription(t *testing.T) {
 		},
 	}
 
-	intg, err := Build(def, config.ConnectionDef{}, map[string]*OperationOverride{
+	intg, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{
 		"op_gamma": {Alias: "renamed_gamma", Description: "Custom gamma description"},
 	})
 	if err != nil {
@@ -238,7 +238,7 @@ func TestBuildWithNullOverride(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("null_override")
-	intg, err := Build(def, testCreds(), map[string]*OperationOverride{
+	intg, err := Build(def, testCreds(), map[string]*config.OperationOverride{
 		"list_items": nil,
 		"get_item":   nil,
 	})
@@ -260,7 +260,7 @@ func TestBuildWithDescriptionOnly(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("desc_only")
-	intg, err := Build(def, testCreds(), map[string]*OperationOverride{
+	intg, err := Build(def, testCreds(), map[string]*config.OperationOverride{
 		"list_items": {Description: "Overridden list description"},
 	})
 	if err != nil {
@@ -282,7 +282,7 @@ func TestBuildAliasCollision(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("collision")
-	_, err := Build(def, testCreds(), map[string]*OperationOverride{
+	_, err := Build(def, testCreds(), map[string]*config.OperationOverride{
 		"list_items": {Alias: "get_item"},
 		"get_item":   nil,
 	})

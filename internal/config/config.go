@@ -168,16 +168,24 @@ func ConnectionMode(connections map[string]ConnectionDef) string {
 	return "user"
 }
 
+// OperationOverride holds optional alias and description for an allowed operation.
+type OperationOverride struct {
+	Alias       string `yaml:"alias" json:"alias,omitempty"`
+	Description string `yaml:"description" json:"description,omitempty"`
+}
+
 type APIDef struct {
-	Type       string `yaml:"type"`
-	OpenAPI    string `yaml:"openapi"`
-	URL        string `yaml:"url"`
-	Connection string `yaml:"connection"`
+	Type              string                        `yaml:"type"`
+	OpenAPI           string                        `yaml:"openapi"`
+	URL               string                        `yaml:"url"`
+	Connection        string                        `yaml:"connection"`
+	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 }
 
 type MCPDef struct {
-	URL        string `yaml:"url"`
-	Connection string `yaml:"connection"`
+	URL               string                        `yaml:"url"`
+	Connection        string                        `yaml:"connection"`
+	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 }
 
 func Load(path string) (*Config, error) {

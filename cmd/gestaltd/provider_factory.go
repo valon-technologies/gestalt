@@ -84,7 +84,7 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 			buildOpts = append(buildOpts, provider.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, a.regStore, a.deps)))
 		}
 
-		p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, *a.intg.API, conn, a.preparedProviders, nil, buildOpts...)
+		p, err := providercompiler.BuildProvider(a.ctx, a.name, a.intg, *a.intg.API, conn, a.preparedProviders, a.intg.API.AllowedOperations, buildOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -96,6 +96,11 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 		up, err := mcpupstream.New(a.ctx, a.name, a.intg.MCP.URL, connMode, a.deps.Egress.Resolver)
 		if err != nil {
 			return nil, err
+		}
+		if a.intg.MCP.AllowedOperations != nil {
+			if err := up.FilterOperations(a.intg.MCP.AllowedOperations); err != nil {
+				return nil, fmt.Errorf("integration %q mcp: %w", a.name, err)
+			}
 		}
 		a.mcpUp = up
 		a.mcpConn = &conn

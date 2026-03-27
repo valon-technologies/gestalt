@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/testutil"
 )
 
@@ -79,7 +79,7 @@ func TestLoadDefinition(t *testing.T) {
 	srv := serveJSON(t, testSpec())
 	testutil.CloseOnCleanup(t, srv)
 
-	allowed := map[string]*provider.OperationOverride{
+	allowed := map[string]*config.OperationOverride{
 		"list_items": {Description: "List items with pagination"},
 		"get_item":   nil,
 	}
@@ -136,7 +136,7 @@ func TestLoadDefinitionFiltersOperations(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*provider.OperationOverride{"op_a": nil, "op_c": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"op_a": nil, "op_c": nil})
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestCollectScopesRespectsAllowedOps(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*provider.OperationOverride{"read_op": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"read_op": nil})
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
