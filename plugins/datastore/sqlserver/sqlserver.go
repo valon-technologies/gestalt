@@ -78,7 +78,6 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
-var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})
@@ -153,30 +152,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 				created_at DATETIME2(6) NOT NULL,
 				expires_at DATETIME2(6) NOT NULL
 			)`},
-		{"egress_clients", `
-			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'egress_clients')
-			CREATE TABLE egress_clients (
-				id NVARCHAR(36) NOT NULL PRIMARY KEY,
-				name NVARCHAR(255) NOT NULL,
-				description NVARCHAR(MAX) NOT NULL DEFAULT '',
-				scope NVARCHAR(255) NOT NULL DEFAULT 'personal',
-				scope_key NVARCHAR(255) NOT NULL DEFAULT '',
-				created_by_id NVARCHAR(36) NOT NULL REFERENCES users(id),
-				created_at DATETIME2(6) NOT NULL,
-				updated_at DATETIME2(6) NOT NULL,
-				CONSTRAINT uq_egress_clients_scope_name UNIQUE (scope_key, name)
-			)`},
-		{"egress_client_tokens", `
-			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'egress_client_tokens')
-			CREATE TABLE egress_client_tokens (
-				id NVARCHAR(36) NOT NULL PRIMARY KEY,
-				client_id NVARCHAR(36) NOT NULL REFERENCES egress_clients(id) ON DELETE CASCADE,
-				name NVARCHAR(255) NOT NULL,
-				hashed_token NVARCHAR(255) NOT NULL UNIQUE,
-				expires_at DATETIME2(6) NULL,
-				created_at DATETIME2(6) NOT NULL,
-				updated_at DATETIME2(6) NOT NULL
-			)`},
 	}
 
 	for _, m := range migrations {
@@ -188,45 +163,5 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.migrateEgressClientScope(ctx)
-}
-
-func (s *Store) migrateEgressClientScope(ctx context.Context) error {
-	if _, err := s.DB.ExecContext(ctx, `
-		IF COL_LENGTH('egress_clients', 'scope') IS NULL
-		  ALTER TABLE egress_clients ADD scope NVARCHAR(255) NOT NULL DEFAULT 'personal'`); err != nil {
-		return fmt.Errorf("adding scope column: %w", err)
-	}
-
-	if _, err := s.DB.ExecContext(ctx, `
-		IF COL_LENGTH('egress_clients', 'scope_key') IS NULL
-		  ALTER TABLE egress_clients ADD scope_key NVARCHAR(255) NOT NULL DEFAULT ''`); err != nil {
-		return fmt.Errorf("adding scope_key column: %w", err)
-	}
-
-	if _, err := s.DB.ExecContext(ctx, `
-		UPDATE egress_clients SET scope_key = created_by_id WHERE scope = 'personal' AND scope_key = ''`); err != nil {
-		return fmt.Errorf("backfilling scope_key: %w", err)
-	}
-
-	if _, err := s.DB.ExecContext(ctx, `
-		DECLARE @old_uq NVARCHAR(255);
-		SELECT @old_uq = kc.name FROM sys.key_constraints kc
-		  JOIN sys.index_columns ic ON kc.unique_index_id = ic.index_id AND kc.parent_object_id = ic.object_id
-		  WHERE kc.parent_object_id = OBJECT_ID('egress_clients') AND kc.type = 'UQ'
-		  GROUP BY kc.name
-		  HAVING COUNT(*) = 2
-		    AND MAX(CASE WHEN COL_NAME(ic.object_id, ic.column_id) = 'created_by_id' THEN 1 ELSE 0 END) = 1
-		    AND MAX(CASE WHEN COL_NAME(ic.object_id, ic.column_id) = 'name' THEN 1 ELSE 0 END) = 1;
-		IF @old_uq IS NOT NULL EXEC('ALTER TABLE egress_clients DROP CONSTRAINT [' + @old_uq + ']')`); err != nil {
-		return fmt.Errorf("dropping old constraint: %w", err)
-	}
-
-	if _, err := s.DB.ExecContext(ctx, `
-		IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'uq_egress_clients_scope_name')
-		  ALTER TABLE egress_clients ADD CONSTRAINT uq_egress_clients_scope_name UNIQUE (scope_key, name)`); err != nil {
-		return fmt.Errorf("adding scope constraint: %w", err)
-	}
-
 	return nil
 }

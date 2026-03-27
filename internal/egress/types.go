@@ -6,7 +6,6 @@ type SubjectKind string
 const (
 	SubjectUser     SubjectKind = "user"
 	SubjectIdentity SubjectKind = "identity"
-	SubjectAgent    SubjectKind = "agent"
 	SubjectSystem   SubjectKind = "system"
 )
 

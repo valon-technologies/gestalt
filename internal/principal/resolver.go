@@ -16,12 +16,10 @@ type TokenType int
 
 const (
 	TokenTypeAPI TokenType = iota
-	TokenTypeEgressClient
 )
 
 const (
-	prefixAPI          = "gst_api_"
-	prefixEgressClient = "gst_ec_"
+	prefixAPI = "gst_api_"
 )
 
 func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
@@ -35,8 +33,6 @@ func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
 	switch typ {
 	case TokenTypeAPI:
 		prefix = prefixAPI
-	case TokenTypeEgressClient:
-		prefix = prefixEgressClient
 	default:
 		return "", "", fmt.Errorf("unknown token type %d", typ)
 	}
@@ -50,41 +46,23 @@ func ParseTokenType(token string) (TokenType, bool) {
 	switch {
 	case strings.HasPrefix(token, prefixAPI):
 		return TokenTypeAPI, true
-	case strings.HasPrefix(token, prefixEgressClient):
-		return TokenTypeEgressClient, true
 	default:
 		return 0, false
 	}
 }
 
-type ResolverOption func(*Resolver)
-
-func WithEgressClientStore(ecs core.EgressClientStore) ResolverOption {
-	return func(r *Resolver) { r.egressClients = ecs }
-}
-
 type Resolver struct {
-	auth          core.AuthProvider
-	datastore     core.Datastore
-	egressClients core.EgressClientStore
+	auth      core.AuthProvider
+	datastore core.Datastore
 }
 
-func NewResolver(auth core.AuthProvider, ds core.Datastore, opts ...ResolverOption) *Resolver {
-	r := &Resolver{auth: auth, datastore: ds}
-	for _, opt := range opts {
-		opt(r)
-	}
-	return r
+func NewResolver(auth core.AuthProvider, ds core.Datastore) *Resolver {
+	return &Resolver{auth: auth, datastore: ds}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
-	if typ, ok := ParseTokenType(token); ok {
-		switch typ {
-		case TokenTypeAPI:
-			return r.resolveAPIToken(ctx, token)
-		case TokenTypeEgressClient:
-			return r.resolveEgressClientToken(ctx, token)
-		}
+	if typ, ok := ParseTokenType(token); ok && typ == TokenTypeAPI {
+		return r.resolveAPIToken(ctx, token)
 	}
 
 	identity, err := r.auth.ValidateToken(ctx, token)
@@ -123,37 +101,6 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		},
 		UserID: user.ID,
 		Source: SourceAPIToken,
-	}, nil
-}
-
-func (r *Resolver) resolveEgressClientToken(ctx context.Context, token string) (*Principal, error) {
-	if r.egressClients == nil {
-		return nil, ErrInvalidToken
-	}
-
-	hashed := HashToken(token)
-	ecToken, err := r.egressClients.ValidateEgressClientToken(ctx, hashed)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return nil, ErrInvalidToken
-		}
-		return nil, err
-	}
-	if ecToken == nil {
-		return nil, ErrInvalidToken
-	}
-
-	client, err := r.egressClients.GetEgressClient(ctx, ecToken.ClientID)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return nil, ErrInvalidToken
-		}
-		return nil, err
-	}
-
-	return &Principal{
-		EgressClientID: client.ID,
-		Source:         SourceEgressClient,
 	}, nil
 }
 

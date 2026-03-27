@@ -46,7 +46,6 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
-var _ core.EgressClientStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -123,31 +122,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			expires_at DATETIME(6) NOT NULL,
 			CONSTRAINT fk_staged_connections_user FOREIGN KEY (user_id) REFERENCES users(id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-		`CREATE TABLE IF NOT EXISTS egress_clients (
-			id VARCHAR(36) NOT NULL PRIMARY KEY,
-			name VARCHAR(255) NOT NULL,
-			description TEXT NOT NULL,
-			scope VARCHAR(255) NOT NULL DEFAULT 'personal',
-			scope_key VARCHAR(255) NOT NULL DEFAULT '',
-			created_by_id VARCHAR(36) NOT NULL,
-			created_at DATETIME(6) NOT NULL,
-			updated_at DATETIME(6) NOT NULL,
-			UNIQUE KEY uq_egress_clients_scope_name (scope_key, name),
-			CONSTRAINT fk_egress_clients_user FOREIGN KEY (created_by_id) REFERENCES users(id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-		`CREATE TABLE IF NOT EXISTS egress_client_tokens (
-			id VARCHAR(36) NOT NULL PRIMARY KEY,
-			client_id VARCHAR(36) NOT NULL,
-			name VARCHAR(255) NOT NULL,
-			hashed_token VARCHAR(255) NOT NULL,
-			expires_at DATETIME(6) NULL,
-			created_at DATETIME(6) NOT NULL,
-			updated_at DATETIME(6) NOT NULL,
-			UNIQUE KEY idx_egress_client_tokens_hashed (hashed_token),
-			CONSTRAINT fk_egress_client_tokens_client FOREIGN KEY (client_id) REFERENCES egress_clients(id) ON DELETE CASCADE
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 
 	for i, stmt := range migrations {
@@ -155,77 +129,5 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migration %d: %w", i, err)
 		}
 	}
-	return s.migrateEgressClientScope(ctx)
-}
-
-func (s *Store) columnExists(ctx context.Context, table, column string) (bool, error) {
-	var count int
-	err := s.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM information_schema.columns
-		 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-		table, column,
-	).Scan(&count)
-	return count > 0, err
-}
-
-func (s *Store) indexExists(ctx context.Context, table, index string) (bool, error) {
-	var count int
-	err := s.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM information_schema.statistics
-		 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
-		table, index,
-	).Scan(&count)
-	return count > 0, err
-}
-
-func (s *Store) migrateEgressClientScope(ctx context.Context) error {
-	exists, err := s.columnExists(ctx, "egress_clients", "scope")
-	if err != nil {
-		return fmt.Errorf("checking scope column: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD COLUMN scope VARCHAR(255) NOT NULL DEFAULT 'personal'"); err != nil {
-			return fmt.Errorf("adding scope column: %w", err)
-		}
-	}
-
-	exists, err = s.columnExists(ctx, "egress_clients", "scope_key")
-	if err != nil {
-		return fmt.Errorf("checking scope_key column: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD COLUMN scope_key VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
-			return fmt.Errorf("adding scope_key column: %w", err)
-		}
-	}
-
-	if _, err := s.DB.ExecContext(ctx,
-		"UPDATE egress_clients SET scope_key = created_by_id WHERE scope = 'personal' AND scope_key = ''"); err != nil {
-		return fmt.Errorf("backfilling scope_key: %w", err)
-	}
-
-	exists, err = s.indexExists(ctx, "egress_clients", "idx_egress_clients_owner_name")
-	if err != nil {
-		return fmt.Errorf("checking old key: %w", err)
-	}
-	if exists {
-		if _, err := s.DB.ExecContext(ctx, "ALTER TABLE egress_clients DROP KEY idx_egress_clients_owner_name"); err != nil {
-			return fmt.Errorf("dropping old key: %w", err)
-		}
-	}
-
-	exists, err = s.indexExists(ctx, "egress_clients", "uq_egress_clients_scope_name")
-	if err != nil {
-		return fmt.Errorf("checking new key: %w", err)
-	}
-	if !exists {
-		if _, err := s.DB.ExecContext(ctx,
-			"ALTER TABLE egress_clients ADD UNIQUE KEY uq_egress_clients_scope_name (scope_key, name)"); err != nil {
-			return fmt.Errorf("adding scope key: %w", err)
-		}
-	}
-
 	return nil
 }
