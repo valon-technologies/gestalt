@@ -17,14 +17,14 @@ func TestValidateCredentialGrant_RequiresMatchCriterion(t *testing.T) {
 	}
 }
 
-func TestValidateCredentialGrant_InstanceOnlyIsNotSufficient(t *testing.T) {
+func TestValidateCredentialGrant_AuthStyleOnlyIsNotSufficient(t *testing.T) {
 	t.Parallel()
 
 	err := ValidateCredentialGrant(CredentialGrantValidationInput{
-		Instance: "vendor-prod",
+		AuthStyle: "bearer",
 	})
 	if err == nil {
-		t.Fatal("expected error when only instance is set")
+		t.Fatal("expected error when only auth_style is set")
 	}
 	if !strings.Contains(err.Error(), "at least one match criterion") {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,7 +40,6 @@ func TestValidateCredentialGrant_EachMatchCriterionSufficient(t *testing.T) {
 	}{
 		{"subject_kind", CredentialGrantValidationInput{SubjectKind: "agent"}},
 		{"subject_id", CredentialGrantValidationInput{SubjectID: "agent-1"}},
-		{"provider", CredentialGrantValidationInput{Provider: "vendorx"}},
 		{"operation", CredentialGrantValidationInput{Operation: "chat"}},
 		{"method", CredentialGrantValidationInput{Method: "POST"}},
 		{"host", CredentialGrantValidationInput{Host: "api.vendor.test"}},

@@ -4121,11 +4121,11 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 			Loaders: []egress.CredentialGrantLoader{
 				&egress.StaticCredentialGrantLoader{
 					Grants: []egress.CredentialGrant{
-						{MatchCriteria: egress.MatchCriteria{Provider: "test-provider"}},
+						{SecretRef: "inject-key", MatchCriteria: egress.MatchCriteria{Host: upstream.Listener.Addr().String()}},
 					},
 				},
 			},
-			TokenResolver: staticTokenResolverFunc("injected-token"),
+			SecretResolver: &coretesting.StubSecretManager{Secrets: map[string]string{"inject-key": "injected-token"}},
 		},
 	}
 
@@ -4166,18 +4166,6 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 	auth, _ := receivedAuth.Load().(string)
 	if auth != "Bearer injected-token" {
 		t.Fatalf("upstream received Authorization = %q, want %q", auth, "Bearer injected-token")
-	}
-}
-
-type tokenResolverFunc func(ctx context.Context, subject egress.Subject, provider, instance string) (string, error)
-
-func (f tokenResolverFunc) ResolveProviderToken(ctx context.Context, subject egress.Subject, provider, instance string) (string, error) {
-	return f(ctx, subject, provider, instance)
-}
-
-func staticTokenResolverFunc(token string) tokenResolverFunc {
-	return func(_ context.Context, _ egress.Subject, _, _ string) (string, error) {
-		return token, nil
 	}
 }
 

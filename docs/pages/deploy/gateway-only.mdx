@@ -8,11 +8,10 @@ This is useful when you want to mediate outbound API calls -- injecting secrets,
 
 ## What You Get
 
-- Inbound auth via session tokens, API keys (`gst_api_`), or egress-client tokens (`gst_ec_`)
+- Inbound auth via session tokens or API keys (`gst_api_`)
 - A proxy binding that forwards requests to arbitrary upstream hosts
 - Egress policy rules that deny or allow requests by host, path, method, or subject
-- Credential injection from secret-manager references (`secret_ref`) or provider tokens
-- Admin API for managing deny rules and credential grants at runtime
+- Secret-backed credential injection via `secret_ref`
 
 ## What You Do Not Get
 
@@ -27,8 +26,6 @@ server:
   port: 8080
   base_url: https://gateway.example.com
   encryption_key: secret://gestalt-encryption-key
-  admin_emails:
-    - ops@example.com
 
 auth:
   provider: oidc
@@ -75,15 +72,13 @@ Key points:
 - The `bindings.proxy` section declares zero providers. This is the providerless proxy mode.
 - `egress.default_action: deny` blocks all outbound traffic except hosts explicitly allowed.
 - Each credential grant uses `secret_ref` to pull a secret at request time and `auth_style: bearer` to inject it as a `Bearer` token.
-- `admin_emails` grants the listed users access to the deny-rule and credential-grant admin APIs, and to global-scope egress client management.
-
 <Callout>
   `secret_ref` values are resolved at request time through the configured secret manager, not during config loading. This means the proxy always fetches the current secret value.
 </Callout>
 
 ## Secret-Backed Credentials
 
-The `secret_ref` and `auth_style` fields on credential grants replace provider-token resolution with direct secret-manager lookups.
+The `secret_ref` and `auth_style` fields on credential grants control how secrets are resolved and injected.
 
 ```yaml
 egress:
@@ -122,15 +117,13 @@ Host matching is exact. Each request resolves credentials from the first grant w
 
 ## Full Platform With Egress
 
-The same egress substrate works in a full-platform deployment alongside providers and integrations. Provider-token grants and secret-backed grants can coexist:
+The same egress substrate works in a full-platform deployment alongside providers and integrations. The proxy uses secret-backed credential grants for outbound auth while integrations use their own OAuth connections:
 
 ```yaml
 server:
   port: 8080
   base_url: https://gestalt.example.com
   encryption_key: secret://gestalt-encryption-key
-  admin_emails:
-    - ops@example.com
 
 auth:
   provider: oidc
@@ -184,16 +177,10 @@ egress:
     - action: allow
       host: api.openai.com
   credentials:
-    # Provider-token grant: resolves from user's GitHub OAuth token
-    - provider: github
-      host: api.github.com
-    # Secret-backed grant: resolves from secret manager
     - host: api.openai.com
       secret_ref: openai-api-key
       auth_style: bearer
 ```
-
-The credential grant resolver evaluates saved DB grants before config grants, so operator-managed state overrides bootstrap defaults. Within each source, the first matching grant wins.
 
 ## Startup
 
