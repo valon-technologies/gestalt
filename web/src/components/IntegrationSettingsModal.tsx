@@ -5,30 +5,37 @@ import { Integration } from "@/lib/api";
 import Button from "./Button";
 import { CheckCircleIcon, CloseIcon } from "./icons";
 
+type ModalView = "default" | "disconnect" | "instance" | "token";
+
 interface IntegrationSettingsModalProps {
   integration: Integration;
   onClose: () => void;
-  onReconnect: () => void;
-  onReconnectManual?: () => void;
+  onStartOAuth: (instance?: string, connection?: string) => void;
+  onSubmitToken: (credential: string, connectionParams?: Record<string, string>, instance?: string, connection?: string) => void;
   onDisconnect: (instance?: string) => void;
   reconnecting: boolean;
   disconnecting: boolean;
+  submitting: boolean;
   error: string | null;
 }
 
 export default function IntegrationSettingsModal({
   integration,
   onClose,
-  onReconnect,
-  onReconnectManual,
+  onStartOAuth,
+  onSubmitToken,
   onDisconnect,
   reconnecting,
   disconnecting,
+  submitting,
   error,
 }: IntegrationSettingsModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [view, setView] = useState<ModalView>("default");
   const [disconnectInstance, setDisconnectInstance] = useState<string | undefined>();
+  const [pendingConnection, setPendingConnection] = useState<string | undefined>();
+  const [pendingAuthType, setPendingAuthType] = useState<"oauth" | "manual">("oauth");
+  const [pendingInstance, setPendingInstance] = useState<string | undefined>();
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -36,21 +43,134 @@ export default function IntegrationSettingsModal({
 
   const displayName = integration.display_name || integration.name;
   const headingId = `settings-modal-heading-${integration.name}`;
+  const authTypes = integration.auth_types ?? ["oauth"];
+  const supportsOAuth = authTypes.includes("oauth");
+  const supportsManual = authTypes.includes("manual");
+  const isDualAuth = supportsOAuth && supportsManual;
+  const isManualOnly = supportsManual && !supportsOAuth;
+  const hasMultipleConnections = (integration.connections?.length ?? 0) > 1;
+  const needsParams = integration.connection_params && Object.keys(integration.connection_params).length > 0;
 
   function handleCancel(e: React.SyntheticEvent<HTMLDialogElement>) {
-    if (disconnecting) {
+    if (disconnecting || submitting) {
       e.preventDefault();
     }
   }
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
-    if (e.target === e.currentTarget && !disconnecting) {
+    if (e.target === e.currentTarget && !disconnecting && !submitting) {
       e.currentTarget.close();
     }
   }
 
   function closeDialog() {
     dialogRef.current?.close();
+  }
+
+  function startAddConnection(authType: "oauth" | "manual", connection?: string) {
+    setPendingConnection(connection);
+    setPendingAuthType(authType);
+    if (integration.connected) {
+      setView("instance");
+    } else if (authType === "manual") {
+      setView("token");
+    } else {
+      onStartOAuth(undefined, connection);
+    }
+  }
+
+  function handleInstanceSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = (new FormData(e.currentTarget).get("instance_name") as string)?.trim();
+    if (!name) return;
+    setPendingInstance(name);
+    if (pendingAuthType === "manual") {
+      setView("token");
+    } else {
+      onStartOAuth(name, pendingConnection);
+    }
+  }
+
+  function handleTokenSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const credential = (fd.get("credential") as string)?.trim();
+    if (!credential) return;
+    let params: Record<string, string> | undefined;
+    if (integration.connection_params) {
+      const collected: Record<string, string> = {};
+      for (const name of Object.keys(integration.connection_params)) {
+        const val = (fd.get(`cp_${name}`) as string)?.trim();
+        if (val) collected[name] = val;
+      }
+      if (Object.keys(collected).length > 0) params = collected;
+    }
+    onSubmitToken(credential, params, pendingInstance, pendingConnection);
+  }
+
+  function renderConnectionButtons() {
+    if (hasMultipleConnections) {
+      return (
+        <div className="mt-6 flex flex-col gap-2">
+          {integration.connections!.map((conn) => (
+            <Button
+              key={conn.name}
+              className="w-full"
+              onClick={() => startAddConnection(conn.auth_type, conn.name)}
+              disabled={reconnecting || submitting}
+            >
+              {integration.connected ? `Add ${conn.name}` : `Connect with ${conn.name}`}
+            </Button>
+          ))}
+        </div>
+      );
+    }
+
+    if (integration.connected) {
+      return (
+        <div className="mt-6 flex flex-col gap-2">
+          <Button
+            className="w-full"
+            onClick={() => startAddConnection(isDualAuth ? "oauth" : isManualOnly ? "manual" : "oauth")}
+            disabled={reconnecting || submitting}
+          >
+            {reconnecting ? "Connecting..." : "Add Connection"}
+          </Button>
+          {isDualAuth && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => startAddConnection("manual")}
+              disabled={reconnecting || submitting}
+            >
+              Add with API Token
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-6 flex flex-col gap-2">
+        <Button
+          className="w-full"
+          onClick={() => startAddConnection(isManualOnly ? "manual" : "oauth")}
+          disabled={reconnecting || submitting}
+        >
+          {reconnecting ? "Connecting..." : isDualAuth ? "Connect with OAuth" : "Connect"}
+        </Button>
+        {isDualAuth && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => startAddConnection("manual")}
+            disabled={reconnecting || submitting}
+          >
+            Use API Token
+          </Button>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -63,7 +183,7 @@ export default function IntegrationSettingsModal({
       className="m-auto w-full max-w-sm rounded-lg border border-border bg-surface p-0 shadow-warm"
     >
       <div className="p-6">
-        {confirmingDisconnect ? (
+        {view === "disconnect" ? (
           <>
             <h2
               id={headingId}
@@ -80,7 +200,7 @@ export default function IntegrationSettingsModal({
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => { setConfirmingDisconnect(false); setDisconnectInstance(undefined); }}
+                onClick={() => { setView("default"); setDisconnectInstance(undefined); }}
                 disabled={disconnecting}
               >
                 Cancel
@@ -95,6 +215,102 @@ export default function IntegrationSettingsModal({
               </Button>
             </div>
           </>
+        ) : view === "instance" ? (
+          <form onSubmit={handleInstanceSubmit}>
+            <h2
+              id={headingId}
+              className="text-lg font-heading font-semibold text-stone-900"
+            >
+              Add Connection
+            </h2>
+            {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
+            <label
+              htmlFor={`instance-name-${integration.name}`}
+              className="mt-4 block text-sm font-medium text-stone-700"
+            >
+              Connection name
+            </label>
+            <input
+              id={`instance-name-${integration.name}`}
+              name="instance_name"
+              type="text"
+              required
+              placeholder="e.g. my-store, acme-workspace"
+              autoFocus
+              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+            />
+            <div className="mt-6 flex gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setView("default")}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1">
+                Continue
+              </Button>
+            </div>
+          </form>
+        ) : view === "token" ? (
+          <form onSubmit={handleTokenSubmit}>
+            <h2
+              id={headingId}
+              className="text-lg font-heading font-semibold text-stone-900"
+            >
+              API Token
+            </h2>
+            {needsParams && integration.connection_params && Object.entries(integration.connection_params).map(([name, def]) => (
+              <div key={name} className="mt-2">
+                <label
+                  htmlFor={`cp_${name}-${integration.name}`}
+                  className="block text-sm font-medium text-stone-700"
+                >
+                  {def.description || name}
+                </label>
+                <input
+                  id={`cp_${name}-${integration.name}`}
+                  name={`cp_${name}`}
+                  type="text"
+                  required={def.required}
+                  defaultValue={def.default}
+                  placeholder={name}
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+                />
+              </div>
+            ))}
+            <label
+              htmlFor={`credential-${integration.name}`}
+              className="mt-4 block text-sm font-medium text-stone-700"
+            >
+              Paste your API token
+            </label>
+            <input
+              id={`credential-${integration.name}`}
+              name="credential"
+              type="password"
+              required
+              placeholder="Paste your API token"
+              autoFocus
+              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+            />
+            {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
+            <div className="mt-6 flex gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setView(integration.connected ? "instance" : "default")}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1" disabled={submitting}>
+                {submitting ? "Connecting..." : "Submit"}
+              </Button>
+            </div>
+          </form>
         ) : (
           <>
             <div className="flex items-start justify-between">
@@ -124,7 +340,7 @@ export default function IntegrationSettingsModal({
                           <span className="text-sm text-stone-700">{inst.name}</span>
                         </div>
                         <button
-                          onClick={() => { setDisconnectInstance(inst.name); setConfirmingDisconnect(true); }}
+                          onClick={() => { setDisconnectInstance(inst.name); setView("disconnect"); }}
                           disabled={disconnecting}
                           className="text-xs text-ember-500 hover:text-ember-600"
                         >
@@ -136,52 +352,13 @@ export default function IntegrationSettingsModal({
                 )}
 
                 {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
-
-                <div className="mt-6 flex flex-col gap-2">
-                  <Button
-                    className="w-full"
-                    onClick={onReconnect}
-                    disabled={reconnecting}
-                  >
-                    {reconnecting ? "Connecting..." : "Add Connection"}
-                  </Button>
-                  {onReconnectManual && (
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={onReconnectManual}
-                      disabled={reconnecting}
-                    >
-                      Add with API Token
-                    </Button>
-                  )}
-                </div>
+                {renderConnectionButtons()}
               </>
             ) : (
               <>
                 <p className="mt-4 text-sm text-stone-500">Not connected</p>
-
                 {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
-
-                <div className="mt-6 flex flex-col gap-2">
-                  <Button
-                    className="w-full"
-                    onClick={onReconnect}
-                    disabled={reconnecting}
-                  >
-                    {reconnecting ? "Connecting..." : onReconnectManual ? "Connect with OAuth" : "Connect"}
-                  </Button>
-                  {onReconnectManual && (
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={onReconnectManual}
-                      disabled={reconnecting}
-                    >
-                      Use API Token
-                    </Button>
-                  )}
-                </div>
+                {renderConnectionButtons()}
               </>
             )}
           </>

@@ -67,21 +67,14 @@ export default function IntegrationCard({
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showTokenForm, setShowTokenForm] = useState(false);
   const [showParamForm, setShowParamForm] = useState(false);
-  const [showInstanceForm, setShowInstanceForm] = useState(false);
   const [pendingInstance, setPendingInstance] = useState("");
-  const [pendingAuthMethod, setPendingAuthMethod] = useState<"oauth" | "manual">("oauth");
+  const [pendingConnection, setPendingConnection] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
   const safeIconSVG = integration.icon_svg
     ? sanitizeSVG(integration.icon_svg)
     : "";
-  const authTypes = integration.auth_types ?? ["oauth"];
-  const supportsOAuth = authTypes.includes("oauth");
-  const supportsManual = authTypes.includes("manual");
-  const isDualAuth = supportsOAuth && supportsManual;
-  const isManualOnly = supportsManual && !supportsOAuth;
   const needsParams = hasConnectionParams(integration);
 
   function collectConnectionParams(
@@ -96,24 +89,9 @@ export default function IntegrationCard({
     return params;
   }
 
-  function promptForInstance(method: "oauth" | "manual") {
-    setPendingAuthMethod(method);
-    setSettingsOpen(false);
-    setShowInstanceForm(true);
-    setError(null);
-  }
-
-  function handleConnectManual() {
-    if (integration.connected) {
-      promptForInstance("manual");
-      return;
-    }
-    setSettingsOpen(false);
-    setShowTokenForm(true);
-    setError(null);
-  }
-
-  async function startOAuthFlow(instance?: string) {
+  async function handleStartOAuth(instance?: string, connection?: string) {
+    if (instance) setPendingInstance(instance);
+    if (connection) setPendingConnection(connection);
     if (needsParams && !showParamForm) {
       setSettingsOpen(false);
       setShowParamForm(true);
@@ -123,7 +101,9 @@ export default function IntegrationCard({
     setLoading(true);
     setError(null);
     try {
-      const { url } = await startIntegrationOAuth(integration.name, undefined, undefined, instance);
+      const { url } = await startIntegrationOAuth(
+        integration.name, undefined, undefined, instance, connection,
+      );
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start OAuth");
@@ -132,32 +112,19 @@ export default function IntegrationCard({
     }
   }
 
-  function handleConnectOAuth() {
-    if (integration.connected) {
-      promptForInstance("oauth");
-      return;
-    }
-    startOAuthFlow();
-  }
-
-  function handleConnect() {
-    if (isManualOnly) {
-      handleConnectManual();
-    } else {
-      handleConnectOAuth();
-    }
-  }
-
-  function handleInstanceSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = (new FormData(e.currentTarget).get("instance_name") as string)?.trim();
-    if (!name) return;
-    setPendingInstance(name);
-    setShowInstanceForm(false);
-    if (pendingAuthMethod === "manual") {
-      setShowTokenForm(true);
-    } else {
-      startOAuthFlow(name);
+  async function handleSubmitToken(credential: string, connectionParams?: Record<string, string>, instance?: string, connection?: string) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await connectManualIntegration(
+        integration.name, credential, connectionParams, instance, connection,
+      );
+      setSettingsOpen(false);
+      onConnected?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -172,6 +139,7 @@ export default function IntegrationCard({
         undefined,
         params,
         pendingInstance || undefined,
+        pendingConnection,
       );
       window.location.href = url;
     } catch (err) {
@@ -180,35 +148,10 @@ export default function IntegrationCard({
     }
   }
 
-  async function handleSubmitManual(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const credential = (fd.get("credential") as string)?.trim();
-    if (!credential) return;
-    const params = collectConnectionParams(e.currentTarget);
-    setSubmitting(true);
-    setError(null);
-    try {
-      await connectManualIntegration(
-        integration.name,
-        credential,
-        Object.keys(params).length > 0 ? params : undefined,
-        pendingInstance || undefined,
-      );
-      setShowTokenForm(false);
-      onConnected?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   function handleCancelForm() {
-    setShowTokenForm(false);
     setShowParamForm(false);
-    setShowInstanceForm(false);
     setPendingInstance("");
+    setPendingConnection(undefined);
     setError(null);
   }
 
@@ -295,30 +238,7 @@ export default function IntegrationCard({
       {error && !settingsOpen && (
         <p className="mt-2 text-sm text-ember-500">{error}</p>
       )}
-      {showInstanceForm && (
-        <form onSubmit={handleInstanceSubmit} className="mt-3">
-          <label
-            htmlFor={`instance-name-${integration.name}`}
-            className="block text-sm font-medium text-stone-700"
-          >
-            Connection name
-          </label>
-          <input
-            id={`instance-name-${integration.name}`}
-            name="instance_name"
-            type="text"
-            required
-            placeholder="e.g. my-store, acme-workspace"
-            autoFocus
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
-          />
-          <div className="mt-2 flex gap-2">
-            <Button type="submit">Continue</Button>
-            <Button type="button" variant="secondary" onClick={handleCancelForm}>Cancel</Button>
-          </div>
-        </form>
-      )}
-      {showParamForm && !isManualOnly && (
+      {showParamForm && (
         <form onSubmit={handleParamSubmit} className="mt-3">
           {renderConnectionParamFields()}
           <div className="mt-3 flex gap-2">
@@ -336,48 +256,16 @@ export default function IntegrationCard({
           </div>
         </form>
       )}
-      {showTokenForm && (
-        <form onSubmit={handleSubmitManual} className="mt-3">
-          {needsParams && renderConnectionParamFields()}
-          <label
-            htmlFor={`credential-${integration.name}`}
-            className="mt-2 block text-sm font-medium text-stone-700"
-          >
-            API Token
-          </label>
-          <input
-            id={`credential-${integration.name}`}
-            name="credential"
-            type="password"
-            required
-            placeholder="Paste your API token"
-            autoFocus={!needsParams}
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
-          />
-          <div className="mt-2 flex gap-2">
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Connecting..." : "Submit"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCancelForm}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      )}
       {settingsOpen && (
         <IntegrationSettingsModal
           integration={integration}
           onClose={handleSettingsClose}
-          onReconnect={isDualAuth ? handleConnectOAuth : handleConnect}
-          onReconnectManual={isDualAuth ? handleConnectManual : undefined}
+          onStartOAuth={handleStartOAuth}
+          onSubmitToken={handleSubmitToken}
           onDisconnect={handleDisconnect}
           reconnecting={loading}
           disconnecting={disconnecting}
+          submitting={submitting}
           error={error}
         />
       )}

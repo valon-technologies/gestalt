@@ -129,6 +129,7 @@ func runServer(env *bootstrapEnv) error {
 		Bindings:          result.Bindings,
 		Invoker:           result.Invoker,
 		DefaultConnection: bootstrap.BuildConnectionMap(env.Config),
+		IntegrationDefs:   env.Config.Integrations,
 		DevMode:           result.DevMode,
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		Readiness: composeReadiness(

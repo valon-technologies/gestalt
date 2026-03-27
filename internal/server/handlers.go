@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -66,6 +67,11 @@ type instanceInfo struct {
 	Connection string `json:"connection,omitempty"`
 }
 
+type connectionDefInfo struct {
+	Name     string `json:"name"`
+	AuthType string `json:"auth_type"`
+}
+
 type integrationInfo struct {
 	Name             string                         `json:"name"`
 	DisplayName      string                         `json:"display_name,omitempty"`
@@ -75,6 +81,7 @@ type integrationInfo struct {
 	Instances        []instanceInfo                 `json:"instances,omitempty"`
 	AuthTypes        []string                       `json:"auth_types"`
 	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
+	Connections      []connectionDefInfo            `json:"connections,omitempty"`
 }
 
 type connectionParamInfo struct {
@@ -135,6 +142,23 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			if len(userParams) > 0 {
 				info.ConnectionParams = userParams
 			}
+		}
+		if intg, ok := s.integrationDefs[name]; ok && len(intg.Connections) > 1 {
+			connNames := make([]string, 0, len(intg.Connections))
+			for connName := range intg.Connections {
+				connNames = append(connNames, connName)
+			}
+			sort.Strings(connNames)
+			conns := make([]connectionDefInfo, 0, len(intg.Connections))
+			for _, connName := range connNames {
+				connDef := intg.Connections[connName]
+				authType := "oauth"
+				if connDef.Auth.Type == "manual" || connDef.Auth.Type == "api_key" {
+					authType = "manual"
+				}
+				conns = append(conns, connectionDefInfo{Name: connName, AuthType: authType})
+			}
+			info.Connections = conns
 		}
 		out = append(out, info)
 	}
