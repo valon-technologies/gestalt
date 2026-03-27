@@ -244,6 +244,29 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     }
 }
 
+pub fn select_path(value: &serde_json::Value, path: &str) -> anyhow::Result<serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        if segment.is_empty() {
+            continue;
+        }
+        current = match current {
+            serde_json::Value::Object(map) => map
+                .get(segment)
+                .ok_or_else(|| anyhow::anyhow!("key '{}' not found in response", segment))?,
+            serde_json::Value::Array(arr) => {
+                let idx: usize = segment.parse().map_err(|_| {
+                    anyhow::anyhow!("expected numeric index for array, got '{}'", segment)
+                })?;
+                arr.get(idx)
+                    .ok_or_else(|| anyhow::anyhow!("index {} out of bounds", idx))?
+            }
+            _ => anyhow::bail!("cannot traverse into non-object/non-array value"),
+        };
+    }
+    Ok(current.clone())
+}
+
 pub fn print_success(msg: &str) {
     if std::io::stderr().is_terminal() {
         eprintln!("{}", msg.green());
@@ -388,5 +411,40 @@ mod tests {
                 "continuation lines should align with column start"
             );
         }
+    }
+
+    #[test]
+    fn test_select_simple_key() {
+        let val = serde_json::json!({"a": 1});
+        let result = select_path(&val, "a").unwrap();
+        assert_eq!(result, serde_json::json!(1));
+    }
+
+    #[test]
+    fn test_select_nested() {
+        let val = serde_json::json!({"a": {"b": 2}});
+        let result = select_path(&val, "a.b").unwrap();
+        assert_eq!(result, serde_json::json!(2));
+    }
+
+    #[test]
+    fn test_select_array_index() {
+        let val = serde_json::json!({"a": [10, 20]});
+        let result = select_path(&val, "a.0").unwrap();
+        assert_eq!(result, serde_json::json!(10));
+    }
+
+    #[test]
+    fn test_select_missing_key() {
+        let val = serde_json::json!({"a": 1});
+        let result = select_path(&val, "b");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_select_empty_path() {
+        let val = serde_json::json!({"a": 1});
+        let result = select_path(&val, "").unwrap();
+        assert_eq!(result, val);
     }
 }
