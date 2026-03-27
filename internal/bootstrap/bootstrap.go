@@ -133,7 +133,7 @@ type Result struct {
 	Datastore        core.Datastore
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
-	ConnectionAuth   map[string]map[string]OAuthHandler // integration -> connection -> handler
+	ConnectionAuth   func() map[string]map[string]OAuthHandler
 	Runtimes         *registry.PluginMap[core.Runtime]
 	Bindings         *registry.PluginMap[core.Binding]
 	Invoker          invocation.Invoker
@@ -244,7 +244,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		deps.SQLDialect = acc.RawDialect()
 	}
 
-	providers, providersReady, connAuth, err := buildProviders(ctx, cfg, factories, deps)
+	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	connMap := BuildConnectionMap(cfg)
 	sharedInvoker := invocation.NewBroker(providers, ds,
 		invocation.WithConnectionMapper(connMap),
-		invocation.WithConnectionAuth(connectionAuthToRefreshers(connAuth)),
+		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
 	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
@@ -283,7 +283,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Datastore:        ds,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
-		ConnectionAuth:   connAuth,
+		ConnectionAuth:   connAuthResolver,
 		Runtimes:         extensions.Runtimes,
 		Bindings:         extensions.Bindings,
 		Invoker:          sharedInvoker,
@@ -582,7 +582,7 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 	return ds, nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, map[string]map[string]OAuthHandler, error) {
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex
@@ -599,7 +599,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	ready := make(chan struct{})
 	if len(cfg.Integrations) == 0 {
 		close(ready)
-		return &reg.Providers, ready, connAuth, nil
+		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
 	}
 
 	var wg sync.WaitGroup
@@ -633,13 +633,16 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		}()
 	}
 
-	// Wait for all goroutines to finish so connAuth is fully populated
-	// before the caller reads it. The ready channel still signals provider
-	// loading completion for other consumers.
-	wg.Wait()
-	close(ready)
+	go func() {
+		wg.Wait()
+		close(ready)
+	}()
 
-	return &reg.Providers, ready, connAuth, nil
+	resolver := func() map[string]map[string]OAuthHandler {
+		<-ready
+		return connAuth
+	}
+	return &reg.Providers, ready, resolver, nil
 }
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
@@ -702,6 +705,18 @@ func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
 		}
 	}
 	return m
+}
+
+func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {
+	var once sync.Once
+	var result map[string]map[string]invocation.OAuthRefresher
+	return func() map[string]map[string]invocation.OAuthRefresher {
+		once.Do(func() {
+			<-ready
+			result = connectionAuthToRefreshers(resolver())
+		})
+		return result
+	}
 }
 
 func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string]map[string]invocation.OAuthRefresher {

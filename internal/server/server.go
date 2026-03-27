@@ -29,7 +29,7 @@ type Server struct {
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
 	defaultConnection  map[string]string
-	connectionAuth     map[string]map[string]bootstrap.OAuthHandler
+	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
 	integrationDefs    map[string]config.IntegrationDef
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
@@ -49,7 +49,7 @@ type Config struct {
 	Bindings          *registry.PluginMap[core.Binding]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
-	ConnectionAuth    map[string]map[string]bootstrap.OAuthHandler
+	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	IntegrationDefs   map[string]config.IntegrationDef
 	SecureCookies     bool
 	StateSecret       []byte

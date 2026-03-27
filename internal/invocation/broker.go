@@ -59,11 +59,15 @@ type OAuthRefresher interface {
 	TokenURL() string
 }
 
+// RefresherResolver returns the connection auth map, blocking until providers
+// finish loading if needed.
+type RefresherResolver func() map[string]map[string]OAuthRefresher
+
 type Broker struct {
 	providers      *registry.PluginMap[core.Provider]
 	datastore      core.Datastore
 	connMapper     ConnectionMapper
-	connectionAuth map[string]map[string]OAuthRefresher
+	connectionAuth RefresherResolver
 }
 
 type BrokerOption func(*Broker)
@@ -72,8 +76,8 @@ func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.connMapper = m }
 }
 
-func WithConnectionAuth(m map[string]map[string]OAuthRefresher) BrokerOption {
-	return func(b *Broker) { b.connectionAuth = m }
+func WithConnectionAuth(r RefresherResolver) BrokerOption {
+	return func(b *Broker) { b.connectionAuth = r }
 }
 
 func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore, opts ...BrokerOption) *Broker {
@@ -312,11 +316,11 @@ func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher
 	if b.connectionAuth == nil {
 		return nil
 	}
-	connMap := b.connectionAuth[integration]
-	if connMap == nil {
+	m := b.connectionAuth()
+	if m == nil {
 		return nil
 	}
-	return connMap[connection]
+	return m[integration][connection]
 }
 
 func (b *Broker) refreshOAuth(ctx context.Context, refresher OAuthRefresher, refreshToken string) (*core.TokenResponse, error) {

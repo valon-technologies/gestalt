@@ -54,15 +54,19 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
 	}
 	if cfg.ConnectionAuth != nil {
-		refreshers := make(map[string]map[string]invocation.OAuthRefresher)
-		for intg, conns := range cfg.ConnectionAuth {
-			inner := make(map[string]invocation.OAuthRefresher)
-			for conn, h := range conns {
-				inner[conn] = h
+		authFn := cfg.ConnectionAuth
+		brokerOpts = append(brokerOpts, invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
+			m := authFn()
+			refreshers := make(map[string]map[string]invocation.OAuthRefresher, len(m))
+			for intg, conns := range m {
+				inner := make(map[string]invocation.OAuthRefresher, len(conns))
+				for conn, h := range conns {
+					inner[conn] = h
+				}
+				refreshers[intg] = inner
 			}
-			refreshers[intg] = inner
-		}
-		brokerOpts = append(brokerOpts, invocation.WithConnectionAuth(refreshers))
+			return refreshers
+		}))
 	}
 	if cfg.Invoker == nil {
 		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Datastore, brokerOpts...)
@@ -144,13 +148,14 @@ func (h *testOAuthHandler) TokenURL() string             { return h.tokenURLVal 
 
 const testDefaultConnection = "default"
 
-func testConnectionAuth(integration string, handler bootstrap.OAuthHandler) map[string]map[string]bootstrap.OAuthHandler {
-	return map[string]map[string]bootstrap.OAuthHandler{
+func testConnectionAuth(integration string, handler bootstrap.OAuthHandler) func() map[string]map[string]bootstrap.OAuthHandler {
+	m := map[string]map[string]bootstrap.OAuthHandler{
 		integration: {testDefaultConnection: handler},
 	}
+	return func() map[string]map[string]bootstrap.OAuthHandler { return m }
 }
 
-func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.TokenResponse, error)) map[string]map[string]bootstrap.OAuthHandler {
+func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.TokenResponse, error)) func() map[string]map[string]bootstrap.OAuthHandler {
 	return testConnectionAuth(integration, &testOAuthHandler{refreshTokenFn: refreshFn})
 }
 
@@ -2988,11 +2993,13 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
-		cfg.ConnectionAuth = map[string]map[string]bootstrap.OAuthHandler{
-			"multi": {
-				"conn-a": connAHandler,
-				"conn-b": connBHandler,
-			},
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"multi": {
+					"conn-a": connAHandler,
+					"conn-b": connBHandler,
+				},
+			}
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -3093,11 +3100,13 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
-		cfg.ConnectionAuth = map[string]map[string]bootstrap.OAuthHandler{
-			"multi": {
-				"conn-a": &testOAuthHandler{authorizationBaseURLVal: "https://provider.example/oauth/a"},
-				"conn-b": handler,
-			},
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"multi": {
+					"conn-a": &testOAuthHandler{authorizationBaseURLVal: "https://provider.example/oauth/a"},
+					"conn-b": handler,
+				},
+			}
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {

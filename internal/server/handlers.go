@@ -281,7 +281,11 @@ func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider,
 }
 
 func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connection string) (bootstrap.OAuthHandler, bool) {
-	connMap := s.connectionAuth[integration]
+	if s.connectionAuth == nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q has no OAuth connections configured", integration))
+		return nil, false
+	}
+	connMap := s.connectionAuth()[integration]
 	if connMap == nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q has no OAuth connections configured", integration))
 		return nil, false
