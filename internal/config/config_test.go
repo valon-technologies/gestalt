@@ -1131,3 +1131,97 @@ func TestLoadErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestAllowedOperations(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+integrations:
+  service-a:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+      allowed_operations:
+        list_records:
+          alias: fetch_records
+          description: Retrieve all records
+        get_record:
+        delete_record:
+          alias: remove_record
+    mcp:
+      url: https://example.test/mcp
+      connection: default
+      allowed_operations:
+        run_query:
+          alias: execute_query
+          description: Run a database query
+        list_tables:
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	api := cfg.Integrations["service-a"].API
+	if api.AllowedOperations == nil {
+		t.Fatal("API.AllowedOperations is nil")
+	}
+	if len(api.AllowedOperations) != 3 {
+		t.Fatalf("API.AllowedOperations length = %d, want 3", len(api.AllowedOperations))
+	}
+
+	listOp := api.AllowedOperations["list_records"]
+	if listOp == nil {
+		t.Fatal("list_records override is nil")
+	}
+	if listOp.Alias != "fetch_records" {
+		t.Errorf("list_records alias = %q, want fetch_records", listOp.Alias)
+	}
+	if listOp.Description != "Retrieve all records" {
+		t.Errorf("list_records description = %q", listOp.Description)
+	}
+
+	if api.AllowedOperations["get_record"] != nil {
+		t.Error("get_record override should be nil for bare key")
+	}
+
+	deleteOp := api.AllowedOperations["delete_record"]
+	if deleteOp == nil {
+		t.Fatal("delete_record override is nil")
+	}
+	if deleteOp.Alias != "remove_record" {
+		t.Errorf("delete_record alias = %q, want remove_record", deleteOp.Alias)
+	}
+
+	mcp := cfg.Integrations["service-a"].MCP
+	if mcp.AllowedOperations == nil {
+		t.Fatal("MCP.AllowedOperations is nil")
+	}
+	if len(mcp.AllowedOperations) != 2 {
+		t.Fatalf("MCP.AllowedOperations length = %d, want 2", len(mcp.AllowedOperations))
+	}
+
+	runOp := mcp.AllowedOperations["run_query"]
+	if runOp == nil {
+		t.Fatal("run_query override is nil")
+	}
+	if runOp.Alias != "execute_query" {
+		t.Errorf("run_query alias = %q, want execute_query", runOp.Alias)
+	}
+	if runOp.Description != "Run a database query" {
+		t.Errorf("run_query description = %q", runOp.Description)
+	}
+
+	if mcp.AllowedOperations["list_tables"] != nil {
+		t.Error("list_tables override should be nil for bare key")
+	}
+}

@@ -32,7 +32,7 @@ func LoadDefinition(ctx context.Context, name string, api config.APIDef, prepare
 	return loadDefinition(ctx, name, api, preparedProviders)
 }
 
-func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef, api config.APIDef, conn config.ConnectionDef, preparedProviders map[string]string, allowedOps map[string]*provider.OperationOverride, opts ...provider.BuildOption) (core.Provider, error) {
+func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef, api config.APIDef, conn config.ConnectionDef, preparedProviders map[string]string, allowedOps map[string]*config.OperationOverride, opts ...provider.BuildOption) (core.Provider, error) {
 	def, err := loadDefinition(ctx, name, api, preparedProviders)
 	if err != nil {
 		return nil, err

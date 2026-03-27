@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/internal/provider"
+	"github.com/valon-technologies/gestalt/internal/config"
 )
 
 func strPtr(s string) *string { return &s }
@@ -148,7 +148,7 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	srv := startIntrospectionServer(t, newTestSchema())
 	defer srv.Close()
 
-	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*provider.OperationOverride{
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*config.OperationOverride{
 		"teams": {Description: "My custom description"},
 	})
 	if err != nil {
