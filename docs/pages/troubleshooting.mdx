@@ -32,7 +32,7 @@ Outside dev mode, `server.encryption_key` is required. Set it explicitly or use 
 
 ## An Integration Cannot Find Credentials
 
-Check the integration's `connection_mode` first.
+Check the connection's `mode` first.
 
 - `user` expects a connection for the current user
 - `identity` expects a shared identity connection
@@ -49,12 +49,9 @@ Pass an explicit instance when invoking, or disconnect the extra connection you 
 
 ## `/mcp` Is Missing
 
-`/mcp` is only mounted when at least one integration is MCP-enabled.
+`/mcp` is only mounted when at least one integration exposes tools.
 
-Enable it by either:
-
-- setting `mcp: true` on a REST or GraphQL upstream
-- or configuring an upstream with `type: mcp`
+Enable it by adding an integration with an `api` surface, an `mcp` surface, or a plugin that exposes a catalog.
 
 ## Webhook Or Proxy Behavior Is Missing
 

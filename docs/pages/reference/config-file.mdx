@@ -364,7 +364,7 @@ runtimes:
 | `type` | Built-in runtime type. Currently only `echo`, and only in dev mode. |
 | `providers` | Allowlist of providers the runtime can access. |
 | `config` | Runtime config payload. |
-| `plugin` | Executable runtime plugin. Runtime plugins cannot use overlay mode. |
+| `plugin` | Executable runtime plugin. |
 
 ## `bindings`
 
@@ -487,5 +487,4 @@ egress:
 - REST API surfaces require `api.openapi`; GraphQL surfaces require `api.url`
 - URL templates in surface URLs and auth URLs must reference required params
 - runtime plugins must use `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`
-- runtime plugins cannot use overlay mode
 - `egress.default_action` and policy `action` must be `allow` or `deny`

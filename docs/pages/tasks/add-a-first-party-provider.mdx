@@ -7,7 +7,7 @@ Most integrations should stay config-defined. Add a compiled-in first-party prov
 A built-in provider makes sense when:
 
 - the provider is part of the product, not just one deployment
-- config-defined upstreams are not expressive enough
+- config-defined surfaces are not expressive enough
 - the code needs to ship and test with the host binary
 
 ## 1. Implement The Provider Package
@@ -39,23 +39,7 @@ If the provider is intended to ship in the binary, it must be added there.
 
 ## 3. Decide How Operators Compose It
 
-Built-in providers usually show up in one of two ways:
-
-### Directly
-
-An integration uses the registered provider as its entire implementation.
-
-### As An Overlay Base
-
-An integration uses:
-
-```yaml
-plugin:
-  mode: overlay
-  base: <built-in-provider-name>
-```
-
-That lets an executable plugin extend the built-in provider.
+An integration uses the registered provider as its entire implementation by referencing it in the `plugin` block.
 
 ## 4. Test It At The Provider Boundary
 

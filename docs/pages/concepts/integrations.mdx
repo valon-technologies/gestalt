@@ -89,6 +89,8 @@ A URL like `https://{subdomain}.example.com/api` is expanded using the connectio
 
 Surfaces define where operations come from. An integration can declare one `api` surface, one `mcp` surface, or both.
 
+All declarative API operations are automatically projected as MCP tools on `/mcp`. There is no opt-in flag; any integration with an `api` surface has its operations available to MCP clients.
+
 ### `api`
 
 ```yaml

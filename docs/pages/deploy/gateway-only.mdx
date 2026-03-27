@@ -16,7 +16,7 @@ This is useful when you want to mediate outbound API calls -- injecting secrets,
 ## What You Do Not Get
 
 - No capability catalog or operation discovery
-- No provider integrations, REST/GraphQL upstreams, or MCP endpoints
+- No provider integrations, API/MCP surfaces, or MCP endpoints
 - No runtimes or background workers
 
 ## Minimal Config
@@ -146,20 +146,19 @@ secrets:
 integrations:
   github:
     display_name: GitHub
-    auth_profile: github_oauth
-    connection_mode: user
-    upstreams:
-      - type: rest
-        url: https://api.github.com/openapi.json
-
-auth_profiles:
-  github_oauth:
-    client_id: ${GITHUB_CLIENT_ID}
-    client_secret: secret://github-client-secret
-    auth:
-      type: oauth2
-      authorization_url: https://github.com/login/oauth/authorize
-      token_url: https://github.com/login/oauth/access_token
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: secret://github-client-secret
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+    api:
+      type: rest
+      openapi: https://api.github.com/openapi.json
+      connection: default
 
 bindings:
   proxy:
@@ -184,7 +183,7 @@ egress:
 
 ## Startup
 
-Gateway-only configs have no remote upstreams to fetch, so locked startup works without `gestaltd bundle`:
+Gateway-only configs have no remote API specs to fetch, so locked startup works without `gestaltd bundle`:
 
 ```sh
 gestaltd serve --config ./gateway.yaml
