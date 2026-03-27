@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"gopkg.in/yaml.v3"
 )
@@ -631,10 +632,12 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 			log.Printf("loaded provider %s (%d operations)", name, len(result.Provider.ListOperations()))
 		}()
 	}
-	go func() {
-		wg.Wait()
-		close(ready)
-	}()
+
+	// Wait for all goroutines to finish so connAuth is fully populated
+	// before the caller reads it. The ready channel still signals provider
+	// loading completion for other consumers.
+	wg.Wait()
+	close(ready)
 
 	return &reg.Providers, ready, connAuth, nil
 }
@@ -714,6 +717,26 @@ func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string
 		out[intg] = inner
 	}
 	return out
+}
+
+// BuildResultWithOAuth wraps a provider in a ProviderBuildResult and builds an
+// OAuth handler for the API connection when applicable. Named provider factories
+// (BigQuery, Jira, etc.) use this to avoid duplicating the connection auth
+// construction logic.
+func BuildResultWithOAuth(prov core.Provider, def *provider.Definition, intg config.IntegrationDef, conn config.ConnectionDef) *ProviderBuildResult {
+	result := &ProviderBuildResult{Provider: prov}
+	if conn.Auth.Type == "manual" || conn.Auth.Type == "api_key" {
+		return result
+	}
+	upstream, err := provider.BuildOAuthUpstream(def, conn, def.BaseURL, nil)
+	if err != nil {
+		log.Printf("WARNING: %s: cannot build oauth handler for connection %q: %v", prov.Name(), intg.API.Connection, err)
+		return result
+	}
+	result.ConnectionAuth = map[string]OAuthHandler{
+		intg.API.Connection: WrapUpstreamHandler(upstream),
+	}
+	return result
 }
 
 // ResolveAPIConnection returns the ConnectionDef referenced by the

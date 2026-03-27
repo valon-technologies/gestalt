@@ -4,9 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"log"
-	"net/http"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -33,16 +30,5 @@ func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps 
 	if err != nil {
 		return nil, err
 	}
-	result := &bootstrap.ProviderBuildResult{Provider: prov}
-	if conn.Auth.Type != "manual" && conn.Auth.Type != "api_key" {
-		upstream, err := provider.BuildOAuthUpstream(&def, conn, def.BaseURL, &http.Client{Timeout: 10 * time.Second})
-		if err != nil {
-			log.Printf("WARNING: bigquery: cannot build oauth handler for connection %q: %v", intg.API.Connection, err)
-		} else {
-			result.ConnectionAuth = map[string]bootstrap.OAuthHandler{
-				intg.API.Connection: bootstrap.WrapUpstreamHandler(upstream),
-			}
-		}
-	}
-	return result, nil
+	return bootstrap.BuildResultWithOAuth(prov, &def, intg, conn), nil
 }
