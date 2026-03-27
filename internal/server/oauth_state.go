@@ -14,6 +14,7 @@ const integrationOAuthStateTTL = 10 * time.Minute
 type integrationOAuthState struct {
 	UserID           string            `json:"uid"`
 	Integration      string            `json:"int"`
+	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`
 	Verifier         string            `json:"ver,omitempty"`
 	ConnectionParams map[string]string `json:"cp,omitempty"`

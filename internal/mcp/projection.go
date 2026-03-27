@@ -32,7 +32,7 @@ func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov co
 		}
 
 		tool := mcpgo.NewTool(name, opts...)
-		handler := makeHandler(cfg.Invoker, provName, op.Name)
+		handler := makeHandler(cfg.Invoker, provName, op.Name, cfg.APIConnection[provName])
 		srv.AddTool(tool, handler)
 	}
 }
@@ -69,11 +69,19 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 			tool.Annotations.Title = op.ID
 		}
 
+		var conn string
+		switch op.Transport {
+		case catalog.TransportMCPPassthrough:
+			conn = cfg.MCPConnection[provName]
+		default:
+			conn = cfg.APIConnection[provName]
+		}
+
 		var handler mcpserver.ToolHandlerFunc
 		if isDirect && op.Transport != catalog.TransportREST && op.Transport != catalog.TransportPlugin {
-			handler = makeDirectHandler(cfg, provName, op.ID, caller)
+			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller)
 		} else {
-			handler = makeHandler(cfg.Invoker, provName, op.ID)
+			handler = makeHandler(cfg.Invoker, provName, op.ID, conn)
 		}
 		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: handler}
 	}

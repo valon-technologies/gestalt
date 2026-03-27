@@ -182,7 +182,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	sharedInvoker := invocation.NewBroker(providers, ds)
+	connMap := BuildConnectionMap(cfg)
+	sharedInvoker := invocation.NewBroker(providers, ds, invocation.WithConnectionMapper(connMap))
 	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
@@ -594,6 +595,23 @@ func validateProviderBuildAvailable(name string, intg config.IntegrationDef, fac
 	}
 	_, err := providerFactoryForName(name, factories)
 	return err
+}
+
+// BuildConnectionMap returns a map from integration name to its default
+// connection name. Used by the broker and server to resolve connections.
+func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
+	m := make(invocation.ConnectionMap, len(cfg.Integrations))
+	for name, intg := range cfg.Integrations {
+		switch {
+		case intg.Plugin != nil:
+			m[name] = config.PluginConnectionName
+		case intg.API != nil:
+			m[name] = intg.API.Connection
+		case intg.MCP != nil:
+			m[name] = intg.MCP.Connection
+		}
+	}
+	return m
 }
 
 // ResolveAPIConnection returns the ConnectionDef referenced by the

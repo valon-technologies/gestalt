@@ -21,10 +21,10 @@ func (dialect) Placeholder(int) string { return "?" }
 func (dialect) UpsertTokenSQL() string {
 	return `
 		INSERT INTO integration_tokens
-			(id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+			(id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 			 scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(user_id, integration, instance) DO UPDATE SET
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(user_id, integration, connection, instance) DO UPDATE SET
 			access_token_encrypted = excluded.access_token_encrypted,
 			refresh_token_encrypted = excluded.refresh_token_encrypted,
 			scopes = excluded.scopes,
@@ -80,6 +80,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			integration TEXT NOT NULL,
+			connection TEXT NOT NULL DEFAULT '',
 			instance TEXT NOT NULL,
 			access_token_encrypted TEXT NOT NULL,
 			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
@@ -90,7 +91,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			metadata_json TEXT NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
-			UNIQUE(user_id, integration, instance)
+			UNIQUE(user_id, integration, connection, instance)
 		);
 		CREATE TABLE IF NOT EXISTS api_tokens (
 			id TEXT PRIMARY KEY,
@@ -106,6 +107,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			integration TEXT NOT NULL,
+			connection TEXT NOT NULL DEFAULT '',
 			instance TEXT NOT NULL,
 			access_token_encrypted TEXT NOT NULL,
 			refresh_token_encrypted TEXT NOT NULL DEFAULT '',

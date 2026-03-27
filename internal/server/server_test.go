@@ -859,7 +859,7 @@ func TestExecuteOperation(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{AccessToken: "stored-token"}, nil
 			},
 		}
@@ -1013,7 +1013,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return nil, core.ErrNotFound
 			},
 		}
@@ -1555,7 +1555,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{AccessToken: "tok"}, nil
 			},
 		}
@@ -1863,7 +1863,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "stale-access-token",
 					RefreshToken: "old-refresh-token",
@@ -1936,7 +1936,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "still-valid-token",
 					RefreshToken: "rf",
@@ -1994,7 +1994,7 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "expired-token",
 					RefreshToken: "rf",
@@ -2047,7 +2047,7 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken: "no-refresh-token",
 					ExpiresAt:   &expiresSoon,
@@ -2101,7 +2101,7 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "no-expiry-token",
 					RefreshToken: "rf",
@@ -2148,7 +2148,7 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "manual-token",
 					RefreshToken: "rf",
@@ -2206,7 +2206,7 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "old-access",
 					RefreshToken: "old-refresh",
@@ -2270,7 +2270,7 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "old-access",
 					RefreshToken: "rf",
@@ -2337,7 +2337,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				tokenCallCount++
 				if tokenCallCount == 1 {
 					return &core.IntegrationToken{
@@ -2404,7 +2404,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					AccessToken:  "old-access",
 					RefreshToken: "old-refresh",
@@ -2458,7 +2458,7 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				tokenCallCount++
 				if tokenCallCount == 1 {
 					return &core.IntegrationToken{
@@ -2528,7 +2528,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				tokenCalled = true
 				return nil, core.ErrNotFound
 			},
@@ -3649,7 +3649,7 @@ func TestMaxBodySize(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{AccessToken: "tok"}, nil
 			},
 		}
@@ -3695,7 +3695,7 @@ func TestErrorSanitization(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, _, _, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{AccessToken: "tok"}, nil
 			},
 		}
@@ -4190,7 +4190,7 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
 			},
-			TokenFn: func(_ context.Context, userID, integration, _ string) (*core.IntegrationToken, error) {
+			TokenFn: func(_ context.Context, userID, integration, _, _ string) (*core.IntegrationToken, error) {
 				if userID == principal.IdentityPrincipal && integration == "svc" {
 					return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
 				}
@@ -4257,7 +4257,7 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 				GetUserFn: func(_ context.Context, id string) (*core.User, error) {
 					return &core.User{ID: id, Email: "dev@example.com"}, nil
 				},
-				TokenFn: func(_ context.Context, userID, _, _ string) (*core.IntegrationToken, error) {
+				TokenFn: func(_ context.Context, userID, _, _, _ string) (*core.IntegrationToken, error) {
 					switch userID {
 					case "u1":
 						return &core.IntegrationToken{AccessToken: "user-tok"}, nil
@@ -4295,7 +4295,7 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 					return &core.User{ID: "u1", Email: email}, nil
 				},
-				TokenFn: func(_ context.Context, userID, _, _ string) (*core.IntegrationToken, error) {
+				TokenFn: func(_ context.Context, userID, _, _, _ string) (*core.IntegrationToken, error) {
 					if userID == principal.IdentityPrincipal {
 						return &core.IntegrationToken{AccessToken: "identity-tok"}, nil
 					}

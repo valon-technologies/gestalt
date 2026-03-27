@@ -20,7 +20,7 @@ const (
 )
 
 type TokenResolver interface {
-	ResolveToken(ctx context.Context, p *principal.Principal, providerName, instance string) (string, error)
+	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error)
 }
 
 type directToolCaller interface {
@@ -34,6 +34,8 @@ type Config struct {
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool
+	APIConnection    map[string]string
+	MCPConnection    map[string]string
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {

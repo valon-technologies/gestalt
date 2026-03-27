@@ -17,6 +17,7 @@ type IntegrationToken struct {
 	ID                string
 	UserID            string
 	Integration       string
+	Connection        string
 	Instance          string
 	AccessToken       string
 	RefreshToken      string
@@ -73,6 +74,7 @@ type StagedConnection struct {
 	ID             string
 	UserID         string
 	Integration    string
+	Connection     string
 	Instance       string
 	AccessToken    string
 	RefreshToken   string

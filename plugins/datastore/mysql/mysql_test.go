@@ -130,7 +130,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 
 	// Verify round-trip decryption.
-	got, err := store.Token(ctx, user.ID, "test", "i1")
+	got, err := store.Token(ctx, user.ID, "test", "", "i1")
 	if err != nil {
 		t.Fatalf("Token: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestStoreTokenUpsert(t *testing.T) {
 		t.Fatalf("second StoreToken: %v", err)
 	}
 
-	got, err := store.Token(ctx, user.ID, "svc", "i1")
+	got, err := store.Token(ctx, user.ID, "svc", "", "i1")
 	if err != nil {
 		t.Fatalf("Token: %v", err)
 	}

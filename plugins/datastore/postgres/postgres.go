@@ -20,10 +20,10 @@ func (dialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
 func (dialect) UpsertTokenSQL() string {
 	return `
 		INSERT INTO integration_tokens
-			(id, user_id, integration, instance, access_token_encrypted, refresh_token_encrypted,
+			(id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 			 scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		ON CONFLICT(user_id, integration, instance) DO UPDATE SET
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		ON CONFLICT(user_id, integration, connection, instance) DO UPDATE SET
 			access_token_encrypted = EXCLUDED.access_token_encrypted,
 			refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
 			scopes = EXCLUDED.scopes,
@@ -94,6 +94,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			integration TEXT NOT NULL,
+			connection TEXT NOT NULL DEFAULT '',
 			instance TEXT NOT NULL,
 			access_token_encrypted TEXT NOT NULL,
 			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
@@ -104,7 +105,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			metadata_json TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL,
-			UNIQUE(user_id, integration, instance)
+			UNIQUE(user_id, integration, connection, instance)
 		)`); err != nil {
 		return fmt.Errorf("creating integration_tokens table: %w", err)
 	}
@@ -126,6 +127,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			integration TEXT NOT NULL,
+			connection TEXT NOT NULL DEFAULT '',
 			instance TEXT NOT NULL,
 			access_token_encrypted TEXT NOT NULL,
 			refresh_token_encrypted TEXT NOT NULL DEFAULT '',

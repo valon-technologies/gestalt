@@ -37,6 +37,7 @@ const (
 	attrUpdatedAt         = "updated_at"
 	attrUserID            = "user_id"
 	attrIntegration       = "integration"
+	attrConnection        = "connection"
 	attrInstance          = "instance"
 	attrAccessTokenEnc    = "access_token_enc"
 	attrRefreshTokenEnc   = "refresh_token_enc"
@@ -250,10 +251,10 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 	return nil
 }
 
-func (s *Store) Token(ctx context.Context, userID, integration, instance string) (*core.IntegrationToken, error) {
+func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
-		Key:       tokenKey(userID, integration, instance),
+		Key:       tokenKey(userID, integration, connection, instance),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb: getting token: %w", err)
@@ -313,6 +314,41 @@ func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integratio
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb: listing tokens for integration: %w", err)
+	}
+
+	tokens := make([]*core.IntegrationToken, 0, len(out.Items))
+	for _, item := range out.Items {
+		t, err := s.unmarshalIntegrationToken(item)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, nil
+}
+
+func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	keyCond := expression.KeyAnd(
+		expression.Key(attrPK).Equal(expression.Value(userPKPrefix+userID)),
+		expression.KeyBeginsWith(expression.Key(attrSK), tokenSKPrefix),
+	)
+	filt := expression.And(
+		expression.Name(attrIntegration).Equal(expression.Value(integration)),
+		expression.Name(attrConnection).Equal(expression.Value(connection)),
+	)
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithFilter(filt).Build()
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb: building expression: %w", err)
+	}
+	out, err := s.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 &s.tableName,
+		KeyConditionExpression:    expr.KeyCondition(),
+		FilterExpression:          expr.Filter(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb: listing tokens for connection: %w", err)
 	}
 
 	tokens := make([]*core.IntegrationToken, 0, len(out.Items))
@@ -530,10 +566,10 @@ func userKey(id string) map[string]ddbtypes.AttributeValue {
 	}
 }
 
-func tokenKey(userID, integration, instance string) map[string]ddbtypes.AttributeValue {
+func tokenKey(userID, integration, connection, instance string) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
 		attrPK: &ddbtypes.AttributeValueMemberS{Value: userPKPrefix + userID},
-		attrSK: &ddbtypes.AttributeValueMemberS{Value: tokenSKPrefix + integration + "#" + instance},
+		attrSK: &ddbtypes.AttributeValueMemberS{Value: tokenSKPrefix + integration + "#" + connection + "#" + instance},
 	}
 }
 
@@ -583,10 +619,11 @@ func unmarshalUser(item map[string]ddbtypes.AttributeValue) (*core.User, error) 
 func marshalIntegrationToken(t *core.IntegrationToken, accessEnc, refreshEnc string) map[string]ddbtypes.AttributeValue {
 	item := map[string]ddbtypes.AttributeValue{
 		attrPK:                &ddbtypes.AttributeValueMemberS{Value: userPKPrefix + t.UserID},
-		attrSK:                &ddbtypes.AttributeValueMemberS{Value: tokenSKPrefix + t.Integration + "#" + t.Instance},
+		attrSK:                &ddbtypes.AttributeValueMemberS{Value: tokenSKPrefix + t.Integration + "#" + t.Connection + "#" + t.Instance},
 		attrID:                &ddbtypes.AttributeValueMemberS{Value: t.ID},
 		attrUserID:            &ddbtypes.AttributeValueMemberS{Value: t.UserID},
 		attrIntegration:       &ddbtypes.AttributeValueMemberS{Value: t.Integration},
+		attrConnection:        &ddbtypes.AttributeValueMemberS{Value: t.Connection},
 		attrInstance:          &ddbtypes.AttributeValueMemberS{Value: t.Instance},
 		attrAccessTokenEnc:    &ddbtypes.AttributeValueMemberS{Value: accessEnc},
 		attrRefreshTokenEnc:   &ddbtypes.AttributeValueMemberS{Value: refreshEnc},
@@ -617,6 +654,9 @@ func (s *Store) unmarshalIntegrationToken(item map[string]ddbtypes.AttributeValu
 		return nil, err
 	}
 	if err := unmarshalS(item, attrIntegration, &t.Integration); err != nil {
+		return nil, err
+	}
+	if err := unmarshalS(item, attrConnection, &t.Connection); err != nil {
 		return nil, err
 	}
 	if err := unmarshalS(item, attrInstance, &t.Instance); err != nil {

@@ -119,14 +119,15 @@ func runServer(env *bootstrapEnv) error {
 	}
 
 	srv, err := server.New(server.Config{
-		Auth:        result.Auth,
-		Datastore:   result.Datastore,
-		Providers:   result.Providers,
-		Runtimes:    result.Runtimes,
-		Bindings:    result.Bindings,
-		Invoker:     result.Invoker,
-		DevMode:     result.DevMode,
-		StateSecret: crypto.DeriveKey(env.Config.Server.EncryptionKey),
+		Auth:              result.Auth,
+		Datastore:         result.Datastore,
+		Providers:         result.Providers,
+		Runtimes:          result.Runtimes,
+		Bindings:          result.Bindings,
+		Invoker:           result.Invoker,
+		DefaultConnection: bootstrap.BuildConnectionMap(env.Config),
+		DevMode:           result.DevMode,
+		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		Readiness: composeReadiness(
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
 			datastoreReadiness(result.Datastore),
@@ -193,24 +194,34 @@ func runServer(env *bootstrapEnv) error {
 }
 
 type mcpSurface struct {
-	providers    []string
-	toolPrefixes map[string]string
-	includeREST  map[string]bool
+	providers     []string
+	toolPrefixes  map[string]string
+	includeREST   map[string]bool
+	apiConnection map[string]string
+	mcpConnection map[string]string
 }
 
 func buildMCPSurface(cfg *config.Config) mcpSurface {
 	surface := mcpSurface{
-		toolPrefixes: make(map[string]string),
-		includeREST:  make(map[string]bool),
+		toolPrefixes:  make(map[string]string),
+		includeREST:   make(map[string]bool),
+		apiConnection: make(map[string]string),
+		mcpConnection: make(map[string]string),
 	}
 
 	for name, intg := range cfg.Integrations {
 		if intg.Plugin != nil {
 			surface.providers = append(surface.providers, name)
+			surface.apiConnection[name] = config.PluginConnectionName
+			surface.mcpConnection[name] = config.PluginConnectionName
 		} else if intg.API != nil || intg.MCP != nil {
 			surface.providers = append(surface.providers, name)
 			if intg.API != nil {
 				surface.includeREST[name] = true
+				surface.apiConnection[name] = intg.API.Connection
+			}
+			if intg.MCP != nil {
+				surface.mcpConnection[name] = intg.MCP.Connection
 			}
 		}
 		if intg.MCPToolPrefix != "" {
@@ -238,6 +249,8 @@ func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {
 			AllowedProviders: s.providers,
 			ToolPrefixes:     s.toolPrefixes,
 			IncludeREST:      s.includeREST,
+			APIConnection:    s.apiConnection,
+			MCPConnection:    s.mcpConnection,
 		}),
 		mcpserver.WithStateLess(true),
 	), nil
