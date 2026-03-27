@@ -10,6 +10,7 @@ import (
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/valon-technologies/gestalt/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/provider"
 
 	"github.com/pb33f/libopenapi"
 )
@@ -20,7 +21,7 @@ const (
 
 // LoadCatalog produces a *Catalog directly from an OpenAPI spec, preserving
 // nested JSON Schema for request bodies instead of flattening to parameters.
-func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[string]string) (*catalog.Catalog, error) {
+func LoadCatalog(ctx context.Context, name, specURL string, allowedOps map[string]*provider.OperationOverride) (*catalog.Catalog, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -86,7 +87,7 @@ func catalogExtractAuth(model *v3high.Document, cat *catalog.Catalog) {
 	}
 }
 
-func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allowedOps map[string]string) {
+func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allowedOps map[string]*provider.OperationOverride) {
 	if model.Paths == nil || model.Paths.PathItems == nil {
 		return
 	}
@@ -110,14 +111,20 @@ func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allo
 			if desc == "" {
 				desc = op.Summary
 			}
-			if override, ok := allowedOps[op.OperationId]; ok && override != "" {
-				desc = override
+			opID := op.OperationId
+			if override := allowedOps[op.OperationId]; override != nil {
+				if override.Description != "" {
+					desc = override.Description
+				}
+				if override.Alias != "" {
+					opID = override.Alias
+				}
 			}
 
 			upperMethod := strings.ToUpper(method)
 
 			catOp := catalog.CatalogOperation{
-				ID:          op.OperationId,
+				ID:          opID,
 				Method:      upperMethod,
 				Path:        path,
 				Title:       title,

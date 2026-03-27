@@ -90,7 +90,7 @@ func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
 		Type: config.APITypeREST,
 	}, config.ConnectionDef{}, map[string]string{
 		"prepared": preparedPath,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("BuildProvider: %v", err)
 	}
