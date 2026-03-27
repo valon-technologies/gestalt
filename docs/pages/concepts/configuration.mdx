@@ -73,7 +73,7 @@ Some fields are effectively mandatory:
 
 `server.encryption_key` is the root secret for the deployment. Gestalt derives other cryptographic material from it, including session-related secrets for some auth providers.
 
-## Prepared State: `init`, `validate`, And `serve --locked`
+## Prepared State: `bundle`, `validate`, And `serve --locked`
 
 Gestalt supports both mutable startup and deterministic startup.
 
@@ -89,19 +89,22 @@ This is convenient for development.
 
 ### Deterministic Startup
 
-`gestaltd init` writes prepared artifacts next to the config:
+`gestaltd bundle --config PATH --output DIR` resolves remote dependencies into a self-contained output directory containing:
 
 - `gestalt.lock.json`
 - `.gestalt/providers/*.json`
 - `.gestalt/plugins/...`
 
-After that, `gestaltd serve --locked` starts only if the prepared state exactly matches the config.
+After that, `gestaltd serve --locked --config <output>/PATH` starts only if the prepared state exactly matches the config.
 
 ### Validation
 
-`gestaltd validate --config PATH` is non-mutating and expects existing lock state.
+`gestaltd validate --config PATH` is non-mutating and expects existing lock state. Bundle first, then validate the bundled output:
 
-`gestaltd validate --init --config PATH` first prepares remote dependencies, then validates the resulting locked deployment.
+```sh
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd validate --config ./bundle/gestalt.yaml
+```
 
 ## Relative Paths
 

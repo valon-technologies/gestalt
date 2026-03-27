@@ -24,7 +24,7 @@ The generated local config uses:
 The server listens on `http://localhost:8080`. The web UI is served from that same port.
 
 <Callout>
-  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd init` followed by `gestaltd serve --locked`.
+  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd bundle` followed by `gestaltd serve --locked`.
 </Callout>
 
 ## 2. Open The UI And Sign In
@@ -84,13 +84,14 @@ This is the smallest useful production-shaped config:
 - an explicit integration `base_url` for live requests
 - no per-user credential requirement because `connection_mode: none`
 
-## 4. Prepare And Validate It
+## 4. Bundle And Validate It
 
 ```sh
-gestaltd validate --init --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd validate --config ./bundle/gestalt.yaml
 ```
 
-`--init` resolves remote provider inputs first, then validates the final locked state. For the config above, that writes:
+`bundle` resolves remote provider inputs into a self-contained output directory. For the config above, the bundle contains:
 
 - `gestalt.lock.json`
 - `.gestalt/providers/petstore.json`
@@ -98,7 +99,7 @@ gestaltd validate --init --config ./gestalt.yaml
 ## 5. Start From Locked State
 
 ```sh
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.

@@ -15,10 +15,10 @@ Your config references something that must be prepared first, usually:
 Run:
 
 ```sh
-gestaltd init --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
 ```
 
-and then start again with `serve --locked`.
+and then start again with `gestaltd serve --locked --config ./bundle/gestalt.yaml`.
 
 ## OAuth Redirects Are Wrong
 

@@ -19,26 +19,26 @@ integrations:
 - a local `.tar.gz`
 - an HTTPS URL
 
-## 2. Prepare It
+## 2. Bundle It
 
 ```sh
-gestaltd init --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
 ```
 
-This validates the manifest, selects the current platform artifact, installs the package into `.gestalt/plugins/`, and records the prepared result in `gestalt.lock.json`.
+This validates the manifest, selects the current platform artifact, installs the package into the output directory, and records the prepared result in `gestalt.lock.json`.
 
-## 3. Validate The Locked Deployment
+## 3. Validate The Bundled Deployment
 
 ```sh
-gestaltd validate --config ./gestalt.yaml
+gestaltd validate --config ./bundle/gestalt.yaml
 ```
 
-Validation now uses the prepared plugin state instead of re-resolving the package every time.
+Validation uses the prepared plugin state instead of re-resolving the package every time.
 
 ## 4. Start From Locked State
 
 ```sh
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 That is the normal production path for packaged plugins.
@@ -48,7 +48,7 @@ That is the normal production path for packaged plugins.
 If `plugin.package` points at an HTTPS URL and the remote archive changes, rerun:
 
 ```sh
-gestaltd init --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
 ```
 
-Remote packages are intentionally refreshed during explicit `init`.
+Remote packages are intentionally refreshed during explicit `bundle`.
