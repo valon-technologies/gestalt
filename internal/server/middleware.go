@@ -48,6 +48,12 @@ func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.noAuth {
+			ctx := principal.WithPrincipal(r.Context(), s.resolver.ResolveEmail("local@gestalt.local"))
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		if s.devMode {
 			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
 				p := s.resolver.ResolveEmail(email)
@@ -57,8 +63,6 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Try the session cookie first, then the Authorization header.
-		// If either yields a valid principal, use it.
 		var p *principal.Principal
 		var lastErr error
 
@@ -97,6 +101,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.noAuth {
+			ctx := principal.WithPrincipal(r.Context(), s.resolver.ResolveEmail("local@gestalt.local"))
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		if s.devMode {
 			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
 				p := s.resolver.ResolveEmail(email)

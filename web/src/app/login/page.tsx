@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { fetchAPI, getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setUserEmail } from "@/lib/auth";
+import { NONE_PROVIDER, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
@@ -19,6 +20,11 @@ export default function LoginPage() {
   useEffect(() => {
     getAuthInfo()
       .then((info) => {
+        if (info.provider === NONE_PROVIDER) {
+          setUserEmail(DEFAULT_LOCAL_EMAIL);
+          window.location.replace("/");
+          return;
+        }
         setAuthConfig({
           label: "Sign in with " + info.display_name,
           devMode: info.dev_mode,

@@ -30,7 +30,7 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 
 	dbPath := filepath.Join(configDir, "gestalt.db")
 	cfg := fmt.Sprintf(`auth:
-  provider: local
+  provider: none
 datastore:
   provider: sqlite
   config:
