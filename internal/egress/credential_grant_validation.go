@@ -5,8 +5,6 @@ import "fmt"
 type CredentialGrantValidationInput struct {
 	SubjectKind string
 	SubjectID   string
-	Provider    string
-	Instance    string
 	Operation   string
 	Method      string
 	Host        string
@@ -15,10 +13,9 @@ type CredentialGrantValidationInput struct {
 }
 
 // ValidateCredentialGrant checks that a credential grant has at least one match
-// criterion and a valid auth_style. Instance is not a match criterion because it
-// only affects provider-token resolution, not request matching.
+// criterion and a valid auth_style.
 func ValidateCredentialGrant(g CredentialGrantValidationInput) error {
-	if g.SubjectKind == "" && g.SubjectID == "" && g.Provider == "" &&
+	if g.SubjectKind == "" && g.SubjectID == "" &&
 		g.Operation == "" && g.Method == "" &&
 		g.Host == "" && g.PathPrefix == "" {
 		return fmt.Errorf("at least one match criterion is required")
