@@ -7,7 +7,7 @@ fn default_type() -> String {
     "string".to_string()
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogOperation {
     pub id: String,
@@ -25,7 +25,7 @@ pub struct CatalogOperation {
     pub transport: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogParameter {
     pub name: String,
@@ -44,6 +44,10 @@ pub struct OperationsCatalog {
 }
 
 impl OperationsCatalog {
+    pub fn new(operations: Vec<CatalogOperation>) -> Self {
+        Self { operations }
+    }
+
     pub fn find_operation(&self, name: &str) -> Option<&CatalogOperation> {
         self.operations.iter().find(|op| op.id == name)
     }

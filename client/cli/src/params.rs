@@ -80,7 +80,9 @@ pub fn assemble_params(
         if vals.len() == 1 {
             let val = vals.into_iter().next().unwrap();
             match is_array {
-                Some(true) => map.insert(key, serde_json::Value::Array(vec![val])),
+                Some(true) if !val.is_array() => {
+                    map.insert(key, serde_json::Value::Array(vec![val]))
+                }
                 _ => map.insert(key, val),
             };
         } else {
@@ -208,6 +210,29 @@ mod tests {
     fn test_parse_no_delimiter() {
         let result = parse_param_entry("nodelimiter");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_json_array_not_double_wrapped() {
+        use crate::catalog::{CatalogOperation, CatalogParameter, OperationsCatalog};
+
+        let cat = OperationsCatalog::new(vec![CatalogOperation {
+            id: "op".to_string(),
+            parameters: vec![CatalogParameter {
+                name: "tags".to_string(),
+                r#type: "array".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }]);
+
+        let entries = vec![ParamEntry {
+            key: "tags".to_string(),
+            value: ParamValue::JsonVal(serde_json::json!(["a", "b"])),
+        }];
+
+        let result = assemble_params(&entries, Some(&cat), "op").unwrap();
+        assert_eq!(result["tags"], serde_json::json!(["a", "b"]));
     }
 
     #[test]
