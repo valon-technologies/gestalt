@@ -51,3 +51,4 @@ internal/webui/out/
 # Exceptions
 !internal/manifest/
 .claude/scheduled_tasks.lock
+.claude/worktrees/
