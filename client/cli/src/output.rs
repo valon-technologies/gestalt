@@ -251,11 +251,9 @@ pub fn select_path(value: &serde_json::Value, path: &str) -> anyhow::Result<serd
             continue;
         }
         current = match current {
-            serde_json::Value::Object(map) => {
-                map.get(segment).ok_or_else(|| {
-                    anyhow::anyhow!("key '{}' not found in response", segment)
-                })?
-            }
+            serde_json::Value::Object(map) => map
+                .get(segment)
+                .ok_or_else(|| anyhow::anyhow!("key '{}' not found in response", segment))?,
             serde_json::Value::Array(arr) => {
                 let idx: usize = segment.parse().map_err(|_| {
                     anyhow::anyhow!("expected numeric index for array, got '{}'", segment)

@@ -65,7 +65,12 @@ pub fn list_operations(
                 .iter()
                 .map(|op| {
                     let params = format_parameters(&op.parameters);
-                    vec![op.id.clone(), op.description.clone(), op.method.clone(), params]
+                    vec![
+                        op.id.clone(),
+                        op.description.clone(),
+                        op.method.clone(),
+                        params,
+                    ]
                 })
                 .collect();
             output::print_table(&["Name", "Description", "Method", "Parameters"], &rows);

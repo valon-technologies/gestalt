@@ -179,10 +179,7 @@ mod tests {
     fn test_parse_json_null() {
         let entry = parse_param_entry("key:=null").unwrap();
         assert_eq!(entry.key, "key");
-        assert_eq!(
-            entry.value,
-            ParamValue::JsonVal(serde_json::Value::Null)
-        );
+        assert_eq!(entry.value, ParamValue::JsonVal(serde_json::Value::Null));
     }
 
     #[test]
