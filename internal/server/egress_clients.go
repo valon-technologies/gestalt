@@ -12,6 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 )
 
+const adminForbiddenMessage = "forbidden"
+
 func (s *Server) egressClientStore() (core.EgressClientStore, error) {
 	ecs, ok := s.datastore.(core.EgressClientStore)
 	if !ok {

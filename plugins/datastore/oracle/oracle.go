@@ -80,8 +80,6 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 var _ core.StagedConnectionStore = (*Store)(nil)
 var _ core.EgressClientStore = (*Store)(nil)
-var _ core.EgressDenyRuleStore = (*Store)(nil)
-var _ core.EgressCredentialGrantStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
@@ -178,42 +176,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 			)`,
 		},
-		{
-			name: "EGRESS_DENY_RULES",
-			ddl: `CREATE TABLE egress_deny_rules (
-				id VARCHAR2(36) PRIMARY KEY,
-				subject_kind VARCHAR2(255) DEFAULT '' NOT NULL,
-				subject_id VARCHAR2(255) DEFAULT '' NOT NULL,
-				provider VARCHAR2(255) DEFAULT '' NOT NULL,
-				operation VARCHAR2(255) DEFAULT '' NOT NULL,
-				method VARCHAR2(255) DEFAULT '' NOT NULL,
-				host VARCHAR2(255) DEFAULT '' NOT NULL,
-				path_prefix VARCHAR2(255) DEFAULT '' NOT NULL,
-				created_by_id VARCHAR2(36) NOT NULL,
-				description CLOB,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
-		},
-		{
-			name: "EGRESS_CREDENTIAL_GRANTS",
-			ddl: `CREATE TABLE egress_credential_grants (
-				id VARCHAR2(36) PRIMARY KEY,
-				provider VARCHAR2(255) DEFAULT '' NOT NULL,
-				instance VARCHAR2(255) DEFAULT '' NOT NULL,
-				secret_ref VARCHAR2(255) DEFAULT '' NOT NULL,
-				auth_style VARCHAR2(255) DEFAULT '' NOT NULL,
-				subject_kind VARCHAR2(255) DEFAULT '' NOT NULL,
-				subject_id VARCHAR2(255) DEFAULT '' NOT NULL,
-				operation VARCHAR2(255) DEFAULT '' NOT NULL,
-				method VARCHAR2(255) DEFAULT '' NOT NULL,
-				host VARCHAR2(255) DEFAULT '' NOT NULL,
-				path_prefix VARCHAR2(255) DEFAULT '' NOT NULL,
-				created_by_id VARCHAR2(36) NOT NULL,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
-		},
 	}
 
 	for _, tbl := range tables {
@@ -267,14 +229,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{
 			name: "FK_ECLT_CLIENT",
 			ddl:  "ALTER TABLE egress_client_tokens ADD CONSTRAINT fk_eclt_client FOREIGN KEY (client_id) REFERENCES egress_clients(id) ON DELETE CASCADE",
-		},
-		{
-			name: "FK_EDR_USER",
-			ddl:  "ALTER TABLE egress_deny_rules ADD CONSTRAINT fk_edr_user FOREIGN KEY (created_by_id) REFERENCES users(id)",
-		},
-		{
-			name: "FK_ECG_USER",
-			ddl:  "ALTER TABLE egress_credential_grants ADD CONSTRAINT fk_ecg_user FOREIGN KEY (created_by_id) REFERENCES users(id)",
 		},
 	}
 

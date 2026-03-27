@@ -20,40 +20,30 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 
 var _ core.StagedConnectionStore = (*StubDatastore)(nil)
 var _ core.EgressClientStore = (*StubDatastore)(nil)
-var _ core.EgressDenyRuleStore = (*StubDatastore)(nil)
-var _ core.EgressCredentialGrantStore = (*StubDatastore)(nil)
 
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
-	PingFn                        func(context.Context) error
-	GetUserFn                     func(context.Context, string) (*core.User, error)
-	FindOrCreateUserFn            func(context.Context, string) (*core.User, error)
-	StoreTokenFn                  func(context.Context, *core.IntegrationToken) error
-	TokenFn                       func(context.Context, string, string, string) (*core.IntegrationToken, error)
-	ListTokensFn                  func(context.Context, string) ([]*core.IntegrationToken, error)
-	ListTokensForIntegrationFn    func(context.Context, string, string) ([]*core.IntegrationToken, error)
-	DeleteTokenFn                 func(context.Context, string) error
-	ValidateAPITokenFn            func(context.Context, string) (*core.APIToken, error)
-	RevokeAPITokenFn              func(context.Context, string, string) error
-	StoreStagedConnectionFn       func(context.Context, *core.StagedConnection) error
-	GetStagedConnectionFn         func(context.Context, string) (*core.StagedConnection, error)
-	DeleteStagedConnectionFn      func(context.Context, string) error
-	CreateEgressClientFn          func(context.Context, *core.EgressClient) error
-	GetEgressClientFn             func(context.Context, string) (*core.EgressClient, error)
-	ListEgressClientsFn           func(context.Context, core.EgressClientFilter) ([]*core.EgressClient, error)
-	DeleteEgressClientFn          func(context.Context, string) error
-	CreateEgressClientTokenFn     func(context.Context, *core.EgressClientToken) error
-	ValidateEgressClientTokenFn   func(context.Context, string) (*core.EgressClientToken, error)
-	ListEgressClientTokensFn      func(context.Context, string) ([]*core.EgressClientToken, error)
-	RevokeEgressClientTokenFn     func(context.Context, string, string) error
-	CreateEgressDenyRuleFn        func(context.Context, *core.EgressDenyRule) error
-	GetEgressDenyRuleFn           func(context.Context, string) (*core.EgressDenyRule, error)
-	ListEgressDenyRulesFn         func(context.Context, core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error)
-	DeleteEgressDenyRuleFn        func(context.Context, string) error
-	CreateEgressCredentialGrantFn func(context.Context, *core.EgressCredentialGrant) error
-	GetEgressCredentialGrantFn    func(context.Context, string) (*core.EgressCredentialGrant, error)
-	ListEgressCredentialGrantsFn  func(context.Context, core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error)
-	DeleteEgressCredentialGrantFn func(context.Context, string) error
+	PingFn                      func(context.Context) error
+	GetUserFn                   func(context.Context, string) (*core.User, error)
+	FindOrCreateUserFn          func(context.Context, string) (*core.User, error)
+	StoreTokenFn                func(context.Context, *core.IntegrationToken) error
+	TokenFn                     func(context.Context, string, string, string) (*core.IntegrationToken, error)
+	ListTokensFn                func(context.Context, string) ([]*core.IntegrationToken, error)
+	ListTokensForIntegrationFn  func(context.Context, string, string) ([]*core.IntegrationToken, error)
+	DeleteTokenFn               func(context.Context, string) error
+	ValidateAPITokenFn          func(context.Context, string) (*core.APIToken, error)
+	RevokeAPITokenFn            func(context.Context, string, string) error
+	StoreStagedConnectionFn     func(context.Context, *core.StagedConnection) error
+	GetStagedConnectionFn       func(context.Context, string) (*core.StagedConnection, error)
+	DeleteStagedConnectionFn    func(context.Context, string) error
+	CreateEgressClientFn        func(context.Context, *core.EgressClient) error
+	GetEgressClientFn           func(context.Context, string) (*core.EgressClient, error)
+	ListEgressClientsFn         func(context.Context, core.EgressClientFilter) ([]*core.EgressClient, error)
+	DeleteEgressClientFn        func(context.Context, string) error
+	CreateEgressClientTokenFn   func(context.Context, *core.EgressClientToken) error
+	ValidateEgressClientTokenFn func(context.Context, string) (*core.EgressClientToken, error)
+	ListEgressClientTokensFn    func(context.Context, string) ([]*core.EgressClientToken, error)
+	RevokeEgressClientTokenFn   func(context.Context, string, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -198,54 +188,6 @@ func (s *StubDatastore) ListEgressClientTokens(ctx context.Context, clientID str
 func (s *StubDatastore) RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error {
 	if s.RevokeEgressClientTokenFn != nil {
 		return s.RevokeEgressClientTokenFn(ctx, clientID, tokenID)
-	}
-	return nil
-}
-func (s *StubDatastore) CreateEgressDenyRule(ctx context.Context, rule *core.EgressDenyRule) error {
-	if s.CreateEgressDenyRuleFn != nil {
-		return s.CreateEgressDenyRuleFn(ctx, rule)
-	}
-	return nil
-}
-func (s *StubDatastore) GetEgressDenyRule(ctx context.Context, id string) (*core.EgressDenyRule, error) {
-	if s.GetEgressDenyRuleFn != nil {
-		return s.GetEgressDenyRuleFn(ctx, id)
-	}
-	return nil, core.ErrNotFound
-}
-func (s *StubDatastore) ListEgressDenyRules(ctx context.Context, filter core.EgressDenyRuleFilter) ([]*core.EgressDenyRule, error) {
-	if s.ListEgressDenyRulesFn != nil {
-		return s.ListEgressDenyRulesFn(ctx, filter)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) DeleteEgressDenyRule(ctx context.Context, id string) error {
-	if s.DeleteEgressDenyRuleFn != nil {
-		return s.DeleteEgressDenyRuleFn(ctx, id)
-	}
-	return nil
-}
-func (s *StubDatastore) CreateEgressCredentialGrant(ctx context.Context, grant *core.EgressCredentialGrant) error {
-	if s.CreateEgressCredentialGrantFn != nil {
-		return s.CreateEgressCredentialGrantFn(ctx, grant)
-	}
-	return nil
-}
-func (s *StubDatastore) GetEgressCredentialGrant(ctx context.Context, id string) (*core.EgressCredentialGrant, error) {
-	if s.GetEgressCredentialGrantFn != nil {
-		return s.GetEgressCredentialGrantFn(ctx, id)
-	}
-	return nil, core.ErrNotFound
-}
-func (s *StubDatastore) ListEgressCredentialGrants(ctx context.Context, filter core.EgressCredentialGrantFilter) ([]*core.EgressCredentialGrant, error) {
-	if s.ListEgressCredentialGrantsFn != nil {
-		return s.ListEgressCredentialGrantsFn(ctx, filter)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) DeleteEgressCredentialGrant(ctx context.Context, id string) error {
-	if s.DeleteEgressCredentialGrantFn != nil {
-		return s.DeleteEgressCredentialGrantFn(ctx, id)
 	}
 	return nil
 }

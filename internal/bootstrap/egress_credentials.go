@@ -10,13 +10,8 @@ import (
 	"github.com/valon-technologies/gestalt/internal/registry"
 )
 
-func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], ds core.Datastore, sm core.SecretManager) {
+func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, providers *registry.PluginMap[core.Provider], sm core.SecretManager) {
 	var loaders []egress.CredentialGrantLoader
-
-	// Saved grants first: control-plane overlay takes precedence over config defaults.
-	if grantStore, ok := ds.(core.EgressCredentialGrantStore); ok {
-		loaders = append(loaders, &credentialGrantStoreLoader{store: grantStore})
-	}
 
 	if len(deps.CredentialGrants) > 0 {
 		grants := make([]egress.CredentialGrant, len(deps.CredentialGrants))
@@ -50,35 +45,6 @@ func wireCredentialResolver(deps *EgressDeps, broker *invocation.Broker, provide
 		Materializer:   &registryMaterializer{providers: providers},
 		SecretResolver: sm,
 	}
-}
-
-type credentialGrantStoreLoader struct {
-	store core.EgressCredentialGrantStore
-}
-
-func (a *credentialGrantStoreLoader) LoadCredentialGrants(ctx context.Context) ([]egress.CredentialGrant, error) {
-	grants, err := a.store.ListEgressCredentialGrants(ctx, core.EgressCredentialGrantFilter{})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]egress.CredentialGrant, len(grants))
-	for i, g := range grants {
-		out[i] = egress.CredentialGrant{
-			Instance:  g.Instance,
-			SecretRef: g.SecretRef,
-			AuthStyle: egress.AuthStyle(g.AuthStyle),
-			MatchCriteria: egress.MatchCriteria{
-				SubjectKind: egress.SubjectKind(g.SubjectKind),
-				SubjectID:   g.SubjectID,
-				Provider:    g.Provider,
-				Operation:   g.Operation,
-				Method:      g.Method,
-				Host:        g.Host,
-				PathPrefix:  g.PathPrefix,
-			},
-		}
-	}
-	return out, nil
 }
 
 type brokerTokenResolver struct {
