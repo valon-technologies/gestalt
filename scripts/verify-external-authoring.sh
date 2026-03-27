@@ -52,7 +52,7 @@ func (p *provider) Name() string                                    { return "ex
 func (p *provider) DisplayName() string                             { return "External Test" }
 func (p *provider) Description() string                             { return "" }
 func (p *provider) ConnectionMode() pluginsdk.ConnectionMode        { return pluginsdk.ConnectionModeNone }
-func (p *provider) Start(_ context.Context, _ string, cfg map[string]any, _ string) error {
+func (p *provider) Start(_ context.Context, _ string, cfg map[string]any) error {
 	if v, ok := cfg["prefix"].(string); ok {
 		p.prefix = v
 	}
