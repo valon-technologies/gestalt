@@ -2,6 +2,8 @@ package mcpupstream
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,8 +39,12 @@ func newTestServer() *mcpserver.MCPServer {
 
 func newTestUpstream(t *testing.T) *Upstream {
 	t.Helper()
+	return newTestUpstreamFromServer(t, "clickhouse", newTestServer())
+}
 
-	srv := newTestServer()
+func newTestUpstreamFromServer(t *testing.T, name string, srv *mcpserver.MCPServer) *Upstream {
+	t.Helper()
+
 	client, err := mcpclient.NewInProcessClient(srv)
 	if err != nil {
 		t.Fatalf("creating in-process client: %v", err)
@@ -61,7 +67,7 @@ func newTestUpstream(t *testing.T) *Upstream {
 		t.Fatalf("listing tools: %v", err)
 	}
 
-	return newFromClient("clickhouse", client, core.ConnectionModeUser, toolsResult.Tools)
+	return newFromClient(name, client, core.ConnectionModeUser, toolsResult.Tools)
 }
 
 func newAuthenticatedHTTPTestServer(t *testing.T, expectedAuth string) *httptest.Server {
@@ -330,5 +336,68 @@ func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_CallToolForwardsMeta(t *testing.T) {
+	t.Parallel()
+
+	srv := mcpserver.NewMCPServer("meta-test", "1.0.0")
+	srv.AddTool(
+		mcpgo.NewTool("check_meta", mcpgo.WithDescription("checks meta")),
+		func(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			if req.Params.Meta == nil {
+				return nil, fmt.Errorf("expected _meta to be forwarded")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	u := newTestUpstreamFromServer(t, "meta-upstream", srv)
+	t.Cleanup(func() { _ = u.Close() })
+
+	ctx := WithCallToolMeta(context.Background(), &mcpgo.Meta{ProgressToken: mcpgo.ProgressToken("tok-1")})
+	result, err := u.CallTool(ctx, "check_meta", nil)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_DiscoverToolsPreservesOutputSchema(t *testing.T) {
+	t.Parallel()
+
+	outputSchema := json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"}}}`)
+
+	srv := mcpserver.NewMCPServer("output-test", "1.0.0")
+	srv.AddTool(
+		mcpgo.NewTool("typed_op", mcpgo.WithDescription("has output schema"), mcpgo.WithRawOutputSchema(outputSchema)),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	u := newTestUpstreamFromServer(t, "output-upstream", srv)
+	t.Cleanup(func() { _ = u.Close() })
+
+	cat := u.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if len(cat.Operations) != 1 {
+		t.Fatalf("expected 1 catalog operation, got %d", len(cat.Operations))
+	}
+	if len(cat.Operations[0].OutputSchema) == 0 {
+		t.Fatal("expected OutputSchema to be preserved")
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(cat.Operations[0].OutputSchema, &parsed); err != nil {
+		t.Fatalf("unmarshal OutputSchema: %v", err)
+	}
+	if parsed["type"] != "object" {
+		t.Fatalf("expected type=object, got %v", parsed["type"])
 	}
 }

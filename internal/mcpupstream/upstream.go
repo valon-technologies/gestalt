@@ -95,6 +95,7 @@ func (u *Upstream) CallTool(ctx context.Context, name string, args map[string]an
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = name
 	req.Params.Arguments = args
+	req.Params.Meta = CallToolMetaFromContext(ctx)
 
 	if u.client != nil {
 		return u.client.CallTool(ctx, req)
@@ -218,12 +219,18 @@ func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Ope
 	for i := range tools {
 		schema, _ := json.Marshal(tools[i].InputSchema)
 
+		var outputSchema json.RawMessage
+		if tools[i].OutputSchema.Type != "" {
+			outputSchema, _ = json.Marshal(tools[i].OutputSchema)
+		}
+
 		catOp := catalog.CatalogOperation{
-			ID:          tools[i].Name,
-			Title:       tools[i].Annotations.Title,
-			Description: tools[i].Description,
-			InputSchema: schema,
-			Transport:   catalog.TransportMCPPassthrough,
+			ID:           tools[i].Name,
+			Title:        tools[i].Annotations.Title,
+			Description:  tools[i].Description,
+			InputSchema:  schema,
+			OutputSchema: outputSchema,
+			Transport:    catalog.TransportMCPPassthrough,
 		}
 		catOp.Annotations = catalog.OperationAnnotations{
 			ReadOnlyHint:    tools[i].Annotations.ReadOnlyHint,

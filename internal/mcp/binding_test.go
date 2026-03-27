@@ -1067,4 +1067,121 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 	}
 }
 
+func TestNewServer_DirectCallerForwardsMeta(t *testing.T) {
+	t.Parallel()
+
+	var gotMeta *mcpgo.Meta
+
+	cat := &catalog.Catalog{
+		Name: "upstream",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "do_thing",
+				Description: "Do a thing",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "upstream"},
+		ops:             []core.Operation{{Name: "do_thing", Description: "Do a thing"}},
+		cat:             cat,
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			gotMeta = mcpupstream.CallToolMetaFromContext(ctx)
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{token: "t"},
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool("upstream_do_thing")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	ctx := ctxWithPrincipal()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "upstream_do_thing"
+	req.Params.Meta = &mcpgo.Meta{ProgressToken: mcpgo.ProgressToken("prog-1")}
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if gotMeta == nil {
+		t.Fatal("expected meta to be forwarded via context")
+	}
+	if gotMeta.ProgressToken != mcpgo.ProgressToken("prog-1") {
+		t.Fatalf("expected progress token prog-1, got %v", gotMeta.ProgressToken)
+	}
+}
+
+func TestNewServer_OutputSchemaPreserved(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "upstream",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:           "typed_op",
+				Description:  "Has output schema",
+				Transport:    catalog.TransportMCPPassthrough,
+				InputSchema:  json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`),
+				OutputSchema: json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"}}}`),
+			},
+		},
+	}
+
+	prov := &catalogProvider{
+		StubIntegration: coretesting.StubIntegration{N: "upstream"},
+		ops:             coreintegration.OperationsList(cat),
+		catalog:         cat,
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := stubDatastoreWithToken()
+	broker := invocation.NewBroker(providers, ds)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:   broker,
+		Providers: providers,
+	})
+
+	tools := srv.ListTools()
+	st := tools["upstream_typed_op"]
+	if st == nil {
+		t.Fatal("expected upstream_typed_op tool")
+	}
+
+	raw, err := json.Marshal(st.Tool)
+	if err != nil {
+		t.Fatalf("marshal tool: %v", err)
+	}
+
+	var toolJSON map[string]any
+	if err := json.Unmarshal(raw, &toolJSON); err != nil {
+		t.Fatalf("unmarshal tool JSON: %v", err)
+	}
+	os, ok := toolJSON["outputSchema"]
+	if !ok {
+		t.Fatal("expected outputSchema in tool JSON")
+	}
+	osMap, ok := os.(map[string]any)
+	if !ok {
+		t.Fatalf("expected outputSchema to be a map, got %T", os)
+	}
+	if osMap["type"] != "object" {
+		t.Fatalf("expected outputSchema type=object, got %v", osMap["type"])
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }

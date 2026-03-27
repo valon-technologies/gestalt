@@ -57,6 +57,7 @@ func makeDirectHandler(cfg Config, provName, opName, connection string, caller d
 		}
 
 		ctx = mcpupstream.WithUpstreamToken(ctx, token)
+		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
 		return caller.CallTool(ctx, opName, args)
 	}
 }
