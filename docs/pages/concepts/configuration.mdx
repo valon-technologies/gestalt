@@ -20,11 +20,10 @@ Loading a config is more than YAML parsing:
 1. `${ENV_VAR}` placeholders are expanded first.
 2. YAML is decoded with known-field checking.
 3. Defaults are applied.
-4. `auth_profiles` are merged into integrations and upstreams.
-5. Missing redirect URLs are derived from `server.base_url` where possible.
-6. Relative paths are resolved against the directory that contains the config file.
-7. Validation runs.
-8. During bootstrap, `secret://...` values are resolved through the configured secret manager.
+4. Connection auth is validated against surface references.
+5. Relative paths are resolved against the directory that contains the config file.
+6. Validation runs.
+7. During bootstrap, `secret://...` values are resolved through the configured secret manager.
 
 `secret://...` resolution is intentionally later than basic config parsing. That keeps the config loader simple and lets the secret manager itself be configured normally.
 
@@ -36,7 +35,6 @@ This is the complete top-level shape of the config:
 auth: {}
 datastore: {}
 secrets: {}
-auth_profiles: {}
 integrations: {}
 runtimes: {}
 bindings: {}
@@ -52,7 +50,6 @@ Each block controls a distinct part of the runtime:
 | `auth` | How users authenticate to Gestalt itself. |
 | `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
 | `secrets` | How `secret://...` values are resolved. |
-| `auth_profiles` | Reusable integration auth settings shared across integrations or upstreams. |
 | `integrations` | The provider graph users call. |
 | `runtimes` | Background workers. |
 | `bindings` | Additional inbound surfaces. |
@@ -81,7 +78,7 @@ Gestalt supports both mutable startup and deterministic startup.
 
 `gestaltd` or `gestaltd serve` without `--locked` may mutate local state at startup:
 
-- remote REST or GraphQL upstreams can be fetched and compiled
+- remote REST or GraphQL API sources can be fetched and compiled
 - packaged plugins can be prepared locally
 - missing or stale lock state can be regenerated
 

@@ -1,34 +1,36 @@
 # Add an Integration
 
-Most integrations in Gestalt are pure configuration. Start with a config-defined integration and only reach for a plugin when the upstream behavior cannot be expressed declaratively.
+Most integrations in Gestalt are pure configuration. Start with a declarative integration and only reach for a plugin when the upstream behavior cannot be expressed declaratively.
 
-## 1. Pick The Base Source
+## 1. Pick The Surface Type
 
-Choose one of these:
+Choose one or both:
 
-| Source | Use when |
+| Surface | Use when |
 | --- | --- |
-| `rest` | You have an OpenAPI document. |
-| `graphql` | You have a GraphQL endpoint. |
+| `api` (REST) | You have an OpenAPI document. |
+| `api` (GraphQL) | You have a GraphQL endpoint. |
 | `mcp` | The upstream already exposes MCP tools. |
-| `plugin` | You need custom execution logic or custom auth behavior. |
+| `plugin` | You need custom execution logic. Plugin-only; cannot combine with declarative surfaces. |
 
 ## 2. Start With The Smallest Useful Definition
 
-Public REST example:
+Public REST example with no auth:
 
 ```yaml
 integrations:
   petstore:
     display_name: Swagger Petstore
-    connection_mode: none
-    base_url: https://petstore3.swagger.io/api/v3
-    upstreams:
-      - type: rest
-        url: https://petstore3.swagger.io/api/v3/openapi.json
-        allowed_operations:
-          findPetsByStatus: List pets by status
-          getPetById: Fetch a pet by id
+    connections:
+      default:
+        mode: none
+    api:
+      type: rest
+      openapi: https://petstore3.swagger.io/api/v3/openapi.json
+      connection: default
+      allowed_operations:
+        findPetsByStatus: List pets by status
+        getPetById: Fetch a pet by id
 ```
 
 That is enough to build a real provider and invoke the public API.
@@ -38,37 +40,50 @@ That is enough to build a real provider and invoke the public API.
 OAuth-backed example:
 
 ```yaml
-auth_profiles:
-  github_oauth:
-    client_id: ${GITHUB_CLIENT_ID}
-    client_secret: secret://github-client-secret
-    auth:
-      type: oauth2
-      authorization_url: https://github.com/login/oauth/authorize
-      token_url: https://github.com/login/oauth/access_token
-
 integrations:
   github:
-    auth_profile: github_oauth
-    upstreams:
-      - type: rest
-        url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-        allowed_operations:
-          repos_listForAuthenticatedUser: List repositories
-          issues_listForAuthenticatedUser: List issues
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: secret://github-client-secret
+          authorization_url: https://github.com/login/oauth/authorize
+          token_url: https://github.com/login/oauth/access_token
+    api:
+      type: rest
+      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+      connection: default
+      allowed_operations:
+        repos_listForAuthenticatedUser: List repositories
+        issues_listForAuthenticatedUser: List issues
 ```
 
-If the upstream uses manual credentials instead, configure manual auth instead of OAuth.
+Auth lives inside the connection, not at the integration level or in a separate profile.
 
-## 4. Add Runtime Behavior
+## 4. Add An MCP Surface
 
-You can refine the integration with:
+You can add an `mcp` surface alongside `api`, or use it standalone:
 
-- `headers` for static request headers
-- `response_check` for success and error extraction
-- `mcp: true` to project operations onto `/mcp`
-- `mcp_tool_prefix` to avoid MCP tool-name collisions
-- `manual_auth: true` if the provider supports both OAuth and manual auth
+```yaml
+integrations:
+  example:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://auth.example.com/authorize
+          token_url: https://auth.example.com/token
+          client_id: ${CLIENT_ID}
+          client_secret: ${CLIENT_SECRET}
+    mcp:
+      url: https://mcp.example.com
+      connection: default
+```
+
+Use `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
 
 ## 5. Bundle And Validate
 
@@ -99,3 +114,5 @@ Write a provider plugin when you need one of these:
 - nonstandard auth behavior
 - multi-step execution
 - custom operation semantics that do not come from an upstream spec
+
+Plugin integrations use only the `plugin` block and cannot declare `connections`, `api`, or `mcp`.
