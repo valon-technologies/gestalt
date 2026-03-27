@@ -42,7 +42,7 @@ func (b *Binding) Close() error                  { return nil }
 
 func (b *Binding) Routes() []core.Route {
 	patterns := b.cfg.routePatterns()
-	routes := make([]core.Route, 0, len(b.cfg.methods())*len(patterns)+1)
+	routes := make([]core.Route, 0, len(b.cfg.methods())*len(patterns))
 	for _, method := range b.cfg.methods() {
 		for _, pattern := range patterns {
 			routes = append(routes, core.Route{
@@ -54,23 +54,10 @@ func (b *Binding) Routes() []core.Route {
 			})
 		}
 	}
-	if b.resolver.Policy != nil {
-		routes = append(routes, core.Route{
-			Method:    http.MethodConnect,
-			Handler:   http.HandlerFunc(b.handle),
-			ProxyAuth: true,
-			Connect:   true,
-		})
-	}
 	return routes
 }
 
 func (b *Binding) handle(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodConnect {
-		b.handleConnect(w, r)
-		return
-	}
-
 	resolved, body, err := b.resolve(r)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
