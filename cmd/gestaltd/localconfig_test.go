@@ -23,8 +23,8 @@ func TestGenerateDefaultConfigProducesValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load on generated config: %v", err)
 	}
-	if cfg.Auth.Provider != "local" {
-		t.Fatalf("auth.provider = %q, want local", cfg.Auth.Provider)
+	if cfg.Auth.Provider != "none" {
+		t.Fatalf("auth.provider = %q, want none", cfg.Auth.Provider)
 	}
 	if cfg.Datastore.Provider != "sqlite" {
 		t.Fatalf("datastore.provider = %q, want sqlite", cfg.Datastore.Provider)

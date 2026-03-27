@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/plugins/auth/google"
 	"github.com/valon-technologies/gestalt/plugins/auth/local"
+	authnone "github.com/valon-technologies/gestalt/plugins/auth/none"
 	"github.com/valon-technologies/gestalt/plugins/auth/oidc"
 	"github.com/valon-technologies/gestalt/plugins/bindings/proxy"
 	"github.com/valon-technologies/gestalt/plugins/bindings/webhook"
@@ -84,6 +85,7 @@ func buildFactories(preparedProviders map[string]string, devMode bool) *bootstra
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["google"] = google.Factory
 	factories.Auth["local"] = local.Factory
+	factories.Auth["none"] = authnone.Factory
 	factories.Auth["oidc"] = oidc.Factory
 	factories.Datastores["sqlite"] = sqlite.Factory
 	factories.Datastores["postgres"] = postgres.Factory
