@@ -7,8 +7,7 @@ import (
 )
 
 type proxyConfig struct {
-	Path     string `yaml:"path"`
-	Instance string `yaml:"instance"`
+	Path string `yaml:"path"`
 }
 
 func (c proxyConfig) validate(name string) error {
