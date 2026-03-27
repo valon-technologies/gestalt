@@ -21,7 +21,7 @@ const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
-func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]string) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*provider.OperationOverride) (*provider.Definition, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -160,7 +160,7 @@ func extractScopes(scopes *orderedmap.Map[string, string]) []string {
 	return result
 }
 
-func collectOperationScopes(model *v3high.Document, allowedOps map[string]string) []string {
+func collectOperationScopes(model *v3high.Document, allowedOps map[string]*provider.OperationOverride) []string {
 	seen := make(map[string]struct{})
 	collect := func(reqs []*base.SecurityRequirement) {
 		for _, req := range reqs {
@@ -203,7 +203,7 @@ func collectOperationScopes(model *v3high.Document, allowedOps map[string]string
 	return result
 }
 
-func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]string) {
+func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]*provider.OperationOverride) {
 	def.Operations = make(map[string]provider.OperationDef)
 
 	if model.Paths == nil || model.Paths.PathItems == nil {
@@ -229,8 +229,14 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			if desc == "" {
 				desc = op.Description
 			}
-			if override, ok := allowedOps[op.OperationId]; ok && override != "" {
-				desc = override
+			opID := op.OperationId
+			if override := allowedOps[op.OperationId]; override != nil {
+				if override.Description != "" {
+					desc = override.Description
+				}
+				if override.Alias != "" {
+					opID = override.Alias
+				}
 			}
 
 			var params []provider.ParameterDef
@@ -283,7 +289,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				}
 			}
 
-			def.Operations[op.OperationId] = provider.OperationDef{
+			def.Operations[opID] = provider.OperationDef{
 				Description: desc,
 				Method:      strings.ToUpper(method),
 				Path:        path,

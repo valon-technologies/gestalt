@@ -9,10 +9,14 @@ import (
 	"github.com/valon-technologies/gestalt/internal/oauth"
 )
 
-// Restricted wraps a Provider to expose only a subset of its operations.
+// Restricted wraps a Provider to expose only a subset of its operations,
+// optionally renaming them via aliases.
 type Restricted struct {
-	inner   core.Provider
-	allowed map[string]struct{}
+	inner        core.Provider
+	allowed      map[string]struct{}
+	aliases      map[string]string
+	reverseAlias map[string]string
+	allowedInner map[string]struct{}
 }
 
 // Compile-time interface checks.
@@ -26,13 +30,31 @@ var (
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
-// If the inner provider implements OAuthProvider, the returned value does too.
-func NewRestricted(inner core.Provider, allowed []string) core.Provider {
-	m := make(map[string]struct{}, len(allowed))
-	for _, name := range allowed {
-		m[name] = struct{}{}
+// The ops map maps exposedName -> innerName. If innerName is empty, the
+// exposed name equals the inner name (no alias). If the inner provider
+// implements OAuthProvider, the returned value does too.
+func NewRestricted(inner core.Provider, ops map[string]string) core.Provider {
+	m := make(map[string]struct{}, len(ops))
+	aliases := make(map[string]string)
+	reverseAlias := make(map[string]string)
+	allowedInner := make(map[string]struct{}, len(ops))
+	for exposed, innerName := range ops {
+		m[exposed] = struct{}{}
+		if innerName != "" && innerName != exposed {
+			aliases[exposed] = innerName
+			reverseAlias[innerName] = exposed
+			allowedInner[innerName] = struct{}{}
+		} else {
+			allowedInner[exposed] = struct{}{}
+		}
 	}
-	r := &Restricted{inner: inner, allowed: m}
+	r := &Restricted{
+		inner:        inner,
+		allowed:      m,
+		aliases:      aliases,
+		reverseAlias: reverseAlias,
+		allowedInner: allowedInner,
+	}
 	if scp, ok := inner.(core.SessionCatalogProvider); ok {
 		rs := &restrictedSession{Restricted: r, scp: scp}
 		if oauth, ok := inner.(core.OAuthProvider); ok {
@@ -55,7 +77,10 @@ func (r *Restricted) ListOperations() []core.Operation {
 	all := r.inner.ListOperations()
 	filtered := make([]core.Operation, 0, len(r.allowed))
 	for _, op := range all {
-		if _, ok := r.allowed[op.Name]; ok {
+		if _, ok := r.allowedInner[op.Name]; ok {
+			if exposed, ok := r.reverseAlias[op.Name]; ok {
+				op.Name = exposed
+			}
 			filtered = append(filtered, op)
 		}
 	}
@@ -66,7 +91,11 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	if _, ok := r.allowed[operation]; !ok {
 		return nil, fmt.Errorf("operation %q is not allowed", operation)
 	}
-	return r.inner.Execute(ctx, operation, params, token)
+	innerName := operation
+	if alias, ok := r.aliases[operation]; ok {
+		innerName = alias
+	}
+	return r.inner.Execute(ctx, innerName, params, token)
 }
 
 func (r *Restricted) SupportsManualAuth() bool {
@@ -88,8 +117,12 @@ func (r *Restricted) Catalog() *catalog.Catalog {
 	filtered := *cat
 	filtered.Operations = nil
 	for i := range cat.Operations {
-		if _, ok := r.allowed[cat.Operations[i].ID]; ok {
-			filtered.Operations = append(filtered.Operations, cat.Operations[i])
+		if _, ok := r.allowedInner[cat.Operations[i].ID]; ok {
+			op := cat.Operations[i]
+			if exposed, ok := r.reverseAlias[op.ID]; ok {
+				op.ID = exposed
+			}
+			filtered.Operations = append(filtered.Operations, op)
 		}
 	}
 	return &filtered
@@ -115,8 +148,12 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 	filtered := *cat
 	filtered.Operations = nil
 	for i := range cat.Operations {
-		if _, ok := rs.allowed[cat.Operations[i].ID]; ok {
-			filtered.Operations = append(filtered.Operations, cat.Operations[i])
+		if _, ok := rs.allowedInner[cat.Operations[i].ID]; ok {
+			op := cat.Operations[i]
+			if exposed, ok := rs.reverseAlias[op.ID]; ok {
+				op.ID = exposed
+			}
+			filtered.Operations = append(filtered.Operations, op)
 		}
 	}
 	return &filtered, nil

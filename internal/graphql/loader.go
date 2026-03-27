@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/provider"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]string) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*provider.OperationOverride) (*provider.Definition, error) {
 	schema, err := introspect(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
@@ -30,7 +30,7 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	return def, nil
 }
 
-func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]string) {
+func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*provider.OperationOverride) {
 	if root == nil {
 		return
 	}
@@ -51,8 +51,14 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 		}
 
 		desc := field.Description
-		if override, ok := allowedOps[field.Name]; ok && override != "" {
-			desc = override
+		opName := field.Name
+		if override := allowedOps[field.Name]; override != nil {
+			if override.Description != "" {
+				desc = override.Description
+			}
+			if override.Alias != "" {
+				opName = override.Alias
+			}
 		}
 
 		query := generateQuery(schema, field, isMutation)
@@ -65,7 +71,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 
 		opDef.Parameters = argsToParams(schema, field.Args)
 
-		def.Operations[field.Name] = opDef
+		def.Operations[opName] = opDef
 	}
 }
 
