@@ -139,20 +139,6 @@ impl ApiClient {
         self.handle_response(resp)
     }
 
-    pub fn post_params(
-        &self,
-        path: &str,
-        params: &[(String, String)],
-    ) -> Result<serde_json::Value> {
-        let body: serde_json::Value = params
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect::<serde_json::Map<String, serde_json::Value>>()
-            .into();
-
-        self.post(path, &body)
-    }
-
     pub fn delete(&self, path: &str) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.base_url, path);
         let resp = self
