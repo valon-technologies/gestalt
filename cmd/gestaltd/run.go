@@ -114,12 +114,8 @@ func runServer(env *bootstrapEnv) error {
 		log.Printf("  integration callback: %s%s", env.Config.Server.BaseURL, config.IntegrationCallbackPath)
 	}
 
-	var mcpSlot *lateHandler
-	var mcpHandler http.Handler
-	if mcpSurface.enabled() {
-		mcpSlot = &lateHandler{}
-		mcpHandler = mcpSlot
-	}
+	mcpSlot := &lateHandler{}
+	var mcpHandler http.Handler = mcpSlot
 
 	srv, err := server.New(server.Config{
 		Auth:              result.Auth,
@@ -179,14 +175,12 @@ func runServer(env *bootstrapEnv) error {
 		return err
 	}
 
-	if mcpSlot != nil {
-		handler, err := mcpSurface.handler(result)
-		if err != nil {
-			return err
-		}
-		mcpSlot.Set(handler)
-		log.Println("MCP endpoint enabled at /mcp")
+	mcpInner, err := mcpSurface.handler(result)
+	if err != nil {
+		return err
 	}
+	mcpSlot.Set(mcpInner)
+	log.Println("MCP endpoint enabled at /mcp")
 
 	select {
 	case err := <-listenErr:
@@ -207,6 +201,7 @@ type mcpSurface struct {
 
 func buildMCPSurface(cfg *config.Config) mcpSurface {
 	surface := mcpSurface{
+		providers:     []string{},
 		toolPrefixes:  make(map[string]string),
 		includeREST:   make(map[string]bool),
 		apiConnection: make(map[string]string),
@@ -234,10 +229,6 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 	}
 
 	return surface
-}
-
-func (s mcpSurface) enabled() bool {
-	return len(s.providers) > 0
 }
 
 func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {
