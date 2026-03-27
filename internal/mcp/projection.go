@@ -69,6 +69,10 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 			tool.Annotations.Title = op.ID
 		}
 
+		if len(op.OutputSchema) > 0 {
+			tool.RawOutputSchema = op.OutputSchema
+		}
+
 		var conn string
 		switch op.Transport {
 		case catalog.TransportMCPPassthrough:
