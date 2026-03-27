@@ -28,20 +28,3 @@ type StagedConnectionStore interface {
 	GetStagedConnection(ctx context.Context, id string) (*StagedConnection, error)
 	DeleteStagedConnection(ctx context.Context, id string) error
 }
-
-type EgressClientFilter struct {
-	CreatedByID string
-	Scope       string
-}
-
-type EgressClientStore interface {
-	CreateEgressClient(ctx context.Context, client *EgressClient) error
-	GetEgressClient(ctx context.Context, id string) (*EgressClient, error)
-	ListEgressClients(ctx context.Context, filter EgressClientFilter) ([]*EgressClient, error)
-	DeleteEgressClient(ctx context.Context, id string) error
-
-	CreateEgressClientToken(ctx context.Context, token *EgressClientToken) error
-	ValidateEgressClientToken(ctx context.Context, hashedToken string) (*EgressClientToken, error)
-	ListEgressClientTokens(ctx context.Context, clientID string) ([]*EgressClientToken, error)
-	RevokeEgressClientToken(ctx context.Context, clientID, tokenID string) error
-}

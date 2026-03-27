@@ -121,18 +121,6 @@ At the config layer, that is controlled by the integration auth model:
 
 Manual auth still ends with a stored integration token. The difference is only how the token enters the system.
 
-## Egress Client Tokens
-
-Gestalt also has a machine-oriented token type for proxy and egress use cases.
-
-These tokens:
-
-- are created under `/api/v1/egress-clients/...`
-- use the prefix `gst_ec_`
-- authenticate as an egress client principal, not as a user
-
-They are mainly relevant when you use the proxy binding and egress policy controls.
-
 ## Instances And Ambiguity
 
 If there is exactly one stored connection for an integration, Gestalt uses it automatically.

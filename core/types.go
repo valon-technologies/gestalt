@@ -88,28 +88,3 @@ type OperationResult struct {
 	Headers http.Header
 	Body    string
 }
-
-const (
-	EgressClientScopePersonal = "personal"
-	EgressClientScopeGlobal   = "global"
-)
-
-type EgressClient struct {
-	ID          string
-	Name        string
-	Description string
-	Scope       string
-	CreatedByID string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type EgressClientToken struct {
-	ID          string
-	ClientID    string
-	Name        string
-	HashedToken string
-	ExpiresAt   *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}

@@ -11,9 +11,6 @@ func SubjectForPrincipal(p *principal.Principal) (Subject, bool) {
 	if p == nil {
 		return Subject{}, false
 	}
-	if p.EgressClientID != "" {
-		return Subject{Kind: SubjectAgent, ID: p.EgressClientID}, true
-	}
 	if p.UserID != "" && p.UserID != principal.IdentityPrincipal {
 		return Subject{Kind: SubjectUser, ID: p.UserID}, true
 	}
@@ -41,11 +38,6 @@ func PrincipalForSubject(s Subject) (*principal.Principal, bool) {
 			return nil, false
 		}
 		return &principal.Principal{Identity: &core.UserIdentity{Email: s.ID}}, true
-	case SubjectAgent:
-		if s.ID == "" {
-			return nil, false
-		}
-		return &principal.Principal{EgressClientID: s.ID}, true
 	default:
 		return nil, false
 	}

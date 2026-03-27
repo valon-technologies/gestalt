@@ -95,14 +95,6 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) isAdmin(p *principal.Principal) bool {
-	if p == nil || p.Identity == nil || p.Identity.Email == "" {
-		return false
-	}
-	_, ok := s.adminEmails[strings.ToLower(p.Identity.Email)]
-	return ok
-}
-
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.devMode {

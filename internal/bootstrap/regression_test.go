@@ -300,7 +300,7 @@ func TestSecretBackedCredentialGrant_ConfigGrant(t *testing.T) {
 		t.Fatal("expected credential resolver to be wired")
 	}
 
-	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
 		Target: egress.Target{Method: "GET", Host: "api.vendor.test", Path: "/v1/data"},
 	})
@@ -360,7 +360,7 @@ func TestSecretBackedCredentialGrant_MultiTenantHostMatching(t *testing.T) {
 	}
 	<-result.ProvidersReady
 
-	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 
 	resolve := func(host string) string {
 		t.Helper()
@@ -428,7 +428,7 @@ func TestSecretBackedGrant_CoexistsWithProviderTokenGrant(t *testing.T) {
 	}
 	<-result.ProvidersReady
 
-	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 	secretRes, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
 		Target: egress.Target{Method: "GET", Host: "api.external.test", Path: "/v1/data"},
 	})
@@ -519,7 +519,7 @@ func TestSecretBackedGrant_SecretURIPrefixStripped(t *testing.T) {
 	}
 	<-result.ProvidersReady
 
-	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectAgent, ID: "ec-agent-1"})
+	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
 		Target: egress.Target{Method: "GET", Host: "api.prefix.test", Path: "/v1"},
 	})

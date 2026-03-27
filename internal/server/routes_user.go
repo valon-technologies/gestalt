@@ -26,11 +26,5 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/tokens", s.listAPITokens)
 		r.Delete("/tokens/{id}", s.revokeAPIToken)
 
-		r.Post("/egress-clients", s.createEgressClient)
-		r.Get("/egress-clients", s.listEgressClients)
-		r.Delete("/egress-clients/{id}", s.deleteEgressClient)
-		r.Post("/egress-clients/{id}/tokens", s.createEgressClientToken)
-		r.Get("/egress-clients/{id}/tokens", s.listEgressClientTokens)
-		r.Delete("/egress-clients/{id}/tokens/{tokenID}", s.revokeEgressClientToken)
 	})
 }
