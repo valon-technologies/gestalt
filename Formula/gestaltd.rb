@@ -5,18 +5,18 @@ require_relative "lib/private_strategy"
 class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.4"
+  version "0.0.1-alpha.5"
   license "Proprietary"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.4/gestaltd-macos-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.5/gestaltd-macos-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "PLACEHOLDER"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.4/gestaltd-macos-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.5/gestaltd-macos-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "PLACEHOLDER"
     end
@@ -24,13 +24,13 @@ class Gestaltd < Formula
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.4/gestaltd-linux-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.5/gestaltd-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "PLACEHOLDER"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.4/gestaltd-linux-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.5/gestaltd-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "PLACEHOLDER"
     end
