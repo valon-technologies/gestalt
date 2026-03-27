@@ -87,11 +87,8 @@ echo "=== building plugin ==="
 go mod tidy
 go build -o ./provider .
 
-echo "=== scaffolding package ==="
-"$GESTALTD" plugin init --id test/external --kind provider --binary ./provider --output ./pkg
-
 echo "=== packaging ==="
-"$GESTALTD" plugin package --input ./pkg --output ./plugin.tar.gz
+"$GESTALTD" plugin package --binary ./provider --id test/external --output ./plugin.tar.gz
 
 echo "=== writing config ==="
 cat > config.yaml <<CFG

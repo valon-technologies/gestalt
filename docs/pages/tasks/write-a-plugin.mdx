@@ -78,21 +78,20 @@ func main() {
 go build -o ./my-tool .
 ```
 
-## Scaffold and package
+## Package
 
-Use `gestaltd plugin init` to generate the manifest and artifact layout, then package:
+Package the binary directly into a distributable archive:
 
 ```sh
-gestaltd plugin init --id myorg/my-tool --kind provider --binary ./my-tool --output ./pkg
-gestaltd plugin package --input ./pkg --output ./my-tool.tar.gz
+gestaltd plugin package --binary ./my-tool --id myorg/my-tool --output ./my-tool.tar.gz
 ```
 
 The `--os` and `--arch` flags default to your current platform. For cross-compilation:
 
 ```sh
 GOOS=linux GOARCH=amd64 go build -o ./my-tool-linux .
-gestaltd plugin init --id myorg/my-tool --kind provider --binary ./my-tool-linux \
-  --os linux --arch amd64 --output ./pkg
+gestaltd plugin package --binary ./my-tool-linux --id myorg/my-tool \
+  --os linux --arch amd64 --output ./my-tool.tar.gz
 ```
 
 ## Configure and run

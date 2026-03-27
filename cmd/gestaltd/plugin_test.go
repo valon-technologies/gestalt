@@ -29,8 +29,10 @@ func TestRun_PluginHelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
 		t.Fatalf("expected plugin usage output, got: %s", out)
 	}
-	if strings.Contains(string(out), "install") || strings.Contains(string(out), "inspect") || strings.Contains(string(out), "list") {
-		t.Fatalf("expected removed commands absent from help, got: %s", out)
+	for _, removed := range []string{"install", "inspect", "list", "init"} {
+		if strings.Contains(string(out), removed) {
+			t.Fatalf("expected %q absent from help, got: %s", removed, out)
+		}
 	}
 }
 
@@ -71,6 +73,27 @@ func TestRun_PluginPackageCreatesArchive(t *testing.T) {
 	}
 	if !strings.Contains(output, "packaged") {
 		t.Fatalf("expected package output, got: %q", output)
+	}
+}
+
+//nolint:paralleltest // Swaps os.Stdout via captureStdout.
+func TestRun_PluginPackageFromBinary(t *testing.T) {
+	dir := t.TempDir()
+	binaryPath := filepath.Join(dir, "my-provider")
+	if err := os.WriteFile(binaryPath, []byte("fake-binary-content"), 0755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	outPath := filepath.Join(dir, "my-provider.tar.gz")
+
+	output := captureStdout(t, func() error {
+		return run([]string{"plugin", "package", "--binary", binaryPath, "--id", "test/myprov", "--output", outPath})
+	})
+
+	if _, err := os.Stat(outPath); err != nil {
+		t.Fatalf("expected archive to exist: %v", err)
+	}
+	if !strings.Contains(output, "packaged") {
+		t.Fatalf("expected packaged output, got: %q", output)
 	}
 }
 
