@@ -1,0 +1,11 @@
+.git
+.claude
+.github
+node_modules
+web/node_modules
+web/out
+web/.next
+docs
+thoughts
+deploy
+**/.DS_Store
