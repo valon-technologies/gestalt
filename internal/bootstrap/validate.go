@@ -34,6 +34,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
+		DevMode:       cfg.Server.DevMode,
 	}
 
 	if _, err := buildAuth(cfg, factories, deps); err != nil {

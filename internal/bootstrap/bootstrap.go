@@ -25,6 +25,7 @@ type Deps struct {
 	SQLDB         any // *sql.DB when available, nil otherwise
 	SQLDialect    any // Placeholder(int)string when available, nil otherwise
 	Egress        EgressDeps
+	DevMode       bool
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -146,6 +147,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
+		DevMode:       cfg.Server.DevMode,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)

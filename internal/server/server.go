@@ -30,6 +30,7 @@ type Server struct {
 	defaultConnection map[string]string
 	integrationDefs   map[string]config.IntegrationDef
 	devMode           bool
+	noAuth            bool
 	stateCodec        *integrationOAuthStateCodec
 	now               func() time.Time
 	readiness         ReadinessChecker
@@ -83,6 +84,7 @@ func New(cfg Config) (*Server, error) {
 		defaultConnection: cfg.DefaultConnection,
 		integrationDefs:   cfg.IntegrationDefs,
 		devMode:           cfg.DevMode,
+		noAuth:            cfg.Auth.Name() == "none" && cfg.DevMode,
 		stateCodec:        stateCodec,
 		now:               now,
 		readiness:         cfg.Readiness,
