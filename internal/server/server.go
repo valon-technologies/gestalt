@@ -18,21 +18,20 @@ import (
 type ReadinessChecker func() string
 
 type Server struct {
-	router         chi.Router
-	auth           core.AuthProvider
-	datastore      core.Datastore
-	providers      *registry.PluginMap[core.Provider]
-	runtimes       *registry.PluginMap[core.Runtime]
-	bindings       *registry.PluginMap[core.Binding]
-	resolver       *principal.Resolver
-	invoker        invocation.Invoker
-	devMode        bool
-	stateCodec     *integrationOAuthStateCodec
-	now            func() time.Time
-	readiness      ReadinessChecker
-	mcpHandler     http.Handler
-	webUI          http.Handler
-	connectHandler http.Handler // CONNECT dispatched outside chi (authority-form URIs bypass path routing)
+	router     chi.Router
+	auth       core.AuthProvider
+	datastore  core.Datastore
+	providers  *registry.PluginMap[core.Provider]
+	runtimes   *registry.PluginMap[core.Runtime]
+	bindings   *registry.PluginMap[core.Binding]
+	resolver   *principal.Resolver
+	invoker    invocation.Invoker
+	devMode    bool
+	stateCodec *integrationOAuthStateCodec
+	now        func() time.Time
+	readiness  ReadinessChecker
+	mcpHandler http.Handler
+	webUI      http.Handler
 }
 
 type Config struct {
@@ -97,9 +96,5 @@ func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodConnect && s.connectHandler != nil {
-		s.connectHandler.ServeHTTP(w, r)
-		return
-	}
 	s.router.ServeHTTP(w, r)
 }
