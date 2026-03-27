@@ -55,7 +55,7 @@ That is how a runtime plugin participates in the same execution model as built-i
 
 The host and plugin speak an explicit protocol version. Provider metadata includes a supported range, and startup fails if the current host version is outside that range.
 
-That check is what allows packaged plugins to be validated before or during `init`.
+That check is what allows packaged plugins to be validated during `bundle`.
 
 ## Config Placement
 

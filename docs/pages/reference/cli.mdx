@@ -10,20 +10,19 @@ The most important CLI surface in this repo is the `gestaltd` server binary.
 gestaltd [--config PATH]
 gestaltd plugin <command> [flags]
 gestaltd serve [--config PATH] [--locked]
-gestaltd init [--config PATH]
-gestaltd validate [--config PATH] [--init]
+gestaltd bundle --config PATH --output DIR
+gestaltd validate [--config PATH]
 ```
 
 ## Command Meanings
 
 | Command | What it does |
 | --- | --- |
-| `gestaltd` | Default start command. Can auto-generate a local config and can auto-init missing prepared state. |
+| `gestaltd` | Default start command. Can auto-generate a local config and can auto-prepare missing state. |
 | `gestaltd serve` | Start the server from an explicit config path. |
-| `gestaltd serve --locked` | Require exact prepared state. Do not auto-init. |
-| `gestaltd init` | Prepare remote provider artifacts and packaged plugins into locked local state. |
+| `gestaltd serve --locked` | Require exact prepared state. Do not auto-prepare. |
+| `gestaltd bundle` | Resolve remote provider artifacts and packaged plugins into a self-contained output directory. |
 | `gestaltd validate` | Load and validate config without starting the server. |
-| `gestaltd validate --init` | Prepare locked state first, then validate it. |
 | `gestaltd plugin package` | Build a distributable plugin archive from a manifest directory. |
 
 ## Default Command Behavior
@@ -51,10 +50,11 @@ When a command needs a config path, Gestalt resolves it in this order:
 4. `~/.gestalt/config.yaml`
 5. `/etc/gestalt/config.yaml`
 
-## `init`
+## `bundle`
 
-`gestaltd init --config ./gestalt.yaml` writes:
+`gestaltd bundle --config ./gestalt.yaml --output ./bundle` produces a self-contained output directory containing:
 
+- the bundled config
 - `gestalt.lock.json`
 - `.gestalt/providers/*.json`
 - `.gestalt/plugins/...`
@@ -70,17 +70,20 @@ Use it whenever your config contains:
 Use locked mode in production:
 
 ```sh
-gestaltd init --config ./gestalt.yaml
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 If prepared state is missing or stale, startup fails instead of mutating local state.
 
 ## `validate`
 
-`gestaltd validate` is non-mutating by default. It expects lock state to already exist when the config depends on prepared artifacts.
+`gestaltd validate` is non-mutating. It expects lock state to already exist when the config depends on prepared artifacts. Bundle first, then validate the bundled output:
 
-`gestaltd validate --init` is the most useful CI command for production-shaped configs.
+```sh
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd validate --config ./bundle/gestalt.yaml
+```
 
 ## `plugin package`
 

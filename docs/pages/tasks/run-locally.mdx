@@ -35,11 +35,12 @@ Use this when you want to control:
 
 ## Locked Local Startup
 
-If your config includes remote REST or GraphQL upstreams, or packaged plugins, validate and prepare first:
+If your config includes remote REST or GraphQL upstreams, or packaged plugins, bundle and validate first:
 
 ```sh
-gestaltd validate --init --config ./gestalt.yaml
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd validate --config ./bundle/gestalt.yaml
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 This is the closest local approximation to a production deployment.

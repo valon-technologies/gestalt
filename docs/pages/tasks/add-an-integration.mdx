@@ -70,18 +70,19 @@ You can refine the integration with:
 - `mcp_tool_prefix` to avoid MCP tool-name collisions
 - `manual_auth: true` if the provider supports both OAuth and manual auth
 
-## 5. Validate And Prepare
+## 5. Bundle And Validate
 
 ```sh
-gestaltd validate --init --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd validate --config ./bundle/gestalt.yaml
 ```
 
-That catches config errors and prepares any remote provider artifacts.
+That prepares remote provider artifacts and catches config errors.
 
 ## 6. Run It
 
 ```sh
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 Then:

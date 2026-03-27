@@ -107,11 +107,11 @@ integrations:
       package: ./my-tool.tar.gz
 ```
 
-Then hydrate and serve:
+Then bundle and serve:
 
 ```sh
-gestaltd init --config config.yaml
-gestaltd serve --locked --config config.yaml
+gestaltd bundle --config config.yaml --output ./bundle
+gestaltd serve --locked --config ./bundle/config.yaml
 ```
 
 ## Overlay plugins
