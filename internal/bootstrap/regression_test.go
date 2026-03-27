@@ -79,8 +79,8 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	}
 
 	factories := validFactories()
-	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		return &stubIntegrationWithOps{
+	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
+		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "alpha",
 				ConnMode: core.ConnectionModeNone,
@@ -89,10 +89,10 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 				},
 			},
 			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
-		}, nil
+		}}, nil
 	}
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		return &stubIntegrationWithOps{
+	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
+		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "beta",
 				ConnMode: core.ConnectionModeNone,
@@ -101,7 +101,7 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 				},
 			},
 			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
-		}, nil
+		}}, nil
 	}
 
 	var runtimeDeps bootstrap.RuntimeDeps

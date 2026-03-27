@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/discovery"
 	"github.com/valon-technologies/gestalt/internal/invocation"
@@ -279,35 +280,18 @@ func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider,
 	return prov, true
 }
 
-func (s *Server) requireOAuthProvider(w http.ResponseWriter, name string) (core.OAuthProvider, bool) {
-	prov, ok := s.getProvider(w, name)
+func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connection string) (bootstrap.OAuthHandler, bool) {
+	connMap := s.connectionAuth[integration]
+	if connMap == nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q has no OAuth connections configured", integration))
+		return nil, false
+	}
+	handler, ok := connMap[connection]
 	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("connection %q on integration %q does not support OAuth", connection, integration))
 		return nil, false
 	}
-	oauthProv, ok := prov.(core.OAuthProvider)
-	if !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support OAuth", name))
-		return nil, false
-	}
-	if atl, ok := prov.(core.AuthTypeLister); ok {
-		hasOAuth := false
-		for _, t := range atl.AuthTypes() {
-			if t == "oauth" {
-				hasOAuth = true
-				break
-			}
-		}
-		if !hasOAuth {
-			writeError(w, http.StatusBadRequest,
-				fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
-			return nil, false
-		}
-	} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
-		writeError(w, http.StatusBadRequest,
-			fmt.Sprintf("integration %q uses manual auth; use POST /api/v1/auth/connect-manual instead", name))
-		return nil, false
-	}
-	return oauthProv, true
+	return handler, true
 }
 
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
@@ -546,14 +530,6 @@ type startOAuthRequest struct {
 	ConnectionParams map[string]string `json:"connection_params"`
 }
 
-type oauthStarter interface {
-	StartOAuth(state string, scopes []string) (authURL string, verifier string)
-}
-
-type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-}
-
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -561,12 +537,26 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oauthProv, ok := s.requireOAuthProvider(w, req.Integration)
-	if !ok {
+	if _, ok := s.getProvider(w, req.Integration); !ok {
 		return
 	}
 
-	prov, _ := s.providers.Get(req.Integration)
+	connection := req.Connection
+	if connection == "" {
+		connection = s.defaultConnection[req.Integration]
+	}
+	if connection == "" {
+		connection = config.PluginConnectionName
+	}
+	if !safeParamValue.MatchString(connection) {
+		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+		return
+	}
+
+	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
+	if !ok {
+		return
+	}
 
 	if s.stateCodec == nil {
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
@@ -587,17 +577,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	connection := req.Connection
-	if connection == "" {
-		connection = s.defaultConnection[req.Integration]
-	}
-	if connection == "" {
-		connection = config.PluginConnectionName
-	}
-	if !safeParamValue.MatchString(connection) {
-		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
-		return
-	}
+	prov, _ := s.providers.Get(req.Integration)
 
 	var connParams map[string]string
 	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
@@ -614,28 +594,15 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		verifier string
 	)
 
-	type authURLOverrider interface {
-		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-	}
-	type authBaseURLer interface{ AuthorizationBaseURL() string }
-
 	if len(connParams) > 0 {
-		if abu, ok := prov.(authBaseURLer); ok {
-			rawAuthURL := abu.AuthorizationBaseURL()
-			resolvedAuthURL := paraminterp.Interpolate(rawAuthURL, connParams)
-			if resolvedAuthURL != rawAuthURL {
-				if ov, ok := prov.(authURLOverrider); ok {
-					authURL, verifier = ov.StartOAuthWithOverride(resolvedAuthURL, "_", req.Scopes)
-				}
-			}
+		rawAuthURL := handler.AuthorizationBaseURL()
+		resolvedAuthURL := paraminterp.Interpolate(rawAuthURL, connParams)
+		if resolvedAuthURL != rawAuthURL {
+			authURL, verifier = handler.StartOAuthWithOverride(resolvedAuthURL, "_", req.Scopes)
 		}
 	}
 	if authURL == "" {
-		if starter, ok := prov.(oauthStarter); ok {
-			authURL, verifier = starter.StartOAuth("_", req.Scopes)
-		} else {
-			authURL = oauthProv.AuthorizationURL("_", req.Scopes)
-		}
+		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
 
 	state, err := s.stateCodec.Encode(integrationOAuthState{
@@ -681,7 +648,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	providerName := state.Integration
-	oauthProv, ok := s.requireOAuthProvider(w, providerName)
+	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		return
 	}
@@ -691,25 +658,15 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	var exchangeOpts []oauth.ExchangeOption
 	connParams := state.ConnectionParams
 	if len(connParams) > 0 {
-		type tokenURLer interface{ TokenURL() string }
-		if tup, ok := prov.(tokenURLer); ok {
-			rawURL := tup.TokenURL()
-			resolved := paraminterp.Interpolate(rawURL, connParams)
-			if resolved != rawURL {
-				exchangeOpts = append(exchangeOpts, oauth.WithTokenURL(resolved))
-			}
+		rawURL := handler.TokenURL()
+		resolved := paraminterp.Interpolate(rawURL, connParams)
+		if resolved != rawURL {
+			exchangeOpts = append(exchangeOpts, oauth.WithTokenURL(resolved))
 		}
 	}
 
 	var tokenResp *core.TokenResponse
-	if exchanger, ok := prov.(oauthVerifierExchanger); ok {
-		tokenResp, err = exchanger.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
-	} else {
-		if len(exchangeOpts) > 0 {
-			log.Printf("WARNING: %s does not support exchange options (e.g. token URL override); connection params may not apply to token exchange", providerName)
-		}
-		tokenResp, err = oauthProv.ExchangeCode(r.Context(), code)
-	}
+	tokenResp, err = handler.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	if err != nil {
 		log.Printf("token exchange failed for %s: %v", providerName, err)
 		writeError(w, http.StatusBadGateway, "token exchange failed")

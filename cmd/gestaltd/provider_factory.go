@@ -30,7 +30,7 @@ func defaultProviderFactory(preparedProviders map[string]string) bootstrap.Provi
 	return state.build
 }
 
-func (s *providerFactoryState) build(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (core.Provider, error) {
+func (s *providerFactoryState) build(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 	assembly := providerAssembly{
 		ctx:               ctx,
 		name:              name,
@@ -62,7 +62,7 @@ type providerAssembly struct {
 	mcpConn *config.ConnectionDef
 }
 
-func (a *providerAssembly) build() (_ core.Provider, err error) {
+func (a *providerAssembly) build() (_ *bootstrap.ProviderBuildResult, err error) {
 	connMode := connectionModeForIntegration(a.intg)
 
 	defer func() {
@@ -106,19 +106,81 @@ func (a *providerAssembly) build() (_ core.Provider, err error) {
 		a.mcpConn = &conn
 	}
 
+	var prov core.Provider
 	switch {
 	case a.apiProv != nil && a.mcpUp != nil:
-		return composite.New(a.name, a.apiProv, a.mcpUp), nil
+		prov = composite.New(a.name, a.apiProv, a.mcpUp)
 	case a.apiProv != nil:
-		return a.apiProv, nil
+		prov = a.apiProv
 	case a.mcpUp != nil:
 		if a.mcpConn != nil && a.mcpConn.Auth.Type == "mcp_oauth" {
-			return buildMCPOAuthProvider(a.name, a.intg, *a.mcpConn, a.mcpUp, a.regStore, a.deps, connMode)
+			p, buildErr := buildMCPOAuthProvider(a.name, a.intg, *a.mcpConn, a.mcpUp, a.regStore, a.deps, connMode)
+			if buildErr != nil {
+				return nil, buildErr
+			}
+			prov = p
+		} else {
+			prov = a.mcpUp
 		}
-		return a.mcpUp, nil
 	default:
 		return nil, fmt.Errorf("no surfaces configured")
 	}
+
+	connAuth := a.buildConnectionAuth()
+
+	return &bootstrap.ProviderBuildResult{
+		Provider:       prov,
+		ConnectionAuth: connAuth,
+	}, nil
+}
+
+func (a *providerAssembly) buildConnectionAuth() map[string]bootstrap.OAuthHandler {
+	authMap := make(map[string]bootstrap.OAuthHandler)
+
+	for connName, conn := range a.intg.Connections {
+		switch conn.Auth.Type {
+		case "oauth2", "":
+			if conn.Auth.AuthorizationURL == "" && conn.Auth.ClientID == "" {
+				continue
+			}
+			handler := a.buildOAuth2Handler(connName, conn)
+			if handler != nil {
+				authMap[connName] = handler
+			}
+		case "mcp_oauth":
+			mcpURL := ""
+			if a.intg.MCP != nil {
+				mcpURL = a.intg.MCP.URL
+			}
+			authMap[connName] = buildMCPOAuthHandler(conn, mcpURL, a.regStore, a.deps)
+		}
+	}
+
+	if len(authMap) == 0 {
+		return nil
+	}
+	return authMap
+}
+
+func (a *providerAssembly) buildOAuth2Handler(connName string, conn config.ConnectionDef) bootstrap.OAuthHandler {
+	if a.intg.API == nil {
+		return nil
+	}
+	def, err := providercompiler.LoadDefinition(a.ctx, a.name, *a.intg.API, a.preparedProviders)
+	if err != nil {
+		log.Printf("WARNING: %s: cannot load definition for connection %q oauth handler: %v", a.name, connName, err)
+		return nil
+	}
+
+	defCopy := *def
+	provider.ApplyConnectionAuth(&defCopy, conn)
+
+	upstream, err := provider.BuildOAuthUpstream(&defCopy, conn, defCopy.BaseURL, nil)
+	if err != nil {
+		log.Printf("WARNING: %s: cannot build oauth handler for connection %q: %v", a.name, connName, err)
+		return nil
+	}
+	return bootstrap.WrapUpstreamHandler(upstream)
 }
 
 func (a *providerAssembly) cleanup() {

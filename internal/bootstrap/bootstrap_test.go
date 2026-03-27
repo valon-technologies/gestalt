@@ -31,8 +31,8 @@ func stubDatastoreFactory() bootstrap.DatastoreFactory {
 }
 
 func stubProviderFactory(name string) bootstrap.ProviderFactory {
-	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		return &coretesting.StubIntegration{N: name}, nil
+	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
+		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: name}}, nil
 	}
 }
 
@@ -52,11 +52,11 @@ func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 }
 
 func stubProviderFactoryWithOps(name string, ops []core.Operation) bootstrap.ProviderFactory {
-	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
-		return &stubIntegrationWithOps{
+	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
+		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: name},
 			ops:             ops,
-		}, nil
+		}}, nil
 	}
 }
 
@@ -235,7 +235,7 @@ func TestBootstrapNamedOverridesDefault(t *testing.T) {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
 	factories.Datastores["test-store"] = stubDatastoreFactory()
-	factories.DefaultProvider = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+	factories.DefaultProvider = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 		return nil, fmt.Errorf("should not be called")
 	}
 	factories.Providers["alpha"] = stubProviderFactory("alpha")
@@ -362,7 +362,7 @@ func TestBootstrapProviderErrorSkipsProvider(t *testing.T) {
 	cfg.Integrations["beta"] = config.IntegrationDef{}
 
 	factories := validFactories()
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 		return nil, fmt.Errorf("provider broke")
 	}
 
@@ -386,7 +386,7 @@ func TestValidateProviderErrorFails(t *testing.T) {
 	cfg.Integrations["beta"] = config.IntegrationDef{}
 
 	factories := validFactories()
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 		return nil, fmt.Errorf("provider broke")
 	}
 
@@ -489,11 +489,11 @@ func TestBootstrapBaseURL(t *testing.T) {
 		receivedBaseURL = deps.BaseURL
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
-	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 		if conn, ok := def.Connections["default"]; ok {
 			receivedRedirectURL = conn.Auth.RedirectURL
 		}
-		return &coretesting.StubIntegration{N: "alpha"}, nil
+		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 	}
 	// config.Load defaults secrets.provider to "env"
 	factories.Secrets["env"] = stubSecretManagerFactory()
@@ -618,9 +618,9 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"slack-secret": "resolved-secret"},
 			}, nil
 		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 			receivedDef = intg
-			return &coretesting.StubIntegration{N: "alpha"}, nil
+			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 		}
 
 		cfg := validConfig()
@@ -782,9 +782,9 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"api-key": "resolved-key"},
 			}, nil
 		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 			receivedDef = intg
-			return &coretesting.StubIntegration{N: "alpha"}, nil
+			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 		}
 
 		cfg := validConfig()
@@ -821,9 +821,9 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"meta-val": "resolved-meta"},
 			}, nil
 		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (core.Provider, error) {
+		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
 			receivedDef = intg
-			return &coretesting.StubIntegration{N: "alpha"}, nil
+			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 		}
 
 		cfg := validConfig()

@@ -13,10 +13,83 @@ import (
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
 	"github.com/valon-technologies/gestalt/internal/registry"
 	"gopkg.in/yaml.v3"
 )
+
+// OAuthHandler covers every OAuth method needed by the server (start, exchange,
+// refresh) and the broker (refresh). mcpoauth.Handler satisfies this directly;
+// use WrapUpstreamHandler to adapt an oauth.UpstreamHandler.
+type OAuthHandler interface {
+	AuthorizationURL(state string, scopes []string) string
+	StartOAuth(state string, scopes []string) (authURL string, verifier string)
+	StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
+	ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error)
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	AuthorizationBaseURL() string
+	TokenURL() string
+}
+
+// upstreamHandlerAdapter wraps an oauth.UpstreamHandler to satisfy OAuthHandler.
+type upstreamHandlerAdapter struct {
+	h *oauth.UpstreamHandler
+}
+
+// WrapUpstreamHandler adapts an oauth.UpstreamHandler to the OAuthHandler
+// interface. The adapter maps StartOAuth to AuthorizationURLWithPKCE and
+// ExchangeCodeWithVerifier to ExchangeCode with option injection.
+func WrapUpstreamHandler(h *oauth.UpstreamHandler) OAuthHandler {
+	return &upstreamHandlerAdapter{h: h}
+}
+
+func (a *upstreamHandlerAdapter) AuthorizationURL(state string, scopes []string) string {
+	url, _ := a.h.AuthorizationURLWithPKCE(state, scopes)
+	return url
+}
+
+func (a *upstreamHandlerAdapter) StartOAuth(state string, scopes []string) (string, string) {
+	return a.h.AuthorizationURLWithPKCE(state, scopes)
+}
+
+func (a *upstreamHandlerAdapter) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	return a.h.AuthorizationURLWithOverride(authBaseURL, state, scopes)
+}
+
+func (a *upstreamHandlerAdapter) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return a.h.ExchangeCode(ctx, code)
+}
+
+func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	var opts []oauth.ExchangeOption
+	if verifier != "" {
+		opts = append(opts, oauth.WithPKCEVerifier(verifier))
+	}
+	opts = append(opts, extraOpts...)
+	return a.h.ExchangeCode(ctx, code, opts...)
+}
+
+func (a *upstreamHandlerAdapter) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return a.h.RefreshToken(ctx, refreshToken)
+}
+
+func (a *upstreamHandlerAdapter) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	return a.h.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
+}
+
+func (a *upstreamHandlerAdapter) AuthorizationBaseURL() string { return a.h.AuthorizationBaseURL() }
+func (a *upstreamHandlerAdapter) TokenURL() string             { return a.h.TokenURL() }
+
+// ProviderBuildResult is the return value of a ProviderFactory. It carries
+// the constructed provider and an OAuth handler for each named connection
+// that uses oauth2 or mcp_oauth auth.
+type ProviderBuildResult struct {
+	Provider       core.Provider
+	ConnectionAuth map[string]OAuthHandler
+}
 
 type Deps struct {
 	EncryptionKey []byte
@@ -29,7 +102,7 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
-type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error)
+type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 
 type FactoryRegistry struct {
@@ -59,6 +132,7 @@ type Result struct {
 	Datastore        core.Datastore
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
+	ConnectionAuth   map[string]map[string]OAuthHandler // integration -> connection -> handler
 	Runtimes         *registry.PluginMap[core.Runtime]
 	Bindings         *registry.PluginMap[core.Binding]
 	Invoker          invocation.Invoker
@@ -169,7 +243,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		deps.SQLDialect = acc.RawDialect()
 	}
 
-	providers, providersReady, err := buildProviders(ctx, cfg, factories, deps)
+	providers, providersReady, connAuth, err := buildProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +256,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	connMap := BuildConnectionMap(cfg)
-	sharedInvoker := invocation.NewBroker(providers, ds, invocation.WithConnectionMapper(connMap))
+	sharedInvoker := invocation.NewBroker(providers, ds,
+		invocation.WithConnectionMapper(connMap),
+		invocation.WithConnectionAuth(connectionAuthToRefreshers(connAuth)),
+	)
 	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
 
@@ -205,6 +282,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Datastore:        ds,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
+		ConnectionAuth:   connAuth,
 		Runtimes:         extensions.Runtimes,
 		Bindings:         extensions.Bindings,
 		Invoker:          sharedInvoker,
@@ -503,14 +581,16 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 	return ds, nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, error) {
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
+	connAuth := make(map[string]map[string]OAuthHandler)
+	var connMu sync.Mutex
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		log.Printf("loaded builtin provider %s (%d operations)", builtin.Name(), len(builtin.ListOperations()))
 	}
@@ -518,7 +598,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	ready := make(chan struct{})
 	if len(cfg.Integrations) == 0 {
 		close(ready)
-		return &reg.Providers, ready, nil
+		return &reg.Providers, ready, connAuth, nil
 	}
 
 	var wg sync.WaitGroup
@@ -526,24 +606,29 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		intgDef := cfg.Integrations[name]
 		if err := validateProviderBuildAvailable(name, intgDef, factories); err != nil {
 			close(ready)
-			return nil, nil, fmt.Errorf("bootstrap: %w", err)
+			return nil, nil, nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			prov, err := buildProvider(ctx, name, intgDef, factories, deps)
+			result, err := buildProvider(ctx, name, intgDef, factories, deps)
 			if err != nil {
 				log.Printf("WARNING: skipping provider %q: %v", name, err)
 				return
 			}
-			if err := reg.Providers.Register(name, prov); err != nil {
-				if c, ok := prov.(interface{ Close() error }); ok {
+			if err := reg.Providers.Register(name, result.Provider); err != nil {
+				if c, ok := result.Provider.(interface{ Close() error }); ok {
 					_ = c.Close()
 				}
 				log.Printf("WARNING: registering provider %q: %v", name, err)
 				return
 			}
-			log.Printf("loaded provider %s (%d operations)", name, len(prov.ListOperations()))
+			if len(result.ConnectionAuth) > 0 {
+				connMu.Lock()
+				connAuth[name] = result.ConnectionAuth
+				connMu.Unlock()
+			}
+			log.Printf("loaded provider %s (%d operations)", name, len(result.Provider.ListOperations()))
 		}()
 	}
 	go func() {
@@ -551,22 +636,26 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		close(ready)
 	}()
 
-	return &reg.Providers, ready, nil
+	return &reg.Providers, ready, connAuth, nil
 }
 
-func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
+func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin != nil {
 		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 		}
-		return pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
+		prov, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
 			Command: intg.Plugin.Command,
 			Args:    intg.Plugin.Args,
 			Env:     intg.Plugin.Env,
 			Name:    name,
 			Config:  pluginConfig,
 		})
+		if err != nil {
+			return nil, err
+		}
+		return &ProviderBuildResult{Provider: prov}, nil
 	}
 
 	factory, err := providerFactoryForName(name, factories)
@@ -610,6 +699,21 @@ func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
 		}
 	}
 	return m
+}
+
+func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string]map[string]invocation.OAuthRefresher {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]invocation.OAuthRefresher, len(m))
+	for intg, conns := range m {
+		inner := make(map[string]invocation.OAuthRefresher, len(conns))
+		for conn, handler := range conns {
+			inner[conn] = handler
+		}
+		out[intg] = inner
+	}
+	return out
 }
 
 // ResolveAPIConnection returns the ConnectionDef referenced by the

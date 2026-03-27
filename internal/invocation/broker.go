@@ -51,16 +51,29 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 	return m[provider]
 }
 
+// OAuthRefresher is the subset of OAuthHandler that the broker needs for
+// token refresh. Defined here to avoid importing the bootstrap package.
+type OAuthRefresher interface {
+	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	TokenURL() string
+}
+
 type Broker struct {
-	providers  *registry.PluginMap[core.Provider]
-	datastore  core.Datastore
-	connMapper ConnectionMapper
+	providers      *registry.PluginMap[core.Provider]
+	datastore      core.Datastore
+	connMapper     ConnectionMapper
+	connectionAuth map[string]map[string]OAuthRefresher
 }
 
 type BrokerOption func(*Broker)
 
 func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.connMapper = m }
+}
+
+func WithConnectionAuth(m map[string]map[string]OAuthRefresher) BrokerOption {
+	return func(b *Broker) { b.connectionAuth = m }
 }
 
 func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore, opts ...BrokerOption) *Broker {
@@ -242,11 +255,11 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 		}
 	}
 
-	accessToken, err := b.refreshTokenIfNeeded(ctx, prov, storedToken)
+	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection)
 	return ctx, accessToken, err
 }
 
-func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, token *core.IntegrationToken) (string, error) {
+func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.IntegrationToken, providerName, connection string) (string, error) {
 	if token.RefreshToken == "" || token.ExpiresAt == nil {
 		return token.AccessToken, nil
 	}
@@ -254,12 +267,12 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, t
 		return token.AccessToken, nil
 	}
 
-	oauthProv, ok := prov.(core.OAuthProvider)
-	if !ok {
+	refresher := b.resolveRefresher(providerName, connection)
+	if refresher == nil {
 		return token.AccessToken, nil
 	}
 
-	resp, err := b.refreshOAuth(ctx, oauthProv, prov, token.RefreshToken)
+	resp, err := b.refreshOAuth(ctx, refresher, token.RefreshToken)
 	if err != nil {
 		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
@@ -295,22 +308,24 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, prov core.Provider, t
 	return token.AccessToken, nil
 }
 
-func (b *Broker) refreshOAuth(ctx context.Context, oauthProv core.OAuthProvider, prov core.Provider, refreshToken string) (*core.TokenResponse, error) {
-	type refreshWithURL interface {
-		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher {
+	if b.connectionAuth == nil {
+		return nil
 	}
-	type tokenURLer interface{ TokenURL() string }
+	connMap := b.connectionAuth[integration]
+	if connMap == nil {
+		return nil
+	}
+	return connMap[connection]
+}
 
+func (b *Broker) refreshOAuth(ctx context.Context, refresher OAuthRefresher, refreshToken string) (*core.TokenResponse, error) {
 	if cp := core.ConnectionParams(ctx); cp != nil {
-		if tu, ok := prov.(tokenURLer); ok {
-			raw := tu.TokenURL()
-			resolved := paraminterp.Interpolate(raw, cp)
-			if resolved != raw {
-				if rw, ok := prov.(refreshWithURL); ok {
-					return rw.RefreshTokenWithURL(ctx, refreshToken, resolved)
-				}
-			}
+		raw := refresher.TokenURL()
+		resolved := paraminterp.Interpolate(raw, cp)
+		if resolved != raw {
+			return refresher.RefreshTokenWithURL(ctx, refreshToken, resolved)
 		}
 	}
-	return oauthProv.RefreshToken(ctx, refreshToken)
+	return refresher.RefreshToken(ctx, refreshToken)
 }
