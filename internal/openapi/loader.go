@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -44,7 +45,15 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 	}
 
 	if len(model.Model.Servers) > 0 {
-		def.BaseURL = strings.TrimRight(model.Model.Servers[0].URL, "/")
+		serverURL := model.Model.Servers[0].URL
+		if !strings.HasPrefix(serverURL, "http://") && !strings.HasPrefix(serverURL, "https://") {
+			if base, err := url.Parse(specURL); err == nil {
+				if ref, err := url.Parse(serverURL); err == nil {
+					serverURL = base.ResolveReference(ref).String()
+				}
+			}
+		}
+		def.BaseURL = strings.TrimRight(serverURL, "/")
 	}
 
 	extractAuth(&model.Model, def)
