@@ -19,7 +19,7 @@ Every deployment needs the same inputs:
 | Mode | Command | When to use it |
 | --- | --- | --- |
 | Mutable | `gestaltd --config ...` or `gestaltd serve --config ...` | Local development or simple single-node deployments. |
-| Locked | `gestaltd init --config ...` then `gestaltd serve --locked --config ...` | Production deployments that should not fetch remote specs or mutate local state at boot. |
+| Locked | `gestaltd bundle --config ... --output DIR` then `gestaltd serve --locked --config DIR/...` | Production deployments that should not fetch remote specs or mutate local state at boot. |
 
 If your config depends on remote REST or GraphQL upstreams, or packaged plugins, the locked flow is the safer deployment model.
 
@@ -66,15 +66,15 @@ It mounts:
 The bare-binary model is straightforward:
 
 ```sh
-gestaltd validate --init --config ./gestalt.yaml
-gestaltd serve --locked --config ./gestalt.yaml
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd serve --locked --config ./bundle/gestalt.yaml
 ```
 
 That is often the cleanest way to run Gestalt on a VM, inside systemd, or in a custom container build.
 
 ## Kubernetes
 
-The bundled Helm chart is the most complete production deployment path in the repo. It uses one Deployment for `gestaltd` and can optionally add an init container that runs `gestaltd init` before the main container starts.
+The bundled Helm chart is the most complete production deployment path in the repo. It uses one Deployment for `gestaltd` and can optionally add an init container that runs `gestaltd bundle` before the main container starts.
 
 See [Kubernetes](/deploy/kubernetes) for the exact chart behavior.
 
