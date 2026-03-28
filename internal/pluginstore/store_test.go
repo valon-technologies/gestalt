@@ -327,6 +327,110 @@ func TestInstallV2RejectsInvalidSource(t *testing.T) {
 	}
 }
 
+func TestInstallFromDirCopiesEntirePackage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	store := New(cfgPath)
+	srcDir := mustBuildPluginDir(t, dir, "testowner/fullcopy", "0.1.0", "test-binary", "")
+
+	extraFile := filepath.Join(srcDir, "extra.txt")
+	if err := os.WriteFile(extraFile, []byte("extra-data"), 0644); err != nil {
+		t.Fatalf("WriteFile extra: %v", err)
+	}
+
+	installed, err := store.InstallFromDir(srcDir)
+	if err != nil {
+		t.Fatalf("InstallFromDir: %v", err)
+	}
+
+	if installed.ManifestPath == "" {
+		t.Fatal("ManifestPath is empty")
+	}
+	if _, err := os.Stat(installed.ManifestPath); err != nil {
+		t.Fatalf("manifest file missing: %v", err)
+	}
+	if installed.ExecutablePath == "" {
+		t.Fatal("ExecutablePath is empty")
+	}
+	if _, err := os.Stat(installed.ExecutablePath); err != nil {
+		t.Fatalf("executable file missing: %v", err)
+	}
+
+	data, err := os.ReadFile(installed.ExecutablePath)
+	if err != nil {
+		t.Fatalf("ReadFile executable: %v", err)
+	}
+	if string(data) != "test-binary" {
+		t.Fatalf("executable content = %q", data)
+	}
+}
+
+func TestInstallFromDirV2SetsSourceAndZeroPluginID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	store := New(cfgPath)
+	srcDir := mustBuildV2PluginDir(t, dir, "github.com/test-org/test-repo/test-plugin", "1.0.0", "v2-install-test")
+
+	installed, err := store.InstallFromDir(srcDir)
+	if err != nil {
+		t.Fatalf("InstallFromDir: %v", err)
+	}
+	if installed.Source != "github.com/test-org/test-repo/test-plugin" {
+		t.Fatalf("Source = %q", installed.Source)
+	}
+	if !installed.PluginID.IsZero() {
+		t.Fatalf("expected zero PluginID for v2, got %q", installed.PluginID)
+	}
+	if installed.ExecutablePath == "" {
+		t.Fatal("ExecutablePath is empty")
+	}
+}
+
+func TestInstall_ArchiveArtifactDigestVerified(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	store := New(cfgPath)
+	pkg := mustBuildPackage(t, dir, "testowner/digcheck", "0.1.0", "correct-content")
+
+	installed, err := store.Install(pkg)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if installed.SHA256 == "" {
+		t.Fatal("SHA256 is empty")
+	}
+	sum := sha256.Sum256([]byte("correct-content"))
+	if installed.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Fatalf("SHA256 = %q, want %q", installed.SHA256, hex.EncodeToString(sum[:]))
+	}
+}
+
+func TestStoreNew_UsesConfigDirAsRoot(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
+	store := New(cfgPath)
+	if store.root != filepath.Join(dir, "configs", ".gestalt", "plugins") {
+		t.Fatalf("store root = %q", store.root)
+	}
+}
+
 func mustBuildPluginDir(t *testing.T, dir, id, version, content, schema string) string {
 	t.Helper()
 

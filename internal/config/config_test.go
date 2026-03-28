@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -1272,6 +1273,224 @@ func TestLoadErrors(t *testing.T) {
 			t.Fatal("Load: expected error, got nil")
 		}
 	})
+}
+
+func TestValidateStructure_PluginValidationDirect(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		cfg     *Config
+		wantErr string
+	}{
+		{
+			name: "package valid",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir"}},
+				},
+			},
+		},
+		{
+			name: "source valid",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+				},
+			},
+		},
+		{
+			name: "both package and source rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "mutually exclusive",
+		},
+		{
+			name: "neither package nor source nor command rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{}},
+				},
+			},
+			wantErr: "plugin.command, plugin.package, or plugin.source is required",
+		},
+		{
+			name: "source without version rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin"}},
+				},
+			},
+			wantErr: "plugin.version is required",
+		},
+		{
+			name: "package with version rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "plugin.version is only valid with plugin.source",
+		},
+		{
+			name: "http package rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "http://evil.com/pkg"}},
+				},
+			},
+			wantErr: "HTTPS",
+		},
+		{
+			name: "https package accepted",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "https://releases.example.com/pkg.tar.gz"}},
+				},
+			},
+		},
+		{
+			name: "command with version rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "plugin.version is only valid with plugin.source",
+		},
+		{
+			name: "args without command rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Args: []string{"--verbose"}}},
+				},
+			},
+			wantErr: "plugin.args are only valid with plugin.command",
+		},
+		{
+			name: "invalid source address rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &ExecutablePluginDef{Source: "not-a-valid-source", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "plugin.source",
+		},
+		{
+			name: "plugin with connections rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
+						Plugin:     &ExecutablePluginDef{Command: "/usr/bin/plugin"},
+					},
+				},
+			},
+			wantErr: "cannot set both plugin and connections",
+		},
+		{
+			name: "plugin with api rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin"},
+						API:    &APIDef{Type: "rest"},
+					},
+				},
+			},
+			wantErr: "cannot set both plugin and api",
+		},
+		{
+			name: "runtime plugin with type rejected",
+			cfg: &Config{
+				Runtimes: map[string]RuntimeDef{
+					"worker": {Type: "grpc", Plugin: &ExecutablePluginDef{Command: "/usr/bin/runtime"}},
+				},
+			},
+			wantErr: "cannot set both plugin and type",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateStructure(tc.cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestHasManagedArtifacts(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		plugin *ExecutablePluginDef
+		want   bool
+	}{
+		{"nil plugin", nil, false},
+		{"command only", &ExecutablePluginDef{Command: "/bin/x"}, false},
+		{"package set", &ExecutablePluginDef{Package: "./dir"}, true},
+		{"source set", &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.plugin.HasManagedArtifacts(); got != tc.want {
+				t.Fatalf("HasManagedArtifacts() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "my-plugin")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `integrations:
+  sample:
+    plugin:
+      package: ./my-plugin
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	plugin := loaded.Integrations["sample"].Plugin
+	if plugin == nil {
+		t.Fatal("expected plugin to be loaded")
+	}
+	if !filepath.IsAbs(plugin.Package) {
+		t.Fatalf("expected absolute path, got: %q", plugin.Package)
+	}
+	if plugin.Package != pluginDir {
+		t.Fatalf("plugin.Package = %q, want %q", plugin.Package, pluginDir)
+	}
 }
 
 func TestAllowedOperations(t *testing.T) {
