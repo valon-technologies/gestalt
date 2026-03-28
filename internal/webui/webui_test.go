@@ -49,7 +49,7 @@ func mustGet(t *testing.T, handler http.Handler, path string) (int, string) {
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("ReadAll: %v", err)
@@ -215,16 +215,17 @@ func TestHandler_SPAFallbackForDeepPath(t *testing.T) {
 	req := httptest.NewRequest("GET", "/app/dashboard", nil)
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code == http.StatusOK {
+	switch rr.Code {
+	case http.StatusOK:
 		if !strings.Contains(rr.Body.String(), "spa-root") {
 			t.Fatalf("body = %q, want SPA fallback content", rr.Body.String())
 		}
-	} else if rr.Code == http.StatusMovedPermanently || rr.Code == http.StatusFound {
+	case http.StatusMovedPermanently, http.StatusFound:
 		loc := rr.Header().Get("Location")
 		if loc != "/" && loc != "./" {
 			t.Fatalf("expected redirect to root, got Location: %q", loc)
 		}
-	} else {
+	default:
 		t.Fatalf("unexpected status = %d", rr.Code)
 	}
 }
@@ -233,8 +234,8 @@ func TestHandler_StaticAssetInSubdirectory(t *testing.T) {
 	t.Parallel()
 
 	handler := newTestHandler(t, fstest.MapFS{
-		"index.html":      {Data: []byte("<html>home</html>")},
-		"assets/app.js":   {Data: []byte("console.log('app');")},
+		"index.html":    {Data: []byte("<html>home</html>")},
+		"assets/app.js": {Data: []byte("console.log('app');")},
 	})
 
 	code, body := mustGet(t, handler, "/assets/app.js")

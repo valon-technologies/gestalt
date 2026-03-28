@@ -1385,7 +1385,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				Integrations: map[string]IntegrationDef{
 					"sample": {
 						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:     &ExecutablePluginDef{Command: "/usr/bin/plugin"},
+						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin"},
 					},
 				},
 			},
