@@ -12,14 +12,14 @@ const (
 )
 
 type Manifest struct {
-	SchemaVersion int         `json:"schema_version"`
-	ID            string      `json:"id,omitempty"`
-	Source        string      `json:"source,omitempty"`
-	Version       string      `json:"version"`
-	DisplayName   string      `json:"display_name,omitempty"`
-	Description   string      `json:"description,omitempty"`
-	Kinds         []string    `json:"kinds"`
-	Provider      *Provider       `json:"provider,omitempty"`
+	SchemaVersion int            `json:"schema_version"`
+	ID            string         `json:"id,omitempty"`
+	Source        string         `json:"source,omitempty"`
+	Version       string         `json:"version"`
+	DisplayName   string         `json:"display_name,omitempty"`
+	Description   string         `json:"description,omitempty"`
+	Kinds         []string       `json:"kinds"`
+	Provider      *Provider      `json:"provider,omitempty"`
 	WebUI         *WebUIMetadata `json:"webui,omitempty"`
 	Artifacts     []Artifact     `json:"artifacts,omitempty"`
 	Entrypoints   Entrypoints    `json:"entrypoints,omitempty"`
