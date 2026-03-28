@@ -5,6 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/operator"
+	github "github.com/valon-technologies/gestalt/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	providercompiler "github.com/valon-technologies/gestalt/internal/provider/compiler"
 )
@@ -22,7 +23,7 @@ type lockPluginEntry = operator.LockPluginEntry
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle(func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error) {
 		return providercompiler.LoadDefinition(ctx, name, api, nil)
-	}, nil)
+	}, &github.GitHubResolver{})
 }
 
 func initConfig(configFlag string) error {

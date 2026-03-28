@@ -32,6 +32,24 @@ type Config struct {
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
+	UI           UIConfig                  `yaml:"ui"`
+}
+
+type UIConfig struct {
+	Plugin *UIPluginDef `yaml:"plugin"`
+}
+
+type UIPluginDef struct {
+	Package string `yaml:"package"`
+	Source  string `yaml:"source"`
+	Version string `yaml:"version"`
+
+	ResolvedAssetRoot    string `yaml:"-"`
+	ResolvedManifestPath string `yaml:"-"`
+}
+
+func (p *UIPluginDef) HasManagedArtifacts() bool {
+	return p != nil && (p.Package != "" || p.Source != "")
 }
 
 type EgressConfig struct {

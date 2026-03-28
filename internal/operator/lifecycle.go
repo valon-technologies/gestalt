@@ -49,7 +49,8 @@ type LockPluginEntry struct {
 	ResolvedURL   string `json:"resolved_url,omitempty"`
 	ArchiveSHA256 string `json:"archive_sha256,omitempty"`
 	Manifest      string `json:"manifest"`
-	Executable    string `json:"executable"`
+	Executable    string `json:"executable,omitempty"`
+	AssetRoot     string `json:"asset_root,omitempty"`
 }
 
 type UpstreamLoader func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error)
@@ -283,6 +284,9 @@ func configHasPlugins(cfg *config.Config) bool {
 			return true
 		}
 	}
+	if cfg.UI.Plugin.HasManagedArtifacts() {
+		return true
+	}
 	return false
 }
 
@@ -385,6 +389,25 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
+	if cfg.UI.Plugin.HasManagedArtifacts() {
+		key := LockPluginKey("ui", "default")
+		entry, found := lock.Plugins[key]
+		if !found {
+			return false
+		}
+		fingerprint, err := UIPluginFingerprint(cfg.UI.Plugin)
+		if err != nil || entry.Fingerprint != fingerprint {
+			return false
+		}
+		manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
+		if _, err := os.Stat(manifestPath); err != nil {
+			return false
+		}
+		assetRootPath := resolveLockPath(paths.configDir, entry.AssetRoot)
+		if _, err := os.Stat(assetRootPath); err != nil {
+			return false
+		}
+	}
 	return true
 }
 
@@ -406,6 +429,24 @@ func PluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMa
 		input.Config = configMap
 	}
 
+	payload, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func UIPluginFingerprint(plugin *config.UIPluginDef) (string, error) {
+	input := struct {
+		Package string `json:"package,omitempty"`
+		Source  string `json:"source,omitempty"`
+		Version string `json:"version,omitempty"`
+	}{
+		Package: plugin.Package,
+		Source:  plugin.Source,
+		Version: plugin.Version,
+	}
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return "", err
@@ -499,6 +540,15 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string,
 		}
 		written[LockPluginKey("runtime", name)] = entry
 	}
+
+	if cfg.UI.Plugin.HasManagedArtifacts() {
+		entry, err := l.writeUIPluginArtifact(ctx, cfg, paths, store)
+		if err != nil {
+			return nil, err
+		}
+		written[LockPluginKey("ui", "default")] = entry
+	}
+
 	return written, nil
 }
 
@@ -629,6 +679,100 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, sto
 	}, nil
 }
 
+func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Config, paths initPaths, store *pluginstore.Store) (LockPluginEntry, error) {
+	plugin := cfg.UI.Plugin
+	fingerprint, err := UIPluginFingerprint(plugin)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("fingerprinting ui plugin: %w", err)
+	}
+
+	var installed *pluginstore.InstalledPlugin
+	var sourceDigest string
+	switch {
+	case plugin.Source != "":
+		src, err := pluginsource.Parse(plugin.Source)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin.source %q: %w", plugin.Source, err)
+		}
+		if l.sourceResolver == nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin: source resolution requires a source resolver")
+		}
+		resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin resolve source %q@%s: %w", plugin.Source, plugin.Version, err)
+		}
+		defer resolved.Cleanup()
+		installed, err = store.Install(resolved.LocalPath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin install source: %w", err)
+		}
+		manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
+		}
+		assetRoot, err := filepath.Rel(paths.configDir, installed.AssetRoot)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
+		}
+		return LockPluginEntry{
+			Fingerprint:   fingerprint,
+			Source:        plugin.Source,
+			Version:       plugin.Version,
+			ResolvedURL:   resolved.ResolvedURL,
+			ArchiveSHA256: resolved.ArchiveSHA256,
+			Manifest:      filepath.ToSlash(manifestPath),
+			AssetRoot:     filepath.ToSlash(assetRoot),
+		}, nil
+
+	case plugin.Package != "":
+		packagePath := plugin.Package
+		isURL := strings.HasPrefix(packagePath, "https://")
+		if isURL {
+			tmpPath, cleanup, err := pluginpkg.FetchPackage(ctx, packagePath)
+			if err != nil {
+				return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", packagePath, err)
+			}
+			defer cleanup()
+			packagePath = tmpPath
+		}
+		info, err := os.Stat(packagePath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)
+		}
+		if info.IsDir() {
+			installed, err = store.InstallFromDir(packagePath)
+		} else {
+			installed, err = store.Install(packagePath)
+		}
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)
+		}
+		if !isURL {
+			sourceDigest, err = sourceDigestForPackage(packagePath)
+			if err != nil {
+				return LockPluginEntry{}, fmt.Errorf("ui plugin source digest: %w", err)
+			}
+		}
+		manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
+		}
+		assetRoot, err := filepath.Rel(paths.configDir, installed.AssetRoot)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
+		}
+		return LockPluginEntry{
+			Fingerprint:  fingerprint,
+			Package:      plugin.Package,
+			SourceDigest: sourceDigest,
+			Manifest:     filepath.ToSlash(manifestPath),
+			AssetRoot:    filepath.ToSlash(assetRoot),
+		}, nil
+	}
+
+	return LockPluginEntry{}, fmt.Errorf("ui plugin requires package or source")
+}
+
 func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, locked bool) error {
 	if !configHasPlugins(cfg) {
 		return nil
@@ -669,6 +813,29 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 			return err
 		}
 	}
+
+	if cfg.UI.Plugin.HasManagedArtifacts() {
+		key := LockPluginKey("ui", "default")
+		entry, ok := lock.Plugins[key]
+		if !ok {
+			return fmt.Errorf("prepared artifact for ui plugin is missing or stale; run `gestaltd bundle --config %s --output DIR`", paths.configPath)
+		}
+		fingerprint, err := UIPluginFingerprint(cfg.UI.Plugin)
+		if err != nil || entry.Fingerprint != fingerprint {
+			return fmt.Errorf("prepared artifact for ui plugin is missing or stale; run `gestaltd bundle --config %s --output DIR`", paths.configPath)
+		}
+		manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
+		assetRootPath := resolveLockPath(paths.configDir, entry.AssetRoot)
+		if _, err := os.Stat(manifestPath); err != nil {
+			return fmt.Errorf("prepared manifest for ui plugin not found at %s", manifestPath)
+		}
+		if _, err := os.Stat(assetRootPath); err != nil {
+			return fmt.Errorf("prepared asset root for ui plugin not found at %s", assetRootPath)
+		}
+		cfg.UI.Plugin.ResolvedAssetRoot = assetRootPath
+		cfg.UI.Plugin.ResolvedManifestPath = manifestPath
+	}
+
 	return nil
 }
 
