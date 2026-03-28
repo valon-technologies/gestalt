@@ -87,6 +87,11 @@ func collectLocalRefs(configPath string) ([]string, error) {
 				Package string `yaml:"package"`
 			} `yaml:"plugin"`
 		} `yaml:"runtimes"`
+		UI struct {
+			Plugin *struct {
+				Package string `yaml:"package"`
+			} `yaml:"plugin"`
+		} `yaml:"ui"`
 	}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing config for local refs: %w", err)
@@ -136,6 +141,17 @@ func collectLocalRefs(configPath string) ([]string, error) {
 				}
 				refs = append(refs, resolved)
 			}
+		}
+	}
+
+	if raw.UI.Plugin != nil && raw.UI.Plugin.Package != "" {
+		pkg := raw.UI.Plugin.Package
+		if !strings.HasPrefix(pkg, "https://") && !filepath.IsAbs(pkg) {
+			resolved := filepath.Clean(filepath.Join(baseDir, pkg))
+			if _, err := os.Stat(resolved); err != nil {
+				return nil, fmt.Errorf("ui plugin.package %q: %w", pkg, err)
+			}
+			refs = append(refs, resolved)
 		}
 	}
 
