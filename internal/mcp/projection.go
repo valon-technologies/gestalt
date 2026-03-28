@@ -21,18 +21,19 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov core.Provider) {
 	for _, op := range prov.ListOperations() {
 		name := toolName(cfg.ToolPrefixes, provName, op.Name)
+		sanitizedParams, mapper := sanitizeFlatParams(op.Parameters)
 
 		opts := []mcpgo.ToolOption{mcpgo.WithDescription(op.Description)}
 		annot := mapAnnotations(coreintegration.AnnotationsFromMethod(op.Method))
 		annot.Title = op.Name
 		opts = append(opts, mcpgo.WithToolAnnotation(annot))
 
-		for _, param := range op.Parameters {
+		for _, param := range sanitizedParams {
 			opts = append(opts, paramToOption(param))
 		}
 
 		tool := mcpgo.NewTool(name, opts...)
-		handler := makeHandler(cfg.Invoker, provName, op.Name, cfg.APIConnection[provName])
+		handler := makeHandler(cfg.Invoker, provName, op.Name, cfg.APIConnection[provName], mapper)
 		srv.AddTool(tool, handler)
 	}
 }
@@ -54,10 +55,11 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 		}
 
 		name := toolName(cfg.ToolPrefixes, provName, op.ID)
+		sanitizedSchema, mapper := sanitizeInputSchema(op.InputSchema)
 
 		var tool mcpgo.Tool
-		if len(op.InputSchema) > 0 {
-			tool = mcpgo.NewToolWithRawSchema(name, op.Description, op.InputSchema)
+		if len(sanitizedSchema) > 0 {
+			tool = mcpgo.NewToolWithRawSchema(name, op.Description, sanitizedSchema)
 		} else {
 			tool = mcpgo.NewTool(name, mcpgo.WithDescription(op.Description))
 		}
@@ -83,9 +85,9 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 
 		var handler mcpserver.ToolHandlerFunc
 		if isDirect && op.Transport != catalog.TransportREST && op.Transport != catalog.TransportPlugin {
-			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller)
+			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller, mapper)
 		} else {
-			handler = makeHandler(cfg.Invoker, provName, op.ID, conn)
+			handler = makeHandler(cfg.Invoker, provName, op.ID, conn, mapper)
 		}
 		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: handler}
 	}
