@@ -176,7 +176,7 @@ func TestHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
 func TestHandler_NilWhenNoIndexHTML(t *testing.T) {
 	t.Parallel()
 
-	handler := Handler()
+	handler := EmbeddedHandler()
 	if handler != nil {
 		t.Fatal("expected nil handler when embedded frontend has not been built")
 	}

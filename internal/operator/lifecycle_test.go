@@ -1,8 +1,6 @@
 package operator
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,10 +12,6 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
-func sha256HexLC(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
-}
 
 func mustBuildTestPluginDir(t *testing.T, dir, id, version, content string) string {
 	t.Helper()
@@ -43,7 +37,7 @@ func mustBuildTestPluginDir(t *testing.T, dir, id, version, content string) stri
 				OS:     runtime.GOOS,
 				Arch:   runtime.GOARCH,
 				Path:   artifactRel,
-				SHA256: sha256HexLC(content),
+				SHA256: sha256hex(content),
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
@@ -460,7 +454,7 @@ func TestInitAtPath_RuntimePlugin(t *testing.T) {
 				OS:     runtime.GOOS,
 				Arch:   runtime.GOARCH,
 				Path:   artifactRel,
-				SHA256: sha256HexLC("runtime-binary"),
+				SHA256: sha256hex("runtime-binary"),
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
