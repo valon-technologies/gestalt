@@ -182,16 +182,50 @@ func TestSlackErrorResponse(t *testing.T) {
 		})
 	})
 
-	_, err := p.Execute(context.Background(), opSendMessage, map[string]any{
+	result, err := p.Execute(context.Background(), opSendMessage, map[string]any{
 		"channel": "C00INVALID",
 		"text":    testMessage,
 	}, testToken)
-	if err == nil {
-		t.Fatal("expected error for Slack API failure")
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
 	}
-	expected := "slack API error: channel_not_found"
-	if err.Error() != expected {
-		t.Errorf("expected error %q, got %q", expected, err.Error())
+	if result.Status != 200 {
+		t.Fatalf("expected status 200 (Slack returns 200 for API errors), got %d", result.Status)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if body["ok"] != false {
+		t.Error("expected ok=false in response")
+	}
+}
+
+func TestHTTPErrorStatusPassthrough(t *testing.T) {
+	t.Parallel()
+	p, _ := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "ratelimited"})
+	})
+
+	result, err := p.Execute(context.Background(), opListChannels, map[string]any{}, testToken)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if result.Status != http.StatusTooManyRequests {
+		t.Fatalf("expected status %d, got %d", http.StatusTooManyRequests, result.Status)
+	}
+}
+
+func TestUnknownOperation(t *testing.T) {
+	t.Parallel()
+	p := &slackProvider{}
+	result, err := p.Execute(context.Background(), "nonexistent", map[string]any{}, testToken)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != 404 {
+		t.Fatalf("expected status 404, got %d", result.Status)
 	}
 }
 

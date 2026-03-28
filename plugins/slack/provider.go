@@ -193,6 +193,8 @@ func (p *slackProvider) doPost(ctx context.Context, method string, body any, tok
 	return p.do(req)
 }
 
+const maxResponseBytes = 10 << 20 // 10 MB
+
 func (p *slackProvider) do(req *http.Request) (*pluginsdk.OperationResult, error) {
 	client := p.httpClient
 	if client == nil {
@@ -204,20 +206,12 @@ func (p *slackProvider) do(req *http.Request) (*pluginsdk.OperationResult, error
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	var envelope struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(data, &envelope); err == nil && !envelope.OK {
-		return nil, fmt.Errorf("slack API error: %s", envelope.Error)
-	}
-
-	return &pluginsdk.OperationResult{Status: 200, Body: string(data)}, nil
+	return &pluginsdk.OperationResult{Status: resp.StatusCode, Body: string(data)}, nil
 }
 
 func (p *slackProvider) apiURL(method string) string {
