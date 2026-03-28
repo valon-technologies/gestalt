@@ -270,4 +270,3 @@ func (p *mcpOAuthMetadataProvider) SupportsManualAuth() bool { return true }
 func (p *mcpOAuthMetadataProvider) AuthTypes() []string {
 	return []string{"oauth", "manual"}
 }
-
