@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/internal/mcpupstream"
-	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	providercompiler "github.com/valon-technologies/gestalt/internal/provider/compiler"
 )
@@ -114,7 +113,7 @@ func (a *providerAssembly) build() (_ *bootstrap.ProviderBuildResult, err error)
 		prov = a.apiProv
 	case a.mcpUp != nil:
 		if a.mcpConn != nil && a.mcpConn.Auth.Type == "mcp_oauth" {
-			p, buildErr := buildMCPOAuthProvider(a.name, a.intg, *a.mcpConn, a.mcpUp, a.regStore, a.deps, connMode)
+			p, buildErr := buildMCPOAuthProvider(a.name, a.intg, a.mcpUp, connMode)
 			if buildErr != nil {
 				return nil, buildErr
 			}
@@ -230,19 +229,12 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoau
 	})
 }
 
-func buildMCPOAuthProvider(name string, intg config.IntegrationDef, conn config.ConnectionDef, mcpUp *mcpupstream.Upstream, store mcpoauth.RegistrationStore, deps bootstrap.Deps, connMode core.ConnectionMode) (core.Provider, error) {
-	mcpURL := ""
-	if intg.MCP != nil {
-		mcpURL = intg.MCP.URL
-	}
-	handler := buildMCPOAuthHandler(conn, mcpURL, store, deps)
-
+func buildMCPOAuthProvider(name string, intg config.IntegrationDef, mcpUp *mcpupstream.Upstream, connMode core.ConnectionMode) (core.Provider, error) {
 	baseProv := &mcpOAuthMetadataProvider{
 		name:        name,
 		displayName: intg.DisplayName,
 		description: intg.Description,
 		connMode:    connMode,
-		auth:        handler,
 	}
 
 	return composite.New(name, baseProv, mcpUp), nil
@@ -253,7 +245,6 @@ type mcpOAuthMetadataProvider struct {
 	displayName string
 	description string
 	connMode    core.ConnectionMode
-	auth        *mcpoauth.Handler
 }
 
 func (p *mcpOAuthMetadataProvider) Name() string        { return p.name }
@@ -280,38 +271,3 @@ func (p *mcpOAuthMetadataProvider) AuthTypes() []string {
 	return []string{"oauth", "manual"}
 }
 
-func (p *mcpOAuthMetadataProvider) AuthorizationURL(state string, scopes []string) string {
-	return p.auth.AuthorizationURL(state, scopes)
-}
-
-func (p *mcpOAuthMetadataProvider) StartOAuth(state string, scopes []string) (string, string) {
-	return p.auth.StartOAuth(state, scopes)
-}
-
-func (p *mcpOAuthMetadataProvider) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	return p.auth.StartOAuthWithOverride(authBaseURL, state, scopes)
-}
-
-func (p *mcpOAuthMetadataProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.auth.ExchangeCode(ctx, code)
-}
-
-func (p *mcpOAuthMetadataProvider) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	return p.auth.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
-}
-
-func (p *mcpOAuthMetadataProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.auth.RefreshToken(ctx, refreshToken)
-}
-
-func (p *mcpOAuthMetadataProvider) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	return p.auth.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
-}
-
-func (p *mcpOAuthMetadataProvider) TokenURL() string {
-	return p.auth.TokenURL()
-}
-
-func (p *mcpOAuthMetadataProvider) AuthorizationBaseURL() string {
-	return p.auth.AuthorizationBaseURL()
-}
