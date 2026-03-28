@@ -143,8 +143,10 @@ func catalogExtractOperations(model *v3high.Document, cat *catalog.Catalog, allo
 				if p.In != "" {
 					loc = p.In
 				}
+				name, wireName := normalizeParamName(p.Name)
 				catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
-					Name:        p.Name,
+					Name:        name,
+					WireName:    wireName,
 					Type:        pType,
 					Location:    loc,
 					Description: p.Description,
@@ -185,6 +187,14 @@ func extractRequestBodySchema(rb *v3high.RequestBody) json.RawMessage {
 	}
 
 	return schemaToJSON(schema)
+}
+
+func normalizeParamName(raw string) (name, wireName string) {
+	if !strings.ContainsAny(raw, "[]") {
+		return raw, ""
+	}
+	normalized := strings.ReplaceAll(strings.ReplaceAll(raw, "[", "_"), "]", "")
+	return normalized, raw
 }
 
 func schemaToJSON(s *highbase.Schema) json.RawMessage {

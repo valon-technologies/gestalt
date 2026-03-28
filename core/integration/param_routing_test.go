@@ -273,6 +273,70 @@ func TestExecuteREST_NoCatalog_PreservesLegacy(t *testing.T) {
 	}
 }
 
+func TestExecuteREST_WireNameQueryParam(t *testing.T) {
+	t.Parallel()
+
+	const (
+		opID          = "list_records"
+		opPath        = "/api/v2/records"
+		schemaName    = "page_size"
+		wireName      = "page[size]"
+		pageSizeValue = "25"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"raw_query": r.URL.RawQuery,
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	cat := &catalog.Catalog{
+		Name: "test-svc",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     opID,
+				Method: http.MethodGet,
+				Path:   opPath,
+				Parameters: []catalog.CatalogParameter{
+					{Name: schemaName, WireName: wireName, Type: "integer", Location: "query"},
+				},
+			},
+		},
+	}
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Endpoints: map[string]Endpoint{
+			opID: {Method: http.MethodGet, Path: opPath},
+		},
+	}
+	b.SetCatalog(cat)
+
+	result, err := b.Execute(context.Background(), opID, map[string]any{
+		schemaName: 25,
+	}, "test-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	rawQuery := resp["raw_query"].(string)
+	parsed, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		t.Fatalf("url.ParseQuery: %v", err)
+	}
+	if parsed.Get(wireName) != pageSizeValue {
+		t.Fatalf("query %s = %q, want %s; raw = %s", wireName, parsed.Get(wireName), pageSizeValue, rawQuery)
+	}
+}
+
 func TestExecuteREST_CatalogHeaderParam(t *testing.T) {
 	t.Parallel()
 
