@@ -52,7 +52,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, err := buildProvidersStrict(ctx, cfg, factories, deps)
+	providers, _, err := buildProvidersStrict(ctx, cfg, factories, deps)
 	if err != nil {
 		return warnings, err
 	}
@@ -75,15 +75,16 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	return warnings, nil
 }
 
-func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], error) {
+func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
+	connAuth := make(map[string]map[string]OAuthHandler)
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
 			_ = CloseProviders(&reg.Providers)
-			return nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 	}
 
@@ -92,32 +93,39 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		intgDef := cfg.Integrations[name]
-		prov, err := buildProviderForValidation(ctx, name, intgDef, factories, deps)
+		result, err := buildProviderForValidation(ctx, name, intgDef, factories, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
 		}
-		if err := reg.Providers.Register(name, prov); err != nil {
-			if c, ok := prov.(io.Closer); ok {
+		if err := reg.Providers.Register(name, result.Provider); err != nil {
+			if c, ok := result.Provider.(io.Closer); ok {
 				_ = c.Close()
 			}
 			errs = append(errs, fmt.Errorf("bootstrap: registering provider %q: %w", name, err))
+		}
+		if len(result.ConnectionAuth) > 0 {
+			connAuth[name] = result.ConnectionAuth
 		}
 	}
 
 	if len(errs) > 0 {
 		_ = CloseProviders(&reg.Providers)
-		return nil, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))
+		return nil, nil, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))
 	}
 
-	return &reg.Providers, nil
+	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (core.Provider, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
 		return buildProvider(ctx, name, intg, factories, deps)
 	}
-	return newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
+	prov, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
+	if err != nil {
+		return nil, err
+	}
+	return &ProviderBuildResult{Provider: prov}, nil
 }
 
 func buildRuntimeForValidation(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {

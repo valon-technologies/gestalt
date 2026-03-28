@@ -49,14 +49,114 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	brokerOpts := []invocation.BrokerOption{}
+	if cfg.DefaultConnection != nil {
+		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
+	}
+	if cfg.ConnectionAuth != nil {
+		authFn := cfg.ConnectionAuth
+		brokerOpts = append(brokerOpts, invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
+			m := authFn()
+			refreshers := make(map[string]map[string]invocation.OAuthRefresher, len(m))
+			for intg, conns := range m {
+				inner := make(map[string]invocation.OAuthRefresher, len(conns))
+				for conn, h := range conns {
+					inner[conn] = h
+				}
+				refreshers[intg] = inner
+			}
+			return refreshers
+		}))
+	}
 	if cfg.Invoker == nil {
-		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Datastore)
+		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Datastore, brokerOpts...)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
 	return httptest.NewServer(srv)
+}
+
+// testOAuthHandler adapts a test stub into bootstrap.OAuthHandler for use in
+// server tests. Only the methods actually exercised by each test need non-nil
+// implementations.
+type testOAuthHandler struct {
+	authorizationURLFn       func(state string, scopes []string) string
+	startOAuthFn             func(state string, scopes []string) (string, string)
+	startOAuthWithOverrideFn func(authBaseURL, state string, scopes []string) (string, string)
+	exchangeCodeFn           func(ctx context.Context, code string) (*core.TokenResponse, error)
+	exchangeCodeWithVerFn    func(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	refreshTokenFn           func(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	refreshTokenWithURLFn    func(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	authorizationBaseURLVal  string
+	tokenURLVal              string
+}
+
+func (h *testOAuthHandler) AuthorizationURL(state string, scopes []string) string {
+	if h.authorizationURLFn != nil {
+		return h.authorizationURLFn(state, scopes)
+	}
+	url, _ := h.StartOAuth(state, scopes)
+	return url
+}
+
+func (h *testOAuthHandler) StartOAuth(state string, scopes []string) (string, string) {
+	if h.startOAuthFn != nil {
+		return h.startOAuthFn(state, scopes)
+	}
+	return h.authorizationBaseURLVal + "?state=" + state, ""
+}
+
+func (h *testOAuthHandler) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	if h.startOAuthWithOverrideFn != nil {
+		return h.startOAuthWithOverrideFn(authBaseURL, state, scopes)
+	}
+	return authBaseURL + "?state=" + state, ""
+}
+
+func (h *testOAuthHandler) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	if h.exchangeCodeFn != nil {
+		return h.exchangeCodeFn(ctx, code)
+	}
+	return nil, fmt.Errorf("ExchangeCode not implemented")
+}
+
+func (h *testOAuthHandler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	if h.exchangeCodeWithVerFn != nil {
+		return h.exchangeCodeWithVerFn(ctx, code, verifier, opts...)
+	}
+	return h.ExchangeCode(ctx, code)
+}
+
+func (h *testOAuthHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	if h.refreshTokenFn != nil {
+		return h.refreshTokenFn(ctx, refreshToken)
+	}
+	return nil, fmt.Errorf("RefreshToken not implemented")
+}
+
+func (h *testOAuthHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	if h.refreshTokenWithURLFn != nil {
+		return h.refreshTokenWithURLFn(ctx, refreshToken, tokenURL)
+	}
+	return h.RefreshToken(ctx, refreshToken)
+}
+
+func (h *testOAuthHandler) AuthorizationBaseURL() string { return h.authorizationBaseURLVal }
+func (h *testOAuthHandler) TokenURL() string             { return h.tokenURLVal }
+
+const testDefaultConnection = "default"
+
+func testConnectionAuth(integration string, handler bootstrap.OAuthHandler) func() map[string]map[string]bootstrap.OAuthHandler {
+	m := map[string]map[string]bootstrap.OAuthHandler{
+		integration: {testDefaultConnection: handler},
+	}
+	return func() map[string]map[string]bootstrap.OAuthHandler { return m }
+}
+
+func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.TokenResponse, error)) func() map[string]map[string]bootstrap.OAuthHandler {
+	return testConnectionAuth(integration, &testOAuthHandler{refreshTokenFn: refreshFn})
 }
 
 func TestHealthCheck(t *testing.T) {
@@ -1168,8 +1268,14 @@ func TestStartIntegrationOAuth(t *testing.T) {
 		authURL:         "https://slack.com/oauth/v2/authorize",
 	}
 
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+	}
+
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1215,21 +1321,26 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
 	var stored *core.IntegrationToken
-	stub := &stubIntegrationWithAuthURL{
-		StubIntegration: coretesting.StubIntegration{
-			N: "slack",
-			ExchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
-				if code == "good-code" {
-					return &core.TokenResponse{AccessToken: "slack-token"}, nil
-				}
-				return nil, fmt.Errorf("bad code")
-			},
+
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			if code == "good-code" {
+				return &core.TokenResponse{AccessToken: "slack-token"}, nil
+			}
+			return nil, fmt.Errorf("bad code")
 		},
-		authURL: "https://slack.com/oauth/v2/authorize",
+	}
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		authURL:         "https://slack.com/oauth/v2/authorize",
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1670,8 +1781,24 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 		wantVerifier:    "verifier-123",
 	}
 
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://gitlab.com/oauth/authorize",
+		startOAuthFn: func(state string, _ []string) (string, string) {
+			return "https://gitlab.com/oauth/authorize?state=" + state, "verifier-123"
+		},
+		exchangeCodeWithVerFn: func(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+			stub.gotVerifier = verifier
+			if code != "good-code" {
+				return nil, fmt.Errorf("bad code")
+			}
+			return &core.TokenResponse{AccessToken: "pkce-token"}, nil
+		},
+	}
+
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"gitlab": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("gitlab", handler)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1806,6 +1933,8 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1877,6 +2006,8 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	expiresInThree := time.Now().Add(3 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1933,6 +2064,8 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 	alreadyExpired := time.Now().Add(-10 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1984,6 +2117,8 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2036,6 +2171,8 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2137,6 +2274,8 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2199,6 +2338,8 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2264,6 +2405,8 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2329,6 +2472,8 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2381,6 +2526,8 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 	tokenCallCount := 0
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2824,6 +2971,244 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 	}
 	if result["error"] == "" {
 		t.Fatal("expected error message in response")
+	}
+}
+
+func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
+	t.Parallel()
+
+	connAHandler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://provider.example/oauth/a",
+	}
+	connBHandler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://provider.example/oauth/b",
+	}
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "multi"},
+		authURL:         "https://provider.example/oauth/a",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"multi": {
+					"conn-a": connAHandler,
+					"conn-b": connBHandler,
+				},
+			}
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"multi","connection":"conn-b"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if !strings.Contains(result["url"], "provider.example/oauth/b") {
+		t.Fatalf("expected conn-b auth URL, got %q", result["url"])
+	}
+}
+
+func TestStartOAuth_MissingConnection_FailsCleanly(t *testing.T) {
+	t.Parallel()
+
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://provider.example/oauth",
+	}
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "myint"},
+		authURL:         "https://provider.example/oauth",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"myint": "conn-a"}
+		cfg.ConnectionAuth = testConnectionAuth("myint", handler)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"myint","connection":"nonexistent"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if !strings.Contains(result["error"], "nonexistent") {
+		t.Fatalf("expected error to mention missing connection, got %q", result["error"])
+	}
+}
+
+func TestOAuthCallback_UsesStateConnection(t *testing.T) {
+	t.Parallel()
+
+	var exchangedConnection string
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://provider.example/oauth",
+		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			exchangedConnection = "conn-b"
+			return &core.TokenResponse{AccessToken: "token-for-b"}, nil
+		},
+	}
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "multi"},
+		authURL:         "https://provider.example/oauth",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"multi": {
+					"conn-a": &testOAuthHandler{authorizationBaseURLVal: "https://provider.example/oauth/a"},
+					"conn-b": handler,
+				},
+			}
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, _ *core.IntegrationToken) error {
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"integration":"multi","connection":"conn-b"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=ok&state="+url.QueryEscape(startResult["state"]), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect, got %d", resp.StatusCode)
+	}
+	if exchangedConnection != "conn-b" {
+		t.Fatalf("expected conn-b handler to be used for exchange, got %q", exchangedConnection)
+	}
+}
+
+func TestRefresh_UsesConnectionAuth(t *testing.T) {
+	t.Parallel()
+
+	var refreshedVia string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+		},
+		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+			refreshedVia = "connection-handler"
+			return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+		},
+	}
+
+	expiresSoon := time.Now().Add(2 * time.Minute)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{
+					AccessToken:  "stale",
+					RefreshToken: "rf",
+					ExpiresAt:    &expiresSoon,
+				}, nil
+			},
+			StoreTokenFn: func(_ context.Context, _ *core.IntegrationToken) error {
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if refreshedVia != "connection-handler" {
+		t.Fatalf("expected refresh via connection handler, got %q", refreshedVia)
 	}
 }
 

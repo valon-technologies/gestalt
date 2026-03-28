@@ -46,7 +46,7 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 
 	d := *def
 	def = &d
-	applyConnectionAuth(def, conn)
+	ApplyConnectionAuth(def, conn)
 
 	baseURL := def.BaseURL
 
@@ -253,8 +253,8 @@ func ApplyDisplayOverrides(def *Definition, intg config.IntegrationDef) {
 	}
 }
 
-// applyConnectionAuth merges connection auth overrides into the Definition.
-func applyConnectionAuth(def *Definition, conn config.ConnectionDef) {
+// ApplyConnectionAuth merges connection auth overrides into the Definition.
+func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	o := conn.Auth
 	setStr(&def.Auth.Type, o.Type)
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
@@ -294,6 +294,19 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 		return oauth.ManualAuthHandler{}, nil
 	}
 
+	upstream, err := BuildOAuthUpstream(def, conn, baseURL, client)
+	if err != nil {
+		return nil, err
+	}
+	return coreintegration.UpstreamAuth{Handler: upstream}, nil
+}
+
+// BuildOAuthUpstream creates an oauth.UpstreamHandler from a provider
+// Definition and ConnectionDef. This preserves all fields: token_exchange,
+// token_params, refresh_params, scope_separator, accept_header, and response
+// hooks. Callers outside the provider build pipeline (e.g. the factory building
+// per-connection OAuth handlers) use this to get a standalone handler.
+func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (*oauth.UpstreamHandler, error) {
 	var tokenExchange oauth.TokenExchangeFormat
 	switch def.Auth.TokenExchange {
 	case "", "form":
@@ -328,7 +341,9 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 	}
 
 	var opts []oauth.Option
-	opts = append(opts, oauth.WithHTTPClient(client))
+	if client != nil {
+		opts = append(opts, oauth.WithHTTPClient(client))
+	}
 
 	if def.Auth.ResponseCheck != nil {
 		rcd := def.Auth.ResponseCheck
@@ -349,8 +364,7 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 		}))
 	}
 
-	upstream := oauth.NewUpstream(oauthCfg, opts...)
-	return coreintegration.UpstreamAuth{Handler: upstream}, nil
+	return oauth.NewUpstream(oauthCfg, opts...), nil
 }
 
 func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
