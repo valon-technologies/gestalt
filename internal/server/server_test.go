@@ -2990,7 +2990,6 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
@@ -3045,7 +3044,6 @@ func TestStartOAuth_MissingConnection_FailsCleanly(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"myint": "conn-a"}
 		cfg.ConnectionAuth = testConnectionAuth("myint", handler)
@@ -3097,7 +3095,6 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
@@ -3178,7 +3175,6 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)

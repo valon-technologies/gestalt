@@ -740,8 +740,16 @@ func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string
 // construction logic.
 func BuildResultWithOAuth(prov core.Provider, def *provider.Definition, intg config.IntegrationDef, conn config.ConnectionDef) *ProviderBuildResult {
 	result := &ProviderBuildResult{Provider: prov}
-	if conn.Auth.Type == "manual" || conn.Auth.Type == "api_key" {
+	if intg.API == nil {
 		return result
+	}
+	switch conn.Auth.Type {
+	case "manual", "api_key":
+		return result
+	case "":
+		if conn.Auth.AuthorizationURL == "" && conn.Auth.ClientID == "" {
+			return result
+		}
 	}
 	upstream, err := provider.BuildOAuthUpstream(def, conn, def.BaseURL, nil)
 	if err != nil {
