@@ -243,8 +243,6 @@ func TestE2EValidateNonMutating(t *testing.T) {
 }
 
 func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := `auth:
@@ -275,8 +273,6 @@ integrations:
 }
 
 func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := `auth:
@@ -307,8 +303,6 @@ integrations:
 }
 
 func TestE2EValidateRejectsMalformedYAML(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(`{{{invalid yaml`), 0o644); err != nil {
