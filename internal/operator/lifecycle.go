@@ -284,10 +284,7 @@ func configHasPlugins(cfg *config.Config) bool {
 			return true
 		}
 	}
-	if cfg.UI.Plugin.HasManagedArtifacts() {
-		return true
-	}
-	return false
+	return cfg.UI.Plugin.HasManagedArtifacts()
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -406,6 +403,12 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		assetRootPath := resolveLockPath(paths.configDir, entry.AssetRoot)
 		if _, err := os.Stat(assetRootPath); err != nil {
 			return false
+		}
+		if entry.SourceDigest != "" && cfg.UI.Plugin.Package != "" && !strings.HasPrefix(cfg.UI.Plugin.Package, "https://") {
+			digest, err := sourceDigestForPackage(cfg.UI.Plugin.Package)
+			if err != nil || digest != entry.SourceDigest {
+				return false
+			}
 		}
 	}
 	return true
