@@ -75,10 +75,15 @@ type InstalledPlugin struct {
 	Root           string
 	ManifestPath   string
 	ExecutablePath string
+	AssetRoot      string
 	ArtifactPath   string
 	SHA256         string
 	Manifest       *pluginmanifestv1.Manifest
 	Artifact       *pluginmanifestv1.Artifact
+}
+
+func isWebUIOnly(manifest *pluginmanifestv1.Manifest) bool {
+	return len(manifest.Kinds) == 1 && manifest.Kinds[0] == pluginmanifestv1.KindWebUI
 }
 
 func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
@@ -93,6 +98,19 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	destDir, _, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
+	}
+
+	if isWebUIOnly(manifest) {
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return nil, fmt.Errorf("create plugin directory: %w", err)
+		}
+		if err := pluginpkg.ExtractPackage(packagePath, destDir); err != nil {
+			return nil, err
+		}
+		manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
+		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
+		return installed, nil
 	}
 
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
@@ -121,7 +139,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact)
+	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact, "")
 	return installed, nil
 }
 
@@ -137,6 +155,19 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	destDir, _, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
+	}
+
+	if isWebUIOnly(manifest) {
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return nil, fmt.Errorf("create plugin directory: %w", err)
+		}
+		if err := copyDir(dirPath, destDir); err != nil {
+			return nil, fmt.Errorf("copy plugin directory: %w", err)
+		}
+		manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
+		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
+		return installed, nil
 	}
 
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
@@ -192,7 +223,7 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	}
 
 	manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
-	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact)
+	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact, "")
 	return installed, nil
 }
 
@@ -233,15 +264,18 @@ func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error)
 	return id, nil
 }
 
-func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact) *InstalledPlugin {
+func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact, assetRoot string) *InstalledPlugin {
 	ip := &InstalledPlugin{
 		Root:           destDir,
 		ManifestPath:   manifestPath,
 		ExecutablePath: executablePath,
-		ArtifactPath:   artifact.Path,
-		SHA256:         artifact.SHA256,
+		AssetRoot:      assetRoot,
 		Manifest:       manifest,
 		Artifact:       artifact,
+	}
+	if artifact != nil {
+		ip.ArtifactPath = artifact.Path
+		ip.SHA256 = artifact.SHA256
 	}
 	switch manifest.SchemaVersion {
 	case pluginmanifestv1.SchemaVersion:
@@ -256,6 +290,9 @@ func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifest
 func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest) (string, error) {
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
+	}
+	if isWebUIOnly(manifest) {
+		return "", nil
 	}
 	var entry *pluginmanifestv1.Entrypoint
 	for _, kind := range manifest.Kinds {
@@ -292,6 +329,23 @@ func configSchemaPaths(manifest *pluginmanifestv1.Manifest, dirPath string) []st
 		paths = append(paths, runtimeConfigSchemaPath)
 	}
 	return paths
+}
+
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		return copyFile(path, target)
+	})
 }
 
 func copyFile(src, dst string) error {
