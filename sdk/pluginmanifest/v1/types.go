@@ -8,6 +8,7 @@ const (
 
 	KindProvider = "provider"
 	KindRuntime  = "runtime"
+	KindWebUI    = "webui"
 )
 
 type Manifest struct {
@@ -18,9 +19,14 @@ type Manifest struct {
 	DisplayName   string      `json:"display_name,omitempty"`
 	Description   string      `json:"description,omitempty"`
 	Kinds         []string    `json:"kinds"`
-	Provider      *Provider   `json:"provider,omitempty"`
-	Artifacts     []Artifact  `json:"artifacts"`
-	Entrypoints   Entrypoints `json:"entrypoints"`
+	Provider      *Provider       `json:"provider,omitempty"`
+	WebUI         *WebUIMetadata `json:"webui,omitempty"`
+	Artifacts     []Artifact     `json:"artifacts"`
+	Entrypoints   Entrypoints    `json:"entrypoints"`
+}
+
+type WebUIMetadata struct {
+	AssetRoot string `json:"asset_root"`
 }
 
 type Provider struct {
