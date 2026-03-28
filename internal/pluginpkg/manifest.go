@@ -134,6 +134,13 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths); err != nil {
 				return err
 			}
+		case pluginmanifestv1.KindWebUI:
+			if manifest.WebUI == nil {
+				return fmt.Errorf("webui metadata is required when kind %q is present", pluginmanifestv1.KindWebUI)
+			}
+			if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset_root"); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unsupported manifest kind %q", kind)
 		}

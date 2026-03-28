@@ -7,9 +7,7 @@
     "schema_version",
     "source",
     "version",
-    "kinds",
-    "artifacts",
-    "entrypoints"
+    "kinds"
   ],
   "properties": {
     "schema_version": {
@@ -36,7 +34,8 @@
       "items": {
         "enum": [
           "provider",
-          "runtime"
+          "runtime",
+          "webui"
         ]
       }
     },
@@ -71,9 +70,21 @@
         }
       }
     },
+    "webui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_root"
+      ],
+      "properties": {
+        "asset_root": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "artifacts": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "$ref": "#/$defs/artifact"
       }
@@ -104,6 +115,8 @@
       },
       "then": {
         "required": [
+          "artifacts",
+          "entrypoints",
           "provider"
         ],
         "properties": {
@@ -126,6 +139,10 @@
         }
       },
       "then": {
+        "required": [
+          "artifacts",
+          "entrypoints"
+        ],
         "properties": {
           "entrypoints": {
             "required": [
@@ -133,6 +150,22 @@
             ]
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kinds": {
+            "contains": {
+              "const": "webui"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "webui"
+        ]
       }
     }
   ],

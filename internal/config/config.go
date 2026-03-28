@@ -48,6 +48,10 @@ type UIPluginDef struct {
 	ResolvedManifestPath string `yaml:"-"`
 }
 
+func (p *UIPluginDef) HasManagedArtifacts() bool {
+	return p != nil && (p.Package != "" || p.Source != "")
+}
+
 type EgressConfig struct {
 	DefaultAction string                  `yaml:"default_action"`
 	Policies      []EgressPolicyRule      `yaml:"policies"`
