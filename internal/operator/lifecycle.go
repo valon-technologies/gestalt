@@ -709,6 +709,12 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("ui plugin install source: %w", err)
 		}
+		if installed.Manifest.Source != plugin.Source {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin manifest source %q does not match config source %q", installed.Manifest.Source, plugin.Source)
+		}
+		if installed.Manifest.Version != plugin.Version {
+			return LockPluginEntry{}, fmt.Errorf("ui plugin manifest version %q does not match config version %q", installed.Manifest.Version, plugin.Version)
+		}
 		manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)

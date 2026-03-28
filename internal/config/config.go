@@ -348,6 +348,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateEgress(&cfg.Egress); err != nil {
 		return err
 	}
+	if err := validateUIPlugin(cfg.UI.Plugin); err != nil {
+		return err
+	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		if err := validateIntegration(name, intg); err != nil {
@@ -585,6 +588,45 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	}
 	if strings.HasPrefix(plugin.Package, "http://") {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
+	}
+	return nil
+}
+
+func validateUIPlugin(plugin *UIPluginDef) error {
+	if plugin == nil {
+		return nil
+	}
+	sourceCount := 0
+	if plugin.Package != "" {
+		sourceCount++
+	}
+	if plugin.Source != "" {
+		sourceCount++
+	}
+	switch {
+	case sourceCount == 0:
+		return fmt.Errorf("config validation: ui plugin.package or plugin.source is required")
+	case sourceCount > 1:
+		return fmt.Errorf("config validation: ui plugin.package and plugin.source are mutually exclusive")
+	}
+
+	if plugin.Source != "" {
+		if _, err := pluginsource.Parse(plugin.Source); err != nil {
+			return fmt.Errorf("config validation: ui plugin.source: %w", err)
+		}
+		if plugin.Version == "" {
+			return fmt.Errorf("config validation: ui plugin.version is required when plugin.source is set")
+		}
+		if err := pluginsource.ValidateVersion(plugin.Version); err != nil {
+			return fmt.Errorf("config validation: ui plugin.version: %w", err)
+		}
+	}
+
+	if plugin.Package != "" && plugin.Version != "" {
+		return fmt.Errorf("config validation: ui plugin.version is only valid with plugin.source")
+	}
+	if strings.HasPrefix(plugin.Package, "http://") {
+		return fmt.Errorf("config validation: ui plugin.package requires HTTPS; plain HTTP is not supported")
 	}
 	return nil
 }
