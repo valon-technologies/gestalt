@@ -74,6 +74,10 @@ type ExecutablePluginDef struct {
 	ResolvedManifestPath string `yaml:"-"`
 }
 
+func (p *ExecutablePluginDef) HasManagedArtifacts() bool {
+	return p != nil && (p.Package != "" || p.Source != "")
+}
+
 type RuntimeDef struct {
 	Type      string               `yaml:"type"`
 	Providers []string             `yaml:"providers"`

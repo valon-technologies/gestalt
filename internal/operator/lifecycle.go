@@ -16,6 +16,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
@@ -24,7 +25,8 @@ import (
 const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestalt/providers"
-	LockVersion          = 3
+	LockVersion          = 4
+	LockVersionCompat    = 3
 )
 
 type Lockfile struct {
@@ -39,21 +41,26 @@ type LockProviderEntry struct {
 }
 
 type LockPluginEntry struct {
-	Fingerprint  string `json:"fingerprint"`
-	Package      string `json:"package,omitempty"`
-	SourceDigest string `json:"source_digest,omitempty"`
-	Manifest     string `json:"manifest"`
-	Executable   string `json:"executable"`
+	Fingerprint   string `json:"fingerprint"`
+	Package       string `json:"package,omitempty"`
+	SourceDigest  string `json:"source_digest,omitempty"`
+	Source        string `json:"source,omitempty"`
+	Version       string `json:"version,omitempty"`
+	ResolvedURL   string `json:"resolved_url,omitempty"`
+	ArchiveSHA256 string `json:"archive_sha256,omitempty"`
+	Manifest      string `json:"manifest"`
+	Executable    string `json:"executable"`
 }
 
 type UpstreamLoader func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error)
 
 type Lifecycle struct {
 	loadAPIUpstream UpstreamLoader
+	sourceResolver  pluginsource.Resolver
 }
 
-func NewLifecycle(loadAPIUpstream UpstreamLoader) *Lifecycle {
-	return &Lifecycle{loadAPIUpstream: loadAPIUpstream}
+func NewLifecycle(loadAPIUpstream UpstreamLoader, sourceResolver pluginsource.Resolver) *Lifecycle {
+	return &Lifecycle{loadAPIUpstream: loadAPIUpstream, sourceResolver: sourceResolver}
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
@@ -81,12 +88,12 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		lock.Providers[name] = entry
 	}
 
-	resolvedPlugins, err := writePluginArtifacts(context.Background(), configPath, cfg, paths)
+	resolvedPlugins, err := l.writePluginArtifacts(context.Background(), configPath, cfg, paths)
 	if err != nil {
 		return nil, err
 	}
-	for key, entry := range resolvedPlugins {
-		lock.Plugins[key] = entry
+	for key := range resolvedPlugins {
+		lock.Plugins[key] = resolvedPlugins[key]
 	}
 
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
@@ -139,6 +146,8 @@ type pluginFingerprintInput struct {
 	Name    string            `json:"name"`
 	Command string            `json:"command,omitempty"`
 	Package string            `json:"package,omitempty"`
+	Source  string            `json:"source,omitempty"`
+	Version string            `json:"version,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	Config  map[string]any    `json:"config,omitempty"`
@@ -263,16 +272,14 @@ func configHasRemoteAPIUpstreams(cfg *config.Config) bool {
 	return false
 }
 
-func configHasPluginPackages(cfg *config.Config) bool {
+func configHasPlugins(cfg *config.Config) bool {
 	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		if intg.Plugin != nil && intg.Plugin.Package != "" {
+		if cfg.Integrations[name].Plugin.HasManagedArtifacts() {
 			return true
 		}
 	}
 	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if rt.Plugin != nil && rt.Plugin.Package != "" {
+		if cfg.Runtimes[name].Plugin.HasManagedArtifacts() {
 			return true
 		}
 	}
@@ -314,7 +321,7 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	if lock.Version != LockVersion {
+	if lock.Version != LockVersion && lock.Version != LockVersionCompat {
 		return nil, fmt.Errorf("unsupported lockfile version %d", lock.Version)
 	}
 	if lock.Providers == nil {
@@ -334,7 +341,7 @@ func WriteLockfile(path string, lock *Lockfile) error {
 }
 
 func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool {
-	if lock == nil || lock.Version != LockVersion {
+	if lock == nil || (lock.Version != LockVersion && lock.Version != LockVersionCompat) {
 		return false
 	}
 	for name := range cfg.Integrations {
@@ -358,7 +365,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if intg.Plugin == nil || intg.Plugin.Package == "" {
+		if !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
 		entry, found := lock.Plugins[LockPluginKey("integration", name)]
@@ -369,7 +376,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	for name := range cfg.Runtimes {
 		rt := cfg.Runtimes[name]
-		if rt.Plugin == nil || rt.Plugin.Package == "" {
+		if !rt.Plugin.HasManagedArtifacts() {
 			continue
 		}
 		entry, found := lock.Plugins[LockPluginKey("runtime", name)]
@@ -390,6 +397,8 @@ func PluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMa
 		Name:    name,
 		Command: plugin.Command,
 		Package: plugin.Package,
+		Source:  plugin.Source,
+		Version: plugin.Version,
 		Args:    plugin.Args,
 		Env:     plugin.Env,
 	}
@@ -414,7 +423,14 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.ExecutableP
 		return false
 	}
 	fingerprint, err := PluginFingerprint(name, plugin, configMap)
-	if err != nil || entry.Fingerprint != fingerprint || entry.Package != plugin.Package {
+	if err != nil || entry.Fingerprint != fingerprint {
+		return false
+	}
+	if entry.Source != "" {
+		if entry.Source != plugin.Source || entry.Version != plugin.Version {
+			return false
+		}
+	} else if entry.Package != plugin.Package {
 		return false
 	}
 	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
@@ -425,7 +441,7 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.ExecutableP
 	if _, err := os.Stat(executablePath); err != nil {
 		return false
 	}
-	if entry.SourceDigest != "" && !strings.HasPrefix(plugin.Package, "https://") {
+	if entry.Source == "" && entry.SourceDigest != "" && !strings.HasPrefix(plugin.Package, "https://") {
 		digest, err := sourceDigestForPackage(plugin.Package)
 		if err != nil || digest != entry.SourceDigest {
 			return false
@@ -434,19 +450,27 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.ExecutableP
 	return true
 }
 
-func writePluginArtifacts(ctx context.Context, configPath string, cfg *config.Config, paths initPaths) (map[string]LockPluginEntry, error) {
+func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string, cfg *config.Config, paths initPaths) (map[string]LockPluginEntry, error) {
 	store := pluginstore.New(configPath)
 	written := make(map[string]LockPluginEntry)
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if intg.Plugin == nil || intg.Plugin.Package == "" {
+		if intg.Plugin == nil {
 			continue
 		}
 		configMap, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode plugin config for integration %q: %w", name, err)
 		}
-		entry, err := lockEntryForPackage(ctx, paths, store, "integration", name, intg.Plugin, configMap)
+		var entry LockPluginEntry
+		switch {
+		case intg.Plugin.Source != "":
+			entry, err = l.lockEntryForSource(ctx, paths, store, "integration", name, intg.Plugin, configMap)
+		case intg.Plugin.Package != "":
+			entry, err = lockEntryForPackage(ctx, paths, store, "integration", name, intg.Plugin, configMap)
+		default:
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -454,14 +478,22 @@ func writePluginArtifacts(ctx context.Context, configPath string, cfg *config.Co
 	}
 	for name := range cfg.Runtimes {
 		rt := cfg.Runtimes[name]
-		if rt.Plugin == nil || rt.Plugin.Package == "" {
+		if rt.Plugin == nil {
 			continue
 		}
 		configMap, err := config.NodeToMap(rt.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode runtime config for runtime %q: %w", name, err)
 		}
-		entry, err := lockEntryForPackage(ctx, paths, store, "runtime", name, rt.Plugin, configMap)
+		var entry LockPluginEntry
+		switch {
+		case rt.Plugin.Source != "":
+			entry, err = l.lockEntryForSource(ctx, paths, store, "runtime", name, rt.Plugin, configMap)
+		case rt.Plugin.Package != "":
+			entry, err = lockEntryForPackage(ctx, paths, store, "runtime", name, rt.Plugin, configMap)
+		default:
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -545,8 +577,60 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstor
 	}, nil
 }
 
+func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (LockPluginEntry, error) {
+	src, err := pluginsource.Parse(plugin.Source)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.source %q: %w", kind, name, plugin.Source, err)
+	}
+	if l.sourceResolver == nil {
+		return LockPluginEntry{}, fmt.Errorf("%s %q: source plugin resolution requires a source resolver", kind, name)
+	}
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.Source, plugin.Version, err)
+	}
+	defer resolved.Cleanup()
+
+	installed, err := store.Install(resolved.LocalPath)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("%s %q install source plugin: %w", kind, name, err)
+	}
+
+	if installed.Manifest.Source != plugin.Source {
+		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, plugin.Source)
+	}
+	if installed.Manifest.Version != plugin.Version {
+		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.Version)
+	}
+
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKind(kind), configMap); err != nil {
+		return LockPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
+	fingerprint, err := PluginFingerprint(name, plugin, configMap)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
+	}
+	manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
+	}
+	executablePath, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
+	if err != nil {
+		return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+	}
+	return LockPluginEntry{
+		Fingerprint:   fingerprint,
+		Source:        plugin.Source,
+		Version:       plugin.Version,
+		ResolvedURL:   resolved.ResolvedURL,
+		ArchiveSHA256: resolved.ArchiveSHA256,
+		Manifest:      filepath.ToSlash(manifestPath),
+		Executable:    filepath.ToSlash(executablePath),
+	}, nil
+}
+
 func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, locked bool) error {
-	if !configHasPluginPackages(cfg) {
+	if !configHasPlugins(cfg) {
 		return nil
 	}
 
@@ -561,7 +645,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if intg.Plugin == nil || intg.Plugin.Package == "" {
+		if !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
 		configMap, err := config.NodeToMap(intg.Plugin.Config)
@@ -574,7 +658,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 	}
 	for name := range cfg.Runtimes {
 		rt := cfg.Runtimes[name]
-		if rt.Plugin == nil || rt.Plugin.Package == "" {
+		if !rt.Plugin.HasManagedArtifacts() {
 			continue
 		}
 		configMap, err := config.NodeToMap(rt.Config)
@@ -598,7 +682,11 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Package != plugin.Package {
+	if entry.Source != "" {
+		if entry.Fingerprint != fingerprint || entry.Source != plugin.Source || entry.Version != plugin.Version {
+			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", kind, name, paths.configPath)
+		}
+	} else if entry.Fingerprint != fingerprint || entry.Package != plugin.Package {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", kind, name, paths.configPath)
 	}
 
