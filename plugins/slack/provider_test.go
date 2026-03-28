@@ -92,7 +92,7 @@ func TestListChannels(t *testing.T) {
 	if log.headers["Authorization"] != "Bearer "+testToken {
 		t.Errorf("auth = %s, want Bearer %s", log.headers["Authorization"], testToken)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200", result.Status)
 	}
 }
@@ -119,7 +119,7 @@ func TestSendMessage(t *testing.T) {
 	if log.path != "/api/"+methodChatPostMessage {
 		t.Errorf("path = %s, want /api/%s", log.path, methodChatPostMessage)
 	}
-	if log.contentType != "application/json" {
+	if log.contentType != contentTypeJSON {
 		t.Errorf("content-type = %s, want application/json", log.contentType)
 	}
 	if log.body["channel"] != testChannel {
@@ -128,7 +128,7 @@ func TestSendMessage(t *testing.T) {
 	if log.body["text"] != testMessage {
 		t.Errorf("body text = %s, want %s", log.body["text"], testMessage)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200", result.Status)
 	}
 }
@@ -160,7 +160,7 @@ func TestListUsers(t *testing.T) {
 	if log.query["cursor"] != testCursor {
 		t.Errorf("query cursor = %s, want %s", log.query["cursor"], testCursor)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200", result.Status)
 	}
 }
@@ -192,7 +192,7 @@ func TestReadHistory(t *testing.T) {
 	if log.query["limit"] != strconv.Itoa(testLimit) {
 		t.Errorf("query limit = %s, want %d", log.query["limit"], testLimit)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200", result.Status)
 	}
 }
@@ -226,7 +226,7 @@ func TestSearchMessages(t *testing.T) {
 	if log.query["count"] != strconv.Itoa(testCount) {
 		t.Errorf("count = %s, want %d", log.query["count"], testCount)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200", result.Status)
 	}
 }
@@ -245,7 +245,7 @@ func TestSlackAPIError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected transport error: %v", err)
 	}
-	if result.Status != 200 {
+	if result.Status != http.StatusOK {
 		t.Errorf("status = %d, want 200 (Slack returns 200 for API errors)", result.Status)
 	}
 	var body map[string]any
@@ -283,7 +283,7 @@ func TestUnknownOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Status != 404 {
+	if result.Status != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", result.Status)
 	}
 }

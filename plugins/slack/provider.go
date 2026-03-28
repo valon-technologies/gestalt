@@ -26,6 +26,8 @@ const (
 	methodUsersList            = "users.list"
 	methodConversationsHistory = "conversations.history"
 	methodSearchMessages       = "search.messages"
+
+	contentTypeJSON = "application/json"
 )
 
 type slackProvider struct {
@@ -47,7 +49,7 @@ func (p *slackProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        opListChannels,
 			Description: "List conversations/channels",
-			Method:      "GET",
+			Method:      http.MethodGet,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "limit", Type: "int", Description: "Maximum results to return"},
 				{Name: "cursor", Type: "string", Description: "Pagination cursor"},
@@ -56,7 +58,7 @@ func (p *slackProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        opSendMessage,
 			Description: "Send a message to a channel",
-			Method:      "POST",
+			Method:      http.MethodPost,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "channel", Type: "string", Description: "Channel ID", Required: true},
 				{Name: "text", Type: "string", Description: "Message text", Required: true},
@@ -65,7 +67,7 @@ func (p *slackProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        opListUsers,
 			Description: "List workspace users",
-			Method:      "GET",
+			Method:      http.MethodGet,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "limit", Type: "int", Description: "Maximum results to return"},
 				{Name: "cursor", Type: "string", Description: "Pagination cursor"},
@@ -74,7 +76,7 @@ func (p *slackProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        opReadHistory,
 			Description: "Read message history for a channel",
-			Method:      "GET",
+			Method:      http.MethodGet,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "channel", Type: "string", Description: "Channel ID", Required: true},
 				{Name: "limit", Type: "int", Description: "Maximum results to return"},
@@ -84,7 +86,7 @@ func (p *slackProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        opSearchMessages,
 			Description: "Search messages across the workspace",
-			Method:      "GET",
+			Method:      http.MethodGet,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "query", Type: "string", Description: "Search query", Required: true},
 				{Name: "count", Type: "int", Description: "Number of results to return"},
@@ -106,7 +108,7 @@ func (p *slackProvider) Execute(ctx context.Context, operation string, params ma
 	case opSearchMessages:
 		return p.searchMessages(ctx, params, token)
 	default:
-		return &pluginsdk.OperationResult{Status: 404, Body: `{"error":"unknown operation"}`}, nil
+		return &pluginsdk.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
 }
 
@@ -189,7 +191,7 @@ func (p *slackProvider) doPost(ctx context.Context, method string, body any, tok
 		return nil, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentTypeJSON)
 	return p.do(req)
 }
 
