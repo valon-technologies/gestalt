@@ -114,6 +114,11 @@ func runServer(env *bootstrapEnv) error {
 		log.Printf("  integration callback: %s%s", env.Config.Server.BaseURL, config.IntegrationCallbackPath)
 	}
 
+	uiHandler, err := resolveUIHandler(env.Config)
+	if err != nil {
+		return fmt.Errorf("resolving ui handler: %w", err)
+	}
+
 	mcpSlot := &lateHandler{}
 	var mcpHandler http.Handler = mcpSlot
 
@@ -134,7 +139,7 @@ func runServer(env *bootstrapEnv) error {
 			datastoreReadiness(result.Datastore),
 		),
 		MCPHandler: mcpHandler,
-		WebUI:      webui.Handler(),
+		WebUI:      uiHandler,
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
@@ -190,6 +195,16 @@ func runServer(env *bootstrapEnv) error {
 	}
 
 	return nil
+}
+
+func resolveUIHandler(cfg *config.Config) (http.Handler, error) {
+	if cfg.UI.Plugin == nil {
+		return webui.EmbeddedHandler(), nil
+	}
+	if cfg.UI.Plugin.ResolvedAssetRoot != "" {
+		return webui.DirHandler(cfg.UI.Plugin.ResolvedAssetRoot)
+	}
+	return nil, fmt.Errorf("ui plugin configured but asset root not resolved")
 }
 
 type mcpSurface struct {
