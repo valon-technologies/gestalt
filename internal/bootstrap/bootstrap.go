@@ -25,7 +25,6 @@ type Deps struct {
 	SQLDB         any // *sql.DB when available, nil otherwise
 	SQLDialect    any // Placeholder(int)string when available, nil otherwise
 	Egress        EgressDeps
-	DevMode       bool
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -67,7 +66,6 @@ type Result struct {
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
 	Egress           EgressDeps
-	DevMode          bool
 
 	mu                sync.Mutex
 	extensionsStarted bool
@@ -147,7 +145,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
-		DevMode:       cfg.Server.DevMode,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)
@@ -215,7 +212,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:        audit,
 		SecretManager:    sm,
 		Egress:           deps.Egress,
-		DevMode:          cfg.Server.DevMode,
 	}, nil
 }
 

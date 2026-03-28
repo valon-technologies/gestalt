@@ -204,23 +204,6 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	}
 }
 
-func TestBootstrapDevMode(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Server.DevMode = true
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if !result.DevMode {
-		t.Error("DevMode: got false, want true")
-	}
-}
-
 func TestBootstrapDefaultProviderFactory(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

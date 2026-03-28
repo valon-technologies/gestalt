@@ -65,7 +65,6 @@ config:
     port: 8080
     base_url: "${GESTALT_BASE_URL}"
     encryption_key: "${GESTALT_ENCRYPTION_KEY}"
-    dev_mode: false
   auth:
     provider: google
     config:

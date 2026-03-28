@@ -34,10 +34,9 @@ If no config file exists and you did not pass `--config`, `gestaltd` creates `~/
 
 The generated local config uses:
 
-- `auth.provider: local`
+- `auth.provider: none`
 - `datastore.provider: sqlite`
 - `secrets.provider: env`
-- `server.dev_mode: true`
 - a generated `server.encryption_key`
 - `~/.gestalt/gestalt.db` as the SQLite database
 
@@ -47,20 +46,16 @@ The server listens on `http://localhost:8080`. The web UI is served from that sa
   The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd bundle` followed by `gestaltd serve --locked`.
 </Callout>
 
-## 2. Open The UI And Sign In
+## 2. Open The UI
 
 <Steps>
 ### Open the server
 
 Visit `http://localhost:8080`.
 
-### Sign in
-
-The generated config uses the built-in `local` auth provider, so you can sign in without Google or OIDC credentials.
-
 ### Inspect the default environment
 
-Because the generated config enables `server.dev_mode: true`, dev-only surfaces such as the built-in `echo` provider are available for local experimentation.
+The generated config uses `auth.provider: none`, so no sign-in is required. The built-in `echo` provider is available for local experimentation.
 </Steps>
 
 ## 3. Switch To An Explicit Config
@@ -71,11 +66,10 @@ Save this as `gestalt.yaml`:
 server:
   port: 8080
   base_url: http://localhost:8080
-  dev_mode: true
   encryption_key: change-me
 
 auth:
-  provider: local
+  provider: none
 
 datastore:
   provider: sqlite

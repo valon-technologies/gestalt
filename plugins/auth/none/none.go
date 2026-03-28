@@ -27,9 +27,6 @@ func (p *Provider) ValidateToken(_ context.Context, _ string) (*core.UserIdentit
 	return nil, fmt.Errorf("none auth provider does not validate tokens")
 }
 
-var Factory bootstrap.AuthFactory = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
-	if !deps.DevMode {
-		return nil, fmt.Errorf("none auth provider requires server.dev_mode: true")
-	}
+var Factory bootstrap.AuthFactory = func(_ yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
 	return &Provider{}, nil
 }

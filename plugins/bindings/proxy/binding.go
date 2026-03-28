@@ -158,7 +158,6 @@ var sanitizedHeaders = func() map[string]bool {
 		"Cookie":            true,
 		"Host":              true,
 		"Content-Length":    true,
-		"X-Dev-User-Email":  true,
 		"X-Forwarded-Host":  true,
 		"X-Forwarded-Proto": true,
 	}

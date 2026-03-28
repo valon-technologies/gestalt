@@ -38,13 +38,12 @@ import (
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
 	cfg := server.Config{
-		Auth:      &coretesting.StubAuthProvider{N: "test"},
+		Auth:      &coretesting.StubAuthProvider{N: "none"},
 		Datastore: &coretesting.StubDatastore{},
 		Providers: func() *registry.PluginMap[core.Provider] {
 			reg := registry.New()
 			return &reg.Providers
 		}(),
-		DevMode:     false,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
 	}
 	for _, opt := range opts {
@@ -256,7 +255,9 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 
 func TestAuthMiddleware_NoAuth(t *testing.T) {
 	t.Parallel()
-	ts := newTestServer(t)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
@@ -276,31 +277,6 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 	}
 	if body["error"] == "" {
 		t.Fatal("expected error message in response")
-	}
-}
-
-func TestAuthMiddleware_DevMode(t *testing.T) {
-	t.Parallel()
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 }
 
@@ -386,7 +362,6 @@ func TestListIntegrations(t *testing.T) {
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -397,7 +372,6 @@ func TestListIntegrations(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -436,7 +410,6 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -452,7 +425,6 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -486,7 +458,6 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 		StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -497,7 +468,6 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -552,7 +522,6 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -563,7 +532,6 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 	defer ts.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -595,7 +563,6 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	stub2 := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
@@ -614,7 +581,6 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -653,7 +619,6 @@ func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 
 	stub := &coretesting.StubIntegration{N: "test-integ", DN: "Test"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
@@ -664,7 +629,6 @@ func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -681,7 +645,6 @@ func TestListIntegrations_ListTokensError(t *testing.T) {
 
 	stub := &coretesting.StubIntegration{N: "test-integ", DN: "Test"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -695,7 +658,6 @@ func TestListIntegrations_ListTokensError(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -713,7 +675,6 @@ func TestDisconnectIntegration(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	var deletedID string
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
@@ -738,7 +699,6 @@ func TestDisconnectIntegration(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -759,7 +719,6 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
@@ -773,7 +732,6 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -795,7 +753,6 @@ func TestListOperations(t *testing.T) {
 		},
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -806,7 +763,6 @@ func TestListOperations(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -838,12 +794,10 @@ func TestListOperations(t *testing.T) {
 func TestListOperations_NotFound(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/nonexistent/operations", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -875,7 +829,6 @@ func TestExecuteOperation(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -889,7 +842,6 @@ func TestExecuteOperation(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing?foo=bar", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -918,7 +870,6 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	var gotParams map[string]any
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Invoker = &testutil.StubInvoker{
 			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, _, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
@@ -935,7 +886,6 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	defer ts.Close()
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/custom-provider/custom-operation", bytes.NewBufferString(`{"foo":"bar"}`))
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -962,7 +912,6 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -972,7 +921,6 @@ func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/nonexistent/some_op", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -995,7 +943,6 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1006,7 +953,6 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/nonexistent", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1029,7 +975,6 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1043,7 +988,6 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1225,7 +1169,6 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1238,7 +1181,6 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
 	req.Header.Set("Authorization", "Bearer ignored")
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1287,7 +1229,6 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1303,7 +1244,6 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 	startBody := bytes.NewBufferString(`{"integration":"slack"}`)
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
 	if err != nil {
@@ -1359,7 +1299,6 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack"}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1388,7 +1327,6 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1399,7 +1337,6 @@ func TestCreateAndListAPITokens(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name":"my-token","scopes":"read"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1427,7 +1364,6 @@ func TestRevokeAPIToken(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -1443,7 +1379,6 @@ func TestRevokeAPIToken(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens/tok-123", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1467,7 +1402,6 @@ func TestRevokeAPIToken_WrongUser(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				if email == "owner@example.com" {
@@ -1486,7 +1420,6 @@ func TestRevokeAPIToken_WrongUser(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens/tok-owned-by-a", nil)
-	req.Header.Set("X-Dev-User-Email", "attacker@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1504,7 +1437,6 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 
 	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Now = func() time.Time { return fixedNow }
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1516,7 +1448,6 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name":"expiry-test","scopes":"read"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1571,7 +1502,6 @@ func TestExecuteOperation_POST(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1586,7 +1516,6 @@ func TestExecuteOperation_POST(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"text":"hello"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/send", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1742,7 +1671,6 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1754,7 +1682,6 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 
 	startBody := bytes.NewBufferString(`{"integration":"gitlab"}`)
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
 	if err != nil {
@@ -1795,7 +1722,6 @@ func TestCallbackPathConstants(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -1879,7 +1805,6 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1901,7 +1826,6 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1952,7 +1876,6 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	// Token expires in 3 minutes (within threshold) but still valid
 	expiresInThree := time.Now().Add(3 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -1974,7 +1897,6 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2010,7 +1932,6 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 
 	alreadyExpired := time.Now().Add(-10 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2028,7 +1949,6 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2063,7 +1983,6 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2080,7 +1999,6 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2117,7 +2035,6 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2134,7 +2051,6 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2164,7 +2080,6 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2182,7 +2097,6 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/manual-api/get", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2222,7 +2136,6 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2244,7 +2157,6 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2286,7 +2198,6 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2308,7 +2219,6 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2353,7 +2263,6 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	tokenCallCount := 0
 	var storedToken *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2383,7 +2292,6 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2420,7 +2328,6 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2441,7 +2348,6 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2474,7 +2380,6 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 	expiresSoon := time.Now().Add(3 * time.Minute)
 	tokenCallCount := 0
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2497,7 +2402,6 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2544,7 +2448,6 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2559,7 +2462,6 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/noop/ping", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2592,7 +2494,6 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, echoProvider)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -2604,7 +2505,6 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"message":"hello"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/echo/echo", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2652,14 +2552,12 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 
 	httpSrv := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = providers
 		cfg.Datastore = ds
 	})
 	defer httpSrv.Close()
 
 	httpReq, _ := http.NewRequest(http.MethodGet, httpSrv.URL+"/api/v1/echo/search?q=hello", nil)
-	httpReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		t.Fatalf("HTTP request: %v", err)
@@ -2717,12 +2615,10 @@ func TestListRuntimes_NoRuntimes(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2751,13 +2647,11 @@ func TestListRuntimes_WithRuntimes(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Runtimes = runtimes
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2788,7 +2682,6 @@ func TestConnectManual(t *testing.T) {
 
 	var stored *core.IntegrationToken
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
@@ -2806,7 +2699,6 @@ func TestConnectManual(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2843,14 +2735,12 @@ func TestConnectManual_OAuthProviderRejected(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack"})
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"slack","credential":"some-key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2867,13 +2757,11 @@ func TestConnectManual_MissingFields(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2890,13 +2778,11 @@ func TestConnectManual_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"nonexistent","credential":"key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2913,7 +2799,6 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
@@ -2922,7 +2807,6 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"integration":"manual-svc","scopes":[]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -2947,12 +2831,10 @@ func TestListBindings_NoBindings(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2983,13 +2865,11 @@ func TestListBindings_WithBindings(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -3029,7 +2909,6 @@ func TestBindingRoutesMounted(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3074,6 +2953,7 @@ func TestSurfaceBindingRequiresAuth(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Bindings = bindings
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3157,6 +3037,7 @@ func TestProxyBindingRequiresAuth(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Bindings = bindings
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3238,7 +3119,6 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			}
 
 			ts := newTestServer(t, func(cfg *server.Config) {
-				cfg.DevMode = true
 				cfg.Bindings = bindings
 				cfg.Datastore = &coretesting.StubDatastore{
 					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -3255,7 +3135,6 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			req.Header.Set("Content-Type", "text/plain")
 			req.Header.Set("X-Forwarded-Host", upstreamHost)
 			req.Header.Set("X-Forwarded-Proto", "http")
-			req.Header.Set("X-Dev-User-Email", "dev@example.com")
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -3296,7 +3175,6 @@ func TestProxyBindingRoutesMountedAsPrefix(t *testing.T) {
 			}
 			exactReq.Header.Set("X-Forwarded-Host", upstreamHost)
 			exactReq.Header.Set("X-Forwarded-Proto", "http")
-			exactReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 
 			resp, err = http.DefaultClient.Do(exactReq)
 			if err != nil {
@@ -3411,16 +3289,13 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, ds)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = providers
 		cfg.Datastore = ds
 		cfg.MCPHandler = mcpHandler
 	})
 	defer ts.Close()
 
-	devHeaders := map[string]string{"X-Dev-User-Email": "dev@example.com"}
-
-	status, resp := mcpJSONRPC(t, ts, devHeaders, map[string]any{
+	status, resp := mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -3441,7 +3316,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 		t.Fatal("initialize: missing serverInfo")
 	}
 
-	status, resp = mcpJSONRPC(t, ts, devHeaders, map[string]any{
+	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/list",
@@ -3474,6 +3349,7 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, ds)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.MCPHandler = mcpHandler
 	})
 	defer ts.Close()
@@ -3552,16 +3428,13 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, ds)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = providers
 		cfg.Datastore = ds
 		cfg.MCPHandler = mcpHandler
 	})
 	defer ts.Close()
 
-	devHeaders := map[string]string{"X-Dev-User-Email": "dev@example.com"}
-
-	mcpJSONRPC(t, ts, devHeaders, map[string]any{
+	mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -3572,7 +3445,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		},
 	})
 
-	status, resp := mcpJSONRPC(t, ts, devHeaders, map[string]any{
+	status, resp := mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/list",
@@ -3593,7 +3466,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		t.Fatalf("expected clickhouse_run_query, got %v", firstTool["name"])
 	}
 
-	status, resp = mcpJSONRPC(t, ts, devHeaders, map[string]any{
+	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
 		"method":  "tools/call",
@@ -3626,7 +3499,6 @@ func TestMCPEndpoint_NotMountedWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 	})
 	defer ts.Close()
 
@@ -3637,7 +3509,6 @@ func TestMCPEndpoint_NotMountedWhenDisabled(t *testing.T) {
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST /mcp: %v", err)
@@ -3665,7 +3536,6 @@ func TestMaxBodySize(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -3680,7 +3550,6 @@ func TestMaxBodySize(t *testing.T) {
 
 	largeBody := bytes.NewReader(bytes.Repeat([]byte("A"), (1<<20)+1))
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/do_thing", largeBody)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -3711,7 +3580,6 @@ func TestErrorSanitization(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -3725,7 +3593,6 @@ func TestErrorSanitization(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -3756,93 +3623,6 @@ func (s *stubAuthWithToken) IssueSessionToken(identity *core.UserIdentity) (stri
 
 func (s *stubAuthWithToken) SessionTokenTTL() time.Duration {
 	return time.Hour
-}
-
-func TestDevLogin(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Auth = &stubAuthWithToken{StubAuthProvider: coretesting.StubAuthProvider{N: "test"}}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"email":"dev@test.local"}`)
-	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
-	if err != nil {
-		t.Fatalf("POST /api/dev-login: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["email"] != "dev@test.local" {
-		t.Fatalf("expected email dev@test.local, got %v", result["email"])
-	}
-	cookies := resp.Cookies()
-	var sessionCookie *http.Cookie
-	for _, c := range cookies {
-		if c.Name == "session_token" {
-			sessionCookie = c
-			break
-		}
-	}
-	if sessionCookie == nil {
-		t.Fatal("expected session_token cookie to be set")
-	}
-	if sessionCookie.Value != "dev-token-dev@test.local" {
-		t.Fatalf("expected cookie value dev-token-dev@test.local, got %q", sessionCookie.Value)
-	}
-	if !sessionCookie.HttpOnly {
-		t.Fatal("expected session cookie to be HttpOnly")
-	}
-}
-
-func TestDevLogin_NotRegisteredWithoutDevMode(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = false
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"email":"dev@test.local"}`)
-	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
-	if err != nil {
-		t.Fatalf("POST /api/dev-login: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 404/405 when dev mode disabled, got %d", resp.StatusCode)
-	}
-}
-
-func TestDevLogin_EmptyEmail(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
-		cfg.Auth = &stubAuthWithToken{StubAuthProvider: coretesting.StubAuthProvider{N: "test"}}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"email":""}`)
-	resp, err := http.Post(ts.URL+"/api/dev-login", "application/json", body)
-	if err != nil {
-		t.Fatalf("POST /api/dev-login: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
-	}
 }
 
 func TestCookieAuth(t *testing.T) {
@@ -3969,7 +3749,6 @@ func TestProxyBinding_StaticPolicyDenyBlocksRequest(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -3982,7 +3761,6 @@ func TestProxyBinding_StaticPolicyDenyBlocksRequest(t *testing.T) {
 	doReq := func(path string) int {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/policy-proxy"+path, nil)
-		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
 		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
@@ -4030,7 +3808,6 @@ func TestProxyBinding_StaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -4043,7 +3820,6 @@ func TestProxyBinding_StaticPolicyDefaultDenyBlocksUnmatched(t *testing.T) {
 	doReq := func(path string) int {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/deny-proxy"+path, nil)
-		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
 		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
@@ -4095,7 +3871,6 @@ func TestProxyBinding_StaticPolicyFirstMatchWins(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -4108,7 +3883,6 @@ func TestProxyBinding_StaticPolicyFirstMatchWins(t *testing.T) {
 	doReq := func(path string) int {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/fmw-proxy"+path, nil)
-		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
 		req.Header.Set("X-Forwarded-Proto", "http")
 		resp, err := http.DefaultClient.Do(req)
@@ -4160,7 +3934,6 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Bindings = bindings
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -4171,7 +3944,6 @@ func TestProxyBinding_CredentialInjection(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/bindings/cred-proxy/items", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("X-Forwarded-Host", upstream.Listener.Addr().String())
 	req.Header.Set("X-Forwarded-Proto", "http")
 	resp, err := http.DefaultClient.Do(req)
@@ -4206,7 +3978,6 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.DevMode = true
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -4223,7 +3994,6 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -4311,7 +4081,6 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.DevMode = true
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.Datastore = &coretesting.StubDatastore{
 				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -4328,7 +4097,6 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-		req.Header.Set("X-Dev-User-Email", "dev@example.com")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)

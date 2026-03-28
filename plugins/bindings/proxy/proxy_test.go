@@ -205,7 +205,6 @@ func TestProxySanitizesInboundAuthHeaders(t *testing.T) {
 			"authorization":       r.Header.Get("Authorization"),
 			"cookie":              r.Header.Get("Cookie"),
 			"proxy_authorization": r.Header.Get("Proxy-Authorization"),
-			"x_dev_user_email":    r.Header.Get("X-Dev-User-Email"),
 			"x_custom":            r.Header.Get("X-Custom"),
 		})
 	}))
@@ -217,7 +216,6 @@ func TestProxySanitizesInboundAuthHeaders(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer inbound-token")
 	req.Header.Set("Cookie", "session=abc123")
 	req.Header.Set("Proxy-Authorization", "Basic creds")
-	req.Header.Set("X-Dev-User-Email", "user@example.com")
 	req.Header.Set("X-Custom", "should-pass")
 	w := httptest.NewRecorder()
 	b.Routes()[0].Handler.ServeHTTP(w, req)
@@ -238,9 +236,6 @@ func TestProxySanitizesInboundAuthHeaders(t *testing.T) {
 	}
 	if resp["proxy_authorization"] != "" {
 		t.Fatalf("inbound Proxy-Authorization should be stripped, got %q", resp["proxy_authorization"])
-	}
-	if resp["x_dev_user_email"] != "" {
-		t.Fatalf("inbound X-Dev-User-Email should be stripped, got %q", resp["x_dev_user_email"])
 	}
 	if resp["x_custom"] != "should-pass" {
 		t.Fatalf("X-Custom = %q, want should-pass", resp["x_custom"])

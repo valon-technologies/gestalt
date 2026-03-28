@@ -412,7 +412,6 @@ type loginRequest struct {
 type authInfoResponse struct {
 	Provider    string `json:"provider"`
 	DisplayName string `json:"display_name"`
-	DevMode     bool   `json:"dev_mode"`
 }
 
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
@@ -424,7 +423,6 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, authInfoResponse{
 		Provider:    provider,
 		DisplayName: displayName,
-		DevMode:     s.devMode,
 	})
 }
 
@@ -474,7 +472,7 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   !s.devMode,
+		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -486,7 +484,7 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   !s.devMode,
+		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -967,42 +965,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *Server) devLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.Email == "" {
-		writeError(w, http.StatusBadRequest, "email is required")
-		return
-	}
-
-	if _, err := s.datastore.FindOrCreateUser(r.Context(), req.Email); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return
-	}
-
-	issuer, ok := s.auth.(SessionTokenIssuer)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
-		return
-	}
-
-	token, err := issuer.IssueSessionToken(&core.UserIdentity{Email: req.Email})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to issue session token")
-		return
-	}
-
-	s.setSessionCookie(w, token)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"email": req.Email,
-	})
 }
 
 var (

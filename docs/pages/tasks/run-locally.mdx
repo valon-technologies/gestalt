@@ -47,16 +47,7 @@ This is the closest local approximation to a production deployment.
 
 ## Local Dev Features
 
-With `server.dev_mode: true`, Gestalt enables:
-
-- `POST /api/dev-login`
-- `X-Dev-User-Email`
-- dev CORS
-- the built-in `echo` provider and `echo` runtime
-
-<Callout>
-  Dev mode is for local work only. Do not carry it into production configs.
-</Callout>
+With `auth.provider: none`, Gestalt skips authentication entirely. All requests are handled as a single anonymous user, which is convenient for local development. The built-in `echo` provider and `echo` runtime are always available.
 
 ## The Frontend In Isolation
 

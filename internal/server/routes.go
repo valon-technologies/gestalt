@@ -6,13 +6,8 @@ func (s *Server) routes() {
 	r := s.router
 	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
-	if s.devMode {
-		r.Use(devCORS)
-	}
-
 	s.mountCoreRoutes(r)
 	s.mountMCPRoutes(r)
-	s.mountDevRoutes(r)
 	s.mountAPIRoutes(r)
 
 	if s.webUI != nil {
@@ -33,13 +28,6 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 		r.Use(s.authMiddleware)
 		r.Handle("/mcp", s.mcpHandler)
 	})
-}
-
-func (s *Server) mountDevRoutes(r chi.Router) {
-	if !s.devMode {
-		return
-	}
-	r.Post("/api/dev-login", s.devLogin)
 }
 
 func (s *Server) mountAPIRoutes(r chi.Router) {

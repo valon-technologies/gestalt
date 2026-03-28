@@ -126,7 +126,7 @@ func runServer(env *bootstrapEnv) error {
 		Invoker:           result.Invoker,
 		DefaultConnection: bootstrap.BuildConnectionMap(env.Config),
 		IntegrationDefs:   env.Config.Integrations,
-		DevMode:           result.DevMode,
+		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		Readiness: composeReadiness(
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
@@ -278,7 +278,7 @@ func validateConfig(configFlag string) error {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
-	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(preparedProviders, cfg.Server.DevMode))
+	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(preparedProviders))
 	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
@@ -296,7 +296,6 @@ func logConfigSummary(path string, cfg *config.Config) {
 	log.Printf("server:")
 	log.Printf("  port:       %d", cfg.Server.Port)
 	log.Printf("  base_url:   %s", maskEmpty(cfg.Server.BaseURL))
-	log.Printf("  dev_mode:   %t", cfg.Server.DevMode)
 	log.Printf("  encryption: %s", maskSecret(cfg.Server.EncryptionKey))
 	log.Printf("auth:")
 	log.Printf("  provider:   %s", cfg.Auth.Provider)
