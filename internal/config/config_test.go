@@ -985,6 +985,38 @@ integrations:
 			wantErr: true,
 		},
 		{
+			name: "plugin package with version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      package: ./plugins/dummy.tar.gz
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin command with version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      command: /tmp/plugin
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source without version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: example.com/org/repo/plugin
+`,
+			wantErr: true,
+		},
+		{
 			name: "egress default_action allow is valid",
 			yaml: `
 auth:

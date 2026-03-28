@@ -22,7 +22,7 @@ type lockPluginEntry = operator.LockPluginEntry
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle(func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error) {
 		return providercompiler.LoadDefinition(ctx, name, api, nil)
-	})
+	}, nil)
 }
 
 func initConfig(configFlag string) error {
