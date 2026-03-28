@@ -21,8 +21,8 @@ type Manifest struct {
 	Kinds         []string    `json:"kinds"`
 	Provider      *Provider       `json:"provider,omitempty"`
 	WebUI         *WebUIMetadata `json:"webui,omitempty"`
-	Artifacts     []Artifact     `json:"artifacts"`
-	Entrypoints   Entrypoints    `json:"entrypoints"`
+	Artifacts     []Artifact     `json:"artifacts,omitempty"`
+	Entrypoints   Entrypoints    `json:"entrypoints,omitempty"`
 }
 
 type WebUIMetadata struct {
