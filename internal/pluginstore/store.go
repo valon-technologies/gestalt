@@ -89,6 +89,12 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	destDir, _, err := s.destDirForManifest(manifest)
+	if err != nil {
+		return nil, err
+	}
+
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
 	if err != nil {
 		return nil, err
@@ -102,14 +108,6 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("artifact digest mismatch for %s: package has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
 	}
 
-	root := s.root
-	if root == "" {
-		return nil, fmt.Errorf("store root is required")
-	}
-	destDir, err := installDirFromManifest(root, manifest)
-	if err != nil {
-		return nil, err
-	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
@@ -135,6 +133,12 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	destDir, _, err := s.destDirForManifest(manifest)
+	if err != nil {
+		return nil, err
+	}
+
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
 	if err != nil {
 		return nil, err
@@ -153,15 +157,6 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	_ = artifactFile.Close()
 	if got := hex.EncodeToString(sum.Sum(nil)); got != artifact.SHA256 {
 		return nil, fmt.Errorf("artifact digest mismatch for %s: directory has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
-	}
-
-	root := s.root
-	if root == "" {
-		return nil, fmt.Errorf("store root is required")
-	}
-	destDir, err := installDirFromManifest(root, manifest)
-	if err != nil {
-		return nil, err
 	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
@@ -201,37 +196,41 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	return installed, nil
 }
 
+func (s *Store) destDirForManifest(manifest *pluginmanifestv1.Manifest) (string, PluginID, error) {
+	if s == nil || s.root == "" {
+		return "", PluginID{}, fmt.Errorf("store root is required")
+	}
+	if manifest == nil {
+		return "", PluginID{}, fmt.Errorf("manifest is required")
+	}
+	if manifest.SchemaVersion == pluginmanifestv1.SchemaVersion2 {
+		src, err := pluginsource.Parse(manifest.Source)
+		if err != nil {
+			return "", PluginID{}, fmt.Errorf("manifest source: %w", err)
+		}
+		destDir := filepath.Join(s.root, filepath.FromSlash(src.StorePath()), manifest.Version)
+		return destDir, PluginID{}, nil
+	}
+	id, err := pluginIDFromManifest(manifest)
+	if err != nil {
+		return "", PluginID{}, err
+	}
+	destDir := filepath.Join(s.root, id.Publisher, id.Name, id.Version)
+	return destDir, id, nil
+}
+
 func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error) {
 	if manifest == nil {
 		return PluginID{}, fmt.Errorf("manifest is required")
+	}
+	if manifest.ID == "" {
+		return PluginID{}, fmt.Errorf("manifest id is required for v1 plugins")
 	}
 	id, err := ParsePluginID(manifest.ID + "@" + manifest.Version)
 	if err != nil {
 		return PluginID{}, fmt.Errorf("manifest id/version must form a valid plugin identifier: %w", err)
 	}
 	return id, nil
-}
-
-func installDirFromManifest(root string, manifest *pluginmanifestv1.Manifest) (string, error) {
-	switch manifest.SchemaVersion {
-	case pluginmanifestv1.SchemaVersion:
-		id, err := pluginIDFromManifest(manifest)
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(root, id.Publisher, id.Name, id.Version), nil
-	case pluginmanifestv1.SchemaVersion2:
-		src, err := pluginsource.Parse(manifest.Source)
-		if err != nil {
-			return "", fmt.Errorf("manifest source is invalid: %w", err)
-		}
-		if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
-			return "", fmt.Errorf("manifest version is invalid: %w", err)
-		}
-		return filepath.Join(root, filepath.FromSlash(src.StorePath()), manifest.Version), nil
-	default:
-		return "", fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
-	}
 }
 
 func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact) *InstalledPlugin {
