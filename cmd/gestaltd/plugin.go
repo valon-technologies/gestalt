@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
@@ -38,7 +39,8 @@ func runPluginPackage(args []string) error {
 	input := fs.String("input", "", "path to plugin manifest or build directory")
 	output := fs.String("output", "", "path to write the packaged archive")
 	binary := fs.String("binary", "", "path to pre-built binary (scaffolds manifest automatically)")
-	id := fs.String("id", "", "plugin ID (publisher/name), required with --binary")
+	id := fs.String("id", "", "(deprecated) plugin ID (publisher/name), required with --binary")
+	source := fs.String("source", "", "plugin source (github.com/owner/repo/plugin), used with --binary")
 	kind := fs.String("kind", "provider", "plugin kind (provider or runtime), used with --binary")
 	targetOS := fs.String("os", runtime.GOOS, "target OS for the artifact, used with --binary")
 	targetArch := fs.String("arch", runtime.GOARCH, "target architecture, used with --binary")
@@ -50,8 +52,12 @@ func runPluginPackage(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
+	if *id != "" && *source != "" {
+		return fmt.Errorf("--id and --source are mutually exclusive")
+	}
+
 	if *binary != "" {
-		return packageFromBinary(*binary, *id, *kind, *version, *targetOS, *targetArch, *output)
+		return packageFromBinary(*binary, *id, *source, *kind, *version, *targetOS, *targetArch, *output)
 	}
 	return packageFromDir(*input, *output)
 }
@@ -78,12 +84,27 @@ func packageFromDir(input, output string) error {
 	return nil
 }
 
-func packageFromBinary(binaryPath, id, kind, version, targetOS, targetArch, output string) error {
-	if id == "" || output == "" {
-		return fmt.Errorf("usage: gestaltd plugin package --binary PATH --id ID --output PATH")
+func packageFromBinary(binaryPath, id, source, kind, version, targetOS, targetArch, output string) error {
+	if id == "" && source == "" {
+		return fmt.Errorf("usage: gestaltd plugin package --binary PATH --source SOURCE --output PATH")
+	}
+	if output == "" {
+		return fmt.Errorf("--output is required")
 	}
 	if kind != pluginmanifestv1.KindProvider && kind != pluginmanifestv1.KindRuntime {
 		return fmt.Errorf("kind must be %q or %q", pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime)
+	}
+
+	if source != "" {
+		if _, err := pluginsource.Parse(source); err != nil {
+			return fmt.Errorf("invalid --source: %w", err)
+		}
+		if err := pluginsource.ValidateVersion(version); err != nil {
+			return fmt.Errorf("invalid --version for source plugin: %w", err)
+		}
+	}
+	if id != "" {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: --id is deprecated, use --source instead\n")
 	}
 
 	workDir, err := os.MkdirTemp("", "gestalt-plugin-pkg-*")
@@ -104,7 +125,12 @@ func packageFromBinary(binaryPath, id, kind, version, targetOS, targetArch, outp
 		return fmt.Errorf("copying binary: %w", err)
 	}
 
-	manifest := buildManifest(id, kind, version, targetOS, targetArch, artifactRel, digest)
+	var manifest *pluginmanifestv1.Manifest
+	if source != "" {
+		manifest = buildManifestV2(source, kind, version, targetOS, targetArch, artifactRel, digest)
+	} else {
+		manifest = buildManifest(id, kind, version, targetOS, targetArch, artifactRel, digest)
+	}
 	data, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
 		return fmt.Errorf("encoding manifest: %w", err)
@@ -116,16 +142,32 @@ func packageFromBinary(binaryPath, id, kind, version, targetOS, targetArch, outp
 	if err := pluginpkg.CreatePackageFromDir(workDir, output); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "packaged %s (%s) -> %s\n", id, binaryPath, output)
+	label := id
+	if source != "" {
+		label = source
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "packaged %s (%s) -> %s\n", label, binaryPath, output)
 	return nil
 }
 
 func buildManifest(id, kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
+	m := newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest)
+	m.SchemaVersion = pluginmanifestv1.SchemaVersion
+	m.ID = id
+	return m
+}
+
+func buildManifestV2(source, kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
+	m := newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest)
+	m.SchemaVersion = pluginmanifestv1.SchemaVersion2
+	m.Source = source
+	return m
+}
+
+func newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
 	m := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            id,
-		Version:       version,
-		Kinds:         []string{kind},
+		Version: version,
+		Kinds:   []string{kind},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     targetOS,
@@ -189,7 +231,8 @@ func printPluginUsage(w io.Writer) {
 func printPluginPackageUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd plugin package --input PATH --output PATH")
-	writeUsageLine(w, "  gestaltd plugin package --binary PATH --id ID --output PATH")
+	writeUsageLine(w, "  gestaltd plugin package --binary PATH --source SOURCE --output PATH")
+	writeUsageLine(w, "  gestaltd plugin package --binary PATH --id ID --output PATH  (deprecated)")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Package a plugin for distribution. Use --input with an existing plugin")
 	writeUsageLine(w, "directory containing a manifest, or --binary to scaffold and package")
@@ -199,7 +242,8 @@ func printPluginPackageUsage(w io.Writer) {
 	writeUsageLine(w, "  --input     Path to plugin manifest or build directory")
 	writeUsageLine(w, "  --output    Path to write the packaged archive")
 	writeUsageLine(w, "  --binary    Path to pre-built binary (scaffolds manifest automatically)")
-	writeUsageLine(w, "  --id        Plugin ID (publisher/name), required with --binary")
+	writeUsageLine(w, "  --source    Plugin source (github.com/owner/repo/plugin), used with --binary")
+	writeUsageLine(w, "  --id        (deprecated) Plugin ID (publisher/name), use --source instead")
 	writeUsageLine(w, "  --kind      Plugin kind: provider or runtime (default: provider)")
 	writeUsageLine(w, "  --os        Target OS (default: current platform)")
 	writeUsageLine(w, "  --arch      Target architecture (default: current platform)")

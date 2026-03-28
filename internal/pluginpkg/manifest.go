@@ -10,18 +10,36 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
 const ManifestFile = "plugin.json"
 
 func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
+	var ver struct {
+		SchemaVersion int `json:"schema_version"`
+	}
+	if err := json.Unmarshal(data, &ver); err != nil {
+		return nil, fmt.Errorf("parse manifest JSON: %w", err)
+	}
+
+	var schemaBytes []byte
+	switch ver.SchemaVersion {
+	case pluginmanifestv1.SchemaVersion:
+		schemaBytes = pluginmanifestv1.ManifestJSONSchema
+	case pluginmanifestv1.SchemaVersion2:
+		schemaBytes = pluginmanifestv1.ManifestV2JSONSchema
+	default:
+		return nil, fmt.Errorf("unsupported manifest schema_version %d", ver.SchemaVersion)
+	}
+
 	var doc any
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
 	}
 	var schemaDoc any
-	if err := json.Unmarshal(pluginmanifestv1.ManifestJSONSchema, &schemaDoc); err != nil {
+	if err := json.Unmarshal(schemaBytes, &schemaDoc); err != nil {
 		return nil, fmt.Errorf("parse embedded manifest schema: %w", err)
 	}
 
@@ -51,8 +69,27 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is required")
 	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		return fmt.Errorf("manifest schema_version must be %d", pluginmanifestv1.SchemaVersion)
+
+	switch manifest.SchemaVersion {
+	case pluginmanifestv1.SchemaVersion:
+		if manifest.ID == "" {
+			return fmt.Errorf("manifest id is required for schema_version %d", pluginmanifestv1.SchemaVersion)
+		}
+		if manifest.Source != "" {
+			return fmt.Errorf("manifest source must not be set for schema_version %d", pluginmanifestv1.SchemaVersion)
+		}
+	case pluginmanifestv1.SchemaVersion2:
+		if manifest.ID != "" {
+			return fmt.Errorf("manifest id must not be set for schema_version %d", pluginmanifestv1.SchemaVersion2)
+		}
+		if _, err := pluginsource.Parse(manifest.Source); err != nil {
+			return fmt.Errorf("manifest source is invalid: %w", err)
+		}
+		if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
+			return fmt.Errorf("manifest version is invalid: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
 	}
 
 	artifactPaths := make(map[string]struct{}, len(manifest.Artifacts))

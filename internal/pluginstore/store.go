@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	pluginpkg "github.com/valon-technologies/gestalt/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
@@ -70,6 +71,7 @@ func New(configPath string) *Store {
 
 type InstalledPlugin struct {
 	PluginID       PluginID
+	Source         string
 	Root           string
 	ManifestPath   string
 	ExecutablePath string
@@ -84,10 +86,6 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("store is required")
 	}
 	_, manifest, err := pluginpkg.ReadPackageManifest(packagePath)
-	if err != nil {
-		return nil, err
-	}
-	id, err := pluginIDFromManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +106,10 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	if root == "" {
 		return nil, fmt.Errorf("store root is required")
 	}
-	destDir := filepath.Join(root, id.Publisher, id.Name, id.Version)
+	destDir, err := installDirFromManifest(root, manifest)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
@@ -122,16 +123,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	installed := &InstalledPlugin{
-		PluginID:       id,
-		Root:           destDir,
-		ManifestPath:   manifestPath,
-		ExecutablePath: executablePath,
-		ArtifactPath:   artifact.Path,
-		SHA256:         artifact.SHA256,
-		Manifest:       manifest,
-		Artifact:       artifact,
-	}
+	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact)
 	return installed, nil
 }
 
@@ -140,10 +132,6 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("store is required")
 	}
 	_, manifest, _, err := pluginpkg.LoadManifestFromPath(dirPath)
-	if err != nil {
-		return nil, err
-	}
-	id, err := pluginIDFromManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +159,10 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	if root == "" {
 		return nil, fmt.Errorf("store root is required")
 	}
-	destDir := filepath.Join(root, id.Publisher, id.Name, id.Version)
+	destDir, err := installDirFromManifest(root, manifest)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
@@ -205,16 +196,9 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	return &InstalledPlugin{
-		PluginID:       id,
-		Root:           destDir,
-		ManifestPath:   filepath.Join(destDir, pluginpkg.ManifestFile),
-		ExecutablePath: executablePath,
-		ArtifactPath:   artifact.Path,
-		SHA256:         artifact.SHA256,
-		Manifest:       manifest,
-		Artifact:       artifact,
-	}, nil
+	manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact)
+	return installed, nil
 }
 
 func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error) {
@@ -226,6 +210,48 @@ func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error)
 		return PluginID{}, fmt.Errorf("manifest id/version must form a valid plugin identifier: %w", err)
 	}
 	return id, nil
+}
+
+func installDirFromManifest(root string, manifest *pluginmanifestv1.Manifest) (string, error) {
+	switch manifest.SchemaVersion {
+	case pluginmanifestv1.SchemaVersion:
+		id, err := pluginIDFromManifest(manifest)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(root, id.Publisher, id.Name, id.Version), nil
+	case pluginmanifestv1.SchemaVersion2:
+		src, err := pluginsource.Parse(manifest.Source)
+		if err != nil {
+			return "", fmt.Errorf("manifest source is invalid: %w", err)
+		}
+		if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
+			return "", fmt.Errorf("manifest version is invalid: %w", err)
+		}
+		return filepath.Join(root, filepath.FromSlash(src.StorePath()), manifest.Version), nil
+	default:
+		return "", fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
+	}
+}
+
+func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact) *InstalledPlugin {
+	ip := &InstalledPlugin{
+		Root:           destDir,
+		ManifestPath:   manifestPath,
+		ExecutablePath: executablePath,
+		ArtifactPath:   artifact.Path,
+		SHA256:         artifact.SHA256,
+		Manifest:       manifest,
+		Artifact:       artifact,
+	}
+	switch manifest.SchemaVersion {
+	case pluginmanifestv1.SchemaVersion:
+		id, _ := pluginIDFromManifest(manifest)
+		ip.PluginID = id
+	case pluginmanifestv1.SchemaVersion2:
+		ip.Source = manifest.Source
+	}
+	return ip
 }
 
 func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest) (string, error) {
