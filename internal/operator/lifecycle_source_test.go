@@ -7,14 +7,27 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
+	ghresolver "github.com/valon-technologies/gestalt/internal/pluginsource/github"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+)
+
+const (
+	testOwner   = "testowner"
+	testRepo    = "testrepo"
+	testPlugin  = "testplugin"
+	testVersion = "1.0.0"
+	testSource  = "github.com/" + testOwner + "/" + testRepo + "/" + testPlugin
+	testBinary  = "fake-binary-content"
 )
 
 type fakeResolver struct {
@@ -373,5 +386,148 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 	if resolver.calls != callsBefore {
 		t.Errorf("resolver called during LoadForExecution (locked), want no additional calls")
+	}
+}
+
+func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	src := pluginsource.Source{
+		Host:   pluginsource.HostGitHub,
+		Owner:  testOwner,
+		Repo:   testRepo,
+		Plugin: testPlugin,
+	}
+	expectedAssetName := src.AssetName(testVersion)
+	expectedTag := src.ReleaseTag(testVersion)
+	releasePath := "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag
+	archivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+
+	var requestCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		switch r.URL.Path {
+		case releasePath:
+			browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + expectedAssetName
+			w.Header().Set("Content-Type", "application/json")
+			resp := map[string]any{
+				"assets": []map[string]any{
+					{
+						"name":                 expectedAssetName,
+						"url":                  "http://" + r.Host + "/asset-dl",
+						"browser_download_url": browserURL,
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		case "/asset-dl":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	configYAML := strings.Join([]string{
+		"auth:",
+		"  provider: noop",
+		"datastore:",
+		"  provider: sqlite",
+		"  config:",
+		"    path: " + filepath.Join(dir, "data.db"),
+		"server:",
+		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"integrations:",
+		"  alpha:",
+		"    plugin:",
+		"      source: " + testSource,
+		"      version: " + testVersion,
+	}, "\n") + "\n"
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolver := &ghresolver.GitHubResolver{BaseURL: srv.URL}
+	lc := NewLifecycle(nil, resolver)
+
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	if lock.Version != LockVersion {
+		t.Errorf("lock version = %d, want %d", lock.Version, LockVersion)
+	}
+
+	entry, ok := lock.Plugins[LockPluginKey("integration", "alpha")]
+	if !ok {
+		t.Fatal("lock entry for integration:alpha not found")
+	}
+	if entry.Source != testSource {
+		t.Errorf("entry.Source = %q, want %q", entry.Source, testSource)
+	}
+	if entry.Version != testVersion {
+		t.Errorf("entry.Version = %q, want %q", entry.Version, testVersion)
+	}
+	if entry.ResolvedURL == "" {
+		t.Error("entry.ResolvedURL is empty")
+	}
+	if entry.ArchiveSHA256 == "" {
+		t.Error("entry.ArchiveSHA256 is empty")
+	}
+	wantSHA := sha256hex(string(archiveData))
+	if entry.ArchiveSHA256 != wantSHA {
+		t.Errorf("entry.ArchiveSHA256 = %q, want %q", entry.ArchiveSHA256, wantSHA)
+	}
+	if entry.Package != "" {
+		t.Errorf("entry.Package should be empty for source plugins, got %q", entry.Package)
+	}
+
+	configDir := filepath.Dir(configPath)
+	lockPath := filepath.Join(configDir, InitLockfileName)
+	readBack, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if readBack.Version != LockVersion {
+		t.Errorf("lockfile on disk version = %d, want %d", readBack.Version, LockVersion)
+	}
+
+	wantInstallSuffix := filepath.Join("github.com", testOwner, testRepo, testPlugin, testVersion)
+	executablePath := resolveLockPath(configDir, entry.Executable)
+	if !strings.Contains(executablePath, wantInstallSuffix) {
+		t.Errorf("executable path %q does not contain expected store path %q", executablePath, wantInstallSuffix)
+	}
+	if _, err := os.Stat(executablePath); err != nil {
+		t.Errorf("executable not found at %s: %v", executablePath, err)
+	}
+	manifestPath := resolveLockPath(configDir, entry.Manifest)
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Errorf("manifest not found at %s: %v", manifestPath, err)
+	}
+
+	execData, err := os.ReadFile(executablePath)
+	if err != nil {
+		t.Fatalf("read executable: %v", err)
+	}
+	if string(execData) != testBinary {
+		t.Errorf("executable content = %q, want %q", execData, testBinary)
+	}
+
+	requestsBefore := requestCount.Load()
+	_, _, err = lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if got := requestCount.Load(); got != requestsBefore {
+		t.Errorf("server received %d requests during locked load, want 0", got-requestsBefore)
 	}
 }
