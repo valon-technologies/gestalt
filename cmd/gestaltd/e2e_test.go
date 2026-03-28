@@ -242,6 +242,7 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -272,6 +273,7 @@ integrations:
 	}
 }
 
+//nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -302,6 +304,7 @@ integrations:
 	}
 }
 
+//nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EValidateRejectsMalformedYAML(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
