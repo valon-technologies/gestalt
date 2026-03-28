@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/internal/egress"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,6 +65,8 @@ type EgressCredentialGrant struct {
 type ExecutablePluginDef struct {
 	Command string            `yaml:"command"`
 	Package string            `yaml:"package"`
+	Source  string            `yaml:"source"`
+	Version string            `yaml:"version"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Config  yaml.Node         `yaml:"config"`
@@ -526,14 +529,35 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	if plugin.Package != "" {
 		sourceCount++
 	}
+	if plugin.Source != "" {
+		sourceCount++
+	}
 	switch {
 	case sourceCount == 0:
-		return fmt.Errorf("config validation: %s %q plugin.command or plugin.package is required", kind, name)
+		return fmt.Errorf("config validation: %s %q plugin.command, plugin.package, or plugin.source is required", kind, name)
 	case sourceCount > 1:
-		return fmt.Errorf("config validation: %s %q plugin.command and plugin.package are mutually exclusive", kind, name)
-	case plugin.Command == "" && len(plugin.Args) > 0:
+		return fmt.Errorf("config validation: %s %q plugin.command, plugin.package, and plugin.source are mutually exclusive", kind, name)
+	}
+
+	if plugin.Source != "" {
+		if _, err := pluginsource.Parse(plugin.Source); err != nil {
+			return fmt.Errorf("config validation: %s %q plugin.source: %w", kind, name, err)
+		}
+		if plugin.Version == "" {
+			return fmt.Errorf("config validation: %s %q plugin.version is required when plugin.source is set", kind, name)
+		}
+		if err := pluginsource.ValidateVersion(plugin.Version); err != nil {
+			return fmt.Errorf("config validation: %s %q plugin.version: %w", kind, name, err)
+		}
+	}
+
+	if (plugin.Command != "" || plugin.Package != "") && plugin.Version != "" {
+		return fmt.Errorf("config validation: %s %q plugin.version is only valid with plugin.source", kind, name)
+	}
+	if plugin.Command == "" && len(plugin.Args) > 0 {
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
-	case strings.HasPrefix(plugin.Package, "http://"):
+	}
+	if strings.HasPrefix(plugin.Package, "http://") {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
 	return nil
