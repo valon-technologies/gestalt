@@ -95,22 +95,33 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
 	}
 
-	artifactPaths := make(map[string]struct{}, len(manifest.Artifacts))
-	artifactPlatforms := make(map[string]struct{}, len(manifest.Artifacts))
-	for _, artifact := range manifest.Artifacts {
-		if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
-			return err
+	hasExecutableKinds := false
+	for _, kind := range manifest.Kinds {
+		if kind == pluginmanifestv1.KindProvider || kind == pluginmanifestv1.KindRuntime {
+			hasExecutableKinds = true
+			break
 		}
-		if _, exists := artifactPaths[artifact.Path]; exists {
-			return fmt.Errorf("duplicate artifact path %q", artifact.Path)
-		}
-		artifactPaths[artifact.Path] = struct{}{}
+	}
 
-		key := artifact.OS + "/" + artifact.Arch
-		if _, exists := artifactPlatforms[key]; exists {
-			return fmt.Errorf("duplicate artifact platform %q", key)
+	var artifactPaths map[string]struct{}
+	if hasExecutableKinds {
+		artifactPaths = make(map[string]struct{}, len(manifest.Artifacts))
+		artifactPlatforms := make(map[string]struct{}, len(manifest.Artifacts))
+		for _, artifact := range manifest.Artifacts {
+			if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
+				return err
+			}
+			if _, exists := artifactPaths[artifact.Path]; exists {
+				return fmt.Errorf("duplicate artifact path %q", artifact.Path)
+			}
+			artifactPaths[artifact.Path] = struct{}{}
+
+			key := artifact.OS + "/" + artifact.Arch
+			if _, exists := artifactPlatforms[key]; exists {
+				return fmt.Errorf("duplicate artifact platform %q", key)
+			}
+			artifactPlatforms[key] = struct{}{}
 		}
-		artifactPlatforms[key] = struct{}{}
 	}
 
 	for _, kind := range manifest.Kinds {
@@ -135,11 +146,19 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 				return err
 			}
 		case pluginmanifestv1.KindWebUI:
+			if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion2 {
+				return fmt.Errorf("webui kind requires schema_version %d", pluginmanifestv1.SchemaVersion2)
+			}
 			if manifest.WebUI == nil {
 				return fmt.Errorf("webui metadata is required when kind %q is present", pluginmanifestv1.KindWebUI)
 			}
-			if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset_root"); err != nil {
+			if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset root"); err != nil {
 				return err
+			}
+			for _, other := range manifest.Kinds {
+				if other != pluginmanifestv1.KindWebUI {
+					return fmt.Errorf("webui kind cannot be combined with %q", other)
+				}
 			}
 		default:
 			return fmt.Errorf("unsupported manifest kind %q", kind)

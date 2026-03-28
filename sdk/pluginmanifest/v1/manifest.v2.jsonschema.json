@@ -73,9 +73,7 @@
     "webui": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "asset_root"
-      ],
+      "required": ["asset_root"],
       "properties": {
         "asset_root": {
           "type": "string",
