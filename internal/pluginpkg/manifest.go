@@ -17,21 +17,21 @@ import (
 const ManifestFile = "plugin.json"
 
 func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
-	var ver struct {
+	var header struct {
 		SchemaVersion int `json:"schema_version"`
 	}
-	if err := json.Unmarshal(data, &ver); err != nil {
+	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
 	}
 
-	var schemaBytes []byte
-	switch ver.SchemaVersion {
+	var rawSchema []byte
+	switch header.SchemaVersion {
 	case pluginmanifestv1.SchemaVersion:
-		schemaBytes = pluginmanifestv1.ManifestJSONSchema
+		rawSchema = pluginmanifestv1.ManifestJSONSchema
 	case pluginmanifestv1.SchemaVersion2:
-		schemaBytes = pluginmanifestv1.ManifestV2JSONSchema
+		rawSchema = pluginmanifestv1.ManifestV2JSONSchema
 	default:
-		return nil, fmt.Errorf("unsupported manifest schema_version %d", ver.SchemaVersion)
+		return nil, fmt.Errorf("unsupported manifest schema_version %d", header.SchemaVersion)
 	}
 
 	var doc any
@@ -39,7 +39,7 @@ func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
 	}
 	var schemaDoc any
-	if err := json.Unmarshal(schemaBytes, &schemaDoc); err != nil {
+	if err := json.Unmarshal(rawSchema, &schemaDoc); err != nil {
 		return nil, fmt.Errorf("parse embedded manifest schema: %w", err)
 	}
 
@@ -82,11 +82,14 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 		if manifest.ID != "" {
 			return fmt.Errorf("manifest id must not be set for schema_version %d", pluginmanifestv1.SchemaVersion2)
 		}
+		if manifest.Source == "" {
+			return fmt.Errorf("manifest source is required for schema_version %d", pluginmanifestv1.SchemaVersion2)
+		}
 		if _, err := pluginsource.Parse(manifest.Source); err != nil {
-			return fmt.Errorf("manifest source is invalid: %w", err)
+			return fmt.Errorf("manifest source: %w", err)
 		}
 		if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
-			return fmt.Errorf("manifest version is invalid: %w", err)
+			return fmt.Errorf("manifest version: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
