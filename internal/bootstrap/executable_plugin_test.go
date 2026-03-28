@@ -79,7 +79,7 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -141,8 +141,8 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 	}
 
 	factories := NewFactoryRegistry()
-	factories.Providers["search"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (core.Provider, error) {
-		return &catalogProviderWithOps{
+	factories.Providers["search"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (*ProviderBuildResult, error) {
+		return &ProviderBuildResult{Provider: &catalogProviderWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "search",
 				ConnMode: core.ConnectionModeNone,
@@ -160,10 +160,10 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 					},
 				},
 			},
-		}, nil
+		}}, nil
 	}
 
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -223,8 +223,8 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 	}
 
 	factories := NewFactoryRegistry()
-	factories.Providers["workspace"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (core.Provider, error) {
-		return &catalogProviderWithOps{
+	factories.Providers["workspace"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (*ProviderBuildResult, error) {
+		return &ProviderBuildResult{Provider: &catalogProviderWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "workspace",
 				ConnMode: core.ConnectionModeNone,
@@ -260,10 +260,10 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 					},
 				},
 			},
-		}, nil
+		}}, nil
 	}
 
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -324,8 +324,8 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 	}
 
 	factories := NewFactoryRegistry()
-	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (core.Provider, error) {
-		return &catalogProviderWithOps{
+	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ Deps) (*ProviderBuildResult, error) {
+		return &ProviderBuildResult{Provider: &catalogProviderWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "alpha",
 				ConnMode: core.ConnectionModeNone,
@@ -334,10 +334,10 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 				{Name: "rest_op", Description: "REST op", Method: http.MethodPost},
 				{Name: "hidden_op", Description: "Hidden op"},
 			},
-		}, nil
+		}}, nil
 	}
 
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestExecutableProviderAcceptsMinOnlyProtocolVersion(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}

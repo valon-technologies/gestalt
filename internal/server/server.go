@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
@@ -28,6 +29,7 @@ type Server struct {
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
 	defaultConnection  map[string]string
+	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
 	integrationDefs    map[string]config.IntegrationDef
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
@@ -47,6 +49,7 @@ type Config struct {
 	Bindings          *registry.PluginMap[core.Binding]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
+	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	IntegrationDefs   map[string]config.IntegrationDef
 	SecureCookies     bool
 	StateSecret       []byte
@@ -86,6 +89,7 @@ func New(cfg Config) (*Server, error) {
 		resolver:          resolver,
 		invoker:           cfg.Invoker,
 		defaultConnection: cfg.DefaultConnection,
+		connectionAuth:    cfg.ConnectionAuth,
 		integrationDefs:   cfg.IntegrationDefs,
 		noAuth:            noAuth,
 		secureCookies:     cfg.SecureCookies,

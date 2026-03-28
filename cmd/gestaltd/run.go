@@ -125,6 +125,7 @@ func runServer(env *bootstrapEnv) error {
 		Bindings:          result.Bindings,
 		Invoker:           result.Invoker,
 		DefaultConnection: bootstrap.BuildConnectionMap(env.Config),
+		ConnectionAuth:    result.ConnectionAuth,
 		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
