@@ -103,7 +103,6 @@ type ServerConfig struct {
 	Port          int    `yaml:"port"`
 	BaseURL       string `yaml:"base_url"`
 	EncryptionKey string `yaml:"encryption_key"`
-	DevMode       bool   `yaml:"dev_mode"`
 }
 
 // IntegrationDef represents either a declarative integration (connections +
@@ -358,8 +357,8 @@ func ValidateRuntime(cfg *Config) error {
 	if cfg.Datastore.Provider == "" {
 		return fmt.Errorf("config validation: datastore.provider is required")
 	}
-	if !cfg.Server.DevMode && cfg.Server.EncryptionKey == "" {
-		return fmt.Errorf("config validation: server.encryption_key is required (set server.dev_mode to true to skip)")
+	if cfg.Server.EncryptionKey == "" {
+		return fmt.Errorf("config validation: server.encryption_key is required")
 	}
 	return nil
 }

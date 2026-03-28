@@ -166,7 +166,6 @@ func TestE2EBundleServeLockedGoldenPath(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo", strings.NewReader(`{"message":"hello"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Dev-User-Email", "test@example.com")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
@@ -352,14 +351,13 @@ func writeE2EConfig(t *testing.T, dir, packageRef string, port int) string {
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`auth:
-  provider: local
+  provider: none
 datastore:
   provider: sqlite
   config:
     path: %s
 server:
   port: %d
-  dev_mode: true
   encryption_key: test-e2e-key
 integrations:
   example:

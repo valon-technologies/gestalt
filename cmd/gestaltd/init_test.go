@@ -141,7 +141,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 runtimes:
   worker:
@@ -208,7 +207,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 integrations:
   graphapi:
@@ -292,7 +290,6 @@ func TestValidateConfigRejectsPluginWithConnectionsOrAPI(t *testing.T) {
 datastore:
   provider: sqlite
 server:
-  dev_mode: true
   encryption_key: test-key
 ` + tc.body
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
@@ -554,7 +551,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 integrations:
   restapi:
@@ -608,7 +604,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 integrations:
   example:
@@ -651,7 +646,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 runtimes:
   example:

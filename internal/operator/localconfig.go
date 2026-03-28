@@ -39,7 +39,6 @@ secrets:
   provider: env
 server:
   port: 8080
-  dev_mode: true
   encryption_key: %q
 `, dbPath, hex.EncodeToString(key))
 

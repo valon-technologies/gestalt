@@ -15,6 +15,8 @@ type contextKey string
 const (
 	userContextKey   contextKey = "user"
 	userIDContextKey contextKey = "userID"
+
+	anonymousEmail = "anonymous@gestalt"
 )
 
 func UserFromContext(ctx context.Context) *core.UserIdentity {
@@ -49,18 +51,9 @@ func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.noAuth {
-			ctx := principal.WithPrincipal(r.Context(), s.resolver.ResolveEmail("local@gestalt.local"))
+			ctx := principal.WithPrincipal(r.Context(), s.anonymousPrincipal)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
-		}
-
-		if s.devMode {
-			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
-				p := s.resolver.ResolveEmail(email)
-				ctx := principal.WithPrincipal(r.Context(), p)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
 		}
 
 		var p *principal.Principal
@@ -102,18 +95,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.noAuth {
-			ctx := principal.WithPrincipal(r.Context(), s.resolver.ResolveEmail("local@gestalt.local"))
+			ctx := principal.WithPrincipal(r.Context(), s.anonymousPrincipal)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
-		}
-
-		if s.devMode {
-			if email := r.Header.Get("X-Dev-User-Email"); email != "" {
-				p := s.resolver.ResolveEmail(email)
-				ctx := principal.WithPrincipal(r.Context(), p)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
 		}
 
 		var p *principal.Principal
@@ -147,21 +131,5 @@ func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 
 		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-// devCORS permits cross-origin requests in dev mode so the Next.js dev
-// server (hot reload on a different port) can reach the API.
-func devCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
 }

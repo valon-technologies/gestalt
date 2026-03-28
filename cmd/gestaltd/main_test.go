@@ -133,7 +133,6 @@ datastore:
   config:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
-  dev_mode: true
   encryption_key: test-key
 integrations:
   broken:

@@ -127,11 +127,6 @@ If there is exactly one stored connection for an integration, Gestalt uses it au
 
 If there are multiple stored instances and the caller does not specify which one to use, invocation fails with an ambiguity error. That is a deliberate safeguard; Gestalt does not guess when more than one upstream account could apply.
 
-## Dev Mode Overrides
+## No-Auth Mode
 
-In `server.dev_mode: true`, Gestalt exposes local testing shortcuts:
-
-- `POST /api/dev-login`
-- `X-Dev-User-Email` on authenticated routes
-
-Those are development features only. They bypass normal browser auth flows so you can exercise provider and binding behavior quickly.
+When `auth.provider: none`, Gestalt skips authentication entirely. All requests are treated as coming from a single anonymous user. This is useful for local development and testing.
