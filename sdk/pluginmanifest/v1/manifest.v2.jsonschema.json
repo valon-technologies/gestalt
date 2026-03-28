@@ -115,6 +115,8 @@
       },
       "then": {
         "required": [
+          "artifacts",
+          "entrypoints",
           "provider"
         ],
         "properties": {
@@ -137,6 +139,10 @@
         }
       },
       "then": {
+        "required": [
+          "artifacts",
+          "entrypoints"
+        ],
         "properties": {
           "entrypoints": {
             "required": [

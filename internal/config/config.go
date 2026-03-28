@@ -301,6 +301,10 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 		cfg.Runtimes[name] = rt
 	}
+
+	if cfg.UI.Plugin != nil {
+		cfg.UI.Plugin.Package = resolvePackagePath(baseDir, cfg.UI.Plugin.Package)
+	}
 }
 
 func resolveRelativePath(baseDir, value string) string {
