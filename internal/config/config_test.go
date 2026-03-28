@@ -1056,6 +1056,118 @@ egress:
 `,
 			wantErr: true,
 		},
+		{
+			name: "plugin source with version is valid",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+      version: 1.2.3
+`,
+		},
+		{
+			name: "plugin source without version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source with command is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+      version: 1.0.0
+      command: /tmp/plugin
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source with package is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+      version: 1.0.0
+      package: ./plugins/dummy.tar.gz
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin command with version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      command: /tmp/plugin
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin package with version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      package: ./plugins/dummy.tar.gz
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source missing plugin segment is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source with uppercase is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/Acme-Corp/tools/widget
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source with leading v in version is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+      version: v1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin source with args is rejected",
+			yaml: `
+integrations:
+  external:
+    plugin:
+      source: github.com/acme-corp/tools/widget
+      version: 1.0.0
+      args:
+        - --verbose
+`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range cases {
