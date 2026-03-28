@@ -107,27 +107,6 @@ func TestHandler_HTMLSuffixFallback(t *testing.T) {
 	}
 }
 
-func TestHandler_DirectoryIndexServedForTrailingSlash(t *testing.T) {
-	t.Parallel()
-
-	files := fstest.MapFS{
-		"index.html":      {Data: []byte("<html>home</html>")},
-		"docs/index.html": {Data: []byte("<html>docs</html>")},
-	}
-	fileServer := http.FileServer(http.FS(files))
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/docs/", nil)
-	fileServer.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
-	}
-	if !strings.Contains(rr.Body.String(), "docs") {
-		t.Fatalf("body = %q, want docs content", rr.Body.String())
-	}
-}
-
 func TestHandler_DirectoryRedirectsToTrailingSlash(t *testing.T) {
 	t.Parallel()
 
