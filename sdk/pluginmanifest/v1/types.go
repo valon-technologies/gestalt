@@ -3,7 +3,8 @@ package pluginmanifestv1
 import _ "embed"
 
 const (
-	SchemaVersion = 1
+	SchemaVersion  = 1
+	SchemaVersion2 = 2
 
 	KindProvider = "provider"
 	KindRuntime  = "runtime"
@@ -11,7 +12,8 @@ const (
 
 type Manifest struct {
 	SchemaVersion int         `json:"schema_version"`
-	ID            string      `json:"id"`
+	ID            string      `json:"id,omitempty"`
+	Source        string      `json:"source,omitempty"`
 	Version       string      `json:"version"`
 	DisplayName   string      `json:"display_name,omitempty"`
 	Description   string      `json:"description,omitempty"`
@@ -50,3 +52,6 @@ type Entrypoint struct {
 
 //go:embed manifest.jsonschema.json
 var ManifestJSONSchema []byte
+
+//go:embed manifest.v2.jsonschema.json
+var ManifestV2JSONSchema []byte
