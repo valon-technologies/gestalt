@@ -407,6 +407,55 @@ func TestLoadCatalogNormalizesBracketParams(t *testing.T) {
 	}
 }
 
+func TestValidateMCPCompatRejectsDuplicateNormalizedParams(t *testing.T) {
+	t.Parallel()
+
+	const (
+		bracketName = "page[size]"
+		plainName   = "page_size"
+	)
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Collision API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/records": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_records",
+					"summary":     "List records",
+					"parameters": []any{
+						map[string]any{
+							"name": bracketName, "in": "query",
+							"schema": map[string]any{"type": "integer"},
+						},
+						map[string]any{
+							"name": plainName, "in": "query",
+							"schema": map[string]any{"type": "integer"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+
+	if err := cat.Validate(); err != nil {
+		t.Fatalf("Validate() should pass (duplicates are an MCP concern, not a general one): %v", err)
+	}
+
+	if err := cat.ValidateMCPCompat(); err == nil {
+		t.Fatal("ValidateMCPCompat() should reject duplicate normalized param names")
+	}
+}
+
 func TestLoadCatalogYAMLSpec(t *testing.T) {
 	t.Parallel()
 
