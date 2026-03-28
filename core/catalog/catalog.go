@@ -55,12 +55,13 @@ type OperationAnnotations struct {
 }
 
 type CatalogParameter struct {
-	Name        string `yaml:"name"                 json:"name"`
-	Type        string `yaml:"type"                 json:"type"`
-	Location    string `yaml:"location,omitempty"   json:"location,omitempty"`
-	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-	Required    bool   `yaml:"required,omitempty"   json:"required,omitempty"`
-	Default     any    `yaml:"default,omitempty"    json:"default,omitempty"`
+	Name        string `yaml:"name"                  json:"name"`
+	WireName    string `yaml:"wire_name,omitempty"    json:"wireName,omitempty"`
+	Type        string `yaml:"type"                  json:"type"`
+	Location    string `yaml:"location,omitempty"    json:"location,omitempty"`
+	Description string `yaml:"description,omitempty"  json:"description,omitempty"`
+	Required    bool   `yaml:"required,omitempty"    json:"required,omitempty"`
+	Default     any    `yaml:"default,omitempty"     json:"default,omitempty"`
 }
 
 func (c *Catalog) Clone() *Catalog {
