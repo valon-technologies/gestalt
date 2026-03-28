@@ -8,26 +8,18 @@ package webui
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 )
 
 //go:embed all:out
 var assets embed.FS
 
-// Handler returns an http.Handler that serves the embedded frontend,
-// or nil if the frontend has not been built.
-func Handler() http.Handler {
-	sub, err := fs.Sub(assets, "out")
-	if err != nil {
-		return nil
-	}
-	if _, err := fs.Stat(sub, "index.html"); err != nil {
-		return nil
-	}
-
-	fileServer := http.FileServer(http.FS(sub))
+func NewHandler(root fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(root))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
@@ -35,18 +27,17 @@ func Handler() http.Handler {
 			path = "index.html"
 		}
 
-		if _, err := fs.Stat(sub, path); err == nil {
+		if _, err := fs.Stat(root, path); err == nil {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 
-		// Try path.html and path/index.html for Next.js static export routes.
 		if !strings.Contains(path, ".") {
-			if _, err := fs.Stat(sub, path+".html"); err == nil {
+			if _, err := fs.Stat(root, path+".html"); err == nil {
 				serve(fileServer, w, r, "/"+path+".html")
 				return
 			}
-			if _, err := fs.Stat(sub, path+"/index.html"); err == nil {
+			if _, err := fs.Stat(root, path+"/index.html"); err == nil {
 				serve(fileServer, w, r, "/"+path+"/index.html")
 				return
 			}
@@ -54,6 +45,25 @@ func Handler() http.Handler {
 
 		serve(fileServer, w, r, "/index.html")
 	})
+}
+
+func EmbeddedHandler() http.Handler {
+	sub, err := fs.Sub(assets, "out")
+	if err != nil {
+		return nil
+	}
+	if _, err := fs.Stat(sub, "index.html"); err != nil {
+		return nil
+	}
+	return NewHandler(sub)
+}
+
+func DirHandler(path string) (http.Handler, error) {
+	root := os.DirFS(path)
+	if _, err := fs.Stat(root, "index.html"); err != nil {
+		return nil, fmt.Errorf("webui asset root %s does not contain index.html", path)
+	}
+	return NewHandler(root), nil
 }
 
 func serve(h http.Handler, w http.ResponseWriter, r *http.Request, path string) {

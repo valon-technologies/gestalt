@@ -326,6 +326,87 @@ func TestCatalogExtractAuthHTTPBasic(t *testing.T) {
 	}
 }
 
+func TestLoadCatalogNormalizesBracketParams(t *testing.T) {
+	t.Parallel()
+
+	type paramExpectation struct {
+		rawName        string
+		normalizedName string
+		hasWireName    bool
+	}
+
+	expectations := []paramExpectation{
+		{rawName: "page[size]", normalizedName: "page_size", hasWireName: true},
+		{rawName: "filter[from]", normalizedName: "filter_from", hasWireName: true},
+		{rawName: "status", normalizedName: "status", hasWireName: false},
+	}
+
+	params := make([]any, len(expectations))
+	for i, e := range expectations {
+		params[i] = map[string]any{
+			"name": e.rawName, "in": "query",
+			"schema": map[string]any{"type": "string"},
+		}
+	}
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Bracket API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/records": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_records",
+					"summary":     "List records",
+					"parameters":  params,
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	cat, err := LoadCatalog(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+
+	op := cat.Operations[0]
+	if len(op.Parameters) != len(expectations) {
+		t.Fatalf("got %d params, want %d", len(op.Parameters), len(expectations))
+	}
+
+	type paramResult struct {
+		Name, WireName string
+	}
+	byWire := make(map[string]paramResult, len(op.Parameters))
+	for _, p := range op.Parameters {
+		key := p.WireName
+		if key == "" {
+			key = p.Name
+		}
+		byWire[key] = paramResult{Name: p.Name, WireName: p.WireName}
+	}
+
+	for _, e := range expectations {
+		p, ok := byWire[e.rawName]
+		if !ok {
+			t.Errorf("missing param for raw name %q", e.rawName)
+			continue
+		}
+		if p.Name != e.normalizedName {
+			t.Errorf("%q normalized to %q, want %q", e.rawName, p.Name, e.normalizedName)
+		}
+		if e.hasWireName && p.WireName != e.rawName {
+			t.Errorf("%q wire name = %q, want %q", e.rawName, p.WireName, e.rawName)
+		}
+		if !e.hasWireName && p.WireName != "" {
+			t.Errorf("%q should have no wire name, got %q", e.rawName, p.WireName)
+		}
+	}
+}
+
 func TestLoadCatalogYAMLSpec(t *testing.T) {
 	t.Parallel()
 

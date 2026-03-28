@@ -57,6 +57,24 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		digests = append(digests, sum)
 	}
 
+	if manifest.WebUI != nil && manifest.WebUI.AssetRoot != "" {
+		assetDir := filepath.Join(dirPath, filepath.FromSlash(manifest.WebUI.AssetRoot))
+		if err := filepath.WalkDir(assetDir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			sum, err := fileSHA256(path)
+			if err != nil {
+				return fmt.Errorf("digest asset %s: %w", path, err)
+			}
+			rel, _ := filepath.Rel(assetDir, path)
+			digests = append(digests, rel+"="+sum)
+			return nil
+		}); err != nil {
+			return "", fmt.Errorf("digest webui assets: %w", err)
+		}
+	}
+
 	combined := sha256.Sum256([]byte(strings.Join(digests, "\n")))
 	return hex.EncodeToString(combined[:]), nil
 }
