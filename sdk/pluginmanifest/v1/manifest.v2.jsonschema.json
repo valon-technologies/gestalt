@@ -67,6 +67,9 @@
         "config_schema_path": {
           "type": "string",
           "minLength": 1
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
         }
       }
     },
@@ -168,6 +171,57 @@
     }
   ],
   "$defs": {
+    "provider_auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["oauth2", "manual", "none"]
+        },
+        "authorization_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "token_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "pkce": {
+          "type": "boolean"
+        },
+        "client_auth": {
+          "type": "string",
+          "enum": ["header", ""]
+        },
+        "token_exchange": {
+          "type": "string",
+          "enum": ["form", "json"]
+        },
+        "scope_separator": {
+          "type": "string"
+        },
+        "authorization_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "oauth2" } }
+          },
+          "then": {
+            "required": ["authorization_url", "token_url"]
+          }
+        }
+      ]
+    },
     "artifact": {
       "type": "object",
       "additionalProperties": false,

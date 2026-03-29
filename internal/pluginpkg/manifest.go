@@ -138,6 +138,9 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 					return err
 				}
 			}
+			if err := validateProviderAuth(manifest.Provider.Auth); err != nil {
+				return err
+			}
 			if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 				return err
 			}
@@ -210,6 +213,25 @@ func validateRelativePackagePath(value, label string) error {
 	}
 	if cleaned != value {
 		return fmt.Errorf("%s must be normalized", label)
+	}
+	return nil
+}
+
+func validateProviderAuth(auth *pluginmanifestv1.ProviderAuth) error {
+	if auth == nil {
+		return nil
+	}
+	switch auth.Type {
+	case pluginmanifestv1.AuthTypeOAuth2:
+		if auth.AuthorizationURL == "" {
+			return fmt.Errorf("provider.auth.authorization_url is required for oauth2")
+		}
+		if auth.TokenURL == "" {
+			return fmt.Errorf("provider.auth.token_url is required for oauth2")
+		}
+	case pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
+	default:
+		return fmt.Errorf("unsupported provider.auth.type %q", auth.Type)
 	}
 	return nil
 }
