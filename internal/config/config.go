@@ -81,13 +81,14 @@ type EgressCredentialGrant struct {
 }
 
 type ExecutablePluginDef struct {
-	Command string            `yaml:"command"`
-	Package string            `yaml:"package"`
-	Source  string            `yaml:"source"`
-	Version string            `yaml:"version"`
-	Args    []string          `yaml:"args"`
-	Env     map[string]string `yaml:"env"`
-	Config  yaml.Node         `yaml:"config"`
+	Command           string                        `yaml:"command"`
+	Package           string                        `yaml:"package"`
+	Source            string                        `yaml:"source"`
+	Version           string                        `yaml:"version"`
+	Args              []string                      `yaml:"args"`
+	Env               map[string]string             `yaml:"env"`
+	Config            yaml.Node                     `yaml:"config"`
+	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
 	ResolvedManifestPath string `yaml:"-"`
 }
