@@ -711,6 +711,8 @@ func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string
 		tokenExchange = oauth.TokenExchangeForm
 	case "json":
 		tokenExchange = oauth.TokenExchangeJSON
+	default:
+		return nil, fmt.Errorf("unknown token_exchange %q", auth.TokenExchange)
 	}
 
 	oauthCfg := oauth.UpstreamConfig{
