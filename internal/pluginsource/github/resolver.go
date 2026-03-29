@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -53,7 +54,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 	}
 
 	tag := src.ReleaseTag(version)
-	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), tag)
+	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
 
 	release, err := r.fetchRelease(ctx, client, releaseURL, token, tag, src.RepoSlug())
 	if err != nil {
