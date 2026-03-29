@@ -169,7 +169,7 @@
         },
         "client_auth": {
           "type": "string",
-          "enum": ["header", ""]
+          "enum": ["header"]
         },
         "token_exchange": {
           "type": "string",
