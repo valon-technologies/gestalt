@@ -46,6 +46,24 @@ The important ideas are:
 - entrypoints point at one of those packaged artifacts
 - provider packages may also ship a JSON Schema for config validation
 
+### Web UI package
+
+UI plugins use the `webui` kind. They contain static assets instead of executables:
+
+```json
+{
+  "schema_version": 2,
+  "source": "github.com/your-org/your-repo/console",
+  "version": "1.0.0",
+  "kinds": ["webui"],
+  "webui": {
+    "asset_root": "out"
+  }
+}
+```
+
+Web UI manifests require schema version 2, have no `artifacts` or `entrypoints`, and cannot be combined with `provider` or `runtime` kinds. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
+
 ## Creating A Package
 
 Build a directory that contains `plugin.json` plus the referenced artifacts, then run:
