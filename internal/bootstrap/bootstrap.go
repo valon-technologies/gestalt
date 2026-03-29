@@ -665,7 +665,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		}
 		result := &ProviderBuildResult{Provider: prov}
 		if intg.Plugin.ResolvedManifestPath != "" {
-			authHandler, err := buildPluginOAuthHandler(intg, deps)
+			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
 			if err != nil {
 				log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
 			} else if authHandler != nil {
@@ -684,7 +684,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	return factory(ctx, name, intg, deps)
 }
 
-func buildPluginOAuthHandler(intg config.IntegrationDef, deps Deps) (OAuthHandler, error) {
+func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
 		return nil, nil
 	}
@@ -696,11 +696,6 @@ func buildPluginOAuthHandler(intg config.IntegrationDef, deps Deps) (OAuthHandle
 		return nil, nil
 	}
 	auth := manifest.Provider.Auth
-
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, err
-	}
 
 	clientID, _ := pluginConfig["client_id"].(string)
 	clientSecret, _ := pluginConfig["client_secret"].(string)
