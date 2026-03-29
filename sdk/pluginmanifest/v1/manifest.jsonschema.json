@@ -8,8 +8,7 @@
     "id",
     "version",
     "kinds",
-    "artifacts",
-    "entrypoints"
+    "artifacts"
   ],
   "properties": {
     "schema_version": {
@@ -104,7 +103,8 @@
       },
       "then": {
         "required": [
-          "provider"
+          "provider",
+          "entrypoints"
         ],
         "properties": {
           "entrypoints": {
@@ -126,6 +126,9 @@
         }
       },
       "then": {
+        "required": [
+          "entrypoints"
+        ],
         "properties": {
           "entrypoints": {
             "required": [

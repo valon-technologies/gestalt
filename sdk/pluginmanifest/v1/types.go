@@ -22,7 +22,7 @@ type Manifest struct {
 	Provider      *Provider      `json:"provider,omitempty"`
 	WebUI         *WebUIMetadata `json:"webui,omitempty"`
 	Artifacts     []Artifact     `json:"artifacts,omitempty"`
-	Entrypoints   Entrypoints    `json:"entrypoints,omitempty"`
+	Entrypoints   Entrypoints    `json:"entrypoints,omitzero"`
 }
 
 type WebUIMetadata struct {
