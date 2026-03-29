@@ -4,14 +4,24 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-	"testing/fstest"
 )
 
+func mustWriteFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
 
-
-func mustGet(t *testing.T, handler http.Handler, path string) (int, string) {
+func mustServe(t *testing.T, handler http.Handler, path string) (int, string) {
 	t.Helper()
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -28,31 +38,37 @@ func mustGet(t *testing.T, handler http.Handler, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func TestHandler_RootServesIndexHTML(t *testing.T) {
+func TestDirHandler_ServesIndexHTML(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
 
-	handler := NewHandler(fstest.MapFS{
-		"index.html": {Data: []byte("<html>home</html>")},
-	})
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	code, body := mustGet(t, handler, "/")
+	code, body := mustServe(t, handler, "/")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
 	if !strings.Contains(body, "home") {
-		t.Fatalf("body = %q, want to contain 'home'", body)
+		t.Fatalf("body = %q, want home content", body)
 	}
 }
 
-func TestHandler_ExactFileMatch(t *testing.T) {
+func TestDirHandler_ServesExactFile(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
+	mustWriteFile(t, dir, "style.css", "body { color: red; }")
 
-	handler := NewHandler(fstest.MapFS{
-		"index.html": {Data: []byte("<html>home</html>")},
-		"style.css":  {Data: []byte("body { color: red; }")},
-	})
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	code, body := mustGet(t, handler, "/style.css")
+	code, body := mustServe(t, handler, "/style.css")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
@@ -61,15 +77,18 @@ func TestHandler_ExactFileMatch(t *testing.T) {
 	}
 }
 
-func TestHandler_HTMLSuffixFallback(t *testing.T) {
+func TestDirHandler_HTMLSuffixFallback(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
+	mustWriteFile(t, dir, "about.html", "<html>about page</html>")
 
-	handler := NewHandler(fstest.MapFS{
-		"index.html": {Data: []byte("<html>home</html>")},
-		"about.html": {Data: []byte("<html>about page</html>")},
-	})
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	code, body := mustGet(t, handler, "/about")
+	code, body := mustServe(t, handler, "/about")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
@@ -78,95 +97,83 @@ func TestHandler_HTMLSuffixFallback(t *testing.T) {
 	}
 }
 
-func TestHandler_DirectoryRedirectsToTrailingSlash(t *testing.T) {
+func TestDirHandler_SPAFallbackForUnknownPath(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>spa-root</html>")
 
-	handler := NewHandler(fstest.MapFS{
-		"index.html":      {Data: []byte("<html>home</html>")},
-		"docs/index.html": {Data: []byte("<html>docs</html>")},
-	})
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/docs", nil)
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusMovedPermanently {
-		t.Fatalf("status = %d, want %d (redirect to /docs/)", rr.Code, http.StatusMovedPermanently)
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
 
-func TestHandler_SPAFallbackForNonexistentPath(t *testing.T) {
-	t.Parallel()
-
-	handler := NewHandler(fstest.MapFS{
-		"index.html": {Data: []byte("<html>spa-root</html>")},
-	})
-
-	code, body := mustGet(t, handler, "/nonexistent")
+	code, body := mustServe(t, handler, "/nonexistent")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
 	if !strings.Contains(body, "spa-root") {
-		t.Fatalf("body = %q, want SPA fallback to index.html", body)
-	}
-}
-
-func TestHandler_SPAFallbackForMissingExtensionFile(t *testing.T) {
-	t.Parallel()
-
-	handler := NewHandler(fstest.MapFS{
-		"index.html": {Data: []byte("<html>spa-root</html>")},
-	})
-
-	code, body := mustGet(t, handler, "/missing.js")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "spa-root") {
-		t.Fatalf("body = %q, want SPA fallback for missing .js file", body)
-	}
-}
-
-func TestHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
-	t.Parallel()
-
-	handler := NewHandler(fstest.MapFS{
-		"index.html":    {Data: []byte("<html>home</html>")},
-		"settings.html": {Data: []byte("<html>settings</html>")},
-	})
-
-	code, body := mustGet(t, handler, "/settings")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "settings") {
-		t.Fatalf("body = %q, want settings page (not SPA fallback)", body)
-	}
-}
-
-func TestHandler_NilWhenNoIndexHTML(t *testing.T) {
-	t.Parallel()
-
-	handler := EmbeddedHandler()
-	if handler != nil {
-		t.Fatal("expected nil handler when embedded frontend has not been built")
+		t.Fatalf("body = %q, want SPA fallback", body)
 	}
 }
 
 
-func TestHandler_StaticAssetInSubdirectory(t *testing.T) {
+func TestDirHandler_StaticAssetInSubdirectory(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
+	mustWriteFile(t, dir, "assets/app.js", "console.log('app');")
 
-	handler := NewHandler(fstest.MapFS{
-		"index.html":    {Data: []byte("<html>home</html>")},
-		"assets/app.js": {Data: []byte("console.log('app');")},
-	})
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	code, body := mustGet(t, handler, "/assets/app.js")
+	code, body := mustServe(t, handler, "/assets/app.js")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
 	if !strings.Contains(body, "console.log") {
 		t.Fatalf("body = %q, want JS content", body)
+	}
+}
+
+
+func TestDirHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
+	mustWriteFile(t, dir, "settings.html", "<html>settings</html>")
+
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := mustServe(t, handler, "/settings")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", code, http.StatusOK)
+	}
+	if !strings.Contains(body, "settings") {
+		t.Fatalf("body = %q, want settings content", body)
+	}
+}
+
+func TestDirHandler_RejectsDirectoryWithoutIndex(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "style.css", "body {}")
+
+	_, err := DirHandler(dir)
+	if err == nil {
+		t.Fatal("expected error for directory without index.html")
+	}
+}
+
+func TestEmbeddedHandler_NilWhenNotBuilt(t *testing.T) {
+	t.Parallel()
+
+	handler := EmbeddedHandler()
+	if handler != nil {
+		t.Fatal("expected nil handler when embedded frontend has not been built")
 	}
 }
