@@ -12,7 +12,6 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
-
 func mustBuildTestPluginDir(t *testing.T, dir, id, version, content string) string {
 	t.Helper()
 
