@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	HostGitHub    = "github.com"
-	segmentCount  = 4
-	assetPrefix   = "gestalt-plugin-"
-	assetSuffix   = ".tar.gz"
-	versionPrefix = "v"
+	HostGitHub      = "github.com"
+	segmentCount    = 4
+	assetPrefix     = "gestalt-plugin-"
+	assetSuffix     = ".tar.gz"
+	versionPrefix   = "v"
+	pluginTagPrefix = "plugin/"
 )
 
 var segmentRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
@@ -61,7 +62,7 @@ func (s Source) AssetName(version string) string {
 }
 
 func (s Source) ReleaseTag(version string) string {
-	return versionPrefix + version
+	return pluginTagPrefix + s.Plugin + "/" + versionPrefix + version
 }
 
 func (s Source) RepoSlug() string {
