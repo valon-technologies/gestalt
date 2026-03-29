@@ -109,6 +109,20 @@ func isValidAuthStyle(s string) bool {
 	return ok
 }
 
+func (c *Catalog) ValidateMCPCompat() error {
+	for i := range c.Operations {
+		op := &c.Operations[i]
+		seen := make(map[string]struct{}, len(op.Parameters))
+		for _, param := range op.Parameters {
+			if _, dup := seen[param.Name]; dup {
+				return fmt.Errorf("catalog %q operation %q has duplicate parameter name %q (likely from bracket normalization; rename one in the OpenAPI spec)", c.Name, op.ID, param.Name)
+			}
+			seen[param.Name] = struct{}{}
+		}
+	}
+	return nil
+}
+
 func (c *Catalog) Validate() error {
 	if c == nil {
 		return fmt.Errorf("catalog is nil")

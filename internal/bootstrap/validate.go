@@ -58,6 +58,10 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 	defer func() { _ = CloseProviders(providers) }()
 
+	if err := validateMCPCatalogs(providers); err != nil {
+		return warnings, err
+	}
+
 	sharedInvoker := invocation.NewBroker(providers, ds)
 	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.LogAuditSink{})
@@ -73,6 +77,27 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 
 	return warnings, nil
+}
+
+func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
+	for _, name := range providers.List() {
+		prov, err := providers.Get(name)
+		if err != nil {
+			continue
+		}
+		cp, ok := prov.(core.CatalogProvider)
+		if !ok {
+			continue
+		}
+		cat := cp.Catalog()
+		if cat == nil {
+			continue
+		}
+		if err := cat.ValidateMCPCompat(); err != nil {
+			return fmt.Errorf("integration %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], map[string]map[string]OAuthHandler, error) {
