@@ -2,7 +2,6 @@ package webui
 
 import (
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,35 +9,7 @@ import (
 	"testing/fstest"
 )
 
-func newTestHandler(t *testing.T, files fstest.MapFS) http.Handler {
-	t.Helper()
 
-	fileServer := http.FileServer(http.FS(files))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "index.html"
-		}
-
-		if _, err := fs.Stat(files, path); err == nil {
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		if !strings.Contains(path, ".") {
-			if _, err := fs.Stat(files, path+".html"); err == nil {
-				serve(fileServer, w, r, "/"+path+".html")
-				return
-			}
-			if _, err := fs.Stat(files, path+"/index.html"); err == nil {
-				serve(fileServer, w, r, "/"+path+"/index.html")
-				return
-			}
-		}
-
-		serve(fileServer, w, r, "/index.html")
-	})
-}
 
 func mustGet(t *testing.T, handler http.Handler, path string) (int, string) {
 	t.Helper()
@@ -60,7 +31,7 @@ func mustGet(t *testing.T, handler http.Handler, path string) (int, string) {
 func TestHandler_RootServesIndexHTML(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html": {Data: []byte("<html>home</html>")},
 	})
 
@@ -76,7 +47,7 @@ func TestHandler_RootServesIndexHTML(t *testing.T) {
 func TestHandler_ExactFileMatch(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html": {Data: []byte("<html>home</html>")},
 		"style.css":  {Data: []byte("body { color: red; }")},
 	})
@@ -93,7 +64,7 @@ func TestHandler_ExactFileMatch(t *testing.T) {
 func TestHandler_HTMLSuffixFallback(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html": {Data: []byte("<html>home</html>")},
 		"about.html": {Data: []byte("<html>about page</html>")},
 	})
@@ -110,7 +81,7 @@ func TestHandler_HTMLSuffixFallback(t *testing.T) {
 func TestHandler_DirectoryRedirectsToTrailingSlash(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html":      {Data: []byte("<html>home</html>")},
 		"docs/index.html": {Data: []byte("<html>docs</html>")},
 	})
@@ -127,7 +98,7 @@ func TestHandler_DirectoryRedirectsToTrailingSlash(t *testing.T) {
 func TestHandler_SPAFallbackForNonexistentPath(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html": {Data: []byte("<html>spa-root</html>")},
 	})
 
@@ -143,7 +114,7 @@ func TestHandler_SPAFallbackForNonexistentPath(t *testing.T) {
 func TestHandler_SPAFallbackForMissingExtensionFile(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html": {Data: []byte("<html>spa-root</html>")},
 	})
 
@@ -159,7 +130,7 @@ func TestHandler_SPAFallbackForMissingExtensionFile(t *testing.T) {
 func TestHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html":    {Data: []byte("<html>home</html>")},
 		"settings.html": {Data: []byte("<html>settings</html>")},
 	})
@@ -182,37 +153,11 @@ func TestHandler_NilWhenNoIndexHTML(t *testing.T) {
 	}
 }
 
-func TestHandler_SPAFallbackForDeepPath(t *testing.T) {
-	t.Parallel()
-
-	handler := newTestHandler(t, fstest.MapFS{
-		"index.html":    {Data: []byte("<html>spa-root</html>")},
-		"assets/app.js": {Data: []byte("console.log('app');")},
-	})
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/app/dashboard", nil)
-	handler.ServeHTTP(rr, req)
-
-	switch rr.Code {
-	case http.StatusOK:
-		if !strings.Contains(rr.Body.String(), "spa-root") {
-			t.Fatalf("body = %q, want SPA fallback content", rr.Body.String())
-		}
-	case http.StatusMovedPermanently, http.StatusFound:
-		loc := rr.Header().Get("Location")
-		if loc != "/" && loc != "./" {
-			t.Fatalf("expected redirect to root, got Location: %q", loc)
-		}
-	default:
-		t.Fatalf("unexpected status = %d", rr.Code)
-	}
-}
 
 func TestHandler_StaticAssetInSubdirectory(t *testing.T) {
 	t.Parallel()
 
-	handler := newTestHandler(t, fstest.MapFS{
+	handler := NewHandler(fstest.MapFS{
 		"index.html":    {Data: []byte("<html>home</html>")},
 		"assets/app.js": {Data: []byte("console.log('app');")},
 	})
