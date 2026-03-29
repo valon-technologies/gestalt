@@ -15,8 +15,10 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/internal/provider"
 	"github.com/valon-technologies/gestalt/internal/registry"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -661,7 +663,18 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		if err != nil {
 			return nil, err
 		}
-		return &ProviderBuildResult{Provider: prov}, nil
+		result := &ProviderBuildResult{Provider: prov}
+		if intg.Plugin.ResolvedManifestPath != "" {
+			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
+			if err != nil {
+				log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
+			} else if authHandler != nil {
+				result.ConnectionAuth = map[string]OAuthHandler{
+					config.PluginConnectionName: authHandler,
+				}
+			}
+		}
+		return result, nil
 	}
 
 	factory, err := providerFactoryForName(name, factories)
@@ -669,6 +682,57 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, err
 	}
 	return factory(ctx, name, intg, deps)
+}
+
+func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
+		return nil, nil
+	}
+	_, manifest, err := pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Provider == nil || manifest.Provider.Auth == nil || manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+		return nil, nil
+	}
+	auth := manifest.Provider.Auth
+
+	clientID, _ := pluginConfig["client_id"].(string)
+	clientSecret, _ := pluginConfig["client_secret"].(string)
+	if clientID == "" || clientSecret == "" {
+		return nil, fmt.Errorf("plugin.config must provide client_id and client_secret for oauth2 auth")
+	}
+
+	redirectURL := deps.BaseURL + config.IntegrationCallbackPath
+
+	var tokenExchange oauth.TokenExchangeFormat
+	switch auth.TokenExchange {
+	case "", "form":
+		tokenExchange = oauth.TokenExchangeForm
+	case "json":
+		tokenExchange = oauth.TokenExchangeJSON
+	default:
+		return nil, fmt.Errorf("unknown token_exchange %q", auth.TokenExchange)
+	}
+
+	oauthCfg := oauth.UpstreamConfig{
+		ClientID:            clientID,
+		ClientSecret:        clientSecret,
+		AuthorizationURL:    auth.AuthorizationURL,
+		TokenURL:            auth.TokenURL,
+		RedirectURL:         redirectURL,
+		PKCE:                auth.PKCE,
+		DefaultScopes:       auth.Scopes,
+		ScopeSeparator:      auth.ScopeSeparator,
+		TokenExchange:       tokenExchange,
+		AuthorizationParams: auth.AuthorizationParams,
+	}
+	if auth.ClientAuth == "header" {
+		oauthCfg.ClientAuthMethod = oauth.ClientAuthHeader
+	}
+
+	handler := oauth.NewUpstream(oauthCfg)
+	return WrapUpstreamHandler(handler), nil
 }
 
 func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFactory, error) {

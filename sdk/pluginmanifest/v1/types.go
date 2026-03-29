@@ -32,6 +32,25 @@ type WebUIMetadata struct {
 type Provider struct {
 	Protocol         ProtocolRange `json:"protocol"`
 	ConfigSchemaPath string        `json:"config_schema_path,omitempty"`
+	Auth             *ProviderAuth `json:"auth,omitempty"`
+}
+
+const (
+	AuthTypeOAuth2 = "oauth2"
+	AuthTypeManual = "manual"
+	AuthTypeNone   = "none"
+)
+
+type ProviderAuth struct {
+	Type                string            `json:"type"`
+	AuthorizationURL    string            `json:"authorization_url,omitempty"`
+	TokenURL            string            `json:"token_url,omitempty"`
+	Scopes              []string          `json:"scopes,omitempty"`
+	PKCE                bool              `json:"pkce,omitempty"`
+	ClientAuth          string            `json:"client_auth,omitempty"`
+	TokenExchange       string            `json:"token_exchange,omitempty"`
+	ScopeSeparator      string            `json:"scope_separator,omitempty"`
+	AuthorizationParams map[string]string `json:"authorization_params,omitempty"`
 }
 
 type ProtocolRange struct {
