@@ -16,6 +16,8 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
+	"github.com/valon-technologies/gestalt/internal/pluginpkg"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -577,4 +579,142 @@ func readRuntimeOutput(t *testing.T, path string) runtimeOutput {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	return got
+}
+
+func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+
+	manifest := &pluginmanifestv1.Manifest{
+		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		Source:        "github.com/acme/plugins/echo",
+		Version:       "1.0.0",
+		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+			Auth: &pluginmanifestv1.ProviderAuth{
+				Type:             pluginmanifestv1.AuthTypeOAuth2,
+				AuthorizationURL: "https://example.com/authorize",
+				TokenURL:         "https://example.com/token",
+				Scopes:           []string{"read", "write"},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
+	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoauth": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+					Config: mustNode(t, map[string]any{
+						"client_id":     "test-client-id",
+						"client_secret": "test-client-secret",
+					}),
+					ResolvedManifestPath: manifestPath,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, connAuth, err := buildProvidersStrict(
+		context.Background(), cfg, factories,
+		Deps{BaseURL: "https://gestalt.example.com"},
+	)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoauth")
+	if err != nil {
+		t.Fatalf("providers.Get(echoauth): %v", err)
+	}
+	if len(prov.ListOperations()) == 0 {
+		t.Fatal("expected at least one operation from the echo provider")
+	}
+
+	handlers, ok := connAuth["echoauth"]
+	if !ok {
+		t.Fatal("expected connection auth entry for echoauth")
+	}
+	handler, ok := handlers[config.PluginConnectionName]
+	if !ok {
+		t.Fatalf("expected handler for connection %q", config.PluginConnectionName)
+	}
+	if handler.AuthorizationBaseURL() != "https://example.com/authorize" {
+		t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/authorize")
+	}
+	if handler.TokenURL() != "https://example.com/token" {
+		t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/token")
+	}
+}
+
+func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+
+	manifest := &pluginmanifestv1.Manifest{
+		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		Source:        "github.com/acme/plugins/echo",
+		Version:       "1.0.0",
+		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
+	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echonoauth": {
+				Plugin: &config.ExecutablePluginDef{
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifestPath: manifestPath,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, connAuth, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	if _, ok := connAuth["echonoauth"]; ok {
+		t.Fatal("expected no connection auth for plugin without oauth2 auth")
+	}
 }
