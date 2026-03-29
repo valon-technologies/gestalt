@@ -6,4 +6,5 @@ export default {
   "mcp-binding": "MCP Binding",
   "plugin-protocol": "Plugin Protocol",
   "plugin-packaging": "Plugin Packaging",
+  "ui-plugins": "UI Plugins",
 };

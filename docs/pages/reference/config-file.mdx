@@ -13,6 +13,7 @@ runtimes: {}
 bindings: {}
 server: {}
 egress: {}
+ui: {}
 ```
 
 ## Load Semantics
@@ -473,6 +474,33 @@ egress:
 | `host` | Optional host filter. |
 | `path_prefix` | Optional path filter. |
 
+## `ui`
+
+```yaml
+ui:
+  plugin:
+    package: ./my-ui-plugin
+```
+
+or:
+
+```yaml
+ui:
+  plugin:
+    source: github.com/your-org/your-repo/console
+    version: 1.0.0
+```
+
+| Field | Notes |
+| --- | --- |
+| `plugin.package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `source`. |
+| `plugin.source` | Managed plugin source address. Requires `version`. |
+| `plugin.version` | Required with `source`. Must be valid SemVer without leading `v`. |
+
+When `ui` is omitted, `gestaltd` serves the embedded frontend. When `ui.plugin` is configured, the plugin's assets are served instead.
+
+See [UI Plugins](/concepts/ui-plugins) for the full workflow.
+
 ## Validation Rules Worth Remembering
 
 - `auth.provider` is required
@@ -486,3 +514,6 @@ egress:
 - URL templates in surface URLs and auth URLs must reference required params
 - runtime plugins must use `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`
 - `egress.default_action` and policy `action` must be `allow` or `deny`
+- `ui.plugin` requires exactly one of `package` or `source`
+- `ui.plugin.version` is required with `source` and invalid with `package`
+- `ui.plugin.package` rejects plain `http://`
