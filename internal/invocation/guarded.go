@@ -93,12 +93,12 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
 		entry.Error = err.Error()
-		g.logAudit(entry)
+		g.logAudit(ctx, entry)
 		return nil, err
 	}
 
 	entry.Allowed = true
-	g.logAudit(entry)
+	g.logAudit(ctx, entry)
 
 	chainInstance := instance
 	if chainInstance == "" {
@@ -173,8 +173,8 @@ func (g *GuardedInvoker) ResolveToken(ctx context.Context, p *principal.Principa
 	return "", fmt.Errorf("token resolution not supported")
 }
 
-func (g *GuardedInvoker) logAudit(entry core.AuditEntry) {
+func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {
 	if g.audit != nil {
-		g.audit.Log(entry)
+		g.audit.Log(ctx, entry)
 	}
 }

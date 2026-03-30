@@ -1,21 +1,58 @@
 package invocation
 
 import (
-	"log"
+	"context"
+	"io"
+	"log/slog"
+	"os"
 
 	"github.com/valon-technologies/gestalt/core"
+	"go.opentelemetry.io/otel/trace"
 )
 
-var _ core.AuditSink = LogAuditSink{}
+const auditLogType = "audit"
 
-type LogAuditSink struct{}
+var _ core.AuditSink = (*SlogAuditSink)(nil)
 
-func (LogAuditSink) Log(entry core.AuditEntry) {
-	if entry.Allowed {
-		log.Printf("audit: %s src=%s user=%s %s/%s depth=%d",
-			entry.RequestID, entry.Source, entry.UserID, entry.Provider, entry.Operation, entry.Depth)
-		return
+type SlogAuditSink struct {
+	logger *slog.Logger
+}
+
+func NewSlogAuditSink(w io.Writer) *SlogAuditSink {
+	if w == nil {
+		w = os.Stderr
 	}
-	log.Printf("audit: %s src=%s user=%s %s/%s depth=%d DENIED: %s",
-		entry.RequestID, entry.Source, entry.UserID, entry.Provider, entry.Operation, entry.Depth, entry.Error)
+	return &SlogAuditSink{
+		logger: slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+}
+
+func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
+	attrs := []slog.Attr{
+		slog.String("log.type", auditLogType),
+		slog.Time("event_time", entry.Timestamp),
+		slog.String("request_id", entry.RequestID),
+		slog.String("source", entry.Source),
+		slog.String("user_id", entry.UserID),
+		slog.String("provider", entry.Provider),
+		slog.String("operation", entry.Operation),
+		slog.Int("depth", entry.Depth),
+		slog.Bool("allowed", entry.Allowed),
+	}
+
+	if entry.Error != "" {
+		attrs = append(attrs, slog.String("error", entry.Error))
+	}
+
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		attrs = append(attrs, slog.String("trace_id", spanCtx.TraceID().String()))
+		attrs = append(attrs, slog.String("span_id", spanCtx.SpanID().String()))
+	}
+
+	level := slog.LevelInfo
+	if !entry.Allowed {
+		level = slog.LevelWarn
+	}
+	s.logger.LogAttrs(ctx, level, auditLogType, attrs...)
 }
