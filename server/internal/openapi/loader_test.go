@@ -554,6 +554,74 @@ func TestLoadDefinitionRelativeServerURL(t *testing.T) {
 	}
 }
 
+func TestLoadDefinitionBodyParamDedup(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Test"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/variables/{name}": map[string]any{
+				"patch": map[string]any{
+					"operationId": "update_variable",
+					"summary":     "Update a variable",
+					"parameters": []any{
+						map[string]any{
+							"name": "name", "in": "path", "required": true,
+							"schema": map[string]any{"type": "string"},
+						},
+					},
+					"requestBody": map[string]any{
+						"content": map[string]any{
+							"application/json": map[string]any{
+								"schema": map[string]any{
+									"type":     "object",
+									"required": []string{"name", "value"},
+									"properties": map[string]any{
+										"name":  map[string]any{"type": "string", "description": "Variable name"},
+										"value": map[string]any{"type": "string", "description": "Variable value"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	op, ok := def.Operations["update_variable"]
+	if !ok {
+		t.Fatal("missing update_variable operation")
+	}
+
+	nameCount := 0
+	hasValue := false
+	for _, p := range op.Parameters {
+		if p.Name == "name" {
+			nameCount++
+		}
+		if p.Name == "value" {
+			hasValue = true
+		}
+	}
+	if nameCount != 1 {
+		t.Errorf("expected 1 'name' parameter, got %d", nameCount)
+	}
+	if !hasValue {
+		t.Error("expected 'value' body property to be included")
+	}
+}
+
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 
