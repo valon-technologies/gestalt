@@ -1,6 +1,6 @@
 # Deploy to Kubernetes
 
-The repo ships a Helm chart at `deploy/helm/gestalt`. It runs `gestaltd` as a single Deployment and exposes it through one Kubernetes Service.
+The repo ships a Helm chart at `server/deploy/helm/gestalt`. It runs `gestaltd` as a single Deployment and exposes it through one Kubernetes Service.
 
 ## What The Chart Actually Creates
 
@@ -101,7 +101,7 @@ pluginInit:
 ## Install
 
 ```sh
-helm upgrade --install gestalt ./deploy/helm/gestalt -f values.yaml
+helm upgrade --install gestalt ./server/deploy/helm/gestalt -f values.yaml
 ```
 
 If you use ingress, make sure `config.server.base_url` matches the public URL exactly. That is what Gestalt uses for callback derivation.
