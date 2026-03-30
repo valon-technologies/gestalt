@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"reflect"
 	"strings"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/core"
-	"github.com/valon-technologies/gestalt/core/catalog"
 	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -665,14 +664,40 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		if err != nil {
 			return nil, err
 		}
-		result := prov
+		buildResult := &ProviderBuildResult{Provider: prov}
 		if len(intg.Plugin.AllowedOperations) > 0 {
-			result, err = newFilteredProvider(prov, intg.Plugin.AllowedOperations)
-			if err != nil {
-				return nil, fmt.Errorf("integration %q plugin: %w", name, err)
+			provOps := make(map[string]struct{}, len(prov.ListOperations()))
+			for _, op := range prov.ListOperations() {
+				provOps[op.Name] = struct{}{}
 			}
+			for opName := range intg.Plugin.AllowedOperations {
+				if _, ok := provOps[opName]; !ok {
+					return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
+				}
+			}
+
+			exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
+			for opName, override := range intg.Plugin.AllowedOperations {
+				exposed := opName
+				if override != nil && override.Alias != "" {
+					exposed = override.Alias
+				}
+				if existing, ok := exposedNames[exposed]; ok {
+					return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
+				}
+				exposedNames[exposed] = opName
+			}
+
+			opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
+			for opName, override := range intg.Plugin.AllowedOperations {
+				if override != nil && override.Alias != "" {
+					opsMap[override.Alias] = opName
+				} else {
+					opsMap[opName] = ""
+				}
+			}
+			buildResult.Provider = integration.NewRestricted(prov, opsMap)
 		}
-		buildResult := &ProviderBuildResult{Provider: result}
 		if intg.Plugin.ResolvedManifestPath != "" {
 			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
 			if err != nil {
@@ -742,116 +767,6 @@ func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string
 
 	handler := oauth.NewUpstream(oauthCfg)
 	return WrapUpstreamHandler(handler), nil
-}
-
-type filteredProvider struct {
-	core.Provider
-	ops     []core.Operation
-	allowed map[string]string
-}
-
-func (f *filteredProvider) ListOperations() []core.Operation { return f.ops }
-
-func (f *filteredProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
-	inner, ok := f.allowed[op]
-	if !ok {
-		return &core.OperationResult{
-			Status: http.StatusNotFound,
-			Body:   `{"error":"operation not allowed"}`,
-		}, nil
-	}
-	return f.Provider.Execute(ctx, inner, params, token)
-}
-
-func (f *filteredProvider) SupportsManualAuth() bool {
-	if mp, ok := f.Provider.(core.ManualProvider); ok {
-		return mp.SupportsManualAuth()
-	}
-	return false
-}
-
-func (f *filteredProvider) Catalog() *catalog.Catalog {
-	cp, ok := f.Provider.(core.CatalogProvider)
-	if !ok {
-		return nil
-	}
-	return cp.Catalog()
-}
-
-func (f *filteredProvider) AuthTypes() []string {
-	if atl, ok := f.Provider.(core.AuthTypeLister); ok {
-		return atl.AuthTypes()
-	}
-	return nil
-}
-
-type filteredSessionProvider struct {
-	*filteredProvider
-	scp core.SessionCatalogProvider
-}
-
-func (f *filteredSessionProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return f.scp.CatalogForRequest(ctx, token)
-}
-
-func newFilteredProvider(inner core.Provider, allowed map[string]*config.OperationOverride) (core.Provider, error) {
-	allOps := inner.ListOperations()
-	opSet := make(map[string]struct{}, len(allOps))
-	for _, op := range allOps {
-		opSet[op.Name] = struct{}{}
-	}
-	for name := range allowed {
-		if _, ok := opSet[name]; !ok {
-			return nil, fmt.Errorf("allowed_operations contains unknown operation %q", name)
-		}
-	}
-
-	exposedNames := make(map[string]string, len(allowed))
-	for name, override := range allowed {
-		exposed := name
-		if override != nil && override.Alias != "" {
-			exposed = override.Alias
-		}
-		if existing, ok := exposedNames[exposed]; ok {
-			return nil, fmt.Errorf("alias collision: %q and %q both resolve to %q", existing, name, exposed)
-		}
-		exposedNames[exposed] = name
-	}
-
-	aliasMap := make(map[string]string, len(allowed))
-	var filtered []core.Operation
-	for _, op := range allOps {
-		override, ok := allowed[op.Name]
-		if !ok {
-			continue
-		}
-		exposed := op
-		if override != nil {
-			if override.Description != "" {
-				exposed.Description = override.Description
-			}
-			if override.Alias != "" {
-				aliasMap[override.Alias] = op.Name
-				exposed.Name = override.Alias
-			} else {
-				aliasMap[op.Name] = op.Name
-			}
-		} else {
-			aliasMap[op.Name] = op.Name
-		}
-		filtered = append(filtered, exposed)
-	}
-
-	fp := &filteredProvider{
-		Provider: inner,
-		ops:      filtered,
-		allowed:  aliasMap,
-	}
-
-	if scp, ok := inner.(core.SessionCatalogProvider); ok {
-		return &filteredSessionProvider{filteredProvider: fp, scp: scp}, nil
-	}
-	return fp, nil
 }
 
 func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFactory, error) {

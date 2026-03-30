@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/core/testing"
 )
@@ -211,5 +212,106 @@ func TestDelegationMethods(t *testing.T) {
 	}
 	if refreshTok != nil {
 		t.Errorf("RefreshToken: got %+v, want nil", refreshTok)
+	}
+}
+
+type stubCatalogProvider struct {
+	stubWithOps
+	cat *catalog.Catalog
+}
+
+func (s *stubCatalogProvider) Catalog() *catalog.Catalog { return s.cat }
+
+func TestCatalogFiltersOperations(t *testing.T) {
+	t.Parallel()
+
+	inner := &stubCatalogProvider{
+		stubWithOps: stubWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test_provider"},
+			ops: []core.Operation{
+				{Name: "op_alpha"},
+				{Name: "op_beta"},
+				{Name: "op_gamma"},
+			},
+		},
+		cat: &catalog.Catalog{
+			Name: "test_provider",
+			Operations: []catalog.CatalogOperation{
+				{ID: "op_alpha", Title: "Alpha"},
+				{ID: "op_beta", Title: "Beta"},
+				{ID: "op_gamma", Title: "Gamma"},
+			},
+		},
+	}
+
+	r := coreintegration.NewRestricted(inner, map[string]string{
+		"op_alpha": "",
+		"op_gamma": "",
+	})
+
+	cp, ok := r.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("restricted provider does not implement CatalogProvider")
+	}
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() returned nil")
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))
+	}
+
+	ids := make(map[string]bool, len(cat.Operations))
+	for _, op := range cat.Operations {
+		ids[op.ID] = true
+	}
+	if !ids["op_alpha"] {
+		t.Error("expected op_alpha in catalog")
+	}
+	if !ids["op_gamma"] {
+		t.Error("expected op_gamma in catalog")
+	}
+	if ids["op_beta"] {
+		t.Error("op_beta should not appear in filtered catalog")
+	}
+}
+
+func TestCatalogRenamesAliasedOperations(t *testing.T) {
+	t.Parallel()
+
+	inner := &stubCatalogProvider{
+		stubWithOps: stubWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test_provider"},
+			ops: []core.Operation{
+				{Name: "op_alpha"},
+				{Name: "op_beta"},
+			},
+		},
+		cat: &catalog.Catalog{
+			Name: "test_provider",
+			Operations: []catalog.CatalogOperation{
+				{ID: "op_alpha", Title: "Alpha"},
+				{ID: "op_beta", Title: "Beta"},
+			},
+		},
+	}
+
+	r := coreintegration.NewRestricted(inner, map[string]string{
+		"renamed_alpha": "op_alpha",
+	})
+
+	cp, ok := r.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("restricted provider does not implement CatalogProvider")
+	}
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() returned nil")
+	}
+	if len(cat.Operations) != 1 {
+		t.Fatalf("Catalog().Operations: got %d, want 1", len(cat.Operations))
+	}
+	if cat.Operations[0].ID != "renamed_alpha" {
+		t.Errorf("expected aliased ID %q, got %q", "renamed_alpha", cat.Operations[0].ID)
 	}
 }
