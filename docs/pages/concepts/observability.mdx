@@ -1,0 +1,140 @@
+# Observability
+
+Gestalt uses [OpenTelemetry](https://opentelemetry.io) for observability. Traces, metrics, and structured logs are exported through a pluggable telemetry provider configured in the `telemetry` block of your config file.
+
+## Traces
+
+Every request is automatically traced across three layers:
+
+1. **HTTP** — `otelhttp` middleware on the chi router creates a root span for each inbound request with standard HTTP semantic conventions (method, route, status code, latency).
+2. **Broker** — `Broker.Invoke()` creates a child span with attributes for the provider, operation, user, and connection mode.
+3. **gRPC plugins** — `otelgrpc` interceptors on plugin connections propagate trace context across process boundaries, so plugin spans appear as children of the broker span.
+
+A single trace shows the full lifecycle: HTTP request → broker invocation → plugin RPC. When a provider invocation is slow, the trace shows whether the bottleneck was token refresh, the provider's execution, or network latency.
+
+### Sampling
+
+The `otlp` provider supports configurable trace sampling via `traces.sampling_ratio` (default `1.0`, meaning all traces). At low to moderate scale, sample everything. When volume demands it, reduce the ratio — but note that the OTel Collector's [spanmetrics connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/spanmetricsconnector/README.md) can derive accurate RED metrics from 100% of spans _before_ the sampling decision, so metrics remain accurate even with aggressive trace sampling.
+
+## Metrics
+
+Gestalt does not maintain separate application-level metric instrumentation for request rates, error rates, or latency. Instead, these are derived from traces:
+
+- Use the OTel Collector's **spanmetrics connector** to automatically generate RED metrics (Rate, Errors, Duration) from trace spans.
+- This eliminates double-instrumentation and gives you per-provider, per-operation breakdowns without declaring metric labels upfront.
+
+Infrastructure metrics (CPU, memory, goroutines) should come from your runtime environment (Kubernetes metrics-server, CloudWatch, etc.), not from Gestalt itself.
+
+## Structured Logging
+
+All log output from Gestalt uses Go's `slog` for structured logging. When using the `otlp` provider, logs are exported via the [otelslog bridge](https://pkg.go.dev/go.opentelemetry.io/contrib/bridges/otelslog) and include trace correlation fields (`trace_id`, `span_id`) so logs can be linked to their parent request trace.
+
+With the `stdout` provider, logs are written to stdout in either `text` (default) or `json` format.
+
+## Audit Logs
+
+Audit entries record who invoked what, when, and whether it was allowed. Every provider invocation through the broker produces an audit log entry with these fields:
+
+| Field | Description |
+| --- | --- |
+| `log.type` | Always `audit`. Use this for routing. |
+| `request_id` | Unique request identifier. |
+| `source` | Where the invocation originated (e.g., `binding:webhook`). |
+| `user_id` | Authenticated user. |
+| `provider` | Target provider name. |
+| `operation` | Target operation name. |
+| `depth` | Call depth (prevents infinite recursion in chained invocations). |
+| `allowed` | Whether the operation was permitted. |
+| `error` | Present only for denied operations. |
+
+Allowed operations are logged at `INFO` level; denied operations at `WARN`.
+
+### Routing audit logs separately
+
+Audit logs and operational logs serve different purposes and typically need different retention, access controls, and storage backends. Gestalt tags audit entries with `log.type=audit` so they can be routed independently at the collector level.
+
+Example OTel Collector config that splits audit logs from operational logs:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  filter/audit:
+    logs:
+      include:
+        match_type: strict
+        resource_attributes:
+          - key: log.type
+            value: audit
+  filter/operational:
+    logs:
+      exclude:
+        match_type: strict
+        resource_attributes:
+          - key: log.type
+            value: audit
+
+exporters:
+  otlphttp/audit:
+    endpoint: https://audit-backend.example.com
+  otlphttp/operational:
+    endpoint: https://logs-backend.example.com
+
+service:
+  pipelines:
+    logs/audit:
+      receivers: [otlp]
+      processors: [filter/audit]
+      exporters: [otlphttp/audit]
+    logs/operational:
+      receivers: [otlp]
+      processors: [filter/operational]
+      exporters: [otlphttp/operational]
+```
+
+## Example: Full Production Setup
+
+```yaml
+telemetry:
+  provider: otlp
+  config:
+    endpoint: otel-collector.monitoring:4317
+    protocol: grpc
+    service_name: gestaltd
+    resource_attributes:
+      deployment.environment: production
+      service.version: "1.2.0"
+    traces:
+      sampling_ratio: 1.0
+    metrics:
+      interval: 60s
+    logs:
+      level: info
+```
+
+This sends all signals to an OTel Collector, which can then fan out to your tracing backend (Jaeger, Tempo, Datadog), metrics backend (Prometheus, Datadog), and log backend (Loki, CloudWatch) using its pipeline configuration.
+
+## Example: Local Development
+
+```yaml
+telemetry:
+  provider: stdout
+  config:
+    format: json
+    level: debug
+```
+
+Prints all traces, metrics, and logs to stdout in JSON format. Useful for inspecting request flow during development.
+
+## Disabling Telemetry
+
+```yaml
+telemetry:
+  provider: noop
+```
+
+All instrumentation points remain in the code but produce zero overhead. No traces, metrics, or logs are collected.

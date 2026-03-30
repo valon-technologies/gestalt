@@ -8,6 +8,7 @@ This page is the authoritative reference for `gestaltd` configuration.
 auth: {}
 datastore: {}
 secrets: {}
+telemetry: {}
 integrations: {}
 runtimes: {}
 bindings: {}
@@ -25,6 +26,7 @@ Before you get into individual fields, these global rules matter:
 - unknown YAML fields are rejected
 - `server.port` defaults to `8080`
 - `secrets.provider` defaults to `env`
+- `telemetry.provider` defaults to `stdout`
 - relative paths resolve relative to the config file directory
 - `secret://...` values are resolved later during bootstrap, not during raw YAML parsing
 
@@ -164,6 +166,89 @@ Any string value outside `secrets.config` may use:
 ```yaml
 secret://name-of-secret
 ```
+
+## `telemetry`
+
+Controls observability: distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced.
+
+### `stdout`
+
+```yaml
+telemetry:
+  provider: stdout
+  config:
+    format: text
+    level: info
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `format` | no | `text` (default) or `json`. |
+| `level` | no | `debug`, `info` (default), `warn`, or `error`. |
+
+`stdout` prints traces and metrics to standard output. Good for local development and debugging. This is the default provider when `telemetry` is omitted.
+
+### `otlp`
+
+```yaml
+telemetry:
+  provider: otlp
+  config:
+    endpoint: otel-collector:4317
+    protocol: grpc
+    service_name: gestaltd
+    insecure: false
+    headers:
+      Authorization: Bearer ${OTEL_TOKEN}
+    resource_attributes:
+      deployment.environment: production
+      service.version: "1.0.0"
+    traces:
+      sampling_ratio: 1.0
+    metrics:
+      interval: 60s
+    logs:
+      level: info
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `endpoint` | no | OTLP collector address. Uses the SDK default when omitted. |
+| `protocol` | no | `grpc` (default) or `http`. |
+| `service_name` | no | OpenTelemetry service name. Defaults to `gestaltd`. |
+| `insecure` | no | Skip TLS verification. Defaults to `false`. |
+| `headers` | no | Extra headers sent with every export request. Useful for auth tokens. |
+| `resource_attributes` | no | Arbitrary key-value pairs attached to every signal as resource attributes. |
+| `traces.sampling_ratio` | no | Fraction of traces to sample, `0.0` to `1.0`. Defaults to `1.0` (all traces). |
+| `metrics.interval` | no | How often metrics are exported. Defaults to `60s`. |
+| `logs.level` | no | Minimum log level exported. Defaults to `info`. |
+
+`otlp` exports traces, metrics, and logs to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent, etc.) using the OTLP protocol.
+
+### `noop`
+
+```yaml
+telemetry:
+  provider: noop
+```
+
+Disables all telemetry. No traces, metrics, or logs are collected or exported. The instrumentation points remain in the code but produce zero overhead.
+
+### What gets traced
+
+Gestalt automatically creates distributed trace spans at three levels:
+
+| Layer | Span name | Key attributes |
+| --- | --- | --- |
+| HTTP | `gestaltd: {method} {route}` | Standard HTTP semantic conventions (method, route, status code) |
+| Broker | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.user_id`, `gestalt.connection_mode` |
+| gRPC plugin | Per-RPC spans | Standard gRPC semantic conventions (service, method, status) |
+
+Child spans are linked to their parent, so a single trace shows the full request lifecycle from HTTP through broker to plugin.
+
+### Audit logs
+
+Audit log records are emitted as structured log entries with a `log.type=audit` attribute. When using the `otlp` provider, these can be routed to a dedicated audit backend by the OTel Collector using attribute-based filtering. See [Observability](/concepts/observability) for details.
 
 ## `integrations`
 
