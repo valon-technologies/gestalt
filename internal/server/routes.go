@@ -4,6 +4,7 @@ import "github.com/go-chi/chi/v5"
 
 func (s *Server) routes() {
 	r := s.router
+	r.Use(requestMetaMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
