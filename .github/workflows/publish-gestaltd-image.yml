@@ -120,8 +120,8 @@ jobs:
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
           repository: ${{ env.IMAGE_NAME }}
           short-description: Self-hosted integration runtime for REST, GraphQL, MCP, and plugins.
           readme-filepath: docs/dockerhub/gestaltd.md
