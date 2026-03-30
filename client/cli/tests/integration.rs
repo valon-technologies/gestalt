@@ -123,9 +123,8 @@ fn test_list_integrations_table_format() {
         )
         .create();
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result = gestalt::commands::integrations::list(Some(&server.url()), Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
+    let client = create_client(&server);
+    let result = gestalt::commands::integrations::list(&client, Format::Table);
 
     mock.assert();
     assert!(result.is_ok());
@@ -170,10 +169,8 @@ fn test_list_operations_formats_parameters() {
         )
         .create();
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
+    let client = create_client(&server);
+    let result = gestalt::commands::invoke::list_operations(&client, "test_svc", Format::Table);
 
     mock.assert();
     assert!(result.is_ok());
@@ -198,10 +195,8 @@ fn test_list_operations_json_format() {
         )
         .create();
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Json);
-    std::env::remove_var("GESTALT_API_KEY");
+    let client = create_client(&server);
+    let result = gestalt::commands::invoke::list_operations(&client, "test_svc", Format::Json);
 
     mock.assert();
     assert!(result.is_ok());
@@ -217,10 +212,8 @@ fn test_list_operations_empty_parameters() {
         .with_body(r#"[{"id": "list_items", "description": "Lists items", "method": "GET", "parameters": []}]"#)
         .create();
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result =
-        gestalt::commands::invoke::list_operations(Some(&server.url()), "test_svc", Format::Table);
-    std::env::remove_var("GESTALT_API_KEY");
+    let client = create_client(&server);
+    let result = gestalt::commands::invoke::list_operations(&client, "test_svc", Format::Table);
 
     mock.assert();
     assert!(result.is_ok());
@@ -293,9 +286,9 @@ fn test_invoke_typed_params() {
         },
     ];
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
+    let client = create_client(&server);
     let result = gestalt::commands::invoke::invoke(
-        Some(&server.url()),
+        &client,
         "test_svc",
         "do_thing",
         &params,
@@ -303,7 +296,6 @@ fn test_invoke_typed_params() {
         None,
         Format::Json,
     );
-    std::env::remove_var("GESTALT_API_KEY");
 
     invoke_mock.assert();
     assert!(result.is_ok());
@@ -320,14 +312,9 @@ fn test_describe_operation() {
         .with_body(catalog_body())
         .create();
 
-    std::env::set_var("GESTALT_API_KEY", "test-token");
-    let result = gestalt::commands::describe::describe(
-        Some(&server.url()),
-        "test_svc",
-        "do_thing",
-        Format::Table,
-    );
-    std::env::remove_var("GESTALT_API_KEY");
+    let client = create_client(&server);
+    let result =
+        gestalt::commands::describe::describe(&client, "test_svc", "do_thing", Format::Table);
 
     mock.assert();
     assert!(result.is_ok());

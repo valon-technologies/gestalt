@@ -1,17 +1,16 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::api::ApiClient;
 use crate::catalog;
 use crate::output::{self, Format};
 
 pub fn describe(
-    url_override: Option<&str>,
+    client: &ApiClient,
     integration: &str,
     operation: &str,
     format: Format,
 ) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
-    let cat = catalog::fetch_catalog(&client, integration)?;
+    let cat = catalog::fetch_catalog(client, integration)?;
 
     let op = match cat.find_operation(operation) {
         Some(op) => op,

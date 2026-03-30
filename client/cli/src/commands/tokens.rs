@@ -3,8 +3,7 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(url_override: Option<&str>, name: Option<&str>, format: Format) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
+pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
     let body = serde_json::json!({"name": token_name});
     let resp = client
@@ -26,8 +25,7 @@ pub fn create(url_override: Option<&str>, name: Option<&str>, format: Format) ->
     Ok(())
 }
 
-pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
+pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
         .get("/api/v1/tokens")
         .context("failed to list tokens")?;
@@ -54,8 +52,7 @@ pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
     Ok(())
 }
 
-pub fn revoke(url_override: Option<&str>, id: &str, format: Format) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
+pub fn revoke(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     let path = format!("/api/v1/tokens/{}", id);
     let resp = client.delete(&path).context("failed to revoke token")?;
 
