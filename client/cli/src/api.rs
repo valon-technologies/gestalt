@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
+use reqwest::header::{self, HeaderValue};
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -98,8 +99,12 @@ impl ApiClient {
     }
 
     pub fn new(base_url: &str, token: &str) -> Result<Self> {
+        let mut default_headers = header::HeaderMap::new();
+        default_headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
+            .default_headers(default_headers)
             .build()
             .context("failed to build HTTP client")?;
 
@@ -117,7 +122,6 @@ impl ApiClient {
             .client
             .get(&url)
             .bearer_auth(&self.token)
-            .header("Accept", "application/json")
             .send()
             .with_context(|| format!("request to {} failed", url))?;
 
@@ -130,8 +134,6 @@ impl ApiClient {
             .client
             .post(&url)
             .bearer_auth(&self.token)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
             .json(body)
             .send()
             .with_context(|| format!("request to {} failed", url))?;
@@ -145,7 +147,6 @@ impl ApiClient {
             .client
             .delete(&url)
             .bearer_auth(&self.token)
-            .header("Accept", "application/json")
             .send()
             .with_context(|| format!("request to {} failed", url))?;
 

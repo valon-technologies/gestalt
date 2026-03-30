@@ -6,6 +6,8 @@ use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
+const SESSION_COOKIE_PREFIX: &str = "session_token=";
+
 pub fn login(url_override: Option<&str>) -> Result<()> {
     if api::env_api_key_is_set() {
         bail!(
@@ -21,7 +23,7 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         std::net::TcpListener::bind("127.0.0.1:0").context("failed to bind callback listener")?;
     let port = listener.local_addr()?.port();
 
-    let state = format!("{:x}", rand_u64());
+    let state = random_hex_string();
 
     let login_url = format!("{}/api/v1/auth/login", base_url);
     let client = reqwest::blocking::Client::builder()
@@ -117,7 +119,7 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         .iter()
         .filter_map(|v| v.to_str().ok())
         .find_map(|v| {
-            v.strip_prefix("session_token=")
+            v.strip_prefix(SESSION_COOKIE_PREFIX)
                 .map(|rest| rest.split(';').next().unwrap_or(rest).to_string())
         })
         .context("callback response missing session cookie")?;
@@ -205,8 +207,8 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
     Ok(())
 }
 
-fn rand_u64() -> u64 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    RandomState::new().build_hasher().finish()
+fn random_hex_string() -> String {
+    let mut buf = [0u8; 16];
+    getrandom::fill(&mut buf).expect("failed to generate random bytes");
+    buf.iter().map(|b| format!("{b:02x}")).collect()
 }
