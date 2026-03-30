@@ -388,6 +388,18 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
+	result, err := s.DB.ExecContext(ctx, "DELETE FROM api_tokens WHERE user_id = "+s.ph(1), userID)
+	if err != nil {
+		return 0, fmt.Errorf("revoking all api tokens: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("revoking all api tokens: %w", err)
+	}
+	return n, nil
+}
+
 func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
 	accessEnc, refreshEnc, err := s.Enc.EncryptTokenPair(sc.AccessToken, sc.RefreshToken)
 	if err != nil {

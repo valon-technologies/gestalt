@@ -7,7 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
-const defaultIssuedTokenExpiry = 90 * 24 * time.Hour
+const defaultIssuedTokenExpiry = 30 * 24 * time.Hour
 
 type issuedToken struct {
 	Plaintext string
@@ -32,7 +32,11 @@ func (s *Server) issueTokenWithType(typ principal.TokenType) (*issuedToken, erro
 	}
 
 	now := s.nowUTCSecond()
-	expiry := now.Add(defaultIssuedTokenExpiry)
+	ttl := s.apiTokenTTL
+	if ttl == 0 {
+		ttl = defaultIssuedTokenExpiry
+	}
+	expiry := now.Add(ttl)
 	return &issuedToken{
 		Plaintext: plaintext,
 		Hashed:    hashed,

@@ -122,6 +122,15 @@ func runServer(env *bootstrapEnv) error {
 	mcpSlot := &lateHandler{}
 	var mcpHandler http.Handler = mcpSlot
 
+	var apiTokenTTL time.Duration
+	if env.Config.Server.APITokenTTL != "" {
+		var err error
+		apiTokenTTL, err = config.ParseDuration(env.Config.Server.APITokenTTL)
+		if err != nil {
+			return fmt.Errorf("parsing server.api_token_ttl: %w", err)
+		}
+	}
+
 	srv, err := server.New(server.Config{
 		Auth:              result.Auth,
 		Datastore:         result.Datastore,
@@ -134,6 +143,7 @@ func runServer(env *bootstrapEnv) error {
 		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
+		APITokenTTL:       apiTokenTTL,
 		Readiness: composeReadiness(
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
 			datastoreReadiness(result.Datastore),

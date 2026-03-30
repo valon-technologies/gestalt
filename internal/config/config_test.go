@@ -1251,6 +1251,113 @@ server:
 	}
 }
 
+func TestLoadConfig_APITokenTTL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid day duration", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "14d"
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.APITokenTTL != "14d" {
+			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "14d")
+		}
+	})
+
+	t.Run("valid hour duration", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "48h"
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.APITokenTTL != "48h" {
+			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "48h")
+		}
+	})
+
+	t.Run("valid minute duration", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "30m"
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.APITokenTTL != "30m" {
+			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "30m")
+		}
+	})
+
+	t.Run("invalid duration rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "not-a-duration"
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("expected error for invalid api_token_ttl")
+		}
+	})
+
+	t.Run("zero day duration rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "0d"
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("expected error for zero api_token_ttl")
+		}
+	})
+
+	t.Run("negative duration rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  api_token_ttl: "-1d"
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("expected error for negative api_token_ttl")
+		}
+	})
+
+	t.Run("omitted uses default", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  port: 9090
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.APITokenTTL != "" {
+			t.Fatalf("APITokenTTL = %q, want empty", cfg.Server.APITokenTTL)
+		}
+	})
+}
+
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
 

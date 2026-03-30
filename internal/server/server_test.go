@@ -1587,9 +1587,131 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing expires_at: %v", err)
 	}
-	expected := fixedNow.Add(90 * 24 * time.Hour).UTC().Truncate(time.Second)
+	expected := fixedNow.Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
 		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+	}
+}
+
+func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	customTTL := 7 * 24 * time.Hour
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Now = func() time.Time { return fixedNow }
+		cfg.APITokenTTL = customTTL
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"ttl-test","scopes":"read"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	expiresAtStr, ok := result["expires_at"].(string)
+	if !ok {
+		t.Fatal("expected expires_at string in response")
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
+	if err != nil {
+		t.Fatalf("parsing expires_at: %v", err)
+	}
+	expected := fixedNow.Add(customTTL).UTC().Truncate(time.Second)
+	if !expiresAt.Equal(expected) {
+		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+	}
+}
+
+func TestRevokeAllAPITokens(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			RevokeAllAPITokensFn: func(_ context.Context, userID string) (int64, error) {
+				if userID == "u1" {
+					return 3, nil
+				}
+				return 0, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "revoked" {
+		t.Fatalf("expected status revoked, got %q", result["status"])
+	}
+	if count, ok := result["count"].(float64); !ok || count != 3 {
+		t.Fatalf("expected count 3, got %v", result["count"])
+	}
+}
+
+func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if count, ok := result["count"].(float64); !ok || count != 0 {
+		t.Fatalf("expected count 0, got %v", result["count"])
 	}
 }
 

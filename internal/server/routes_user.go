@@ -24,6 +24,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 
 		r.Post("/tokens", s.createAPIToken)
 		r.Get("/tokens", s.listAPITokens)
+		r.Delete("/tokens", s.revokeAllAPITokens)
 		r.Delete("/tokens/{id}", s.revokeAPIToken)
 
 	})

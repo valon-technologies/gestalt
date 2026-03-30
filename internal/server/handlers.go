@@ -923,6 +923,20 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
+func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.resolveUserID(w, r)
+	if !ok {
+		return
+	}
+
+	count, err := s.datastore.RevokeAllAPITokens(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to revoke tokens")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
+}
+
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
