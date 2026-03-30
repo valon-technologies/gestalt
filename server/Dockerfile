@@ -2,7 +2,7 @@ ARG GESTALT_VERSION=dev
 ARG GESTALT_REVISION=unknown
 ARG GESTALT_CREATED=unknown
 ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
-ARG GESTALT_DOCUMENTATION=https://gestalt.run
+ARG GESTALT_DOCUMENTATION=https://docs.toolshed.peachstreet.dev
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestaltd
 
 FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
