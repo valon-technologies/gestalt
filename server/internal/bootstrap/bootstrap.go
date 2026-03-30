@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -820,12 +819,11 @@ func applyPluginIcon(prov core.Provider, intg config.IntegrationDef) {
 	if intg.IconFile == "" {
 		return
 	}
-	data, err := os.ReadFile(intg.IconFile)
+	svg, err := provider.ReadIconFile(intg.IconFile)
 	if err != nil {
 		slog.Warn("could not read plugin icon_file", "path", intg.IconFile, "error", err)
 		return
 	}
-	svg := strings.TrimSpace(string(data))
 	if svg == "" {
 		return
 	}

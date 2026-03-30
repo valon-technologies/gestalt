@@ -256,13 +256,20 @@ func ApplyDisplayOverrides(def *Definition, intg config.IntegrationDef) {
 	setStr(&def.DisplayName, intg.DisplayName)
 	setStr(&def.Description, intg.Description)
 	if intg.IconFile != "" {
-		data, err := os.ReadFile(intg.IconFile)
-		if err != nil {
+		if svg, err := ReadIconFile(intg.IconFile); err != nil {
 			slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
 		} else {
-			def.IconSVG = strings.TrimSpace(string(data))
+			def.IconSVG = svg
 		}
 	}
+}
+
+func ReadIconFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 // ApplyConnectionAuth merges connection auth overrides into the Definition.
