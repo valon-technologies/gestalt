@@ -329,6 +329,59 @@ func TestBootstrapNilProviderFactoryFailsFast(t *testing.T) {
 
 }
 
+func TestBootstrapPluginMCPRequiresFactory(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.ExecutablePluginDef{
+			Command: "echo",
+		},
+		MCP: &config.MCPDef{
+			URL:        "https://mcp.test/sse",
+			Connection: "default",
+		},
+		Connections: map[string]config.ConnectionDef{
+			"default": {Mode: "none"},
+		},
+	}
+
+	factories := validFactories()
+	delete(factories.Providers, "alpha")
+	factories.DefaultProvider = nil
+
+	_, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err == nil {
+		t.Fatal("expected error for plugin+mcp integration with no factory")
+	}
+	if !strings.Contains(err.Error(), "no provider factory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBootstrapPluginOnlySkipsFactory(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.ExecutablePluginDef{
+			Command: "echo",
+		},
+	}
+
+	factories := validFactories()
+	delete(factories.Providers, "alpha")
+	factories.DefaultProvider = nil
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap should succeed for plugin-only: %v", err)
+	}
+	<-result.ProvidersReady
+}
+
 func TestBootstrapFactoryError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
