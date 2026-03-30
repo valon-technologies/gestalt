@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -384,6 +385,7 @@ func dialUnixSocket(ctx context.Context, socket string) (*grpc.ClientConn, error
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", addr)
 		}),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		return nil, err
