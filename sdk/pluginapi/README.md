@@ -72,8 +72,8 @@ This produces stubs for Go, TypeScript, and Python. Output locations:
 | Language   | Path                          |
 |------------|-------------------------------|
 | Go         | `sdk/pluginapi/v1/`           |
-| TypeScript | `sdk/plugin/typescript/gen/`  |
-| Python     | `sdk/plugin/python/gen/`      |
+| TypeScript | `sdk/generated/typescript/gen/`  |
+| Python     | `sdk/generated/python/gen/`      |
 
 If buf is not installed, the script falls back to `protoc` for Go-only
 generation (the original workflow).
