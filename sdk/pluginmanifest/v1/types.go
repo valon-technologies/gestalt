@@ -33,6 +33,7 @@ type Provider struct {
 	Protocol         ProtocolRange `json:"protocol"`
 	ConfigSchemaPath string        `json:"config_schema_path,omitempty"`
 	Auth             *ProviderAuth `json:"auth,omitempty"`
+	MCP              bool          `json:"mcp,omitempty"`
 }
 
 const (

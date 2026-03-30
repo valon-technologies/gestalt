@@ -19,6 +19,8 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/internal/mcp"
+	"github.com/valon-technologies/gestalt/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/internal/server"
 	"github.com/valon-technologies/gestalt/internal/webui"
 
@@ -236,9 +238,17 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 
 	for name, intg := range cfg.Integrations {
 		if intg.Plugin != nil {
+			if !pluginDeclaresMCP(intg.Plugin) {
+				continue
+			}
 			surface.providers = append(surface.providers, name)
 			surface.apiConnection[name] = config.PluginConnectionName
 			surface.mcpConnection[name] = config.PluginConnectionName
+			if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
+				if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
+					surface.toolPrefixes[name] = src.Plugin + "_"
+				}
+			}
 		} else if intg.API != nil || intg.MCP != nil {
 			surface.providers = append(surface.providers, name)
 			if intg.API != nil {
@@ -255,6 +265,18 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 	}
 
 	return surface
+}
+
+func pluginDeclaresMCP(plugin *config.ExecutablePluginDef) bool {
+	if plugin.ResolvedManifestPath == "" {
+		return true
+	}
+	_, manifest, err := pluginpkg.ReadManifestFile(plugin.ResolvedManifestPath)
+	if err != nil {
+		log.Printf("WARNING: reading plugin manifest %s: %v", plugin.ResolvedManifestPath, err)
+		return true
+	}
+	return manifest.Provider != nil && manifest.Provider.MCP
 }
 
 func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {

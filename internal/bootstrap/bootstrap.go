@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
+	"github.com/valon-technologies/gestalt/core/integration"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -663,18 +664,55 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		if err != nil {
 			return nil, err
 		}
-		result := &ProviderBuildResult{Provider: prov}
+		buildResult := &ProviderBuildResult{Provider: prov}
+		if intg.Plugin.AllowedOperations != nil && len(intg.Plugin.AllowedOperations) == 0 {
+			return nil, fmt.Errorf("integration %q plugin.allowed_operations cannot be empty; omit the field to allow all", name)
+		}
+		if len(intg.Plugin.AllowedOperations) > 0 {
+			provOps := make(map[string]struct{}, len(prov.ListOperations()))
+			for _, op := range prov.ListOperations() {
+				provOps[op.Name] = struct{}{}
+			}
+
+			opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
+			descs := make(map[string]string)
+			exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
+			for opName, override := range intg.Plugin.AllowedOperations {
+				if _, ok := provOps[opName]; !ok {
+					return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
+				}
+				exposed := opName
+				if override != nil && override.Alias != "" {
+					exposed = override.Alias
+					opsMap[exposed] = opName
+				} else {
+					opsMap[opName] = ""
+				}
+				if existing, ok := exposedNames[exposed]; ok {
+					return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
+				}
+				exposedNames[exposed] = opName
+				if override != nil && override.Description != "" {
+					descs[exposed] = override.Description
+				}
+			}
+			var opts []integration.RestrictedOption
+			if len(descs) > 0 {
+				opts = append(opts, integration.WithDescriptions(descs))
+			}
+			buildResult.Provider = integration.NewRestricted(prov, opsMap, opts...)
+		}
 		if intg.Plugin.ResolvedManifestPath != "" {
 			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
 			if err != nil {
 				log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
 			} else if authHandler != nil {
-				result.ConnectionAuth = map[string]OAuthHandler{
+				buildResult.ConnectionAuth = map[string]OAuthHandler{
 					config.PluginConnectionName: authHandler,
 				}
 			}
 		}
-		return result, nil
+		return buildResult, nil
 	}
 
 	factory, err := providerFactoryForName(name, factories)
