@@ -4,9 +4,9 @@
 
 | Path | Purpose |
 | --- | --- |
-| `cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
-| `core` | Public interfaces for auth, datastore, secrets, providers, runtimes, and bindings. |
-| `internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other runtime internals. |
+| `server/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
+| `server/core` | Public interfaces for auth, datastore, secrets, providers, runtimes, and bindings. |
+| `server/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other runtime internals. |
 | `plugins` | Built-in auth providers, datastores, secrets, bindings, runtimes, and named providers. |
 | `sdk` | Public SDKs and plugin manifest definitions. |
 | `web` | Frontend that is embedded into the server build. |
@@ -17,9 +17,9 @@
 
 When you update docs, keep them aligned with:
 
-- config structs in `internal/config`
-- runtime wiring in `cmd/gestaltd` and `internal/bootstrap`
-- HTTP routes in `internal/server`
+- config structs in `server/internal/config`
+- runtime wiring in `server/cmd/gestaltd` and `server/internal/bootstrap`
+- HTTP routes in `server/internal/server`
 - deployment assets in `Dockerfile`, `docker-compose.yml`, and `server/deploy/helm`
 
 The easiest way to make docs drift is to copy previous prose instead of reading the code path that actually implements the feature.
@@ -42,7 +42,7 @@ npm run build
 
 If you add a new built-in auth provider, datastore, secret manager, binding, runtime, or named provider:
 
-1. register it in the relevant `cmd/gestaltd` file
+1. register it in the relevant `server/cmd/gestaltd` file
 2. add or update tests
 3. update [Built-in Plugins](/reference/built-in-plugins)
 4. update any docs or examples that describe the supported inventory
