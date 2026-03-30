@@ -29,8 +29,11 @@ Components registered by the `gestaltd` binary at startup.
 | Name | Purpose |
 | --- | --- |
 | `env` | Resolves secrets from environment variables. Default when `secrets` is omitted. |
-| `file` | Resolves secrets from files in a configured directory. |
-| `gcp_secret_manager` | Resolves secrets from Google Cloud Secret Manager. |
+| `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
+| `google_secret_manager` | Resolves secrets from Google Cloud Secret Manager. |
+| `aws_secrets_manager` | Resolves secrets from AWS Secrets Manager. |
+| `vault` | Resolves secrets from HashiCorp Vault (KV v2). |
+| `azure_key_vault` | Resolves secrets from Azure Key Vault. |
 
 ## Telemetry Providers
 

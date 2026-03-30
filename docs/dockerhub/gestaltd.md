@@ -124,7 +124,7 @@ docker run --rm \
   valontechnologies/gestaltd:latest
 ```
 
-For more advanced setups, Gestalt also supports `secret://...` references with `env`, `file`, and `gcp_secret_manager` secret providers.
+For more advanced setups, Gestalt also supports `secret://...` references with `env`, `file`, `google_secret_manager`, `aws_secrets_manager`, `vault`, and `azure_key_vault` secret providers.
 
 ## Health endpoints
 
