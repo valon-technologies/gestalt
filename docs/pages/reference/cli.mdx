@@ -11,7 +11,7 @@ gestaltd [--config PATH]
 gestaltd plugin <command> [flags]
 gestaltd serve [--config PATH] [--locked]
 gestaltd bundle --config PATH --output DIR
-gestaltd validate [--config PATH]
+gestaltd validate [--config PATH] [--init]
 ```
 
 ## Command Meanings
@@ -35,10 +35,10 @@ The plain `gestaltd` command has one extra convenience feature:
 
 That generated config is intentionally local-only:
 
-- `local` auth
+- `none` auth
 - SQLite
 - `env` secrets
-- dev mode enabled
+- a generated `server.encryption_key`
 
 ## Config Path Resolution
 

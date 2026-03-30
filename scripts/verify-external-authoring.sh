@@ -112,11 +112,11 @@ integrations:
         prefix: "verified:"
 CFG
 
-echo "=== running init ==="
-"$GESTALTD" init --config "$WORK/config.yaml"
+echo "=== bundling config ==="
+"$GESTALTD" bundle --config "$WORK/config.yaml" --output "$WORK/bundle"
 
 echo "=== starting serve --locked ==="
-"$GESTALTD" serve --locked --config "$WORK/config.yaml" &
+"$GESTALTD" serve --locked --config "$WORK/bundle/config.yaml" &
 SERVER_PID=$!
 
 echo "=== polling health ==="

@@ -11,7 +11,7 @@ import { Cards, Steps } from 'nextra/components'
 | `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
 | `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, integrations, runtimes, bindings, and egress policy. |
 | `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd bundle`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
-| Deploy assets | A Dockerfile, `docker-compose.yml`, and a Helm chart for the bundled deployment paths. |
+| Deploy assets | `Dockerfile.gestaltd`, `Dockerfile.gestalt`, `docker-compose.yml`, and a Helm chart for the bundled deployment paths. |
 
 ## The Four Foundations
 
@@ -37,7 +37,7 @@ The same provider graph can be reached through the HTTP API, the embedded web UI
 
 There are four real deployment modes to think about:
 
-1. `gestaltd` with no config: local-only, auto-generated config, local auth, SQLite, dev mode on.
+1. `gestaltd` with no config: local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key.
 2. Docker or Docker Compose: single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`.
 3. Helm on Kubernetes: one Deployment for `gestaltd`, optional init container for locked startup.
 4. Bare binary: `gestaltd`, `gestaltd serve`, `gestaltd bundle`, and `gestaltd validate`.

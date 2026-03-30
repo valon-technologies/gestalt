@@ -4,9 +4,20 @@ Gestalt has pluggable platform authentication. Configure it under `auth:` in `co
 
 ## Available Providers
 
+### `none`
+
+Use `none` when you want Gestalt to skip platform authentication entirely.
+
+```yaml
+auth:
+  provider: none
+```
+
+Every request is treated as coming from a single anonymous user.
+
 ### `local`
 
-The built-in local provider is the simplest way to run Gestalt without any external identity system.
+The built-in local provider is the simplest authenticated way to run Gestalt without any external identity system.
 
 ```yaml
 auth:
@@ -63,6 +74,7 @@ auth:
 
 | Field | Provider | Notes |
 | --- | --- | --- |
+| none | `none` | No provider-specific config. |
 | `email` | `local` | Optional local-login email. |
 | `client_id` | `google`, `oidc` | OAuth client ID. |
 | `client_secret` | `google`, `oidc` | OAuth client secret. |

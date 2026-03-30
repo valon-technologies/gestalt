@@ -1,7 +1,7 @@
 server:
   port: 8080
   base_url: ${GESTALT_BASE_URL}
-  encryption_key: ${ENCRYPTION_KEY}
+  encryption_key: ${GESTALT_ENCRYPTION_KEY}
 
 auth:
   provider: google

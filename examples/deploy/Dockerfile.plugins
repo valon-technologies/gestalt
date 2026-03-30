@@ -11,17 +11,10 @@
 #
 # Build:
 #   docker build -f Dockerfile.plugins --secret id=github_token,src=token.txt .
-#
-# Once a gestalt:builder image is available, the first stage simplifies to:
-#   FROM valontechnologies/gestalt:builder AS build
 
-FROM golang:1.26-alpine AS build
-RUN apk add --no-cache git
+FROM valontechnologies/gestaltd:builder AS build
 WORKDIR /src
 COPY . .
-
-# Copy gestaltd from the runtime image so we can run plugin package + bundle.
-COPY --from=valontechnologies/gestaltd:latest /gestaltd /usr/local/bin/gestaltd
 
 # Build plugin binaries, package them as archives, and bundle everything.
 RUN --mount=type=secret,id=github_token \

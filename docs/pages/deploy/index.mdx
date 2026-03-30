@@ -30,13 +30,13 @@ The repository ships these deployment assets:
 | Path | What it gives you |
 | --- | --- |
 | `gestaltd` with no config | True out-of-the-box local startup. |
-| `Dockerfile` | Single-container image with `gestaltd` as the entrypoint. |
+| `Dockerfile.gestaltd` | Single-container server image with `gestaltd` as the entrypoint. |
 | `docker-compose.yml` | Single-container local deployment with mounted config and SQLite volume. |
 | `deploy/helm/gestalt` | Helm chart for Kubernetes. |
 
 ## Docker And Compose
 
-The root `Dockerfile` builds:
+`Dockerfile.gestaltd` builds:
 
 - the frontend static export
 - the `gestaltd` binary
@@ -45,12 +45,19 @@ The root `Dockerfile` builds:
 The image defaults to:
 
 ```sh
-/gestaltd --config /etc/gestalt/config.yaml
+/gestaltd serve --locked --config /etc/gestalt/config.yaml
 ```
 
-That is a mutable-startup path. If you want locked startup, override the command and make sure the lockfile and prepared artifacts exist next to the mounted config.
+That means the published image expects a config mounted or baked at `/etc/gestalt/config.yaml` and starts in locked mode by default.
 
-The bundled `docker-compose.yml` is the quickest containerized path:
+If your config is static and does not require prepared artifacts, that works directly.
+
+If your config depends on remote REST or GraphQL upstreams, or packaged plugins, run `gestaltd bundle` ahead of time and either:
+
+- bake the bundled output into a derived image
+- or prepare it in a separate init or release step and point `serve --locked` at that bundled config
+
+The bundled `docker-compose.yml` is the quickest repo-local containerized path:
 
 ```sh
 docker compose up --build
@@ -60,6 +67,8 @@ It mounts:
 
 - `./deploy/docker/config.yaml` to `/etc/gestalt/config.yaml`
 - a named volume at `/data` for SQLite
+
+For published-image examples rather than repo-local source builds, see `examples/deploy/`.
 
 ## Bare Binary
 

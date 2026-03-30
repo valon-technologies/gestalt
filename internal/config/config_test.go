@@ -149,6 +149,106 @@ integrations:
 	}
 }
 
+func TestLoadConfigEnvFileFallback(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "encryption-key")
+	if err := os.WriteFile(secretPath, []byte("file-based-secret\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile secret: %v", err)
+	}
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: ${TEST_ENCRYPTION}
+`)
+
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		switch key {
+		case "TEST_ENCRYPTION_FILE":
+			return secretPath, true
+		default:
+			return "", false
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+
+	if cfg.Server.EncryptionKey != "file-based-secret" {
+		t.Fatalf("Server.EncryptionKey = %q, want file-based-secret", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestLoadConfigEnvValueOverridesFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "encryption-key")
+	if err := os.WriteFile(secretPath, []byte("file-based-secret\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile secret: %v", err)
+	}
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: ${TEST_ENCRYPTION}
+`)
+
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		switch key {
+		case "TEST_ENCRYPTION":
+			return "env-secret", true
+		case "TEST_ENCRYPTION_FILE":
+			return secretPath, true
+		default:
+			return "", false
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+
+	if cfg.Server.EncryptionKey != "env-secret" {
+		t.Fatalf("Server.EncryptionKey = %q, want env-secret", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestLoadConfigEnvFileReadError(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: ${TEST_ENCRYPTION}
+`)
+
+	_, err := LoadWithLookup(path, func(key string) (string, bool) {
+		switch key {
+		case "TEST_ENCRYPTION_FILE":
+			return "/does/not/exist", true
+		default:
+			return "", false
+		}
+	})
+	if err == nil {
+		t.Fatal("expected error for unreadable *_FILE path")
+	}
+	if !strings.Contains(err.Error(), "TEST_ENCRYPTION_FILE") {
+		t.Fatalf("expected *_FILE context in error, got: %v", err)
+	}
+}
+
 func TestLoadConfigBaseURLResolvesRedirectURL(t *testing.T) {
 	t.Parallel()
 
