@@ -134,7 +134,6 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	}
 
 	manifest := `{
-  "schema_version": 2,
   "source": "github.com/testowner/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],

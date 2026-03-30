@@ -18,7 +18,6 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 		t.Fatalf("WriteFile(provider): %v", err)
 	}
 	manifest := `{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],

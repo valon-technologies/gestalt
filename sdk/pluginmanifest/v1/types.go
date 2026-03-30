@@ -3,24 +3,21 @@ package pluginmanifestv1
 import _ "embed"
 
 const (
-	SchemaVersion = 2
-
 	KindProvider = "provider"
 	KindRuntime  = "runtime"
 	KindWebUI    = "webui"
 )
 
 type Manifest struct {
-	SchemaVersion int            `json:"schema_version"`
-	Source        string         `json:"source,omitempty"`
-	Version       string         `json:"version"`
-	DisplayName   string         `json:"display_name,omitempty"`
-	Description   string         `json:"description,omitempty"`
-	Kinds         []string       `json:"kinds"`
-	Provider      *Provider      `json:"provider,omitempty"`
-	WebUI         *WebUIMetadata `json:"webui,omitempty"`
-	Artifacts     []Artifact     `json:"artifacts,omitempty"`
-	Entrypoints   Entrypoints    `json:"entrypoints,omitzero"`
+	Source      string         `json:"source,omitempty"`
+	Version     string         `json:"version"`
+	DisplayName string         `json:"display_name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Kinds       []string       `json:"kinds"`
+	Provider    *Provider      `json:"provider,omitempty"`
+	WebUI       *WebUIMetadata `json:"webui,omitempty"`
+	Artifacts   []Artifact     `json:"artifacts,omitempty"`
+	Entrypoints Entrypoints    `json:"entrypoints,omitzero"`
 }
 
 type WebUIMetadata struct {
@@ -98,5 +95,5 @@ type Entrypoint struct {
 	Args         []string `json:"args,omitempty"`
 }
 
-//go:embed manifest.v2.jsonschema.json
+//go:embed manifest.jsonschema.json
 var ManifestJSONSchema []byte
