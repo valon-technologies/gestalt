@@ -33,6 +33,13 @@ func (s *memStore) StoreRegistration(_ context.Context, reg *mcpoauth.Registrati
 	return nil
 }
 
+func (s *memStore) DeleteRegistration(_ context.Context, authServerURL, redirectURI string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.regs, authServerURL+"|"+redirectURI)
+	return nil
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	if status != 0 {
@@ -232,6 +239,76 @@ func TestMCPOAuthFlow(t *testing.T) {
 		}
 		if tokenResp.AccessToken != "direct-access-tok" {
 			t.Errorf("access_token = %q, want direct-access-tok", tokenResp.AccessToken)
+		}
+	})
+
+	t.Run("ClearRegistration", func(t *testing.T) {
+		t.Parallel()
+
+		var dcrCount int
+		var mu sync.Mutex
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"resource":              baseURL + "/mcp",
+				"authorization_servers": []string{baseURL},
+			})
+		})
+		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"issuer":                                baseURL,
+				"authorization_endpoint":                baseURL + "/oauth/authorize",
+				"token_endpoint":                        baseURL + "/oauth/token",
+				"registration_endpoint":                 baseURL + "/oauth/register",
+				"code_challenge_methods_supported":      []string{"S256"},
+				"token_endpoint_auth_methods_supported": []string{"none"},
+			})
+		})
+		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			dcrCount++
+			id := fmt.Sprintf("client-%03d", dcrCount)
+			mu.Unlock()
+			writeJSON(w, http.StatusCreated, map[string]any{"client_id": id})
+		})
+
+		srv := httptest.NewServer(mux)
+		testutil.CloseOnCleanup(t, srv)
+
+		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
+		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+			MCPURL:      srv.URL + "/mcp",
+			Store:       store,
+			RedirectURL: "http://localhost:9999/callback",
+		})
+
+		authURL1, _ := handler.StartOAuth("s1", nil)
+		parsed1, _ := url.Parse(authURL1)
+		if parsed1.Query().Get("client_id") != "client-001" {
+			t.Fatalf("first client_id = %q, want client-001", parsed1.Query().Get("client_id"))
+		}
+
+		authURL2, _ := handler.StartOAuth("s2", nil)
+		parsed2, _ := url.Parse(authURL2)
+		if parsed2.Query().Get("client_id") != "client-001" {
+			t.Fatalf("cached client_id = %q, want client-001", parsed2.Query().Get("client_id"))
+		}
+
+		handler.ClearRegistration()
+
+		authURL3, _ := handler.StartOAuth("s3", nil)
+		parsed3, _ := url.Parse(authURL3)
+		if parsed3.Query().Get("client_id") != "client-002" {
+			t.Fatalf("re-registered client_id = %q, want client-002", parsed3.Query().Get("client_id"))
 		}
 	})
 }

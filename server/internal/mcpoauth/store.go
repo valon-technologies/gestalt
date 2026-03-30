@@ -7,4 +7,5 @@ import "context"
 type RegistrationStore interface {
 	GetRegistration(ctx context.Context, authServerURL, redirectURI string) (*Registration, error)
 	StoreRegistration(ctx context.Context, reg *Registration) error
+	DeleteRegistration(ctx context.Context, authServerURL, redirectURI string) error
 }

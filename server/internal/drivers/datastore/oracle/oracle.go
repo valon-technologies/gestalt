@@ -53,6 +53,7 @@ func (dialect) RegistrationDDL() string {
 				redirect_uri VARCHAR2(255) NOT NULL,
 				client_id VARCHAR2(255) NOT NULL,
 				client_secret_encrypted CLOB,
+				expires_at TIMESTAMP WITH TIME ZONE,
 				authorization_endpoint VARCHAR2(500) NOT NULL,
 				token_endpoint VARCHAR2(500) NOT NULL,
 				scopes_supported CLOB,

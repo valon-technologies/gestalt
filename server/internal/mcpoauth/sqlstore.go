@@ -42,6 +42,7 @@ const defaultRegistrationDDL = `CREATE TABLE IF NOT EXISTS oauth_registrations (
 	redirect_uri VARCHAR(255) NOT NULL,
 	client_id VARCHAR(255) NOT NULL,
 	client_secret_encrypted TEXT,
+	expires_at DATETIME NULL,
 	authorization_endpoint VARCHAR(500) NOT NULL,
 	token_endpoint VARCHAR(500) NOT NULL,
 	scopes_supported TEXT,
@@ -56,13 +57,16 @@ func (s *SQLStore) Migrate(ctx context.Context) error {
 	if p, ok := s.dialect.(RegistrationDDLProvider); ok {
 		ddl = p.RegistrationDDL()
 	}
-	_, err := s.db.ExecContext(ctx, ddl)
-	return err
+	if _, err := s.db.ExecContext(ctx, ddl); err != nil {
+		return err
+	}
+	_, _ = s.db.ExecContext(ctx, `ALTER TABLE oauth_registrations ADD COLUMN expires_at DATETIME NULL`)
+	return nil
 }
 
 func (s *SQLStore) GetRegistration(ctx context.Context, authServerURL, redirectURI string) (*Registration, error) {
 	query := `SELECT id, auth_server_url, redirect_uri, client_id, client_secret_encrypted,
-	       authorization_endpoint, token_endpoint, scopes_supported, discovered_at
+	       expires_at, authorization_endpoint, token_endpoint, scopes_supported, discovered_at
 	FROM oauth_registrations
 	WHERE auth_server_url = ` + s.ph(1) + ` AND redirect_uri = ` + s.ph(2)
 
@@ -71,9 +75,10 @@ func (s *SQLStore) GetRegistration(ctx context.Context, authServerURL, redirectU
 	var reg Registration
 	var secretEnc sql.NullString
 	var scopes sql.NullString
+	var expiresAt sql.NullTime
 	var id string
 	err := row.Scan(&id, &reg.AuthServerURL, &reg.RedirectURI, &reg.ClientID,
-		&secretEnc, &reg.AuthorizationEndpoint, &reg.TokenEndpoint,
+		&secretEnc, &expiresAt, &reg.AuthorizationEndpoint, &reg.TokenEndpoint,
 		&scopes, &reg.DiscoveredAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -89,9 +94,20 @@ func (s *SQLStore) GetRegistration(ctx context.Context, authServerURL, redirectU
 		}
 		reg.ClientSecret = decrypted
 	}
+	if expiresAt.Valid {
+		reg.ExpiresAt = &expiresAt.Time
+	}
 	reg.ScopesSupported = scopes.String
 
 	return &reg, nil
+}
+
+func (s *SQLStore) DeleteRegistration(ctx context.Context, authServerURL, redirectURI string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_registrations WHERE auth_server_url = `+s.ph(1)+` AND redirect_uri = `+s.ph(2),
+		authServerURL, redirectURI,
+	)
+	return err
 }
 
 func (s *SQLStore) StoreRegistration(ctx context.Context, reg *Registration) error {
@@ -104,6 +120,11 @@ func (s *SQLStore) StoreRegistration(ctx context.Context, reg *Registration) err
 		secretEnc = sql.NullString{String: encrypted, Valid: true}
 	}
 
+	var expiresAt sql.NullTime
+	if reg.ExpiresAt != nil {
+		expiresAt = sql.NullTime{Time: *reg.ExpiresAt, Valid: true}
+	}
+
 	now := time.Now()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -112,18 +133,17 @@ func (s *SQLStore) StoreRegistration(ctx context.Context, reg *Registration) err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Try UPDATE first, then INSERT if no rows affected. This avoids
-	// database-specific upsert syntax (ON DUPLICATE KEY / ON CONFLICT).
 	res, err := tx.ExecContext(ctx, `UPDATE oauth_registrations SET
 		client_id = `+s.ph(1)+`,
 		client_secret_encrypted = `+s.ph(2)+`,
-		authorization_endpoint = `+s.ph(3)+`,
-		token_endpoint = `+s.ph(4)+`,
-		scopes_supported = `+s.ph(5)+`,
-		discovered_at = `+s.ph(6)+`,
-		updated_at = `+s.ph(7)+`
-		WHERE auth_server_url = `+s.ph(8)+` AND redirect_uri = `+s.ph(9),
-		reg.ClientID, secretEnc, reg.AuthorizationEndpoint, reg.TokenEndpoint,
+		expires_at = `+s.ph(3)+`,
+		authorization_endpoint = `+s.ph(4)+`,
+		token_endpoint = `+s.ph(5)+`,
+		scopes_supported = `+s.ph(6)+`,
+		discovered_at = `+s.ph(7)+`,
+		updated_at = `+s.ph(8)+`
+		WHERE auth_server_url = `+s.ph(9)+` AND redirect_uri = `+s.ph(10),
+		reg.ClientID, secretEnc, expiresAt, reg.AuthorizationEndpoint, reg.TokenEndpoint,
 		reg.ScopesSupported, reg.DiscoveredAt, now,
 		reg.AuthServerURL, reg.RedirectURI,
 	)
@@ -135,10 +155,10 @@ func (s *SQLStore) StoreRegistration(ctx context.Context, reg *Registration) err
 	if affected == 0 {
 		_, err = tx.ExecContext(ctx, `INSERT INTO oauth_registrations
 			(id, auth_server_url, redirect_uri, client_id, client_secret_encrypted,
-			 authorization_endpoint, token_endpoint, scopes_supported, discovered_at, created_at, updated_at)
-			VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`)`,
+			 expires_at, authorization_endpoint, token_endpoint, scopes_supported, discovered_at, created_at, updated_at)
+			VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`, `+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`, `+s.ph(12)+`)`,
 			uuid.NewString(), reg.AuthServerURL, reg.RedirectURI, reg.ClientID,
-			secretEnc, reg.AuthorizationEndpoint, reg.TokenEndpoint,
+			secretEnc, expiresAt, reg.AuthorizationEndpoint, reg.TokenEndpoint,
 			reg.ScopesSupported, reg.DiscoveredAt, now, now,
 		)
 		if err != nil {
