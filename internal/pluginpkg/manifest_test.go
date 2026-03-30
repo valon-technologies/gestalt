@@ -342,6 +342,209 @@ func TestDecodeManifest_V1StillWorks(t *testing.T) {
 	}
 }
 
+func TestDecodeManifest_V2RejectsUnsupportedKind(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/test-org/test-repo/test-plugin",
+  "version": "1.0.0",
+  "kinds": ["unknown_kind"],
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    }
+  ],
+  "entrypoints": {}
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for unsupported kind")
+	}
+}
+
+func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "protocol": { "min": 1, "max": 1 }
+  },
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for v2 manifest without source")
+	}
+}
+
+func TestDecodeManifest_RejectsSchemaVersion3(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 3,
+  "source": "github.com/test-org/test-repo/test-plugin",
+  "version": "1.0.0",
+  "kinds": ["provider"]
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for unsupported schema_version 3")
+	}
+}
+
+func TestDecodeManifest_V2RejectsDuplicateArtifactPlatform(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/test-org/test-repo/test-plugin",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "protocol": { "min": 1, "max": 1 }
+  },
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider2",
+      "sha256": "` + sha256Hex("provider2") + `"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for duplicate artifact platform")
+	}
+}
+
+func TestDecodeManifest_V2RejectsAbsoluteArtifactPath(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/test-org/test-repo/test-plugin",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "protocol": { "min": 1, "max": 1 }
+  },
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "/absolute/path/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "/absolute/path/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for absolute artifact path")
+	}
+}
+
+func TestDecodeManifest_V2ProviderWithoutMetadataRejected(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/test-org/test-repo/test-plugin",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for provider kind without provider metadata")
+	}
+}
+
+func TestValidateManifest_ProtocolMinGreaterThanMax(t *testing.T) {
+	t.Parallel()
+
+	manifest := &pluginmanifestv1.Manifest{
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
+		ID:            "acme/provider",
+		Version:       "0.1.0",
+		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Protocol: pluginmanifestv1.ProtocolRange{Min: 5, Max: 1},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     "darwin",
+				Arch:   "arm64",
+				Path:   "artifacts/darwin/arm64/provider",
+				SHA256: sha256Hex("provider"),
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: "artifacts/darwin/arm64/provider",
+			},
+		},
+	}
+
+	err := ValidateManifest(manifest)
+	if err == nil {
+		t.Fatal("expected error for protocol min > max")
+	}
+}
+
 func TestDecodeManifest_V1RejectsSource(t *testing.T) {
 	t.Parallel()
 
