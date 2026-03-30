@@ -111,7 +111,7 @@ func parseResourceMetadataFromWWWAuth(header string) string {
 	if header == "" {
 		return ""
 	}
-	header = strings.TrimPrefix(header, "Bearer ")
+	header = strings.TrimPrefix(header, core.BearerScheme)
 	for _, part := range strings.Split(header, ",") {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "resource_metadata=") {
