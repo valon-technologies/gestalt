@@ -2,7 +2,7 @@ services:
   gestaltd:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.gestaltd
     ports:
       - "8080:8080"
     volumes:
