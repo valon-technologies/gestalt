@@ -78,13 +78,17 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 		p = &principal.Principal{}
 	}
 
+	reqMeta := RequestMetaFromContext(ctx)
 	entry := core.AuditEntry{
-		Timestamp: time.Now(),
-		RequestID: meta.RequestID,
-		Source:    g.source,
-		Provider:  providerName,
-		Operation: operation,
-		Depth:     meta.Depth,
+		Timestamp:  time.Now(),
+		RequestID:  meta.RequestID,
+		Source:     g.source,
+		Provider:   providerName,
+		Operation:  operation,
+		Depth:      meta.Depth,
+		ClientIP:   reqMeta.ClientIP,
+		RemoteAddr: reqMeta.RemoteAddr,
+		UserAgent:  reqMeta.UserAgent,
 	}
 	if p != nil {
 		entry.UserID = p.UserID

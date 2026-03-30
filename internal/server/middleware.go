@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
 )
 
@@ -37,6 +38,18 @@ func UserIDFromContext(ctx context.Context) string {
 
 func PrincipalFromContext(ctx context.Context) *principal.Principal {
 	return principal.FromContext(ctx)
+}
+
+func requestMetaMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		meta := invocation.RequestMeta{
+			ClientIP:   invocation.ClientIP(r),
+			RemoteAddr: invocation.RemoteAddrIP(r),
+			UserAgent:  r.UserAgent(),
+		}
+		ctx := invocation.WithRequestMeta(r.Context(), meta)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {

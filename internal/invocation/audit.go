@@ -44,6 +44,16 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 		attrs = append(attrs, slog.String("error", entry.Error))
 	}
 
+	if entry.ClientIP != "" {
+		attrs = append(attrs, slog.String("client_ip", entry.ClientIP))
+	}
+	if entry.RemoteAddr != "" {
+		attrs = append(attrs, slog.String("remote_addr", entry.RemoteAddr))
+	}
+	if entry.UserAgent != "" {
+		attrs = append(attrs, slog.String("user_agent", entry.UserAgent))
+	}
+
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.IsValid() {
 		attrs = append(attrs,
