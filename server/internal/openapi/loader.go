@@ -257,6 +257,10 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			}
 
 			if op.RequestBody != nil && op.RequestBody.Content != nil {
+				seen := make(map[string]struct{}, len(params))
+				for _, p := range params {
+					seen[p.Name] = struct{}{}
+				}
 				for contentPair := op.RequestBody.Content.First(); contentPair != nil; contentPair = contentPair.Next() {
 					mt := contentPair.Value()
 					if mt.Schema == nil || mt.Schema.Schema() == nil {
@@ -271,6 +275,9 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 						requiredSet[r] = true
 					}
 					for propPair := schema.Properties.First(); propPair != nil; propPair = propPair.Next() {
+						if _, exists := seen[propPair.Key()]; exists {
+							continue
+						}
 						propSchema := propPair.Value().Schema()
 						if propSchema == nil {
 							continue
