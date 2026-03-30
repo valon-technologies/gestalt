@@ -26,14 +26,14 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gestaltd ./cmd/gestaltd
 RUN mkdir /data
 
-FROM alpine:3.21
+FROM alpine:3.23
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk upgrade --no-cache && apk add --no-cache ca-certificates curl
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=build-binary /gestaltd /gestaltd
 RUN mkdir -p /data && chown nobody:nobody /data
 LABEL org.opencontainers.image.title="gestaltd" \
