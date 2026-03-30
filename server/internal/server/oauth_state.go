@@ -70,6 +70,40 @@ func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*int
 	return &state, nil
 }
 
+const loginStateTTL = 10 * time.Minute
+const loginStateCookieName = "login_state"
+
+type loginState struct {
+	State     string `json:"s"`
+	ExpiresAt int64  `json:"exp"`
+}
+
+func encodeLoginState(enc *cryptoutil.AESGCMEncryptor, state loginState) (string, error) {
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("marshal login state: %w", err)
+	}
+	return enc.EncryptURLSafe(string(payload))
+}
+
+func decodeLoginState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*loginState, error) {
+	plaintext, err := enc.DecryptURLSafe(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt login state: %w", err)
+	}
+	var state loginState
+	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
+		return nil, fmt.Errorf("unmarshal login state: %w", err)
+	}
+	if state.State == "" {
+		return nil, fmt.Errorf("login state missing state value")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return nil, fmt.Errorf("login state expired")
+	}
+	return &state, nil
+}
+
 func setURLQueryParam(rawURL, key, value string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {

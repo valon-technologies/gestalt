@@ -28,6 +28,7 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     let login_url = format!("{}/api/v1/auth/login", base_url);
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
+        .cookie_store(true)
         .build()
         .context("failed to build HTTP client")?;
     let resp = client
@@ -95,7 +96,10 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
 
     let mut callback_url = url::Url::parse(&format!("{}/api/v1/auth/login/callback", base_url))
         .context("failed to build callback URL")?;
-    callback_url.query_pairs_mut().append_pair("code", &code);
+    callback_url
+        .query_pairs_mut()
+        .append_pair("code", &code)
+        .append_pair("state", &state);
 
     let callback_resp = client
         .get(callback_url.as_str())
