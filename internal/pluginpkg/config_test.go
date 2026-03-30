@@ -27,7 +27,7 @@ func TestValidateConfigForManifest(t *testing.T) {
 	}
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "acme/provider",
+		Source:        "github.com/acme/plugins/provider",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -81,7 +81,7 @@ func TestValidateConfigForManifestRuntimeFallback(t *testing.T) {
 	}
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "acme/runtime",
+		Source:        "github.com/acme/plugins/runtime",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -119,7 +119,7 @@ func TestValidateConfigForManifestRuntimeDoesNotUseProviderSchema(t *testing.T) 
 	manifestPath := filepath.Join(dir, ManifestFile)
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "acme/plugin",
+		Source:        "github.com/acme/plugins/plugin",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime},
 		Provider: &pluginmanifestv1.Provider{

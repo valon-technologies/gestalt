@@ -12,7 +12,7 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
 
-func mustBuildTestPluginDir(t *testing.T, dir, id, version, content string) string {
+func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) string {
 	t.Helper()
 
 	srcDir := filepath.Join(dir, "plugin-src")
@@ -25,7 +25,7 @@ func mustBuildTestPluginDir(t *testing.T, dir, id, version, content string) stri
 	}
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            id,
+		Source:        source,
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -72,7 +72,7 @@ func TestInitAtPath_WritesLockfileWithPluginEntry(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "init-test-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "init-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -109,7 +109,7 @@ func TestLockMatchesConfig_TrueAfterInit(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "match-test-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "match-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -136,7 +136,7 @@ func TestLockMatchesConfig_FalseWhenPackageChanged(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "original-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "original-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -176,7 +176,7 @@ func TestLockMatchesConfig_FalseWhenManifestMissing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "manifest-test-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "manifest-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -210,7 +210,7 @@ func TestLockMatchesConfig_FalseWhenExecutableMissing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "exec-test-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "exec-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -244,7 +244,7 @@ func TestLockMatchesConfig_FalseWhenFingerprintChanged(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := mustBuildTestPluginDir(t, dir, "testowner/provider", "0.1.0", "fp-test-binary")
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "fp-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
 	lc := NewLifecycle(nil, nil)
@@ -445,7 +445,7 @@ func TestInitAtPath_RuntimePlugin(t *testing.T) {
 	}
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "testowner/runtime",
+		Source:        "github.com/testowner/plugins/runtime",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
