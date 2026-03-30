@@ -100,6 +100,7 @@ type ExecutablePluginDef struct {
 	Version           string                        `yaml:"version"`
 	Args              []string                      `yaml:"args"`
 	Env               map[string]string             `yaml:"env"`
+	AllowedHosts      []string                      `yaml:"allowed_hosts"`
 	Config            yaml.Node                     `yaml:"config"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
