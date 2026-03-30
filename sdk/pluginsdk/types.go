@@ -78,3 +78,40 @@ func ConnectionParams(ctx context.Context) map[string]string {
 	params, _ := ctx.Value(connectionParamsKey{}).(map[string]string)
 	return params
 }
+
+type Runtime interface {
+	Start(ctx context.Context, name string, config map[string]any, host RuntimeHost) error
+	Stop(ctx context.Context) error
+}
+
+type RuntimeHost interface {
+	Invoke(ctx context.Context, principal Principal, provider, instance, operation string, params map[string]any) (*OperationResult, error)
+	ListCapabilities(ctx context.Context) ([]Capability, error)
+}
+
+type Principal struct {
+	UserID   string
+	Identity *UserIdentity
+	Source   PrincipalSource
+}
+
+type UserIdentity struct {
+	Email       string
+	DisplayName string
+	AvatarURL   string
+}
+
+type PrincipalSource string
+
+const (
+	PrincipalSourceSession  PrincipalSource = "session"
+	PrincipalSourceAPIToken PrincipalSource = "api_token"
+	PrincipalSourceEnv      PrincipalSource = "env"
+)
+
+type Capability struct {
+	Provider    string
+	Operation   string
+	Description string
+	Parameters  []Parameter
+}

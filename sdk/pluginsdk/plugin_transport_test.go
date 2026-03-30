@@ -3,6 +3,7 @@ package pluginsdk_test
 import (
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,22 +14,21 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type stubRuntimePlugin struct {
-	pluginapiv1.UnimplementedRuntimePluginServer
-	started int
-	stopped int
-	lastReq *pluginapiv1.StartRuntimeRequest
+type stubRuntime struct {
+	started  int
+	stopped  int
+	lastName string
 }
 
-func (s *stubRuntimePlugin) Start(_ context.Context, req *pluginapiv1.StartRuntimeRequest) (*emptypb.Empty, error) {
+func (s *stubRuntime) Start(_ context.Context, name string, _ map[string]any, _ pluginsdk.RuntimeHost) error {
 	s.started++
-	s.lastReq = req
-	return &emptypb.Empty{}, nil
+	s.lastName = name
+	return nil
 }
 
-func (s *stubRuntimePlugin) Stop(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (s *stubRuntime) Stop(context.Context) error {
 	s.stopped++
-	return &emptypb.Empty{}, nil
+	return nil
 }
 
 type stubRuntimeHost struct {
@@ -76,23 +76,48 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestServeRuntimeRoundTrip(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "runtime.sock")
-	t.Setenv(pluginapiv1.EnvPluginSocket, socket)
+func newRuntimeTestEnv(t *testing.T, rt pluginsdk.Runtime) pluginapiv1.RuntimePluginClient {
+	t.Helper()
 
-	server := &stubRuntimePlugin{}
+	dir, err := os.MkdirTemp("/tmp", "sdk-rt-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	pluginSocket := filepath.Join(dir, "rt.sock")
+	hostSocket := filepath.Join(dir, "host.sock")
+	t.Setenv(pluginapiv1.EnvPluginSocket, pluginSocket)
+	t.Setenv(pluginapiv1.EnvRuntimeHostSocket, hostSocket)
+
+	hostLis, err := net.Listen("unix", hostSocket)
+	if err != nil {
+		t.Fatalf("net.Listen host: %v", err)
+	}
+	t.Cleanup(func() { _ = hostLis.Close() })
+
+	hostSrv := grpc.NewServer()
+	pluginapiv1.RegisterRuntimeHostServer(hostSrv, &stubRuntimeHost{})
+	go func() { _ = hostSrv.Serve(hostLis) }()
+	t.Cleanup(hostSrv.Stop)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- pluginsdk.ServeRuntime(ctx, server)
+		errCh <- pluginsdk.ServeRuntime(ctx, rt)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		waitServeResult(t, errCh)
 	})
 
-	conn := newUnixConn(t, socket)
-	client := pluginapiv1.NewRuntimePluginClient(conn)
+	conn := newUnixConn(t, pluginSocket)
+	return pluginapiv1.NewRuntimePluginClient(conn)
+}
+
+func TestServeRuntimeRoundTrip(t *testing.T) {
+	rt := &stubRuntime{}
+	client := newRuntimeTestEnv(t, rt)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -103,40 +128,49 @@ func TestServeRuntimeRoundTrip(t *testing.T) {
 	if _, err := client.Stop(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true)); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if server.started != 1 || server.stopped != 1 || server.lastReq.GetName() != "echo" {
-		t.Fatalf("unexpected runtime server state: %+v", server)
+	if rt.started != 1 || rt.stopped != 1 || rt.lastName != "echo" {
+		t.Fatalf("unexpected runtime state: started=%d stopped=%d lastName=%q", rt.started, rt.stopped, rt.lastName)
 	}
 }
 
-func TestDialRuntimeHostRoundTrip(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "host.sock")
-	t.Setenv(pluginapiv1.EnvRuntimeHostSocket, socket)
+func TestServeRuntimeHostIntegration(t *testing.T) {
+	var capturedHost pluginsdk.RuntimeHost
+	capturingRT := &capturingRuntime{host: &capturedHost}
+	client := newRuntimeTestEnv(t, capturingRT)
 
-	lis, err := net.Listen("unix", socket)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterRuntimeHostServer(srv, &stubRuntimeHost{})
-	go func() { _ = srv.Serve(lis) }()
-	t.Cleanup(srv.Stop)
-
-	conn, client, err := pluginsdk.DialRuntimeHost(context.Background())
-	if err != nil {
-		t.Fatalf("DialRuntimeHost: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
+	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer rpcCancel()
 
-	resp, err := client.ListCapabilities(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	if _, err := client.Start(rpcCtx, &pluginapiv1.StartRuntimeRequest{Name: "test-rt"}, grpc.WaitForReady(true)); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if capturedHost == nil {
+		t.Fatal("RuntimeHost was not passed to Start")
+	}
+
+	caps, err := capturedHost.ListCapabilities(rpcCtx)
 	if err != nil {
-		t.Fatalf("ListCapabilities: %v", err)
+		t.Fatalf("ListCapabilities via SDK host: %v", err)
 	}
-	if len(resp.GetCapabilities()) != 1 || resp.GetCapabilities()[0].GetProvider() != "alpha" {
-		t.Fatalf("unexpected capabilities: %+v", resp.GetCapabilities())
+	if len(caps) != 1 || caps[0].Provider != "alpha" || caps[0].Operation != "read" {
+		t.Fatalf("unexpected capabilities: %+v", caps)
 	}
+
+	if _, err := client.Stop(rpcCtx, &emptypb.Empty{}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+}
+
+type capturingRuntime struct {
+	host *pluginsdk.RuntimeHost
+}
+
+func (r *capturingRuntime) Start(_ context.Context, _ string, _ map[string]any, host pluginsdk.RuntimeHost) error {
+	*r.host = host
+	return nil
+}
+
+func (r *capturingRuntime) Stop(context.Context) error {
+	return nil
 }
