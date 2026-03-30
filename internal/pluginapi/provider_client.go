@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"slices"
 	"sync"
 
@@ -55,7 +55,7 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 		return nil, err
 	}
 	if schemaJSON := meta.GetConfigSchemaJson(); schemaJSON != "" {
-		log.Printf("WARNING: validating plugin %q config requires executing plugin binary; use manifests for static validation (Phase 3)", name)
+		slog.Warn("validating plugin config requires executing plugin binary", "plugin", name)
 		validationTarget := config
 		if validationTarget == nil {
 			validationTarget = map[string]any{}

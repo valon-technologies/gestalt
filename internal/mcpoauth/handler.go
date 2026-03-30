@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -122,7 +122,7 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 	authServerURL := md.AuthServerURL
 	existing, err := h.cfg.Store.GetRegistration(ctx, authServerURL, h.cfg.RedirectURL)
 	if err != nil {
-		log.Printf("WARNING: mcpoauth: reading registration for %s: %v", authServerURL, err)
+		slog.Warn("mcpoauth: reading registration failed", "auth_server", authServerURL, "error", err)
 	}
 	if existing != nil {
 		return existing, nil
@@ -147,7 +147,7 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 	}
 
 	if err := h.cfg.Store.StoreRegistration(ctx, reg); err != nil {
-		log.Printf("WARNING: mcpoauth: storing registration for %s: %v", authServerURL, err)
+		slog.Warn("mcpoauth: storing registration failed", "auth_server", authServerURL, "error", err)
 	}
 
 	return reg, nil
@@ -158,7 +158,7 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 func (h *Handler) AuthorizationURL(state string, scopes []string) string {
 	upstream, err := h.ensure()
 	if err != nil {
-		log.Printf("ERROR: mcpoauth: ensure failed in AuthorizationURL: %v", err)
+		slog.Error("mcpoauth: ensure failed", "method", "AuthorizationURL", "error", err)
 		return ""
 	}
 	authURL, _ := upstream.AuthorizationURLWithPKCE(state, scopes)
@@ -168,7 +168,7 @@ func (h *Handler) AuthorizationURL(state string, scopes []string) string {
 func (h *Handler) StartOAuth(state string, scopes []string) (string, string) {
 	upstream, err := h.ensure()
 	if err != nil {
-		log.Printf("ERROR: mcpoauth: ensure failed in StartOAuth: %v", err)
+		slog.Error("mcpoauth: ensure failed", "method", "StartOAuth", "error", err)
 		return "", ""
 	}
 	return upstream.AuthorizationURLWithPKCE(state, scopes)
@@ -177,7 +177,7 @@ func (h *Handler) StartOAuth(state string, scopes []string) (string, string) {
 func (h *Handler) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
 	upstream, err := h.ensure()
 	if err != nil {
-		log.Printf("ERROR: mcpoauth: ensure failed in StartOAuthWithOverride: %v", err)
+		slog.Error("mcpoauth: ensure failed", "method", "StartOAuthWithOverride", "error", err)
 		return "", ""
 	}
 	return upstream.AuthorizationURLWithOverride(authBaseURL, state, scopes)
