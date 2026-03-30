@@ -183,6 +183,57 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default", func(t *testing.T) {
+		t.Parallel()
+		ts := newTestServer(t)
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/health")
+		if err != nil {
+			t.Fatalf("GET /health: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+		}
+		if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+		}
+		if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
+			t.Errorf("Strict-Transport-Security = %q, want empty (secureCookies=false)", got)
+		}
+	})
+
+	t.Run("secure_cookies", func(t *testing.T) {
+		t.Parallel()
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.SecureCookies = true
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/health")
+		if err != nil {
+			t.Fatalf("GET /health: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+		}
+		if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+		}
+		const wantHSTS = "max-age=63072000; includeSubDomains"
+		if got := resp.Header.Get("Strict-Transport-Security"); got != wantHSTS {
+			t.Errorf("Strict-Transport-Security = %q, want %q", got, wantHSTS)
+		}
+	})
+}
+
 func TestReadinessCheck(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t)
