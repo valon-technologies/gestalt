@@ -35,6 +35,7 @@ type Server struct {
 	anonymousPrincipal *principal.Principal
 	secureCookies      bool
 	stateCodec         *integrationOAuthStateCodec
+	apiTokenTTL        time.Duration
 	now                func() time.Time
 	readiness          ReadinessChecker
 	mcpHandler         http.Handler
@@ -53,6 +54,7 @@ type Config struct {
 	IntegrationDefs   map[string]config.IntegrationDef
 	SecureCookies     bool
 	StateSecret       []byte
+	APITokenTTL       time.Duration
 	Now               func() time.Time
 	Readiness         ReadinessChecker
 	MCPHandler        http.Handler
@@ -94,6 +96,7 @@ func New(cfg Config) (*Server, error) {
 		noAuth:            noAuth,
 		secureCookies:     cfg.SecureCookies,
 		stateCodec:        stateCodec,
+		apiTokenTTL:       cfg.APITokenTTL,
 		now:               now,
 		readiness:         cfg.Readiness,
 		mcpHandler:        cfg.MCPHandler,

@@ -349,6 +349,14 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
+	result, err := s.db.Collection(datastore.APITokensCollection).DeleteMany(ctx, bson.M{"user_id": userID})
+	if err != nil {
+		return 0, fmt.Errorf("mongodb: revoking all api tokens: %w", err)
+	}
+	return result.DeletedCount, nil
+}
+
 func userFromDoc(doc *userDoc) *core.User {
 	return &core.User{
 		ID:          doc.ID,

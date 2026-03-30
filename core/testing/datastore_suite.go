@@ -399,6 +399,68 @@ func testDatastoreAPITokens(t *testing.T, newStore func(t *testing.T) core.Datas
 			t.Errorf("ValidateAPIToken for expired: expected nil, got %+v", got)
 		}
 	})
+
+	t.Run("revoke all tokens for user", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+
+		userA := mustCreateUser(t, ctx, ds, "revoke-all-a@example.com")
+		userB := mustCreateUser(t, ctx, ds, "revoke-all-b@example.com")
+		now := time.Now().Truncate(time.Second)
+
+		mustStoreAPIToken(t, ctx, ds, &core.APIToken{
+			ID: "rall-1", UserID: userA.ID, Name: "a-tok-1",
+			HashedToken: "sha256:rall1", CreatedAt: now, UpdatedAt: now,
+		})
+		mustStoreAPIToken(t, ctx, ds, &core.APIToken{
+			ID: "rall-2", UserID: userA.ID, Name: "a-tok-2",
+			HashedToken: "sha256:rall2", CreatedAt: now, UpdatedAt: now,
+		})
+		mustStoreAPIToken(t, ctx, ds, &core.APIToken{
+			ID: "rall-3", UserID: userB.ID, Name: "b-tok-1",
+			HashedToken: "sha256:rall3", CreatedAt: now, UpdatedAt: now,
+		})
+
+		count, err := ds.RevokeAllAPITokens(ctx, userA.ID)
+		if err != nil {
+			t.Fatalf("RevokeAllAPITokens: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("RevokeAllAPITokens: got count %d, want 2", count)
+		}
+
+		tokensA, err := ds.ListAPITokens(ctx, userA.ID)
+		if err != nil {
+			t.Fatalf("ListAPITokens after revoke-all: %v", err)
+		}
+		if len(tokensA) != 0 {
+			t.Errorf("expected 0 tokens for userA, got %d", len(tokensA))
+		}
+
+		tokensB, err := ds.ListAPITokens(ctx, userB.ID)
+		if err != nil {
+			t.Fatalf("ListAPITokens for userB: %v", err)
+		}
+		if len(tokensB) != 1 {
+			t.Errorf("expected 1 token for userB, got %d", len(tokensB))
+		}
+	})
+
+	t.Run("revoke all tokens returns zero when none exist", func(t *testing.T) {
+		ds := newStore(t)
+		t.Cleanup(func() { ds.Close() })
+		ctx := context.Background()
+
+		user := mustCreateUser(t, ctx, ds, "revoke-all-empty@example.com")
+		count, err := ds.RevokeAllAPITokens(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("RevokeAllAPITokens: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("RevokeAllAPITokens: got count %d, want 0", count)
+		}
+	})
 }
 
 func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) core.Datastore) {
