@@ -2,6 +2,7 @@ source: github.com/valon-technologies/gestalt/bigquery
 version: 0.0.1-alpha.1
 display_name: BigQuery
 description: Google BigQuery data warehouse
+icon_file: assets/icon.svg
 kinds:
   - provider
 provider:

@@ -105,6 +105,7 @@ type ExecutablePluginDef struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
 	ResolvedManifestPath string `yaml:"-"`
+	ResolvedIconFile     string `yaml:"-"`
 	IsDeclarative        bool   `yaml:"-"`
 }
 

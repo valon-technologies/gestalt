@@ -13,6 +13,7 @@ type Manifest struct {
 	Version     string         `json:"version"`
 	DisplayName string         `json:"display_name,omitempty"`
 	Description string         `json:"description,omitempty"`
+	IconFile    string         `json:"icon_file,omitempty"`
 	Kinds       []string       `json:"kinds"`
 	Provider    *Provider      `json:"provider,omitempty"`
 	WebUI       *WebUIMetadata `json:"webui,omitempty"`

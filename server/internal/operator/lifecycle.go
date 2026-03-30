@@ -818,6 +818,10 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		if err := applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 			return err
 		}
+		if intg.IconFile == "" && intg.Plugin.ResolvedIconFile != "" {
+			intg.IconFile = intg.Plugin.ResolvedIconFile
+			cfg.Integrations[name] = intg
+		}
 	}
 	for name := range cfg.Runtimes {
 		rt := cfg.Runtimes[name]
@@ -889,6 +893,8 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
 
+	resolvePluginIcon(manifest, manifestPath, plugin)
+
 	if kind == "integration" && manifest.Provider.IsDeclarative() {
 		plugin.ResolvedManifestPath = manifestPath
 		plugin.IsDeclarative = true
@@ -909,6 +915,18 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	plugin.Args = append([]string(nil), args...)
 	plugin.ResolvedManifestPath = manifestPath
 	return nil
+}
+
+func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.ExecutablePluginDef) {
+	if manifest.IconFile == "" {
+		return
+	}
+	iconPath := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.IconFile))
+	if _, err := os.Stat(iconPath); err != nil {
+		slog.Warn("plugin icon_file not found", "path", iconPath, "error", err)
+		return
+	}
+	plugin.ResolvedIconFile = iconPath
 }
 
 func entrypointArgs(kind string, manifest *pluginmanifestv1.Manifest) ([]string, error) {

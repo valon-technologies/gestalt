@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -24,6 +25,7 @@ type DeclarativeProvider struct {
 	name                 string
 	displayName          string
 	description          string
+	iconSVG              string
 	baseURL              string
 	auth                 *pluginmanifestv1.ProviderAuth
 	operations           []core.Operation
@@ -90,6 +92,15 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 func (p *DeclarativeProvider) Name() string        { return p.name }
 func (p *DeclarativeProvider) DisplayName() string { return p.displayName }
 func (p *DeclarativeProvider) Description() string { return p.description }
+
+func (p *DeclarativeProvider) SetIconSVG(svg string) { p.iconSVG = svg }
+
+func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
+	if p.iconSVG == "" {
+		return nil
+	}
+	return &catalog.Catalog{IconSVG: p.iconSVG}
+}
 
 func (p *DeclarativeProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeUser

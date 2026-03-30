@@ -899,6 +899,77 @@ func TestDecodeManifest_DeclarativeRejectsOrphanPathParam(t *testing.T) {
 	}
 }
 
+func TestDecodeManifest_IconFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid icon_file decodes and validates", func(t *testing.T) {
+		t.Parallel()
+
+		data := []byte(`{
+  "source": "github.com/acme/plugins/echo",
+  "version": "1.0.0",
+  "icon_file": "assets/icon.svg",
+  "kinds": ["provider"],
+  "provider": {
+    "base_url": "https://api.example.com",
+    "operations": [
+      {"name": "get_thing", "method": "GET", "path": "/thing"}
+    ]
+  }
+}`)
+		manifest, err := DecodeManifest(data)
+		if err != nil {
+			t.Fatalf("DecodeManifest: %v", err)
+		}
+		if manifest.IconFile != "assets/icon.svg" {
+			t.Fatalf("IconFile = %q, want %q", manifest.IconFile, "assets/icon.svg")
+		}
+	})
+
+	t.Run("omitted icon_file is valid", func(t *testing.T) {
+		t.Parallel()
+
+		data := []byte(`{
+  "source": "github.com/acme/plugins/echo",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "base_url": "https://api.example.com",
+    "operations": [
+      {"name": "get_thing", "method": "GET", "path": "/thing"}
+    ]
+  }
+}`)
+		manifest, err := DecodeManifest(data)
+		if err != nil {
+			t.Fatalf("DecodeManifest: %v", err)
+		}
+		if manifest.IconFile != "" {
+			t.Fatalf("IconFile = %q, want empty", manifest.IconFile)
+		}
+	})
+
+	t.Run("traversal path rejected", func(t *testing.T) {
+		t.Parallel()
+
+		manifest := &pluginmanifestv1.Manifest{
+			Source:  "github.com/acme/plugins/echo",
+			Version: "1.0.0",
+			Kinds:   []string{pluginmanifestv1.KindProvider},
+			Provider: &pluginmanifestv1.Provider{
+				BaseURL: "https://api.example.com",
+				Operations: []pluginmanifestv1.ProviderOperation{
+					{Name: "get_thing", Method: "GET", Path: "/thing"},
+				},
+			},
+			IconFile: "../escape.svg",
+		}
+		if err := ValidateManifest(manifest); err == nil {
+			t.Fatal("expected error for traversal icon_file path")
+		}
+	})
+}
+
 func TestFindManifestFile(t *testing.T) {
 	t.Parallel()
 

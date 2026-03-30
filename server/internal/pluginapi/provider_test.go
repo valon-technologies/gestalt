@@ -160,6 +160,92 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 }
 
+func TestRemoteProviderIconSVG(t *testing.T) {
+	t.Parallel()
+
+	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>`
+
+	t.Run("no icon and no catalog returns nil", func(t *testing.T) {
+		t.Parallel()
+
+		client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
+		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
+		if err != nil {
+			t.Fatalf("NewRemoteProvider: %v", err)
+		}
+		cp, ok := prov.(core.CatalogProvider)
+		if !ok {
+			t.Fatal("expected provider to implement CatalogProvider")
+		}
+		if cat := cp.Catalog(); cat != nil {
+			t.Fatalf("expected nil catalog, got %+v", cat)
+		}
+	})
+
+	t.Run("SetIconSVG injects icon when no static catalog", func(t *testing.T) {
+		t.Parallel()
+
+		client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
+		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
+		if err != nil {
+			t.Fatalf("NewRemoteProvider: %v", err)
+		}
+		base := prov.(*remoteProviderBase)
+		base.SetIconSVG(testSVG)
+
+		cp := prov.(core.CatalogProvider)
+		cat := cp.Catalog()
+		if cat == nil {
+			t.Fatal("expected non-nil catalog after SetIconSVG")
+		}
+		if cat.IconSVG != testSVG {
+			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
+		}
+	})
+
+	t.Run("SetIconSVG fills empty icon on existing catalog", func(t *testing.T) {
+		t.Parallel()
+
+		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		if err != nil {
+			t.Fatalf("NewRemoteProvider: %v", err)
+		}
+		cp := prov.(core.CatalogProvider)
+		if cp.Catalog().IconSVG != "" {
+			t.Fatal("expected empty icon before SetIconSVG")
+		}
+
+		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
+		base.SetIconSVG(testSVG)
+
+		cat := cp.Catalog()
+		if cat.IconSVG != testSVG {
+			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
+		}
+	})
+
+	t.Run("existing catalog icon is preserved", func(t *testing.T) {
+		t.Parallel()
+
+		const existingIcon = `<svg><circle/></svg>`
+		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		if err != nil {
+			t.Fatalf("NewRemoteProvider: %v", err)
+		}
+		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
+		base.catalog.IconSVG = existingIcon
+		base.SetIconSVG(testSVG)
+
+		cp := prov.(core.CatalogProvider)
+		cat := cp.Catalog()
+		if cat.IconSVG != existingIcon {
+			t.Fatalf("IconSVG = %q, want preserved %q", cat.IconSVG, existingIcon)
+		}
+	})
+}
+
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
