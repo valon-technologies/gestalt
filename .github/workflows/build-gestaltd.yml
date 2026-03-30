@@ -190,12 +190,12 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Helm lint
-        run: helm lint deploy/helm/gestalt
+        run: helm lint server/deploy/helm/gestalt
 
       - name: Helm template
         run: |
-          helm template test-release deploy/helm/gestalt \
-            -f deploy/helm/gestalt/ci-values.yaml \
+          helm template test-release server/deploy/helm/gestalt \
+            -f server/deploy/helm/gestalt/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform
@@ -208,8 +208,8 @@ jobs:
 
       - name: Helm template (plugin-init)
         run: |
-          helm template test-release deploy/helm/gestalt \
-            -f deploy/helm/gestalt/ci-values-plugin-init.yaml \
+          helm template test-release server/deploy/helm/gestalt \
+            -f server/deploy/helm/gestalt/ci-values-plugin-init.yaml \
             > /tmp/rendered-plugin-init.yaml
 
       - name: Validate Kubernetes schemas (plugin-init)

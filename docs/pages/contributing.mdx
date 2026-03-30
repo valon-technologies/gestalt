@@ -11,7 +11,7 @@
 | `sdk` | Public SDKs and plugin manifest definitions. |
 | `web` | Frontend that is embedded into the server build. |
 | `docs` | Documentation site. |
-| `deploy` | Docker and Helm deployment assets. |
+| `server/deploy` | Docker and Helm deployment assets. |
 
 ## Working Principles
 
@@ -20,7 +20,7 @@ When you update docs, keep them aligned with:
 - config structs in `internal/config`
 - runtime wiring in `cmd/gestaltd` and `internal/bootstrap`
 - HTTP routes in `internal/server`
-- deployment assets in `Dockerfile`, `docker-compose.yml`, and `deploy/helm`
+- deployment assets in `Dockerfile`, `docker-compose.yml`, and `server/deploy/helm`
 
 The easiest way to make docs drift is to copy previous prose instead of reading the code path that actually implements the feature.
 

@@ -32,7 +32,7 @@ The repository ships these deployment assets:
 | `gestaltd` with no config | True out-of-the-box local startup. |
 | `Dockerfile` | Single-container server image with `gestaltd` as the entrypoint. |
 | `docker-compose.yml` | Single-container local deployment with mounted config and SQLite volume. |
-| `deploy/helm/gestalt` | Helm chart for Kubernetes. |
+| `server/deploy/helm/gestalt` | Helm chart for Kubernetes. |
 
 ## Docker And Compose
 
@@ -65,7 +65,7 @@ docker compose up --build
 
 It mounts:
 
-- `./deploy/docker/config.yaml` to `/etc/gestalt/config.yaml`
+- `./server/deploy/docker/config.yaml` to `/etc/gestalt/config.yaml`
 - a named volume at `/data` for SQLite
 
 For published-image examples rather than repo-local source builds, see `examples/deploy/`.
