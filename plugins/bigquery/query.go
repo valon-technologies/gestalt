@@ -5,21 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/http"
 	"time"
 
 	cloudbigquery "cloud.google.com/go/bigquery"
 	"cloud.google.com/go/civil"
-	"github.com/valon-technologies/gestalt/server/core"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
 const (
-	queryProviderDisplayName = "BigQuery Query"
-	queryProviderDescription = "BigQuery SQL query execution"
-	queryOperationName       = "query"
+	queryOperationName = "query"
 
 	queryParamProjectID    = "project_id"
 	queryParamSQL          = "query"
@@ -35,10 +31,6 @@ const (
 	fieldModeRequired = "REQUIRED"
 	fieldModeNullable = "NULLABLE"
 )
-
-type QueryProvider struct {
-	runner queryRunner
-}
 
 type queryOptions struct {
 	Timeout      time.Duration
@@ -76,91 +68,6 @@ type sdkQueryIterator struct {
 	iter   *cloudbigquery.RowIterator
 	client *cloudbigquery.Client
 	cancel context.CancelFunc
-}
-
-var _ core.Provider = (*QueryProvider)(nil)
-
-func NewQueryProvider() *QueryProvider {
-	return &QueryProvider{runner: sdkQueryRunner{}}
-}
-
-func (p *QueryProvider) Name() string                        { return "bigquery" }
-func (p *QueryProvider) DisplayName() string                 { return queryProviderDisplayName }
-func (p *QueryProvider) Description() string                 { return queryProviderDescription }
-func (p *QueryProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
-
-func (p *QueryProvider) ListOperations() []core.Operation {
-	return []core.Operation{
-		{
-			Name:        queryOperationName,
-			Description: "Execute a BigQuery SQL query",
-			Method:      http.MethodPost,
-			Parameters: []core.Parameter{
-				{Name: queryParamProjectID, Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: queryParamSQL, Type: "string", Required: true, Description: "SQL query to execute"},
-				{Name: queryParamMaxResults, Type: "integer", Description: "Maximum number of rows to return", Default: defaultQueryMaxResults},
-				{Name: queryParamTimeoutMs, Type: "integer", Description: "Query timeout in milliseconds", Default: defaultQueryTimeoutMs},
-				{Name: queryParamUseLegacySQL, Type: "boolean", Description: "Use legacy SQL syntax", Default: defaultQueryUseLegacySQL},
-			},
-		},
-	}
-}
-
-func (p *QueryProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	if operation != queryOperationName {
-		return nil, fmt.Errorf("unknown operation: %s", operation)
-	}
-
-	projectID, _ := params[queryParamProjectID].(string)
-	if projectID == "" {
-		return nil, fmt.Errorf("%s is required", queryParamProjectID)
-	}
-
-	sql, _ := params[queryParamSQL].(string)
-	if sql == "" {
-		return nil, fmt.Errorf("%s is required", queryParamSQL)
-	}
-
-	maxResults := intParam(params, queryParamMaxResults, defaultQueryMaxResults)
-	if maxResults < 0 {
-		maxResults = 0
-	}
-	iter, err := p.runner.Run(ctx, projectID, token, sql, queryOptions{
-		Timeout:      time.Duration(intParam(params, queryParamTimeoutMs, defaultQueryTimeoutMs)) * time.Millisecond,
-		UseLegacySQL: boolParam(params, queryParamUseLegacySQL, defaultQueryUseLegacySQL),
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = iter.Close() }()
-
-	rows := make([]map[string]any, 0, maxResults)
-	for i := 0; i < maxResults; i++ {
-		row := make(map[string]cloudbigquery.Value)
-		err := iter.Next(&row)
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading row: %w", err)
-		}
-		rows = append(rows, sanitizeRow(row))
-	}
-
-	body, err := json.Marshal(queryResult{
-		Schema:      convertSchema(iter.Schema()),
-		Rows:        rows,
-		TotalRows:   iter.TotalRows(),
-		JobComplete: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshaling result: %w", err)
-	}
-
-	return &core.OperationResult{
-		Status: http.StatusOK,
-		Body:   string(body),
-	}, nil
 }
 
 func (sdkQueryRunner) Run(ctx context.Context, projectID, token, sql string, opts queryOptions) (queryIterator, error) {
@@ -208,6 +115,22 @@ func (it sdkQueryIterator) Close() error {
 		return it.client.Close()
 	}
 	return nil
+}
+
+func readRows(iter queryIterator, maxResults int) ([]map[string]any, error) {
+	rows := make([]map[string]any, 0, maxResults)
+	for i := 0; i < maxResults; i++ {
+		row := make(map[string]cloudbigquery.Value)
+		err := iter.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading row: %w", err)
+		}
+		rows = append(rows, sanitizeRow(row))
+	}
+	return rows, nil
 }
 
 func convertSchema(schema cloudbigquery.Schema) []querySchemaField {
@@ -338,6 +261,10 @@ func zeroPadDecimal(value string, width int) string {
 	}
 	copy(buf[offset:], value)
 	return string(buf)
+}
+
+func timeDurationMs(ms int) time.Duration {
+	return time.Duration(ms) * time.Millisecond
 }
 
 func intParam(params map[string]any, key string, defaultVal int) int {
