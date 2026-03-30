@@ -2,6 +2,9 @@ package invocation
 
 import (
 	"context"
+	"net"
+	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -30,4 +33,40 @@ func ensureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
 	}
 	meta = &InvocationMeta{RequestID: uuid.NewString()}
 	return ContextWithMeta(ctx, meta), meta
+}
+
+type requestMetaCtxKey struct{}
+
+type RequestMeta struct {
+	ClientIP   string
+	RemoteAddr string
+	UserAgent  string
+}
+
+func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
+	return context.WithValue(ctx, requestMetaCtxKey{}, meta)
+}
+
+func RequestMetaFromContext(ctx context.Context) RequestMeta {
+	m, _ := ctx.Value(requestMetaCtxKey{}).(RequestMeta)
+	return m
+}
+
+const xForwardedForHeader = "X-Forwarded-For"
+
+func ClientIP(r *http.Request) string {
+	if xff := r.Header.Get(xForwardedForHeader); xff != "" {
+		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+			return ip
+		}
+	}
+	return RemoteAddrIP(r)
+}
+
+func RemoteAddrIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
