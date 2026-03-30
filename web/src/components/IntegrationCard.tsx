@@ -112,7 +112,7 @@ export default function IntegrationCard({
     }
   }
 
-  async function handleSubmitToken(credential: string, connectionParams?: Record<string, string>, instance?: string, connection?: string) {
+  async function handleSubmitToken(credential: string | Record<string, string>, connectionParams?: Record<string, string>, instance?: string, connection?: string) {
     setSubmitting(true);
     setError(null);
     try {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Integration } from "@/lib/api";
+import { ConnectionParamDef, CredentialFieldDef, Integration } from "@/lib/api";
 import Button from "./Button";
 import { CheckCircleIcon, CloseIcon } from "./icons";
 
@@ -11,7 +11,7 @@ interface IntegrationSettingsModalProps {
   integration: Integration;
   onClose: () => void;
   onStartOAuth: (instance?: string, connection?: string) => void;
-  onSubmitToken: (credential: string, connectionParams?: Record<string, string>, instance?: string, connection?: string) => void;
+  onSubmitToken: (credential: string | Record<string, string>, connectionParams?: Record<string, string>, instance?: string, connection?: string) => void;
   onDisconnect: (instance?: string) => void;
   reconnecting: boolean;
   disconnecting: boolean;
@@ -91,11 +91,35 @@ export default function IntegrationSettingsModal({
     }
   }
 
+  function resolveCredentialFields(): CredentialFieldDef[] | undefined {
+    if (pendingConnection && integration.connections) {
+      const conn = integration.connections.find(c => c.name === pendingConnection);
+      return conn?.credential_fields?.length ? conn.credential_fields : undefined;
+    }
+    return integration.credential_fields;
+  }
+
   function handleTokenSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const credential = (fd.get("credential") as string)?.trim();
+    const fields = resolveCredentialFields();
+
+    let credential: string | Record<string, string>;
+    if (fields && fields.length > 1) {
+      const creds: Record<string, string> = {};
+      for (const field of fields) {
+        const val = (fd.get(`cred_${field.name}`) as string)?.trim();
+        if (!val) return;
+        creds[field.name] = val;
+      }
+      credential = creds;
+    } else if (fields && fields.length === 1) {
+      credential = (fd.get(`cred_${fields[0].name}`) as string)?.trim() ?? "";
+    } else {
+      credential = (fd.get("credential") as string)?.trim() ?? "";
+    }
     if (!credential) return;
+
     let params: Record<string, string> | undefined;
     if (integration.connection_params) {
       const collected: Record<string, string> = {};
@@ -254,63 +278,16 @@ export default function IntegrationSettingsModal({
             </div>
           </form>
         ) : view === "token" ? (
-          <form onSubmit={handleTokenSubmit}>
-            <h2
-              id={headingId}
-              className="text-lg font-heading font-semibold text-stone-900"
-            >
-              API Token
-            </h2>
-            {needsParams && integration.connection_params && Object.entries(integration.connection_params).map(([name, def]) => (
-              <div key={name} className="mt-2">
-                <label
-                  htmlFor={`cp_${name}-${integration.name}`}
-                  className="block text-sm font-medium text-stone-700"
-                >
-                  {def.description || name}
-                </label>
-                <input
-                  id={`cp_${name}-${integration.name}`}
-                  name={`cp_${name}`}
-                  type="text"
-                  required={def.required}
-                  defaultValue={def.default}
-                  placeholder={name}
-                  className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
-                />
-              </div>
-            ))}
-            <label
-              htmlFor={`credential-${integration.name}`}
-              className="mt-4 block text-sm font-medium text-stone-700"
-            >
-              Paste your API token
-            </label>
-            <input
-              id={`credential-${integration.name}`}
-              name="credential"
-              type="password"
-              required
-              placeholder="Paste your API token"
-              autoFocus
-              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
-            />
-            {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
-            <div className="mt-6 flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                className="flex-1"
-                onClick={() => setView(integration.connected ? "instance" : "default")}
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="flex-1" disabled={submitting}>
-                {submitting ? "Connecting..." : "Submit"}
-              </Button>
-            </div>
-          </form>
+          <TokenForm
+            integrationName={integration.name}
+            headingId={headingId}
+            credentialFields={resolveCredentialFields()}
+            connectionParams={needsParams ? integration.connection_params : undefined}
+            error={error}
+            submitting={submitting}
+            onSubmit={handleTokenSubmit}
+            onCancel={() => setView(integration.connected ? "instance" : "default")}
+          />
         ) : (
           <>
             <div className="flex items-start justify-between">
@@ -365,5 +342,127 @@ export default function IntegrationSettingsModal({
         )}
       </div>
     </dialog>
+  );
+}
+
+function TokenForm({
+  integrationName,
+  headingId,
+  credentialFields,
+  connectionParams,
+  error,
+  submitting,
+  onSubmit,
+  onCancel,
+}: {
+  integrationName: string;
+  headingId: string;
+  credentialFields: CredentialFieldDef[] | undefined;
+  connectionParams: Record<string, ConnectionParamDef> | undefined;
+  error: string | null;
+  submitting: boolean;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  const fields = credentialFields;
+  const heading = !fields?.length ? "API Token"
+    : fields.length === 1 ? (fields[0].label || "API Token")
+    : "Enter Credentials";
+
+  return (
+    <form onSubmit={onSubmit}>
+      <h2
+        id={headingId}
+        className="text-lg font-heading font-semibold text-stone-900"
+      >
+        {heading}
+      </h2>
+      {connectionParams && Object.entries(connectionParams).map(([name, def]) => (
+        <div key={name} className="mt-2">
+          <label
+            htmlFor={`cp_${name}-${integrationName}`}
+            className="block text-sm font-medium text-stone-700"
+          >
+            {def.description || name}
+          </label>
+          <input
+            id={`cp_${name}-${integrationName}`}
+            name={`cp_${name}`}
+            type="text"
+            required={def.required}
+            defaultValue={def.default}
+            placeholder={name}
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+          />
+        </div>
+      ))}
+      {fields && fields.length > 0 ? (
+        fields.map((field, idx) => (
+          <div key={field.name} className="mt-4">
+            <label
+              htmlFor={`cred_${field.name}-${integrationName}`}
+              className="block text-sm font-medium text-stone-700"
+            >
+              {field.label || field.name}
+              {field.help_url && (
+                <a
+                  href={field.help_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 text-xs text-timber-500 hover:underline"
+                >
+                  (where to find this)
+                </a>
+              )}
+            </label>
+            {field.description && (
+              <p className="mt-0.5 text-xs text-stone-400">{field.description}</p>
+            )}
+            <input
+              id={`cred_${field.name}-${integrationName}`}
+              name={`cred_${field.name}`}
+              type="password"
+              required
+              placeholder={field.label || field.name}
+              autoFocus={idx === 0}
+              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+            />
+          </div>
+        ))
+      ) : (
+        <>
+          <label
+            htmlFor={`credential-${integrationName}`}
+            className="mt-4 block text-sm font-medium text-stone-700"
+          >
+            Paste your API token
+          </label>
+          <input
+            id={`credential-${integrationName}`}
+            name="credential"
+            type="password"
+            required
+            placeholder="Paste your API token"
+            autoFocus
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+          />
+        </>
+      )}
+      {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
+      <div className="mt-6 flex gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          className="flex-1"
+          onClick={onCancel}
+          disabled={submitting}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" className="flex-1" disabled={submitting}>
+          {submitting ? "Connecting..." : "Submit"}
+        </Button>
+      </div>
+    </form>
   );
 }

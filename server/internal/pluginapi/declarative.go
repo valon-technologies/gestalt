@@ -147,6 +147,22 @@ func (p *DeclarativeProvider) SupportsManualAuth() bool {
 	return p.auth.Type == pluginmanifestv1.AuthTypeManual || p.auth.Type == pluginmanifestv1.AuthTypeBearer
 }
 
+func (p *DeclarativeProvider) CredentialFields() []core.CredentialFieldDef {
+	if p.auth == nil || len(p.auth.Credentials) == 0 {
+		return nil
+	}
+	fields := make([]core.CredentialFieldDef, len(p.auth.Credentials))
+	for i, cf := range p.auth.Credentials {
+		fields[i] = core.CredentialFieldDef{
+			Name:        cf.Name,
+			Label:       cf.Label,
+			Description: cf.Description,
+			HelpURL:     cf.HelpURL,
+		}
+	}
+	return fields
+}
+
 func (p *DeclarativeProvider) AuthTypes() []string {
 	if p.auth == nil {
 		return nil

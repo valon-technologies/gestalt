@@ -170,23 +170,36 @@ type ConnectionDef struct {
 }
 
 type ConnectionAuthDef struct {
-	Type                string            `yaml:"type"`
-	AuthorizationURL    string            `yaml:"authorization_url"`
-	TokenURL            string            `yaml:"token_url"`
-	ClientID            string            `yaml:"client_id"`
-	ClientSecret        string            `yaml:"client_secret"`
-	RedirectURL         string            `yaml:"redirect_url"`
-	ClientAuth          string            `yaml:"client_auth"`
-	TokenExchange       string            `yaml:"token_exchange"`
-	Scopes              []string          `yaml:"scopes"`
-	ScopeParam          string            `yaml:"scope_param"`
-	ScopeSeparator      string            `yaml:"scope_separator"`
-	PKCE                bool              `yaml:"pkce"`
-	AuthorizationParams map[string]string `yaml:"authorization_params"`
-	TokenParams         map[string]string `yaml:"token_params"`
-	RefreshParams       map[string]string `yaml:"refresh_params"`
-	AcceptHeader        string            `yaml:"accept_header"`
-	TokenMetadata       []string          `yaml:"token_metadata"`
+	Type                string               `yaml:"type"`
+	AuthorizationURL    string               `yaml:"authorization_url"`
+	TokenURL            string               `yaml:"token_url"`
+	ClientID            string               `yaml:"client_id"`
+	ClientSecret        string               `yaml:"client_secret"`
+	RedirectURL         string               `yaml:"redirect_url"`
+	ClientAuth          string               `yaml:"client_auth"`
+	TokenExchange       string               `yaml:"token_exchange"`
+	Scopes              []string             `yaml:"scopes"`
+	ScopeParam          string               `yaml:"scope_param"`
+	ScopeSeparator      string               `yaml:"scope_separator"`
+	PKCE                bool                 `yaml:"pkce"`
+	AuthorizationParams map[string]string    `yaml:"authorization_params"`
+	TokenParams         map[string]string    `yaml:"token_params"`
+	RefreshParams       map[string]string    `yaml:"refresh_params"`
+	AcceptHeader        string               `yaml:"accept_header"`
+	TokenMetadata       []string             `yaml:"token_metadata"`
+	Credentials         []CredentialFieldDef `yaml:"credentials"`
+	AuthMapping         *AuthMappingDef      `yaml:"auth_mapping"`
+}
+
+type CredentialFieldDef struct {
+	Name        string `yaml:"name"`
+	Label       string `yaml:"label"`
+	Description string `yaml:"description"`
+	HelpURL     string `yaml:"help_url"`
+}
+
+type AuthMappingDef struct {
+	Headers map[string]string `yaml:"headers"`
 }
 
 type ConnectionParamDef struct {
@@ -498,6 +511,9 @@ func validateIntegration(name string, intg IntegrationDef) error {
 		if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
 			return err
 		}
+		if err := validateCredentialFields(name, cname, intg.Connections[cname].Auth); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -536,6 +552,9 @@ func validateHybridIntegration(name string, intg IntegrationDef) error {
 		}
 		for cname := range intg.Connections {
 			if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
+				return err
+			}
+			if err := validateCredentialFields(name, cname, intg.Connections[cname].Auth); err != nil {
 				return err
 			}
 		}
@@ -615,6 +634,37 @@ func resolveConnectionRef(intgName, surface, connName string, connections map[st
 		return ConnectionDef{}, fmt.Errorf("config validation: integration %q %s.connection references unknown connection %q", intgName, surface, connName)
 	}
 	return conn, nil
+}
+
+func validateCredentialFields(intgName, connName string, auth ConnectionAuthDef) error {
+	if len(auth.Credentials) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(auth.Credentials))
+	for i, cf := range auth.Credentials {
+		if cf.Name == "" {
+			return fmt.Errorf("config validation: integration %q connection %q credentials[%d].name is required", intgName, connName, i)
+		}
+		if names[cf.Name] {
+			return fmt.Errorf("config validation: integration %q connection %q has duplicate credential name %q", intgName, connName, cf.Name)
+		}
+		names[cf.Name] = true
+	}
+	if auth.AuthMapping != nil {
+		for header, field := range auth.AuthMapping.Headers {
+			if !names[field] {
+				return fmt.Errorf("config validation: integration %q connection %q auth_mapping header %q references unknown credential %q", intgName, connName, header, field)
+			}
+		}
+	}
+	hasMapping := auth.AuthMapping != nil && len(auth.AuthMapping.Headers) > 0
+	if len(auth.Credentials) == 1 && hasMapping {
+		return fmt.Errorf("config validation: integration %q connection %q has auth_mapping with a single credential; use auth_header on the provider definition for single-credential header injection", intgName, connName)
+	}
+	if len(auth.Credentials) > 1 && !hasMapping {
+		return fmt.Errorf("config validation: integration %q connection %q has multiple credentials but no auth_mapping", intgName, connName)
+	}
+	return nil
 }
 
 func validateConnectionAuthURLParams(intgName, connName string, conn ConnectionDef) error {

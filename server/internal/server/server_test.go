@@ -4668,3 +4668,51 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		}
 	})
 }
+
+func TestConnectManual_MultiCredential(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.IntegrationToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "multi-key-svc"},
+		})
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+				stored = tok
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"multi-key-svc","credentials":{"api_key":"k1","app_key":"k2"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if stored == nil {
+		t.Fatal("expected StoreToken to be called")
+	}
+
+	var tokenData map[string]string
+	if err := json.Unmarshal([]byte(stored.AccessToken), &tokenData); err != nil {
+		t.Fatalf("stored token is not valid JSON: %v", err)
+	}
+	if tokenData["api_key"] != "k1" {
+		t.Errorf("api_key = %q, want k1", tokenData["api_key"])
+	}
+	if tokenData["app_key"] != "k2" {
+		t.Errorf("app_key = %q, want k2", tokenData["app_key"])
+	}
+}

@@ -1873,3 +1873,220 @@ integrations:
 		})
 	}
 }
+
+func TestCredentialFieldValidation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{
+			name: "single credential field is valid",
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: token
+              label: API Token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name: "multiple credentials with auth_mapping is valid",
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: api_key
+              label: API Key
+            - name: app_key
+              label: Application Key
+          auth_mapping:
+            headers:
+              X-Api-Key: api_key
+              X-App-Key: app_key
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name:    "duplicate credential names",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: token
+            - name: token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name:    "empty credential name",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: ""
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name:    "auth_mapping references unknown credential",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: api_key
+          auth_mapping:
+            headers:
+              X-Api-Key: unknown_field
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name:    "single credential with auth_mapping",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: token
+          auth_mapping:
+            headers:
+              X-Token: token
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
+			name:    "multiple credentials without auth_mapping",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+          credentials:
+            - name: api_key
+            - name: app_key
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}

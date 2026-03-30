@@ -398,6 +398,55 @@ auth:
 
 `mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates authorization URL and token URL resolution to the upstream MCP server.
 
+#### Manual auth with custom credential fields
+
+For manual-auth connections, you can customize the credential input form with `credentials`. Each entry defines a field the user must fill in, with an optional label, description, and help URL.
+
+Single credential with a custom label:
+
+```yaml
+connections:
+  default:
+    mode: user
+    auth:
+      type: manual
+      credentials:
+        - name: token
+          label: API Access Token
+          help_url: https://app.example.com/settings/tokens
+```
+
+Multiple credentials (requires `auth_mapping` to map each field to an HTTP header):
+
+```yaml
+connections:
+  default:
+    mode: user
+    auth:
+      type: manual
+      credentials:
+        - name: api_key
+          label: API Key
+          help_url: https://us5.datadoghq.com/organization-settings/api-keys
+        - name: app_key
+          label: Application Key
+          help_url: https://us5.datadoghq.com/organization-settings/application-keys
+      auth_mapping:
+        headers:
+          DD-API-KEY: api_key
+          DD-APPLICATION-KEY: app_key
+```
+
+| Field | Notes |
+| --- | --- |
+| `credentials[].name` | Internal identifier for the field. Must be unique, lowercase with underscores. |
+| `credentials[].label` | Display label shown in the UI. Falls back to `name` if omitted. |
+| `credentials[].description` | Hint text shown below the label. |
+| `credentials[].help_url` | Link displayed next to the label for where to find the credential. |
+| `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
+
+When no `credentials` are declared, the UI shows the default single "API Token" field.
+
 ### `plugin`
 
 Plugin integrations delegate execution to an external binary. A plugin integration may optionally compose with an `mcp` surface (hybrid pattern) but cannot declare an `api` surface.

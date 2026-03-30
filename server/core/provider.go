@@ -61,6 +61,17 @@ type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
+type CredentialFieldDef struct {
+	Name        string
+	Label       string
+	Description string
+	HelpURL     string
+}
+
+type CredentialFieldsProvider interface {
+	CredentialFields() []CredentialFieldDef
+}
+
 type AuthTypeLister interface {
 	AuthTypes() []string
 }

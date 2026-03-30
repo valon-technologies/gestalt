@@ -274,3 +274,10 @@ func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	}
 	return nil
 }
+
+func (r *Restricted) CredentialFields() []core.CredentialFieldDef {
+	if cfp, ok := r.inner.(core.CredentialFieldsProvider); ok {
+		return cfp.CredentialFields()
+	}
+	return nil
+}

@@ -1017,3 +1017,138 @@ func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 		t.Errorf("error should contain %q, got: %v", msgValue, err)
 	}
 }
+
+func TestBuildCredentialFields(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "cred_test",
+		DisplayName: "Credential Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		CredentialFields: []CredentialFieldDef{
+			{Name: "api_key", Label: "API Key", HelpURL: "https://example.com/keys"},
+			{Name: "app_key", Label: "App Key", Description: "Your application key"},
+		},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List", Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, config.ConnectionDef{}, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cfp, ok := prov.(core.CredentialFieldsProvider)
+	if !ok {
+		t.Fatal("provider does not implement CredentialFieldsProvider")
+	}
+
+	fields := cfp.CredentialFields()
+	if len(fields) != 2 {
+		t.Fatalf("got %d credential fields, want 2", len(fields))
+	}
+	if fields[0].Name != "api_key" || fields[0].Label != "API Key" || fields[0].HelpURL != "https://example.com/keys" {
+		t.Errorf("field[0] = %+v", fields[0])
+	}
+	if fields[1].Name != "app_key" || fields[1].Description != "Your application key" {
+		t.Errorf("field[1] = %+v", fields[1])
+	}
+}
+
+func TestBuildCredentialFieldsFromConfig(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "cred_cfg_test",
+		DisplayName: "Credential Config Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List", Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	conn := config.ConnectionDef{
+		Auth: config.ConnectionAuthDef{
+			Credentials: []config.CredentialFieldDef{
+				{Name: "token", Label: "Access Token", HelpURL: "https://example.com/tokens"},
+			},
+		},
+	}
+
+	prov, err := Build(def, conn, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cfp, ok := prov.(core.CredentialFieldsProvider)
+	if !ok {
+		t.Fatal("provider does not implement CredentialFieldsProvider")
+	}
+
+	fields := cfp.CredentialFields()
+	if len(fields) != 1 {
+		t.Fatalf("got %d credential fields, want 1", len(fields))
+	}
+	if fields[0].Name != "token" || fields[0].Label != "Access Token" {
+		t.Errorf("field = %+v", fields[0])
+	}
+}
+
+func TestBuildAuthMappingFromConfig(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"api_key": r.Header.Get("X-Api-Key"),
+			"app_key": r.Header.Get("X-App-Key"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "cfg_mapping_test",
+		DisplayName: "Config Mapping Test",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List", Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	conn := config.ConnectionDef{
+		Auth: config.ConnectionAuthDef{
+			AuthMapping: &config.AuthMappingDef{
+				Headers: map[string]string{
+					"X-Api-Key": "api_key",
+					"X-App-Key": "app_key",
+				},
+			},
+		},
+	}
+
+	prov, err := Build(def, conn, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	token := `{"api_key":"k1","app_key":"k2"}`
+	result, err := prov.Execute(context.Background(), "list", nil, token)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["api_key"] != "k1" {
+		t.Errorf("X-Api-Key = %v, want k1", resp["api_key"])
+	}
+	if resp["app_key"] != "k2" {
+		t.Errorf("X-App-Key = %v, want k2", resp["app_key"])
+	}
+}
