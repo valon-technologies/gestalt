@@ -113,9 +113,10 @@ type Base struct {
 	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
 	EgressResolver *egress.Resolver
 
-	ConnectionDefs    map[string]core.ConnectionParamDef
-	DiscoveryDef      *core.DiscoveryConfig
-	ManualAuthEnabled bool
+	ConnectionDefs      map[string]core.ConnectionParamDef
+	DiscoveryDef        *core.DiscoveryConfig
+	ManualAuthEnabled   bool
+	CredentialFieldDefs []core.CredentialFieldDef
 
 	catalog *catalog.Catalog
 }
@@ -153,6 +154,10 @@ func (b *Base) AuthTypes() []string {
 
 func (b *Base) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return b.ConnectionDefs
+}
+
+func (b *Base) CredentialFields() []core.CredentialFieldDef {
+	return b.CredentialFieldDefs
 }
 
 func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {

@@ -68,9 +68,17 @@ type instanceInfo struct {
 	Connection string `json:"connection,omitempty"`
 }
 
+type credentialFieldInfo struct {
+	Name        string `json:"name"`
+	Label       string `json:"label,omitempty"`
+	Description string `json:"description,omitempty"`
+	HelpURL     string `json:"help_url,omitempty"`
+}
+
 type connectionDefInfo struct {
-	Name     string `json:"name"`
-	AuthType string `json:"auth_type"`
+	Name             string                `json:"name"`
+	AuthType         string                `json:"auth_type"`
+	CredentialFields []credentialFieldInfo `json:"credential_fields,omitempty"`
 }
 
 type integrationInfo struct {
@@ -83,6 +91,7 @@ type integrationInfo struct {
 	AuthTypes        []string                       `json:"auth_types"`
 	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
 	Connections      []connectionDefInfo            `json:"connections,omitempty"`
+	CredentialFields []credentialFieldInfo          `json:"credential_fields,omitempty"`
 }
 
 type connectionParamInfo struct {
@@ -144,6 +153,20 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				info.ConnectionParams = userParams
 			}
 		}
+		if cfp, ok := prov.(core.CredentialFieldsProvider); ok {
+			if fields := cfp.CredentialFields(); len(fields) > 0 {
+				cfInfos := make([]credentialFieldInfo, len(fields))
+				for i, f := range fields {
+					cfInfos[i] = credentialFieldInfo{
+						Name:        f.Name,
+						Label:       f.Label,
+						Description: f.Description,
+						HelpURL:     f.HelpURL,
+					}
+				}
+				info.CredentialFields = cfInfos
+			}
+		}
 		if intg, ok := s.integrationDefs[name]; ok && len(intg.Connections) > 1 {
 			connNames := make([]string, 0, len(intg.Connections))
 			for connName := range intg.Connections {
@@ -157,7 +180,20 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				if connDef.Auth.Type == "manual" || connDef.Auth.Type == "api_key" {
 					authType = "manual"
 				}
-				conns = append(conns, connectionDefInfo{Name: connName, AuthType: authType})
+				cdi := connectionDefInfo{Name: connName, AuthType: authType}
+				if len(connDef.Auth.Credentials) > 0 {
+					cfInfos := make([]credentialFieldInfo, len(connDef.Auth.Credentials))
+					for i, cf := range connDef.Auth.Credentials {
+						cfInfos[i] = credentialFieldInfo{
+							Name:        cf.Name,
+							Label:       cf.Label,
+							Description: cf.Description,
+							HelpURL:     cf.HelpURL,
+						}
+					}
+					cdi.CredentialFields = cfInfos
+				}
+				conns = append(conns, cdi)
 			}
 			info.Connections = conns
 		}
@@ -726,6 +762,7 @@ type connectManualRequest struct {
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
 	Credential       string            `json:"credential"`
+	Credentials      map[string]string `json:"credentials"`
 	ConnectionParams map[string]string `json:"connection_params"`
 }
 
@@ -735,7 +772,26 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if req.Integration == "" || req.Credential == "" {
+
+	var effectiveCredential string
+	if len(req.Credentials) > 0 {
+		for k, v := range req.Credentials {
+			if v == "" {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("credential %q must not be empty", k))
+				return
+			}
+		}
+		b, err := json.Marshal(req.Credentials)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid credentials map")
+			return
+		}
+		effectiveCredential = string(b)
+	} else {
+		effectiveCredential = req.Credential
+	}
+
+	if req.Integration == "" || effectiveCredential == "" {
 		writeError(w, http.StatusBadRequest, "integration and credential are required")
 		return
 	}
@@ -805,7 +861,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		Integration:  req.Integration,
 		Connection:   manualConnection,
 		Instance:     manualInstance,
-		AccessToken:  req.Credential,
+		AccessToken:  effectiveCredential,
 		MetadataJSON: manualMeta,
 	}
 

@@ -71,6 +71,14 @@ type ProviderAuth struct {
 	ScopeParam          string            `json:"scope_param,omitempty"`
 	ScopeSeparator      string            `json:"scope_separator,omitempty"`
 	AuthorizationParams map[string]string `json:"authorization_params,omitempty"`
+	Credentials         []CredentialField `json:"credentials,omitempty"`
+}
+
+type CredentialField struct {
+	Name        string `json:"name"`
+	Label       string `json:"label,omitempty"`
+	Description string `json:"description,omitempty"`
+	HelpURL     string `json:"help_url,omitempty"`
 }
 
 type ProtocolRange struct {

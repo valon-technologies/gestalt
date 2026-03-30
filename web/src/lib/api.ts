@@ -7,6 +7,13 @@ export interface ConnectionParamDef {
   default?: string;
 }
 
+export interface CredentialFieldDef {
+  name: string;
+  label?: string;
+  description?: string;
+  help_url?: string;
+}
+
 export interface InstanceInfo {
   name: string;
   connection?: string;
@@ -15,6 +22,7 @@ export interface InstanceInfo {
 export interface ConnectionDefInfo {
   name: string;
   auth_type: "oauth" | "manual";
+  credential_fields?: CredentialFieldDef[];
 }
 
 export interface Integration {
@@ -27,6 +35,7 @@ export interface Integration {
   auth_types?: ("oauth" | "manual")[];
   connection_params?: Record<string, ConnectionParamDef>;
   connections?: ConnectionDefInfo[];
+  credential_fields?: CredentialFieldDef[];
 }
 
 export interface APIToken {
@@ -145,20 +154,25 @@ export async function startIntegrationOAuth(
 
 export async function connectManualIntegration(
   integration: string,
-  credential: string,
+  credential: string | Record<string, string>,
   connectionParams?: Record<string, string>,
   instance?: string,
   connection?: string,
 ): Promise<{ status: string }> {
+  const body: Record<string, unknown> = {
+    integration,
+    instance,
+    connection,
+    connection_params: connectionParams,
+  };
+  if (typeof credential === "string") {
+    body.credential = credential;
+  } else {
+    body.credentials = credential;
+  }
   return fetchAPI("/api/v1/auth/connect-manual", {
     method: "POST",
-    body: JSON.stringify({
-      integration,
-      instance,
-      connection,
-      credential,
-      connection_params: connectionParams,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
