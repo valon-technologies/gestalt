@@ -57,11 +57,8 @@ func (s *SQLStore) Migrate(ctx context.Context) error {
 	if p, ok := s.dialect.(RegistrationDDLProvider); ok {
 		ddl = p.RegistrationDDL()
 	}
-	if _, err := s.db.ExecContext(ctx, ddl); err != nil {
-		return err
-	}
-	_, _ = s.db.ExecContext(ctx, `ALTER TABLE oauth_registrations ADD COLUMN expires_at DATETIME NULL`)
-	return nil
+	_, err := s.db.ExecContext(ctx, ddl)
+	return err
 }
 
 func (s *SQLStore) GetRegistration(ctx context.Context, authServerURL, redirectURI string) (*Registration, error) {
