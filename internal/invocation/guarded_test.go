@@ -26,7 +26,7 @@ type capturingSink struct {
 	entries []core.AuditEntry
 }
 
-func (s *capturingSink) Log(entry core.AuditEntry) {
+func (s *capturingSink) Log(_ context.Context, entry core.AuditEntry) {
 	s.entries = append(s.entries, entry)
 }
 

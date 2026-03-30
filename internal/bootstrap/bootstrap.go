@@ -284,7 +284,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
 	wireCredentialResolver(&deps.Egress, sm)
-	audit := core.AuditSink(invocation.LogAuditSink{})
+	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
 	extensions, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
 	if err != nil {

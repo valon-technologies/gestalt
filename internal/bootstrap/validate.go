@@ -70,7 +70,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 
 	sharedInvoker := invocation.NewBroker(providers, ds)
 	wireCredentialResolver(&deps.Egress, sm)
-	audit := core.AuditSink(invocation.LogAuditSink{})
+	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
 	extensions, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)
 	if err != nil {
