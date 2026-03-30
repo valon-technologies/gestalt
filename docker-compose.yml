@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./deploy/docker/config.yaml:/etc/gestalt/config.yaml:ro
+      - ./server/deploy/docker/config.yaml:/etc/gestalt/config.yaml:ro
       - gestalt-data:/data
     env_file:
       - .env
