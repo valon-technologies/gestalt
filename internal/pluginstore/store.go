@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 
+	"slices"
+
 	pluginpkg "github.com/valon-technologies/gestalt/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
@@ -107,9 +109,27 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		if err := pluginpkg.ExtractPackage(packagePath, destDir); err != nil {
 			return nil, err
 		}
-		manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+		manifestPath, _ := pluginpkg.FindManifestFile(destDir)
+		if manifestPath == "" {
+			manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
+		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
+		return installed, nil
+	}
+
+	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return nil, fmt.Errorf("create plugin directory: %w", err)
+		}
+		if err := pluginpkg.ExtractPackage(packagePath, destDir); err != nil {
+			return nil, err
+		}
+		manifestPath, err := pluginpkg.FindManifestFile(destDir)
+		if err != nil {
+			manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
+		}
+		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, "")
 		return installed, nil
 	}
 
@@ -133,7 +153,10 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+	manifestPath, _ := pluginpkg.FindManifestFile(destDir)
+	if manifestPath == "" {
+		manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
+	}
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
@@ -164,9 +187,38 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		if err := copyDir(dirPath, destDir); err != nil {
 			return nil, fmt.Errorf("copy plugin directory: %w", err)
 		}
-		manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
+		mfPath, _ := pluginpkg.FindManifestFile(destDir)
+		if mfPath == "" {
+			mfPath = filepath.Join(destDir, pluginpkg.ManifestFile)
+		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
-		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
+		installed := buildInstalledPlugin(manifest, destDir, mfPath, "", nil, assetRoot)
+		return installed, nil
+	}
+
+	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return nil, fmt.Errorf("create plugin directory: %w", err)
+		}
+		manifestSrc, err := pluginpkg.FindManifestFile(dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("find manifest: %w", err)
+		}
+		manifestDest := filepath.Join(destDir, filepath.Base(manifestSrc))
+		if err := copyFile(manifestSrc, manifestDest); err != nil {
+			return nil, fmt.Errorf("copy manifest: %w", err)
+		}
+		for _, schemaRel := range configSchemaPaths(manifest, dirPath) {
+			schemaSrc := filepath.Join(dirPath, filepath.FromSlash(schemaRel))
+			schemaDest := filepath.Join(destDir, filepath.FromSlash(schemaRel))
+			if err := os.MkdirAll(filepath.Dir(schemaDest), 0755); err != nil {
+				return nil, fmt.Errorf("create schema directory: %w", err)
+			}
+			if err := copyFile(schemaSrc, schemaDest); err != nil {
+				return nil, fmt.Errorf("copy config schema %s: %w", schemaRel, err)
+			}
+		}
+		installed := buildInstalledPlugin(manifest, destDir, manifestDest, "", nil, "")
 		return installed, nil
 	}
 
@@ -193,8 +245,12 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
 
-	manifestSrc := filepath.Join(dirPath, pluginpkg.ManifestFile)
-	if err := copyFile(manifestSrc, filepath.Join(destDir, pluginpkg.ManifestFile)); err != nil {
+	manifestSrc, err := pluginpkg.FindManifestFile(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("find manifest: %w", err)
+	}
+	manifestDest := filepath.Join(destDir, filepath.Base(manifestSrc))
+	if err := copyFile(manifestSrc, manifestDest); err != nil {
 		return nil, fmt.Errorf("copy manifest: %w", err)
 	}
 
@@ -222,8 +278,7 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	manifestPath := filepath.Join(destDir, pluginpkg.ManifestFile)
-	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact, "")
+	installed := buildInstalledPlugin(manifest, destDir, manifestDest, executablePath, artifact, "")
 	return installed, nil
 }
 
@@ -292,6 +347,9 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		return "", fmt.Errorf("manifest is required")
 	}
 	if isWebUIOnly(manifest) {
+		return "", nil
+	}
+	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
 		return "", nil
 	}
 	var entry *pluginmanifestv1.Entrypoint

@@ -19,23 +19,38 @@ import (
 )
 
 func ReadPackageManifest(packagePath string) (_ []byte, _ *pluginmanifestv1.Manifest, err error) {
-	data, err := ReadArchiveEntry(packagePath, ManifestFile)
-	if err != nil {
-		return nil, nil, err
+	var firstErr error
+	for _, name := range ManifestFiles {
+		data, err := ReadArchiveEntry(packagePath, name)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		format := "json"
+		if isYAMLFile(name) {
+			format = "yaml"
+		}
+		manifest, err := DecodeManifestFormat(data, format)
+		if err != nil {
+			return nil, nil, err
+		}
+		return data, manifest, nil
 	}
-	manifest, err := DecodeManifest(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	return data, manifest, nil
+	return nil, nil, firstErr
 }
 
-func ReadManifestFile(path string) ([]byte, *pluginmanifestv1.Manifest, error) {
-	data, err := os.ReadFile(path)
+func ReadManifestFile(p string) ([]byte, *pluginmanifestv1.Manifest, error) {
+	data, err := os.ReadFile(p)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read manifest %q: %w", path, err)
+		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
 	}
-	manifest, err := DecodeManifest(data)
+	format := "json"
+	if isYAMLFile(p) {
+		format = "yaml"
+	}
+	manifest, err := DecodeManifestFormat(data, format)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -48,11 +63,15 @@ func LoadManifestFromPath(inputPath string) ([]byte, *pluginmanifestv1.Manifest,
 		return nil, nil, "", fmt.Errorf("stat %q: %w", inputPath, err)
 	}
 	if info.IsDir() {
-		manifestPath := filepath.Join(inputPath, ManifestFile)
+		manifestPath, err := FindManifestFile(inputPath)
+		if err != nil {
+			return nil, nil, "", err
+		}
 		data, manifest, err := ReadManifestFile(manifestPath)
 		return data, manifest, manifestPath, err
 	}
-	if filepath.Base(inputPath) == ManifestFile {
+	base := filepath.Base(inputPath)
+	if base == "plugin.json" || base == "plugin.yaml" || base == "plugin.yml" {
 		data, manifest, err := ReadManifestFile(inputPath)
 		return data, manifest, inputPath, err
 	}
@@ -266,7 +285,11 @@ func ValidatePackageDir(sourceDir string) (*pluginmanifestv1.Manifest, error) {
 }
 
 func loadManifestFromDir(sourceDir string) ([]byte, *pluginmanifestv1.Manifest, error) {
-	return ReadManifestFile(filepath.Join(sourceDir, ManifestFile))
+	p, err := FindManifestFile(sourceDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ReadManifestFile(p)
 }
 
 func archiveEntryPath(name string) (string, error) {

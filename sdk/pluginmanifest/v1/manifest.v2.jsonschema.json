@@ -42,9 +42,6 @@
     "provider": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "protocol"
-      ],
       "properties": {
         "protocol": {
           "type": "object",
@@ -73,6 +70,17 @@
         },
         "mcp": {
           "type": "boolean"
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/provider_operation"
+          }
         }
       }
     },
@@ -119,17 +127,38 @@
       },
       "then": {
         "required": [
-          "artifacts",
-          "entrypoints",
           "provider"
         ],
-        "properties": {
-          "entrypoints": {
+        "anyOf": [
+          {
             "required": [
-              "provider"
-            ]
+              "artifacts",
+              "entrypoints"
+            ],
+            "properties": {
+              "entrypoints": {
+                "required": [
+                  "provider"
+                ]
+              },
+              "provider": {
+                "required": [
+                  "protocol"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "provider": {
+                "required": [
+                  "base_url",
+                  "operations"
+                ]
+              }
+            }
           }
-        }
+        ]
       }
     },
     {
@@ -181,7 +210,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["oauth2", "manual", "none"]
+          "enum": ["oauth2", "bearer", "manual", "none"]
         },
         "authorization_url": {
           "type": "string",
@@ -224,6 +253,59 @@
           }
         }
       ]
+    },
+    "provider_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "method", "path"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_parameter"
+          }
+        }
+      }
+    },
+    "provider_parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "in"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "int", "bool"]
+        },
+        "in": {
+          "type": "string",
+          "enum": ["query", "body", "path"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
     },
     "artifact": {
       "type": "object",

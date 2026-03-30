@@ -1,6 +1,8 @@
 package pluginpkg
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
@@ -724,7 +726,7 @@ func TestDecodeManifest_V2InvalidAuthType(t *testing.T) {
   "provider": {
     "protocol": { "min": 1, "max": 1 },
     "auth": {
-      "type": "bearer"
+      "type": "bogus"
     }
   },
   "artifacts": [
@@ -805,5 +807,257 @@ func TestDecodeManifest_V2AuthRoundTrip(t *testing.T) {
 	}
 	if got.Provider.Auth.AuthorizationURL != "https://example.com/authorize" {
 		t.Fatalf("auth lost authorization_url across round trip")
+	}
+}
+
+func TestDecodeManifestFormat_YAML(t *testing.T) {
+	t.Parallel()
+
+	yamlData := []byte(`
+schema_version: 2
+source: github.com/acme/plugins/echo
+version: "1.0.0"
+kinds:
+  - provider
+provider:
+  protocol:
+    min: 1
+    max: 1
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: ` + sha256Hex("provider") + `
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
+`)
+
+	manifest, err := DecodeManifestFormat(yamlData, "yaml")
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if manifest.Source != "github.com/acme/plugins/echo" {
+		t.Fatalf("unexpected source %q", manifest.Source)
+	}
+	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion2 {
+		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
+	}
+}
+
+func TestDecodeManifestFormat_YAMLDeclarative(t *testing.T) {
+	t.Parallel()
+
+	yamlData := []byte(`
+schema_version: 2
+source: github.com/acme/plugins/testapi
+version: "0.1.0"
+display_name: Test API
+description: A test declarative provider
+kinds:
+  - provider
+provider:
+  base_url: https://api.example.com/v1
+  auth:
+    type: bearer
+  operations:
+    - name: list_items
+      description: List all items
+      method: GET
+      path: /items
+      parameters:
+        - name: limit
+          type: int
+          in: query
+    - name: create_item
+      description: Create an item
+      method: POST
+      path: /items
+      parameters:
+        - name: name
+          type: string
+          in: body
+          required: true
+`)
+
+	manifest, err := DecodeManifestFormat(yamlData, "yaml")
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if manifest.Provider == nil {
+		t.Fatal("expected provider")
+	}
+	if !manifest.Provider.IsDeclarative() {
+		t.Fatal("expected declarative provider")
+	}
+	if manifest.Provider.BaseURL != "https://api.example.com/v1" {
+		t.Fatalf("unexpected base_url %q", manifest.Provider.BaseURL)
+	}
+	if len(manifest.Provider.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(manifest.Provider.Operations))
+	}
+	if manifest.Provider.Operations[0].Name != "list_items" {
+		t.Fatalf("unexpected operation name %q", manifest.Provider.Operations[0].Name)
+	}
+	if manifest.Provider.Operations[1].Parameters[0].Required != true {
+		t.Fatal("expected required param")
+	}
+}
+
+func TestDecodeManifest_DeclarativeProviderJSON(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/myapi",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "base_url": "https://api.example.com",
+    "auth": { "type": "bearer" },
+    "operations": [
+      {
+        "name": "get_stuff",
+        "method": "GET",
+        "path": "/stuff",
+        "parameters": [
+          { "name": "q", "type": "string", "in": "query" }
+        ]
+      }
+    ]
+  }
+}`)
+
+	manifest, err := DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest: %v", err)
+	}
+	if !manifest.Provider.IsDeclarative() {
+		t.Fatal("expected declarative provider")
+	}
+	if len(manifest.Artifacts) != 0 {
+		t.Fatal("declarative provider should have no artifacts")
+	}
+}
+
+func TestDecodeManifest_DeclarativeRejectsMissingBaseURL(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/myapi",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "operations": [
+      {
+        "name": "get_stuff",
+        "method": "GET",
+        "path": "/stuff"
+      }
+    ]
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for missing base_url")
+	}
+}
+
+func TestDecodeManifest_DeclarativeRejectsDuplicateOpNames(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/myapi",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "base_url": "https://api.example.com",
+    "operations": [
+      { "name": "do_thing", "method": "GET", "path": "/a" },
+      { "name": "do_thing", "method": "POST", "path": "/b" }
+    ]
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for duplicate operation names")
+	}
+}
+
+func TestDecodeManifest_DeclarativeRejectsOrphanPathParam(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/myapi",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "base_url": "https://api.example.com",
+    "operations": [
+      {
+        "name": "get_item",
+        "method": "GET",
+        "path": "/items",
+        "parameters": [
+          { "name": "id", "type": "string", "in": "path" }
+        ]
+      }
+    ]
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for path param without matching placeholder")
+	}
+}
+
+func TestFindManifestFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		files    []string
+		wantBase string
+	}{
+		{"json only", []string{"plugin.json"}, "plugin.json"},
+		{"yaml only", []string{"plugin.yaml"}, "plugin.yaml"},
+		{"yml only", []string{"plugin.yml"}, "plugin.yml"},
+		{"json takes priority", []string{"plugin.json", "plugin.yaml"}, "plugin.json"},
+		{"yaml before yml", []string{"plugin.yaml", "plugin.yml"}, "plugin.yaml"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			for _, f := range tc.files {
+				if err := os.WriteFile(filepath.Join(dir, f), []byte("{}"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := FindManifestFile(dir)
+			if err != nil {
+				t.Fatalf("FindManifestFile: %v", err)
+			}
+			if filepath.Base(got) != tc.wantBase {
+				t.Errorf("FindManifestFile = %s, want %s", filepath.Base(got), tc.wantBase)
+			}
+		})
+	}
+}
+
+func TestFindManifestFile_NotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	_, err := FindManifestFile(dir)
+	if err == nil {
+		t.Fatal("expected error when no manifest found")
 	}
 }
