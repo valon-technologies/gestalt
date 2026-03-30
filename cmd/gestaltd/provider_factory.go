@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -168,7 +168,7 @@ func (a *providerAssembly) buildOAuth2Handler(connName string, conn config.Conne
 	}
 	def, err := providercompiler.LoadDefinition(a.ctx, a.name, *a.intg.API, a.preparedProviders)
 	if err != nil {
-		log.Printf("WARNING: %s: cannot load definition for connection %q oauth handler: %v", a.name, connName, err)
+		slog.Warn("cannot load definition for connection oauth handler", "provider", a.name, "connection", connName, "error", err)
 		return nil
 	}
 
@@ -177,7 +177,7 @@ func (a *providerAssembly) buildOAuth2Handler(connName string, conn config.Conne
 
 	upstream, err := provider.BuildOAuthUpstream(&defCopy, conn, defCopy.BaseURL, nil)
 	if err != nil {
-		log.Printf("WARNING: %s: cannot build oauth handler for connection %q: %v", a.name, connName, err)
+		slog.Warn("cannot build oauth handler for connection", "provider", a.name, "connection", connName, "error", err)
 		return nil
 	}
 	return bootstrap.WrapUpstreamHandler(upstream)
@@ -204,12 +204,12 @@ func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
 	}
 	enc, err := crypto.NewAESGCM(deps.EncryptionKey)
 	if err != nil {
-		log.Printf("WARNING: mcpoauth: cannot create encryptor for registration store: %v", err)
+		slog.Warn("cannot create encryptor for registration store", "component", "mcpoauth", "error", err)
 		return nil
 	}
 	store := mcpoauth.NewSQLStore(db, enc, dialect)
 	if err := store.Migrate(context.Background()); err != nil {
-		log.Printf("WARNING: mcpoauth: migrating registration store: %v", err)
+		slog.Warn("registration store migration failed", "component", "mcpoauth", "error", err)
 	}
 	return store
 }
