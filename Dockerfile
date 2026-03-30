@@ -33,7 +33,7 @@ ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk add --no-cache ca-certificates git
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates git
 COPY --from=build-binary /gestaltd /gestaltd
 RUN ln -sf /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
@@ -53,7 +53,7 @@ ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk add --no-cache ca-certificates curl
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates curl
 COPY --from=build-binary /gestaltd /gestaltd
 RUN mkdir -p /data && chown nobody:nobody /data
 USER nobody:nobody
