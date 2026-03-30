@@ -1,0 +1,17 @@
+/* Show the TOC at lg (1024px) instead of xl (1280px).
+   Nextra hard-codes max-xl:_hidden on nav.nextra-toc.
+   Higher specificity (element + two classes) overrides the theme rule. */
+@media (min-width: 1024px) {
+  nav.nextra-toc.max-xl\:_hidden {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Between lg and xl, use a narrower TOC to leave room for content.
+   Default is 256px (_w-64). */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  nav.nextra-toc {
+    width: 12rem;
+  }
+}
