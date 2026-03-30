@@ -26,6 +26,7 @@ require (
 	github.com/valon-technologies/gestalt/sdk/pluginapi v0.0.0-00010101000000-000000000000
 	github.com/valon-technologies/gestalt/sdk/pluginsdk v0.0.0-00010101000000-000000000000
 	go.mongodb.org/mongo-driver/v2 v2.5.0
+	golang.org/x/crypto v0.48.0
 	golang.org/x/mod v0.34.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.14.0
@@ -100,7 +101,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
