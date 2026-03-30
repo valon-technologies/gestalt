@@ -30,13 +30,13 @@ The repository ships these deployment assets:
 | Path | What it gives you |
 | --- | --- |
 | `gestaltd` with no config | True out-of-the-box local startup. |
-| `Dockerfile.gestaltd` | Single-container server image with `gestaltd` as the entrypoint. |
+| `Dockerfile` | Single-container server image with `gestaltd` as the entrypoint. |
 | `docker-compose.yml` | Single-container local deployment with mounted config and SQLite volume. |
 | `deploy/helm/gestalt` | Helm chart for Kubernetes. |
 
 ## Docker And Compose
 
-`Dockerfile.gestaltd` builds:
+`Dockerfile` builds:
 
 - the frontend static export
 - the `gestaltd` binary
