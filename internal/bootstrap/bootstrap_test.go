@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
-	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
 	telemetrynoop "github.com/valon-technologies/gestalt/plugins/telemetry/noop"
 	"gopkg.in/yaml.v3"
 )
@@ -931,7 +930,7 @@ func TestBootstrapWithRuntimes(t *testing.T) {
 	}
 
 	factories := validFactories()
-	factories.Runtimes["echo"] = echoruntime.Factory
+	factories.Runtimes["echo"] = stubRuntimeFactory("my-echo", nil)
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {

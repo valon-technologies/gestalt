@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
+	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/pluginapi"
-	"github.com/valon-technologies/gestalt/plugins/providers/echo"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,12 +36,38 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return pluginapi.ServeProvider(ctx, newProxyProvider(echo.New()))
+		return pluginapi.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
 	case "runtime":
 		return pluginapi.ServeRuntime(ctx, &echoRuntimePlugin{})
 	default:
 		return fmt.Errorf("unknown mode %q", os.Args[1])
 	}
+}
+
+var _ core.Provider = (*echoProvider)(nil)
+
+type echoProvider struct{}
+
+func (p *echoProvider) Name() string                        { return "echo" }
+func (p *echoProvider) DisplayName() string                 { return "Echo" }
+func (p *echoProvider) Description() string                 { return "Echoes back the input parameters" }
+func (p *echoProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeNone }
+
+func (p *echoProvider) ListOperations() []core.Operation {
+	return []core.Operation{
+		{Name: "echo", Description: "Echo back input params as JSON", Method: http.MethodPost},
+	}
+}
+
+func (p *echoProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+	if operation != "echo" {
+		return nil, fmt.Errorf("unknown operation: %s", operation)
+	}
+	body, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling params: %w", err)
+	}
+	return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 }
 
 type echoRuntimePlugin struct {
