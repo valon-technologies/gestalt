@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -404,6 +405,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
 		case errors.Is(err, invocation.ErrNotAuthenticated):
 			writeError(w, http.StatusUnauthorized, "not authenticated")
+		case errors.Is(err, invocation.ErrScopeDenied):
+			writeError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, invocation.ErrNoToken):
 			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
 		case errors.Is(err, invocation.ErrAmbiguousInstance):
@@ -902,6 +905,15 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
+	}
+
+	if req.Scopes != "" {
+		for _, scope := range strings.Fields(req.Scopes) {
+			if _, err := s.providers.Get(scope); err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown scope %q", scope))
+				return
+			}
+		}
 	}
 
 	issued, err := s.issueToken()
