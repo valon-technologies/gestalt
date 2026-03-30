@@ -9,7 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) string {

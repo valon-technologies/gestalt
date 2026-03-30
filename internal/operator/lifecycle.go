@@ -19,7 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/internal/provider"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 func ArchiveDigest(archivePath string) (string, error) {

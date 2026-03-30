@@ -13,7 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 func runPlugin(args []string) error {

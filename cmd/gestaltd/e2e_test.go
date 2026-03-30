@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 func TestE2EBundleArchiveAndValidate(t *testing.T) {
