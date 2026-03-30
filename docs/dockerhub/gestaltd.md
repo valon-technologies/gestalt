@@ -29,23 +29,12 @@ The publish workflows maintain these tag shapes:
 - `latest`
 - `<version>`
 - `<sha>`
-- `builder`
-- `builder-<version>`
-- `builder-<sha>`
-- `debug`
-- `debug-<version>`
-- `debug-<sha>`
 
 The image is published for `linux/amd64` and `linux/arm64`.
 
-## What each tag is for
+## What the image includes
 
-- `valontechnologies/gestaltd:latest`
-  The production runtime image. Distroless, no shell, smallest surface area.
-- `valontechnologies/gestaltd:builder`
-  A Go-based build image with `gestaltd`, `git`, and the Go toolchain. Use it when compiling plugins and bundling a deployment in a multi-stage Docker build.
-- `valontechnologies/gestaltd:debug`
-  A shell-enabled image for troubleshooting. Same `gestaltd` entrypoint, plus a shell and `curl`.
+The image is Alpine-based and includes `gestaltd`, a shell, `ca-certificates`, and `curl`. It runs as `nobody:nobody` by default.
 
 ## Run a simple static config
 
@@ -82,7 +71,8 @@ integrations: {}
 If your config references remote OpenAPI or GraphQL sources, or `plugin.package`, prepare it during the image build:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:builder AS bundle
+FROM valontechnologies/gestaltd:latest AS bundle
+USER root
 COPY config.yaml /src/config.yaml
 RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
 
@@ -159,24 +149,28 @@ For horizontally scaled deployments, prefer Postgres or MySQL.
 
 ## Debugging
 
-The default runtime image is distroless, so it does not include a shell. Use the `debug` tag when you need interactive troubleshooting:
+The image includes a shell, so you can exec into a running container or start an interactive session:
 
 ```sh
-docker run --rm -it --entrypoint sh valontechnologies/gestaltd:debug
+docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest
 ```
 
 You can also use it to check startup behavior directly:
 
 ```sh
-docker run --rm valontechnologies/gestaltd:debug --help
+docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
 ## Building plugins and bundles
 
-Use the `builder` tag when you want to compile plugins and run `gestaltd bundle` in the same build stage:
+To compile Go plugins, use a standard `golang:` image and copy `gestaltd` from the runtime image:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:builder AS build
+FROM valontechnologies/gestaltd:latest AS gestaltd
+
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
@@ -188,7 +182,7 @@ RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
 
 - The published image defaults to locked startup. A missing config file or missing prepared state causes startup to fail fast.
 - `docker run valontechnologies/gestaltd:latest` by itself is expected to fail because the image does not auto-generate config in-container.
-- The runtime image has no shell. Use `:debug` if you need one.
+- The image includes a shell and `curl` for debugging.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more
