@@ -483,6 +483,40 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
+	iter := s.client.Collection(datastore.APITokensCollection).
+		Where("user_id", "==", userID).
+		Documents(ctx)
+	defer iter.Stop()
+
+	bw := s.client.BulkWriter(ctx)
+	var jobs []*gcpfirestore.BulkWriterJob
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return 0, fmt.Errorf("firestore: iterating api tokens for revoke-all: %w", err)
+		}
+		job, err := bw.Delete(snap.Ref)
+		if err != nil {
+			return 0, fmt.Errorf("firestore: queuing delete for revoke-all: %w", err)
+		}
+		jobs = append(jobs, job)
+	}
+	bw.End()
+
+	var count int64
+	for _, job := range jobs {
+		if _, err := job.Results(); err != nil {
+			return count, fmt.Errorf("firestore: deleting api token in revoke-all: %w", err)
+		}
+		count++
+	}
+	return count, nil
+}
+
 func snapToAPIToken(snap *gcpfirestore.DocumentSnapshot) (*core.APIToken, error) {
 	var doc apiTokenDoc
 	if err := snap.DataTo(&doc); err != nil {

@@ -33,6 +33,7 @@ type StubDatastore struct {
 	DeleteTokenFn              func(context.Context, string) error
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
+	RevokeAllAPITokensFn       func(context.Context, string) (int64, error)
 	StoreStagedConnectionFn    func(context.Context, *core.StagedConnection) error
 	GetStagedConnectionFn      func(context.Context, string) (*core.StagedConnection, error)
 	DeleteStagedConnectionFn   func(context.Context, string) error
@@ -135,6 +136,12 @@ func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) e
 		return s.RevokeAPITokenFn(ctx, userID, id)
 	}
 	return nil
+}
+func (s *StubDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
+	if s.RevokeAllAPITokensFn != nil {
+		return s.RevokeAllAPITokensFn(ctx, userID)
+	}
+	return 0, nil
 }
 func (s *StubDatastore) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
 	if s.StoreStagedConnectionFn != nil {

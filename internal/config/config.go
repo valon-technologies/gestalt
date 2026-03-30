@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
@@ -128,6 +130,7 @@ type ServerConfig struct {
 	Port          int    `yaml:"port"`
 	BaseURL       string `yaml:"base_url"`
 	EncryptionKey string `yaml:"encryption_key"`
+	APITokenTTL   string `yaml:"api_token_ttl"`
 }
 
 // IntegrationDef represents either a declarative integration (connections +
@@ -345,6 +348,11 @@ var templateParamRe = regexp.MustCompile(`\{(\w+)\}`)
 // Called by Load (and therefore by bundle and validate). Does not require
 // runtime secrets like encryption_key, auth.provider, or datastore.provider.
 func ValidateStructure(cfg *Config) error {
+	if cfg.Server.APITokenTTL != "" {
+		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
+			return fmt.Errorf("config validation: server.api_token_ttl: %w", err)
+		}
+	}
 	if err := validateEgress(&cfg.Egress); err != nil {
 		return err
 	}
@@ -629,6 +637,30 @@ func validateUIPlugin(plugin *UIPluginDef) error {
 		return fmt.Errorf("config validation: ui plugin.package requires HTTPS; plain HTTP is not supported")
 	}
 	return nil
+}
+
+func ParseDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty duration string")
+	}
+	if strings.HasSuffix(s, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil {
+			return 0, fmt.Errorf("invalid day duration %q: %w", s, err)
+		}
+		if days <= 0 {
+			return 0, fmt.Errorf("duration must be positive, got %q", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, err
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("duration must be positive, got %q", s)
+	}
+	return d, nil
 }
 
 func NodeToMap(node yaml.Node) (map[string]any, error) {

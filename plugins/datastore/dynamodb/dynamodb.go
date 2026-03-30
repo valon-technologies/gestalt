@@ -484,6 +484,84 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
+	pk := userPKPrefix + userID
+	keyCond := expression.KeyAnd(
+		expression.Key(attrPK).Equal(expression.Value(pk)),
+		expression.KeyBeginsWith(expression.Key(attrSK), apiTokenSKPrefix),
+	)
+	proj := expression.NamesList(expression.Name(attrPK), expression.Name(attrSK))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithProjection(proj).Build()
+	if err != nil {
+		return 0, fmt.Errorf("dynamodb: building expression: %w", err)
+	}
+
+	var items []map[string]ddbtypes.AttributeValue
+	var exclusiveStartKey map[string]ddbtypes.AttributeValue
+	for {
+		input := &dynamodb.QueryInput{
+			TableName:                 &s.tableName,
+			KeyConditionExpression:    expr.KeyCondition(),
+			ProjectionExpression:      expr.Projection(),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			ExclusiveStartKey:         exclusiveStartKey,
+		}
+		out, err := s.client.Query(ctx, input)
+		if err != nil {
+			return 0, fmt.Errorf("dynamodb: querying api tokens for revoke-all: %w", err)
+		}
+		items = append(items, out.Items...)
+		if out.LastEvaluatedKey == nil {
+			break
+		}
+		exclusiveStartKey = out.LastEvaluatedKey
+	}
+
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	const batchSize = 25
+	const maxRetries = 3
+	var count int64
+	for i := 0; i < len(items); i += batchSize {
+		end := i + batchSize
+		if end > len(items) {
+			end = len(items)
+		}
+		requests := make([]ddbtypes.WriteRequest, 0, end-i)
+		for _, item := range items[i:end] {
+			requests = append(requests, ddbtypes.WriteRequest{
+				DeleteRequest: &ddbtypes.DeleteRequest{
+					Key: map[string]ddbtypes.AttributeValue{
+						attrPK: item[attrPK],
+						attrSK: item[attrSK],
+					},
+				},
+			})
+		}
+		pending := requests
+		for attempt := 0; attempt <= maxRetries && len(pending) > 0; attempt++ {
+			batchOut, err := s.client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+				RequestItems: map[string][]ddbtypes.WriteRequest{
+					s.tableName: pending,
+				},
+			})
+			if err != nil {
+				return count, fmt.Errorf("dynamodb: batch deleting api tokens: %w", err)
+			}
+			unprocessed := batchOut.UnprocessedItems[s.tableName]
+			count += int64(len(pending) - len(unprocessed))
+			pending = unprocessed
+		}
+		if len(pending) > 0 {
+			return count, fmt.Errorf("dynamodb: %d api token deletions failed after retries", len(pending))
+		}
+	}
+	return count, nil
+}
+
 func (s *Store) lookupKeysByGSI(ctx context.Context, indexName, keyAttr, keyValue, skPrefix string) (pk, sk string, err error) {
 	keyCond := expression.KeyAnd(
 		expression.Key(keyAttr).Equal(expression.Value(keyValue)),
