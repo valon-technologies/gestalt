@@ -1,19 +1,17 @@
 # Add an Integration
 
-Most integrations in Gestalt are pure configuration. Start with a declarative integration and only reach for a plugin when the upstream behavior cannot be expressed declaratively.
+Most integrations are pure configuration. Start with a declarative integration and reach for a plugin only when the upstream behavior cannot be expressed declaratively.
 
-## 1. Pick The Surface Type
+## 1. Pick the Surface Type
 
-Choose one or both:
-
-| Surface | Use when |
+| Surface | When to use |
 | --- | --- |
 | `api` (REST) | You have an OpenAPI document. |
 | `api` (GraphQL) | You have a GraphQL endpoint. |
 | `mcp` | The upstream already exposes MCP tools. |
-| `plugin` | You need custom execution logic. Plugin-only; cannot combine with declarative surfaces. |
+| `plugin` | You need custom execution logic. Can compose with `mcp` (hybrid). Cannot combine with `api`. |
 
-## 2. Start With The Smallest Useful Definition
+## 2. Start with the Smallest Useful Definition
 
 Public REST example with no auth:
 
@@ -30,9 +28,9 @@ integrations:
       connection: default
 ```
 
-That is enough to build a real provider and invoke the public API.
+That is enough to build a provider and invoke the public API.
 
-## 3. Add Auth If The Upstream Needs It
+## 3. Add Auth
 
 OAuth-backed example:
 
@@ -57,11 +55,11 @@ integrations:
         issues/list-for-authenticated-user:
 ```
 
-Auth lives inside the connection, not at the integration level or in a separate profile.
+Auth lives inside the connection, not at the integration level.
 
-## 4. Add An MCP Surface
+## 4. Add an MCP Surface
 
-You can add an `mcp` surface alongside `api`, or use it standalone:
+Add `mcp` alongside `api`, or use it standalone:
 
 ```yaml
 integrations:
@@ -80,18 +78,18 @@ integrations:
       connection: default
 ```
 
-Use `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
+Set `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
 
-## 5. Bundle And Validate
+## 5. Bundle and Validate
 
 ```sh
 gestaltd bundle --config ./gestalt.yaml --output ./bundle
 gestaltd validate --config ./bundle/gestalt.yaml
 ```
 
-That prepares remote provider artifacts and catches config errors.
+This prepares remote provider artifacts and catches config errors.
 
-## 6. Run It
+## 6. Run
 
 ```sh
 gestaltd serve --locked --config ./bundle/gestalt.yaml
@@ -99,17 +97,17 @@ gestaltd serve --locked --config ./bundle/gestalt.yaml
 
 Then:
 
-- connect the integration through the UI or API
-- list operations with `GET /api/v1/integrations/{name}/operations`
-- invoke operations over HTTP or MCP
+- Connect the integration through the UI or API
+- List operations with `GET /api/v1/integrations/{name}/operations`
+- Invoke operations over HTTP or MCP
 
-## 7. Reach For A Plugin Only When Needed
+## 7. Reach for a Plugin Only When Needed
 
-Write a provider plugin when you need one of these:
+Write a provider plugin when you need:
 
-- request or response shaping that config cannot express
-- nonstandard auth behavior
-- multi-step execution
-- custom operation semantics that do not come from an upstream spec
+- Request or response shaping that config cannot express
+- Nonstandard auth behavior
+- Multi-step execution
+- Custom operation semantics that do not come from an upstream spec
 
-Plugin integrations use only the `plugin` block and cannot declare `connections`, `api`, or `mcp`.
+Plugin integrations use the `plugin` block. They can optionally compose with an `mcp` surface (hybrid pattern) but cannot declare an `api` surface. See [Integrations](/concepts/integrations) for the hybrid pattern.

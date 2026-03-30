@@ -1,6 +1,7 @@
 export default {
   "platform-model": "Platform Model",
   configuration: "Configuration",
+  security: "Security Model",
   observability: "Observability",
   integrations: "Integrations",
   "authentication-and-tokens": "Authentication and Tokens",

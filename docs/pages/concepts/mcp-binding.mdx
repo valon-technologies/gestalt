@@ -49,11 +49,13 @@ An integration may combine:
 
 - one `api` surface (REST or GraphQL)
 - one `mcp` surface
+- a `plugin` block with an `mcp` surface (hybrid pattern)
 
 That gives you one provider namespace that can contain:
 
 - generated HTTP operations (automatically projected as MCP tools)
 - imported MCP tools
+- plugin-provided operations (including plugin catalogs)
 
 `mcp_tool_prefix` exists to avoid tool-name collisions when multiple integrations export similarly named operations.
 

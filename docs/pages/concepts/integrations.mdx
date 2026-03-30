@@ -1,8 +1,8 @@
 # Integrations
 
-Integrations are the main user-facing primitive in Gestalt. Every integration becomes a provider at runtime, and every provider exposes operations that callers can invoke through the API, UI, bindings, runtimes, or MCP.
+Every integration becomes a provider at runtime. Every provider exposes operations that callers invoke through the API, UI, bindings, runtimes, or MCP.
 
-## The Shape Of An Integration
+## Shape of an Integration
 
 ```yaml
 integrations:
@@ -35,14 +35,17 @@ This one block answers four questions:
 3. Where do its operations come from (api/mcp surfaces)
 4. Which operations should be exposed
 
-## Two Lanes
+## Integration Patterns
 
-Every integration follows one of two patterns:
+Every integration follows one of three patterns:
 
-- **Declarative**: `connections` + one or both of `api` and `mcp`
-- **Plugin-only**: just a `plugin` block
+| Pattern | Structure | When to use |
+| --- | --- | --- |
+| **Declarative** | `connections` + one or both of `api` and `mcp` | The upstream has an OpenAPI spec, GraphQL endpoint, or MCP server. |
+| **Plugin-only** | Just a `plugin` block | Custom execution logic that cannot be expressed declaratively. |
+| **Hybrid** | `plugin` + `mcp` | A plugin provider combined with an upstream MCP surface. |
 
-You cannot mix plugin and declarative surfaces.
+Plugin integrations cannot declare an `api` surface. Only plugin + `mcp` composition is supported.
 
 ## Connections
 
@@ -69,9 +72,10 @@ All connections within a single integration must share the same mode.
 
 | Value | Behavior |
 | --- | --- |
-| `user` | Use the authenticated caller's token. |
+| `user` | Use the authenticated caller's token. Default when `mode` is omitted. |
 | `identity` | Use a shared identity token. |
-| `none` | Use no credential. |
+| `either` | Try the caller's token first, then fall back to the shared identity token. |
+| `none` | No credential. |
 
 ### Params
 
@@ -83,13 +87,13 @@ params:
     required: true
 ```
 
-A URL like `https://{subdomain}.example.com/api` is expanded using the connection's params at request time.
+A URL like `https://{subdomain}.example.com/api` expands using the connection's params at request time.
 
-## Surfaces: `api` And `mcp`
+## Surfaces: `api` and `mcp`
 
-Surfaces define where operations come from. An integration can declare one `api` surface, one `mcp` surface, or both.
+Surfaces define where operations come from. A declarative integration can declare one `api` surface, one `mcp` surface, or both.
 
-All declarative API operations are automatically projected as MCP tools on `/mcp`. There is no opt-in flag; any integration with an `api` surface has its operations available to MCP clients.
+All declarative API operations are automatically projected as MCP tools on `/mcp`. Any integration with an `api` surface has its operations available to MCP clients.
 
 ### `api`
 
@@ -102,13 +106,13 @@ api:
     listThings:
 ```
 
-| Field | Notes |
+| Field | Purpose |
 | --- | --- |
 | `type` | `rest` or `graphql`. |
 | `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
 | `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
 | `connection` | Name of a connection defined in the same integration. |
-| `allowed_operations` | Narrows exposed operations. Use a YAML map where each key is an operation name. Set the value to nothing to keep the upstream description, or provide an object with `alias` and/or `description`. |
+| `allowed_operations` | Narrows exposed operations. Bare key keeps the upstream description. Object with `alias` and/or `description` overrides it. |
 
 ### `mcp`
 
@@ -116,16 +120,19 @@ api:
 mcp:
   url: https://mcp.example.com
   connection: mcp_conn
+  allowed_operations:
+    search:
 ```
 
-| Field | Notes |
+| Field | Purpose |
 | --- | --- |
 | `url` | Required. The upstream MCP server URL. |
 | `connection` | Name of a connection defined in the same integration. |
+| `allowed_operations` | Optional. Narrows exposed tools. Same override syntax as `api`. |
 
 ### Multiple Connections
 
-An integration can define separate connections for its API and MCP surfaces. This is useful when the two surfaces authenticate through different providers.
+An integration can define separate connections for its API and MCP surfaces when the two surfaces authenticate through different providers.
 
 ```yaml
 integrations:
@@ -158,17 +165,15 @@ integrations:
 
 ## Operation Exposure
 
-`allowed_operations` on `api` narrows what a provider exposes.
+`allowed_operations` on `api` and `mcp` narrows what a provider exposes.
 
-It supports two forms:
+Two forms:
 
 ```yaml
 allowed_operations:
   repos/list-for-authenticated-user:
   issues/list-for-authenticated-user:
 ```
-
-or:
 
 ```yaml
 allowed_operations:
@@ -178,13 +183,13 @@ allowed_operations:
     description: List assigned issues
 ```
 
-The bare-key form keeps upstream descriptions. The object form lets you override descriptions or aliases.
+The bare-key form keeps upstream descriptions. The object form overrides descriptions or aliases.
 
-If you omit `allowed_operations`, Gestalt exposes every operation from the source.
+Omitting `allowed_operations` exposes every operation from the source.
 
 ## Plugins
 
-An integration can be backed by an executable provider plugin instead of declarative surfaces:
+A plugin-only integration delegates execution to an external binary:
 
 ```yaml
 integrations:
@@ -193,24 +198,43 @@ integrations:
       package: ./custom-tool.tar.gz
 ```
 
-Plugin integrations cannot also declare `connections`, `api`, or `mcp`.
+See the [Config File](/reference/config-file) reference for the full `plugin` field specification.
 
-## Metadata And Presentation
+## Hybrid Integrations
 
-These fields only affect how the provider is presented, not how it executes:
+A hybrid integration composes a plugin provider with an upstream MCP surface. The plugin handles execution logic while the MCP surface exposes additional tools.
 
-- `display_name`
-- `description`
-- `icon_file`
-- `mcp_tool_prefix`
+```yaml
+integrations:
+  slack:
+    plugin:
+      source: github.com/valon-technologies/gestalt/slack
+      version: 0.0.1-alpha.3
+    mcp:
+      url: https://mcp.slack.com
+      connection: plugin
+```
 
-`icon_file` is resolved relative to the config file and embedded into the prepared provider artifact during `bundle`.
+Setting `mcp.connection` to `plugin` reuses the plugin's OAuth token for the MCP surface. Alternatively, declare explicit `connections` and reference one from `mcp.connection`.
+
+Hybrid integrations cannot declare an `api` surface. If `connections` are declared, they must be paired with an `mcp` surface.
+
+## Metadata
+
+These fields affect presentation only:
+
+| Field | Purpose |
+| --- | --- |
+| `display_name` | Provider name shown in the UI and API responses. |
+| `description` | Provider description. |
+| `icon_file` | SVG path, resolved relative to the config file. Embedded during `bundle`. |
+| `mcp_tool_prefix` | Prefix applied to tool names on the `/mcp` endpoint. |
 
 ## Instances
 
 Gestalt stores connection state by `(subject, integration, instance)`.
 
-That means one integration can support:
+One integration can support:
 
 - one default connection
 - multiple named connections for the same user
