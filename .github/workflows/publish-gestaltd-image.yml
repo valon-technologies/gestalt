@@ -94,4 +94,4 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
           short-description: Self-hosted integration runtime for REST, GraphQL, MCP, and plugins.
-          readme-filepath: .github/dockerhub-gestaltd-description.md
+          readme-filepath: docs/dockerhub/gestaltd.md
