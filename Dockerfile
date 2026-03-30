@@ -32,7 +32,7 @@ ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk add --no-cache ca-certificates git
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates git
 COPY --from=build-binary /gestaltd /gestaltd
 RUN ln -sf /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
@@ -52,7 +52,7 @@ ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk add --no-cache ca-certificates curl
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates curl
 COPY --from=build-binary /gestaltd /gestaltd
 LABEL org.opencontainers.image.title="gestaltd debug" \
       org.opencontainers.image.description="Debug image for gestaltd with a shell and troubleshooting tools." \
