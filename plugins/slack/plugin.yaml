@@ -1,0 +1,83 @@
+schema_version: 2
+source: github.com/valon-technologies/gestalt/slack
+version: 0.0.1-alpha.3
+display_name: Slack
+description: Send messages, search conversations, and manage channels.
+kinds:
+  - provider
+provider:
+  mcp: true
+  base_url: https://slack.com
+  auth:
+    type: oauth2
+    authorization_url: https://slack.com/oauth/v2/authorize
+    token_url: https://slack.com/api/oauth.v2.access
+    scopes:
+      - channels:read
+      - channels:history
+      - chat:write
+      - users:read
+      - search:read
+  operations:
+    - name: slack_list_channels
+      description: List conversations/channels
+      method: GET
+      path: /api/conversations.list
+      parameters:
+        - name: limit
+          type: int
+          in: query
+        - name: cursor
+          type: string
+          in: query
+    - name: slack_send_message
+      description: Send a message to a channel
+      method: POST
+      path: /api/chat.postMessage
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: text
+          type: string
+          in: body
+          required: true
+    - name: slack_list_users
+      description: List workspace users
+      method: GET
+      path: /api/users.list
+      parameters:
+        - name: limit
+          type: int
+          in: query
+        - name: cursor
+          type: string
+          in: query
+    - name: slack_read_history
+      description: Read message history for a channel
+      method: GET
+      path: /api/conversations.history
+      parameters:
+        - name: channel
+          type: string
+          in: query
+          required: true
+        - name: limit
+          type: int
+          in: query
+        - name: cursor
+          type: string
+          in: query
+    - name: slack_search_messages
+      description: Search messages across the workspace
+      method: GET
+      path: /api/search.messages
+      parameters:
+        - name: query
+          type: string
+          in: query
+          required: true
+        - name: count
+          type: int
+          in: query
