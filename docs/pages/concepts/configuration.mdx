@@ -35,6 +35,7 @@ This is the complete top-level shape of the config:
 auth: {}
 datastore: {}
 secrets: {}
+telemetry: {}
 integrations: {}
 runtimes: {}
 bindings: {}
@@ -50,6 +51,7 @@ Each block controls a distinct part of the runtime:
 | `auth` | How users authenticate to Gestalt itself. |
 | `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
 | `secrets` | How `secret://...` values are resolved. |
+| `telemetry` | Observability: traces, metrics, and structured logs. |
 | `integrations` | The provider graph users call. |
 | `runtimes` | Background workers. |
 | `bindings` | Additional inbound surfaces. |
@@ -61,6 +63,7 @@ The loader applies a small number of defaults:
 
 - `server.port` defaults to `8080`
 - `secrets.provider` defaults to `env`
+- `telemetry.provider` defaults to `stdout`
 
 Some fields are effectively mandatory:
 
