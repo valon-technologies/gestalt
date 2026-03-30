@@ -147,6 +147,8 @@ jobs:
             GESTALT_URL=${{ env.IMAGE_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
       - name: Build and push builder image
         uses: docker/build-push-action@v5
         with:
@@ -167,6 +169,8 @@ jobs:
             GESTALT_URL=${{ env.IMAGE_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
       - name: Build and push debug image
         uses: docker/build-push-action@v5
         with:
@@ -187,6 +191,32 @@ jobs:
             GESTALT_URL=${{ env.IMAGE_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
+      - name: Scan runtime image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Scan builder image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:builder-${{ steps.version.outputs.version }}
+          format: table
+          exit-code: '0'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Scan debug image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:debug-${{ steps.version.outputs.version }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         with:

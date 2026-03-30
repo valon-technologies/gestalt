@@ -73,6 +73,16 @@ jobs:
             valontechnologies/gestalt:latest
           cache-from: type=gha
           cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
+      - name: Scan CLI image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: valontechnologies/gestalt:${{ steps.version.outputs.version }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
   update-formula:
     name: Update Homebrew Formula

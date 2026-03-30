@@ -53,7 +53,9 @@ ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 RUN apk add --no-cache ca-certificates curl
+RUN addgroup -g 65534 -S nonroot && adduser -u 65534 -S -G nonroot -H nonroot
 COPY --from=build-binary /gestaltd /gestaltd
+USER nonroot:nonroot
 LABEL org.opencontainers.image.title="gestaltd debug" \
       org.opencontainers.image.description="Debug image for gestaltd with a shell and troubleshooting tools." \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
@@ -82,6 +84,7 @@ LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.version="${GESTALT_VERSION}" \
       org.opencontainers.image.revision="${GESTALT_REVISION}" \
       org.opencontainers.image.created="${GESTALT_CREATED}"
+USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]
