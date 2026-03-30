@@ -238,8 +238,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
+	encKey := crypto.DeriveKey(cfg.Server.EncryptionKey)
+	if encKey == nil {
+		slog.Warn("no encryption key configured; stored secrets will not be encrypted")
+	}
+
 	deps := Deps{
-		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
+		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
 	}

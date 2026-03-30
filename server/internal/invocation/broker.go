@@ -328,7 +328,9 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		}
 		token.RefreshErrorCount++
 		token.UpdatedAt = time.Now()
-		_ = b.datastore.StoreToken(ctx, token)
+		if storeErr := b.datastore.StoreToken(ctx, token); storeErr != nil {
+			slog.WarnContext(ctx, "failed to persist refresh error count", "provider", providerName, "error", storeErr)
+		}
 		if time.Now().Before(*token.ExpiresAt) {
 			return token.AccessToken, nil
 		}
