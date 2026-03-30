@@ -637,8 +637,11 @@ func resolveConnectionRef(intgName, surface, connName string, connections map[st
 }
 
 func validateCredentialFields(intgName, connName string, auth ConnectionAuthDef) error {
-	if len(auth.Credentials) == 0 {
+	if auth.Type != "manual" && auth.Type != "api_key" {
 		return nil
+	}
+	if len(auth.Credentials) == 0 {
+		return fmt.Errorf("config validation: integration %q connection %q requires credentials when auth type is %q", intgName, connName, auth.Type)
 	}
 	names := make(map[string]bool, len(auth.Credentials))
 	for i, cf := range auth.Credentials {

@@ -7,6 +7,7 @@ const OAUTH_INTEGRATION: Integration = {
 
 const MANUAL_INTEGRATION: Integration = {
   name: "manual-svc", display_name: "Manual Service", description: "Example manual integration", auth_types: ["manual"],
+  credential_fields: [{ name: "token", label: "API Token" }],
 };
 
 const sampleIntegrations: Integration[] = [
