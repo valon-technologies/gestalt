@@ -665,6 +665,9 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, err
 		}
 		buildResult := &ProviderBuildResult{Provider: prov}
+		if intg.Plugin.AllowedOperations != nil && len(intg.Plugin.AllowedOperations) == 0 {
+			return nil, fmt.Errorf("integration %q plugin.allowed_operations cannot be empty; omit the field to allow all", name)
+		}
 		if len(intg.Plugin.AllowedOperations) > 0 {
 			provOps := make(map[string]struct{}, len(prov.ListOperations()))
 			for _, op := range prov.ListOperations() {

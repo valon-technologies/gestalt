@@ -137,6 +137,9 @@ func (r *Restricted) Catalog() *catalog.Catalog {
 			if exposed, ok := r.reverseAlias[op.ID]; ok {
 				op.ID = exposed
 			}
+			if desc, ok := r.descriptions[op.ID]; ok {
+				op.Description = desc
+			}
 			filtered.Operations = append(filtered.Operations, op)
 		}
 	}
@@ -167,6 +170,9 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 			op := cat.Operations[i]
 			if exposed, ok := rs.reverseAlias[op.ID]; ok {
 				op.ID = exposed
+			}
+			if desc, ok := rs.descriptions[op.ID]; ok {
+				op.Description = desc
 			}
 			filtered.Operations = append(filtered.Operations, op)
 		}
