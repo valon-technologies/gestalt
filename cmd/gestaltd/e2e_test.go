@@ -358,7 +358,7 @@ func writeManifest(t *testing.T, pluginDir, version string) {
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "test/provider",
+		Source:        "github.com/test/plugins/provider",
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{

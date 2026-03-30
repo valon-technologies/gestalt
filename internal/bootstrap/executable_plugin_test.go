@@ -589,7 +589,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	bin := buildEchoPluginBinary(t)
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        "github.com/acme/plugins/echo",
 		Version:       "1.0.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
@@ -674,7 +674,7 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	bin := buildEchoPluginBinary(t)
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        "github.com/acme/plugins/echo",
 		Version:       "1.0.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},

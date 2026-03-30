@@ -394,7 +394,7 @@ func TestPrepareConfigResolvesPluginPackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackage(t, dir, "acme/provider", "0.1.0", "provider")
+	packagePath := buildPreparedTestPluginPackage(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
 	cfgPath := writePreparedPluginPackageConfig(t, dir, packagePath)
 
 	if err := initConfig(cfgPath); err != nil {
@@ -442,7 +442,7 @@ func TestValidateConfigUsesPreparedManifestForPluginPackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", `{
   "type": "object",
   "required": ["api_key"],
   "properties": {
@@ -465,7 +465,7 @@ func TestPrepareConfigRejectsPluginPackageSchemaViolation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "acme/provider", "0.1.0", "not-an-executable", `{
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", `{
   "type": "object",
   "required": ["api_key"],
   "properties": {
@@ -485,7 +485,7 @@ func TestValidateConfigUsesPreparedManifestForRuntimePluginPackage(t *testing.T)
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestRuntimePackageWithSchema(t, dir, "acme/runtime", "0.1.0", "not-an-executable", `{
+	packagePath := buildPreparedTestRuntimePackageWithSchema(t, dir, "github.com/acme/plugins/runtime", "0.1.0", "not-an-executable", `{
   "type": "object",
   "required": ["runtime_key"],
   "properties": {
@@ -647,36 +647,36 @@ runtimes:
 	return cfgPath
 }
 
-func buildPreparedTestPluginPackage(t *testing.T, dir, id, version, content string) string {
+func buildPreparedTestPluginPackage(t *testing.T, dir, source, version, content string) string {
 	t.Helper()
-	return buildPreparedTestPluginPackageWithSchema(t, dir, id, version, content, "")
+	return buildPreparedTestPluginPackageWithSchema(t, dir, source, version, content, "")
 }
 
-func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, id, version, content, schema string) string {
+func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version, content, schema string) string {
 	t.Helper()
 
-	source := filepath.Join(dir, "plugin-src")
+	srcDir := filepath.Join(dir, "plugin-src")
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	if err := os.MkdirAll(filepath.Join(source, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
 		t.Fatalf("MkdirAll artifact dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
 	var schemaPath string
 	if schema != "" {
 		schemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
-		if err := os.MkdirAll(filepath.Join(source, "schemas"), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(srcDir, "schemas"), 0755); err != nil {
 			t.Fatalf("MkdirAll schema dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(schemaPath)), []byte(schema), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(schemaPath)), []byte(schema), 0644); err != nil {
 			t.Fatalf("WriteFile schema: %v", err)
 		}
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            id,
+		Source:        source,
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -701,30 +701,30 @@ func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, id, version, co
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(source, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(source, archivePath); err != nil {
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return archivePath
 }
 
-func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, id, version, content, schema string) string {
+func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, source, version, content, schema string) string {
 	t.Helper()
 
-	source := filepath.Join(dir, "runtime-plugin-src")
+	srcDir := filepath.Join(dir, "runtime-plugin-src")
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "runtime"))
-	if err := os.MkdirAll(filepath.Join(source, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.FromSlash(filepath.Dir(artifactRel))), 0755); err != nil {
 		t.Fatalf("MkdirAll artifact dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(source, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
 	if schema != "" {
-		schemaPath := filepath.Join(source, "schemas", "config.schema.json")
+		schemaPath := filepath.Join(srcDir, "schemas", "config.schema.json")
 		if err := os.MkdirAll(filepath.Dir(schemaPath), 0755); err != nil {
 			t.Fatalf("MkdirAll schema dir: %v", err)
 		}
@@ -735,7 +735,7 @@ func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, id, version, c
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            id,
+		Source:        source,
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -756,12 +756,12 @@ func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, id, version, c
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(source, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 
 	archivePath := filepath.Join(dir, "runtime-plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(source, archivePath); err != nil {
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return archivePath

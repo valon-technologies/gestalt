@@ -43,7 +43,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	}
 
 	p := &DeclarativeProvider{
-		name:        nameFromManifest(manifest),
+		name:        manifest.Source,
 		displayName: manifest.DisplayName,
 		description: manifest.Description,
 		baseURL:     manifest.Provider.BaseURL,
@@ -80,13 +80,6 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	}
 
 	return p, nil
-}
-
-func nameFromManifest(m *pluginmanifestv1.Manifest) string {
-	if m.Source != "" {
-		return m.Source
-	}
-	return m.ID
 }
 
 func (p *DeclarativeProvider) Name() string        { return p.name }

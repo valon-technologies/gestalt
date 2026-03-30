@@ -77,27 +77,6 @@ func TestRun_PluginPackageCreatesArchive(t *testing.T) {
 }
 
 //nolint:paralleltest // Swaps os.Stdout via captureStdout.
-func TestRun_PluginPackageFromBinary(t *testing.T) {
-	dir := t.TempDir()
-	binaryPath := filepath.Join(dir, "my-provider")
-	if err := os.WriteFile(binaryPath, []byte("fake-binary-content"), 0755); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	outPath := filepath.Join(dir, "my-provider.tar.gz")
-
-	output := captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--binary", binaryPath, "--id", "test/myprov", "--output", outPath})
-	})
-
-	if _, err := os.Stat(outPath); err != nil {
-		t.Fatalf("expected archive to exist: %v", err)
-	}
-	if !strings.Contains(output, "packaged") {
-		t.Fatalf("expected packaged output, got: %q", output)
-	}
-}
-
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
 func TestRun_PluginPackageFromBinaryWithSource(t *testing.T) {
 	dir := t.TempDir()
 	binaryPath := filepath.Join(dir, "my-provider")
@@ -121,30 +100,6 @@ func TestRun_PluginPackageFromBinaryWithSource(t *testing.T) {
 	}
 	if !strings.Contains(output, "packaged") {
 		t.Fatalf("expected packaged output, got: %q", output)
-	}
-}
-
-func TestRun_PluginPackageRejectsMutualExclusiveFlags(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	binaryPath := filepath.Join(dir, "my-provider")
-	if err := os.WriteFile(binaryPath, []byte("fake-binary-content"), 0755); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	err := run([]string{
-		"plugin", "package",
-		"--binary", binaryPath,
-		"--id", "test/myprov",
-		"--source", "github.com/testorg/testrepo/testplugin",
-		"--output", filepath.Join(dir, "out.tar.gz"),
-	})
-	if err == nil {
-		t.Fatal("expected error for mutually exclusive flags")
-	}
-	if !strings.Contains(err.Error(), "mutually exclusive") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -179,8 +134,8 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	}
 
 	manifest := `{
-  "schema_version": 1,
-  "id": "testowner/provider",
+  "schema_version": 2,
+  "source": "github.com/testowner/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
   "provider": {

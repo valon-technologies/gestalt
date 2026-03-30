@@ -13,7 +13,7 @@ import (
 
 func testManifest(baseURL string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        "github.com/acme/plugins/testapi",
 		Version:       "1.0.0",
 		DisplayName:   "Test API",

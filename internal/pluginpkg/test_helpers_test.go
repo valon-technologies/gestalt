@@ -28,10 +28,10 @@ func currentArtifactPath(binary string) string {
 	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, binary))
 }
 
-func newProviderManifest(id, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
+func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            id,
+		Source:        source,
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -111,14 +111,14 @@ func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFil
 	}
 }
 
-func mustWriteProviderPackageDir(t *testing.T, root, id, version, content string) (string, *pluginmanifestv1.Manifest) {
+func mustWriteProviderPackageDir(t *testing.T, root, source, version, content string) (string, *pluginmanifestv1.Manifest) {
 	t.Helper()
 
 	sourceDir := filepath.Join(root, "src")
 	artifactPath := currentArtifactPath("provider")
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte(content), 0755)
 
-	manifest := newProviderManifest(id, version, artifactPath, sha256Hex(content))
+	manifest := newProviderManifest(source, version, artifactPath, sha256Hex(content))
 	mustWriteManifest(t, sourceDir, manifest)
 	return sourceDir, manifest
 }

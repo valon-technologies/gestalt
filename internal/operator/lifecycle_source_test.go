@@ -61,7 +61,7 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 
 	artPath := artifactRelPath("provider")
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        source,
 		Version:       version,
 		Kinds:         []string{pluginmanifestv1.KindProvider},
