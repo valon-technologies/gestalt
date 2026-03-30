@@ -179,6 +179,7 @@ type ConnectionAuthDef struct {
 	ClientAuth          string            `yaml:"client_auth"`
 	TokenExchange       string            `yaml:"token_exchange"`
 	Scopes              []string          `yaml:"scopes"`
+	ScopeParam          string            `yaml:"scope_param"`
 	ScopeSeparator      string            `yaml:"scope_separator"`
 	PKCE                bool              `yaml:"pkce"`
 	AuthorizationParams map[string]string `yaml:"authorization_params"`

@@ -68,6 +68,7 @@ type AuthDef struct {
 	ClientAuth          string            `yaml:"client_auth" json:"client_auth"`       // body (default), header
 	TokenExchange       string            `yaml:"token_exchange" json:"token_exchange"` // form (default), json
 	Scopes              []string          `yaml:"scopes" json:"scopes"`
+	ScopeParam          string            `yaml:"scope_param" json:"scope_param"`
 	ScopeSeparator      string            `yaml:"scope_separator" json:"scope_separator"`
 	PKCE                bool              `yaml:"pkce" json:"pkce"`
 	AuthorizationParams map[string]string `yaml:"authorization_params" json:"authorization_params"`
