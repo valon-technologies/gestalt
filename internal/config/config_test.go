@@ -249,6 +249,37 @@ server:
 	}
 }
 
+func TestLoadWithMappingEmptyValueDoesNotFallbackToFile(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: auth-provider
+datastore:
+  provider: data-store
+server:
+  encryption_key: server-key
+  base_url: ${TEST_BASE_URL}
+`)
+
+	cfg, err := LoadWithMapping(path, func(key string) string {
+		switch key {
+		case "TEST_BASE_URL":
+			return ""
+		case "TEST_BASE_URL_FILE":
+			return "/tmp/should-not-be-used"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadWithMapping: %v", err)
+	}
+	if cfg.Server.BaseURL != "" {
+		t.Fatalf("Server.BaseURL = %q, want empty string", cfg.Server.BaseURL)
+	}
+}
+
 func TestLoadConfigBaseURLResolvesRedirectURL(t *testing.T) {
 	t.Parallel()
 

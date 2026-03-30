@@ -222,8 +222,9 @@ func Load(path string) (*Config, error) {
 
 func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	return LoadWithLookup(path, func(key string) (string, bool) {
-		val := getenv(key)
-		return val, val != ""
+		// Preserve the legacy os.Expand-style contract for callers that only
+		// provide a string mapping: the mapped value wins even when it is empty.
+		return getenv(key), true
 	})
 }
 
