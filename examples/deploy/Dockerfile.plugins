@@ -12,11 +12,14 @@
 # Build:
 #   docker build -f Dockerfile.plugins --secret id=github_token,src=token.txt .
 
-FROM valontechnologies/gestaltd:builder AS build
+FROM valontechnologies/gestaltd:latest AS gestaltd
+
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 
-# Build plugin binaries, package them as archives, and bundle everything.
 RUN --mount=type=secret,id=github_token \
     if [ -f /run/secrets/github_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \

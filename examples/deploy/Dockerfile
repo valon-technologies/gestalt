@@ -1,4 +1,5 @@
-FROM valontechnologies/gestaltd:builder AS bundle
+FROM valontechnologies/gestaltd:latest AS bundle
+USER root
 COPY config.yaml /src/config.yaml
 RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
 
