@@ -6,6 +6,62 @@ import (
 	"testing"
 )
 
+func TestPackageRoundTripWithIconFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir, manifest := mustWriteProviderPackageDir(t, root, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	manifest.IconFile = "assets/icon.svg"
+	mustWriteManifest(t, sourceDir, manifest)
+
+	iconContent := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>`)
+	mustWriteFile(t, filepath.Join(sourceDir, "assets", "icon.svg"), iconContent, 0644)
+
+	if _, err := ValidatePackageDir(sourceDir); err != nil {
+		t.Fatalf("ValidatePackageDir: %v", err)
+	}
+
+	archivePath := filepath.Join(root, "plugin.tar.gz")
+	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	extractDir := filepath.Join(root, "extracted")
+	if err := ExtractPackage(archivePath, extractDir); err != nil {
+		t.Fatalf("ExtractPackage: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(extractDir, "assets", "icon.svg"))
+	if err != nil {
+		t.Fatalf("icon file missing after extract: %v", err)
+	}
+	if string(got) != string(iconContent) {
+		t.Fatalf("icon content mismatch: got %q", got)
+	}
+
+	extracted, err := ValidatePackageDir(extractDir)
+	if err != nil {
+		t.Fatalf("ValidatePackageDir on extracted: %v", err)
+	}
+	if extracted.IconFile != "assets/icon.svg" {
+		t.Fatalf("extracted manifest IconFile = %q, want %q", extracted.IconFile, "assets/icon.svg")
+	}
+}
+
+func TestValidatePackageDirIconFileMissing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir, manifest := mustWriteProviderPackageDir(t, root, "github.com/acme/plugins/provider", "0.2.0", "provider2")
+	manifest.IconFile = "assets/icon.svg"
+	mustWriteManifest(t, sourceDir, manifest)
+
+	_, err := ValidatePackageDir(sourceDir)
+	if err == nil {
+		t.Fatal("expected error when icon file is missing")
+	}
+}
+
 func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	t.Parallel()
 

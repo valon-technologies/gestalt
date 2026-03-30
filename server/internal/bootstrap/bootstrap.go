@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -693,6 +694,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		if err != nil {
 			return nil, err
 		}
+		applyPluginIcon(pluginProv, intg)
 
 		restricted, err := applyAllowedOperations(name, intg, pluginProv)
 		if err != nil {
@@ -730,6 +732,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 	}
+	applyPluginIcon(prov, intg)
 
 	restricted, err := applyAllowedOperations(name, intg, prov)
 	if err != nil {
@@ -811,6 +814,25 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 		return nil, nil, err
 	}
 	return prov, pluginConfig, nil
+}
+
+func applyPluginIcon(prov core.Provider, intg config.IntegrationDef) {
+	if intg.IconFile == "" {
+		return
+	}
+	data, err := os.ReadFile(intg.IconFile)
+	if err != nil {
+		slog.Warn("could not read plugin icon_file", "path", intg.IconFile, "error", err)
+		return
+	}
+	svg := strings.TrimSpace(string(data))
+	if svg == "" {
+		return
+	}
+	type iconSetter interface{ SetIconSVG(string) }
+	if setter, ok := prov.(iconSetter); ok {
+		setter.SetIconSVG(svg)
+	}
 }
 
 func buildPluginMCPProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginProv core.Provider, pluginConfig map[string]any, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
