@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};

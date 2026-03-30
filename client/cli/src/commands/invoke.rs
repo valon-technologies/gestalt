@@ -6,7 +6,7 @@ use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
 pub fn invoke(
-    url_override: Option<&str>,
+    client: &ApiClient,
     integration: &str,
     operation: &str,
     params: &[ParamEntry],
@@ -14,8 +14,7 @@ pub fn invoke(
     input_file: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
-    let cat = catalog::fetch_catalog(&client, integration)?;
+    let cat = catalog::fetch_catalog(client, integration)?;
     let mut param_map = params::assemble_params(params, Some(&cat), operation)?;
 
     if let Some(file_path) = input_file {
@@ -47,13 +46,8 @@ pub fn invoke(
     Ok(())
 }
 
-pub fn list_operations(
-    url_override: Option<&str>,
-    integration: &str,
-    format: Format,
-) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
-    let cat = catalog::fetch_catalog(&client, integration)?;
+pub fn list_operations(client: &ApiClient, integration: &str, format: Format) -> Result<()> {
+    let cat = catalog::fetch_catalog(client, integration)?;
 
     match format {
         Format::Json => {
