@@ -30,13 +30,15 @@ impl CredentialStore {
     }
 
     pub fn load(&self) -> Result<Option<Credentials>> {
-        if !self.path.exists() {
-            return Ok(None);
+        match fs::read_to_string(&self.path) {
+            Ok(json) => {
+                let creds: Credentials =
+                    serde_json::from_str(&json).context("failed to parse credentials file")?;
+                Ok(Some(creds))
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(anyhow::anyhow!(e).context("failed to read credentials file")),
         }
-        let json = fs::read_to_string(&self.path).context("failed to read credentials file")?;
-        let creds: Credentials =
-            serde_json::from_str(&json).context("failed to parse credentials file")?;
-        Ok(Some(creds))
     }
 
     pub fn save(&self, credentials: &Credentials) -> Result<()> {
@@ -46,31 +48,41 @@ impl CredentialStore {
 
         let json =
             serde_json::to_string_pretty(credentials).context("failed to serialize credentials")?;
-        fs::write(&self.path, &json).context("failed to write credentials file")?;
-
-        set_permissions(&self.path)?;
+        write_secure(&self.path, json.as_bytes())?;
         Ok(())
     }
 
     pub fn delete(&self) -> Result<()> {
-        if self.path.exists() {
-            fs::remove_file(&self.path).context("failed to delete credentials file")?;
+        match fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(anyhow::anyhow!(e).context("failed to delete credentials file")),
         }
-        Ok(())
     }
 }
 
 #[cfg(unix)]
-fn set_permissions(path: &std::path::Path) -> Result<()> {
+fn write_secure(path: &std::path::Path, data: &[u8]) -> Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
     use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .context("failed to set file permissions to 0600")?;
-    Ok(())
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .context("failed to create credentials file")?;
+    file.write_all(data)
+        .context("failed to write credentials file")?;
+    // mode() only applies on creation; fix permissions for pre-existing files
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .context("failed to set file permissions to 0600")
 }
 
 #[cfg(not(unix))]
-fn set_permissions(_path: &std::path::Path) -> Result<()> {
-    Ok(())
+fn write_secure(path: &std::path::Path, data: &[u8]) -> Result<()> {
+    std::fs::write(path, data).context("failed to write credentials file")
 }
 
 #[cfg(test)]
