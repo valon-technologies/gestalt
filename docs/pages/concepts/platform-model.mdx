@@ -68,7 +68,7 @@ The composition rules are intentionally narrow:
 - an integration may have at most one `api` surface (REST or GraphQL)
 - an integration may have at most one `mcp` surface
 - one `api` surface plus one `mcp` surface is valid
-- a `plugin` block replaces declarative surfaces entirely
+- a `plugin` block may compose with `mcp` (hybrid) but not with `api`
 
 That gives you a predictable composition model:
 
@@ -78,6 +78,7 @@ That gives you a predictable composition model:
 - REST plus MCP
 - GraphQL plus MCP
 - plugin only
+- plugin plus MCP (hybrid)
 
 ## The Shared Invocation Broker
 

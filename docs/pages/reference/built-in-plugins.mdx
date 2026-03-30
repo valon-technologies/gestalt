@@ -1,21 +1,21 @@
 # Built-in Plugins
 
-This page lists the components that the `gestaltd` binary actually registers today.
+Components registered by the `gestaltd` binary at startup.
 
 ## Auth Providers
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `none` | No-auth mode used by the generated no-config startup path. |
-| `google` | Google OAuth login for the Gestalt platform. |
-| `local` | Built-in authenticated provider for local development without an external identity system. |
-| `oidc` | Generic OIDC platform auth provider. |
+| `none` | Disables platform authentication. Every request is treated as anonymous. |
+| `local` | Single-user auth for local development. No external identity provider required. |
+| `google` | Google OAuth 2.0 platform login. Supports `allowed_domains` restriction. |
+| `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ## Datastores
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `sqlite` | File-backed datastore. Best for local or single-node deployments. |
+| `sqlite` | File-backed. Best for local or single-node deployments. |
 | `postgres` | Recommended production datastore. |
 | `mysql` | SQL-backed production datastore. |
 | `dynamodb` | DynamoDB-backed datastore. |
@@ -26,33 +26,40 @@ This page lists the components that the `gestaltd` binary actually registers tod
 
 ## Secret Managers
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `env` | Resolve secrets from environment variables. |
-| `file` | Resolve secrets from files in a configured directory. |
-| `gcp_secret_manager` | Resolve secrets from Google Secret Manager. |
+| `env` | Resolves secrets from environment variables. Default when `secrets` is omitted. |
+| `file` | Resolves secrets from files in a configured directory. |
+| `gcp_secret_manager` | Resolves secrets from Google Cloud Secret Manager. |
+
+## Telemetry Providers
+
+| Name | Purpose |
+| --- | --- |
+| `stdout` | Prints traces and logs to standard output. Default when `telemetry` is omitted. |
+| `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
+| `noop` | Disables all telemetry collection. |
 
 ## Bindings
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `webhook` | Inbound HTTP route that can optionally forward into a provider operation. |
-| `proxy` | HTTP proxy surface with egress policy and credential resolution. |
+| `webhook` | Inbound HTTP endpoint with optional HMAC signature verification and provider forwarding. |
+| `proxy` | HTTP proxy surface with egress policy enforcement and credential injection. |
 
 ## Runtimes
 
-| Name | Notes |
-| --- | --- |
-| `echo` | Built-in runtime always registered by the server binary. |
+No built-in runtimes are registered. Define custom runtimes using the `plugin` field under `runtimes` in the config file. See [Plugin Protocol](/concepts/plugin-protocol) for the runtime plugin contract.
 
-## Built-In Named Providers
+## Named Providers
 
-| Name | Notes |
-| --- | --- |
-| `bigquery` | Built-in named provider registered by the server binary. |
-| `jira` | Built-in named provider registered by the server binary. |
-| `echo` | Built-in provider always registered by the server binary. |
+| Name | Type | Purpose |
+| --- | --- | --- |
+| `bigquery` | Declarative (YAML) | Google BigQuery data warehouse operations. |
+| `jira` | Declarative (YAML) | Jira Cloud issue management. |
 
-## What This Page Does Not Mean
+Named providers are pre-registered in the binary and referenced by name in integrations. Declarative providers define their operations, auth, and base URL in YAML manifests under `plugins/providers/`.
 
-This page only lists components that are actually wired into `cmd/gestaltd`. Test fixtures, examples, and helper packages elsewhere in the repo are not runtime registration.
+## Scope
+
+This page lists only components wired into `cmd/gestaltd`. Test fixtures, examples, and the Slack plugin manifest (`plugins/slack/plugin.yaml`) ship in the repository but are not compiled into the binary.
