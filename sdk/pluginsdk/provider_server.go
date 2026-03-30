@@ -96,69 +96,11 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	}, nil
 }
 
-func (s *ProviderServer) AuthorizationURL(_ context.Context, req *pluginapiv1.AuthorizationURLRequest) (*pluginapiv1.AuthorizationURLResponse, error) {
-	oauthProv, ok := s.provider.(OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	return &pluginapiv1.AuthorizationURLResponse{
-		Url: oauthProv.AuthorizationURL(req.GetState(), slices.Clone(req.GetScopes())),
-	}, nil
-}
-
-func (s *ProviderServer) ExchangeCode(ctx context.Context, req *pluginapiv1.ExchangeCodeRequest) (*pluginapiv1.TokenResponse, error) {
-	oauthProv, ok := s.provider.(OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	resp, err := oauthProv.ExchangeCode(ctx, req.GetCode())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "exchange code: %v", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "provider returned nil token response")
-	}
-	msg, err := tokenResponseToProto(resp)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode token response: %v", err)
-	}
-	return msg, nil
-}
-
-func (s *ProviderServer) RefreshToken(ctx context.Context, req *pluginapiv1.RefreshTokenRequest) (*pluginapiv1.TokenResponse, error) {
-	oauthProv, ok := s.provider.(OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	resp, err := oauthProv.RefreshToken(ctx, req.GetRefreshToken())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "refresh token: %v", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "provider returned nil token response")
-	}
-	msg, err := tokenResponseToProto(resp)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode token response: %v", err)
-	}
-	return msg, nil
-}
-
 func authTypes(p Provider) []string {
 	if atl, ok := p.(AuthTypeLister); ok {
 		return slices.Clone(atl.AuthTypes())
 	}
-	_, hasOAuth := p.(OAuthProvider)
-	hasManual := false
-	if mp, ok := p.(ManualAuthProvider); ok {
-		hasManual = mp.SupportsManualAuth()
-	}
-	switch {
-	case hasOAuth && hasManual:
-		return []string{"oauth", "manual"}
-	case hasOAuth:
-		return []string{"oauth"}
-	case hasManual:
+	if mp, ok := p.(ManualAuthProvider); ok && mp.SupportsManualAuth() {
 		return []string{"manual"}
 	}
 	return nil

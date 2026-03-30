@@ -12,8 +12,8 @@ import { UnknownFieldHandler } from "@protobuf-ts/runtime";
 import type { PartialMessage } from "@protobuf-ts/runtime";
 import { reflectionMergePartial } from "@protobuf-ts/runtime";
 import { MessageType } from "@protobuf-ts/runtime";
-import { Timestamp } from "../google/protobuf/timestamp";
 import { Struct } from "../google/protobuf/struct";
+import { Timestamp } from "../google/protobuf/timestamp";
 import { Value } from "../google/protobuf/struct";
 /**
  * @generated from protobuf message gestalt.plugin.v1.UserIdentity
@@ -197,31 +197,6 @@ export interface ProviderMetadata {
     maxProtocolVersion: number;
 }
 /**
- * @generated from protobuf message gestalt.plugin.v1.TokenResponse
- */
-export interface TokenResponse {
-    /**
-     * @generated from protobuf field: string access_token = 1
-     */
-    accessToken: string;
-    /**
-     * @generated from protobuf field: string refresh_token = 2
-     */
-    refreshToken: string;
-    /**
-     * @generated from protobuf field: int32 expires_in = 3
-     */
-    expiresIn: number;
-    /**
-     * @generated from protobuf field: string token_type = 4
-     */
-    tokenType: string;
-    /**
-     * @generated from protobuf field: google.protobuf.Struct extra = 5
-     */
-    extra?: Struct;
-}
-/**
  * @generated from protobuf message gestalt.plugin.v1.OperationResult
  */
 export interface OperationResult {
@@ -326,46 +301,6 @@ export interface ExecuteRequest {
      * @generated from protobuf field: string invocation_id = 5
      */
     invocationId: string;
-}
-/**
- * @generated from protobuf message gestalt.plugin.v1.AuthorizationURLRequest
- */
-export interface AuthorizationURLRequest {
-    /**
-     * @generated from protobuf field: string state = 1
-     */
-    state: string;
-    /**
-     * @generated from protobuf field: repeated string scopes = 2
-     */
-    scopes: string[];
-}
-/**
- * @generated from protobuf message gestalt.plugin.v1.AuthorizationURLResponse
- */
-export interface AuthorizationURLResponse {
-    /**
-     * @generated from protobuf field: string url = 1
-     */
-    url: string;
-}
-/**
- * @generated from protobuf message gestalt.plugin.v1.ExchangeCodeRequest
- */
-export interface ExchangeCodeRequest {
-    /**
-     * @generated from protobuf field: string code = 1
-     */
-    code: string;
-}
-/**
- * @generated from protobuf message gestalt.plugin.v1.RefreshTokenRequest
- */
-export interface RefreshTokenRequest {
-    /**
-     * @generated from protobuf field: string refresh_token = 1
-     */
-    refreshToken: string;
 }
 /**
  * @generated from protobuf message gestalt.plugin.v1.GetSessionCatalogRequest
@@ -1164,84 +1099,6 @@ class ProviderMetadata$Type extends MessageType<ProviderMetadata> {
  */
 export const ProviderMetadata = new ProviderMetadata$Type();
 // @generated message type with reflection information, may provide speed optimized methods
-class TokenResponse$Type extends MessageType<TokenResponse> {
-    constructor() {
-        super("gestalt.plugin.v1.TokenResponse", [
-            { no: 1, name: "access_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "refresh_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "expires_in", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
-            { no: 4, name: "token_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 5, name: "extra", kind: "message", T: () => Struct }
-        ]);
-    }
-    create(value?: PartialMessage<TokenResponse>): TokenResponse {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.accessToken = "";
-        message.refreshToken = "";
-        message.expiresIn = 0;
-        message.tokenType = "";
-        if (value !== undefined)
-            reflectionMergePartial<TokenResponse>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: TokenResponse): TokenResponse {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string access_token */ 1:
-                    message.accessToken = reader.string();
-                    break;
-                case /* string refresh_token */ 2:
-                    message.refreshToken = reader.string();
-                    break;
-                case /* int32 expires_in */ 3:
-                    message.expiresIn = reader.int32();
-                    break;
-                case /* string token_type */ 4:
-                    message.tokenType = reader.string();
-                    break;
-                case /* google.protobuf.Struct extra */ 5:
-                    message.extra = Struct.internalBinaryRead(reader, reader.uint32(), options, message.extra);
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: TokenResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string access_token = 1; */
-        if (message.accessToken !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.accessToken);
-        /* string refresh_token = 2; */
-        if (message.refreshToken !== "")
-            writer.tag(2, WireType.LengthDelimited).string(message.refreshToken);
-        /* int32 expires_in = 3; */
-        if (message.expiresIn !== 0)
-            writer.tag(3, WireType.Varint).int32(message.expiresIn);
-        /* string token_type = 4; */
-        if (message.tokenType !== "")
-            writer.tag(4, WireType.LengthDelimited).string(message.tokenType);
-        /* google.protobuf.Struct extra = 5; */
-        if (message.extra)
-            Struct.internalBinaryWrite(message.extra, writer.tag(5, WireType.LengthDelimited).fork(), options).join();
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.TokenResponse
- */
-export const TokenResponse = new TokenResponse$Type();
-// @generated message type with reflection information, may provide speed optimized methods
 class OperationResult$Type extends MessageType<OperationResult> {
     constructor() {
         super("gestalt.plugin.v1.OperationResult", [
@@ -1576,202 +1433,6 @@ class ExecuteRequest$Type extends MessageType<ExecuteRequest> {
  * @generated MessageType for protobuf message gestalt.plugin.v1.ExecuteRequest
  */
 export const ExecuteRequest = new ExecuteRequest$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class AuthorizationURLRequest$Type extends MessageType<AuthorizationURLRequest> {
-    constructor() {
-        super("gestalt.plugin.v1.AuthorizationURLRequest", [
-            { no: 1, name: "state", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "scopes", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ }
-        ]);
-    }
-    create(value?: PartialMessage<AuthorizationURLRequest>): AuthorizationURLRequest {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.state = "";
-        message.scopes = [];
-        if (value !== undefined)
-            reflectionMergePartial<AuthorizationURLRequest>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthorizationURLRequest): AuthorizationURLRequest {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string state */ 1:
-                    message.state = reader.string();
-                    break;
-                case /* repeated string scopes */ 2:
-                    message.scopes.push(reader.string());
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: AuthorizationURLRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string state = 1; */
-        if (message.state !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.state);
-        /* repeated string scopes = 2; */
-        for (let i = 0; i < message.scopes.length; i++)
-            writer.tag(2, WireType.LengthDelimited).string(message.scopes[i]);
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.AuthorizationURLRequest
- */
-export const AuthorizationURLRequest = new AuthorizationURLRequest$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class AuthorizationURLResponse$Type extends MessageType<AuthorizationURLResponse> {
-    constructor() {
-        super("gestalt.plugin.v1.AuthorizationURLResponse", [
-            { no: 1, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
-        ]);
-    }
-    create(value?: PartialMessage<AuthorizationURLResponse>): AuthorizationURLResponse {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.url = "";
-        if (value !== undefined)
-            reflectionMergePartial<AuthorizationURLResponse>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthorizationURLResponse): AuthorizationURLResponse {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string url */ 1:
-                    message.url = reader.string();
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: AuthorizationURLResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string url = 1; */
-        if (message.url !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.url);
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.AuthorizationURLResponse
- */
-export const AuthorizationURLResponse = new AuthorizationURLResponse$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class ExchangeCodeRequest$Type extends MessageType<ExchangeCodeRequest> {
-    constructor() {
-        super("gestalt.plugin.v1.ExchangeCodeRequest", [
-            { no: 1, name: "code", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
-        ]);
-    }
-    create(value?: PartialMessage<ExchangeCodeRequest>): ExchangeCodeRequest {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.code = "";
-        if (value !== undefined)
-            reflectionMergePartial<ExchangeCodeRequest>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ExchangeCodeRequest): ExchangeCodeRequest {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string code */ 1:
-                    message.code = reader.string();
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: ExchangeCodeRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string code = 1; */
-        if (message.code !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.code);
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.ExchangeCodeRequest
- */
-export const ExchangeCodeRequest = new ExchangeCodeRequest$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class RefreshTokenRequest$Type extends MessageType<RefreshTokenRequest> {
-    constructor() {
-        super("gestalt.plugin.v1.RefreshTokenRequest", [
-            { no: 1, name: "refresh_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
-        ]);
-    }
-    create(value?: PartialMessage<RefreshTokenRequest>): RefreshTokenRequest {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.refreshToken = "";
-        if (value !== undefined)
-            reflectionMergePartial<RefreshTokenRequest>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RefreshTokenRequest): RefreshTokenRequest {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string refresh_token */ 1:
-                    message.refreshToken = reader.string();
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: RefreshTokenRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string refresh_token = 1; */
-        if (message.refreshToken !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.refreshToken);
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.RefreshTokenRequest
- */
-export const RefreshTokenRequest = new RefreshTokenRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class GetSessionCatalogRequest$Type extends MessageType<GetSessionCatalogRequest> {
     constructor() {
@@ -2484,9 +2145,6 @@ export const ProviderPlugin = new ServiceType("gestalt.plugin.v1.ProviderPlugin"
     { name: "StartProvider", options: {}, I: StartProviderRequest, O: StartProviderResponse },
     { name: "ListOperations", options: {}, I: Empty, O: ListOperationsResponse },
     { name: "Execute", options: {}, I: ExecuteRequest, O: OperationResult },
-    { name: "AuthorizationURL", options: {}, I: AuthorizationURLRequest, O: AuthorizationURLResponse },
-    { name: "ExchangeCode", options: {}, I: ExchangeCodeRequest, O: TokenResponse },
-    { name: "RefreshToken", options: {}, I: RefreshTokenRequest, O: TokenResponse },
     { name: "GetSessionCatalog", options: {}, I: GetSessionCatalogRequest, O: GetSessionCatalogResponse },
     { name: "PostConnect", options: {}, I: PostConnectRequest, O: PostConnectResponse }
 ]);

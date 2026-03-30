@@ -96,21 +96,3 @@ func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*
 	return out
 }
 
-func tokenResponseToProto(resp *TokenResponse) (*pluginapiv1.TokenResponse, error) {
-	var extra *structpb.Struct
-	var err error
-	if len(resp.Extra) > 0 {
-		extra, err = structpb.NewStruct(resp.Extra)
-		if err != nil {
-			return nil, fmt.Errorf("token response extra: %w", err)
-		}
-	}
-
-	return &pluginapiv1.TokenResponse{
-		AccessToken:  resp.AccessToken,
-		RefreshToken: resp.RefreshToken,
-		ExpiresIn:    int32(resp.ExpiresIn),
-		TokenType:    resp.TokenType,
-		Extra:        extra,
-	}, nil
-}
