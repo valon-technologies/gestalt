@@ -26,8 +26,8 @@ func testDefinition(name string) *Definition {
 			TokenURL:         "/oauth/token",
 		},
 		Operations: map[string]OperationDef{
-			"list_items": {Description: "List items", Method: "GET", Path: "/items"},
-			"get_item":   {Description: "Get item", Method: "GET", Path: "/items/{id}"},
+			"list_items": {Description: "List items", Method: http.MethodGet, Path: "/items"},
+			"get_item":   {Description: "Get item", Method: http.MethodGet, Path: "/items/{id}"},
 		},
 	}
 }
@@ -65,7 +65,7 @@ func TestBuildManualAuth(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
-			"list": {Description: "List", Method: "GET", Path: "/list"},
+			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
 	intg, err := Build(def, config.ConnectionDef{}, nil)
@@ -145,8 +145,8 @@ func TestBuildWithAlias(t *testing.T) {
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
-			"op_alpha": {Description: "Alpha op", Method: "GET", Path: "/alpha"},
-			"op_beta":  {Description: "Beta op", Method: "GET", Path: "/beta"},
+			"op_alpha": {Description: "Alpha op", Method: http.MethodGet, Path: "/alpha"},
+			"op_beta":  {Description: "Beta op", Method: http.MethodGet, Path: "/beta"},
 		},
 	}
 
@@ -196,7 +196,7 @@ func TestBuildWithAliasAndDescription(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
-			"op_gamma": {Description: "Gamma op", Method: "GET", Path: "/gamma"},
+			"op_gamma": {Description: "Gamma op", Method: http.MethodGet, Path: "/gamma"},
 		},
 	}
 
@@ -315,7 +315,7 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 		Auth:        AuthDef{Type: "manual"},
 		AuthStyle:   "basic",
 		Operations: map[string]OperationDef{
-			"list": {Description: "List", Method: "GET", Path: "/list"},
+			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
 	intg, err := Build(def, config.ConnectionDef{}, nil)
@@ -339,7 +339,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		Operations: map[string]OperationDef{
 			"list": {
 				Description: "List things",
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Path:        "/things",
 				Parameters: []ParameterDef{
 					{Name: "limit", Type: "integer", Description: "Max results", Default: 25},
@@ -348,7 +348,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 			},
 			"create": {
 				Description: "Create a thing",
-				Method:      "POST",
+				Method:      http.MethodPost,
 				Path:        "/things",
 				Parameters: []ParameterDef{
 					{Name: "name", Type: "string", Required: true},
@@ -413,7 +413,7 @@ func TestBuildAppliesIconFile(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
-			"op": {Description: "An op", Method: "GET", Path: "/op"},
+			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -445,7 +445,7 @@ func TestBuildIconFileMissing(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		Operations: map[string]OperationDef{
-			"op": {Description: "An op", Method: "GET", Path: "/op"},
+			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -482,7 +482,7 @@ func TestBuildAuthHeader(t *testing.T) {
 		Auth:        AuthDef{Type: "manual"},
 		AuthHeader:  "X-API-Key",
 		Operations: map[string]OperationDef{
-			"list": {Description: "List items", Method: "GET", Path: "/items"},
+			"list": {Description: "List items", Method: http.MethodGet, Path: "/items"},
 		},
 	}
 
@@ -533,7 +533,7 @@ func TestBuildAuthMapping(t *testing.T) {
 			},
 		},
 		Operations: map[string]OperationDef{
-			"list": {Description: "List items", Method: "GET", Path: "/items"},
+			"list": {Description: "List items", Method: http.MethodGet, Path: "/items"},
 		},
 	}
 
@@ -580,7 +580,7 @@ func TestBuildAuthMappingMissingField(t *testing.T) {
 			Headers: map[string]string{"X-Key": "missing_field"},
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -619,7 +619,7 @@ func TestBuildErrorMessagePath(t *testing.T) {
 		Auth:             AuthDef{Type: "manual"},
 		ErrorMessagePath: "error.message",
 		Operations: map[string]OperationDef{
-			"list": {Description: "List", Method: "GET", Path: "/list"},
+			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
 
@@ -656,7 +656,7 @@ func TestBuildErrorMessagePathSuccessPassthrough(t *testing.T) {
 		Auth:             AuthDef{Type: "manual"},
 		ErrorMessagePath: "error.message",
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -693,7 +693,7 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 		Auth:        AuthDef{Type: "manual"},
 		AuthHeader:  "X-Original-Key",
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -737,7 +737,7 @@ func TestBuildConnectionParams(t *testing.T) {
 			},
 		},
 		Operations: map[string]OperationDef{
-			"list_products": {Description: "List products", Method: "GET", Path: "/products"},
+			"list_products": {Description: "List products", Method: http.MethodGet, Path: "/products"},
 		},
 	}
 
@@ -781,7 +781,7 @@ func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
 			"subdomain": {Required: true},
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/items"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/items"},
 		},
 	}
 
@@ -821,7 +821,7 @@ func TestBuildResponseCheck_SuccessMatch(t *testing.T) {
 			ErrorMessagePath: "error",
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -864,7 +864,7 @@ func TestBuildResponseCheck_FailureMatch(t *testing.T) {
 			ErrorMessagePath: errorKey,
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -902,7 +902,7 @@ func TestBuildResponseCheck_NonJSON200(t *testing.T) {
 			ErrorMessagePath: "error",
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -939,7 +939,7 @@ func TestBuildResponseCheck_NonJSON500(t *testing.T) {
 			ErrorMessagePath: "error",
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -966,7 +966,7 @@ func TestBuildResponseCheck_SuccessMatchOnly(t *testing.T) {
 			SuccessBodyMatch: map[string]any{"ok": true},
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 
@@ -1000,7 +1000,7 @@ func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 			ErrorMessagePath: msgKey,
 		},
 		Operations: map[string]OperationDef{
-			"op": {Description: "Op", Method: "GET", Path: "/op"},
+			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 

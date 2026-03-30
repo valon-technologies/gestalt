@@ -3,6 +3,7 @@ package pluginsdk_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
@@ -185,7 +186,7 @@ func TestProviderServerListOperations(t *testing.T) {
 			{
 				Name:        "list_items",
 				Description: "List all items",
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Parameters: []pluginsdk.Parameter{
 					{Name: "limit", Type: "integer", Description: "Max results", Required: false, Default: 10},
 				},
@@ -193,7 +194,7 @@ func TestProviderServerListOperations(t *testing.T) {
 			{
 				Name:        "create_item",
 				Description: "Create a new item",
-				Method:      "POST",
+				Method:      http.MethodPost,
 				Parameters: []pluginsdk.Parameter{
 					{Name: "name", Type: "string", Description: "Item name", Required: true},
 				},

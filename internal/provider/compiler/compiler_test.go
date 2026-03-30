@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,7 +21,7 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 		DisplayName: "Prepared Provider",
 		Operations: map[string]provider.OperationDef{
 			"list_users": {
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Path:        "/users",
 				Description: "List users",
 				Transport:   "rest",
@@ -69,13 +70,13 @@ func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
 		},
 		Operations: map[string]provider.OperationDef{
 			"delete_user": {
-				Method:      "DELETE",
+				Method:      http.MethodDelete,
 				Path:        "/users/{id}",
 				Description: "Delete user",
 				Transport:   "rest",
 			},
 			"list_users": {
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Path:        "/users",
 				Description: "List users",
 				Transport:   "rest",

@@ -46,7 +46,7 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	apiCat := &catalog.Catalog{
 		Name: "notion",
 		Operations: []catalog.CatalogOperation{
-			{ID: "list_pages", Method: "GET", Path: "/pages", Description: "List pages"},
+			{ID: "list_pages", Method: http.MethodGet, Path: "/pages", Description: "List pages"},
 		},
 	}
 	apiProv := &catalogProvider{
@@ -119,7 +119,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 	apiCat := &catalog.Catalog{
 		Name: "notion",
 		Operations: []catalog.CatalogOperation{
-			{ID: "list_pages", Method: "GET", Path: "/pages", Description: "List pages"},
+			{ID: "list_pages", Method: http.MethodGet, Path: "/pages", Description: "List pages"},
 		},
 	}
 	apiProv := &catalogProvider{
@@ -198,7 +198,7 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 	apiCat := &catalog.Catalog{
 		Name: "notion",
 		Operations: []catalog.CatalogOperation{
-			{ID: "get_page", Method: "GET", Path: "/pages/{id}", Description: "Get page"},
+			{ID: "get_page", Method: http.MethodGet, Path: "/pages/{id}", Description: "Get page"},
 		},
 	}
 	var executedOp string
@@ -241,7 +241,7 @@ func TestComposite_IncludeRESTFalseExcludesAPITools(t *testing.T) {
 	apiCat := &catalog.Catalog{
 		Name: "alpha",
 		Operations: []catalog.CatalogOperation{
-			{ID: "list_items", Method: "GET", Path: "/items", Description: "List items"},
+			{ID: "list_items", Method: http.MethodGet, Path: "/items", Description: "List items"},
 		},
 	}
 	apiProv := &catalogProvider{

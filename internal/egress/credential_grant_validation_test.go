@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -41,7 +42,7 @@ func TestValidateCredentialGrant_EachMatchCriterionSufficient(t *testing.T) {
 		{"subject_kind", CredentialGrantValidationInput{SubjectKind: "agent"}},
 		{"subject_id", CredentialGrantValidationInput{SubjectID: "agent-1"}},
 		{"operation", CredentialGrantValidationInput{Operation: "chat"}},
-		{"method", CredentialGrantValidationInput{Method: "POST"}},
+		{"method", CredentialGrantValidationInput{Method: http.MethodPost}},
 		{"host", CredentialGrantValidationInput{Host: "api.vendor.test"}},
 		{"path_prefix", CredentialGrantValidationInput{PathPrefix: "/v1"}},
 	}

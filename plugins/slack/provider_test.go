@@ -77,7 +77,7 @@ func TestListChannels(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if log.method != "GET" {
+	if log.method != http.MethodGet {
 		t.Errorf("method = %s, want GET", log.method)
 	}
 	if log.path != "/api/"+methodConversationsList {
@@ -113,7 +113,7 @@ func TestSendMessage(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if log.method != "POST" {
+	if log.method != http.MethodPost {
 		t.Errorf("method = %s, want POST", log.method)
 	}
 	if log.path != "/api/"+methodChatPostMessage {
@@ -148,7 +148,7 @@ func TestListUsers(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if log.method != "GET" {
+	if log.method != http.MethodGet {
 		t.Errorf("method = %s, want GET", log.method)
 	}
 	if log.path != "/api/"+methodUsersList {
@@ -180,7 +180,7 @@ func TestReadHistory(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if log.method != "GET" {
+	if log.method != http.MethodGet {
 		t.Errorf("method = %s, want GET", log.method)
 	}
 	if log.path != "/api/"+methodConversationsHistory {
@@ -214,7 +214,7 @@ func TestSearchMessages(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if log.method != "GET" {
+	if log.method != http.MethodGet {
 		t.Errorf("method = %s, want GET", log.method)
 	}
 	if log.path != "/api/"+methodSearchMessages {

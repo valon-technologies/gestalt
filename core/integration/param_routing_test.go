@@ -116,8 +116,8 @@ func TestFindCatalogOp_Found(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "test",
 		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: "GET", Path: "/alpha"},
-			{ID: "op_beta", Method: "POST", Path: "/beta"},
+			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
+			{ID: "op_beta", Method: http.MethodPost, Path: "/beta"},
 		},
 	}
 	got := findCatalogOp(cat, "op_beta")
@@ -141,7 +141,7 @@ func TestFindCatalogOp_NotFound(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "test",
 		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: "GET", Path: "/alpha"},
+			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
 		},
 	}
 	got := findCatalogOp(cat, "nonexistent")
@@ -173,7 +173,7 @@ func TestExecuteREST_CatalogQueryParam(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "create_item",
-				Method: "POST",
+				Method: http.MethodPost,
 				Path:   "/items",
 				Parameters: []catalog.CatalogParameter{
 					{Name: "name", Type: "string", Location: "body"},
@@ -359,7 +359,7 @@ func TestExecuteREST_CatalogHeaderParam(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "create_item",
-				Method: "POST",
+				Method: http.MethodPost,
 				Path:   "/items",
 				Parameters: []catalog.CatalogParameter{
 					{Name: "name", Type: "string", Location: "body"},

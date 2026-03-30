@@ -186,7 +186,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:          "search_issues",
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Path:        "/issues",
 				Title:       "Search Issues",
 				Description: "Search for issues",
@@ -197,7 +197,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 			},
 			{
 				ID:          "create_issue",
-				Method:      "POST",
+				Method:      http.MethodPost,
 				Path:        "/issues",
 				Title:       "Create Issue",
 				Description: "Create a new issue",
@@ -253,10 +253,10 @@ func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
 	prov := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "github"},
 		ops: []core.Operation{
-			{Name: "list_repos", Description: "List repositories", Method: "GET", Parameters: []core.Parameter{
+			{Name: "list_repos", Description: "List repositories", Method: http.MethodGet, Parameters: []core.Parameter{
 				{Name: "org", Type: "string", Description: "Organization name", Required: true},
 			}},
-			{Name: "delete_repo", Description: "Delete a repository", Method: "DELETE"},
+			{Name: "delete_repo", Description: "Delete a repository", Method: http.MethodDelete},
 		},
 	}
 
@@ -296,7 +296,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 
 	prov := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "slack"},
-		ops:             []core.Operation{{Name: "send_message", Method: "POST"}},
+		ops:             []core.Operation{{Name: "send_message", Method: http.MethodPost}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -337,7 +337,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 				}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "do_thing", Method: "POST"}},
+		ops: []core.Operation{{Name: "do_thing", Method: http.MethodPost}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -384,7 +384,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 
 	prov := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             []core.Operation{{Name: "op", Method: "GET"}},
+		ops:             []core.Operation{{Name: "op", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -448,7 +448,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 				}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "forbidden_op", Method: "GET"}},
+		ops: []core.Operation{{Name: "forbidden_op", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -484,7 +484,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 				return nil, fmt.Errorf("connection timeout")
 			},
 		},
-		ops: []core.Operation{{Name: "flaky_op", Method: "GET"}},
+		ops: []core.Operation{{Name: "flaky_op", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -515,7 +515,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 
 	prov := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             []core.Operation{{Name: "op", Method: "GET"}},
+		ops:             []core.Operation{{Name: "op", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
@@ -545,11 +545,11 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 
 	prov1 := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "allowed"},
-		ops:             []core.Operation{{Name: "op1", Method: "GET"}},
+		ops:             []core.Operation{{Name: "op1", Method: http.MethodGet}},
 	}
 	prov2 := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "excluded"},
-		ops:             []core.Operation{{Name: "op2", Method: "GET"}},
+		ops:             []core.Operation{{Name: "op2", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov1, prov2)
@@ -578,8 +578,8 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "test",
 		Operations: []catalog.CatalogOperation{
-			{ID: "visible_op", Method: "GET", Path: "/v"},
-			{ID: "hidden_op", Method: "GET", Path: "/h", Visible: &hidden},
+			{ID: "visible_op", Method: http.MethodGet, Path: "/v"},
+			{ID: "hidden_op", Method: http.MethodGet, Path: "/h", Visible: &hidden},
 		},
 	}
 
@@ -1035,7 +1035,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 			cat := &catalog.Catalog{
 				Name: "acme",
 				Operations: []catalog.CatalogOperation{
-					{ID: "api_op", Method: "GET", Path: "/api", Transport: catalog.TransportREST},
+					{ID: "api_op", Method: http.MethodGet, Path: "/api", Transport: catalog.TransportREST},
 					{ID: "mcp_op", Description: "passthrough", Transport: catalog.TransportMCPPassthrough},
 				},
 			}

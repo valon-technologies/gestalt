@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/valon-technologies/gestalt/internal/egress"
 	"github.com/valon-technologies/gestalt/internal/invocation"
@@ -31,7 +32,7 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
-		if result.Status >= httpErrorMin {
+		if result.Status >= http.StatusBadRequest {
 			return mcpgo.NewToolResultError(result.Body), nil
 		}
 
