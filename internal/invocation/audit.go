@@ -46,8 +46,10 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.IsValid() {
-		attrs = append(attrs, slog.String("trace_id", spanCtx.TraceID().String()))
-		attrs = append(attrs, slog.String("span_id", spanCtx.SpanID().String()))
+		attrs = append(attrs,
+			slog.String("trace_id", spanCtx.TraceID().String()),
+			slog.String("span_id", spanCtx.SpanID().String()),
+		)
 	}
 
 	level := slog.LevelInfo
