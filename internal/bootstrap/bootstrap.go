@@ -108,6 +108,7 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
+type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 
 type FactoryRegistry struct {
 	Auth            map[string]AuthFactory
@@ -115,6 +116,7 @@ type FactoryRegistry struct {
 	Providers       map[string]ProviderFactory
 	DefaultProvider ProviderFactory
 	Secrets         map[string]SecretManagerFactory
+	Telemetry       map[string]TelemetryFactory
 	Runtimes        map[string]RuntimeFactory
 	Bindings        map[string]BindingFactory
 	Builtins        []core.Provider
@@ -126,6 +128,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 		Datastores: make(map[string]DatastoreFactory),
 		Providers:  make(map[string]ProviderFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
+		Telemetry:  make(map[string]TelemetryFactory),
 		Runtimes:   make(map[string]RuntimeFactory),
 		Bindings:   make(map[string]BindingFactory),
 	}
@@ -143,6 +146,7 @@ type Result struct {
 	CapabilityLister invocation.CapabilityLister
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
+	Telemetry        core.TelemetryProvider
 	Egress           EgressDeps
 
 	mu                sync.Mutex
@@ -197,6 +201,9 @@ func (r *Result) Close(ctx context.Context) error {
 		closeDatastore(r.Datastore),
 		closeResultSecretManager(r.SecretManager),
 	)
+	if r.Telemetry != nil {
+		errs = append(errs, r.Telemetry.Shutdown(ctx))
+	}
 	r.closed = true
 	return errors.Join(errs...)
 }
@@ -218,6 +225,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
 		return nil, err
 	}
+
+	tp, err := buildTelemetry(cfg, factories)
+	if err != nil {
+		return nil, err
+	}
+	shutdownTelemetry := true
+	defer func() {
+		if shutdownTelemetry {
+			_ = tp.Shutdown(context.Background())
+		}
+	}()
 
 	deps := Deps{
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
@@ -281,6 +299,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeProviders = false
 	shutdownExtensions = false
 	closeSM = false
+	shutdownTelemetry = false
 	return &Result{
 		Auth:             auth,
 		Datastore:        ds,
@@ -293,8 +312,21 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CapabilityLister: sharedInvoker,
 		AuditSink:        audit,
 		SecretManager:    sm,
+		Telemetry:        tp,
 		Egress:           deps.Egress,
 	}, nil
+}
+
+func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
+	factory, ok := factories.Telemetry[cfg.Telemetry.Provider]
+	if !ok {
+		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.Provider)
+	}
+	tp, err := factory(cfg.Telemetry.Config)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.Provider, err)
+	}
+	return tp, nil
 }
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
@@ -440,6 +472,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.Datastore.Config, resolve); err != nil {
+		return err
+	}
+	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {
 		return err
 	}
 	for name := range cfg.Runtimes {

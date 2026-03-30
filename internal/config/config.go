@@ -29,12 +29,18 @@ type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
+	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
 	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
 	UI           UIConfig                  `yaml:"ui"`
+}
+
+type TelemetryConfig struct {
+	Provider string    `yaml:"provider"`
+	Config   yaml.Node `yaml:"config"`
 }
 
 type UIConfig struct {
@@ -289,6 +295,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Secrets.Provider == "" {
 		cfg.Secrets.Provider = "env"
+	}
+	if cfg.Telemetry.Provider == "" {
+		cfg.Telemetry.Provider = "stdout"
 	}
 }
 

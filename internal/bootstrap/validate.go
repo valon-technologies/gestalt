@@ -30,6 +30,12 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return nil, err
 	}
 
+	tp, err := buildTelemetry(cfg, factories)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+
 	deps := Deps{
 		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
 		BaseURL:       cfg.Server.BaseURL,

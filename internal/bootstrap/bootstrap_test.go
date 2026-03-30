@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
+	telemetrynoop "github.com/valon-technologies/gestalt/plugins/telemetry/noop"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,11 +67,18 @@ func stubSecretManagerFactory() bootstrap.SecretManagerFactory {
 	}
 }
 
+func stubTelemetryFactory() bootstrap.TelemetryFactory {
+	return func(yaml.Node) (core.TelemetryProvider, error) {
+		return telemetrynoop.New(), nil
+	}
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth:      config.AuthConfig{Provider: "test-auth"},
 		Datastore: config.DatastoreConfig{Provider: "test-store"},
 		Secrets:   config.SecretsConfig{Provider: "test-secrets"},
+		Telemetry: config.TelemetryConfig{Provider: "test-telemetry"},
 		Integrations: map[string]config.IntegrationDef{
 			"alpha": {},
 		},
@@ -87,6 +95,7 @@ func validFactories() *bootstrap.FactoryRegistry {
 	f.Datastores["test-store"] = stubDatastoreFactory()
 	f.Providers["alpha"] = stubProviderFactory("alpha")
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
+	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
 }
 
@@ -107,6 +116,9 @@ func TestBootstrap(t *testing.T) {
 	}
 	if result.Datastore == nil {
 		t.Fatal("Datastore is nil")
+	}
+	if result.Telemetry == nil {
+		t.Fatal("Telemetry is nil")
 	}
 	if result.Invoker == nil {
 		t.Fatal("Invoker is nil")
@@ -214,6 +226,7 @@ func TestBootstrapDefaultProviderFactory(t *testing.T) {
 	factories.Datastores["test-store"] = stubDatastoreFactory()
 	factories.DefaultProvider = stubProviderFactory("default-alpha")
 	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
+	factories.Telemetry["test-telemetry"] = stubTelemetryFactory()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -240,6 +253,7 @@ func TestBootstrapNamedOverridesDefault(t *testing.T) {
 	}
 	factories.Providers["alpha"] = stubProviderFactory("alpha")
 	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
+	factories.Telemetry["test-telemetry"] = stubTelemetryFactory()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -495,8 +509,8 @@ func TestBootstrapBaseURL(t *testing.T) {
 		}
 		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 	}
-	// config.Load defaults secrets.provider to "env"
 	factories.Secrets["env"] = stubSecretManagerFactory()
+	factories.Telemetry["stdout"] = stubTelemetryFactory()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	cfgYAML := `

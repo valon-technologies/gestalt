@@ -31,6 +31,9 @@ import (
 	secretsenv "github.com/valon-technologies/gestalt/plugins/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/plugins/secrets/file"
 	secretsgcp "github.com/valon-technologies/gestalt/plugins/secrets/gcp"
+	telemetrynoop "github.com/valon-technologies/gestalt/plugins/telemetry/noop"
+	telemetryotlp "github.com/valon-technologies/gestalt/plugins/telemetry/otlp"
+	telemetrystdout "github.com/valon-technologies/gestalt/plugins/telemetry/stdout"
 )
 
 type bootstrapEnv struct {
@@ -83,6 +86,9 @@ func (e *bootstrapEnv) Close() {
 
 func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
+	factories.Telemetry["noop"] = telemetrynoop.Factory
+	factories.Telemetry["stdout"] = telemetrystdout.Factory
+	factories.Telemetry["otlp"] = telemetryotlp.Factory
 	factories.Auth["google"] = google.Factory
 	factories.Auth["local"] = local.Factory
 	factories.Auth["none"] = authnone.Factory
