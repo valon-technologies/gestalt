@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -1255,7 +1256,17 @@ func TestLoginCallback(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code")
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -1271,6 +1282,93 @@ func TestLoginCallback(t *testing.T) {
 	}
 	if result["email"] != "user@example.com" {
 		t.Fatalf("unexpected email: %v", result["email"])
+	}
+}
+
+func TestLoginCallbackStateMismatch(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithToken{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"correct-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=wrong-state")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginCallbackMissingStateCookie(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithToken{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=anything")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginCallbackExpiredState(t *testing.T) {
+	t.Parallel()
+
+	nowVal := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Now = func() time.Time { return nowVal }
+		cfg.Auth = &stubAuthWithToken{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	nowVal = nowVal.Add(11 * time.Minute)
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
 	}
 }
 
@@ -1292,7 +1390,17 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=encrypted-state")
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"original-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=encrypted-state")
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -36,6 +37,7 @@ type Server struct {
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	secureCookies      bool
+	encryptor          *cryptoutil.AESGCMEncryptor
 	stateCodec         *integrationOAuthStateCodec
 	apiTokenTTL        time.Duration
 	now                func() time.Time
@@ -68,12 +70,18 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("invoker is required")
 	}
 	var stateCodec *integrationOAuthStateCodec
+	var encryptor *cryptoutil.AESGCMEncryptor
 	if len(cfg.StateSecret) > 0 {
 		codec, err := newIntegrationOAuthStateCodec(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init oauth state codec: %w", err)
 		}
 		stateCodec = codec
+		enc, err := cryptoutil.NewAESGCM(cfg.StateSecret)
+		if err != nil {
+			return nil, fmt.Errorf("init state encryptor: %w", err)
+		}
+		encryptor = enc
 	}
 	now := cfg.Now
 	if now == nil {
@@ -99,6 +107,7 @@ func New(cfg Config) (*Server, error) {
 		integrationDefs:   cfg.IntegrationDefs,
 		noAuth:            noAuth,
 		secureCookies:     cfg.SecureCookies,
+		encryptor:         encryptor,
 		stateCodec:        stateCodec,
 		apiTokenTTL:       cfg.APITokenTTL,
 		now:               now,
