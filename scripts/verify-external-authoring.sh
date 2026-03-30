@@ -13,7 +13,8 @@ fi
 if [ -z "$GESTALTD" ]; then
     echo "building gestaltd..."
     BUILT_BINARY=$(mktemp -u)
-    go build -o "$BUILT_BINARY" ./cmd/gestaltd
+    ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    (cd "$ROOT/server" && go build -o "$BUILT_BINARY" ./cmd/gestaltd)
     GESTALTD="$BUILT_BINARY"
 fi
 
