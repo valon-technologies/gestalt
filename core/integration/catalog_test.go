@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -15,7 +16,7 @@ func TestCompileSchemasFillsInputSchema(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "op1",
-				Method: "GET",
+				Method: http.MethodGet,
 				Path:   "/test",
 				Parameters: []catalog.CatalogParameter{
 					{Name: "q", Type: "string", Description: "Query", Required: true},
@@ -54,7 +55,7 @@ func TestCompileSchemasPreservesExistingInputSchema(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:          "op1",
-				Method:      "POST",
+				Method:      http.MethodPost,
 				Path:        "/test",
 				InputSchema: existing,
 				Parameters: []catalog.CatalogParameter{
@@ -77,9 +78,9 @@ func TestCompileSchemasFillsAnnotations(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "test",
 		Operations: []catalog.CatalogOperation{
-			{ID: "read", Method: "GET", Path: "/read"},
-			{ID: "write", Method: "POST", Path: "/write"},
-			{ID: "remove", Method: "DELETE", Path: "/remove"},
+			{ID: "read", Method: http.MethodGet, Path: "/read"},
+			{ID: "write", Method: http.MethodPost, Path: "/write"},
+			{ID: "remove", Method: http.MethodDelete, Path: "/remove"},
 		},
 	}
 
@@ -104,7 +105,7 @@ func TestCompileSchemasPreservesExistingAnnotations(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "op1",
-				Method: "GET",
+				Method: http.MethodGet,
 				Path:   "/test",
 				Annotations: catalog.OperationAnnotations{
 					ReadOnlyHint:  boolPtr(false),

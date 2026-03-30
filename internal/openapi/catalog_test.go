@@ -3,6 +3,7 @@ package openapi
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/internal/config"
@@ -178,15 +179,15 @@ func TestLoadCatalogAnnotationsFromMethod(t *testing.T) {
 		}
 
 		switch op.Method {
-		case "GET":
+		case http.MethodGet:
 			if op.Annotations.ReadOnlyHint == nil || !*op.Annotations.ReadOnlyHint {
 				t.Errorf("%s: GET should have readOnlyHint=true", op.ID)
 			}
-		case "DELETE":
+		case http.MethodDelete:
 			if op.Annotations.DestructiveHint == nil || !*op.Annotations.DestructiveHint {
 				t.Errorf("%s: DELETE should have destructiveHint=true", op.ID)
 			}
-		case "PUT":
+		case http.MethodPut:
 			if op.Annotations.IdempotentHint == nil || !*op.Annotations.IdempotentHint {
 				t.Errorf("%s: PUT should have idempotentHint=true", op.ID)
 			}

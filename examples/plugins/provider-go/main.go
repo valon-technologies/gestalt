@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,7 +31,7 @@ func (p *exampleProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        "greet",
 			Description: "Return a greeting message",
-			Method:      "GET",
+			Method:      http.MethodGet,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
 			},
@@ -38,7 +39,7 @@ func (p *exampleProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        "echo",
 			Description: "Echo back the input",
-			Method:      "POST",
+			Method:      http.MethodPost,
 			Parameters: []pluginsdk.Parameter{
 				{Name: "message", Type: "string", Description: "Message to echo", Required: true},
 			},
@@ -46,7 +47,7 @@ func (p *exampleProvider) ListOperations() []pluginsdk.Operation {
 		{
 			Name:        "status",
 			Description: "Return provider startup state",
-			Method:      "GET",
+			Method:      http.MethodGet,
 		},
 	}
 }
@@ -63,19 +64,19 @@ func (p *exampleProvider) Execute(_ context.Context, operation string, params ma
 			greeting = "Hello"
 		}
 		body, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("%s, %s!", greeting, name)})
-		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
+		return &pluginsdk.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 	case "echo":
 		msg, _ := params["message"].(string)
 		body, _ := json.Marshal(map[string]string{"echo": msg})
-		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
+		return &pluginsdk.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 	case "status":
 		body, _ := json.Marshal(map[string]string{
 			"name":     p.startedName,
 			"greeting": p.greeting,
 		})
-		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
+		return &pluginsdk.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 	default:
-		return &pluginsdk.OperationResult{Status: 404, Body: `{"error":"unknown operation"}`}, nil
+		return &pluginsdk.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
 }
 

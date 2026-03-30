@@ -24,7 +24,7 @@ func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("discovery request failed: HTTP %d: %s", resp.StatusCode, body)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -70,7 +71,7 @@ func TestResolveCatalog_StaticCatalog(t *testing.T) {
 			Operations: []catalog.CatalogOperation{
 				{
 					ID:     "list_widgets",
-					Method: "GET",
+					Method: http.MethodGet,
 					Path:   "/widgets",
 					Parameters: []catalog.CatalogParameter{
 						{Name: "page", Type: "integer", Location: "query", Required: false},
@@ -122,7 +123,7 @@ func TestResolveCatalog_FlatProvider(t *testing.T) {
 		ops: []core.Operation{
 			{
 				Name:        "create_gadget",
-				Method:      "POST",
+				Method:      http.MethodPost,
 				Description: "Creates a gadget",
 				Parameters: []core.Parameter{
 					{Name: "label", Type: "string", Required: true},
@@ -131,7 +132,7 @@ func TestResolveCatalog_FlatProvider(t *testing.T) {
 			},
 			{
 				Name:        "get_gadget",
-				Method:      "GET",
+				Method:      http.MethodGet,
 				Description: "Gets a gadget",
 			},
 		},
@@ -149,7 +150,7 @@ func TestResolveCatalog_FlatProvider(t *testing.T) {
 	if create.ID != "create_gadget" {
 		t.Fatalf("expected id %q, got %q", "create_gadget", create.ID)
 	}
-	if create.Method != "POST" {
+	if create.Method != http.MethodPost {
 		t.Fatalf("expected method POST, got %q", create.Method)
 	}
 	if create.Transport != catalog.TransportREST {
@@ -180,14 +181,14 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 			cat: &catalog.Catalog{
 				Name: "combo-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "rest_op", Method: "GET", Transport: catalog.TransportREST},
+					{ID: "rest_op", Method: http.MethodGet, Transport: catalog.TransportREST},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "combo-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "mcp_op", Method: "POST", Transport: catalog.TransportMCPPassthrough},
+				{ID: "mcp_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
 			},
 		},
 	}
@@ -227,14 +228,14 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 			cat: &catalog.Catalog{
 				Name: "clash-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "shared_op", Method: "GET", Transport: catalog.TransportREST, Description: "static version"},
+					{ID: "shared_op", Method: http.MethodGet, Transport: catalog.TransportREST, Description: "static version"},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "clash-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "shared_op", Method: "POST", Transport: catalog.TransportMCPPassthrough, Description: "session version"},
+				{ID: "shared_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, Description: "session version"},
 			},
 		},
 	}
@@ -252,7 +253,7 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 	if cat.Operations[0].Description != "static version" {
 		t.Fatalf("expected static version to win, got %q", cat.Operations[0].Description)
 	}
-	if cat.Operations[0].Method != "GET" {
+	if cat.Operations[0].Method != http.MethodGet {
 		t.Fatalf("expected GET from static, got %q", cat.Operations[0].Method)
 	}
 }
@@ -269,14 +270,14 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 			cat: &catalog.Catalog{
 				Name: "auth-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "static_op", Method: "GET"},
+					{ID: "static_op", Method: http.MethodGet},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "auth-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "session_only", Method: "POST"},
+				{ID: "session_only", Method: http.MethodPost},
 			},
 		},
 	}
@@ -308,14 +309,14 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 			cat: &catalog.Catalog{
 				Name: "noauth-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "the_op", Method: "PUT"},
+					{ID: "the_op", Method: http.MethodPut},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "noauth-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "hidden_op", Method: "POST"},
+				{ID: "hidden_op", Method: http.MethodPost},
 			},
 		},
 	}
@@ -340,7 +341,7 @@ func TestResolveCatalog_CloneSafety(t *testing.T) {
 		Operations: []catalog.CatalogOperation{
 			{
 				ID:     "safe_op",
-				Method: "POST",
+				Method: http.MethodPost,
 				Parameters: []catalog.CatalogParameter{
 					{Name: "data", Type: "string", Required: true},
 				},

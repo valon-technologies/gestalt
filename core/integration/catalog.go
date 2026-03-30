@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -27,7 +28,7 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 		}
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
 		if method == "" && op.Query != "" {
-			method = "POST"
+			method = http.MethodPost
 		}
 		ops = append(ops, core.Operation{
 			Name:        op.ID,

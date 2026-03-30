@@ -204,7 +204,7 @@ func TestEgressPolicyWiredThroughBootstrap(t *testing.T) {
 
 	resolve := func(path string) error {
 		_, err := receivedEgress.Resolver.Resolve(ctx, egress.ResolutionInput{
-			Target: egress.Target{Provider: "alpha", Method: "GET", Host: "api.test", Path: path},
+			Target: egress.Target{Provider: "alpha", Method: http.MethodGet, Host: "api.test", Path: path},
 		})
 		return err
 	}
@@ -302,7 +302,7 @@ func TestSecretBackedCredentialGrant_ConfigGrant(t *testing.T) {
 
 	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
-		Target: egress.Target{Method: "GET", Host: "api.vendor.test", Path: "/v1/data"},
+		Target: egress.Target{Method: http.MethodGet, Host: "api.vendor.test", Path: "/v1/data"},
 	})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -365,7 +365,7 @@ func TestSecretBackedCredentialGrant_MultiTenantHostMatching(t *testing.T) {
 	resolve := func(host string) string {
 		t.Helper()
 		res, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
-			Target: egress.Target{Method: "GET", Host: host, Path: "/api/orders"},
+			Target: egress.Target{Method: http.MethodGet, Host: host, Path: "/api/orders"},
 		})
 		if err != nil {
 			t.Fatalf("Resolve(%s): %v", host, err)
@@ -451,7 +451,7 @@ func TestSecretBackedGrant_SecretURIPrefixStripped(t *testing.T) {
 
 	agentCtx := egress.WithSubject(ctx, egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
 	resolution, err := receivedEgress.Resolver.Resolve(agentCtx, egress.ResolutionInput{
-		Target: egress.Target{Method: "GET", Host: "api.prefix.test", Path: "/v1"},
+		Target: egress.Target{Method: http.MethodGet, Host: "api.prefix.test", Path: "/v1"},
 	})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)

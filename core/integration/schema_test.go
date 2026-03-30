@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -130,12 +131,12 @@ func TestAnnotationsFromMethod(t *testing.T) {
 		wantIdempotent  *bool
 		wantDestructive *bool
 	}{
-		{"GET", boolPtr(true), nil, nil},
-		{"HEAD", boolPtr(true), nil, nil},
-		{"POST", nil, nil, nil},
-		{"PUT", nil, boolPtr(true), nil},
-		{"DELETE", nil, nil, boolPtr(true)},
-		{"PATCH", nil, nil, nil},
+		{http.MethodGet, boolPtr(true), nil, nil},
+		{http.MethodHead, boolPtr(true), nil, nil},
+		{http.MethodPost, nil, nil, nil},
+		{http.MethodPut, nil, boolPtr(true), nil},
+		{http.MethodDelete, nil, nil, boolPtr(true)},
+		{http.MethodPatch, nil, nil, nil},
 	}
 
 	for _, tc := range cases {

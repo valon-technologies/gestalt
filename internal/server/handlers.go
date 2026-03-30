@@ -387,7 +387,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", core.ContentTypeJSON)
 	w.WriteHeader(result.Status)
 	_, _ = fmt.Fprint(w, result.Body)
 }
