@@ -252,36 +252,6 @@ func connectionParamDefsFromProto(defs map[string]*pluginapiv1.ConnectionParamDe
 	return out
 }
 
-func tokenResponseToProto(resp *core.TokenResponse) (*pluginapiv1.TokenResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	extra, err := structFromMap(resp.Extra)
-	if err != nil {
-		return nil, fmt.Errorf("token response extra: %w", err)
-	}
-	return &pluginapiv1.TokenResponse{
-		AccessToken:  resp.AccessToken,
-		RefreshToken: resp.RefreshToken,
-		ExpiresIn:    int32(resp.ExpiresIn),
-		TokenType:    resp.TokenType,
-		Extra:        extra,
-	}, nil
-}
-
-func tokenResponseFromProto(msg *pluginapiv1.TokenResponse) *core.TokenResponse {
-	if msg == nil {
-		return nil
-	}
-	return &core.TokenResponse{
-		AccessToken:  msg.GetAccessToken(),
-		RefreshToken: msg.GetRefreshToken(),
-		ExpiresIn:    int(msg.GetExpiresIn()),
-		TokenType:    msg.GetTokenType(),
-		Extra:        mapFromStruct(msg.GetExtra()),
-	}
-}
-
 func catalogToJSON(cat *catalog.Catalog) (string, error) {
 	if cat == nil {
 		return "", nil

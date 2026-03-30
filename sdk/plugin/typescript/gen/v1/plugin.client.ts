@@ -16,11 +16,6 @@ import type { PostConnectResponse } from "./plugin";
 import type { PostConnectRequest } from "./plugin";
 import type { GetSessionCatalogResponse } from "./plugin";
 import type { GetSessionCatalogRequest } from "./plugin";
-import type { RefreshTokenRequest } from "./plugin";
-import type { TokenResponse } from "./plugin";
-import type { ExchangeCodeRequest } from "./plugin";
-import type { AuthorizationURLResponse } from "./plugin";
-import type { AuthorizationURLRequest } from "./plugin";
 import type { OperationResult } from "./plugin";
 import type { ExecuteRequest } from "./plugin";
 import type { ListOperationsResponse } from "./plugin";
@@ -51,18 +46,6 @@ export interface IProviderPluginClient {
      * @generated from protobuf rpc: Execute
      */
     execute(input: ExecuteRequest, options?: RpcOptions): UnaryCall<ExecuteRequest, OperationResult>;
-    /**
-     * @generated from protobuf rpc: AuthorizationURL
-     */
-    authorizationURL(input: AuthorizationURLRequest, options?: RpcOptions): UnaryCall<AuthorizationURLRequest, AuthorizationURLResponse>;
-    /**
-     * @generated from protobuf rpc: ExchangeCode
-     */
-    exchangeCode(input: ExchangeCodeRequest, options?: RpcOptions): UnaryCall<ExchangeCodeRequest, TokenResponse>;
-    /**
-     * @generated from protobuf rpc: RefreshToken
-     */
-    refreshToken(input: RefreshTokenRequest, options?: RpcOptions): UnaryCall<RefreshTokenRequest, TokenResponse>;
     /**
      * @generated from protobuf rpc: GetSessionCatalog
      */
@@ -110,38 +93,17 @@ export class ProviderPluginClient implements IProviderPluginClient, ServiceInfo 
         return stackIntercept<ExecuteRequest, OperationResult>("unary", this._transport, method, opt, input);
     }
     /**
-     * @generated from protobuf rpc: AuthorizationURL
-     */
-    authorizationURL(input: AuthorizationURLRequest, options?: RpcOptions): UnaryCall<AuthorizationURLRequest, AuthorizationURLResponse> {
-        const method = this.methods[4], opt = this._transport.mergeOptions(options);
-        return stackIntercept<AuthorizationURLRequest, AuthorizationURLResponse>("unary", this._transport, method, opt, input);
-    }
-    /**
-     * @generated from protobuf rpc: ExchangeCode
-     */
-    exchangeCode(input: ExchangeCodeRequest, options?: RpcOptions): UnaryCall<ExchangeCodeRequest, TokenResponse> {
-        const method = this.methods[5], opt = this._transport.mergeOptions(options);
-        return stackIntercept<ExchangeCodeRequest, TokenResponse>("unary", this._transport, method, opt, input);
-    }
-    /**
-     * @generated from protobuf rpc: RefreshToken
-     */
-    refreshToken(input: RefreshTokenRequest, options?: RpcOptions): UnaryCall<RefreshTokenRequest, TokenResponse> {
-        const method = this.methods[6], opt = this._transport.mergeOptions(options);
-        return stackIntercept<RefreshTokenRequest, TokenResponse>("unary", this._transport, method, opt, input);
-    }
-    /**
      * @generated from protobuf rpc: GetSessionCatalog
      */
     getSessionCatalog(input: GetSessionCatalogRequest, options?: RpcOptions): UnaryCall<GetSessionCatalogRequest, GetSessionCatalogResponse> {
-        const method = this.methods[7], opt = this._transport.mergeOptions(options);
+        const method = this.methods[4], opt = this._transport.mergeOptions(options);
         return stackIntercept<GetSessionCatalogRequest, GetSessionCatalogResponse>("unary", this._transport, method, opt, input);
     }
     /**
      * @generated from protobuf rpc: PostConnect
      */
     postConnect(input: PostConnectRequest, options?: RpcOptions): UnaryCall<PostConnectRequest, PostConnectResponse> {
-        const method = this.methods[8], opt = this._transport.mergeOptions(options);
+        const method = this.methods[5], opt = this._transport.mergeOptions(options);
         return stackIntercept<PostConnectRequest, PostConnectResponse>("unary", this._transport, method, opt, input);
     }
 }

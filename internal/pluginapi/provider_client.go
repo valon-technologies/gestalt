@@ -86,19 +86,10 @@ func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 		opt(base)
 	}
 
-	hasOAuth := slices.Contains(meta.GetAuthTypes(), "oauth")
-	hasSessionCatalog := meta.GetSupportsSessionCatalog()
-
-	switch {
-	case hasOAuth && hasSessionCatalog:
-		return &remoteProviderWithOAuthSessionCatalog{remoteProviderBase: base}, nil
-	case hasOAuth:
-		return &remoteProviderWithOAuth{remoteProviderBase: base}, nil
-	case hasSessionCatalog:
+	if meta.GetSupportsSessionCatalog() {
 		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
-	default:
-		return base, nil
 	}
+	return base, nil
 }
 
 func (p *remoteProviderBase) Name() string { return p.metadata.GetName() }
@@ -162,33 +153,6 @@ func (p *remoteProviderBase) AuthTypes() []string {
 	return slices.Clone(p.metadata.GetAuthTypes())
 }
 
-func (p *remoteProviderBase) authorizationURL(state string, scopes []string) string {
-	resp, err := p.client.AuthorizationURL(context.Background(), &pluginapiv1.AuthorizationURLRequest{
-		State:  state,
-		Scopes: slices.Clone(scopes),
-	})
-	if err != nil {
-		return ""
-	}
-	return resp.GetUrl()
-}
-
-func (p *remoteProviderBase) exchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	resp, err := p.client.ExchangeCode(ctx, &pluginapiv1.ExchangeCodeRequest{Code: code})
-	if err != nil {
-		return nil, err
-	}
-	return tokenResponseFromProto(resp), nil
-}
-
-func (p *remoteProviderBase) refreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	resp, err := p.client.RefreshToken(ctx, &pluginapiv1.RefreshTokenRequest{RefreshToken: refreshToken})
-	if err != nil {
-		return nil, err
-	}
-	return tokenResponseFromProto(resp), nil
-}
-
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
 	invocationID := uuid.New().String()
 	if p.tokens != nil {
@@ -206,41 +170,9 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	return catalogFromJSON(resp.GetCatalogJson())
 }
 
-type remoteProviderWithOAuth struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithOAuth) AuthorizationURL(state string, scopes []string) string {
-	return p.authorizationURL(state, scopes)
-}
-
-func (p *remoteProviderWithOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.exchangeCode(ctx, code)
-}
-
-func (p *remoteProviderWithOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken)
-}
-
 type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
 
 func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.sessionCatalog(ctx, token)
-}
-
-type remoteProviderWithOAuthSessionCatalog struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithOAuthSessionCatalog) AuthorizationURL(state string, scopes []string) string {
-	return p.authorizationURL(state, scopes)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalog) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.exchangeCode(ctx, code)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalog) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.refreshToken(ctx, refreshToken)
-}
-
-func (p *remoteProviderWithOAuthSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
 }
 

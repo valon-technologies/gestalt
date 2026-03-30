@@ -24,9 +24,6 @@ const (
 	ProviderPlugin_StartProvider_FullMethodName     = "/gestalt.plugin.v1.ProviderPlugin/StartProvider"
 	ProviderPlugin_ListOperations_FullMethodName    = "/gestalt.plugin.v1.ProviderPlugin/ListOperations"
 	ProviderPlugin_Execute_FullMethodName           = "/gestalt.plugin.v1.ProviderPlugin/Execute"
-	ProviderPlugin_AuthorizationURL_FullMethodName  = "/gestalt.plugin.v1.ProviderPlugin/AuthorizationURL"
-	ProviderPlugin_ExchangeCode_FullMethodName      = "/gestalt.plugin.v1.ProviderPlugin/ExchangeCode"
-	ProviderPlugin_RefreshToken_FullMethodName      = "/gestalt.plugin.v1.ProviderPlugin/RefreshToken"
 	ProviderPlugin_GetSessionCatalog_FullMethodName = "/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog"
 	ProviderPlugin_PostConnect_FullMethodName       = "/gestalt.plugin.v1.ProviderPlugin/PostConnect"
 )
@@ -39,9 +36,6 @@ type ProviderPluginClient interface {
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
 	ListOperations(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListOperationsResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
-	AuthorizationURL(ctx context.Context, in *AuthorizationURLRequest, opts ...grpc.CallOption) (*AuthorizationURLResponse, error)
-	ExchangeCode(ctx context.Context, in *ExchangeCodeRequest, opts ...grpc.CallOption) (*TokenResponse, error)
-	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*TokenResponse, error)
 	GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error)
 	PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error)
 }
@@ -94,36 +88,6 @@ func (c *providerPluginClient) Execute(ctx context.Context, in *ExecuteRequest, 
 	return out, nil
 }
 
-func (c *providerPluginClient) AuthorizationURL(ctx context.Context, in *AuthorizationURLRequest, opts ...grpc.CallOption) (*AuthorizationURLResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthorizationURLResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_AuthorizationURL_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *providerPluginClient) ExchangeCode(ctx context.Context, in *ExchangeCodeRequest, opts ...grpc.CallOption) (*TokenResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_ExchangeCode_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *providerPluginClient) RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*TokenResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_RefreshToken_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *providerPluginClient) GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSessionCatalogResponse)
@@ -152,9 +116,6 @@ type ProviderPluginServer interface {
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)
 	ListOperations(context.Context, *emptypb.Empty) (*ListOperationsResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
-	AuthorizationURL(context.Context, *AuthorizationURLRequest) (*AuthorizationURLResponse, error)
-	ExchangeCode(context.Context, *ExchangeCodeRequest) (*TokenResponse, error)
-	RefreshToken(context.Context, *RefreshTokenRequest) (*TokenResponse, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
 	PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error)
 	mustEmbedUnimplementedProviderPluginServer()
@@ -178,15 +139,6 @@ func (UnimplementedProviderPluginServer) ListOperations(context.Context, *emptyp
 }
 func (UnimplementedProviderPluginServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
-}
-func (UnimplementedProviderPluginServer) AuthorizationURL(context.Context, *AuthorizationURLRequest) (*AuthorizationURLResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AuthorizationURL not implemented")
-}
-func (UnimplementedProviderPluginServer) ExchangeCode(context.Context, *ExchangeCodeRequest) (*TokenResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ExchangeCode not implemented")
-}
-func (UnimplementedProviderPluginServer) RefreshToken(context.Context, *RefreshTokenRequest) (*TokenResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RefreshToken not implemented")
 }
 func (UnimplementedProviderPluginServer) GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionCatalog not implemented")
@@ -287,60 +239,6 @@ func _ProviderPlugin_Execute_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderPlugin_AuthorizationURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthorizationURLRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProviderPluginServer).AuthorizationURL(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProviderPlugin_AuthorizationURL_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).AuthorizationURL(ctx, req.(*AuthorizationURLRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProviderPlugin_ExchangeCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExchangeCodeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProviderPluginServer).ExchangeCode(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProviderPlugin_ExchangeCode_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).ExchangeCode(ctx, req.(*ExchangeCodeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProviderPlugin_RefreshToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RefreshTokenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProviderPluginServer).RefreshToken(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProviderPlugin_RefreshToken_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).RefreshToken(ctx, req.(*RefreshTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ProviderPlugin_GetSessionCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSessionCatalogRequest)
 	if err := dec(in); err != nil {
@@ -399,18 +297,6 @@ var ProviderPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Execute",
 			Handler:    _ProviderPlugin_Execute_Handler,
-		},
-		{
-			MethodName: "AuthorizationURL",
-			Handler:    _ProviderPlugin_AuthorizationURL_Handler,
-		},
-		{
-			MethodName: "ExchangeCode",
-			Handler:    _ProviderPlugin_ExchangeCode_Handler,
-		},
-		{
-			MethodName: "RefreshToken",
-			Handler:    _ProviderPlugin_RefreshToken_Handler,
 		},
 		{
 			MethodName: "GetSessionCatalog",
