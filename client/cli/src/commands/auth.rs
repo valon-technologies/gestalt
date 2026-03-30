@@ -68,7 +68,15 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         port
     );
 
-    let (stream, _) = listener.accept().context("failed to accept callback")?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(listener.accept());
+    });
+
+    let (stream, _) = rx
+        .recv_timeout(std::time::Duration::from_secs(300))
+        .map_err(|_| anyhow::anyhow!("timed out waiting for login callback after 5 minutes"))?
+        .context("failed to accept callback")?;
     let mut reader = std::io::BufReader::new(&stream);
     let mut request_line = String::new();
     std::io::BufRead::read_line(&mut reader, &mut request_line)?;
