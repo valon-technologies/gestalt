@@ -76,7 +76,7 @@ jobs:
           sbom: true
           provenance: mode=max
       - name: Scan CLI image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: valontechnologies/gestalt:${{ steps.version.outputs.version }}
           format: table

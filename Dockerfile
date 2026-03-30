@@ -83,7 +83,7 @@ LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.version="${GESTALT_VERSION}" \
       org.opencontainers.image.revision="${GESTALT_REVISION}" \
       org.opencontainers.image.created="${GESTALT_CREATED}"
-USER nonroot:nonroot
+USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]

@@ -6,5 +6,5 @@ RUN cargo build --release
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /build/target/release/gestalt /gestalt
-USER nonroot:nonroot
+USER nobody:nobody
 ENTRYPOINT ["/gestalt"]
