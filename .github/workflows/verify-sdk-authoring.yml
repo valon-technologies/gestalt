@@ -7,6 +7,12 @@ on:
         description: "SDK version to verify (e.g. 0.0.0-alpha.1)"
         required: true
         type: string
+  workflow_call:
+    inputs:
+      sdk_version:
+        description: "SDK version to verify (e.g. 0.0.0-alpha.1)"
+        required: true
+        type: string
 
 jobs:
   verify:
@@ -30,11 +36,13 @@ jobs:
         run: cd server && go build -o ../gestaltd ./cmd/gestaltd
 
       - name: Create external plugin module
+        env:
+          SDK_VERSION: ${{ inputs.sdk_version }}
         run: |
           mkdir -p /tmp/sdk-authoring-test
           cd /tmp/sdk-authoring-test
           go mod init external-test-plugin
-          go get "github.com/valon-technologies/gestalt/sdk/pluginsdk@v${{ inputs.sdk_version }}"
+          go get "github.com/valon-technologies/gestalt/sdk/pluginsdk@v${SDK_VERSION}"
 
           cat > main.go <<'GO'
           package main
