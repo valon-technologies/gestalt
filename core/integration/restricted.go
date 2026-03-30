@@ -129,6 +129,10 @@ func (r *Restricted) Catalog() *catalog.Catalog {
 	if cat == nil {
 		return nil
 	}
+	return r.filterCatalog(cat)
+}
+
+func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	filtered := *cat
 	filtered.Operations = nil
 	for i := range cat.Operations {
@@ -163,21 +167,7 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 	if err != nil || cat == nil {
 		return cat, err
 	}
-	filtered := *cat
-	filtered.Operations = nil
-	for i := range cat.Operations {
-		if _, ok := rs.allowedInner[cat.Operations[i].ID]; ok {
-			op := cat.Operations[i]
-			if exposed, ok := rs.reverseAlias[op.ID]; ok {
-				op.ID = exposed
-			}
-			if desc, ok := rs.descriptions[op.ID]; ok {
-				op.Description = desc
-			}
-			filtered.Operations = append(filtered.Operations, op)
-		}
-	}
-	return &filtered, nil
+	return rs.filterCatalog(cat), nil
 }
 
 // restrictedOAuth wraps a Restricted provider and delegates OAuth methods

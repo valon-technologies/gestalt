@@ -673,27 +673,14 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			for _, op := range prov.ListOperations() {
 				provOps[op.Name] = struct{}{}
 			}
-			for opName := range intg.Plugin.AllowedOperations {
-				if _, ok := provOps[opName]; !ok {
-					return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
-				}
-			}
-
-			exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
-			for opName, override := range intg.Plugin.AllowedOperations {
-				exposed := opName
-				if override != nil && override.Alias != "" {
-					exposed = override.Alias
-				}
-				if existing, ok := exposedNames[exposed]; ok {
-					return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
-				}
-				exposedNames[exposed] = opName
-			}
 
 			opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
 			descs := make(map[string]string)
+			exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
 			for opName, override := range intg.Plugin.AllowedOperations {
+				if _, ok := provOps[opName]; !ok {
+					return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
+				}
 				exposed := opName
 				if override != nil && override.Alias != "" {
 					exposed = override.Alias
@@ -701,6 +688,10 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 				} else {
 					opsMap[opName] = ""
 				}
+				if existing, ok := exposedNames[exposed]; ok {
+					return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
+				}
+				exposedNames[exposed] = opName
 				if override != nil && override.Description != "" {
 					descs[exposed] = override.Description
 				}
