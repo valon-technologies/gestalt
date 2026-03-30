@@ -80,13 +80,6 @@ message ProviderMetadata {
   int32 max_protocol_version = 12;
 }
 
-message TokenResponse {
-  string access_token = 1;
-  string refresh_token = 2;
-  int32 expires_in = 3;
-  string token_type = 4;
-  google.protobuf.Struct extra = 5;
-}
 
 message OperationResult {
   int32 status = 1;
@@ -121,22 +114,6 @@ message ExecuteRequest {
   string invocation_id = 5;
 }
 
-message AuthorizationURLRequest {
-  string state = 1;
-  repeated string scopes = 2;
-}
-
-message AuthorizationURLResponse {
-  string url = 1;
-}
-
-message ExchangeCodeRequest {
-  string code = 1;
-}
-
-message RefreshTokenRequest {
-  string refresh_token = 1;
-}
 
 message GetSessionCatalogRequest {
   string token = 1;
@@ -189,9 +166,6 @@ service ProviderPlugin {
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
   rpc ListOperations(google.protobuf.Empty) returns (ListOperationsResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);
-  rpc AuthorizationURL(AuthorizationURLRequest) returns (AuthorizationURLResponse);
-  rpc ExchangeCode(ExchangeCodeRequest) returns (TokenResponse);
-  rpc RefreshToken(RefreshTokenRequest) returns (TokenResponse);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
 }

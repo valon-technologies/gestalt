@@ -2,7 +2,6 @@ package pluginsdk_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -59,36 +58,6 @@ type manualAuthStubProvider struct {
 
 func (p *manualAuthStubProvider) SupportsManualAuth() bool { return true }
 
-type oauthStubProvider struct {
-	stubProvider
-}
-
-func (p *oauthStubProvider) AuthorizationURL(state string, scopes []string) string {
-	return fmt.Sprintf("https://example.com/oauth?state=%s&scope=%d", state, len(scopes))
-}
-
-func (p *oauthStubProvider) ExchangeCode(_ context.Context, code string) (*pluginsdk.TokenResponse, error) {
-	return &pluginsdk.TokenResponse{
-		AccessToken:  "access:" + code,
-		RefreshToken: "refresh:" + code,
-		ExpiresIn:    3600,
-		TokenType:    "Bearer",
-		Extra:        map[string]any{"team": "eng"},
-	}, nil
-}
-
-func (p *oauthStubProvider) RefreshToken(_ context.Context, refreshToken string) (*pluginsdk.TokenResponse, error) {
-	return &pluginsdk.TokenResponse{
-		AccessToken: "fresh:" + refreshToken,
-		TokenType:   "Bearer",
-	}, nil
-}
-
-type oauthManualStubProvider struct {
-	oauthStubProvider
-}
-
-func (p *oauthManualStubProvider) SupportsManualAuth() bool { return true }
 
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
@@ -138,43 +107,6 @@ func TestProviderServerGetMetadata_ManualAuth(t *testing.T) {
 	}
 }
 
-func TestProviderServerGetMetadata_OAuthAuth(t *testing.T) {
-	t.Parallel()
-
-	prov := &oauthStubProvider{
-		stubProvider: stubProvider{name: "oauth-prov"},
-	}
-
-	client := newProviderPluginClient(t, prov)
-	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	authTypes := meta.GetAuthTypes()
-	if len(authTypes) != 1 || authTypes[0] != "oauth" {
-		t.Fatalf("AuthTypes = %v, want [oauth]", authTypes)
-	}
-}
-
-func TestProviderServerGetMetadata_OAuthAndManualAuth(t *testing.T) {
-	t.Parallel()
-
-	prov := &oauthManualStubProvider{
-		oauthStubProvider: oauthStubProvider{
-			stubProvider: stubProvider{name: "oauth-manual-prov"},
-		},
-	}
-
-	client := newProviderPluginClient(t, prov)
-	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	authTypes := meta.GetAuthTypes()
-	if len(authTypes) != 2 || authTypes[0] != "oauth" || authTypes[1] != "manual" {
-		t.Fatalf("AuthTypes = %v, want [oauth manual]", authTypes)
-	}
-}
 
 func TestProviderServerListOperations(t *testing.T) {
 	t.Parallel()
@@ -359,59 +291,6 @@ func TestProviderServerMetadataProtocolVersions(t *testing.T) {
 	}
 }
 
-func TestProviderServerOAuthRPCs(t *testing.T) {
-	t.Parallel()
-
-	prov := &oauthStubProvider{
-		stubProvider: stubProvider{
-			name:     "oauth-provider",
-			connMode: pluginsdk.ConnectionModeUser,
-		},
-	}
-
-	client := newProviderPluginClient(t, prov)
-	ctx := context.Background()
-
-	authResp, err := client.AuthorizationURL(ctx, &pluginapiv1.AuthorizationURLRequest{
-		State:  "state-123",
-		Scopes: []string{"read", "write"},
-	})
-	if err != nil {
-		t.Fatalf("AuthorizationURL: %v", err)
-	}
-	if authResp.GetUrl() != "https://example.com/oauth?state=state-123&scope=2" {
-		t.Fatalf("AuthorizationURL = %q", authResp.GetUrl())
-	}
-
-	exchangeResp, err := client.ExchangeCode(ctx, &pluginapiv1.ExchangeCodeRequest{Code: "abc"})
-	if err != nil {
-		t.Fatalf("ExchangeCode: %v", err)
-	}
-	if exchangeResp.GetAccessToken() != "access:abc" {
-		t.Fatalf("AccessToken = %q", exchangeResp.GetAccessToken())
-	}
-	if exchangeResp.GetRefreshToken() != "refresh:abc" {
-		t.Fatalf("RefreshToken = %q", exchangeResp.GetRefreshToken())
-	}
-	if exchangeResp.GetExpiresIn() != 3600 {
-		t.Fatalf("ExpiresIn = %d", exchangeResp.GetExpiresIn())
-	}
-	if exchangeResp.GetTokenType() != "Bearer" {
-		t.Fatalf("TokenType = %q", exchangeResp.GetTokenType())
-	}
-	if got := exchangeResp.GetExtra().AsMap()["team"]; got != "eng" {
-		t.Fatalf("Extra.team = %v", got)
-	}
-
-	refreshResp, err := client.RefreshToken(ctx, &pluginapiv1.RefreshTokenRequest{RefreshToken: "refresh:abc"})
-	if err != nil {
-		t.Fatalf("RefreshToken: %v", err)
-	}
-	if refreshResp.GetAccessToken() != "fresh:refresh:abc" {
-		t.Fatalf("RefreshToken.AccessToken = %q", refreshResp.GetAccessToken())
-	}
-}
-
 func TestProviderServerUnimplementedRPCs(t *testing.T) {
 	t.Parallel()
 
@@ -423,22 +302,7 @@ func TestProviderServerUnimplementedRPCs(t *testing.T) {
 	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
-	_, err := client.AuthorizationURL(ctx, &pluginapiv1.AuthorizationURLRequest{State: "s"})
-	if err == nil {
-		t.Error("AuthorizationURL should return UNIMPLEMENTED")
-	}
-
-	_, err = client.ExchangeCode(ctx, &pluginapiv1.ExchangeCodeRequest{Code: "c"})
-	if err == nil {
-		t.Error("ExchangeCode should return UNIMPLEMENTED")
-	}
-
-	_, err = client.RefreshToken(ctx, &pluginapiv1.RefreshTokenRequest{RefreshToken: "r"})
-	if err == nil {
-		t.Error("RefreshToken should return UNIMPLEMENTED")
-	}
-
-	_, err = client.GetSessionCatalog(ctx, &pluginapiv1.GetSessionCatalogRequest{Token: "t"})
+	_, err := client.GetSessionCatalog(ctx, &pluginapiv1.GetSessionCatalogRequest{Token: "t"})
 	if err == nil {
 		t.Error("GetSessionCatalog should return UNIMPLEMENTED")
 	}

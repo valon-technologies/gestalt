@@ -72,48 +72,6 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	}, nil
 }
 
-func (s *ProviderServer) AuthorizationURL(_ context.Context, req *pluginapiv1.AuthorizationURLRequest) (*pluginapiv1.AuthorizationURLResponse, error) {
-	oauthProv, ok := s.provider.(core.OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	return &pluginapiv1.AuthorizationURLResponse{
-		Url: oauthProv.AuthorizationURL(req.GetState(), slices.Clone(req.GetScopes())),
-	}, nil
-}
-
-func (s *ProviderServer) ExchangeCode(ctx context.Context, req *pluginapiv1.ExchangeCodeRequest) (*pluginapiv1.TokenResponse, error) {
-	oauthProv, ok := s.provider.(core.OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	resp, err := oauthProv.ExchangeCode(ctx, req.GetCode())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "exchange code: %v", err)
-	}
-	msg, err := tokenResponseToProto(resp)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode token response: %v", err)
-	}
-	return msg, nil
-}
-
-func (s *ProviderServer) RefreshToken(ctx context.Context, req *pluginapiv1.RefreshTokenRequest) (*pluginapiv1.TokenResponse, error) {
-	oauthProv, ok := s.provider.(core.OAuthProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support OAuth")
-	}
-	resp, err := oauthProv.RefreshToken(ctx, req.GetRefreshToken())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "refresh token: %v", err)
-	}
-	msg, err := tokenResponseToProto(resp)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode token response: %v", err)
-	}
-	return msg, nil
-}
-
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1.GetSessionCatalogRequest) (*pluginapiv1.GetSessionCatalogResponse, error) {
 	scp, ok := s.provider.(core.SessionCatalogProvider)
 	if !ok {

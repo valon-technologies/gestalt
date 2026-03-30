@@ -35,21 +35,6 @@ class ProviderPluginStub(object):
                 request_serializer=v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
                 _registered_method=True)
-        self.AuthorizationURL = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/AuthorizationURL',
-                request_serializer=v1_dot_plugin__pb2.AuthorizationURLRequest.SerializeToString,
-                response_deserializer=v1_dot_plugin__pb2.AuthorizationURLResponse.FromString,
-                _registered_method=True)
-        self.ExchangeCode = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/ExchangeCode',
-                request_serializer=v1_dot_plugin__pb2.ExchangeCodeRequest.SerializeToString,
-                response_deserializer=v1_dot_plugin__pb2.TokenResponse.FromString,
-                _registered_method=True)
-        self.RefreshToken = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/RefreshToken',
-                request_serializer=v1_dot_plugin__pb2.RefreshTokenRequest.SerializeToString,
-                response_deserializer=v1_dot_plugin__pb2.TokenResponse.FromString,
-                _registered_method=True)
         self.GetSessionCatalog = channel.unary_unary(
                 '/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog',
                 request_serializer=v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
@@ -89,24 +74,6 @@ class ProviderPluginServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AuthorizationURL(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ExchangeCode(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def RefreshToken(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetSessionCatalog(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -141,21 +108,6 @@ def add_ProviderPluginServicer_to_server(servicer, server):
                     servicer.Execute,
                     request_deserializer=v1_dot_plugin__pb2.ExecuteRequest.FromString,
                     response_serializer=v1_dot_plugin__pb2.OperationResult.SerializeToString,
-            ),
-            'AuthorizationURL': grpc.unary_unary_rpc_method_handler(
-                    servicer.AuthorizationURL,
-                    request_deserializer=v1_dot_plugin__pb2.AuthorizationURLRequest.FromString,
-                    response_serializer=v1_dot_plugin__pb2.AuthorizationURLResponse.SerializeToString,
-            ),
-            'ExchangeCode': grpc.unary_unary_rpc_method_handler(
-                    servicer.ExchangeCode,
-                    request_deserializer=v1_dot_plugin__pb2.ExchangeCodeRequest.FromString,
-                    response_serializer=v1_dot_plugin__pb2.TokenResponse.SerializeToString,
-            ),
-            'RefreshToken': grpc.unary_unary_rpc_method_handler(
-                    servicer.RefreshToken,
-                    request_deserializer=v1_dot_plugin__pb2.RefreshTokenRequest.FromString,
-                    response_serializer=v1_dot_plugin__pb2.TokenResponse.SerializeToString,
             ),
             'GetSessionCatalog': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSessionCatalog,
@@ -276,87 +228,6 @@ class ProviderPlugin(object):
             '/gestalt.plugin.v1.ProviderPlugin/Execute',
             v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
             v1_dot_plugin__pb2.OperationResult.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def AuthorizationURL(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.plugin.v1.ProviderPlugin/AuthorizationURL',
-            v1_dot_plugin__pb2.AuthorizationURLRequest.SerializeToString,
-            v1_dot_plugin__pb2.AuthorizationURLResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ExchangeCode(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.plugin.v1.ProviderPlugin/ExchangeCode',
-            v1_dot_plugin__pb2.ExchangeCodeRequest.SerializeToString,
-            v1_dot_plugin__pb2.TokenResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def RefreshToken(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.plugin.v1.ProviderPlugin/RefreshToken',
-            v1_dot_plugin__pb2.RefreshTokenRequest.SerializeToString,
-            v1_dot_plugin__pb2.TokenResponse.FromString,
             options,
             channel_credentials,
             insecure,
