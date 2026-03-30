@@ -21,7 +21,7 @@ WORKDIR /src
 COPY . .
 
 # Copy gestaltd from the runtime image so we can run plugin package + bundle.
-COPY --from=valontechnologies/gestalt:latest /gestaltd /usr/local/bin/gestaltd
+COPY --from=valontechnologies/gestaltd:latest /gestaltd /usr/local/bin/gestaltd
 
 # Build plugin binaries, package them as archives, and bundle everything.
 RUN --mount=type=secret,id=github_token \
@@ -32,6 +32,6 @@ RUN --mount=type=secret,id=github_token \
     gestaltd plugin package --binary /tmp/myplugin --id example/myplugin --output ./deploy/plugins/myplugin.tar.gz && \
     gestaltd bundle --config ./deploy/config.yaml --output /app
 
-FROM valontechnologies/gestalt:latest
+FROM valontechnologies/gestaltd:latest
 COPY --from=build /app/ /app/
 CMD ["serve", "--locked", "--config", "/app/deploy/config.yaml"]

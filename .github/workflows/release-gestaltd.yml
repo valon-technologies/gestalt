@@ -126,8 +126,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            valontechnologies/gestalt:${{ steps.version.outputs.version }}
-            valontechnologies/gestalt:latest
+            valontechnologies/gestaltd:${{ steps.version.outputs.version }}
+            valontechnologies/gestaltd:latest
           cache-from: type=gha
           cache-to: type=gha,mode=min
 

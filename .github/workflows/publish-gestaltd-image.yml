@@ -26,7 +26,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            valontechnologies/gestalt:latest
-            valontechnologies/gestalt:${{ github.sha }}
+            valontechnologies/gestaltd:latest
+            valontechnologies/gestaltd:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
