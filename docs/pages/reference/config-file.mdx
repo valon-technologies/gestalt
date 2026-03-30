@@ -445,7 +445,7 @@ connections:
 | `credentials[].help_url` | Link displayed next to the label for where to find the credential. |
 | `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
 
-When no `credentials` are declared, the UI shows the default single "API Token" field.
+`credentials` is required when `auth.type` is `manual`.
 
 ### `plugin`
 
