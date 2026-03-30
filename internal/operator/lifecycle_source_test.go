@@ -18,7 +18,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/internal/pluginsource/github"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/apiexec"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 const declarativeHTTPTimeout = 30 * time.Second

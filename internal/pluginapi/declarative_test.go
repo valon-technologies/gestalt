@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 func testManifest(baseURL string) *pluginmanifestv1.Manifest {

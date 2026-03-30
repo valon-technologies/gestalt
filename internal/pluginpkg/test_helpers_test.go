@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"testing"
 
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 type archiveTestFile struct {

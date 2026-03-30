@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/manifest/v1"
 )
 
 const runtimeConfigSchemaPath = "schemas/config.schema.json"
