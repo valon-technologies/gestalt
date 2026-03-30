@@ -244,7 +244,7 @@ integrations:
 	}
 }
 
-func TestValidateConfigRejectsPluginWithConnectionsOrAPI(t *testing.T) {
+func TestValidateConfigRejectsPluginHybridMisconfiguration(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -253,19 +253,7 @@ func TestValidateConfigRejectsPluginWithConnectionsOrAPI(t *testing.T) {
 		wantContain string
 	}{
 		{
-			name: "plugin with connections",
-			body: `integrations:
-  sample:
-    connections:
-      default:
-        mode: user
-    plugin:
-      command: /tmp/plugin
-`,
-			wantContain: "cannot set both plugin and connections",
-		},
-		{
-			name: "plugin with api",
+			name: "plugin with api is rejected",
 			body: `integrations:
   sample:
     plugin:
@@ -275,7 +263,7 @@ func TestValidateConfigRejectsPluginWithConnectionsOrAPI(t *testing.T) {
       openapi: https://example.com/spec.json
       connection: default
 `,
-			wantContain: "cannot set both plugin and api",
+			wantContain: "cannot compose plugin with api",
 		},
 	}
 

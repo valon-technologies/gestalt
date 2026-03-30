@@ -533,28 +533,6 @@ integrations:
 `,
 		},
 		{
-			name: "plugin with connections",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    plugin:
-      command: /tmp/provider
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-`,
-		},
-		{
 			name: "plugin with api",
 			yaml: `
 auth:
@@ -1618,7 +1596,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: "plugin.source",
 		},
 		{
-			name: "plugin with connections rejected",
+			name: "plugin with connections but no mcp is rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
@@ -1627,10 +1605,10 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "cannot set both plugin and connections",
+			wantErr: "plugin + bare connections is not supported",
 		},
 		{
-			name: "plugin with api rejected",
+			name: "plugin with api is rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
@@ -1639,7 +1617,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "cannot set both plugin and api",
+			wantErr: "cannot compose plugin with api",
 		},
 		{
 			name: "runtime plugin with type rejected",
@@ -1799,5 +1777,99 @@ integrations:
 
 	if mcp.AllowedOperations["list_tables"] != nil {
 		t.Error("list_tables override should be nil for bare key")
+	}
+}
+
+func TestHybridPluginComposition(t *testing.T) {
+	t.Parallel()
+
+	const baseConfig = `
+integrations:
+  svc:
+`
+	const connBlock = `    connections:
+      named:
+        mode: user
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+          client_id: cid
+          client_secret: csec
+`
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{
+			name: "plugin only is valid",
+			yaml: baseConfig + `    plugin:
+      command: /tmp/plug
+`,
+		},
+		{
+			name: "plugin plus mcp with connection plugin is valid",
+			yaml: baseConfig + `    plugin:
+      command: /tmp/plug
+    mcp:
+      url: https://mcp.test/sse
+      connection: plugin
+`,
+		},
+		{
+			name: "plugin plus mcp with named connection is valid",
+			yaml: baseConfig + connBlock + `    plugin:
+      command: /tmp/plug
+    mcp:
+      url: https://mcp.test/sse
+      connection: named
+`,
+		},
+		{
+			name: "plugin plus api is rejected",
+			yaml: baseConfig + connBlock + `    plugin:
+      command: /tmp/plug
+    api:
+      type: rest
+      openapi: https://api.test/spec.json
+      connection: named
+`,
+			wantErr: true,
+		},
+		{
+			name: "plugin plus mcp without connection is rejected",
+			yaml: baseConfig + `    plugin:
+      command: /tmp/plug
+    mcp:
+      url: https://mcp.test/sse
+`,
+			wantErr: true,
+		},
+		{
+			name: "declarative only is valid",
+			yaml: baseConfig + connBlock + `    api:
+      type: rest
+      openapi: https://api.test/spec.json
+      connection: named
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }

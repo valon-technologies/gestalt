@@ -47,12 +47,36 @@ func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
 	return p
 }
 
-func (p *Provider) Name() string                        { return p.name }
-func (p *Provider) DisplayName() string                 { return p.api.DisplayName() }
-func (p *Provider) Description() string                 { return p.api.Description() }
-func (p *Provider) ConnectionMode() core.ConnectionMode { return p.api.ConnectionMode() }
-func (p *Provider) ListOperations() []core.Operation    { return p.api.ListOperations() }
-func (p *Provider) Catalog() *catalog.Catalog           { return p.buildCatalog() }
+func (p *Provider) Name() string        { return p.name }
+func (p *Provider) DisplayName() string { return p.api.DisplayName() }
+func (p *Provider) Description() string { return p.api.Description() }
+func (p *Provider) ConnectionMode() core.ConnectionMode {
+	return stricterConnectionMode(p.api.ConnectionMode(), p.mcpConnectionMode())
+}
+
+func (p *Provider) mcpConnectionMode() core.ConnectionMode {
+	if cm, ok := p.mcp.(interface{ ConnectionMode() core.ConnectionMode }); ok {
+		return cm.ConnectionMode()
+	}
+	return core.ConnectionModeNone
+}
+
+var connectionModeRank = map[core.ConnectionMode]int{
+	core.ConnectionModeNone:     0,
+	core.ConnectionModeEither:   1,
+	core.ConnectionModeIdentity: 2,
+	core.ConnectionModeUser:     2,
+}
+
+func stricterConnectionMode(a, b core.ConnectionMode) core.ConnectionMode {
+	if connectionModeRank[b] > connectionModeRank[a] {
+		return b
+	}
+	return a
+}
+
+func (p *Provider) ListOperations() []core.Operation { return p.api.ListOperations() }
+func (p *Provider) Catalog() *catalog.Catalog        { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.api.Execute(ctx, operation, params, token)
@@ -143,18 +167,18 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 	return merged
 }
 
-func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
+func tagCatalog(src *catalog.Catalog, transport string) *catalog.Catalog {
 	out := src.Clone()
 	for i := range out.Operations {
-		out.Operations[i].Transport = catalog.TransportREST
+		out.Operations[i].Transport = transport
 	}
 	return out
 }
 
+func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
+	return tagCatalog(src, catalog.TransportREST)
+}
+
 func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
-	out := src.Clone()
-	for i := range out.Operations {
-		out.Operations[i].Transport = catalog.TransportMCPPassthrough
-	}
-	return out
+	return tagCatalog(src, catalog.TransportMCPPassthrough)
 }

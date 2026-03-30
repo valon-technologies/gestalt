@@ -82,7 +82,7 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 		}
 
 		var handler mcpserver.ToolHandlerFunc
-		if isDirect && op.Transport != catalog.TransportREST && op.Transport != catalog.TransportPlugin {
+		if isDirect && op.Transport != catalog.TransportREST {
 			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller)
 		} else {
 			handler = makeHandler(cfg.Invoker, provName, op.ID, conn)
