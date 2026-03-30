@@ -162,8 +162,11 @@ secrets:
 | Provider | Config fields | Purpose |
 | --- | --- | --- |
 | `env` | `prefix` | Reads secrets from environment variables. |
-| `file` | `dir` | Reads one secret per file from a base directory. |
-| `gcp_secret_manager` | `project`, `version` | `version` defaults to `latest`. |
+| `file` | `dir` | Reads one secret per file from a base directory. Works with Kubernetes volume-mounted secrets. |
+| `google_secret_manager` | `project`, `version` | Google Cloud Secret Manager. `version` defaults to `latest`. |
+| `aws_secrets_manager` | `region`, `version_stage`, `endpoint` | AWS Secrets Manager. `version_stage` defaults to `AWSCURRENT`. |
+| `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `mount_path` defaults to `secret`. |
+| `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `version` defaults to latest. |
 
 Any string value outside `secrets.config` may use the `secret://` prefix:
 

@@ -133,7 +133,10 @@ The secret manager resolves the part after `secret://`:
 
 - `env` reads it from an environment variable name
 - `file` reads it from a file inside a configured directory
-- `gcp_secret_manager` reads it from Google Secret Manager
+- `google_secret_manager` reads it from Google Cloud Secret Manager
+- `aws_secrets_manager` reads it from AWS Secrets Manager
+- `vault` reads it from HashiCorp Vault
+- `azure_key_vault` reads it from Azure Key Vault
 
 ## The Smallest Explicit Config
 
