@@ -313,7 +313,7 @@ These configuration choices directly affect the security posture of a deployment
 | `server.base_url` | Must match the public URL exactly. OAuth callback URLs are derived from it. A mismatch can break auth flows or create open-redirect risks. |
 | `egress.default_action` | Set to `deny` in production and explicitly allow required paths. |
 | TLS termination | Gestalt does not terminate TLS itself. Deploy behind a reverse proxy (Nginx, Envoy, cloud load balancer) that handles TLS. |
-| `secrets.provider` | Use `gcp_secret_manager` or `file` in production. `env` is acceptable but secrets may appear in process listings. |
+| `secrets.provider` | Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`) or `file` in production. `env` is acceptable but secrets may appear in process listings. |
 | `datastore.provider` | Use Postgres or another SQL datastore in production. SQLite is single-writer and not suitable for multi-replica deployments. |
 
 ## Known Limitations

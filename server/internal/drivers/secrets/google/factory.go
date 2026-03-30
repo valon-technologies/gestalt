@@ -1,9 +1,8 @@
-package gcp
+package google
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 
@@ -20,21 +19,21 @@ type yamlConfig struct {
 var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretManager, error) {
 	var cfg yamlConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("gcp secrets: parsing config: %w", err)
+		return nil, fmt.Errorf("google secrets: parsing config: %w", err)
 	}
 	if cfg.Project == "" {
-		return nil, fmt.Errorf("gcp secrets: project is required")
+		return nil, fmt.Errorf("google secrets: project is required")
 	}
 	if cfg.Version == "" {
 		cfg.Version = "latest"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gcp secrets: creating client: %w", err)
+		return nil, fmt.Errorf("google secrets: creating client: %w", err)
 	}
 	return &Provider{client: client, project: cfg.Project, version: cfg.Version}, nil
 }

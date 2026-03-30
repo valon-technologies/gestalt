@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Deploy to Kubernetes
 
 The repo ships a Helm chart at `server/deploy/helm/gestalt`. It runs `gestaltd` as a single Deployment and exposes it through one Kubernetes Service.
@@ -97,6 +99,10 @@ extraEnv:
 pluginInit:
   enabled: true
 ```
+
+<Callout>
+  The `file` secret provider works with Kubernetes volume-mounted secrets. Mount a Secret object as a volume and set `secrets.provider: file` with `config.dir` pointing at the mount path. Each key in the Secret becomes a file that `secret://key-name` resolves.
+</Callout>
 
 ## Install
 
