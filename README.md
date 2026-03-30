@@ -52,10 +52,10 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 
 ## Documentation
 
-Full documentation is available at [gestalt.run](https://gestalt.run).
+Full documentation is available at [docs.toolshed.peachstreet.dev](https://docs.toolshed.peachstreet.dev).
 
-- [Getting Started](/getting-started)
-- [Configuration](/concepts/configuration)
-- [CLI Reference](/reference/cli)
-- [Deployment](/deploy)
-- [Write a Plugin](/tasks/write-a-plugin)
+- [Getting Started](https://docs.toolshed.peachstreet.dev/getting-started)
+- [Configuration](https://docs.toolshed.peachstreet.dev/concepts/configuration)
+- [CLI Reference](https://docs.toolshed.peachstreet.dev/reference/cli)
+- [Deployment](https://docs.toolshed.peachstreet.dev/deploy)
+- [Write a Plugin](https://docs.toolshed.peachstreet.dev/tasks/write-a-plugin)
