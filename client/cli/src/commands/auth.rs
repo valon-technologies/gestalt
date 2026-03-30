@@ -7,6 +7,7 @@ use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
 const SESSION_COOKIE_PREFIX: &str = "session_token=";
+const LOGIN_CALLBACK_TIMEOUT_SECS: u64 = 300;
 
 pub fn login(url_override: Option<&str>) -> Result<()> {
     if api::env_api_key_is_set() {
@@ -68,7 +69,15 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         port
     );
 
-    let (stream, _) = listener.accept().context("failed to accept callback")?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(listener.accept());
+    });
+
+    let (stream, _) = rx
+        .recv_timeout(std::time::Duration::from_secs(LOGIN_CALLBACK_TIMEOUT_SECS))
+        .map_err(|_| anyhow::anyhow!("timed out waiting for login callback after 5 minutes"))?
+        .context("failed to accept callback")?;
     let mut reader = std::io::BufReader::new(&stream);
     let mut request_line = String::new();
     std::io::BufRead::read_line(&mut reader, &mut request_line)?;
