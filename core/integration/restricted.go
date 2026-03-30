@@ -17,6 +17,15 @@ type Restricted struct {
 	aliases      map[string]string
 	reverseAlias map[string]string
 	allowedInner map[string]struct{}
+	descriptions map[string]string
+}
+
+// RestrictedOption configures a Restricted provider.
+type RestrictedOption func(*Restricted)
+
+// WithDescriptions sets description overrides keyed by exposed operation name.
+func WithDescriptions(descs map[string]string) RestrictedOption {
+	return func(r *Restricted) { r.descriptions = descs }
 }
 
 // Compile-time interface checks.
@@ -33,7 +42,7 @@ var (
 // The ops map maps exposedName -> innerName. If innerName is empty, the
 // exposed name equals the inner name (no alias). If the inner provider
 // implements OAuthProvider, the returned value does too.
-func NewRestricted(inner core.Provider, ops map[string]string) core.Provider {
+func NewRestricted(inner core.Provider, ops map[string]string, opts ...RestrictedOption) core.Provider {
 	m := make(map[string]struct{}, len(ops))
 	aliases := make(map[string]string)
 	reverseAlias := make(map[string]string)
@@ -54,6 +63,9 @@ func NewRestricted(inner core.Provider, ops map[string]string) core.Provider {
 		aliases:      aliases,
 		reverseAlias: reverseAlias,
 		allowedInner: allowedInner,
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 	if scp, ok := inner.(core.SessionCatalogProvider); ok {
 		rs := &restrictedSession{Restricted: r, scp: scp}
@@ -80,6 +92,9 @@ func (r *Restricted) ListOperations() []core.Operation {
 		if _, ok := r.allowedInner[op.Name]; ok {
 			if exposed, ok := r.reverseAlias[op.Name]; ok {
 				op.Name = exposed
+			}
+			if desc, ok := r.descriptions[op.Name]; ok {
+				op.Description = desc
 			}
 			filtered = append(filtered, op)
 		}

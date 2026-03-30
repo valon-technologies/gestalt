@@ -689,14 +689,24 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			}
 
 			opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
+			descs := make(map[string]string)
 			for opName, override := range intg.Plugin.AllowedOperations {
+				exposed := opName
 				if override != nil && override.Alias != "" {
-					opsMap[override.Alias] = opName
+					exposed = override.Alias
+					opsMap[exposed] = opName
 				} else {
 					opsMap[opName] = ""
 				}
+				if override != nil && override.Description != "" {
+					descs[exposed] = override.Description
+				}
 			}
-			buildResult.Provider = integration.NewRestricted(prov, opsMap)
+			var opts []integration.RestrictedOption
+			if len(descs) > 0 {
+				opts = append(opts, integration.WithDescriptions(descs))
+			}
+			buildResult.Provider = integration.NewRestricted(prov, opsMap, opts...)
 		}
 		if intg.Plugin.ResolvedManifestPath != "" {
 			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
