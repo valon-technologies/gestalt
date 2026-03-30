@@ -1,6 +1,6 @@
-use anyhow::{bail, Context, Result};
-use reqwest::blocking::Client;
+use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
+use reqwest::blocking::Client;
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;

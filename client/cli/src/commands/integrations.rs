@@ -3,8 +3,7 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
+pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
         .get("/api/v1/integrations")
         .context("failed to list integrations")?;
@@ -34,8 +33,7 @@ pub fn list(url_override: Option<&str>, format: Format) -> Result<()> {
     Ok(())
 }
 
-pub fn connect(url_override: Option<&str>, name: &str) -> Result<()> {
-    let client = ApiClient::from_env(url_override)?;
+pub fn connect(client: &ApiClient, name: &str) -> Result<()> {
     let body = serde_json::json!({"integration": name});
     let resp = client
         .post("/api/v1/auth/start-oauth", &body)

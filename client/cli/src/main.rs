@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use gestalt::api::ApiClient;
 use gestalt::commands;
 use gestalt::output::{self, Format};
 
@@ -139,12 +140,12 @@ enum TokenCommands {
     },
 }
 
-fn main() {
+fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let format = cli.format;
     let url = cli.url.as_deref();
 
-    let result = match cli.command {
+    match cli.command {
         Commands::Auth { command } => match command {
             AuthCommands::Login => commands::auth::login(url),
             AuthCommands::Logout => commands::auth::logout(),
@@ -157,47 +158,63 @@ fn main() {
             ConfigCommands::Unset { key } => commands::config::unset(&key),
             ConfigCommands::List => commands::config::list(format),
         },
-        Commands::Integrations { command } => match command {
-            IntegrationCommands::List => commands::integrations::list(url, format),
-            IntegrationCommands::Connect { name } => commands::integrations::connect(url, &name),
-        },
+        Commands::Integrations { command } => {
+            let client = ApiClient::from_env(url)?;
+            match command {
+                IntegrationCommands::List => commands::integrations::list(&client, format),
+                IntegrationCommands::Connect { name } => {
+                    commands::integrations::connect(&client, &name)
+                }
+            }
+        }
         Commands::Invoke {
             integration,
             operation,
             params,
             select,
             input_file,
-        } => match operation {
-            Some(op) => commands::invoke::invoke(
-                url,
-                &integration,
-                &op,
-                &params,
-                select.as_deref(),
-                input_file.as_deref(),
-                format,
-            ),
-            None => {
-                if !params.is_empty() {
-                    output::print_warning("parameters ignored; no operation specified");
+        } => {
+            let client = ApiClient::from_env(url)?;
+            match operation {
+                Some(op) => commands::invoke::invoke(
+                    &client,
+                    &integration,
+                    &op,
+                    &params,
+                    select.as_deref(),
+                    input_file.as_deref(),
+                    format,
+                ),
+                None => {
+                    if !params.is_empty() {
+                        output::print_warning("parameters ignored; no operation specified");
+                    }
+                    commands::invoke::list_operations(&client, &integration, format)
                 }
-                commands::invoke::list_operations(url, &integration, format)
             }
-        },
+        }
         Commands::Describe {
             integration,
             operation,
-        } => commands::describe::describe(url, &integration, &operation, format),
-        Commands::Tokens { command } => match command {
-            TokenCommands::Create { name } => {
-                commands::tokens::create(url, name.as_deref(), format)
+        } => {
+            let client = ApiClient::from_env(url)?;
+            commands::describe::describe(&client, &integration, &operation, format)
+        }
+        Commands::Tokens { command } => {
+            let client = ApiClient::from_env(url)?;
+            match command {
+                TokenCommands::Create { name } => {
+                    commands::tokens::create(&client, name.as_deref(), format)
+                }
+                TokenCommands::List => commands::tokens::list(&client, format),
+                TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
             }
-            TokenCommands::List => commands::tokens::list(url, format),
-            TokenCommands::Revoke { id } => commands::tokens::revoke(url, &id, format),
-        },
-    };
+        }
+    }
+}
 
-    if let Err(e) = result {
+fn main() {
+    if let Err(e) = run() {
         output::print_error(&format!("{:#}", e));
         std::process::exit(1);
     }
