@@ -26,10 +26,9 @@ func TestValidateConfigForManifest(t *testing.T) {
 		t.Fatalf("WriteFile(schema): %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/provider",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/provider",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: "schemas/config.schema.json",
@@ -80,10 +79,9 @@ func TestValidateConfigForManifestRuntimeFallback(t *testing.T) {
 		t.Fatalf("WriteFile(schema): %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/runtime",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindRuntime},
+		Source:  "github.com/acme/plugins/runtime",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     "darwin",
@@ -118,10 +116,9 @@ func TestValidateConfigForManifestRuntimeDoesNotUseProviderSchema(t *testing.T) 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, ManifestFile)
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/plugin",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime},
+		Source:  "github.com/acme/plugins/plugin",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: "schemas/provider.schema.json",

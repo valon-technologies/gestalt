@@ -133,7 +133,6 @@ func packageFromBinary(binaryPath, source, kind, version, targetOS, targetArch, 
 
 func buildManifest(source, kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
 	m := newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest)
-	m.SchemaVersion = pluginmanifestv1.SchemaVersion
 	m.Source = source
 	return m
 }

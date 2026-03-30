@@ -675,10 +675,9 @@ func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: schemaPath,
@@ -734,10 +733,9 @@ func buildPreparedTestRuntimePackageWithSchema(t *testing.T, dir, source, versio
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindRuntime},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

@@ -589,10 +589,9 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	bin := buildEchoPluginBinary(t)
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/echo",
-		Version:       "1.0.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/echo",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			Auth: &pluginmanifestv1.ProviderAuth{
@@ -674,10 +673,9 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	bin := buildEchoPluginBinary(t)
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/echo",
-		Version:       "1.0.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/echo",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
