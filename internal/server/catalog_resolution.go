@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -25,11 +25,11 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 		if resolver != nil && prov.ConnectionMode() != core.ConnectionModeNone && p != nil {
 			token, err := resolver.ResolveToken(ctx, p, provName, defaultConnection, "")
 			if err != nil {
-				log.Printf("catalog: token resolution for %q: %v", provName, err)
+				slog.WarnContext(ctx, "catalog token resolution failed", "provider", provName, "error", err)
 			} else {
 				cat, err := scp.CatalogForRequest(ctx, token)
 				if err != nil {
-					log.Printf("catalog: session catalog for %q: %v", provName, err)
+					slog.WarnContext(ctx, "catalog session resolution failed", "provider", provName, "error", err)
 				} else {
 					sessionCat = cat
 				}

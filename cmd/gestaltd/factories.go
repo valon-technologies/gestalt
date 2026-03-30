@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -137,7 +137,7 @@ func logDatastoreWarnings(ds core.Datastore) {
 	}
 	if w, ok := ds.(warner); ok {
 		for _, msg := range w.Warnings() {
-			log.Printf("WARNING: %s", msg)
+			slog.Warn(msg)
 		}
 	}
 }

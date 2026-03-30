@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,8 +61,7 @@ func runBundle(args []string) error {
 		return fmt.Errorf("hydrating bundle: %w", err)
 	}
 
-	log.Printf("bundle written to %s", absOutput)
-	log.Printf("serve with: gestaltd serve --locked --config %s", bundledConfigPath)
+	slog.Info("bundle written", "output", absOutput, "serve_command", "gestaltd serve --locked --config "+bundledConfigPath)
 	return nil
 }
 

@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -111,9 +111,11 @@ func runServer(env *bootstrapEnv) error {
 	mcpSurface := buildMCPSurface(env.Config)
 
 	if env.Config.Server.BaseURL != "" {
-		log.Printf("gestaltd base URL: %s", env.Config.Server.BaseURL)
-		log.Printf("  auth callback:        %s%s", env.Config.Server.BaseURL, config.AuthCallbackPath)
-		log.Printf("  integration callback: %s%s", env.Config.Server.BaseURL, config.IntegrationCallbackPath)
+		slog.Info("gestaltd base URL configured",
+			"base_url", env.Config.Server.BaseURL,
+			"auth_callback", env.Config.Server.BaseURL+config.AuthCallbackPath,
+			"integration_callback", env.Config.Server.BaseURL+config.IntegrationCallbackPath,
+		)
 	}
 
 	uiHandler, err := resolveUIHandler(env.Config)
@@ -166,7 +168,7 @@ func runServer(env *bootstrapEnv) error {
 
 	listenErr := make(chan error, 1)
 	go func() {
-		log.Printf("gestaltd listening on %s", addr)
+		slog.Info("gestaltd listening", "addr", addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			listenErr <- err
 		}
@@ -176,13 +178,13 @@ func runServer(env *bootstrapEnv) error {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer drainCancel()
 		if err := httpServer.Shutdown(drainCtx); err != nil {
-			log.Printf("server shutdown: %v", err)
+			slog.Warn("server shutdown", "error", err)
 		}
 	}()
 
 	select {
 	case <-result.ProvidersReady:
-		log.Printf("all providers ready (%d loaded)", len(result.Providers.List()))
+		slog.Info("all providers ready", "count", len(result.Providers.List()))
 	case err := <-listenErr:
 		return fmt.Errorf("http server: %v", err)
 	case <-env.Ctx.Done():
@@ -198,7 +200,7 @@ func runServer(env *bootstrapEnv) error {
 		return err
 	}
 	mcpSlot.Set(mcpInner)
-	log.Println("MCP endpoint enabled at /mcp")
+	slog.Info("MCP endpoint enabled", "path", "/mcp")
 
 	select {
 	case err := <-listenErr:
@@ -278,7 +280,7 @@ func pluginDeclaresMCP(plugin *config.ExecutablePluginDef) bool {
 	}
 	_, manifest, err := pluginpkg.ReadManifestFile(plugin.ResolvedManifestPath)
 	if err != nil {
-		log.Printf("WARNING: reading plugin manifest %s: %v", plugin.ResolvedManifestPath, err)
+		slog.Warn("reading plugin manifest", "path", plugin.ResolvedManifestPath, "error", err)
 		return true
 	}
 	return manifest.Provider != nil && manifest.Provider.MCP
@@ -338,62 +340,50 @@ func validateConfig(configFlag string) error {
 
 	logConfigSummary(path, cfg)
 	for _, w := range warnings {
-		log.Printf("WARNING: %s", w)
+		slog.Warn(w)
 	}
-	log.Printf("config ok")
+	slog.Info("config ok")
 	return nil
 }
 
 func logConfigSummary(path string, cfg *config.Config) {
-	log.Printf("config file: %s", path)
-	log.Printf("server:")
-	log.Printf("  port:       %d", cfg.Server.Port)
-	log.Printf("  base_url:   %s", maskEmpty(cfg.Server.BaseURL))
-	log.Printf("  encryption: %s", maskSecret(cfg.Server.EncryptionKey))
-	log.Printf("auth:")
-	log.Printf("  provider:   %s", cfg.Auth.Provider)
-	log.Printf("datastore:")
-	log.Printf("  provider:   %s", cfg.Datastore.Provider)
-	log.Printf("secrets:")
-	log.Printf("  provider:   %s", cfg.Secrets.Provider)
-	log.Printf("telemetry:")
-	log.Printf("  provider:   %s", cfg.Telemetry.Provider)
+	slog.Info("config loaded",
+		"config_file", path,
+		"server_port", cfg.Server.Port,
+		"server_base_url", maskEmpty(cfg.Server.BaseURL),
+		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
+		"auth_provider", cfg.Auth.Provider,
+		"datastore_provider", cfg.Datastore.Provider,
+		"secrets_provider", cfg.Secrets.Provider,
+		"telemetry_provider", cfg.Telemetry.Provider,
+	)
 
-	if len(cfg.Integrations) > 0 {
-		log.Printf("integrations: %d", len(cfg.Integrations))
-		for name, intg := range cfg.Integrations {
-			switch {
-			case intg.Plugin != nil && intg.MCP == nil:
-				log.Printf("  %s: plugin", name)
-			case intg.Plugin != nil:
-				log.Printf("  %s: hybrid surfaces=[plugin,mcp]", name)
-			default:
-				var surfaces []string
-				if intg.API != nil {
-					surfaces = append(surfaces, intg.API.Type)
-				}
-				if intg.MCP != nil {
-					surfaces = append(surfaces, "mcp")
-				}
-				log.Printf("  %s: surfaces=[%s] connections=%d", name, strings.Join(surfaces, ","), len(intg.Connections))
+	for name, intg := range cfg.Integrations {
+		switch {
+		case intg.Plugin != nil && intg.MCP == nil:
+			slog.Info("integration configured", "integration", name, "type", "plugin")
+		case intg.Plugin != nil:
+			slog.Info("integration configured", "integration", name, "type", "hybrid", "surfaces", []string{"plugin", "mcp"})
+		default:
+			var surfaces []string
+			if intg.API != nil {
+				surfaces = append(surfaces, intg.API.Type)
 			}
+			if intg.MCP != nil {
+				surfaces = append(surfaces, "mcp")
+			}
+			slog.Info("integration configured", "integration", name, "surfaces", surfaces, "connections", len(intg.Connections))
 		}
 	}
 
-	if len(cfg.Runtimes) > 0 {
-		log.Printf("runtimes: %d", len(cfg.Runtimes))
-		for name := range cfg.Runtimes {
-			rt := cfg.Runtimes[name]
-			log.Printf("  %s: type=%s providers=%s", name, rt.Type, strings.Join(rt.Providers, ","))
-		}
+	for name := range cfg.Runtimes {
+		rt := cfg.Runtimes[name]
+		slog.Info("runtime configured", "runtime", name, "type", rt.Type, "providers", rt.Providers)
 	}
 
-	if len(cfg.Bindings) > 0 {
-		log.Printf("bindings: %d", len(cfg.Bindings))
-		for name := range cfg.Bindings {
-			b := cfg.Bindings[name]
-			log.Printf("  %s: type=%s", name, b.Type)
-		}
+	for name := range cfg.Bindings {
+		b := cfg.Bindings[name]
+		slog.Info("binding configured", "binding", name, "type", b.Type)
 	}
 }
 

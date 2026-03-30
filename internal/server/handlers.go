@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -94,7 +94,7 @@ type connectionParamInfo struct {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	connected, err := s.userConnectedIntegrations(r)
 	if err != nil {
-		log.Printf("listing integrations: %v", err)
+		slog.ErrorContext(r.Context(), "listing integrations", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to check integration status")
 		return
 	}
@@ -381,7 +381,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, apiexec.ErrMissingPathParam):
 			writeError(w, http.StatusBadRequest, err.Error())
 		default:
-			log.Printf("operation %s/%s failed: %v", providerName, operationName, err)
+			slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 			writeError(w, http.StatusBadGateway, "operation failed")
 		}
 		return
@@ -501,7 +501,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		identity, err = s.auth.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
-		log.Printf("login callback failed: %v", err)
+		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
@@ -672,14 +672,14 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	var tokenResp *core.TokenResponse
 	tokenResp, err = handler.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	if err != nil {
-		log.Printf("token exchange failed for %s: %v", providerName, err)
+		slog.ErrorContext(r.Context(), "token exchange failed", "provider", providerName, "error", err)
 		writeError(w, http.StatusBadGateway, "token exchange failed")
 		return
 	}
 
 	metadata, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
 	if metaErr != nil {
-		log.Printf("connection metadata extraction failed for %s: %v", providerName, metaErr)
+		slog.ErrorContext(r.Context(), "connection metadata extraction failed", "provider", providerName, "error", metaErr)
 		writeError(w, http.StatusBadGateway, "failed to extract connection metadata from token response")
 		return
 	}
@@ -708,7 +708,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
-		log.Printf("post_connect failed for %s: %v", providerName, err)
+		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
 		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
@@ -811,7 +811,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
-		log.Printf("post_connect failed for %s: %v", req.Integration, err)
+		slog.ErrorContext(r.Context(), "post_connect failed", "provider", req.Integration, "error", err)
 		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
@@ -1280,7 +1280,7 @@ func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := scs.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
-		log.Printf("failed to delete staged connection %s: %v", sc.ID, err)
+		slog.ErrorContext(r.Context(), "failed to delete staged connection", "staged_connection_id", sc.ID, "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})

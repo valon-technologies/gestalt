@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -289,7 +289,7 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 	if storedToken.MetadataJSON != "" {
 		var connParams map[string]string
 		if err := json.Unmarshal([]byte(storedToken.MetadataJSON), &connParams); err != nil {
-			log.Printf("WARNING: malformed MetadataJSON for %s: %v", providerName, err)
+			slog.WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
 		} else if len(connParams) > 0 {
 			ctx = core.WithConnectionParams(ctx, connParams)
 		}
