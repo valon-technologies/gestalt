@@ -516,7 +516,7 @@ func buildEchoPluginBinary(t *testing.T) string {
 
 	bin := filepath.Join(t.TempDir(), "gestalt-plugin-echo")
 	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/gestalt-plugin-echo")
+	cmd := exec.Command("go", "build", "-o", bin, "./internal/testplugins/echo")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build plugin binary: %v\n%s", err, out)
