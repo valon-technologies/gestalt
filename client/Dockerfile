@@ -1,7 +1,7 @@
 FROM rust:1-alpine AS builder
 RUN apk add --no-cache musl-dev perl make
 WORKDIR /build
-COPY client/ .
+COPY . .
 RUN cargo build --release
 
 FROM gcr.io/distroless/static-debian12
