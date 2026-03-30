@@ -428,19 +428,11 @@ func matchValue(actual, expected any) bool {
 }
 
 func extractJSONPath(data map[string]any, path string) (string, bool) {
-	parts := strings.Split(path, ".")
-	var current any = data
-	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return "", false
-		}
-		current, ok = m[part]
-		if !ok {
-			return "", false
-		}
+	v, ok := apiexec.ExtractJSONPath(data, path)
+	if !ok {
+		return "", false
 	}
-	return fmt.Sprintf("%v", current), true
+	return fmt.Sprintf("%v", v), true
 }
 
 func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig {

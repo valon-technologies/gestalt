@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func DoPaginatedWithExecutor(ctx context.Context, client *http.Client, req Reque
 }
 
 func doPaginated(ctx context.Context, client *http.Client, req Request, pgn PaginationConfig, exec RequestExecutor) (*core.OperationResult, error) {
-	params := copyParams(req.Params)
+	params := maps.Clone(req.Params)
 	if params == nil {
 		params = make(map[string]any)
 	}
@@ -77,7 +78,7 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 
 	for page := 0; page < maxPages; page++ {
 		pageReq := req
-		pageReq.Params = copyParams(params)
+		pageReq.Params = maps.Clone(params)
 
 		result, err := exec(ctx, client, pageReq)
 		if err != nil {
@@ -90,7 +91,7 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 			return nil, fmt.Errorf("parsing paginated response: %w", err)
 		}
 
-		pageResults, ok := extractJSONPath(parsed, pgn.ResultsPath)
+		pageResults, ok := ExtractJSONPath(parsed, pgn.ResultsPath)
 		if !ok {
 			break
 		}
@@ -102,7 +103,7 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 
 		switch pgn.Style {
 		case PaginationStyleCursor:
-			cursor, ok := extractJSONPath(parsed, pgn.CursorPath)
+			cursor, ok := ExtractJSONPath(parsed, pgn.CursorPath)
 			if !ok || cursor == nil {
 				return combinedResult(lastStatus, allResults)
 			}
@@ -155,8 +156,7 @@ func combinedResult(status int, results []any) (*core.OperationResult, error) {
 	}, nil
 }
 
-// extractJSONPath traverses a parsed JSON value using a dotted path (e.g. "data.items").
-func extractJSONPath(data any, path string) (any, bool) {
+func ExtractJSONPath(data any, path string) (any, bool) {
 	if path == "" {
 		return data, true
 	}

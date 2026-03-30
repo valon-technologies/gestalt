@@ -1,6 +1,9 @@
 package egress
 
-import "context"
+import (
+	"context"
+	"maps"
+)
 
 type ResolutionInput struct {
 	Target     Target
@@ -38,7 +41,7 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 	policy := PolicyInput{
 		Subject: subject,
 		Target:  input.Target,
-		Headers: CopyHeaders(input.Headers),
+		Headers: maps.Clone(input.Headers),
 	}
 	if err := EvaluatePolicy(ctx, r.Policy, policy); err != nil {
 		return Resolution{}, err
@@ -66,15 +69,4 @@ func (r Resolver) Resolve(ctx context.Context, input ResolutionInput) (Resolutio
 		Credential: CredentialMaterialization{Authorization: credential.Authorization},
 		Policy:     policy,
 	}, nil
-}
-
-func CopyHeaders(headers map[string]string) map[string]string {
-	if headers == nil {
-		return nil
-	}
-	out := make(map[string]string, len(headers))
-	for k, v := range headers {
-		out[k] = v
-	}
-	return out
 }

@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"time"
 
@@ -228,7 +229,7 @@ func (b *Base) ListOperations() []core.Operation { return b.Operations }
 
 func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
 	baseURL := b.BaseURL
-	headers := egress.CopyHeaders(b.Headers)
+	headers := maps.Clone(b.Headers)
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		baseURL = paraminterp.Interpolate(baseURL, cp)
 		for k, v := range headers {
