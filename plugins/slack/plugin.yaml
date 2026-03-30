@@ -12,12 +12,24 @@ provider:
     type: oauth2
     authorization_url: https://slack.com/oauth/v2/authorize
     token_url: https://slack.com/api/oauth.v2.access
+    scope_param: user_scope
+    scope_separator: ","
     scopes:
       - channels:read
       - channels:history
-      - chat:write
-      - users:read
+      - groups:read
+      - groups:history
+      - im:read
+      - im:history
+      - mpim:read
+      - mpim:history
       - search:read
+      - users:read
+      - chat:write
+      - reactions:write
+      - channels:write
+      - groups:write
+      - canvases:write
   operations:
     - name: slack_list_channels
       description: List conversations/channels

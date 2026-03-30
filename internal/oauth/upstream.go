@@ -46,6 +46,7 @@ type UpstreamConfig struct {
 	PKCE             bool
 
 	DefaultScopes       []string
+	ScopeParam          string
 	ScopeSeparator      string
 	AuthorizationParams map[string]string
 	TokenParams         map[string]string
@@ -147,7 +148,11 @@ func (h *UpstreamHandler) authorizationURL(baseURL, state string, scopes []strin
 		if h.cfg.ScopeSeparator != "" {
 			sep = h.cfg.ScopeSeparator
 		}
-		q.Set("scope", strings.Join(effective, sep))
+		param := "scope"
+		if h.cfg.ScopeParam != "" {
+			param = h.cfg.ScopeParam
+		}
+		q.Set(param, strings.Join(effective, sep))
 	}
 
 	for k, v := range h.cfg.AuthorizationParams {

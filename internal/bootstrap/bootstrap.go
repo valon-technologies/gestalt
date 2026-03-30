@@ -913,6 +913,7 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 		RedirectURL:         redirectURL,
 		PKCE:                auth.PKCE,
 		DefaultScopes:       auth.Scopes,
+		ScopeParam:          auth.ScopeParam,
 		ScopeSeparator:      auth.ScopeSeparator,
 		TokenExchange:       tokenExchange,
 		AuthorizationParams: auth.AuthorizationParams,
