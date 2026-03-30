@@ -1022,7 +1022,7 @@ type bearerTransport struct {
 func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("Authorization") == "" {
 		req = req.Clone(req.Context())
-		req.Header.Set("Authorization", "Bearer "+t.token)
+		req.Header.Set("Authorization", core.BearerScheme+t.token)
 	}
 	return t.base.RoundTrip(req)
 }

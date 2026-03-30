@@ -3,6 +3,8 @@ package egress
 import (
 	"encoding/base64"
 	"fmt"
+
+	"github.com/valon-technologies/gestalt/core"
 )
 
 // AuthStyle determines how a stored credential should be materialized.
@@ -43,7 +45,7 @@ func MaterializeCredential(token string, style AuthStyle, parser TokenParser) (C
 		if token == "" {
 			return CredentialMaterialization{}, nil
 		}
-		return CredentialMaterialization{Authorization: "Bearer " + token}, nil
+		return CredentialMaterialization{Authorization: core.BearerScheme + token}, nil
 	case AuthStyleRaw:
 		return CredentialMaterialization{Authorization: token}, nil
 	case AuthStyleBasic:
