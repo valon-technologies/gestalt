@@ -34,7 +34,7 @@ The image is published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
 
-The image is Alpine-based and includes `gestaltd`, a shell, `ca-certificates`, and `curl`. It runs as `nobody:nobody` by default.
+The image is Alpine-based and includes `gestaltd`, a shell, and `ca-certificates`. It runs as `nobody:nobody` by default.
 
 ## Run a simple static config
 
@@ -182,7 +182,7 @@ RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
 
 - The published image defaults to locked startup. A missing config file or missing prepared state causes startup to fail fast.
 - `docker run valontechnologies/gestaltd:latest` by itself is expected to fail because the image does not auto-generate config in-container.
-- The image includes a shell and `curl` for debugging.
+- The image includes a shell for debugging.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more
