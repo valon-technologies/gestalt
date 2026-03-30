@@ -26,8 +26,6 @@ import (
 	"github.com/valon-technologies/gestalt/plugins/datastore/postgres"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlite"
 	"github.com/valon-technologies/gestalt/plugins/datastore/sqlserver"
-	"github.com/valon-technologies/gestalt/plugins/providers/echo"
-	echoruntime "github.com/valon-technologies/gestalt/plugins/runtimes/echo"
 	secretsenv "github.com/valon-technologies/gestalt/plugins/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/plugins/secrets/file"
 	secretsgcp "github.com/valon-technologies/gestalt/plugins/secrets/gcp"
@@ -103,8 +101,6 @@ func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegis
 	factories.Datastores["sqlserver"] = sqlserver.Factory
 	registerProviders(factories)
 	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
-	factories.Builtins = append(factories.Builtins, echo.New())
-	factories.Runtimes["echo"] = echoruntime.Factory
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Bindings["proxy"] = proxy.Factory
 	factories.Secrets["env"] = secretsenv.Factory
