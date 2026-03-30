@@ -13,9 +13,21 @@ import (
 	"github.com/valon-technologies/gestalt/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/registry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const tokenRefreshThreshold = 5 * time.Minute
+const (
+	tokenRefreshThreshold = 5 * time.Minute
+	tracerName            = "gestaltd"
+
+	attrProvider       = attribute.Key("gestalt.provider")
+	attrOperation      = attribute.Key("gestalt.operation")
+	attrUserID         = attribute.Key("gestalt.user_id")
+	attrConnectionMode = attribute.Key("gestalt.connection_mode")
+)
 
 type connectionCtxKey struct{}
 
@@ -109,12 +121,36 @@ func (b *Broker) ListCapabilities() []core.Capability {
 }
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
+	span.SetAttributes(
+		attrProvider.String(providerName),
+		attrOperation.String(operation),
+	)
+
+	fail := func(err error) (*core.OperationResult, error) {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return nil, fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		} else {
+			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 		}
-		return nil, fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+		return fail(err)
+	}
+
+	span.SetAttributes(attrConnectionMode.String(string(prov.ConnectionMode())))
+
+	if p != nil && p.UserID != "" {
+		span.SetAttributes(attrUserID.String(p.UserID))
 	}
 
 	ops := prov.ListOperations()
@@ -126,11 +162,11 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 	if !found {
-		return nil, fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
+		return fail(fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName))
 	}
 
 	if p == nil {
-		return nil, ErrNotAuthenticated
+		return fail(ErrNotAuthenticated)
 	}
 
 	conn := ConnectionFromContext(ctx)
@@ -140,14 +176,14 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
 
 	ctx = b.withSubject(ctx, p)
 
 	result, err := prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
 
 	return result, nil
