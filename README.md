@@ -37,10 +37,11 @@ The published `valontechnologies/gestaltd` image:
 - serves the API, embedded UI, `/health`, `/ready`, and `/mcp`
 - defaults to `serve --locked --config /etc/gestalt/config.yaml`
 - expects you to mount or bake a config file before startup
-- also publishes `:builder` and `:debug` variants
+- includes a shell, `ca-certificates`, and `curl`
 
 ```dockerfile
-FROM valontechnologies/gestaltd:builder AS bundle
+FROM valontechnologies/gestaltd:latest AS bundle
+USER root
 COPY config.yaml /src/config.yaml
 RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
 
