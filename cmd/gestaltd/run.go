@@ -238,12 +238,17 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 
 	for name, intg := range cfg.Integrations {
 		if intg.Plugin != nil {
-			if !pluginDeclaresMCP(intg.Plugin) {
+			if intg.MCP == nil && !pluginDeclaresMCP(intg.Plugin) {
 				continue
 			}
 			surface.providers = append(surface.providers, name)
 			surface.apiConnection[name] = config.PluginConnectionName
-			surface.mcpConnection[name] = config.PluginConnectionName
+			if intg.MCP != nil {
+				surface.includeREST[name] = true
+				surface.mcpConnection[name] = config.ResolveConnectionAlias(intg.MCP.Connection)
+			} else {
+				surface.mcpConnection[name] = config.PluginConnectionName
+			}
 			if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
 				if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
 					surface.toolPrefixes[name] = src.Plugin + "_"
@@ -357,9 +362,12 @@ func logConfigSummary(path string, cfg *config.Config) {
 	if len(cfg.Integrations) > 0 {
 		log.Printf("integrations: %d", len(cfg.Integrations))
 		for name, intg := range cfg.Integrations {
-			if intg.Plugin != nil {
+			switch {
+			case intg.Plugin != nil && intg.MCP == nil:
 				log.Printf("  %s: plugin", name)
-			} else {
+			case intg.Plugin != nil:
+				log.Printf("  %s: hybrid surfaces=[plugin,mcp]", name)
+			default:
 				var surfaces []string
 				if intg.API != nil {
 					surfaces = append(surfaces, intg.API.Type)

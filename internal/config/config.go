@@ -25,6 +25,11 @@ const (
 // tokens for plugin-only integrations that do not declare YAML connections.
 const PluginConnectionName = "_plugin"
 
+// PluginConnectionAlias is the user-facing alias that maps to
+// PluginConnectionName. In hybrid integrations, mcp.connection can be set
+// to "plugin" to reuse the plugin's OAuth token.
+const PluginConnectionAlias = "plugin"
+
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
@@ -140,9 +145,9 @@ type ServerConfig struct {
 	APITokenTTL   string `yaml:"api_token_ttl"`
 }
 
-// IntegrationDef represents either a declarative integration (connections +
-// api/mcp surfaces) or a plugin-only integration. The two lanes are mutually
-// exclusive: if Plugin is set, Connections/API/MCP must be nil and vice versa.
+// IntegrationDef represents a declarative integration (connections +
+// api/mcp surfaces), a plugin-only integration, or a hybrid that composes
+// a plugin with an MCP surface.
 type IntegrationDef struct {
 	Connections   map[string]ConnectionDef `yaml:"connections"`
 	API           *APIDef                  `yaml:"api"`
@@ -189,6 +194,15 @@ const (
 	APITypeREST    = "rest"
 	APITypeGraphQL = "graphql"
 )
+
+// ResolveConnectionAlias maps the user-facing "plugin" alias to the
+// internal PluginConnectionName. All other names pass through unchanged.
+func ResolveConnectionAlias(name string) string {
+	if name == PluginConnectionAlias {
+		return PluginConnectionName
+	}
+	return name
+}
 
 // ConnectionMode returns the shared connection mode for a set of connections.
 // All connections are validated to have the same mode; this returns the first
@@ -452,19 +466,7 @@ func ValidateRuntime(cfg *Config) error {
 
 func validateIntegration(name string, intg IntegrationDef) error {
 	if intg.Plugin != nil {
-		if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
-			return err
-		}
-		if len(intg.Connections) > 0 {
-			return fmt.Errorf("config validation: integration %q cannot set both plugin and connections", name)
-		}
-		if intg.API != nil {
-			return fmt.Errorf("config validation: integration %q cannot set both plugin and api", name)
-		}
-		if intg.MCP != nil {
-			return fmt.Errorf("config validation: integration %q cannot set both plugin and mcp", name)
-		}
-		return nil
+		return validateHybridIntegration(name, intg)
 	}
 
 	if len(intg.Connections) == 0 {
@@ -492,6 +494,47 @@ func validateIntegration(name string, intg IntegrationDef) error {
 	for cname := range intg.Connections {
 		if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func validateHybridIntegration(name string, intg IntegrationDef) error {
+	if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
+		return err
+	}
+
+	if intg.API != nil {
+		return fmt.Errorf("config validation: integration %q cannot compose plugin with api; only plugin + mcp is supported", name)
+	}
+
+	if intg.MCP != nil {
+		if intg.MCP.Connection == "" {
+			return fmt.Errorf("config validation: integration %q mcp.connection is required when composing with plugin", name)
+		}
+		if intg.MCP.Connection != PluginConnectionAlias {
+			if err := validateMCPDef(name, intg.MCP, intg.Connections); err != nil {
+				return err
+			}
+		} else {
+			if intg.MCP.URL == "" {
+				return fmt.Errorf("config validation: integration %q mcp.url is required", name)
+			}
+		}
+	}
+
+	if len(intg.Connections) > 0 {
+		if intg.MCP == nil {
+			return fmt.Errorf("config validation: integration %q has connections but no mcp surface; plugin + bare connections is not supported", name)
+		}
+		if err := validateConnectionModes(name, intg.Connections); err != nil {
+			return err
+		}
+		for cname := range intg.Connections {
+			if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
+				return err
+			}
 		}
 	}
 

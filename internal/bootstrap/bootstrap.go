@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/core/integration"
+	"github.com/valon-technologies/gestalt/internal/composite"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/oauth"
@@ -685,68 +686,25 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin != nil {
-		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-		}
-		prov, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
-			Command: intg.Plugin.Command,
-			Args:    intg.Plugin.Args,
-			Env:     intg.Plugin.Env,
-			Name:    name,
-			Config:  pluginConfig,
-		})
+		pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
 		if err != nil {
 			return nil, err
 		}
-		buildResult := &ProviderBuildResult{Provider: prov}
-		if intg.Plugin.AllowedOperations != nil && len(intg.Plugin.AllowedOperations) == 0 {
-			return nil, fmt.Errorf("integration %q plugin.allowed_operations cannot be empty; omit the field to allow all", name)
-		}
-		if len(intg.Plugin.AllowedOperations) > 0 {
-			provOps := make(map[string]struct{}, len(prov.ListOperations()))
-			for _, op := range prov.ListOperations() {
-				provOps[op.Name] = struct{}{}
-			}
 
-			opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
-			descs := make(map[string]string)
-			exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
-			for opName, override := range intg.Plugin.AllowedOperations {
-				if _, ok := provOps[opName]; !ok {
-					return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
-				}
-				exposed := opName
-				if override != nil && override.Alias != "" {
-					exposed = override.Alias
-					opsMap[exposed] = opName
-				} else {
-					opsMap[opName] = ""
-				}
-				if existing, ok := exposedNames[exposed]; ok {
-					return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
-				}
-				exposedNames[exposed] = opName
-				if override != nil && override.Description != "" {
-					descs[exposed] = override.Description
-				}
+		restricted, err := applyAllowedOperations(name, intg, pluginProv)
+		if err != nil {
+			if c, ok := pluginProv.(interface{ Close() error }); ok {
+				_ = c.Close()
 			}
-			var opts []integration.RestrictedOption
-			if len(descs) > 0 {
-				opts = append(opts, integration.WithDescriptions(descs))
-			}
-			buildResult.Provider = integration.NewRestricted(prov, opsMap, opts...)
+			return nil, err
 		}
-		if intg.Plugin.ResolvedManifestPath != "" {
-			authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
-			if err != nil {
-				log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
-			} else if authHandler != nil {
-				buildResult.ConnectionAuth = map[string]OAuthHandler{
-					config.PluginConnectionName: authHandler,
-				}
-			}
+
+		if intg.MCP != nil {
+			return buildPluginMCPProvider(ctx, name, intg, restricted, pluginConfig, factories, deps)
 		}
+
+		buildResult := &ProviderBuildResult{Provider: restricted}
+		attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
 		return buildResult, nil
 	}
 
@@ -755,6 +713,123 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, err
 	}
 	return factory(ctx, name, intg, deps)
+}
+
+func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {
+	if intg.Plugin.AllowedOperations != nil && len(intg.Plugin.AllowedOperations) == 0 {
+		return nil, fmt.Errorf("integration %q plugin.allowed_operations cannot be empty; omit the field to allow all", name)
+	}
+	if len(intg.Plugin.AllowedOperations) == 0 {
+		return pluginProv, nil
+	}
+
+	provOps := make(map[string]struct{}, len(pluginProv.ListOperations()))
+	for _, op := range pluginProv.ListOperations() {
+		provOps[op.Name] = struct{}{}
+	}
+
+	opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
+	descs := make(map[string]string)
+	exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
+	for opName, override := range intg.Plugin.AllowedOperations {
+		if _, ok := provOps[opName]; !ok {
+			return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
+		}
+		exposed := opName
+		if override != nil && override.Alias != "" {
+			exposed = override.Alias
+			opsMap[exposed] = opName
+		} else {
+			opsMap[opName] = ""
+		}
+		if existing, ok := exposedNames[exposed]; ok {
+			return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
+		}
+		exposedNames[exposed] = opName
+		if override != nil && override.Description != "" {
+			descs[exposed] = override.Description
+		}
+	}
+	var opts []integration.RestrictedOption
+	if len(descs) > 0 {
+		opts = append(opts, integration.WithDescriptions(descs))
+	}
+	return integration.NewRestricted(pluginProv, opsMap, opts...), nil
+}
+
+func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef) (core.Provider, map[string]any, error) {
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+	}
+	prov, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
+		Command: intg.Plugin.Command,
+		Args:    intg.Plugin.Args,
+		Env:     intg.Plugin.Env,
+		Name:    name,
+		Config:  pluginConfig,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return prov, pluginConfig, nil
+}
+
+func buildPluginMCPProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginProv core.Provider, pluginConfig map[string]any, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
+	cleanupPlugin := true
+	defer func() {
+		if cleanupPlugin {
+			if c, ok := pluginProv.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+	}()
+
+	factory, err := providerFactoryForName(name, factories)
+	if err != nil {
+		return nil, fmt.Errorf("building mcp surface for plugin+mcp %q: %w", name, err)
+	}
+
+	mcpResult, err := factory(ctx, name, intg, deps)
+	if err != nil {
+		return nil, fmt.Errorf("building mcp surface for plugin+mcp %q: %w", name, err)
+	}
+
+	mcpUp, ok := mcpResult.Provider.(composite.MCPUpstream)
+	if !ok {
+		if c, ok := mcpResult.Provider.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		return nil, fmt.Errorf("plugin+mcp %q: provider factory returned %T which does not implement MCPUpstream", name, mcpResult.Provider)
+	}
+	composed := composite.New(name, pluginProv, mcpUp)
+
+	result := &ProviderBuildResult{
+		Provider:       composed,
+		ConnectionAuth: mcpResult.ConnectionAuth,
+	}
+	attachPluginOAuth(name, intg, pluginConfig, deps, result)
+
+	cleanupPlugin = false
+	return result, nil
+}
+
+func attachPluginOAuth(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
+		return
+	}
+	authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
+	if err != nil {
+		log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
+		return
+	}
+	if authHandler == nil {
+		return
+	}
+	if result.ConnectionAuth == nil {
+		result.ConnectionAuth = make(map[string]OAuthHandler)
+	}
+	result.ConnectionAuth[config.PluginConnectionName] = authHandler
 }
 
 func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
@@ -820,7 +895,7 @@ func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFa
 }
 
 func validateProviderBuildAvailable(name string, intg config.IntegrationDef, factories *FactoryRegistry) error {
-	if intg.Plugin != nil {
+	if intg.Plugin != nil && intg.MCP == nil {
 		return nil
 	}
 	_, err := providerFactoryForName(name, factories)
@@ -829,6 +904,8 @@ func validateProviderBuildAvailable(name string, intg config.IntegrationDef, fac
 
 // BuildConnectionMap returns a map from integration name to its default
 // connection name. Used by the broker and server to resolve connections.
+// For hybrid integrations, the default is PluginConnectionName; the MCP and
+// server handlers pass per-tool connection names from the surface config.
 func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
 	m := make(invocation.ConnectionMap, len(cfg.Integrations))
 	for name, intg := range cfg.Integrations {

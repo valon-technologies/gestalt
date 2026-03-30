@@ -150,6 +150,13 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	return &filtered
 }
 
+func (r *Restricted) Close() error {
+	if c, ok := r.inner.(interface{ Close() error }); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // Inner returns the unwrapped provider.
 func (r *Restricted) Inner() core.Provider {
 	return r.inner
