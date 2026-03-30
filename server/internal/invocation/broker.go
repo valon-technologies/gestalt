@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -81,6 +82,7 @@ type Broker struct {
 	datastore      core.Datastore
 	connMapper     ConnectionMapper
 	connectionAuth RefresherResolver
+	refreshGroup   singleflight.Group
 }
 
 type BrokerOption func(*Broker)
@@ -320,8 +322,36 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return token.AccessToken, nil
 	}
 
-	resp, err := b.refreshOAuth(ctx, refresher, token.RefreshToken)
+	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
+	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
+		resp, err := b.refreshOAuth(ctx, refresher, token.RefreshToken)
+		if err != nil {
+			return nil, err
+		}
+		now := time.Now()
+		token.AccessToken = resp.AccessToken
+		if resp.RefreshToken != "" {
+			token.RefreshToken = resp.RefreshToken
+		}
+		if resp.ExpiresIn > 0 {
+			t := now.Add(time.Duration(resp.ExpiresIn) * time.Second)
+			token.ExpiresAt = &t
+		} else {
+			token.ExpiresAt = nil
+		}
+		token.LastRefreshedAt = &now
+		token.RefreshErrorCount = 0
+		token.UpdatedAt = now
+		if err := b.datastore.StoreToken(ctx, token); err != nil {
+			return nil, fmt.Errorf("%w: %w", errStoreToken, err)
+		}
+		return resp.AccessToken, nil
+	})
+
 	if err != nil {
+		if errors.Is(err, errStoreToken) {
+			return "", err
+		}
 		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
@@ -335,25 +365,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return "", fmt.Errorf("token expired and refresh failed: %w", err)
 	}
 
-	now := time.Now()
-	token.AccessToken = resp.AccessToken
-	if resp.RefreshToken != "" {
-		token.RefreshToken = resp.RefreshToken
-	}
-	if resp.ExpiresIn > 0 {
-		t := now.Add(time.Duration(resp.ExpiresIn) * time.Second)
-		token.ExpiresAt = &t
-	} else {
-		token.ExpiresAt = nil
-	}
-	token.LastRefreshedAt = &now
-	token.RefreshErrorCount = 0
-	token.UpdatedAt = now
-
-	if err := b.datastore.StoreToken(ctx, token); err != nil {
-		return "", fmt.Errorf("persisting refreshed token: %w", err)
-	}
-	return token.AccessToken, nil
+	return v.(string), nil
 }
 
 func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher {
