@@ -118,6 +118,7 @@ message ExecuteRequest {
   google.protobuf.Struct params = 2;
   string token = 3;
   map<string, string> connection_params = 4;
+  string invocation_id = 5;
 }
 
 message AuthorizationURLRequest {
@@ -140,6 +141,7 @@ message RefreshTokenRequest {
 message GetSessionCatalogRequest {
   string token = 1;
   map<string, string> connection_params = 2;
+  string invocation_id = 3;
 }
 
 message GetSessionCatalogResponse {
@@ -202,4 +204,22 @@ service RuntimePlugin {
 service RuntimeHost {
   rpc Invoke(InvokeRequest) returns (OperationResult);
   rpc ListCapabilities(google.protobuf.Empty) returns (ListCapabilitiesResponse);
+}
+
+message ProxyHTTPRequest {
+  string invocation_id = 1;
+  string method = 2;
+  string url = 3;
+  map<string, string> headers = 4;
+  bytes body = 5;
+}
+
+message ProxyHTTPResponse {
+  int32 status_code = 1;
+  map<string, string> headers = 2;
+  bytes body = 3;
+}
+
+service ProviderHost {
+  rpc ProxyHTTP(ProxyHTTPRequest) returns (ProxyHTTPResponse);
 }

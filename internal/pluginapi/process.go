@@ -25,11 +25,12 @@ const (
 )
 
 type ExecConfig struct {
-	Command string
-	Args    []string
-	Env     map[string]string
-	Name    string
-	Config  map[string]any
+	Command      string
+	Args         []string
+	Env          map[string]string
+	Name         string
+	Config       map[string]any
+	AllowedHosts []string
 }
 
 type managedRuntime struct {
@@ -69,13 +70,20 @@ type pluginProcess struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startPluginProcess(ctx, cfg, nil)
+	var tokens sync.Map
+	proc, err := startPluginProcess(ctx, cfg, func(srv *grpc.Server) {
+		pluginapiv1.RegisterProviderHostServer(srv, &ProviderHostServer{
+			tokens:       &tokens,
+			httpClient:   newProxyHTTPClient(cfg.AllowedHosts),
+			allowedHosts: cfg.AllowedHosts,
+		})
+	}, pluginapiv1.EnvProviderHostSocket)
 	if err != nil {
 		return nil, err
 	}
 
 	client := pluginapiv1.NewProviderPluginClient(proc.conn)
-	prov, err := NewRemoteProvider(ctx, client, cfg.Name, cfg.Config, WithCloser(proc))
+	prov, err := NewRemoteProvider(ctx, client, cfg.Name, cfg.Config, WithCloser(proc), WithTokens(&tokens))
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -92,7 +100,7 @@ func NewExecutableRuntime(
 ) (core.Runtime, error) {
 	proc, err := startPluginProcess(ctx, cfg, func(srv *grpc.Server) {
 		pluginapiv1.RegisterRuntimeHostServer(srv, NewRuntimeHostServer(invoker, lister))
-	})
+	}, pluginapiv1.EnvRuntimeHostSocket)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +142,18 @@ func DialRuntimeHost(ctx context.Context) (*grpc.ClientConn, pluginapiv1.Runtime
 	return conn, pluginapiv1.NewRuntimeHostClient(conn), nil
 }
 
+func DialProviderHost(ctx context.Context) (*grpc.ClientConn, pluginapiv1.ProviderHostClient, error) {
+	socket := os.Getenv(pluginapiv1.EnvProviderHostSocket)
+	if socket == "" {
+		return nil, nil, fmt.Errorf("%s is required", pluginapiv1.EnvProviderHostSocket)
+	}
+	conn, err := dialUnixSocket(ctx, socket)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, pluginapiv1.NewProviderHostClient(conn), nil
+}
+
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	socket := os.Getenv(pluginapiv1.EnvPluginSocket)
 	if socket == "" {
@@ -170,7 +190,7 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	return err
 }
 
-func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server)) (*pluginProcess, error) {
+func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server), hostSocketEnv string) (*pluginProcess, error) {
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("plugin command is required")
 	}
@@ -190,7 +210,7 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 		lis, err := net.Listen("unix", hostSocket)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return nil, fmt.Errorf("listen on runtime host socket: %w", err)
+			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
 		srv := grpc.NewServer()
 		registerHost(srv)
@@ -199,11 +219,11 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 		go func() {
 			_ = srv.Serve(lis)
 		}()
-		env[pluginapiv1.EnvRuntimeHostSocket] = hostSocket
+		env[hostSocketEnv] = hostSocket
 	}
 
 	cmd := exec.Command(cfg.Command, cfg.Args...)
-	cmd.Env = append(os.Environ(), envSlice(env)...)
+	cmd.Env = append(safeBaseEnv(), envSlice(env)...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
@@ -311,6 +331,21 @@ func envSlice(values map[string]string) []string {
 	out := make([]string, 0, len(values))
 	for k, v := range values {
 		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+var safeEnvKeys = []string{
+	"PATH", "HOME", "TMPDIR", "LANG", "TZ",
+	"SSL_CERT_FILE", "SSL_CERT_DIR",
+}
+
+func safeBaseEnv() []string {
+	var out []string
+	for _, key := range safeEnvKeys {
+		if val, ok := os.LookupEnv(key); ok {
+			out = append(out, key+"="+val)
+		}
 	}
 	return out
 }

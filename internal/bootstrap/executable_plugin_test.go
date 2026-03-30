@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -107,7 +109,7 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 	if got.Name != "echoextrt" {
 		t.Fatalf("runtime output name = %q", got.Name)
 	}
-	if got.CapabilityCount != 1 {
+	if got.CapabilityCount != 3 {
 		t.Fatalf("runtime output capability_count = %d", got.CapabilityCount)
 	}
 	if got.ProbeStatus != http.StatusOK {
@@ -716,5 +718,190 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 
 	if _, ok := connAuth["echonoauth"]; ok {
 		t.Fatal("expected no connection auth for plugin without oauth2 auth")
+	}
+}
+
+func TestPluginProcessEnvIsolation(t *testing.T) {
+	t.Parallel()
+	bin := buildEchoPluginBinary(t)
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoext": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "USER"}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if env.Found {
+		t.Fatalf("plugin process should not see USER, but got %q", env.Value)
+	}
+
+	result, err = prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env PATH: %v", err)
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatal("plugin process should see PATH")
+	}
+}
+
+func TestPluginProcessReceivesProviderHostSocket(t *testing.T) {
+	t.Parallel()
+	bin := buildEchoPluginBinary(t)
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoext": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "GESTALT_PROVIDER_HOST_SOCKET"}, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatal("plugin process should receive GESTALT_PROVIDER_HOST_SOCKET")
+	}
+}
+
+func TestPluginProxyHTTPRejectsHTTP(t *testing.T) {
+	t.Parallel()
+	bin := buildEchoPluginBinary(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoext": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "proxy_fetch", map[string]any{
+		"url": upstream.URL + "/test",
+	}, "test-token")
+	if err == nil {
+		t.Fatal("expected ProxyHTTP to reject http:// URL")
+	}
+	if !strings.Contains(err.Error(), "only https is permitted") {
+		t.Fatalf("expected https rejection, got: %v", err)
+	}
+}
+
+func TestPluginProxyHTTPBlocksPrivateIPs(t *testing.T) {
+	t.Parallel()
+	bin := buildEchoPluginBinary(t)
+
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoext": {
+				Plugin: &config.ExecutablePluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	_, err = prov.Execute(context.Background(), "proxy_fetch", map[string]any{
+		"url": upstream.URL + "/data",
+	}, "test-token")
+	if err == nil {
+		t.Fatal("expected ProxyHTTP to reject loopback IP")
+	}
+	if !strings.Contains(err.Error(), "private/reserved") {
+		t.Fatalf("expected private IP rejection, got: %v", err)
 	}
 }
