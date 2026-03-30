@@ -59,6 +59,9 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
+	if id := req.GetInvocationId(); id != "" {
+		ctx = WithInvocationID(ctx, id)
+	}
 	result, err := s.provider.Execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
@@ -118,6 +121,9 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1
 	}
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
+	}
+	if id := req.GetInvocationId(); id != "" {
+		ctx = WithInvocationID(ctx, id)
 	}
 	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
 	if err != nil {

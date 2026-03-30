@@ -704,3 +704,105 @@ var RuntimeHost_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/plugin.proto",
 }
+
+const (
+	ProviderHost_ProxyHTTP_FullMethodName = "/gestalt.plugin.v1.ProviderHost/ProxyHTTP"
+)
+
+// ProviderHostClient is the client API for ProviderHost service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ProviderHostClient interface {
+	ProxyHTTP(ctx context.Context, in *ProxyHTTPRequest, opts ...grpc.CallOption) (*ProxyHTTPResponse, error)
+}
+
+type providerHostClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewProviderHostClient(cc grpc.ClientConnInterface) ProviderHostClient {
+	return &providerHostClient{cc}
+}
+
+func (c *providerHostClient) ProxyHTTP(ctx context.Context, in *ProxyHTTPRequest, opts ...grpc.CallOption) (*ProxyHTTPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProxyHTTPResponse)
+	err := c.cc.Invoke(ctx, ProviderHost_ProxyHTTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ProviderHostServer is the server API for ProviderHost service.
+// All implementations must embed UnimplementedProviderHostServer
+// for forward compatibility.
+type ProviderHostServer interface {
+	ProxyHTTP(context.Context, *ProxyHTTPRequest) (*ProxyHTTPResponse, error)
+	mustEmbedUnimplementedProviderHostServer()
+}
+
+// UnimplementedProviderHostServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedProviderHostServer struct{}
+
+func (UnimplementedProviderHostServer) ProxyHTTP(context.Context, *ProxyHTTPRequest) (*ProxyHTTPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProxyHTTP not implemented")
+}
+func (UnimplementedProviderHostServer) mustEmbedUnimplementedProviderHostServer() {}
+func (UnimplementedProviderHostServer) testEmbeddedByValue()                      {}
+
+// UnsafeProviderHostServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ProviderHostServer will
+// result in compilation errors.
+type UnsafeProviderHostServer interface {
+	mustEmbedUnimplementedProviderHostServer()
+}
+
+func RegisterProviderHostServer(s grpc.ServiceRegistrar, srv ProviderHostServer) {
+	// If the following call panics, it indicates UnimplementedProviderHostServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ProviderHost_ServiceDesc, srv)
+}
+
+func _ProviderHost_ProxyHTTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProxyHTTPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderHostServer).ProxyHTTP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderHost_ProxyHTTP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderHostServer).ProxyHTTP(ctx, req.(*ProxyHTTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ProviderHost_ServiceDesc is the grpc.ServiceDesc for ProviderHost service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ProviderHost_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.ProviderHost",
+	HandlerType: (*ProviderHostServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProxyHTTP",
+			Handler:    _ProviderHost_ProxyHTTP_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/plugin.proto",
+}

@@ -35,7 +35,7 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return pluginapi.ServeProvider(ctx, echo.New())
+		return pluginapi.ServeProvider(ctx, newProxyProvider(echo.New()))
 	case "runtime":
 		return pluginapi.ServeRuntime(ctx, &echoRuntimePlugin{})
 	default:

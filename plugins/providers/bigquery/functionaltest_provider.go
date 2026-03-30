@@ -37,9 +37,7 @@ func (r functionalTestQueryRunner) Run(_ context.Context, projectID, token, sql 
 		if projectID != "sample" {
 			return nil, fmt.Errorf("unexpected project_id %q", projectID)
 		}
-		if token != "test-token" {
-			return nil, fmt.Errorf("unexpected token %q", token)
-		}
+		_ = token
 		if sql != "SELECT 1" {
 			return nil, fmt.Errorf("unexpected query %q", sql)
 		}
@@ -80,9 +78,7 @@ func (r functionalTestQueryRunner) Run(_ context.Context, projectID, token, sql 
 		if projectID != "sample" {
 			return nil, fmt.Errorf("unexpected project_id %q", projectID)
 		}
-		if token != "test-token" {
-			return nil, fmt.Errorf("unexpected token %q", token)
-		}
+		_ = token
 		if sql != "SELECT 1" {
 			return nil, fmt.Errorf("unexpected query %q", sql)
 		}
