@@ -236,7 +236,7 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 			surface.mcpConnection[name] = config.PluginConnectionName
 			if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
 				if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
-					surface.toolPrefixes[name] = src.Plugin
+					surface.toolPrefixes[name] = src.Plugin + "_"
 				}
 			}
 		} else if intg.API != nil || intg.MCP != nil {

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/valon-technologies/gestalt/core"
+	"github.com/valon-technologies/gestalt/core/catalog"
 	"github.com/valon-technologies/gestalt/core/crypto"
 	"github.com/valon-technologies/gestalt/internal/config"
 	"github.com/valon-technologies/gestalt/internal/invocation"
@@ -762,7 +763,38 @@ func (f *filteredProvider) Execute(ctx context.Context, op string, params map[st
 	return f.Provider.Execute(ctx, inner, params, token)
 }
 
-func newFilteredProvider(inner core.Provider, allowed map[string]*config.OperationOverride) (*filteredProvider, error) {
+func (f *filteredProvider) SupportsManualAuth() bool {
+	if mp, ok := f.Provider.(core.ManualProvider); ok {
+		return mp.SupportsManualAuth()
+	}
+	return false
+}
+
+func (f *filteredProvider) Catalog() *catalog.Catalog {
+	cp, ok := f.Provider.(core.CatalogProvider)
+	if !ok {
+		return nil
+	}
+	return cp.Catalog()
+}
+
+func (f *filteredProvider) AuthTypes() []string {
+	if atl, ok := f.Provider.(core.AuthTypeLister); ok {
+		return atl.AuthTypes()
+	}
+	return nil
+}
+
+type filteredSessionProvider struct {
+	*filteredProvider
+	scp core.SessionCatalogProvider
+}
+
+func (f *filteredSessionProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	return f.scp.CatalogForRequest(ctx, token)
+}
+
+func newFilteredProvider(inner core.Provider, allowed map[string]*config.OperationOverride) (core.Provider, error) {
 	allOps := inner.ListOperations()
 	opSet := make(map[string]struct{}, len(allOps))
 	for _, op := range allOps {
@@ -810,11 +842,16 @@ func newFilteredProvider(inner core.Provider, allowed map[string]*config.Operati
 		filtered = append(filtered, exposed)
 	}
 
-	return &filteredProvider{
+	fp := &filteredProvider{
 		Provider: inner,
 		ops:      filtered,
 		allowed:  aliasMap,
-	}, nil
+	}
+
+	if scp, ok := inner.(core.SessionCatalogProvider); ok {
+		return &filteredSessionProvider{filteredProvider: fp, scp: scp}, nil
+	}
+	return fp, nil
 }
 
 func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFactory, error) {
