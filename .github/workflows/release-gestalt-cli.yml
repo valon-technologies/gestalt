@@ -53,11 +53,17 @@ jobs:
     timeout-minutes: 60
     env:
       REGISTRY_IMAGE: valontechnologies/gestalt
+      IMAGE_SOURCE: https://github.com/${{ github.repository }}
+      IMAGE_DOCUMENTATION: https://docs.toolshed.peachstreet.dev
+      IMAGE_URL: https://hub.docker.com/r/valontechnologies/gestalt
     steps:
       - uses: actions/checkout@v6
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Compute image metadata
+        id: meta
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -74,6 +80,13 @@ jobs:
           tags: |
             ${{ env.REGISTRY_IMAGE }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY_IMAGE }}:latest
+          build-args: |
+            GESTALT_VERSION=${{ steps.version.outputs.version }}
+            GESTALT_REVISION=${{ github.sha }}
+            GESTALT_CREATED=${{ steps.meta.outputs.created }}
+            GESTALT_SOURCE=${{ env.IMAGE_SOURCE }}
+            GESTALT_DOCUMENTATION=${{ env.IMAGE_DOCUMENTATION }}
+            GESTALT_URL=${{ env.IMAGE_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
           sbom: true
@@ -86,6 +99,14 @@ jobs:
           exit-code: '1'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
+          repository: ${{ env.REGISTRY_IMAGE }}
+          short-description: CLI client for managing Gestalt integrations, authentication, and operations.
+          readme-filepath: docs/dockerhub/gestalt.md
 
   update-formula:
     name: Update Homebrew Formula
