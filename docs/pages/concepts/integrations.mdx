@@ -37,15 +37,17 @@ This one block answers four questions:
 
 ## Integration Patterns
 
-Every integration follows one of three patterns:
+Every integration follows one of these patterns:
 
 | Pattern | Structure | When to use |
 | --- | --- | --- |
 | **Declarative** | `connections` + one or both of `api` and `mcp` | The upstream has an OpenAPI spec, GraphQL endpoint, or MCP server. |
 | **Plugin-only** | Just a `plugin` block | Custom execution logic that cannot be expressed declaratively. |
-| **Hybrid** | `plugin` + `mcp` | A plugin provider combined with an upstream MCP surface. |
+| **Plugin + API** | `plugin` + `api` + `connections` | A plugin for custom operations combined with an API surface for REST/GraphQL operations. |
+| **Plugin + MCP** | `plugin` + `mcp` | A plugin provider combined with an upstream MCP surface. |
+| **Plugin + API + MCP** | `plugin` + `api` + `mcp` + `connections` | All three surfaces composed together. |
 
-Plugin integrations cannot declare an `api` surface. Only plugin + `mcp` composition is supported.
+When composing a plugin with `api` or `connections`, the plugin must specify `plugin.connection` to reference a connection from the shared pool.
 
 ## Connections
 
@@ -202,7 +204,43 @@ See the [Config File](/reference/config-file) reference for the full `plugin` fi
 
 ## Hybrid Integrations
 
-A hybrid integration composes a plugin provider with an upstream MCP surface. The plugin handles execution logic while the MCP surface exposes additional tools.
+A hybrid integration composes a plugin with other surfaces. The plugin handles custom execution logic while the other surfaces provide REST, GraphQL, or MCP operations.
+
+### Plugin + API
+
+Compose a plugin binary with an API surface when the upstream has an OpenAPI spec for most operations but a few operations need custom code (SDK calls, data transformation, etc.).
+
+```yaml
+integrations:
+  bigquery:
+    display_name: BigQuery
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          client_id: ${GOOGLE_CLIENT_ID}
+          client_secret: ${GOOGLE_CLIENT_SECRET}
+          authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+          token_url: https://oauth2.googleapis.com/token
+          scopes: [https://www.googleapis.com/auth/bigquery]
+    api:
+      type: rest
+      openapi: https://bigquery.googleapis.com/bigquery/v2/openapi.json
+      connection: default
+      allowed_operations:
+        list_datasets: {}
+        get_dataset: {}
+    plugin:
+      source: github.com/valon-technologies/gestalt/bigquery
+      connection: default
+```
+
+Both surfaces must share the same connection (`plugin.connection` and `api.connection` must reference the same name), so the user authenticates once. The API surface provides REST operations and the plugin binary provides custom operations like SQL query execution.
+
+Operation names must be unique across all surfaces. If an API operation and a plugin operation share a name, the server rejects the configuration at startup.
+
+### Plugin + MCP
 
 ```yaml
 integrations:
@@ -217,7 +255,11 @@ integrations:
 
 Setting `mcp.connection` to `plugin` reuses the plugin's OAuth token for the MCP surface. Alternatively, declare explicit `connections` and reference one from `mcp.connection`.
 
-Hybrid integrations cannot declare an `api` surface. If `connections` are declared, they must be paired with an `mcp` surface.
+### Shared Connections
+
+When `plugin.connection` is set, the plugin uses a connection from the integration's shared pool instead of building a separate connection from the plugin manifest's auth config. This enables single-auth-flow integrations where all surfaces share one token.
+
+When `plugin.connection` is omitted, the plugin falls back to its manifest's auth config (the default behavior for plugin-only integrations).
 
 ## Metadata
 

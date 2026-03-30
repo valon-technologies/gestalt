@@ -253,7 +253,7 @@ func TestValidateConfigRejectsPluginHybridMisconfiguration(t *testing.T) {
 		wantContain string
 	}{
 		{
-			name: "plugin with api is rejected",
+			name: "plugin with api requires plugin.connection",
 			body: `integrations:
   sample:
     plugin:
@@ -263,7 +263,7 @@ func TestValidateConfigRejectsPluginHybridMisconfiguration(t *testing.T) {
       openapi: https://example.com/spec.json
       connection: default
 `,
-			wantContain: "cannot compose plugin with api",
+			wantContain: "plugin.connection is required when composing plugin with api",
 		},
 	}
 

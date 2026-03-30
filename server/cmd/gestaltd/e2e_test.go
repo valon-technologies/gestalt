@@ -486,3 +486,105 @@ func waitForEndpoint(t *testing.T, url string, timeout time.Duration) {
 	}
 	t.Fatalf("%s did not return 200 within %s", url, timeout)
 }
+
+func TestE2EHybridAPIPluginIntegration(t *testing.T) {
+	t.Parallel()
+
+	upstreamAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"1","name":"test"}]}`))
+	}))
+	t.Cleanup(upstreamAPI.Close)
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	port := allocateTestPort(t)
+	cfgPath := writeHybridAPIPluginConfig(t, dir, archivePath, upstreamAPI.URL, port)
+
+	bundleDir := filepath.Join(dir, "bundle")
+	out, err := exec.Command(gestaltdBin, "bundle", "--config", cfgPath, "--output", bundleDir).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd bundle: %v\n%s", err, out)
+	}
+
+	bundledCfg := filepath.Join(bundleDir, "config.yaml")
+	out, err = exec.Command(gestaltdBin, "validate", "--config", bundledCfg).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd validate failed for hybrid api+plugin config: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected 'config ok' in validate output, got: %s", out)
+	}
+
+	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", bundledCfg)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start serve: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(os.Interrupt)
+		_ = cmd.Wait()
+	})
+
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	waitForReady(t, baseURL, 30*time.Second)
+}
+
+func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef, upstreamURL string, port int) string {
+	t.Helper()
+
+	openapiSpec := fmt.Sprintf(`{
+  "openapi": "3.0.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "list_items",
+        "summary": "List items",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, upstreamURL)
+	specPath := filepath.Join(dir, "openapi.json")
+	if err := os.WriteFile(specPath, []byte(openapiSpec), 0644); err != nil {
+		t.Fatalf("write openapi spec: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  port: %d
+  encryption_key: test-hybrid-key
+integrations:
+  hybrid:
+    display_name: Hybrid Test
+    connections:
+      default:
+        mode: none
+    api:
+      type: rest
+      openapi: %s
+      connection: default
+    plugin:
+      package: %s
+      connection: default
+`, filepath.Join(dir, "gestalt.db"), port, specPath, packageRef)
+
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return cfgPath
+}
