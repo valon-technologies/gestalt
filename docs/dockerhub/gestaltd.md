@@ -187,7 +187,7 @@ RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
 
 ## Learn more
 
-- Docs: https://gestalt.run
-- CLI reference: https://gestalt.run/reference/cli
-- Deployment docs: https://gestalt.run/deploy
+- Docs: https://docs.toolshed.peachstreet.dev
+- CLI reference: https://docs.toolshed.peachstreet.dev/reference/cli
+- Deployment docs: https://docs.toolshed.peachstreet.dev/deploy
 - Source: https://github.com/valon-technologies/gestalt
