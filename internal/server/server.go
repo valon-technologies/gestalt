@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/internal/invocation"
 	"github.com/valon-technologies/gestalt/internal/principal"
 	"github.com/valon-technologies/gestalt/internal/registry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // ReadinessChecker reports whether the server is ready to handle requests.
@@ -21,6 +22,7 @@ type ReadinessChecker func() string
 
 type Server struct {
 	router             chi.Router
+	handler            http.Handler
 	auth               core.AuthProvider
 	datastore          core.Datastore
 	providers          *registry.PluginMap[core.Provider]
@@ -81,8 +83,10 @@ func New(cfg Config) (*Server, error) {
 	resolver := principal.NewResolver(cfg.Auth, cfg.Datastore)
 	noAuth := cfg.Auth.Name() == "none"
 
+	router := chi.NewRouter()
 	s := &Server{
-		router:            chi.NewRouter(),
+		router:            router,
+		handler:           otelhttp.NewHandler(router, "gestaltd"),
 		auth:              cfg.Auth,
 		datastore:         cfg.Datastore,
 		providers:         cfg.Providers,
@@ -119,5 +123,5 @@ func (s *Server) stagedConnectionStore() (core.StagedConnectionStore, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+	s.handler.ServeHTTP(w, r)
 }
