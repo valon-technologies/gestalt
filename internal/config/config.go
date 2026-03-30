@@ -105,6 +105,7 @@ type ExecutablePluginDef struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
 	ResolvedManifestPath string `yaml:"-"`
+	IsDeclarative        bool   `yaml:"-"`
 }
 
 func (p *ExecutablePluginDef) HasManagedArtifacts() bool {

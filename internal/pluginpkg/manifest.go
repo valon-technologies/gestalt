@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -12,11 +14,73 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 const ManifestFile = "plugin.json"
 
+var ManifestFiles = []string{"plugin.json", "plugin.yaml", "plugin.yml"}
+
+func FindManifestFile(dir string) (string, error) {
+	for _, name := range ManifestFiles {
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("no manifest file found in %s (tried %s)", dir, strings.Join(ManifestFiles, ", "))
+}
+
+func isYAMLFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".yaml" || ext == ".yml"
+}
+
+func yamlToJSON(data []byte) ([]byte, error) {
+	var doc any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse manifest YAML: %w", err)
+	}
+	doc = normalizeYAML(doc)
+	return json.Marshal(doc)
+}
+
+func normalizeYAML(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, v := range val {
+			out[k] = normalizeYAML(v)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, v := range val {
+			out[i] = normalizeYAML(v)
+		}
+		return out
+	default:
+		return val
+	}
+}
+
 func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
+	return DecodeManifestFormat(data, "json")
+}
+
+func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
+	jsonData := data
+	if format == "yaml" {
+		var err error
+		jsonData, err = yamlToJSON(data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return decodeManifestJSON(jsonData)
+}
+
+func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
 	var header struct {
 		SchemaVersion int `json:"schema_version"`
 	}
@@ -95,16 +159,18 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
 	}
 
-	hasExecutableKinds := false
+	isDeclarative := manifest.Provider.IsDeclarative()
+
+	needsArtifacts := false
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider || kind == pluginmanifestv1.KindRuntime {
-			hasExecutableKinds = true
+		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && !isDeclarative) {
+			needsArtifacts = true
 			break
 		}
 	}
 
 	var artifactPaths map[string]struct{}
-	if hasExecutableKinds {
+	if needsArtifacts {
 		artifactPaths = make(map[string]struct{}, len(manifest.Artifacts))
 		artifactPlatforms := make(map[string]struct{}, len(manifest.Artifacts))
 		for _, artifact := range manifest.Artifacts {
@@ -130,19 +196,25 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 			if manifest.Provider == nil {
 				return fmt.Errorf("provider metadata is required when kind %q is present", pluginmanifestv1.KindProvider)
 			}
-			if manifest.Provider.Protocol.Min > manifest.Provider.Protocol.Max {
-				return fmt.Errorf("provider.protocol.min must be <= provider.protocol.max")
+			if err := validateProviderAuth(manifest.Provider.Auth); err != nil {
+				return err
 			}
 			if manifest.Provider.ConfigSchemaPath != "" {
 				if err := validateRelativePackagePath(manifest.Provider.ConfigSchemaPath, "provider config schema path"); err != nil {
 					return err
 				}
 			}
-			if err := validateProviderAuth(manifest.Provider.Auth); err != nil {
-				return err
-			}
-			if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
-				return err
+			if isDeclarative {
+				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
+					return err
+				}
+			} else {
+				if manifest.Provider.Protocol.Min > manifest.Provider.Protocol.Max {
+					return fmt.Errorf("provider.protocol.min must be <= provider.protocol.max")
+				}
+				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
+					return err
+				}
 			}
 		case pluginmanifestv1.KindRuntime:
 			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths); err != nil {
@@ -229,9 +301,62 @@ func validateProviderAuth(auth *pluginmanifestv1.ProviderAuth) error {
 		if auth.TokenURL == "" {
 			return fmt.Errorf("provider.auth.token_url is required for oauth2")
 		}
-	case pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
+	case pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
 	default:
 		return fmt.Errorf("unsupported provider.auth.type %q", auth.Type)
+	}
+	return nil
+}
+
+var validParamIn = map[string]bool{
+	"query": true,
+	"body":  true,
+	"path":  true,
+}
+
+var validHTTPMethods = map[string]bool{
+	"GET":    true,
+	"POST":   true,
+	"PUT":    true,
+	"PATCH":  true,
+	"DELETE": true,
+}
+
+func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
+	if provider.BaseURL == "" {
+		return fmt.Errorf("provider.base_url is required for declarative providers")
+	}
+	seen := make(map[string]struct{}, len(provider.Operations))
+	for i, op := range provider.Operations {
+		if op.Name == "" {
+			return fmt.Errorf("provider.operations[%d].name is required", i)
+		}
+		if _, exists := seen[op.Name]; exists {
+			return fmt.Errorf("duplicate operation name %q", op.Name)
+		}
+		seen[op.Name] = struct{}{}
+		if !validHTTPMethods[op.Method] {
+			return fmt.Errorf("provider.operations[%d].method %q is not a valid HTTP method", i, op.Method)
+		}
+		if op.Path == "" {
+			return fmt.Errorf("provider.operations[%d].path is required", i)
+		}
+		seenParams := make(map[string]struct{}, len(op.Parameters))
+		for j, param := range op.Parameters {
+			if param.Name == "" {
+				return fmt.Errorf("provider.operations[%d].parameters[%d].name is required", i, j)
+			}
+			if _, dup := seenParams[param.Name]; dup {
+				return fmt.Errorf("provider.operations[%d] has duplicate parameter name %q", i, param.Name)
+			}
+			seenParams[param.Name] = struct{}{}
+			if !validParamIn[param.In] {
+				return fmt.Errorf("provider.operations[%d].parameters[%d].in %q must be query, body, or path", i, j, param.In)
+			}
+			if param.In == "path" && !strings.Contains(op.Path, "{"+param.Name+"}") {
+				return fmt.Errorf("provider.operations[%d].parameters[%d] %q declared as path param but %q has no {%s} placeholder", i, j, param.Name, op.Path, param.Name)
+			}
+		}
 	}
 	return nil
 }
