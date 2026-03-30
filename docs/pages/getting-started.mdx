@@ -24,6 +24,8 @@ The `valontechnologies/gestaltd` image ships `gestaltd` and supports both `amd64
 docker run -p 8080:8080 -v ./gestalt.yaml:/etc/gestalt/config.yaml valontechnologies/gestaltd:latest
 ```
 
+The container starts with `serve --locked` by default. That direct mount pattern works for static configs that do not require prepared artifacts. If your config references remote OpenAPI or GraphQL sources, or `plugin.package`, bundle first or bake the prepared state into a derived image.
+
 ## 1. Run `gestaltd` With No Config
 
 ```sh
@@ -77,19 +79,16 @@ datastore:
     path: ./gestalt.db
 
 integrations:
-  petstore:
-    display_name: Swagger Petstore
-    description: Public example API
+  github:
+    display_name: GitHub REST API
+    description: Public GitHub REST surface
     connections:
       default:
         mode: none
     api:
       type: rest
-      openapi: https://petstore3.swagger.io/api/v3/openapi.json
+      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
       connection: default
-      allowed_operations:
-        findPetsByStatus: List pets by status
-        getPetById: Fetch a pet by id
 ```
 
 This is the smallest useful production-shaped config:
@@ -109,7 +108,7 @@ gestaltd validate --config ./bundle/gestalt.yaml
 `bundle` resolves remote provider inputs into a self-contained output directory. For the config above, the bundle contains:
 
 - `gestalt.lock.json`
-- `.gestalt/providers/petstore.json`
+- `.gestalt/providers/github.json`
 
 ## 5. Start From Locked State
 

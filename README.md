@@ -8,7 +8,7 @@ Gestalt is a unified API gateway for integrations. It loads a YAML config, conne
 gestaltd
 ```
 
-Bare `gestaltd` auto-generates a local config, boots with local auth and SQLite, and starts serving. No setup needed.
+Bare `gestaltd` auto-generates a local config, boots with `auth.provider: none` and SQLite, and starts serving. No setup needed.
 
 ## Production Deployment
 
@@ -31,13 +31,21 @@ gestaltd serve --locked --config ./bundle/config.yaml
 
 ## Docker
 
+The published `valontechnologies/gestaltd` image:
+
+- exposes port `8080`
+- serves the API, embedded UI, `/health`, `/ready`, and `/mcp`
+- defaults to `serve --locked --config /etc/gestalt/config.yaml`
+- expects you to mount or bake a config file before startup
+- also publishes `:builder` and `:debug` variants
+
 ```dockerfile
-FROM valontechnologies/gestaltd:latest AS build
+FROM valontechnologies/gestaltd:builder AS bundle
 COPY config.yaml /src/config.yaml
 RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
 
 FROM valontechnologies/gestaltd:latest
-COPY --from=build /app/ /app/
+COPY --from=bundle /app/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 

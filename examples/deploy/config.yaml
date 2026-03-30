@@ -1,0 +1,13 @@
+server:
+  port: 8080
+  encryption_key: example-not-for-production
+
+auth:
+  provider: none
+
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
+
+integrations: {}

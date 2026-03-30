@@ -1,7 +1,7 @@
-FROM valontechnologies/gestaltd:latest AS build
+FROM valontechnologies/gestaltd:builder AS bundle
 COPY config.yaml /src/config.yaml
 RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
 
 FROM valontechnologies/gestaltd:latest
-COPY --from=build /app/ /app/
+COPY --from=bundle /app/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]

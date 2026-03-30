@@ -24,8 +24,8 @@ integrations:
       openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
       connection: default
       allowed_operations:
-        repos_listForAuthenticatedUser: List repositories
-        issues_listForAuthenticatedUser: List assigned issues
+        repos/list-for-authenticated-user:
+        issues/list-for-authenticated-user:
 ```
 
 `mcp_tool_prefix` controls tool naming so that tools from different integrations do not collide.

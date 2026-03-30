@@ -217,16 +217,27 @@ type MCPDef struct {
 }
 
 func Load(path string) (*Config, error) {
-	return LoadWithMapping(path, os.Getenv)
+	return LoadWithLookup(path, os.LookupEnv)
 }
 
 func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
+	return LoadWithLookup(path, func(key string) (string, bool) {
+		// Preserve the legacy os.Expand-style contract for callers that only
+		// provide a string mapping: the mapped value wins even when it is empty.
+		return getenv(key), true
+	})
+}
+
+func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved := os.Expand(string(data), getenv)
+	resolved, err := expandEnvVariables(string(data), lookup)
+	if err != nil {
+		return nil, err
+	}
 
 	var cfg Config
 	dec := yaml.NewDecoder(strings.NewReader(resolved))
@@ -244,6 +255,32 @@ func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func expandEnvVariables(input string, lookup func(string) (string, bool)) (string, error) {
+	var expandErr error
+	resolved := os.Expand(input, func(key string) string {
+		if expandErr != nil {
+			return ""
+		}
+		if val, ok := lookup(key); ok {
+			return val
+		}
+		filePath, ok := lookup(key + "_FILE")
+		if !ok || filePath == "" {
+			return ""
+		}
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			expandErr = fmt.Errorf("resolving %s_FILE: %w", key, err)
+			return ""
+		}
+		return strings.TrimRight(string(data), "\r\n")
+	})
+	if expandErr != nil {
+		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+	}
+	return resolved, nil
 }
 
 func applyDefaults(cfg *Config) {

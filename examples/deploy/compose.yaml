@@ -1,0 +1,11 @@
+services:
+  gestaltd:
+    image: valontechnologies/gestaltd:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - gestalt-data:/data
+
+volumes:
+  gestalt-data:

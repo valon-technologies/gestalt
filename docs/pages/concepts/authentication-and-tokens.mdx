@@ -9,17 +9,29 @@ Keeping those layers separate is one of the core design choices in `gestaltd`.
 
 ## Platform Auth Providers
 
-Gestalt currently ships three platform auth providers:
+Gestalt currently ships four platform auth providers:
 
 | Provider | When to use it |
 | --- | --- |
+| `none` | Local development, demos, or simple single-user deployments with no sign-in. |
 | `local` | Local development, no external identity provider required. |
 | `google` | Google Workspace or Google account login. |
 | `oidc` | Any OIDC-compatible provider such as Okta, Auth0, Azure AD, or Keycloak. |
 
+### `none`
+
+`none` is the auth provider used by the auto-generated out-of-the-box config.
+
+```yaml
+auth:
+  provider: none
+```
+
+All requests are treated as coming from a single anonymous user.
+
 ### `local`
 
-`local` is the auth provider used by the auto-generated out-of-the-box config.
+`local` is the simplest built-in authenticated provider.
 
 ```yaml
 auth:

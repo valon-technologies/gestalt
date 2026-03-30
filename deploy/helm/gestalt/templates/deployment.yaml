@@ -49,11 +49,13 @@ spec:
               type: RuntimeDefault
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/sh", "-c"]
+          command: ["/gestaltd"]
           args:
-            - |
-              cp /etc/gestalt-config/config.yaml /etc/gestalt/config.yaml
-              /gestaltd init --config /etc/gestalt/config.yaml
+            - bundle
+            - --config
+            - /etc/gestalt-config/config.yaml
+            - --output
+            - /etc/gestalt
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}

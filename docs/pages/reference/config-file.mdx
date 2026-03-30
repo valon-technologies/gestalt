@@ -21,6 +21,7 @@ ui: {}
 Before you get into individual fields, these global rules matter:
 
 - `${ENV_VAR}` expansion happens before YAML decode
+- if `${ENV_VAR}` is unset and `ENV_VAR_FILE` exists, Gestalt reads the value from that file
 - unknown YAML fields are rejected
 - `server.port` defaults to `8080`
 - `secrets.provider` defaults to `env`
@@ -43,6 +44,15 @@ server:
 | `encryption_key` | yes | Root deployment secret used for encryption and derived session material. |
 
 ## `auth`
+
+### `none`
+
+```yaml
+auth:
+  provider: none
+```
+
+`none` disables platform authentication entirely. Every request is treated as coming from a single anonymous user. That is useful for local development, demos, and simple single-user setups.
 
 ### `local`
 
@@ -182,8 +192,8 @@ integrations:
       openapi: https://raw.githubusercontent.com/.../api.github.com.json
       connection: default
       allowed_operations:
-        repos_listForAuthenticatedUser: List repositories
-        issues_listForAuthenticatedUser: List issues
+        repos/list-for-authenticated-user:
+        issues/list-for-authenticated-user:
 ```
 
 | Field | Notes |
@@ -226,7 +236,7 @@ api:
   openapi: https://example.com/openapi.json
   connection: default
   allowed_operations:
-    listThings: List things
+    listThings:
 ```
 
 | Field | Notes |
@@ -235,7 +245,7 @@ api:
 | `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
 | `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
 | `connection` | References a named connection in the same integration. |
-| `allowed_operations` | Either a YAML list of names or a YAML map of name to description override. |
+| `allowed_operations` | YAML map of operation name to an optional override object. Use a bare key to keep the upstream description. |
 
 ### `mcp`
 
