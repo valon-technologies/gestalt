@@ -124,16 +124,28 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 	if err != nil {
 		slog.Warn("mcpoauth: reading registration failed", "auth_server", authServerURL, "error", err)
 	}
-	if existing != nil {
+
+	if existing != nil && !existing.Expired() {
 		return existing, nil
 	}
 
 	if md.RegistrationEndpoint == "" {
+		if existing != nil {
+			return existing, nil
+		}
 		return nil, nil
+	}
+
+	if existing != nil {
+		slog.Info("mcpoauth: re-registering (expired)", "auth_server", authServerURL)
 	}
 
 	reg, err := RegisterClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod())
 	if err != nil {
+		if existing != nil {
+			slog.Warn("mcpoauth: re-registration failed, using existing", "auth_server", authServerURL, "error", err)
+			return existing, nil
+		}
 		return nil, fmt.Errorf("mcp oauth DCR for %s: %w", h.cfg.MCPURL, err)
 	}
 
@@ -151,6 +163,30 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 	}
 
 	return reg, nil
+}
+
+func (h *Handler) ClearRegistration() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var authServerURL string
+	if h.metadata != nil {
+		authServerURL = h.metadata.AuthServerURL
+	}
+	h.upstream = nil
+	h.metadata = nil
+	h.discoveredAt = time.Time{}
+
+	if h.cfg.Store == nil || authServerURL == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := h.cfg.Store.DeleteRegistration(ctx, authServerURL, h.cfg.RedirectURL); err != nil {
+		slog.Warn("mcpoauth: deleting registration failed", "auth_server", authServerURL, "error", err)
+	}
 }
 
 // AuthorizationURL discards the PKCE verifier. Use StartOAuth when the

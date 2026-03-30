@@ -41,6 +41,7 @@ func (dialect) RegistrationDDL() string {
 		redirect_uri TEXT NOT NULL,
 		client_id TEXT NOT NULL,
 		client_secret_encrypted TEXT,
+		expires_at TIMESTAMPTZ,
 		authorization_endpoint TEXT NOT NULL,
 		token_endpoint TEXT NOT NULL,
 		scopes_supported TEXT,

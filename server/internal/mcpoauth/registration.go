@@ -17,10 +17,18 @@ type Registration struct {
 	RedirectURI           string
 	ClientID              string
 	ClientSecret          string // empty for public clients
+	ExpiresAt             *time.Time
 	AuthorizationEndpoint string
 	TokenEndpoint         string
 	ScopesSupported       string // JSON array
 	DiscoveredAt          time.Time
+}
+
+func (r *Registration) Expired() bool {
+	if r.ExpiresAt != nil {
+		return time.Now().After(*r.ExpiresAt)
+	}
+	return false
 }
 
 func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, tokenAuthMethod string) (*Registration, error) {
@@ -73,9 +81,16 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	}
 	clientSecret, _ := result["client_secret"].(string)
 
-	return &Registration{
+	reg := &Registration{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		DiscoveredAt: time.Now(),
-	}, nil
+	}
+
+	if expiresAt, ok := result["client_secret_expires_at"].(float64); ok && expiresAt > 0 {
+		t := time.Unix(int64(expiresAt), 0)
+		reg.ExpiresAt = &t
+	}
+
+	return reg, nil
 }
