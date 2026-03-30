@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/valon-technologies/gestalt/core"
 )
 
 const discoveryTimeout = 10 * time.Second
@@ -87,7 +89,7 @@ func probeForResourceMetadata(ctx context.Context, client *http.Client, mcpURL s
 	if err != nil {
 		return "", fmt.Errorf("creating probe request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", core.ContentTypeJSON)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -227,7 +229,7 @@ func fetchJSON(ctx context.Context, client *http.Client, rawURL string) (map[str
 	if err != nil {
 		return nil, fmt.Errorf("creating request for %s: %w", rawURL, err)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", core.ContentTypeJSON)
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -118,7 +118,7 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 	case def.ErrorMessagePath != "":
 		msgPath := def.ErrorMessagePath
 		base.CheckResponse = func(status int, body []byte) error {
-			if status < 400 {
+			if status < http.StatusBadRequest {
 				return nil
 			}
 			var data map[string]any
@@ -371,7 +371,7 @@ func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
 	return func(status int, body []byte) error {
 		var data map[string]any
 		if err := json.Unmarshal(body, &data); err != nil {
-			if status >= 400 {
+			if status >= http.StatusBadRequest {
 				return fmt.Errorf("HTTP %d: %s", status, body)
 			}
 			return nil
@@ -382,7 +382,7 @@ func buildResponseChecker(rcd *ResponseCheckDef) apiexec.ResponseChecker {
 			}
 			return nil
 		}
-		if status >= 400 && rcd.ErrorMessagePath != "" {
+		if status >= http.StatusBadRequest && rcd.ErrorMessagePath != "" {
 			if msg, ok := extractJSONPath(data, rcd.ErrorMessagePath); ok {
 				return fmt.Errorf("HTTP %d: %s", status, msg)
 			}

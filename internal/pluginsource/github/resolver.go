@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 )
@@ -17,7 +18,6 @@ const (
 	DefaultBaseURL      = "https://api.github.com"
 	headerAccept        = "Accept"
 	headerAuthorization = "Authorization"
-	acceptJSON          = "application/json"
 	acceptOctetStream   = "application/octet-stream"
 	envGitHubToken      = "GITHUB_TOKEN"
 	authTokenPrefix     = "token "
@@ -85,7 +85,7 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 	if err != nil {
 		return nil, fmt.Errorf("create release request: %w", err)
 	}
-	req.Header.Set(headerAccept, acceptJSON)
+	req.Header.Set(headerAccept, core.ContentTypeJSON)
 	if token != "" {
 		req.Header.Set(headerAuthorization, authTokenPrefix+token)
 	}

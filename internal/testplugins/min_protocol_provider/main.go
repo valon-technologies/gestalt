@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -44,7 +45,7 @@ func (s *minProtocolProviderServer) ListOperations(context.Context, *emptypb.Emp
 			{
 				Name:        "ping",
 				Description: "Ping",
-				Method:      "GET",
+				Method:      http.MethodGet,
 			},
 		},
 	}, nil

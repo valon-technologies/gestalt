@@ -16,7 +16,6 @@ const (
 	serverName    = "gestalt"
 	serverVersion = "0.1.0"
 	toolNameSep   = "_"
-	httpErrorMin  = 400
 )
 
 type TokenResolver interface {

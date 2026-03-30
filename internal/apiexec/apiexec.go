@@ -111,7 +111,7 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 		}
 		contentType = req.ContentType
 		if contentType == "" {
-			contentType = "application/json"
+			contentType = core.ContentTypeJSON
 		}
 	}
 
@@ -213,7 +213,7 @@ func doOnce(
 		if err := req.CheckResponse(resp.StatusCode, respBody); err != nil {
 			return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], err
 		}
-	} else if resp.StatusCode >= 400 {
+	} else if resp.StatusCode >= http.StatusBadRequest {
 		retryable := retryableStatusCodes[resp.StatusCode]
 		return nil, resp.StatusCode, retryAfter, retryable, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
 	}
@@ -277,7 +277,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	if err != nil {
 		return nil, fmt.Errorf("creating graphql request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", core.ContentTypeJSON)
 
 	if req.AuthHeader != "" {
 		httpReq.Header.Set("Authorization", req.AuthHeader)
@@ -300,7 +300,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 		return nil, fmt.Errorf("reading graphql response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
 	}
 

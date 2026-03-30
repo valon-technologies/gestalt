@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/core/catalog"
@@ -77,11 +78,11 @@ func AnnotationsFromMethod(method string) catalog.OperationAnnotations {
 		OpenWorldHint: boolPtr(true),
 	}
 	switch strings.ToUpper(method) {
-	case "GET", "HEAD":
+	case http.MethodGet, http.MethodHead:
 		a.ReadOnlyHint = boolPtr(true)
-	case "PUT":
+	case http.MethodPut:
 		a.IdempotentHint = boolPtr(true)
-	case "DELETE":
+	case http.MethodDelete:
 		a.DestructiveHint = boolPtr(true)
 	}
 	return a

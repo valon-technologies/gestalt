@@ -3,6 +3,7 @@ package pluginapi
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/core"
@@ -24,7 +25,7 @@ func (p *roundTripProvider) ListOperations() []core.Operation {
 		{
 			Name:        "echo",
 			Description: "Echo input",
-			Method:      "POST",
+			Method:      http.MethodPost,
 			Parameters: []core.Parameter{
 				{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
 			},
@@ -68,7 +69,7 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 		DisplayName: "Round Trip",
 		Description: "test provider",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportREST},
+			{ID: "echo", Method: http.MethodPost, Path: "/echo", Transport: catalog.TransportREST},
 		},
 	}
 }
@@ -79,7 +80,7 @@ func (p *roundTripProvider) CatalogForRequest(_ context.Context, token string) (
 		DisplayName: token,
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: "POST", Path: "/echo", Transport: catalog.TransportREST},
+			{ID: "echo", Method: http.MethodPost, Path: "/echo", Transport: catalog.TransportREST},
 		},
 	}, nil
 }

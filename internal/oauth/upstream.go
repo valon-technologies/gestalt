@@ -237,7 +237,7 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tok
 			return nil, fmt.Errorf("encoding token request as JSON: %w", err)
 		}
 		reader = bytes.NewReader(b)
-		contentType = "application/json"
+		contentType = core.ContentTypeJSON
 	} else {
 		reader = strings.NewReader(data.Encode())
 		contentType = "application/x-www-form-urlencoded"

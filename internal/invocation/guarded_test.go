@@ -39,7 +39,7 @@ func guardTestProvider(name string) *stubProviderWithOps {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "ping", Method: "GET"}},
+		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
 	}
 }
 

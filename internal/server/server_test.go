@@ -664,7 +664,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        provider.AuthDef{Type: "manual"},
 		Operations: map[string]provider.OperationDef{
-			"op": {Description: "An op", Method: "GET", Path: "/op"},
+			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 		},
 	}
 	prov, err := provider.Build(def, config.ConnectionDef{}, nil)
@@ -900,7 +900,7 @@ func TestListOperations(t *testing.T) {
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "test-int"},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
 		},
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -974,8 +974,8 @@ func TestExecuteOperation(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
-			{Name: "create_thing", Description: "Create a thing", Method: "POST"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+			{Name: "create_thing", Description: "Create a thing", Method: http.MethodPost},
 		},
 	}
 
@@ -1089,7 +1089,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	fullStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "test-int"},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
 		},
 	}
 
@@ -1121,7 +1121,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	fullStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "test-int"},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
 		},
 	}
 
@@ -1781,7 +1781,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "send", Description: "Send", Method: "POST"},
+			{Name: "send", Description: "Send", Method: http.MethodPost},
 		},
 	}
 
@@ -2092,7 +2092,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
 			if rt == "old-refresh-token" {
@@ -2168,7 +2168,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			return nil, fmt.Errorf("upstream error")
@@ -2227,7 +2227,7 @@ func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
 	stub := &stubOAuthIntegration{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "fake"},
-			ops:             []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			return nil, fmt.Errorf("refresh token revoked")
@@ -2279,7 +2279,7 @@ func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			t.Fatal("RefreshToken should not be called when no refresh token stored")
@@ -2334,7 +2334,7 @@ func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			t.Fatal("RefreshToken should not be called when no expiry info")
@@ -2381,7 +2381,7 @@ func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
 	var usedToken string
 	stub := &stubNonOAuthProvider{
 		name: "manual-api",
-		ops:  []core.Operation{{Name: "get", Description: "Get", Method: "GET"}},
+		ops:  []core.Operation{{Name: "get", Description: "Get", Method: http.MethodGet}},
 		execFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 			usedToken = token
 			return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
@@ -2432,7 +2432,7 @@ func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
 			return &core.TokenResponse{
@@ -2500,7 +2500,7 @@ func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
 			return &core.TokenResponse{AccessToken: "new-access", ExpiresIn: 0}, nil
@@ -2566,7 +2566,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			return nil, fmt.Errorf("upstream error")
@@ -2631,7 +2631,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	stub := &stubOAuthIntegration{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "fake"},
-			ops:             []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
 			return &core.TokenResponse{
@@ -2688,7 +2688,7 @@ func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
 			return nil, fmt.Errorf("upstream error")
@@ -2763,7 +2763,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "ping", Method: "GET"},
+			{Name: "ping", Method: http.MethodGet},
 		},
 	}
 
@@ -2809,7 +2809,7 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "echo", Method: "POST"},
+			{Name: "echo", Method: http.MethodPost},
 		},
 	}
 
@@ -2861,7 +2861,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "search", Method: "GET"}},
+		ops: []core.Operation{{Name: "search", Method: http.MethodGet}},
 	}
 
 	providers := testutil.NewProviderRegistry(t, echoProvider)
@@ -3338,7 +3338,7 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: "GET"}},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
 			refreshedVia = "connection-handler"
@@ -3835,7 +3835,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "linear"},
 		ops: []core.Operation{
-			{Name: "search_issues", Description: "Search issues", Method: "GET"},
+			{Name: "search_issues", Description: "Search issues", Method: http.MethodGet},
 		},
 	}
 	ds := &coretesting.StubDatastore{
@@ -4089,7 +4089,7 @@ func TestMaxBodySize(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "POST"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodPost},
 		},
 	}
 
@@ -4133,7 +4133,7 @@ func TestErrorSanitization(t *testing.T) {
 			},
 		},
 		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: "GET"},
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
 		},
 	}
 
@@ -4202,7 +4202,7 @@ func TestCookieAuth(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	// Request without cookie should be rejected.
-	reqNoCookie, _ := http.NewRequest("GET", ts.URL+"/api/v1/integrations", nil)
+	reqNoCookie, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	noAuthResp, err := http.DefaultClient.Do(reqNoCookie)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -4213,7 +4213,7 @@ func TestCookieAuth(t *testing.T) {
 	}
 
 	// Request with cookie should pass auth middleware.
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "valid-cookie-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -4232,7 +4232,7 @@ func TestLogout(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/auth/logout", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -4532,7 +4532,7 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "do", Method: "GET"}},
+		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -4583,7 +4583,7 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "do", Method: "GET"}},
+		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
 	}
 
 	t.Run("prefers user token", func(t *testing.T) {
