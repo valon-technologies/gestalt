@@ -361,6 +361,7 @@ auth:
   scopes:
     - read
     - write
+  scope_param: user_scope
   scope_separator: ","
   pkce: true
   authorization_params:
@@ -382,6 +383,7 @@ Supported or notable fields:
 - `client_auth`
 - `token_exchange`
 - `scopes`
+- `scope_param` -- query parameter name for scopes (defaults to `scope`). Set to `user_scope` for Slack and other providers that use a non-standard parameter.
 - `scope_separator`
 - `pkce`
 - `authorization_params`

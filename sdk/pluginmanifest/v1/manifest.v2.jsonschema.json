@@ -235,6 +235,10 @@
           "type": "string",
           "enum": ["form", "json"]
         },
+        "scope_param": {
+          "type": "string",
+          "description": "Query parameter name for scopes (default: scope)"
+        },
         "scope_separator": {
           "type": "string"
         },

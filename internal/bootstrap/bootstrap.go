@@ -88,6 +88,13 @@ func (a *upstreamHandlerAdapter) RefreshTokenWithURL(ctx context.Context, refres
 func (a *upstreamHandlerAdapter) AuthorizationBaseURL() string { return a.h.AuthorizationBaseURL() }
 func (a *upstreamHandlerAdapter) TokenURL() string             { return a.h.TokenURL() }
 
+// RegistrationClearer is an optional interface that OAuthHandler
+// implementations can satisfy to support clearing cached dynamic client
+// registrations. mcpoauth.Handler implements this.
+type RegistrationClearer interface {
+	ClearRegistration()
+}
+
 // ProviderBuildResult is the return value of a ProviderFactory. It carries
 // the constructed provider and an OAuth handler for each named connection
 // that uses oauth2 or mcp_oauth auth.
@@ -913,6 +920,7 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 		RedirectURL:         redirectURL,
 		PKCE:                auth.PKCE,
 		DefaultScopes:       auth.Scopes,
+		ScopeParam:          auth.ScopeParam,
 		ScopeSeparator:      auth.ScopeSeparator,
 		TokenExchange:       tokenExchange,
 		AuthorizationParams: auth.AuthorizationParams,
