@@ -206,7 +206,7 @@ func buildBigQueryPluginBinary(t *testing.T) string {
 
 	bin := filepath.Join(t.TempDir(), "gestalt-plugin-bigquery")
 	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-tags", "functionaltest", "-o", bin, "./cmd/gestalt-plugin-bigquery")
+	cmd := exec.Command("go", "build", "-tags", "functionaltest", "-o", bin, "./plugins/providers/bigquery/cmd")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build plugin binary: %v\n%s", err, out)
@@ -220,5 +220,5 @@ func repoRoot(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
 }
