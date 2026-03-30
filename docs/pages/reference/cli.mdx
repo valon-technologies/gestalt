@@ -1,5 +1,31 @@
 # CLI
 
+## `gestalt` Client CLI
+
+The `gestalt` binary is a client for interacting with a running `gestaltd` server.
+
+```sh
+gestalt auth
+gestalt init
+gestalt config
+gestalt integrations
+gestalt invoke
+gestalt describe
+gestalt tokens
+```
+
+| Command | Purpose |
+| --- | --- |
+| `gestalt auth` | Authenticate with a running server. |
+| `gestalt init` | Initialize a new config file interactively. |
+| `gestalt config` | Display resolved client configuration. |
+| `gestalt integrations` | List integrations available on the server. |
+| `gestalt invoke` | Invoke an integration operation. |
+| `gestalt describe` | Describe an integration or operation. |
+| `gestalt tokens` | Manage API tokens. |
+
+## `gestaltd` Server CLI
+
 The `gestaltd` server binary.
 
 ## Usage

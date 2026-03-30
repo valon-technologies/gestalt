@@ -12,6 +12,12 @@ This guide starts with the true out-of-the-box flow, then moves to an explicit c
 brew install valon-technologies/gestalt/gestaltd
 ```
 
+The `gestalt` client CLI provides `auth`, `invoke`, and `tokens` commands for interacting with a running server:
+
+```sh
+brew install valon-technologies/gestalt/gestalt
+```
+
 **Binary download**
 
 Download the latest release for your platform from the [Releases page](https://github.com/valon-technologies/gestalt/releases), extract it, and place the `gestaltd` binary on your `PATH`.
@@ -20,11 +26,19 @@ Download the latest release for your platform from the [Releases page](https://g
 
 The `valontechnologies/gestaltd` image ships `gestaltd` and supports both `amd64` and `arm64` (Apple Silicon).
 
+Quick start (mutable mode, fetches remote specs on startup):
+
 ```sh
-docker run -p 8080:8080 -v ./gestalt.yaml:/etc/gestalt/config.yaml valontechnologies/gestaltd:latest
+docker run -p 8080:8080 -v ./config.yaml:/etc/gestalt/config.yaml valontechnologies/gestaltd:latest gestaltd
 ```
 
-The container starts with `serve --locked` by default. That direct mount pattern works for static configs that do not require prepared artifacts. If your config references remote OpenAPI or GraphQL sources, or `plugin.package`, bundle first or bake the prepared state into a derived image.
+The trailing `gestaltd` overrides the default CMD (`serve --locked`) so the server auto-prepares missing state on startup.
+
+For production, bundle first and use the default locked mode:
+
+```sh
+docker run -p 8080:8080 -v ./bundle:/etc/gestalt valontechnologies/gestaltd:latest
+```
 
 ## 1. Run `gestaltd` With No Config
 
@@ -62,7 +76,7 @@ The generated config uses `auth.provider: none`, so no sign-in is required. Add 
 
 ## 3. Switch To An Explicit Config
 
-Save this as `gestalt.yaml`:
+Save this as `config.yaml`:
 
 ```yaml
 server:
@@ -101,8 +115,8 @@ This is the smallest useful production-shaped config:
 ## 4. Bundle And Validate It
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd validate --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd validate --config ./bundle/config.yaml
 ```
 
 `bundle` resolves remote provider inputs into a self-contained output directory. For the config above, the bundle contains:
@@ -113,7 +127,7 @@ gestaltd validate --config ./bundle/gestalt.yaml
 ## 5. Start From Locked State
 
 ```sh
-gestaltd serve --locked --config ./bundle/gestalt.yaml
+gestaltd serve --locked --config ./bundle/config.yaml
 ```
 
 This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.

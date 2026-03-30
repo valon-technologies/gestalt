@@ -53,12 +53,7 @@ No built-in runtimes are registered. Define custom runtimes using the `plugin` f
 
 ## Named Providers
 
-| Name | Type | Purpose |
-| --- | --- | --- |
-| `bigquery` | Declarative (YAML) | Google BigQuery data warehouse operations. |
-| `jira` | Declarative (YAML) | Jira Cloud issue management. |
-
-Named providers are pre-registered in the binary and referenced by name in integrations. Declarative providers define their operations, auth, and base URL in YAML manifests under `plugins/providers/`.
+No named providers are currently built into the binary. BigQuery and Jira were migrated to external plugins and are available under `plugins/`.
 
 ## Scope
 
