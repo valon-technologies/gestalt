@@ -1138,7 +1138,10 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 	if len(metadata) == 0 {
 		return "", nil
 	}
-	b, _ := json.Marshal(metadata)
+	b, err := json.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("marshal connection metadata: %w", err)
+	}
 	return string(b), nil
 }
 
@@ -1214,7 +1217,10 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 	for k, v := range extra {
 		m[k] = v
 	}
-	b, _ := json.Marshal(m)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("marshal merged metadata: %w", err)
+	}
 	return string(b), nil
 }
 
@@ -1251,7 +1257,10 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 			if err != nil {
 				return nil, err
 			}
-			candidatesJSON, _ := json.Marshal(candidates)
+			candidatesJSON, err := json.Marshal(candidates)
+			if err != nil {
+				return nil, fmt.Errorf("marshal discovery candidates: %w", err)
+			}
 			now := s.now().UTC().Truncate(time.Second)
 			sc := &core.StagedConnection{
 				ID:             uuid.NewString(),
