@@ -465,6 +465,25 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
 		return
 	}
+	if s.encryptor != nil {
+		encoded, encErr := encodeLoginState(s.encryptor, loginState{
+			State:     req.State,
+			ExpiresAt: s.now().Add(loginStateTTL).Unix(),
+		})
+		if encErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to encode login state")
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     loginStateCookieName,
+			Value:    encoded,
+			Path:     "/",
+			MaxAge:   int(loginStateTTL.Seconds()),
+			HttpOnly: true,
+			Secure:   s.secureCookies,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
@@ -528,18 +547,29 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var identity *core.UserIdentity
+	var originalState string
 	var err error
 
 	if stateful, ok := s.auth.(StatefulCallbackHandler); ok {
 		state := r.URL.Query().Get("state")
-		identity, _, err = stateful.HandleCallbackWithState(r.Context(), code, state)
+		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
 	} else {
+		originalState = r.URL.Query().Get("state")
 		identity, err = s.auth.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
+	}
+
+	if csrfErr := s.validateLoginState(r, originalState); csrfErr != nil {
+		slog.ErrorContext(r.Context(), "login state validation failed", "error", csrfErr)
+		writeError(w, http.StatusForbidden, "login state validation failed")
+		return
+	}
+	if s.encryptor != nil {
+		s.clearLoginStateCookie(w)
 	}
 
 	resp := map[string]any{
@@ -560,6 +590,36 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	s.setSessionCookie(w, token)
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) validateLoginState(r *http.Request, originalState string) error {
+	if s.encryptor == nil {
+		return nil
+	}
+	cookie, err := r.Cookie(loginStateCookieName)
+	if err != nil {
+		return fmt.Errorf("missing login state cookie")
+	}
+	expected, err := decodeLoginState(s.encryptor, cookie.Value, s.now())
+	if err != nil {
+		return fmt.Errorf("invalid login state cookie: %w", err)
+	}
+	if expected.State != originalState {
+		return fmt.Errorf("login state mismatch")
+	}
+	return nil
+}
+
+func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     loginStateCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 type startOAuthRequest struct {
