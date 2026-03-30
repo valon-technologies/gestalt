@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -101,8 +101,8 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		return nil, err
 	}
 
-	log.Printf("prepared providers: %d", len(lock.Providers))
-	log.Printf("wrote lockfile %s", paths.lockfilePath)
+	slog.Info("prepared providers", "count", len(lock.Providers))
+	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, nil
 }
 
@@ -241,7 +241,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 			Fingerprint: fingerprint,
 			Provider:    filepath.ToSlash(relPath),
 		}
-		log.Printf("wrote prepared provider %s", outPath)
+		slog.Info("wrote prepared provider", "path", outPath)
 	}
 	return written, nil
 }

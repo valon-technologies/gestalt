@@ -3,7 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -246,7 +246,7 @@ func ApplyDisplayOverrides(def *Definition, intg config.IntegrationDef) {
 	if intg.IconFile != "" {
 		data, err := os.ReadFile(intg.IconFile)
 		if err != nil {
-			log.Printf("WARNING: could not read icon_file %q: %v", intg.IconFile, err)
+			slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
 		} else {
 			def.IconSVG = strings.TrimSpace(string(data))
 		}

@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -45,6 +45,6 @@ server:
 	if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
 		return "", fmt.Errorf("write config: %w", err)
 	}
-	log.Printf("generated default config at %s", configPath)
+	slog.Info("generated default config", "path", configPath)
 	return configPath, nil
 }
