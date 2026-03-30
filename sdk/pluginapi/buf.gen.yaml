@@ -19,12 +19,12 @@ plugins:
 
   # TypeScript (ts-proto generates both messages and gRPC client/server code)
   - remote: buf.build/community/timostamm-protobuf-ts
-    out: ../../sdk/plugin/typescript/gen
+    out: ../../sdk/generated/typescript/gen
     opt:
       - long_type_string
 
   # Python messages + gRPC stubs
   - remote: buf.build/protocolbuffers/python
-    out: ../../sdk/plugin/python/gen
+    out: ../../sdk/generated/python/gen
   - remote: buf.build/grpc/python
-    out: ../../sdk/plugin/python/gen
+    out: ../../sdk/generated/python/gen
