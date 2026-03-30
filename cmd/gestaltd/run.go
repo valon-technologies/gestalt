@@ -351,6 +351,8 @@ func logConfigSummary(path string, cfg *config.Config) {
 	log.Printf("  provider:   %s", cfg.Datastore.Provider)
 	log.Printf("secrets:")
 	log.Printf("  provider:   %s", cfg.Secrets.Provider)
+	log.Printf("telemetry:")
+	log.Printf("  provider:   %s", cfg.Telemetry.Provider)
 
 	if len(cfg.Integrations) > 0 {
 		log.Printf("integrations: %d", len(cfg.Integrations))
