@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 
@@ -47,7 +48,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 	if err != nil {
 		return nil, err
 	}
-	req.CustomHeaders = egress.CopyHeaders(resolved.Headers)
+	req.CustomHeaders = maps.Clone(resolved.Headers)
 
 	if pgn, ok := b.Pagination[operation]; ok {
 		return apiexec.DoPaginatedWithExecutor(ctx, b.httpClient(), req, pgn, executeEgressHTTP)
@@ -69,7 +70,7 @@ func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.
 			Method:    req.Method,
 			Path:      apiexec.ExpandedPathWithQuery(req.Method, req.Path, req.Params, req.QueryParams),
 		},
-		Headers:    egress.CopyHeaders(req.CustomHeaders),
+		Headers:    maps.Clone(req.CustomHeaders),
 		Credential: credentialFromAPIRequest(req),
 	})
 }
@@ -93,7 +94,7 @@ func (b *Base) resolveGraphQLEgress(ctx context.Context, operation string, req a
 			Host:      parsed.Host,
 			Path:      parsed.Path,
 		},
-		Headers:    egress.CopyHeaders(req.CustomHeaders),
+		Headers:    maps.Clone(req.CustomHeaders),
 		Credential: credentialFromGraphQLRequest(req),
 	})
 }
@@ -130,7 +131,7 @@ func egressRequestFromAPIExec(req apiexec.Request) egress.HTTPRequestSpec {
 		BaseURL:     req.BaseURL,
 		Params:      req.Params,
 		QueryParams: req.QueryParams,
-		Headers:     egress.CopyHeaders(req.CustomHeaders),
+		Headers:     maps.Clone(req.CustomHeaders),
 		Body:        req.Body,
 		ContentType: req.ContentType,
 		Check:       req.CheckResponse,

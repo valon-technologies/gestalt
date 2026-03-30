@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -81,7 +82,7 @@ type Request struct {
 
 // Do executes the request and returns an OperationResult.
 func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationResult, error) {
-	params := copyParams(req.Params)
+	params := maps.Clone(req.Params)
 
 	path, err := substitutePath(req.Path, params)
 	if err != nil {
@@ -336,7 +337,7 @@ func ExpandedPath(method, path string, params map[string]any) string {
 }
 
 func ExpandedPathWithQuery(method, path string, params map[string]any, queryParams map[string]any) string {
-	params = copyParams(params)
+	params = maps.Clone(params)
 	expanded, err := substitutePath(path, params)
 	if err != nil {
 		return path
@@ -370,17 +371,6 @@ func addQueryValue(q url.Values, key string, value any) {
 	default:
 		q.Add(key, fmt.Sprintf("%v", value))
 	}
-}
-
-func copyParams(params map[string]any) map[string]any {
-	if params == nil {
-		return nil
-	}
-	cp := make(map[string]any, len(params))
-	for k, v := range params {
-		cp[k] = v
-	}
-	return cp
 }
 
 func substitutePath(path string, params map[string]any) (string, error) {
