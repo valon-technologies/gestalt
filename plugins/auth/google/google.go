@@ -155,12 +155,26 @@ func (p *Provider) fetchUserInfo(ctx context.Context, accessToken string) (*core
 	}
 
 	var info struct {
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-		Picture string `json:"picture"`
+		Email         string `json:"email"`
+		Name          string `json:"name"`
+		Picture       string `json:"picture"`
+		EmailVerified any    `json:"email_verified"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode userinfo: %w", err)
+	}
+
+	switch v := info.EmailVerified.(type) {
+	case bool:
+		if !v {
+			return nil, fmt.Errorf("google: email %s is not verified", info.Email)
+		}
+	case string:
+		if !strings.EqualFold(v, "true") {
+			return nil, fmt.Errorf("google: email %s is not verified", info.Email)
+		}
+	default:
+		return nil, fmt.Errorf("google: email %s is not verified", info.Email)
 	}
 
 	return &core.UserIdentity{
