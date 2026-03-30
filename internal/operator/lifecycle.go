@@ -478,12 +478,14 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.ExecutableP
 		return false
 	}
 	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
-	executablePath := resolveLockPath(paths.configDir, entry.Executable)
 	if _, err := os.Stat(manifestPath); err != nil {
 		return false
 	}
-	if _, err := os.Stat(executablePath); err != nil {
-		return false
+	if entry.Executable != "" {
+		executablePath := resolveLockPath(paths.configDir, entry.Executable)
+		if _, err := os.Stat(executablePath); err != nil {
+			return false
+		}
 	}
 	if entry.Source == "" && entry.SourceDigest != "" && !strings.HasPrefix(plugin.Package, "https://") {
 		digest, err := sourceDigestForPackage(plugin.Package)
@@ -617,16 +619,20 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstor
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
 	}
-	executablePath, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+	var executableRel string
+	if installed.ExecutablePath != "" {
+		executablePath, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+		}
+		executableRel = filepath.ToSlash(executablePath)
 	}
 	return LockPluginEntry{
 		Fingerprint:  fingerprint,
 		Package:      plugin.Package,
 		SourceDigest: sourceDigest,
 		Manifest:     filepath.ToSlash(manifestPath),
-		Executable:   filepath.ToSlash(executablePath),
+		Executable:   executableRel,
 	}, nil
 }
 
@@ -667,9 +673,13 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, sto
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
 	}
-	executablePath, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+	var executableRel string
+	if installed.ExecutablePath != "" {
+		ep, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
+		if err != nil {
+			return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+		}
+		executableRel = filepath.ToSlash(ep)
 	}
 	return LockPluginEntry{
 		Fingerprint:   fingerprint,
@@ -678,7 +688,7 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, sto
 		ResolvedURL:   resolved.ResolvedURL,
 		ArchiveSHA256: resolved.ArchiveSHA256,
 		Manifest:      filepath.ToSlash(manifestPath),
-		Executable:    filepath.ToSlash(executablePath),
+		Executable:    executableRel,
 	}, nil
 }
 
@@ -867,12 +877,8 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	}
 
 	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
-	executablePath := resolveLockPath(paths.configDir, entry.Executable)
 	if _, err := os.Stat(manifestPath); err != nil {
 		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd bundle --config %s --output DIR`", kind, name, manifestPath, paths.configPath)
-	}
-	if _, err := os.Stat(executablePath); err != nil {
-		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd bundle --config %s --output DIR`", kind, name, executablePath, paths.configPath)
 	}
 
 	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
@@ -882,6 +888,18 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, manifestKind(kind), configMap); err != nil {
 		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
+
+	if kind == "integration" && manifest.Provider.IsDeclarative() {
+		plugin.ResolvedManifestPath = manifestPath
+		plugin.IsDeclarative = true
+		return nil
+	}
+
+	executablePath := resolveLockPath(paths.configDir, entry.Executable)
+	if _, err := os.Stat(executablePath); err != nil {
+		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd bundle --config %s --output DIR`", kind, name, executablePath, paths.configPath)
+	}
+
 	args, err := entrypointArgs(kind, manifest)
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)

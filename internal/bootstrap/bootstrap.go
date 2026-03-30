@@ -686,6 +686,9 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin != nil {
+		if intg.Plugin.IsDeclarative {
+			return buildDeclarativeProvider(name, intg, deps)
+		}
 		pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
 		if err != nil {
 			return nil, err
@@ -713,6 +716,40 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, err
 	}
 	return factory(ctx, name, intg, deps)
+}
+
+func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
+		return nil, fmt.Errorf("declarative provider %q has no resolved manifest path", name)
+	}
+	_, manifest, err := pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
+	}
+	prov, err := pluginapi.NewDeclarativeProvider(manifest, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+	}
+
+	restricted, err := applyAllowedOperations(name, intg, prov)
+	if err != nil {
+		return nil, err
+	}
+	result := &ProviderBuildResult{Provider: restricted}
+
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+	}
+	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+	if err != nil {
+		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
+	} else if authHandler != nil {
+		result.ConnectionAuth = map[string]OAuthHandler{
+			config.PluginConnectionName: authHandler,
+		}
+	}
+	return result, nil
 }
 
 func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {
@@ -841,6 +878,10 @@ func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string
 	if err != nil {
 		return nil, err
 	}
+	return buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+}
+
+func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
 	if manifest.Provider == nil || manifest.Provider.Auth == nil || manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
 		return nil, nil
 	}

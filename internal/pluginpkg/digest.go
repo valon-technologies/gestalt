@@ -26,7 +26,11 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 
 	var digests []string
 
-	manifestSum, err := fileSHA256(filepath.Join(dirPath, ManifestFile))
+	manifestPath, err := FindManifestFile(dirPath)
+	if err != nil {
+		return "", fmt.Errorf("digest manifest: %w", err)
+	}
+	manifestSum, err := fileSHA256(manifestPath)
 	if err != nil {
 		return "", fmt.Errorf("digest manifest: %w", err)
 	}

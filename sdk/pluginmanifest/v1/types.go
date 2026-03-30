@@ -30,14 +30,37 @@ type WebUIMetadata struct {
 }
 
 type Provider struct {
-	Protocol         ProtocolRange `json:"protocol"`
-	ConfigSchemaPath string        `json:"config_schema_path,omitempty"`
-	Auth             *ProviderAuth `json:"auth,omitempty"`
-	MCP              bool          `json:"mcp,omitempty"`
+	Protocol         ProtocolRange       `json:"protocol,omitzero"`
+	ConfigSchemaPath string              `json:"config_schema_path,omitempty"`
+	Auth             *ProviderAuth       `json:"auth,omitempty"`
+	MCP              bool                `json:"mcp,omitempty"`
+	BaseURL          string              `json:"base_url,omitempty"`
+	Operations       []ProviderOperation `json:"operations,omitempty"`
+}
+
+func (p *Provider) IsDeclarative() bool {
+	return p != nil && len(p.Operations) > 0
+}
+
+type ProviderOperation struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description,omitempty"`
+	Method      string              `json:"method"`
+	Path        string              `json:"path"`
+	Parameters  []ProviderParameter `json:"parameters,omitempty"`
+}
+
+type ProviderParameter struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	In          string `json:"in"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
 }
 
 const (
 	AuthTypeOAuth2 = "oauth2"
+	AuthTypeBearer = "bearer"
 	AuthTypeManual = "manual"
 	AuthTypeNone   = "none"
 )
