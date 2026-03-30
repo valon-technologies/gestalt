@@ -104,8 +104,14 @@ export default function IntegrationSettingsModal({
     const fd = new FormData(e.currentTarget);
     const fields = resolveCredentialFields();
 
+    if (!fields?.length) return;
+
     let credential: string | Record<string, string>;
-    if (fields && fields.length > 1) {
+    if (fields.length === 1) {
+      const val = (fd.get(`cred_${fields[0].name}`) as string)?.trim();
+      if (!val) return;
+      credential = val;
+    } else {
       const creds: Record<string, string> = {};
       for (const field of fields) {
         const val = (fd.get(`cred_${field.name}`) as string)?.trim();
@@ -113,12 +119,7 @@ export default function IntegrationSettingsModal({
         creds[field.name] = val;
       }
       credential = creds;
-    } else if (fields && fields.length === 1) {
-      credential = (fd.get(`cred_${fields[0].name}`) as string)?.trim() ?? "";
-    } else {
-      credential = (fd.get("credential") as string)?.trim() ?? "";
     }
-    if (!credential) return;
 
     let params: Record<string, string> | undefined;
     if (integration.connection_params) {
@@ -364,10 +365,8 @@ function TokenForm({
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
-  const fields = credentialFields;
-  const heading = !fields?.length ? "API Token"
-    : fields.length === 1 ? (fields[0].label || "API Token")
-    : "Enter Credentials";
+  const fields = credentialFields ?? [];
+  const heading = fields.length === 1 ? (fields[0].label || fields[0].name) : "Enter Credentials";
 
   return (
     <form onSubmit={onSubmit}>
@@ -396,58 +395,38 @@ function TokenForm({
           />
         </div>
       ))}
-      {fields && fields.length > 0 ? (
-        fields.map((field, idx) => (
-          <div key={field.name} className="mt-4">
-            <label
-              htmlFor={`cred_${field.name}-${integrationName}`}
-              className="block text-sm font-medium text-stone-700"
-            >
-              {field.label || field.name}
-              {field.help_url && (
-                <a
-                  href={field.help_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-1 text-xs text-timber-500 hover:underline"
-                >
-                  (where to find this)
-                </a>
-              )}
-            </label>
-            {field.description && (
-              <p className="mt-0.5 text-xs text-stone-400">{field.description}</p>
-            )}
-            <input
-              id={`cred_${field.name}-${integrationName}`}
-              name={`cred_${field.name}`}
-              type="password"
-              required
-              placeholder={field.label || field.name}
-              autoFocus={idx === 0}
-              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
-            />
-          </div>
-        ))
-      ) : (
-        <>
+      {fields.map((field, idx) => (
+        <div key={field.name} className="mt-4">
           <label
-            htmlFor={`credential-${integrationName}`}
-            className="mt-4 block text-sm font-medium text-stone-700"
+            htmlFor={`cred_${field.name}-${integrationName}`}
+            className="block text-sm font-medium text-stone-700"
           >
-            Paste your API token
+            {field.label || field.name}
+            {field.help_url && (
+              <a
+                href={field.help_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 text-xs text-timber-500 hover:underline"
+              >
+                (where to find this)
+              </a>
+            )}
           </label>
+          {field.description && (
+            <p className="mt-0.5 text-xs text-stone-400">{field.description}</p>
+          )}
           <input
-            id={`credential-${integrationName}`}
-            name="credential"
+            id={`cred_${field.name}-${integrationName}`}
+            name={`cred_${field.name}`}
             type="password"
             required
-            placeholder="Paste your API token"
-            autoFocus
+            placeholder={field.label || field.name}
+            autoFocus={idx === 0}
             className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
           />
-        </>
-      )}
+        </div>
+      ))}
       {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
       <div className="mt-6 flex gap-3">
         <Button

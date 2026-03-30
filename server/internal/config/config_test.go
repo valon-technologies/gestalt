@@ -1883,6 +1883,29 @@ func TestCredentialFieldValidation(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			name:    "manual auth without credentials",
+			wantErr: true,
+			yaml: `
+auth:
+  provider: ap
+datastore:
+  provider: ds
+server:
+  encryption_key: ek
+integrations:
+  svc:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: manual
+    api:
+      type: rest
+      openapi: https://example.test/spec.json
+      connection: default
+`,
+		},
+		{
 			name: "single credential field is valid",
 			yaml: `
 auth:
