@@ -1,73 +1,71 @@
 # CLI
 
-The most important CLI surface in this repo is the `gestaltd` server binary.
+The `gestaltd` server binary.
 
-## `gestaltd`
-
-### Usage
+## Usage
 
 ```sh
 gestaltd [--config PATH]
-gestaltd plugin <command> [flags]
 gestaltd serve [--config PATH] [--locked]
 gestaltd bundle --config PATH --output DIR
 gestaltd validate [--config PATH] [--init]
+gestaltd plugin package [flags]
+gestaltd version
 ```
 
-## Command Meanings
+## Commands
 
-| Command | What it does |
+| Command | Purpose |
 | --- | --- |
-| `gestaltd` | Default start command. Can auto-generate a local config and can auto-prepare missing state. |
+| `gestaltd` | Default start. Auto-generates a local config if none exists. Auto-prepares missing state. |
 | `gestaltd serve` | Start the server from an explicit config path. |
-| `gestaltd serve --locked` | Require exact prepared state. Do not auto-prepare. |
-| `gestaltd bundle` | Resolve remote provider artifacts and packaged plugins into a self-contained output directory. |
+| `gestaltd serve --locked` | Start the server. Fail if prepared state is missing or stale. |
+| `gestaltd bundle` | Resolve remote artifacts and packaged plugins into a self-contained output directory. |
 | `gestaltd validate` | Load and validate config without starting the server. |
-| `gestaltd plugin package` | Build a distributable plugin archive from a manifest directory. |
+| `gestaltd plugin package` | Build a distributable plugin archive. |
+| `gestaltd version` | Print the binary version and exit. |
 
 ## Default Command Behavior
 
-The plain `gestaltd` command has one extra convenience feature:
+The plain `gestaltd` command has one extra convenience:
 
-- if you do not pass `--config`
-- and no config file can be found in the normal search path
-- it generates `~/.gestalt/config.yaml`
+- If you do not pass `--config` and no config file exists in the search path, it generates `~/.gestalt/config.yaml`
 
-That generated config is intentionally local-only:
+That generated config is local-only:
 
 - `none` auth
-- SQLite
+- SQLite datastore
 - `env` secrets
-- a generated `server.encryption_key`
+- A generated `server.encryption_key`
 
 ## Config Path Resolution
 
-When a command needs a config path, Gestalt resolves it in this order:
+When a command needs a config path:
 
-1. `--config`
-2. `GESTALT_CONFIG`
+1. `--config` flag
+2. `GESTALT_CONFIG` environment variable
 3. `./config.yaml`
 4. `~/.gestalt/config.yaml`
 5. `/etc/gestalt/config.yaml`
 
 ## `bundle`
 
-`gestaltd bundle --config ./gestalt.yaml --output ./bundle` produces a self-contained output directory containing:
+```sh
+gestaltd bundle --config ./gestalt.yaml --output ./bundle
+```
 
-- the bundled config
+Produces a self-contained output directory:
+
+- The bundled config
 - `gestalt.lock.json`
-- `.gestalt/providers/*.json`
-- `.gestalt/plugins/...`
+- `.gestalt/providers/*.json` (prepared provider artifacts)
+- `.gestalt/plugins/...` (installed plugin packages)
 
-Use it whenever your config contains:
-
-- remote REST upstreams
-- remote GraphQL upstreams
-- `plugin.package`
+Run `bundle` whenever your config contains remote REST upstreams, remote GraphQL upstreams, `plugin.package`, or `plugin.source`.
 
 ## `serve --locked`
 
-Use locked mode in production:
+Production startup:
 
 ```sh
 gestaltd bundle --config ./gestalt.yaml --output ./bundle
@@ -78,21 +76,61 @@ If prepared state is missing or stale, startup fails instead of mutating local s
 
 ## `validate`
 
-`gestaltd validate` is non-mutating. It expects lock state to already exist when the config depends on prepared artifacts. Bundle first, then validate the bundled output:
+Non-mutating config validation. Expects lock state to already exist when the config depends on prepared artifacts.
 
 ```sh
 gestaltd bundle --config ./gestalt.yaml --output ./bundle
 gestaltd validate --config ./bundle/gestalt.yaml
 ```
 
+### `validate --init`
+
+Run initialization before validating. Useful when you want to validate a config that has not been bundled yet:
+
+```sh
+gestaltd validate --init --config ./gestalt.yaml
+```
+
 ## `plugin package`
 
-Build a plugin archive from a manifest directory:
+Two packaging flows:
+
+### From a manifest directory
+
+Package an existing plugin directory that already contains a `plugin.json` manifest:
 
 ```sh
 gestaltd plugin package --input ./build/my-plugin --output ./dist/my-plugin.tar.gz
 ```
 
-## Companion Client
+### From a pre-built binary
 
-The repo also contains a separate `gestalt` client binary, but the deployment and platform model documented here are centered on `gestaltd`.
+Scaffold a manifest and package a binary in one step:
+
+```sh
+gestaltd plugin package \
+  --binary ./my-plugin \
+  --source github.com/myorg/my-repo/my-plugin \
+  --output ./my-plugin.tar.gz
+```
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--binary` | — | Path to pre-built binary. |
+| `--source` | — | Plugin source identifier (`github.com/owner/repo/plugin`). Required with `--binary`. |
+| `--output` | — | Path to write the `.tar.gz` archive. |
+| `--kind` | `provider` | Plugin kind: `provider` or `runtime`. |
+| `--os` | Current platform | Target OS for the artifact. |
+| `--arch` | Current platform | Target architecture. |
+| `--version` | `0.0.0-alpha.1` | Manifest version. Must be valid SemVer. |
+
+Cross-compilation example:
+
+```sh
+GOOS=linux GOARCH=amd64 go build -o ./my-plugin-linux .
+gestaltd plugin package \
+  --binary ./my-plugin-linux \
+  --source github.com/myorg/my-repo/my-plugin \
+  --os linux --arch amd64 \
+  --output ./my-plugin.tar.gz
+```

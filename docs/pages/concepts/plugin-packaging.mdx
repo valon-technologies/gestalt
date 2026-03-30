@@ -10,8 +10,7 @@ A minimal provider package manifest looks like this:
 
 ```json
 {
-  "schema_version": 1,
-  "id": "example-provider",
+  "source": "github.com/your-org/your-repo/example-provider",
   "version": "1.0.0",
   "display_name": "Example Provider",
   "description": "Minimal packaged provider",
@@ -41,6 +40,7 @@ A minimal provider package manifest looks like this:
 
 The important ideas are:
 
+- `source` identifies the plugin in the managed artifact system
 - the package declares which kinds it supports
 - the manifest names platform-specific artifacts
 - entrypoints point at one of those packaged artifacts
@@ -52,7 +52,6 @@ UI plugins use the `webui` kind. They contain static assets instead of executabl
 
 ```json
 {
-  "schema_version": 2,
   "source": "github.com/your-org/your-repo/console",
   "version": "1.0.0",
   "kinds": ["webui"],
@@ -62,7 +61,7 @@ UI plugins use the `webui` kind. They contain static assets instead of executabl
 }
 ```
 
-Web UI manifests require schema version 2, have no `artifacts` or `entrypoints`, and cannot be combined with `provider` or `runtime` kinds. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
+Web UI manifests have no `artifacts` or `entrypoints` and cannot be combined with `provider` or `runtime` kinds. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
 
 ## Creating A Package
 
