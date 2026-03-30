@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 
@@ -37,7 +37,7 @@ type Binding struct {
 
 func New(name string, cfg webhookConfig, invoker invocation.Invoker) *Binding {
 	if cfg.AuthMode == AuthModeTrustedUserHeader && len(cfg.TrustedSources) == 0 {
-		log.Printf("warning: webhook binding %q uses trusted_user_header auth without trusted_sources; any client can set the user header", name)
+		slog.Warn("webhook binding uses trusted_user_header without trusted_sources", "binding", name)
 	}
 	return &Binding{name: name, cfg: cfg, invoker: invoker}
 }
