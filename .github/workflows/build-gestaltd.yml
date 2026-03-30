@@ -13,6 +13,9 @@ jobs:
     name: Go Lint & Vet
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
 
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +23,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
 
       - name: Check go mod tidy
         run: |
@@ -32,11 +35,15 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.3
+          working-directory: server
 
   test:
     name: Go Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
 
     steps:
       - uses: actions/checkout@v4
@@ -44,8 +51,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
 
       - name: Run tests
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -53,7 +60,7 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
-          files: coverage.out
+          files: server/coverage.out
           fail_ci_if_error: false
 
   web-lint:
@@ -118,8 +125,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -132,10 +139,10 @@ jobs:
         run: cd web && npm ci && npm run build
 
       - name: Copy frontend assets
-        run: rm -rf internal/webui/out && cp -r web/out internal/webui/out
+        run: rm -rf server/internal/webui/out && cp -r web/out server/internal/webui/out
 
       - name: Build Go server
-        run: go build -o ./gestaltd ./cmd/gestaltd
+        run: cd server && go build -o ../gestaltd ./cmd/gestaltd
 
       - name: Start Go server
         run: |

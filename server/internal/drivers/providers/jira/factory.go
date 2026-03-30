@@ -1,0 +1,33 @@
+package jira
+
+import (
+	"context"
+	_ "embed"
+	"fmt"
+
+	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"gopkg.in/yaml.v3"
+)
+
+//go:embed provider.yaml
+var definitionYAML []byte
+
+func Factory(ctx context.Context, name string, intg config.IntegrationDef, deps bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
+	var def provider.Definition
+	if err := yaml.Unmarshal(definitionYAML, &def); err != nil {
+		return nil, err
+	}
+	conn, err := bootstrap.ResolveAPIConnection(intg)
+	if err != nil {
+		return nil, fmt.Errorf("jira: %w", err)
+	}
+	provider.ApplyDisplayOverrides(&def, intg)
+	provider.ApplyConnectionAuth(&def, conn)
+	prov, err := provider.Build(&def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+	if err != nil {
+		return nil, err
+	}
+	return bootstrap.BuildResultWithOAuth(prov, &def, intg, conn), nil
+}

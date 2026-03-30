@@ -45,10 +45,10 @@ Thumbs.db
 build/
 dist/
 web/out/
-internal/webui/out/
-!internal/webui/out/.gitkeep
+server/internal/webui/out/
+!server/internal/webui/out/.gitkeep
 
 # Exceptions
-!internal/manifest/
+!server/internal/manifest/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
