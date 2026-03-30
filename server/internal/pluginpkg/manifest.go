@@ -126,6 +126,11 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
 		return fmt.Errorf("manifest version: %w", err)
 	}
+	if manifest.IconFile != "" {
+		if err := validateRelativePackagePath(manifest.IconFile, "icon_file"); err != nil {
+			return err
+		}
+	}
 
 	isDeclarative := manifest.Provider.IsDeclarative()
 

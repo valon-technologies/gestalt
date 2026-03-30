@@ -22,6 +22,7 @@ type remoteProviderBase struct {
 	metadata *pluginapiv1.ProviderMetadata
 	ops      []core.Operation
 	catalog  *catalog.Catalog
+	iconSVG  string
 	closer   io.Closer
 	tokens   *sync.Map
 }
@@ -138,11 +139,20 @@ func (p *remoteProviderBase) SupportsManualAuth() bool {
 	return slices.Contains(p.metadata.GetAuthTypes(), "manual")
 }
 
+func (p *remoteProviderBase) SetIconSVG(svg string) { p.iconSVG = svg }
+
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 	if p.catalog == nil {
+		if p.iconSVG != "" {
+			return &catalog.Catalog{IconSVG: p.iconSVG}
+		}
 		return nil
 	}
-	return p.catalog.Clone()
+	cat := p.catalog.Clone()
+	if cat.IconSVG == "" && p.iconSVG != "" {
+		cat.IconSVG = p.iconSVG
+	}
+	return cat
 }
 
 func (p *remoteProviderBase) ConnectionParamDefs() map[string]core.ConnectionParamDef {

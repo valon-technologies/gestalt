@@ -281,6 +281,12 @@ func ValidatePackageDir(sourceDir string) (*pluginmanifestv1.Manifest, error) {
 			return nil, fmt.Errorf("validate provider config schema %s: %w", manifest.Provider.ConfigSchemaPath, err)
 		}
 	}
+	if manifest.IconFile != "" {
+		iconPath := filepath.Join(sourceDir, filepath.FromSlash(manifest.IconFile))
+		if _, err := os.Stat(iconPath); err != nil {
+			return nil, fmt.Errorf("validate icon_file %s: %w", manifest.IconFile, err)
+		}
+	}
 	return manifest, nil
 }
 

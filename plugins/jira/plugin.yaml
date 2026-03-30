@@ -2,6 +2,7 @@ source: github.com/valon-technologies/gestalt/jira
 version: 0.0.1-alpha.1
 display_name: Jira Cloud
 description: Atlassian Jira Cloud project and issue management
+icon_file: assets/icon.svg
 kinds:
   - provider
 provider:

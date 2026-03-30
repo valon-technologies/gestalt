@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -329,6 +330,32 @@ func TestDeclarativeProvider_AuthTypes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDeclarativeProviderIcon(t *testing.T) {
+	t.Parallel()
+
+	p, err := NewDeclarativeProvider(testManifest("http://example.com"), nil)
+	if err != nil {
+		t.Fatalf("NewDeclarativeProvider: %v", err)
+	}
+
+	var _ core.CatalogProvider = p
+
+	if cat := p.Catalog(); cat != nil {
+		t.Fatalf("expected nil catalog before SetIconSVG, got %+v", cat)
+	}
+
+	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>`
+	p.SetIconSVG(testSVG)
+
+	cat := p.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog after SetIconSVG")
+	}
+	if cat.IconSVG != testSVG {
+		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
 	}
 }
 
