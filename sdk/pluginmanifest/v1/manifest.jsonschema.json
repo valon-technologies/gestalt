@@ -1,18 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1/manifest.v2.jsonschema.json",
+  "$id": "https://github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1/manifest.jsonschema.json",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
     "source",
     "version",
     "kinds"
   ],
   "properties": {
-    "schema_version": {
-      "const": 2
-    },
     "source": {
       "type": "string",
       "pattern": "^github\\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$"

@@ -81,16 +81,6 @@ func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifes
 }
 
 func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
-	var header struct {
-		SchemaVersion int `json:"schema_version"`
-	}
-	if err := json.Unmarshal(data, &header); err != nil {
-		return nil, fmt.Errorf("parse manifest JSON: %w", err)
-	}
-	if header.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		return nil, fmt.Errorf("unsupported manifest schema_version %d", header.SchemaVersion)
-	}
-
 	var doc any
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
@@ -127,11 +117,8 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 		return fmt.Errorf("manifest is required")
 	}
 
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
-	}
 	if manifest.Source == "" {
-		return fmt.Errorf("manifest source is required for schema_version %d", pluginmanifestv1.SchemaVersion)
+		return fmt.Errorf("manifest source is required")
 	}
 	if _, err := pluginsource.Parse(manifest.Source); err != nil {
 		return fmt.Errorf("manifest source: %w", err)

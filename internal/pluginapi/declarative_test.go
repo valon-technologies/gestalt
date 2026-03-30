@@ -13,12 +13,11 @@ import (
 
 func testManifest(baseURL string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/testapi",
-		Version:       "1.0.0",
-		DisplayName:   "Test API",
-		Description:   "A test API provider",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:      "github.com/acme/plugins/testapi",
+		Version:     "1.0.0",
+		DisplayName: "Test API",
+		Description: "A test API provider",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			BaseURL: baseURL,
 			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeBearer},

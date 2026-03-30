@@ -24,10 +24,9 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -444,10 +443,9 @@ func TestInitAtPath_RuntimePlugin(t *testing.T) {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/testowner/plugins/runtime",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindRuntime},
+		Source:  "github.com/testowner/plugins/runtime",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindRuntime},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

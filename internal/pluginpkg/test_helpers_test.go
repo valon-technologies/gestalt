@@ -30,10 +30,9 @@ func currentArtifactPath(binary string) string {
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},

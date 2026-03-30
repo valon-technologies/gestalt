@@ -12,7 +12,6 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
@@ -49,7 +48,6 @@ func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
@@ -81,10 +79,9 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/provider",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/provider",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -118,7 +115,6 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 
 func validV2JSON() []byte {
 	return []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -151,19 +147,15 @@ func TestDecodeManifest_V2ValidSource(t *testing.T) {
 	if manifest.Source != "github.com/acme/plugins/echo" {
 		t.Fatalf("unexpected source %q", manifest.Source)
 	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
-	}
 }
 
 func TestEncodeManifest_V2RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/echo",
-		Version:       "1.0.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/echo",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -199,7 +191,6 @@ func TestDecodeManifest_RejectsUnknownField(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "id": "acme/echo",
   "version": "1.0.0",
@@ -244,7 +235,6 @@ func TestDecodeManifest_V2RejectsInvalidSource(t *testing.T) {
 			t.Parallel()
 
 			data := []byte(`{
-  "schema_version": 2,
   "source": "` + tc.source + `",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -278,7 +268,6 @@ func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "v1.0.0",
   "kinds": ["provider"],
@@ -306,43 +295,10 @@ func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_RejectsSchemaVersion1(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`{
-  "schema_version": 1,
-  "id": "acme/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
-
-	_, err := DecodeManifest(data)
-	if err == nil {
-		t.Fatal("expected error for schema_version 1")
-	}
-}
-
 func TestDecodeManifest_V2RejectsUnsupportedKind(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["unknown_kind"],
@@ -367,7 +323,6 @@ func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "version": "1.0.0",
   "kinds": ["provider"],
   "provider": {
@@ -394,27 +349,10 @@ func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_RejectsSchemaVersion3(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`{
-  "schema_version": 3,
-  "source": "github.com/test-org/test-repo/test-plugin",
-  "version": "1.0.0",
-  "kinds": ["provider"]
-}`)
-
-	_, err := DecodeManifest(data)
-	if err == nil {
-		t.Fatal("expected error for unsupported schema_version 3")
-	}
-}
-
 func TestDecodeManifest_V2RejectsDuplicateArtifactPlatform(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -452,7 +390,6 @@ func TestDecodeManifest_V2RejectsAbsoluteArtifactPath(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -484,7 +421,6 @@ func TestDecodeManifest_V2ProviderWithoutMetadataRejected(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -513,10 +449,9 @@ func TestValidateManifest_ProtocolMinGreaterThanMax(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/provider",
-		Version:       "0.1.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/provider",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 5, Max: 1},
 		},
@@ -545,7 +480,6 @@ func TestDecodeManifest_V2WithOAuth2Auth(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -606,7 +540,6 @@ func TestDecodeManifest_V2OAuth2MissingTokenURL(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -642,7 +575,6 @@ func TestDecodeManifest_V2ManualAuth(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -680,7 +612,6 @@ func TestDecodeManifest_V2InvalidAuthType(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -727,10 +658,9 @@ func TestDecodeManifest_V2AuthRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        "github.com/acme/plugins/echo",
-		Version:       "1.0.0",
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  "github.com/acme/plugins/echo",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			Auth: &pluginmanifestv1.ProviderAuth{
@@ -775,7 +705,6 @@ func TestDecodeManifestFormat_YAML(t *testing.T) {
 	t.Parallel()
 
 	yamlData := []byte(`
-schema_version: 2
 source: github.com/acme/plugins/echo
 version: "1.0.0"
 kinds:
@@ -801,16 +730,12 @@ entrypoints:
 	if manifest.Source != "github.com/acme/plugins/echo" {
 		t.Fatalf("unexpected source %q", manifest.Source)
 	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
-	}
 }
 
 func TestDecodeManifestFormat_YAMLDeclarative(t *testing.T) {
 	t.Parallel()
 
 	yamlData := []byte(`
-schema_version: 2
 source: github.com/acme/plugins/testapi
 version: "0.1.0"
 display_name: Test API
@@ -869,7 +794,6 @@ func TestDecodeManifest_DeclarativeProviderJSON(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/myapi",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -905,7 +829,6 @@ func TestDecodeManifest_DeclarativeRejectsMissingBaseURL(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/myapi",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -930,7 +853,6 @@ func TestDecodeManifest_DeclarativeRejectsDuplicateOpNames(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/myapi",
   "version": "1.0.0",
   "kinds": ["provider"],
@@ -953,7 +875,6 @@ func TestDecodeManifest_DeclarativeRejectsOrphanPathParam(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 2,
   "source": "github.com/acme/plugins/myapi",
   "version": "1.0.0",
   "kinds": ["provider"],

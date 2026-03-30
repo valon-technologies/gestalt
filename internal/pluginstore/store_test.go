@@ -392,10 +392,9 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: schemaPath,
@@ -436,10 +435,9 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -489,10 +487,9 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		digest = digestOverride
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -531,10 +528,9 @@ func mustBuildRawPackage(t *testing.T, dir, source, version, content string) str
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	manifest := map[string]any{
-		"schema_version": pluginmanifestv1.SchemaVersion,
-		"source":         source,
-		"version":        version,
-		"kinds":          []string{pluginmanifestv1.KindProvider},
+		"source":  source,
+		"version": version,
+		"kinds":   []string{pluginmanifestv1.KindProvider},
 		"provider": map[string]any{
 			"protocol": map[string]any{"min": 1, "max": 1},
 		},
@@ -594,10 +590,9 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 	t.Helper()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -659,10 +654,9 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(firstContent))
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -722,10 +716,9 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	return &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		Source:        source,
-		Version:       version,
-		Kinds:         []string{pluginmanifestv1.KindProvider},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 		},
@@ -780,10 +773,9 @@ func mustBuildV2PackageRaw(t *testing.T, dir, source, version, content string) s
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	manifest := map[string]any{
-		"schema_version": pluginmanifestv1.SchemaVersion,
-		"source":         source,
-		"version":        version,
-		"kinds":          []string{pluginmanifestv1.KindProvider},
+		"source":  source,
+		"version": version,
+		"kinds":   []string{pluginmanifestv1.KindProvider},
 		"provider": map[string]any{
 			"protocol": map[string]any{"min": 1, "max": 1},
 		},
