@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -149,8 +150,16 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 
 	span.SetAttributes(attrConnectionMode.String(string(prov.ConnectionMode())))
 
-	if p != nil && p.UserID != "" {
+	if p == nil {
+		return fail(ErrNotAuthenticated)
+	}
+
+	if p.UserID != "" {
 		span.SetAttributes(attrUserID.String(p.UserID))
+	}
+
+	if p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
+		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
 
 	ops := prov.ListOperations()
@@ -163,10 +172,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	if !found {
 		return fail(fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName))
-	}
-
-	if p == nil {
-		return fail(ErrNotAuthenticated)
 	}
 
 	conn := ConnectionFromContext(ctx)
@@ -190,6 +195,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+	if p != nil && p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
+		return "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {

@@ -94,14 +94,18 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		return nil, err
 	}
 
-	return &Principal{
+	p := &Principal{
 		Identity: &core.UserIdentity{
 			Email:       user.Email,
 			DisplayName: user.DisplayName,
 		},
 		UserID: user.ID,
 		Source: SourceAPIToken,
-	}, nil
+	}
+	if scopes := strings.Fields(apiToken.Scopes); len(scopes) > 0 {
+		p.Scopes = scopes
+	}
+	return p, nil
 }
 
 func (r *Resolver) ResolveEmail(email string) *Principal {

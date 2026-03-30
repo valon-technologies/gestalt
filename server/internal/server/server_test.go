@@ -1605,7 +1605,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"my-token","scopes":"read"}`)
+	body := bytes.NewBufferString(`{"name":"my-token"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -1716,7 +1716,7 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"expiry-test","scopes":"read"}`)
+	body := bytes.NewBufferString(`{"name":"expiry-test"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -1769,7 +1769,7 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"ttl-test","scopes":"read"}`)
+	body := bytes.NewBufferString(`{"name":"ttl-test"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -4822,5 +4822,169 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 	}
 	if tokenData["app_key"] != "k2" {
 		t.Errorf("app_key = %q, want k2", tokenData["app_key"])
+	}
+}
+
+func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
+	t.Parallel()
+
+	alphaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "alpha",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
+	}
+	betaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "beta",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
+	}
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, alphaStub, betaStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateAPITokenFn: func(_ context.Context, h string) (*core.APIToken, error) {
+				if h == hashed {
+					return &core.APIToken{UserID: "u1", Name: "scoped-key", Scopes: "alpha"}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "user@test.com"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	t.Run("allowed provider succeeds", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/alpha/do_thing", nil)
+		req.Header.Set("Authorization", "Bearer "+plaintext)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("denied provider returns 403", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/beta/do_thing", nil)
+		req.Header.Set("Authorization", "Bearer "+plaintext)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "any-provider",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
+	}
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			ValidateAPITokenFn: func(_ context.Context, h string) (*core.APIToken, error) {
+				if h == hashed {
+					return &core.APIToken{UserID: "u1", Name: "unscoped-key", Scopes: ""}, nil
+				}
+				return nil, core.ErrNotFound
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				return &core.User{ID: id, Email: "user@test.com"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/any-provider/do_thing", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateAPIToken_InvalidScope(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "real-provider"},
+		ops:             []core.Operation{{Name: "op", Method: http.MethodGet}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"test-token","scopes":"nonexistent"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }

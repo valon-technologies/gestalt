@@ -20,6 +20,7 @@ type Principal struct {
 	Identity *core.UserIdentity
 	UserID   string
 	Source   Source
+	Scopes   []string
 }
 
 type contextKey struct{}

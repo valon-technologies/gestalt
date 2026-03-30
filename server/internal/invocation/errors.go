@@ -10,4 +10,5 @@ var (
 	ErrAmbiguousInstance = errors.New("ambiguous instance")
 	ErrUserResolution    = errors.New("user resolution failed")
 	ErrInternal          = errors.New("internal error")
+	ErrScopeDenied       = errors.New("token scope denied")
 )
