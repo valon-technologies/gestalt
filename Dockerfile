@@ -24,6 +24,7 @@ COPY . .
 COPY --from=frontend /web/out/ internal/webui/out/
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gestaltd ./cmd/gestaltd
+RUN mkdir /data
 
 FROM golang:1.26-alpine AS builder
 ARG GESTALT_VERSION
@@ -54,6 +55,8 @@ ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 RUN apk add --no-cache ca-certificates curl
 COPY --from=build-binary /gestaltd /gestaltd
+RUN mkdir -p /data && chown nobody:nobody /data
+USER nobody:nobody
 LABEL org.opencontainers.image.title="gestaltd debug" \
       org.opencontainers.image.description="Debug image for gestaltd with a shell and troubleshooting tools." \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
@@ -74,6 +77,7 @@ ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 COPY --from=build-binary /gestaltd /gestaltd
+COPY --from=build-binary --chown=nobody:nobody /data /data
 LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.description="Self-hosted integration runtime for REST, GraphQL, MCP, and plugins." \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
@@ -82,6 +86,7 @@ LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.version="${GESTALT_VERSION}" \
       org.opencontainers.image.revision="${GESTALT_REVISION}" \
       org.opencontainers.image.created="${GESTALT_CREATED}"
+USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]
