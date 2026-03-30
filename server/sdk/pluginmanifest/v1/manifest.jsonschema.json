@@ -241,6 +241,20 @@
         "authorization_params": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "pattern": "^[a-z][a-z0-9_]*$" },
+              "label": { "type": "string" },
+              "description": { "type": "string" },
+              "help_url": { "type": "string", "format": "uri" }
+            }
+          }
         }
       },
       "allOf": [

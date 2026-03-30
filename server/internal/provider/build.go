@@ -167,6 +167,18 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 
 	base.ManualAuthEnabled = def.ManualAuth
 
+	if len(def.CredentialFields) > 0 {
+		base.CredentialFieldDefs = make([]core.CredentialFieldDef, len(def.CredentialFields))
+		for i, cf := range def.CredentialFields {
+			base.CredentialFieldDefs[i] = core.CredentialFieldDef{
+				Name:        cf.Name,
+				Label:       cf.Label,
+				Description: cf.Description,
+				HelpURL:     cf.HelpURL,
+			}
+		}
+	}
+
 	if len(conn.Params) > 0 {
 		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(conn.Params))
 		for name, cpd := range conn.Params {
@@ -281,6 +293,20 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	}
 	if o.TokenMetadata != nil {
 		def.Auth.TokenMetadata = o.TokenMetadata
+	}
+	if len(o.Credentials) > 0 {
+		def.CredentialFields = make([]CredentialFieldDef, len(o.Credentials))
+		for i, cf := range o.Credentials {
+			def.CredentialFields[i] = CredentialFieldDef{
+				Name:        cf.Name,
+				Label:       cf.Label,
+				Description: cf.Description,
+				HelpURL:     cf.HelpURL,
+			}
+		}
+	}
+	if o.AuthMapping != nil && len(o.AuthMapping.Headers) > 0 {
+		def.AuthMapping = &AuthMappingDef{Headers: o.AuthMapping.Headers}
 	}
 }
 
