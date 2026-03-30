@@ -99,7 +99,6 @@ func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegis
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
-	registerProviders(factories)
 	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Bindings["proxy"] = proxy.Factory
