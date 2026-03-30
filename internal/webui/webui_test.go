@@ -116,7 +116,6 @@ func TestDirHandler_SPAFallbackForUnknownPath(t *testing.T) {
 	}
 }
 
-
 func TestDirHandler_StaticAssetInSubdirectory(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -136,7 +135,6 @@ func TestDirHandler_StaticAssetInSubdirectory(t *testing.T) {
 		t.Fatalf("body = %q, want JS content", body)
 	}
 }
-
 
 func TestDirHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
 	t.Parallel()

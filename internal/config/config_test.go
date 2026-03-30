@@ -1434,7 +1434,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	}
 }
 
-
 func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
 	t.Parallel()
 

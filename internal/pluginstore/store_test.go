@@ -415,7 +415,6 @@ func TestInstall_ArchiveArtifactDigestVerified(t *testing.T) {
 	}
 }
 
-
 func mustBuildPluginDir(t *testing.T, dir, id, version, content, schema string) string {
 	t.Helper()
 
