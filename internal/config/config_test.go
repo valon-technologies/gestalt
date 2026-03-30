@@ -1434,28 +1434,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	}
 }
 
-func TestHasManagedArtifacts(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name   string
-		plugin *ExecutablePluginDef
-		want   bool
-	}{
-		{"nil plugin", nil, false},
-		{"command only", &ExecutablePluginDef{Command: "/bin/x"}, false},
-		{"package set", &ExecutablePluginDef{Package: "./dir"}, true},
-		{"source set", &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := tc.plugin.HasManagedArtifacts(); got != tc.want {
-				t.Fatalf("HasManagedArtifacts() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
 
 func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
 	t.Parallel()

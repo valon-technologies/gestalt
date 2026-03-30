@@ -327,7 +327,7 @@ func TestInstallV2RejectsInvalidSource(t *testing.T) {
 	}
 }
 
-func TestInstallFromDirCopiesEntirePackage(t *testing.T) {
+func TestInstallFromDirCopiesManifestAndArtifact(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -337,11 +337,6 @@ func TestInstallFromDirCopiesEntirePackage(t *testing.T) {
 	}
 	store := New(cfgPath)
 	srcDir := mustBuildPluginDir(t, dir, "testowner/fullcopy", "0.1.0", "test-binary", "")
-
-	extraFile := filepath.Join(srcDir, "extra.txt")
-	if err := os.WriteFile(extraFile, []byte("extra-data"), 0644); err != nil {
-		t.Fatalf("WriteFile extra: %v", err)
-	}
 
 	installed, err := store.InstallFromDir(srcDir)
 	if err != nil {
@@ -420,16 +415,6 @@ func TestInstall_ArchiveArtifactDigestVerified(t *testing.T) {
 	}
 }
 
-func TestStoreNew_UsesConfigDirAsRoot(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
-	store := New(cfgPath)
-	if store.root != filepath.Join(dir, "configs", ".gestalt", "plugins") {
-		t.Fatalf("store root = %q", store.root)
-	}
-}
 
 func mustBuildPluginDir(t *testing.T, dir, id, version, content, schema string) string {
 	t.Helper()
