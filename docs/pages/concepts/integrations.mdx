@@ -24,8 +24,8 @@ integrations:
       openapi: https://raw.githubusercontent.com/.../api.github.com.json
       connection: default
       allowed_operations:
-        repos_listForAuthenticatedUser: List repositories
-        issues_listForAuthenticatedUser: List assigned issues
+        repos/list-for-authenticated-user:
+        issues/list-for-authenticated-user:
 ```
 
 This one block answers four questions:
@@ -99,7 +99,7 @@ api:
   openapi: https://example.com/openapi.json
   connection: default
   allowed_operations:
-    listThings: List things
+    listThings:
 ```
 
 | Field | Notes |
@@ -108,7 +108,7 @@ api:
 | `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
 | `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
 | `connection` | Name of a connection defined in the same integration. |
-| `allowed_operations` | Narrows exposed operations. List of names or map of name to description override. |
+| `allowed_operations` | Narrows exposed operations. Use a YAML map where each key is an operation name. Set the value to nothing to keep the upstream description, or provide an object with `alias` and/or `description`. |
 
 ### `mcp`
 
@@ -164,19 +164,21 @@ It supports two forms:
 
 ```yaml
 allowed_operations:
-  - repos_listForAuthenticatedUser
-  - issues_listForAuthenticatedUser
+  repos/list-for-authenticated-user:
+  issues/list-for-authenticated-user:
 ```
 
 or:
 
 ```yaml
 allowed_operations:
-  repos_listForAuthenticatedUser: List repositories
-  issues_listForAuthenticatedUser: List assigned issues
+  repos/list-for-authenticated-user:
+    description: List repositories
+  issues/list-for-authenticated-user:
+    description: List assigned issues
 ```
 
-The list form keeps upstream descriptions. The map form lets you override descriptions.
+The bare-key form keeps upstream descriptions. The object form lets you override descriptions or aliases.
 
 If you omit `allowed_operations`, Gestalt exposes every operation from the source.
 

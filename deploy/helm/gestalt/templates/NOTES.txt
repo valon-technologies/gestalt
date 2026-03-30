@@ -48,7 +48,7 @@ The default auth provider is Google. Provide these for Google OAuth:
 For OIDC, override config.auth.provider and config.auth.config in your values file.
 {{- if .Values.pluginInit.enabled }}
 
-Plugin init is enabled. An init container runs `gestaltd init` before
-the main server starts, hydrating plugin packages into a shared cache.
+Plugin init is enabled. An init container runs `gestaltd bundle` before
+the main server starts, preparing locked state in a shared volume.
 The main container runs with --locked to prevent mutation at startup.
 {{- end }}

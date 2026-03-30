@@ -1,0 +1,8 @@
+# Docker deployment examples
+
+This directory contains published-image examples for `valontechnologies/gestaltd`.
+
+- `config.yaml`: minimal static config that works with the default image command
+- `compose.yaml`: simplest `docker compose` example using the published image
+- `Dockerfile`: multi-stage example that bundles config during the image build
+- `Dockerfile.plugins`: multi-stage example that compiles Go plugins with `valontechnologies/gestaltd:builder`, packages them, and bundles the deployment

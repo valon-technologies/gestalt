@@ -11,7 +11,7 @@ When you do not pass `--config`, `gestaltd` resolves the config path in this ord
 3. `~/.gestalt/config.yaml`
 4. `/etc/gestalt/config.yaml`
 
-The default command `gestaltd` has one extra behavior: if no config exists anywhere in that search path, it generates `~/.gestalt/config.yaml` and starts with a local-only configuration.
+The default command `gestaltd` has one extra behavior: if no config exists anywhere in that search path, it generates `~/.gestalt/config.yaml` and starts with a local-only configuration that uses `auth.provider: none` and SQLite.
 
 ## What Happens During Load
 
@@ -46,7 +46,7 @@ Each block controls a distinct part of the runtime:
 
 | Block | What it defines |
 | --- | --- |
-| `server` | Port, base URL, encryption key, dev mode, and admin email allowlist. |
+| `server` | Port, base URL, and encryption key. |
 | `auth` | How users authenticate to Gestalt itself. |
 | `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
 | `secrets` | How `secret://...` values are resolved. |

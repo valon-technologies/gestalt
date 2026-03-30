@@ -19,18 +19,15 @@ Public REST example with no auth:
 
 ```yaml
 integrations:
-  petstore:
-    display_name: Swagger Petstore
+  github:
+    display_name: GitHub
     connections:
       default:
         mode: none
     api:
       type: rest
-      openapi: https://petstore3.swagger.io/api/v3/openapi.json
+      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
       connection: default
-      allowed_operations:
-        findPetsByStatus: List pets by status
-        getPetById: Fetch a pet by id
 ```
 
 That is enough to build a real provider and invoke the public API.
@@ -56,8 +53,8 @@ integrations:
       openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
       connection: default
       allowed_operations:
-        repos_listForAuthenticatedUser: List repositories
-        issues_listForAuthenticatedUser: List issues
+        repos/list-for-authenticated-user:
+        issues/list-for-authenticated-user:
 ```
 
 Auth lives inside the connection, not at the integration level or in a separate profile.
