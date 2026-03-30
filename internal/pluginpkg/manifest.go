@@ -87,14 +87,7 @@ func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
 	}
-
-	var rawSchema []byte
-	switch header.SchemaVersion {
-	case pluginmanifestv1.SchemaVersion:
-		rawSchema = pluginmanifestv1.ManifestJSONSchema
-	case pluginmanifestv1.SchemaVersion2:
-		rawSchema = pluginmanifestv1.ManifestV2JSONSchema
-	default:
+	if header.SchemaVersion != pluginmanifestv1.SchemaVersion {
 		return nil, fmt.Errorf("unsupported manifest schema_version %d", header.SchemaVersion)
 	}
 
@@ -103,7 +96,7 @@ func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
 	}
 	var schemaDoc any
-	if err := json.Unmarshal(rawSchema, &schemaDoc); err != nil {
+	if err := json.Unmarshal(pluginmanifestv1.ManifestJSONSchema, &schemaDoc); err != nil {
 		return nil, fmt.Errorf("parse embedded manifest schema: %w", err)
 	}
 
@@ -134,29 +127,17 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 		return fmt.Errorf("manifest is required")
 	}
 
-	switch manifest.SchemaVersion {
-	case pluginmanifestv1.SchemaVersion:
-		if manifest.ID == "" {
-			return fmt.Errorf("manifest id is required for schema_version %d", pluginmanifestv1.SchemaVersion)
-		}
-		if manifest.Source != "" {
-			return fmt.Errorf("manifest source must not be set for schema_version %d", pluginmanifestv1.SchemaVersion)
-		}
-	case pluginmanifestv1.SchemaVersion2:
-		if manifest.ID != "" {
-			return fmt.Errorf("manifest id must not be set for schema_version %d", pluginmanifestv1.SchemaVersion2)
-		}
-		if manifest.Source == "" {
-			return fmt.Errorf("manifest source is required for schema_version %d", pluginmanifestv1.SchemaVersion2)
-		}
-		if _, err := pluginsource.Parse(manifest.Source); err != nil {
-			return fmt.Errorf("manifest source: %w", err)
-		}
-		if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
-			return fmt.Errorf("manifest version: %w", err)
-		}
-	default:
+	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
 		return fmt.Errorf("unsupported manifest schema_version %d", manifest.SchemaVersion)
+	}
+	if manifest.Source == "" {
+		return fmt.Errorf("manifest source is required for schema_version %d", pluginmanifestv1.SchemaVersion)
+	}
+	if _, err := pluginsource.Parse(manifest.Source); err != nil {
+		return fmt.Errorf("manifest source: %w", err)
+	}
+	if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
+		return fmt.Errorf("manifest version: %w", err)
 	}
 
 	isDeclarative := manifest.Provider.IsDeclarative()
@@ -221,9 +202,6 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 				return err
 			}
 		case pluginmanifestv1.KindWebUI:
-			if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion2 {
-				return fmt.Errorf("webui kind requires schema_version %d", pluginmanifestv1.SchemaVersion2)
-			}
 			if manifest.WebUI == nil {
 				return fmt.Errorf("webui metadata is required when kind %q is present", pluginmanifestv1.KindWebUI)
 			}

@@ -12,8 +12,8 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 1,
-  "id": "acme/provider",
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
   "provider": {
@@ -40,8 +40,8 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeManifest: %v", err)
 	}
-	if manifest.ID != "acme/provider" {
-		t.Fatalf("unexpected manifest id %q", manifest.ID)
+	if manifest.Source != "github.com/acme/plugins/provider" {
+		t.Fatalf("unexpected manifest source %q", manifest.Source)
 	}
 }
 
@@ -49,8 +49,8 @@ func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
-  "schema_version": 1,
-  "id": "acme/provider",
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
   "provider": {
@@ -82,7 +82,7 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "acme/provider",
+		Source:        "github.com/acme/plugins/provider",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -151,7 +151,7 @@ func TestDecodeManifest_V2ValidSource(t *testing.T) {
 	if manifest.Source != "github.com/acme/plugins/echo" {
 		t.Fatalf("unexpected source %q", manifest.Source)
 	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion2 {
+	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
 		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
 	}
 }
@@ -160,7 +160,7 @@ func TestEncodeManifest_V2RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        "github.com/acme/plugins/echo",
 		Version:       "1.0.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
@@ -195,7 +195,7 @@ func TestEncodeManifest_V2RoundTrip(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_V2RejectsID(t *testing.T) {
+func TestDecodeManifest_RejectsUnknownField(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
@@ -224,7 +224,7 @@ func TestDecodeManifest_V2RejectsID(t *testing.T) {
 
 	_, err := DecodeManifest(data)
 	if err == nil {
-		t.Fatal("expected error for v2 manifest with id set")
+		t.Fatal("expected error for manifest with unknown field")
 	}
 }
 
@@ -306,7 +306,7 @@ func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_V1StillWorks(t *testing.T) {
+func TestDecodeManifest_RejectsSchemaVersion1(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{
@@ -332,15 +332,9 @@ func TestDecodeManifest_V1StillWorks(t *testing.T) {
   }
 }`)
 
-	manifest, err := DecodeManifest(data)
-	if err != nil {
-		t.Fatalf("DecodeManifest: %v", err)
-	}
-	if manifest.ID != "acme/provider" {
-		t.Fatalf("unexpected id %q", manifest.ID)
-	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
-		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected error for schema_version 1")
 	}
 }
 
@@ -520,7 +514,7 @@ func TestValidateManifest_ProtocolMinGreaterThanMax(t *testing.T) {
 
 	manifest := &pluginmanifestv1.Manifest{
 		SchemaVersion: pluginmanifestv1.SchemaVersion,
-		ID:            "acme/provider",
+		Source:        "github.com/acme/plugins/provider",
 		Version:       "0.1.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -544,39 +538,6 @@ func TestValidateManifest_ProtocolMinGreaterThanMax(t *testing.T) {
 	err := ValidateManifest(manifest)
 	if err == nil {
 		t.Fatal("expected error for protocol min > max")
-	}
-}
-
-func TestDecodeManifest_V1RejectsSource(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`{
-  "schema_version": 1,
-  "id": "acme/provider",
-  "source": "github.com/acme/plugins/echo",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
-
-	_, err := DecodeManifest(data)
-	if err == nil {
-		t.Fatal("expected error for v1 manifest with source set")
 	}
 }
 
@@ -766,7 +727,7 @@ func TestDecodeManifest_V2AuthRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		SchemaVersion: pluginmanifestv1.SchemaVersion2,
+		SchemaVersion: pluginmanifestv1.SchemaVersion,
 		Source:        "github.com/acme/plugins/echo",
 		Version:       "1.0.0",
 		Kinds:         []string{pluginmanifestv1.KindProvider},
@@ -840,7 +801,7 @@ entrypoints:
 	if manifest.Source != "github.com/acme/plugins/echo" {
 		t.Fatalf("unexpected source %q", manifest.Source)
 	}
-	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion2 {
+	if manifest.SchemaVersion != pluginmanifestv1.SchemaVersion {
 		t.Fatalf("unexpected schema_version %d", manifest.SchemaVersion)
 	}
 }

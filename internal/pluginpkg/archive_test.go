@@ -18,8 +18,8 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 		t.Fatalf("WriteFile(provider): %v", err)
 	}
 	manifest := `{
-  "schema_version": 1,
-  "id": "acme/provider",
+  "schema_version": 2,
+  "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
   "provider": {
@@ -55,7 +55,7 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	if len(data) == 0 {
 		t.Fatal("expected manifest bytes")
 	}
-	if parsed.ID != "acme/provider" {
-		t.Fatalf("unexpected id %q", parsed.ID)
+	if parsed.Source != "github.com/acme/plugins/provider" {
+		t.Fatalf("unexpected source %q", parsed.Source)
 	}
 }

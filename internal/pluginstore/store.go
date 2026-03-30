@@ -7,8 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"slices"
 
@@ -16,45 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/sdk/pluginmanifest/v1"
 )
-
-var pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._+:-]*$`)
-
-type PluginID struct {
-	Publisher string
-	Name      string
-	Version   string
-}
-
-func ParsePluginID(raw string) (PluginID, error) {
-	if strings.TrimSpace(raw) != raw {
-		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: leading or trailing whitespace is not allowed", raw)
-	}
-	if !pluginIDPattern.MatchString(raw) {
-		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
-	}
-
-	left, version, ok := strings.Cut(raw, "@")
-	if !ok || version == "" {
-		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
-	}
-	publisher, name, ok := strings.Cut(left, "/")
-	if !ok || publisher == "" || name == "" {
-		return PluginID{}, fmt.Errorf("invalid plugin identifier %q: expected publisher/name@version", raw)
-	}
-
-	return PluginID{Publisher: publisher, Name: name, Version: version}, nil
-}
-
-func (r PluginID) String() string {
-	if r.Publisher == "" && r.Name == "" && r.Version == "" {
-		return ""
-	}
-	return r.Publisher + "/" + r.Name + "@" + r.Version
-}
-
-func (r PluginID) IsZero() bool {
-	return r.Publisher == "" && r.Name == "" && r.Version == ""
-}
 
 func storeRootForConfigPath(configPath string) string {
 	if configPath == "" {
@@ -72,7 +31,6 @@ func New(configPath string) *Store {
 }
 
 type InstalledPlugin struct {
-	PluginID       PluginID
 	Source         string
 	Root           string
 	ManifestPath   string
@@ -97,7 +55,7 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	destDir, _, err := s.destDirForManifest(manifest)
+	destDir, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +133,7 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	destDir, _, err := s.destDirForManifest(manifest)
+	destDir, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -282,45 +240,24 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 	return installed, nil
 }
 
-func (s *Store) destDirForManifest(manifest *pluginmanifestv1.Manifest) (string, PluginID, error) {
+func (s *Store) destDirForManifest(manifest *pluginmanifestv1.Manifest) (string, error) {
 	if s == nil || s.root == "" {
-		return "", PluginID{}, fmt.Errorf("store root is required")
+		return "", fmt.Errorf("store root is required")
 	}
 	if manifest == nil {
-		return "", PluginID{}, fmt.Errorf("manifest is required")
+		return "", fmt.Errorf("manifest is required")
 	}
-	if manifest.SchemaVersion == pluginmanifestv1.SchemaVersion2 {
-		src, err := pluginsource.Parse(manifest.Source)
-		if err != nil {
-			return "", PluginID{}, fmt.Errorf("manifest source: %w", err)
-		}
-		destDir := filepath.Join(s.root, filepath.FromSlash(src.StorePath()), manifest.Version)
-		return destDir, PluginID{}, nil
-	}
-	id, err := pluginIDFromManifest(manifest)
+	src, err := pluginsource.Parse(manifest.Source)
 	if err != nil {
-		return "", PluginID{}, err
+		return "", fmt.Errorf("manifest source: %w", err)
 	}
-	destDir := filepath.Join(s.root, id.Publisher, id.Name, id.Version)
-	return destDir, id, nil
-}
-
-func pluginIDFromManifest(manifest *pluginmanifestv1.Manifest) (PluginID, error) {
-	if manifest == nil {
-		return PluginID{}, fmt.Errorf("manifest is required")
-	}
-	if manifest.ID == "" {
-		return PluginID{}, fmt.Errorf("manifest id is required for v1 plugins")
-	}
-	id, err := ParsePluginID(manifest.ID + "@" + manifest.Version)
-	if err != nil {
-		return PluginID{}, fmt.Errorf("manifest id/version must form a valid plugin identifier: %w", err)
-	}
-	return id, nil
+	destDir := filepath.Join(s.root, filepath.FromSlash(src.StorePath()), manifest.Version)
+	return destDir, nil
 }
 
 func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact, assetRoot string) *InstalledPlugin {
 	ip := &InstalledPlugin{
+		Source:         manifest.Source,
 		Root:           destDir,
 		ManifestPath:   manifestPath,
 		ExecutablePath: executablePath,
@@ -331,13 +268,6 @@ func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifest
 	if artifact != nil {
 		ip.ArtifactPath = artifact.Path
 		ip.SHA256 = artifact.SHA256
-	}
-	switch manifest.SchemaVersion {
-	case pluginmanifestv1.SchemaVersion:
-		id, _ := pluginIDFromManifest(manifest)
-		ip.PluginID = id
-	case pluginmanifestv1.SchemaVersion2:
-		ip.Source = manifest.Source
 	}
 	return ip
 }
