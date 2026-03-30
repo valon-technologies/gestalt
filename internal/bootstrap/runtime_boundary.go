@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/config"
@@ -47,7 +47,7 @@ func buildRuntimesWith(ctx context.Context, cfg *config.Config, factories *Facto
 			_ = StopRuntimes(context.Background(), runtimes, runtimeNames(runtimes))
 			return nil, fmt.Errorf("bootstrap: registering runtime %q: %w", name, err)
 		}
-		log.Printf("loaded runtime %s (type=%s, providers=%v)", name, def.Type, def.Providers)
+		slog.Info("loaded runtime", "runtime", name, "type", def.Type, "providers", def.Providers)
 	}
 
 	return runtimes, nil

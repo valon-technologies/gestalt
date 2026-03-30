@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"reflect"
 	"strings"
 	"sync"
@@ -632,7 +632,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		} else if err != nil {
 			return nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
-		log.Printf("loaded builtin provider %s (%d operations)", builtin.Name(), len(builtin.ListOperations()))
+		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", len(builtin.ListOperations()))
 	}
 
 	ready := make(chan struct{})
@@ -653,14 +653,14 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 			defer wg.Done()
 			result, err := buildProvider(ctx, name, intgDef, factories, deps)
 			if err != nil {
-				log.Printf("WARNING: skipping provider %q: %v", name, err)
+				slog.Warn("skipping provider", "provider", name, "error", err)
 				return
 			}
 			if err := reg.Providers.Register(name, result.Provider); err != nil {
 				if c, ok := result.Provider.(interface{ Close() error }); ok {
 					_ = c.Close()
 				}
-				log.Printf("WARNING: registering provider %q: %v", name, err)
+				slog.Warn("registering provider failed", "provider", name, "error", err)
 				return
 			}
 			if len(result.ConnectionAuth) > 0 {
@@ -668,7 +668,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 				connAuth[name] = result.ConnectionAuth
 				connMu.Unlock()
 			}
-			log.Printf("loaded provider %s (%d operations)", name, len(result.Provider.ListOperations()))
+			slog.Info("loaded provider", "provider", name, "operations", len(result.Provider.ListOperations()))
 		}()
 	}
 
@@ -820,7 +820,7 @@ func attachPluginOAuth(name string, intg config.IntegrationDef, pluginConfig map
 	}
 	authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
 	if err != nil {
-		log.Printf("WARNING: %s: cannot build oauth handler from manifest: %v", name, err)
+		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
 		return
 	}
 	if authHandler == nil {
@@ -967,7 +967,7 @@ func BuildResultWithOAuth(prov core.Provider, def *provider.Definition, intg con
 	}
 	upstream, err := provider.BuildOAuthUpstream(def, conn, def.BaseURL, nil)
 	if err != nil {
-		log.Printf("WARNING: %s: cannot build oauth handler for connection %q: %v", prov.Name(), intg.API.Connection, err)
+		slog.Warn("cannot build oauth handler for connection", "provider", prov.Name(), "connection", intg.API.Connection, "error", err)
 		return result
 	}
 	result.ConnectionAuth = map[string]OAuthHandler{

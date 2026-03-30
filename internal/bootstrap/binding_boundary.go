@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/valon-technologies/gestalt/core"
 	"github.com/valon-technologies/gestalt/internal/config"
@@ -45,7 +45,7 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			_ = CloseBindings(bindings, bindingNames(bindings))
 			return nil, fmt.Errorf("bootstrap: registering binding %q: %w", name, err)
 		}
-		log.Printf("loaded binding %s (type=%s, providers=%v)", name, def.Type, def.Providers)
+		slog.Info("loaded binding", "binding", name, "type", def.Type, "providers", def.Providers)
 	}
 
 	return bindings, nil

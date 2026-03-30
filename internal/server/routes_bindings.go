@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -13,7 +13,7 @@ func (s *Server) mountBindingRoutes(r chi.Router) {
 	for _, name := range s.bindings.List() {
 		binding, err := s.bindings.Get(name)
 		if err != nil {
-			log.Printf("warning: skipping binding %q routes: %v", name, err)
+			slog.Warn("skipping binding routes", "binding", name, "error", err)
 			continue
 		}
 		for _, route := range binding.Routes() {
