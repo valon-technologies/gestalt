@@ -33,6 +33,20 @@ func newMockGoogleServer(t *testing.T) *httptest.Server {
 				"expires_in":    3600,
 				"refresh_token": "mock-refresh-token",
 			})
+		case "unverified-code":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "unverified-token",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
+		case "missing-verified-code":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "missing-verified-token",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -50,10 +64,24 @@ func newMockGoogleServer(t *testing.T) *httptest.Server {
 		switch token {
 		case "mock-access-token", "valid-token":
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"email":   "user@example.com",
-				"name":    "Test User",
-				"picture": "https://example.com/avatar.png",
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"email":          "user@example.com",
+				"name":           "Test User",
+				"picture":        "https://example.com/avatar.png",
+				"email_verified": true,
+			})
+		case "unverified-token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"email":          "unverified@example.com",
+				"name":           "Unverified User",
+				"email_verified": false,
+			})
+		case "missing-verified-token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"email": "nofield@example.com",
+				"name":  "No Field User",
 			})
 		default:
 			http.Error(w, "invalid token", http.StatusUnauthorized)
@@ -259,6 +287,54 @@ func TestDisplayName(t *testing.T) {
 	p := newTestProvider(t, mockServer.URL)
 	if p.DisplayName() != "Google" {
 		t.Errorf("DisplayName() = %q, want %q", p.DisplayName(), "Google")
+	}
+}
+
+func TestUnverifiedEmailRejectedOnCallback(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockGoogleServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL)
+
+	_, err := p.HandleCallback(context.Background(), "unverified-code")
+	if err == nil {
+		t.Fatal("expected error for unverified email")
+	}
+	if !strings.Contains(err.Error(), "not verified") {
+		t.Errorf("error should mention verification: %v", err)
+	}
+}
+
+func TestUnverifiedEmailRejectedOnValidateToken(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockGoogleServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL)
+
+	_, err := p.ValidateToken(context.Background(), "unverified-token")
+	if err == nil {
+		t.Fatal("expected error for unverified email on ValidateToken")
+	}
+	if !strings.Contains(err.Error(), "not verified") {
+		t.Errorf("error should mention verification: %v", err)
+	}
+}
+
+func TestMissingEmailVerifiedRejected(t *testing.T) {
+	t.Parallel()
+	mockServer := newMockGoogleServer(t)
+	defer mockServer.Close()
+
+	p := newTestProvider(t, mockServer.URL)
+
+	_, err := p.HandleCallback(context.Background(), "missing-verified-code")
+	if err == nil {
+		t.Fatal("expected error when email_verified field is missing")
+	}
+	if !strings.Contains(err.Error(), "not verified") {
+		t.Errorf("error should mention verification: %v", err)
 	}
 }
 
