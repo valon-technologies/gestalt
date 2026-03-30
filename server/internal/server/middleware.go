@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -104,9 +105,11 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			if errors.Is(lastErr, principal.ErrInvalidToken) {
+				slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
 				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
+			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", lastErr)
 			writeError(w, http.StatusInternalServerError, "token validation failed")
 			return
 		}
@@ -146,6 +149,7 @@ func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 		if p == nil {
 			w.Header().Set("Proxy-Authenticate", "Bearer")
 			if lastErr != nil && !errors.Is(lastErr, principal.ErrInvalidToken) {
+				slog.ErrorContext(r.Context(), "proxy auth: token validation failed", "remote_addr", r.RemoteAddr, "error", lastErr)
 				writeError(w, http.StatusInternalServerError, "token validation failed")
 				return
 			}

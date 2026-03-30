@@ -209,7 +209,7 @@ func buildRegistrationStore(deps bootstrap.Deps) mcpoauth.RegistrationStore {
 	}
 	store := mcpoauth.NewSQLStore(db, enc, dialect)
 	if err := store.Migrate(context.Background()); err != nil {
-		slog.Warn("registration store migration failed", "component", "mcpoauth", "error", err)
+		slog.Error("registration store migration failed", "component", "mcpoauth", "error", err)
 	}
 	return store
 }
