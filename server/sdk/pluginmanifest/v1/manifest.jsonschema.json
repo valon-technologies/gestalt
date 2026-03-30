@@ -77,6 +77,39 @@
           "items": {
             "$ref": "#/$defs/provider_operation"
           }
+        },
+        "post_connect_discovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "id_path": {
+              "type": "string"
+            },
+            "name_path": {
+              "type": "string"
+            },
+            "metadata_mapping": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
+        "connection": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "required": { "type": "boolean" },
+              "description": { "type": "string" },
+              "from": { "type": "string", "enum": ["discovery"] }
+            }
+          }
         }
       }
     },
@@ -293,7 +326,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["string", "int", "bool"]
+          "enum": ["string", "int", "bool", "object", "array"]
         },
         "in": {
           "type": "string",

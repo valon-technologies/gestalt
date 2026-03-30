@@ -25,12 +25,27 @@ type WebUIMetadata struct {
 }
 
 type Provider struct {
-	Protocol         ProtocolRange       `json:"protocol,omitzero"`
-	ConfigSchemaPath string              `json:"config_schema_path,omitempty"`
-	Auth             *ProviderAuth       `json:"auth,omitempty"`
-	MCP              bool                `json:"mcp,omitempty"`
-	BaseURL          string              `json:"base_url,omitempty"`
-	Operations       []ProviderOperation `json:"operations,omitempty"`
+	Protocol             ProtocolRange                      `json:"protocol,omitzero"`
+	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty"`
+	Auth                 *ProviderAuth                      `json:"auth,omitempty"`
+	MCP                  bool                               `json:"mcp,omitempty"`
+	BaseURL              string                             `json:"base_url,omitempty"`
+	Operations           []ProviderOperation                `json:"operations,omitempty"`
+	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty"`
+	Connection           map[string]ProviderConnectionParam `json:"connection,omitempty"`
+}
+
+type ProviderPostConnectDiscovery struct {
+	URL             string            `json:"url"`
+	IDPath          string            `json:"id_path,omitempty"`
+	NamePath        string            `json:"name_path,omitempty"`
+	MetadataMapping map[string]string `json:"metadata_mapping,omitempty"`
+}
+
+type ProviderConnectionParam struct {
+	Required    bool   `json:"required,omitempty"`
+	Description string `json:"description,omitempty"`
+	From        string `json:"from,omitempty"`
 }
 
 func (p *Provider) IsDeclarative() bool {

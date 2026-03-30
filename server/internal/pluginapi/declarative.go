@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -20,14 +21,16 @@ type declarativeOp struct {
 }
 
 type DeclarativeProvider struct {
-	name        string
-	displayName string
-	description string
-	baseURL     string
-	auth        *pluginmanifestv1.ProviderAuth
-	operations  []core.Operation
-	opDefs      map[string]*declarativeOp
-	httpClient  *http.Client
+	name                 string
+	displayName          string
+	description          string
+	baseURL              string
+	auth                 *pluginmanifestv1.ProviderAuth
+	operations           []core.Operation
+	opDefs               map[string]*declarativeOp
+	httpClient           *http.Client
+	postConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery
+	connectionDefs       map[string]pluginmanifestv1.ProviderConnectionParam
 }
 
 func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *http.Client) (*DeclarativeProvider, error) {
@@ -43,13 +46,15 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	}
 
 	p := &DeclarativeProvider{
-		name:        manifest.Source,
-		displayName: manifest.DisplayName,
-		description: manifest.Description,
-		baseURL:     manifest.Provider.BaseURL,
-		auth:        manifest.Provider.Auth,
-		opDefs:      make(map[string]*declarativeOp, len(manifest.Provider.Operations)),
-		httpClient:  httpClient,
+		name:                 manifest.Source,
+		displayName:          manifest.DisplayName,
+		description:          manifest.Description,
+		baseURL:              manifest.Provider.BaseURL,
+		auth:                 manifest.Provider.Auth,
+		opDefs:               make(map[string]*declarativeOp, len(manifest.Provider.Operations)),
+		httpClient:           httpClient,
+		postConnectDiscovery: manifest.Provider.PostConnectDiscovery,
+		connectionDefs:       manifest.Provider.Connection,
 	}
 
 	for i := range manifest.Provider.Operations {
@@ -127,9 +132,14 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 		}
 	}
 
+	baseURL := p.baseURL
+	if cp := core.ConnectionParams(ctx); cp != nil {
+		baseURL = paraminterp.Interpolate(baseURL, cp)
+	}
+
 	req := apiexec.Request{
 		Method:      op.method,
-		BaseURL:     p.baseURL,
+		BaseURL:     baseURL,
 		Path:        op.path,
 		Params:      bodyParams,
 		QueryParams: queryParams,
@@ -183,4 +193,31 @@ func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken str
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
 	return nil, fmt.Errorf("declarative OAuth token refresh not yet implemented")
+}
+
+func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	if len(p.connectionDefs) == 0 {
+		return nil
+	}
+	defs := make(map[string]core.ConnectionParamDef, len(p.connectionDefs))
+	for name, def := range p.connectionDefs {
+		defs[name] = core.ConnectionParamDef{
+			Required:    def.Required,
+			Description: def.Description,
+			From:        def.From,
+		}
+	}
+	return defs
+}
+
+func (p *DeclarativeProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	if p.postConnectDiscovery == nil {
+		return nil
+	}
+	return &core.DiscoveryConfig{
+		URL:             p.postConnectDiscovery.URL,
+		IDPath:          p.postConnectDiscovery.IDPath,
+		NamePath:        p.postConnectDiscovery.NamePath,
+		MetadataMapping: p.postConnectDiscovery.MetadataMapping,
+	}
 }
