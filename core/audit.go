@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type AuditEntry struct {
 	Timestamp time.Time
@@ -15,5 +18,5 @@ type AuditEntry struct {
 }
 
 type AuditSink interface {
-	Log(entry AuditEntry)
+	Log(ctx context.Context, entry AuditEntry)
 }

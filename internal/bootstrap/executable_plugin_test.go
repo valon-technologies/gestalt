@@ -90,7 +90,7 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 	defer func() { _ = CloseProviders(providers) }()
 
 	broker := invocation.NewBroker(providers, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
 	if err != nil {
 		t.Fatalf("buildRuntimes: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestExecutableRuntimeCapabilities_OmitsMCPPassthroughOnlyCatalogOperations(
 	defer func() { _ = CloseProviders(providers) }()
 
 	broker := invocation.NewBroker(providers, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
 	if err != nil {
 		t.Fatalf("buildRuntimes: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestExecutableRuntimeCapabilities_ExposeOnlyInvokableCatalogOperations(t *t
 	defer func() { _ = CloseProviders(providers) }()
 
 	broker := invocation.NewBroker(providers, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
 	if err != nil {
 		t.Fatalf("buildRuntimes: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestExecutableRuntimeCapabilities_FilterMethodlessFallbackOperations(t *tes
 	defer func() { _ = CloseProviders(providers) }()
 
 	broker := invocation.NewBroker(providers, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
 	if err != nil {
 		t.Fatalf("buildRuntimes: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestExecutableRuntimeReceivesPluginConfig(t *testing.T) {
 
 	factories := NewFactoryRegistry()
 	broker := invocation.NewBroker(nil, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.LogAuditSink{}), EgressDeps{})
+	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
 	if err != nil {
 		t.Fatalf("buildRuntimes: %v", err)
 	}
