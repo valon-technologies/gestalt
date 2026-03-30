@@ -1,0 +1,168 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'plugin/*/v*'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plugin-name: ${{ steps.parse.outputs.plugin-name }}
+      plugin-version: ${{ steps.parse.outputs.plugin-version }}
+      plugin-type: ${{ steps.detect.outputs.plugin-type }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PLUGIN_NAME=$(echo "$TAG" | cut -d'/' -f2)
+          PLUGIN_VERSION=$(echo "$TAG" | sed 's|^plugin/.*/v||')
+          echo "plugin-name=${PLUGIN_NAME}" >> "$GITHUB_OUTPUT"
+          echo "plugin-version=${PLUGIN_VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Validate plugin directory
+        env:
+          PLUGIN_NAME: ${{ steps.parse.outputs.plugin-name }}
+        run: |
+          PLUGIN_DIR="plugins/${PLUGIN_NAME}"
+          if [ ! -d "$PLUGIN_DIR" ]; then
+            echo "ERROR: Plugin directory ${PLUGIN_DIR} does not exist"
+            exit 1
+          fi
+          if [ ! -f "${PLUGIN_DIR}/plugin.yaml" ]; then
+            echo "ERROR: ${PLUGIN_DIR}/plugin.yaml not found"
+            exit 1
+          fi
+      - name: Detect plugin type
+        id: detect
+        env:
+          PLUGIN_NAME: ${{ steps.parse.outputs.plugin-name }}
+        run: |
+          if [ -f "plugins/${PLUGIN_NAME}/go.mod" ]; then
+            echo "plugin-type=compiled" >> "$GITHUB_OUTPUT"
+          else
+            echo "plugin-type=declarative" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-declarative:
+    name: Package Declarative Plugin
+    needs: prepare
+    if: needs.prepare.outputs.plugin-type == 'declarative'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PLUGIN_NAME: ${{ needs.prepare.outputs.plugin-name }}
+      PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package
+        run: |
+          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}"
+          cd "plugins/${PLUGIN_NAME}"
+          TAR_ARGS="plugin.yaml"
+          if [ -d assets ]; then
+            TAR_ARGS="${TAR_ARGS} assets/"
+          fi
+          tar -czvf "${ASSET}.tar.gz" ${TAR_ARGS}
+          shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gestalt-plugin-${{ env.PLUGIN_NAME }}
+          path: |
+            plugins/${{ env.PLUGIN_NAME }}/gestalt-plugin-*.tar.gz
+            plugins/${{ env.PLUGIN_NAME }}/gestalt-plugin-*.sha256
+          if-no-files-found: error
+
+  build-compiled:
+    name: Build - ${{ matrix.platform.name }}
+    needs: prepare
+    if: needs.prepare.outputs.plugin-type == 'compiled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: macOS-ARM64
+            goos: darwin
+            goarch: arm64
+            suffix: macos-arm64
+          - name: macOS-x86_64
+            goos: darwin
+            goarch: amd64
+            suffix: macos-x86_64
+          - name: Linux-x86_64
+            goos: linux
+            goarch: amd64
+            suffix: linux-x86_64
+          - name: Linux-ARM64
+            goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+    env:
+      PLUGIN_NAME: ${{ needs.prepare.outputs.plugin-name }}
+      PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: plugins/${{ env.PLUGIN_NAME }}/go.mod
+          cache-dependency-path: plugins/${{ env.PLUGIN_NAME }}/go.sum
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.platform.goos }}
+          GOARCH: ${{ matrix.platform.goarch }}
+        run: |
+          cd "plugins/${PLUGIN_NAME}"
+          go build -o "../../gestalt-plugin-${PLUGIN_NAME}" ./cmd
+      - name: Package
+        run: |
+          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}_${{ matrix.platform.suffix }}"
+          mkdir staging
+          cp "gestalt-plugin-${PLUGIN_NAME}" staging/
+          cp "plugins/${PLUGIN_NAME}/plugin.yaml" staging/
+          if [ -d "plugins/${PLUGIN_NAME}/assets" ]; then
+            cp -r "plugins/${PLUGIN_NAME}/assets" staging/
+          fi
+          cd staging
+          tar -czvf "../${ASSET}.tar.gz" .
+          cd ..
+          shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gestalt-plugin-${{ env.PLUGIN_NAME }}-${{ matrix.platform.suffix }}
+          path: |
+            gestalt-plugin-*.tar.gz
+            gestalt-plugin-*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [prepare, build-declarative, build-compiled]
+    if: always() && needs.prepare.result == 'success' && (needs.build-declarative.result == 'success' || needs.build-compiled.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gestalt-plugin-*
+          path: artifacts
+      - name: Flatten artifacts
+        run: |
+          mkdir release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} release/ \;
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(needs.prepare.outputs.plugin-version, '-alpha') || contains(needs.prepare.outputs.plugin-version, '-beta') || contains(needs.prepare.outputs.plugin-version, '-rc') }}
