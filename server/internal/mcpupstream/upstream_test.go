@@ -326,6 +326,81 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	}
 }
 
+func TestUpstream_StaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	ts := newHeaderAuthenticatedHTTPTestServer(t, map[string]string{
+		headerName: headerValue,
+	})
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeNone, map[string]string{
+		headerName: headerValue,
+	}, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cat, err := u.CatalogForRequest(context.Background(), "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+
+	result, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_RequestTokenOverridesStaticAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
+	const (
+		headerName  = "X-Static-Version"
+		headerValue = "2026-02-09"
+	)
+
+	ts := newHeaderAuthenticatedHTTPTestServer(t, map[string]string{
+		"Authorization": "Bearer secret-token",
+		headerName:      headerValue,
+	})
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, map[string]string{
+		"Authorization": "Bearer wrong-token",
+		headerName:      headerValue,
+	}, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cat, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+
+	ctx := WithUpstreamToken(context.Background(), "secret-token")
+	result, err := u.CallTool(ctx, "run_query", map[string]any{"sql": "SELECT 1"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
 func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
 	t.Parallel()
 
