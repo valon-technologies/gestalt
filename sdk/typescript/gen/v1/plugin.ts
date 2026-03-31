@@ -428,6 +428,48 @@ export interface StartRuntimeRequest {
     initialCapabilities: Capability[];
 }
 /**
+ * @generated from protobuf message gestalt.plugin.v1.ProxyHTTPRequest
+ */
+export interface ProxyHTTPRequest {
+    /**
+     * @generated from protobuf field: string method = 1
+     */
+    method: string;
+    /**
+     * @generated from protobuf field: string url = 2
+     */
+    url: string;
+    /**
+     * @generated from protobuf field: map<string, string> headers = 3
+     */
+    headers: {
+        [key: string]: string;
+    };
+    /**
+     * @generated from protobuf field: bytes body = 4
+     */
+    body: Uint8Array;
+}
+/**
+ * @generated from protobuf message gestalt.plugin.v1.ProxyHTTPResponse
+ */
+export interface ProxyHTTPResponse {
+    /**
+     * @generated from protobuf field: int32 status_code = 1
+     */
+    statusCode: number;
+    /**
+     * @generated from protobuf field: map<string, string> headers = 2
+     */
+    headers: {
+        [key: string]: string;
+    };
+    /**
+     * @generated from protobuf field: bytes body = 3
+     */
+    body: Uint8Array;
+}
+/**
  * @generated from protobuf enum gestalt.plugin.v1.ConnectionMode
  */
 export enum ConnectionMode {
@@ -1917,6 +1959,172 @@ class StartRuntimeRequest$Type extends MessageType<StartRuntimeRequest> {
  * @generated MessageType for protobuf message gestalt.plugin.v1.StartRuntimeRequest
  */
 export const StartRuntimeRequest = new StartRuntimeRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ProxyHTTPRequest$Type extends MessageType<ProxyHTTPRequest> {
+    constructor() {
+        super("gestalt.plugin.v1.ProxyHTTPRequest", [
+            { no: 1, name: "method", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "headers", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } },
+            { no: 4, name: "body", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProxyHTTPRequest>): ProxyHTTPRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.method = "";
+        message.url = "";
+        message.headers = {};
+        message.body = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ProxyHTTPRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProxyHTTPRequest): ProxyHTTPRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string method */ 1:
+                    message.method = reader.string();
+                    break;
+                case /* string url */ 2:
+                    message.url = reader.string();
+                    break;
+                case /* map<string, string> headers */ 3:
+                    this.binaryReadMap3(message.headers, reader, options);
+                    break;
+                case /* bytes body */ 4:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    private binaryReadMap3(map: ProxyHTTPRequest["headers"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof ProxyHTTPRequest["headers"] | undefined, val: ProxyHTTPRequest["headers"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = reader.string();
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for gestalt.plugin.v1.ProxyHTTPRequest.headers");
+            }
+        }
+        map[key ?? ""] = val ?? "";
+    }
+    internalBinaryWrite(message: ProxyHTTPRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string method = 1; */
+        if (message.method !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.method);
+        /* string url = 2; */
+        if (message.url !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.url);
+        /* map<string, string> headers = 3; */
+        for (let k of globalThis.Object.keys(message.headers))
+            writer.tag(3, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k).tag(2, WireType.LengthDelimited).string(message.headers[k]).join();
+        /* bytes body = 4; */
+        if (message.body.length)
+            writer.tag(4, WireType.LengthDelimited).bytes(message.body);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message gestalt.plugin.v1.ProxyHTTPRequest
+ */
+export const ProxyHTTPRequest = new ProxyHTTPRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ProxyHTTPResponse$Type extends MessageType<ProxyHTTPResponse> {
+    constructor() {
+        super("gestalt.plugin.v1.ProxyHTTPResponse", [
+            { no: 1, name: "status_code", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
+            { no: 2, name: "headers", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } },
+            { no: 3, name: "body", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProxyHTTPResponse>): ProxyHTTPResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.statusCode = 0;
+        message.headers = {};
+        message.body = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ProxyHTTPResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProxyHTTPResponse): ProxyHTTPResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* int32 status_code */ 1:
+                    message.statusCode = reader.int32();
+                    break;
+                case /* map<string, string> headers */ 2:
+                    this.binaryReadMap2(message.headers, reader, options);
+                    break;
+                case /* bytes body */ 3:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    private binaryReadMap2(map: ProxyHTTPResponse["headers"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof ProxyHTTPResponse["headers"] | undefined, val: ProxyHTTPResponse["headers"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = reader.string();
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for gestalt.plugin.v1.ProxyHTTPResponse.headers");
+            }
+        }
+        map[key ?? ""] = val ?? "";
+    }
+    internalBinaryWrite(message: ProxyHTTPResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* int32 status_code = 1; */
+        if (message.statusCode !== 0)
+            writer.tag(1, WireType.Varint).int32(message.statusCode);
+        /* map<string, string> headers = 2; */
+        for (let k of globalThis.Object.keys(message.headers))
+            writer.tag(2, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k).tag(2, WireType.LengthDelimited).string(message.headers[k]).join();
+        /* bytes body = 3; */
+        if (message.body.length)
+            writer.tag(3, WireType.LengthDelimited).bytes(message.body);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message gestalt.plugin.v1.ProxyHTTPResponse
+ */
+export const ProxyHTTPResponse = new ProxyHTTPResponse$Type();
 /**
  * @generated ServiceType for protobuf service gestalt.plugin.v1.ProviderPlugin
  */
@@ -1941,4 +2149,10 @@ export const RuntimePlugin = new ServiceType("gestalt.plugin.v1.RuntimePlugin", 
 export const RuntimeHost = new ServiceType("gestalt.plugin.v1.RuntimeHost", [
     { name: "Invoke", options: {}, I: InvokeRequest, O: OperationResult },
     { name: "ListCapabilities", options: {}, I: Empty, O: ListCapabilitiesResponse }
+]);
+/**
+ * @generated ServiceType for protobuf service gestalt.plugin.v1.PluginHost
+ */
+export const PluginHost = new ServiceType("gestalt.plugin.v1.PluginHost", [
+    { name: "ProxyHTTP", options: {}, I: ProxyHTTPRequest, O: ProxyHTTPResponse }
 ]);

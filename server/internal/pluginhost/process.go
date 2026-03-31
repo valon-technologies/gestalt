@@ -26,11 +26,12 @@ const (
 )
 
 type ExecConfig struct {
-	Command string
-	Args    []string
-	Env     map[string]string
-	Name    string
-	Config  map[string]any
+	Command      string
+	Args         []string
+	Env          map[string]string
+	Name         string
+	Config       map[string]any
+	AllowedHosts []string
 }
 
 type managedRuntime struct {
@@ -123,6 +124,10 @@ func ServeRuntime(ctx context.Context, server proto.RuntimePluginServer) error {
 	})
 }
 
+func DialPluginHost(ctx context.Context, socket string) (*grpc.ClientConn, error) {
+	return dialUnixSocket(ctx, socket)
+}
+
 func DialRuntimeHost(ctx context.Context) (*grpc.ClientConn, proto.RuntimeHostClient, error) {
 	socket := os.Getenv(proto.EnvRuntimeHostSocket)
 	if socket == "" {
@@ -186,20 +191,25 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	})
 
 	proc := &pluginProcess{dir: dir}
+
+	hostSocket := filepath.Join(dir, "host.sock")
+	lis, err := net.Listen("unix", hostSocket)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return nil, fmt.Errorf("listen on host socket: %w", err)
+	}
+	srv := grpc.NewServer()
+	proto.RegisterPluginHostServer(srv, NewPluginHostServer(cfg.AllowedHosts))
 	if registerHost != nil {
-		hostSocket := filepath.Join(dir, "host.sock")
-		lis, err := net.Listen("unix", hostSocket)
-		if err != nil {
-			_ = os.RemoveAll(dir)
-			return nil, fmt.Errorf("listen on host socket: %w", err)
-		}
-		srv := grpc.NewServer()
 		registerHost(srv)
-		proc.hostLis = lis
-		proc.hostSrv = srv
-		go func() {
-			_ = srv.Serve(lis)
-		}()
+	}
+	proc.hostLis = lis
+	proc.hostSrv = srv
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	env[proto.EnvPluginHostSocket] = hostSocket
+	if registerHost != nil {
 		env[hostSocketEnv] = hostSocket
 	}
 
