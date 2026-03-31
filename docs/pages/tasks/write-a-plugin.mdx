@@ -91,36 +91,28 @@ This cross-compiles for macOS and Linux (amd64 and arm64), creates per-platform 
 Upload the release artifacts to GitHub:
 
 ```sh
-gh release create v0.1.0 dist/*
+gh release create plugin/my-tool/v0.1.0 dist/*
 ```
 
-For CI automation, use the reusable workflow:
+The GitHub release tag must match `plugin/<plugin>/v<version>`. Pass bare SemVer to `gestaltd plugin release --version`, for example `0.1.0`, not `v0.1.0`.
 
-```yaml
-# .github/workflows/release.yml
-name: Release
-on:
-  push:
-    tags: ['v*']
-jobs:
-  release:
-    uses: valon-technologies/gestalt/.github/workflows/release-plugin-reusable.yml@<pinned-ref>
-    with:
-      version: ${{ github.ref_name }}
-      gestaltd-version: <same-pinned-ref>
+For CI automation in this repository, push a plugin release tag to trigger `.github/workflows/release-plugin.yml`:
+
+```sh
+git tag plugin/my-tool/v0.1.0
+git push origin plugin/my-tool/v0.1.0
 ```
-
-Use the same tag or commit SHA for both `<pinned-ref>` values so the workflow and installed `gestaltd` stay in lockstep.
 
 ## Configure and run
 
-Reference the package in your Gestalt config:
+Reference the plugin in your Gestalt config:
 
 ```yaml
 integrations:
   my-tool:
     plugin:
-      package: ./dist/my-tool
+      source: github.com/myorg/my-repo/my-tool
+      version: 0.1.0
 ```
 
 Then init and serve:
