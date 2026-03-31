@@ -45,22 +45,8 @@ server:
 integrations:
   service-a:
     display_name: Service A
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-          client_id: integration-client
-          client_secret: integration-secret
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-    mcp:
-      url: https://example.test/mcp
-      connection: default
+    plugin:
+      command: /tmp/provider
 `)
 
 	cfg, err := Load(path)
@@ -82,15 +68,6 @@ integrations:
 	}
 	if got := cfg.Integrations["service-a"].DisplayName; got != "Service A" {
 		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
-	}
-	if got := cfg.Integrations["service-a"].Connections["default"].Auth.ClientID; got != "integration-client" {
-		t.Fatalf("Connections[default].Auth.ClientID = %q", got)
-	}
-	if got := cfg.Integrations["service-a"].API.Type; got != "rest" {
-		t.Fatalf("API.Type = %q", got)
-	}
-	if got := cfg.Integrations["service-a"].MCP.URL; got != "https://example.test/mcp" {
-		t.Fatalf("MCP.URL = %q", got)
 	}
 }
 
@@ -115,17 +92,8 @@ server:
   encryption_key: ${TEST_ENCRYPTION}
 integrations:
   service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
+    plugin:
+      command: /tmp/provider
 `)
 
 	cfg, err := LoadWithMapping(path, getenv)
@@ -184,220 +152,6 @@ server:
 	}
 }
 
-func TestLoadConfigEnvValueOverridesFile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	secretPath := filepath.Join(dir, "encryption-key")
-	if err := os.WriteFile(secretPath, []byte("file-based-secret\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile secret: %v", err)
-	}
-
-	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: ${TEST_ENCRYPTION}
-`)
-
-	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
-		switch key {
-		case "TEST_ENCRYPTION":
-			return "env-secret", true
-		case "TEST_ENCRYPTION_FILE":
-			return secretPath, true
-		default:
-			return "", false
-		}
-	})
-	if err != nil {
-		t.Fatalf("LoadWithLookup: %v", err)
-	}
-
-	if cfg.Server.EncryptionKey != "env-secret" {
-		t.Fatalf("Server.EncryptionKey = %q, want env-secret", cfg.Server.EncryptionKey)
-	}
-}
-
-func TestLoadConfigEnvFileReadError(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: ${TEST_ENCRYPTION}
-`)
-
-	_, err := LoadWithLookup(path, func(key string) (string, bool) {
-		switch key {
-		case "TEST_ENCRYPTION_FILE":
-			return "/does/not/exist", true
-		default:
-			return "", false
-		}
-	})
-	if err == nil {
-		t.Fatal("expected error for unreadable *_FILE path")
-	}
-	if !strings.Contains(err.Error(), "TEST_ENCRYPTION_FILE") {
-		t.Fatalf("expected *_FILE context in error, got: %v", err)
-	}
-}
-
-func TestLoadWithMappingEmptyValueDoesNotFallbackToFile(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-  base_url: ${TEST_BASE_URL}
-`)
-
-	cfg, err := LoadWithMapping(path, func(key string) string {
-		switch key {
-		case "TEST_BASE_URL":
-			return ""
-		case "TEST_BASE_URL_FILE":
-			return "/tmp/should-not-be-used"
-		default:
-			return ""
-		}
-	})
-	if err != nil {
-		t.Fatalf("LoadWithMapping: %v", err)
-	}
-	if cfg.Server.BaseURL != "" {
-		t.Fatalf("Server.BaseURL = %q, want empty string", cfg.Server.BaseURL)
-	}
-}
-
-func TestLoadConfigBaseURLResolvesRedirectURL(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-  base_url: https://app.example.test
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	got := cfg.Integrations["service-a"].Connections["default"].Auth.RedirectURL
-	want := "https://app.example.test/api/v1/auth/callback"
-	if got != want {
-		t.Fatalf("RedirectURL = %q, want %q", got, want)
-	}
-}
-
-func TestLoadConfigResolvesRelativePaths(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	iconDir := filepath.Join(dir, "assets")
-	if err := os.MkdirAll(iconDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	iconPath := filepath.Join(iconDir, "service.svg")
-	if err := os.WriteFile(iconPath, []byte(`<svg/>`), 0o644); err != nil {
-		t.Fatalf("WriteFile icon: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll config dir: %v", err)
-	}
-	if err := os.WriteFile(cfgPath, []byte(`
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    icon_file: ../assets/service.svg
-    plugin:
-      command: ../bin/provider
-  service-b:
-    plugin:
-      package: ../plugins/dummy.tar.gz
-  service-c:
-    plugin:
-      package: https://example.com/dummy.tar.gz
-  service-d:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: ../specs/service-d.json
-      connection: default
-runtimes:
-  worker:
-    plugin:
-      command: ../bin/runtime
-`), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	cfg, err := Load(cfgPath)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
-		t.Fatalf("IconFile = %q, want %q", got, iconPath)
-	}
-	if got := cfg.Integrations["service-a"].Plugin.Command; got != filepath.Join(dir, "bin", "provider") {
-		t.Fatalf("integration plugin command = %q", got)
-	}
-	if got := cfg.Integrations["service-b"].Plugin.Package; got != filepath.Join(dir, "plugins", "dummy.tar.gz") {
-		t.Fatalf("integration plugin package = %q, want %q", got, filepath.Join(dir, "plugins", "dummy.tar.gz"))
-	}
-	if got := cfg.Integrations["service-c"].Plugin.Package; got != "https://example.com/dummy.tar.gz" {
-		t.Fatalf("HTTPS plugin package should not be resolved = %q", got)
-	}
-	if got := cfg.Integrations["service-d"].API.OpenAPI; got != filepath.Join(dir, "specs", "service-d.json") {
-		t.Fatalf("API.OpenAPI = %q, want %q", got, filepath.Join(dir, "specs", "service-d.json"))
-	}
-	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
-		t.Fatalf("runtime plugin command = %q", got)
-	}
-}
-
 func TestValidateRuntime(t *testing.T) {
 	t.Parallel()
 
@@ -437,7 +191,6 @@ datastore:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
 			path := mustWriteConfigFile(t, tc.yaml)
 			cfg, err := Load(path)
 			if err != nil {
@@ -469,25 +222,6 @@ integrations:
 	}
 }
 
-func TestValidateRuntimeRequiresEncryptionKey(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-`)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if err := ValidateRuntime(cfg); err == nil {
-		t.Fatal("expected error for missing encryption_key, got nil")
-	}
-}
-
 func TestLoadConfigValidation(t *testing.T) {
 	t.Parallel()
 
@@ -496,243 +230,16 @@ func TestLoadConfigValidation(t *testing.T) {
 		yaml string
 	}{
 		{
-			name: "declarative integration with no connections",
+			name: "integration with no plugin",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   service-a:
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name: "declarative integration with neither api nor mcp",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-`,
-		},
-		{
-			name: "plugin with api",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    plugin:
-      command: /tmp/provider
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name: "api type rest without openapi",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      connection: default
-`,
-		},
-		{
-			name: "api type graphql without url",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: graphql
-      connection: default
-`,
-		},
-		{
-			name: "mcp without url",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    mcp:
-      connection: default
-`,
-		},
-		{
-			name: "surface references missing connection",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: missing
-`,
-		},
-		{
-			name: "mixed connection modes",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      api_conn:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-      mcp_conn:
-        mode: identity
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: api_conn
-    mcp:
-      url: https://example.test/mcp
-      connection: mcp_conn
-`,
-		},
-		{
-			name: "url template references undeclared param",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: graphql
-      url: https://{subdomain}.example.test/graphql
-      connection: default
-`,
-		},
-		{
-			name: "auth url template references undeclared param",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://{subdomain}.example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
+    display_name: Service A
 `,
 		},
 		{
 			name: "runtime requires type or plugin",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 runtimes:
   worker: {}
 `,
@@ -740,12 +247,6 @@ runtimes:
 		{
 			name: "egress default action must be allow or deny",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 egress:
   default_action: block
 `,
@@ -755,7 +256,6 @@ egress:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
 			path := mustWriteConfigFile(t, tc.yaml)
 			_, err := Load(path)
 			if err == nil {
@@ -773,83 +273,8 @@ func TestValidConfigurations(t *testing.T) {
 		yaml string
 	}{
 		{
-			name: "rest integration",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  github:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-          client_id: test-client
-          client_secret: test-secret
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
-`,
-		},
-		{
-			name: "graphql plus mcp with separate connections",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-integrations:
-  shop:
-    connections:
-      api_conn:
-        mode: user
-        params:
-          subdomain:
-            required: true
-        auth:
-          type: oauth2
-          authorization_url: https://accounts.shopify.com/oauth/authorize
-          token_url: https://accounts.shopify.com/oauth/token
-          client_id: test-client
-          client_secret: test-secret
-      mcp_conn:
-        mode: user
-        params:
-          subdomain:
-            required: true
-        auth:
-          type: oauth2
-          authorization_url: https://mcp-auth.example.com/authorize
-          token_url: https://mcp-auth.example.com/token
-          client_id: mcp-client
-          client_secret: mcp-secret
-    api:
-      type: graphql
-      url: https://{subdomain}.myshopify.com/admin/api/graphql.json
-      connection: api_conn
-    mcp:
-      url: https://tenant-{subdomain}.mcp.example.com
-      connection: mcp_conn
-`,
-		},
-		{
 			name: "plugin only",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   custom_tool:
     plugin:
@@ -857,55 +282,39 @@ integrations:
 `,
 		},
 		{
-			name: "shared connection across api and mcp",
+			name: "plugin with command",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   service:
-    connections:
-      shared:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-          client_id: test-client
-          client_secret: test-secret
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: shared
-    mcp:
-      url: https://example.test/mcp
-      connection: shared
+    plugin:
+      command: /usr/bin/provider
 `,
 		},
 		{
-			name: "mcp only declarative",
+			name: "inline plugin with openapi",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   service:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    mcp:
-      url: https://example.test/mcp
-      connection: default
+    plugin:
+      openapi: https://example.test/spec.json
+      base_url: https://api.example.test
+      auth:
+        type: oauth2
+        authorization_url: https://example.test/auth
+        token_url: https://example.test/token
+`,
+		},
+		{
+			name: "inline plugin with operations",
+			yaml: `
+integrations:
+  service:
+    plugin:
+      base_url: https://api.example.test
+      operations:
+        - name: list_users
+          method: GET
+          path: /users
 `,
 		},
 	}
@@ -913,7 +322,6 @@ integrations:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
 			path := mustWriteConfigFile(t, tc.yaml)
 			_, err := Load(path)
 			if err != nil {
@@ -934,12 +342,6 @@ func TestPluginValidation(t *testing.T) {
 		{
 			name: "integration plugin package is valid",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin:
@@ -949,12 +351,6 @@ integrations:
 		{
 			name: "runtime plugin package is valid",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 runtimes:
   worker:
     plugin:
@@ -964,12 +360,6 @@ runtimes:
 		{
 			name: "plugin package and command are mutually exclusive",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin:
@@ -981,12 +371,6 @@ integrations:
 		{
 			name: "plugin args require command not package",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin:
@@ -999,12 +383,6 @@ integrations:
 		{
 			name: "plugin env with package is valid",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin:
@@ -1016,12 +394,6 @@ integrations:
 		{
 			name: "plugin config with package is valid",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin:
@@ -1033,12 +405,6 @@ integrations:
 		{
 			name: "runtime plugin config must be sibling config block",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 runtimes:
   worker:
     plugin:
@@ -1051,12 +417,6 @@ runtimes:
 		{
 			name: "runtime requires type or plugin",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 runtimes:
   worker: {}
 `,
@@ -1065,12 +425,6 @@ runtimes:
 		{
 			name: "runtime plugin cannot also define type",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 runtimes:
   worker:
     type: echo
@@ -1080,14 +434,8 @@ runtimes:
 			wantErr: true,
 		},
 		{
-			name: "plugin command or package is required",
+			name: "plugin command or package is required for external",
 			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
 integrations:
   external:
     plugin: {}
@@ -1102,99 +450,6 @@ integrations:
     plugin:
       package: ./plugins/dummy.tar.gz
       version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin command with version is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      command: /tmp/plugin
-      version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin source without version is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      source: example.com/org/repo/plugin
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress default_action allow is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  default_action: allow
-`,
-		},
-		{
-			name: "egress default_action deny is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  default_action: deny
-`,
-		},
-		{
-			name: "egress default_action invalid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  default_action: block
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress credential auth_style bearer is valid",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - host: api.vendor.test
-      secret_ref: vendor-key
-      auth_style: bearer
-`,
-		},
-		{
-			name: "egress credential with no match criterion rejected",
-			yaml: `
-auth:
-  provider: auth-provider
-datastore:
-  provider: data-store
-server:
-  encryption_key: server-key
-egress:
-  credentials:
-    - secret_ref: vendor-key
-      auth_style: bearer
 `,
 			wantErr: true,
 		},
@@ -1219,94 +474,24 @@ integrations:
 			wantErr: true,
 		},
 		{
-			name: "plugin source with command is rejected",
+			name: "egress default_action allow is valid",
 			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/acme-corp/tools/widget
-      version: 1.0.0
-      command: /tmp/plugin
+egress:
+  default_action: allow
 `,
-			wantErr: true,
 		},
 		{
-			name: "plugin source with package is rejected",
+			name: "egress default_action deny is valid",
 			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/acme-corp/tools/widget
-      version: 1.0.0
-      package: ./plugins/dummy.tar.gz
+egress:
+  default_action: deny
 `,
-			wantErr: true,
 		},
 		{
-			name: "plugin command with version is rejected",
+			name: "egress default_action invalid",
 			yaml: `
-integrations:
-  external:
-    plugin:
-      command: /tmp/plugin
-      version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin package with version is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      package: ./plugins/dummy.tar.gz
-      version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin source missing plugin segment is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/acme-corp/tools
-      version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin source with uppercase is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/Acme-Corp/tools/widget
-      version: 1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin source with leading v in version is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/acme-corp/tools/widget
-      version: v1.0.0
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin source with args is rejected",
-			yaml: `
-integrations:
-  external:
-    plugin:
-      source: github.com/acme-corp/tools/widget
-      version: 1.0.0
-      args:
-        - --verbose
+egress:
+  default_action: block
 `,
 			wantErr: true,
 		},
@@ -1315,7 +500,6 @@ integrations:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
 			path := mustWriteConfigFile(t, tc.yaml)
 			_, err := Load(path)
 			if tc.wantErr {
@@ -1328,6 +512,192 @@ integrations:
 				t.Fatalf("Load: %v", err)
 			}
 		})
+	}
+}
+
+func TestValidateStructure_PluginValidationDirect(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		cfg     *Config
+		wantErr string
+	}{
+		{
+			name: "package valid",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Package: "./some-dir"}},
+				},
+			},
+		},
+		{
+			name: "source valid",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+				},
+			},
+		},
+		{
+			name: "both package and source rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Package: "./some-dir", Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "mutually exclusive",
+		},
+		{
+			name: "nil plugin rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {},
+				},
+			},
+			wantErr: "requires a plugin",
+		},
+		{
+			name: "source without version rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Source: "github.com/test-org/test-repo/test-plugin"}},
+				},
+			},
+			wantErr: "plugin.version is required",
+		},
+		{
+			name: "package with version rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Package: "./some-dir", Version: "1.0.0"}},
+				},
+			},
+			wantErr: "plugin.version is only valid with plugin.source",
+		},
+		{
+			name: "http package rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Package: "http://evil.com/pkg"}},
+				},
+			},
+			wantErr: "HTTPS",
+		},
+		{
+			name: "https package accepted",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{Package: "https://releases.example.com/pkg.tar.gz"}},
+				},
+			},
+		},
+		{
+			name: "inline plugin with openapi accepted",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}},
+				},
+			},
+		},
+		{
+			name: "inline plugin with auth and openapi accepted",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {Plugin: &PluginDef{
+						OpenAPI: "https://example.com/spec.json",
+						Auth:    &ConnectionAuthDef{Type: "oauth2"},
+					}},
+				},
+			},
+		},
+		{
+			name: "runtime plugin with type rejected",
+			cfg: &Config{
+				Runtimes: map[string]RuntimeDef{
+					"worker": {Type: "grpc", Plugin: &PluginDef{Command: "/usr/bin/runtime"}},
+				},
+			},
+			wantErr: "cannot set both plugin and type",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateStructure(tc.cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigResolvesRelativePaths(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	iconDir := filepath.Join(dir, "assets")
+	if err := os.MkdirAll(iconDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	iconPath := filepath.Join(iconDir, "service.svg")
+	if err := os.WriteFile(iconPath, []byte(`<svg/>`), 0o644); err != nil {
+		t.Fatalf("WriteFile icon: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll config dir: %v", err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(`
+integrations:
+  service-a:
+    icon_file: ../assets/service.svg
+    plugin:
+      command: ../bin/provider
+  service-b:
+    plugin:
+      package: ../plugins/dummy.tar.gz
+  service-c:
+    plugin:
+      package: https://example.com/dummy.tar.gz
+runtimes:
+  worker:
+    plugin:
+      command: ../bin/runtime
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
+		t.Fatalf("IconFile = %q, want %q", got, iconPath)
+	}
+	if got := cfg.Integrations["service-a"].Plugin.Command; got != filepath.Join(dir, "bin", "provider") {
+		t.Fatalf("integration plugin command = %q", got)
+	}
+	if got := cfg.Integrations["service-b"].Plugin.Package; got != filepath.Join(dir, "plugins", "dummy.tar.gz") {
+		t.Fatalf("integration plugin package = %q, want %q", got, filepath.Join(dir, "plugins", "dummy.tar.gz"))
+	}
+	if got := cfg.Integrations["service-c"].Plugin.Package; got != "https://example.com/dummy.tar.gz" {
+		t.Fatalf("HTTPS plugin package should not be resolved = %q", got)
+	}
+	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
+		t.Fatalf("runtime plugin command = %q", got)
 	}
 }
 
@@ -1356,9 +726,6 @@ server:
 	if len(authCfg) != 3 {
 		t.Fatalf("Auth.Config length = %d, want 3", len(authCfg))
 	}
-	if authCfg["allowed_domain"] != "example.test" {
-		t.Fatalf("Auth.Config.allowed_domain = %q", authCfg["allowed_domain"])
-	}
 }
 
 func TestLoadConfig_APITokenTTL(t *testing.T) {
@@ -1366,7 +733,6 @@ func TestLoadConfig_APITokenTTL(t *testing.T) {
 
 	t.Run("valid day duration", func(t *testing.T) {
 		t.Parallel()
-
 		path := mustWriteConfigFile(t, `
 server:
   api_token_ttl: "14d"
@@ -1380,41 +746,8 @@ server:
 		}
 	})
 
-	t.Run("valid hour duration", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-server:
-  api_token_ttl: "48h"
-`)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Server.APITokenTTL != "48h" {
-			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "48h")
-		}
-	})
-
-	t.Run("valid minute duration", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-server:
-  api_token_ttl: "30m"
-`)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Server.APITokenTTL != "30m" {
-			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "30m")
-		}
-	})
-
 	t.Run("invalid duration rejected", func(t *testing.T) {
 		t.Parallel()
-
 		path := mustWriteConfigFile(t, `
 server:
   api_token_ttl: "not-a-duration"
@@ -1424,48 +757,6 @@ server:
 			t.Fatal("expected error for invalid api_token_ttl")
 		}
 	})
-
-	t.Run("zero day duration rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-server:
-  api_token_ttl: "0d"
-`)
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("expected error for zero api_token_ttl")
-		}
-	})
-
-	t.Run("negative duration rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-server:
-  api_token_ttl: "-1d"
-`)
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("expected error for negative api_token_ttl")
-		}
-	})
-
-	t.Run("omitted uses default", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-server:
-  port: 9090
-`)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Server.APITokenTTL != "" {
-			t.Fatalf("APITokenTTL = %q, want empty", cfg.Server.APITokenTTL)
-		}
-	})
 }
 
 func TestLoadErrors(t *testing.T) {
@@ -1473,7 +764,6 @@ func TestLoadErrors(t *testing.T) {
 
 	t.Run("missing file", func(t *testing.T) {
 		t.Parallel()
-
 		_, err := Load("/tmp/gestalt-config-does-not-exist.yaml")
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
@@ -1482,225 +772,12 @@ func TestLoadErrors(t *testing.T) {
 
 	t.Run("invalid yaml", func(t *testing.T) {
 		t.Parallel()
-
 		path := mustWriteConfigFile(t, `{{{invalid yaml`)
 		_, err := Load(path)
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
 	})
-}
-
-func TestValidateStructure_PluginValidationDirect(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		cfg     *Config
-		wantErr string
-	}{
-		{
-			name: "package valid",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir"}},
-				},
-			},
-		},
-		{
-			name: "source valid",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
-				},
-			},
-		},
-		{
-			name: "both package and source rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
-				},
-			},
-			wantErr: "mutually exclusive",
-		},
-		{
-			name: "neither package nor source nor command rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{}},
-				},
-			},
-			wantErr: "plugin.command, plugin.package, or plugin.source is required",
-		},
-		{
-			name: "source without version rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Source: "github.com/test-org/test-repo/test-plugin"}},
-				},
-			},
-			wantErr: "plugin.version is required",
-		},
-		{
-			name: "package with version rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Version: "1.0.0"}},
-				},
-			},
-			wantErr: "plugin.version is only valid with plugin.source",
-		},
-		{
-			name: "http package rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "http://evil.com/pkg"}},
-				},
-			},
-			wantErr: "HTTPS",
-		},
-		{
-			name: "https package accepted",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "https://releases.example.com/pkg.tar.gz"}},
-				},
-			},
-		},
-		{
-			name: "command with version rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin", Version: "1.0.0"}},
-				},
-			},
-			wantErr: "plugin.version is only valid with plugin.source",
-		},
-		{
-			name: "args without command rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Package: "./some-dir", Args: []string{"--verbose"}}},
-				},
-			},
-			wantErr: "plugin.args are only valid with plugin.command",
-		},
-		{
-			name: "invalid source address rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ExecutablePluginDef{Source: "not-a-valid-source", Version: "1.0.0"}},
-				},
-			},
-			wantErr: "plugin.source",
-		},
-		{
-			name: "plugin with connections but no surface reference is rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin"},
-					},
-				},
-			},
-			wantErr: "no surface references them",
-		},
-		{
-			name: "plugin with connection referencing pool is valid",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "default"},
-					},
-				},
-			},
-		},
-		{
-			name: "plugin with api requires plugin.connection",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin"},
-						API:         &APIDef{Type: "rest", Connection: "default"},
-					},
-				},
-			},
-			wantErr: "plugin.connection is required when composing plugin with api",
-		},
-		{
-			name: "plugin with api and shared connection is valid",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "default"},
-						API:         &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "default"},
-					},
-				},
-			},
-		},
-		{
-			name: "plugin with api but missing connection rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
-						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "nonexistent"},
-						API:         &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "default"},
-					},
-				},
-			},
-			wantErr: `plugin.connection "nonexistent" not found`,
-		},
-		{
-			name: "plugin with api using different connections rejected",
-			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {
-						Connections: map[string]ConnectionDef{
-							"api_conn":    {Mode: "user"},
-							"plugin_conn": {Mode: "user"},
-						},
-						Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "plugin_conn"},
-						API:    &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "api_conn"},
-					},
-				},
-			},
-			wantErr: "plugin.connection and api.connection must reference the same connection",
-		},
-		{
-			name: "runtime plugin with type rejected",
-			cfg: &Config{
-				Runtimes: map[string]RuntimeDef{
-					"worker": {Type: "grpc", Plugin: &ExecutablePluginDef{Command: "/usr/bin/runtime"}},
-				},
-			},
-			wantErr: "cannot set both plugin and type",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := ValidateStructure(tc.cfg)
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("expected no error, got: %v", err)
-				}
-				return
-			}
-			if err == nil {
-				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
-			}
-		})
-	}
 }
 
 func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
@@ -1739,429 +816,36 @@ func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
 	}
 }
 
-func TestAllowedOperations(t *testing.T) {
+func TestIsInline(t *testing.T) {
 	t.Parallel()
 
-	path := mustWriteConfigFile(t, `
-integrations:
-  service-a:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-      allowed_operations:
-        list_records:
-          alias: fetch_records
-          description: Retrieve all records
-        get_record:
-        delete_record:
-          alias: remove_record
-    mcp:
-      url: https://example.test/mcp
-      connection: default
-      allowed_operations:
-        run_query:
-          alias: execute_query
-          description: Run a database query
-        list_tables:
-`)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	api := cfg.Integrations["service-a"].API
-	if api.AllowedOperations == nil {
-		t.Fatal("API.AllowedOperations is nil")
-	}
-	if len(api.AllowedOperations) != 3 {
-		t.Fatalf("API.AllowedOperations length = %d, want 3", len(api.AllowedOperations))
-	}
-
-	listOp := api.AllowedOperations["list_records"]
-	if listOp == nil {
-		t.Fatal("list_records override is nil")
-	}
-	if listOp.Alias != "fetch_records" {
-		t.Errorf("list_records alias = %q, want fetch_records", listOp.Alias)
-	}
-	if listOp.Description != "Retrieve all records" {
-		t.Errorf("list_records description = %q", listOp.Description)
-	}
-
-	if api.AllowedOperations["get_record"] != nil {
-		t.Error("get_record override should be nil for bare key")
-	}
-
-	deleteOp := api.AllowedOperations["delete_record"]
-	if deleteOp == nil {
-		t.Fatal("delete_record override is nil")
-	}
-	if deleteOp.Alias != "remove_record" {
-		t.Errorf("delete_record alias = %q, want remove_record", deleteOp.Alias)
-	}
-
-	mcp := cfg.Integrations["service-a"].MCP
-	if mcp.AllowedOperations == nil {
-		t.Fatal("MCP.AllowedOperations is nil")
-	}
-	if len(mcp.AllowedOperations) != 2 {
-		t.Fatalf("MCP.AllowedOperations length = %d, want 2", len(mcp.AllowedOperations))
-	}
-
-	runOp := mcp.AllowedOperations["run_query"]
-	if runOp == nil {
-		t.Fatal("run_query override is nil")
-	}
-	if runOp.Alias != "execute_query" {
-		t.Errorf("run_query alias = %q, want execute_query", runOp.Alias)
-	}
-	if runOp.Description != "Run a database query" {
-		t.Errorf("run_query description = %q", runOp.Description)
-	}
-
-	if mcp.AllowedOperations["list_tables"] != nil {
-		t.Error("list_tables override should be nil for bare key")
-	}
-}
-
-func TestHybridPluginComposition(t *testing.T) {
-	t.Parallel()
-
-	const baseConfig = `
-integrations:
-  svc:
-`
-	const connBlock = `    connections:
-      named:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-          client_id: cid
-          client_secret: csec
-`
 	cases := []struct {
-		name    string
-		yaml    string
-		wantErr bool
+		name   string
+		plugin *PluginDef
+		want   bool
 	}{
-		{
-			name: "plugin only is valid",
-			yaml: baseConfig + `    plugin:
-      command: /tmp/plug
-`,
-		},
-		{
-			name: "plugin plus mcp with connection plugin is valid",
-			yaml: baseConfig + `    plugin:
-      command: /tmp/plug
-    mcp:
-      url: https://mcp.test/sse
-      connection: plugin
-`,
-		},
-		{
-			name: "plugin plus mcp with named connection is valid",
-			yaml: baseConfig + connBlock + `    plugin:
-      command: /tmp/plug
-    mcp:
-      url: https://mcp.test/sse
-      connection: named
-`,
-		},
-		{
-			name: "plugin plus api is rejected",
-			yaml: baseConfig + connBlock + `    plugin:
-      command: /tmp/plug
-    api:
-      type: rest
-      openapi: https://api.test/spec.json
-      connection: named
-`,
-			wantErr: true,
-		},
-		{
-			name: "plugin plus mcp without connection is rejected",
-			yaml: baseConfig + `    plugin:
-      command: /tmp/plug
-    mcp:
-      url: https://mcp.test/sse
-`,
-			wantErr: true,
-		},
-		{
-			name: "declarative only is valid",
-			yaml: baseConfig + connBlock + `    api:
-      type: rest
-      openapi: https://api.test/spec.json
-      connection: named
-`,
-		},
+		{name: "nil plugin", plugin: nil, want: false},
+		{name: "external command", plugin: &PluginDef{Command: "/bin/test"}, want: false},
+		{name: "external package", plugin: &PluginDef{Package: "./pkg"}, want: false},
+		{name: "external source", plugin: &PluginDef{Source: "github.com/a/b/c", Version: "1.0.0"}, want: false},
+		{name: "inline openapi", plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}, want: true},
+		{name: "inline graphql", plugin: &PluginDef{GraphQLURL: "https://example.com/graphql"}, want: true},
+		{name: "inline mcp", plugin: &PluginDef{MCPURL: "https://example.com/mcp"}, want: true},
+		{name: "base_url only", plugin: &PluginDef{BaseURL: "https://api.example.com"}, want: true},
+		{name: "inline operations", plugin: &PluginDef{Operations: []InlineOperationDef{{Name: "op"}}}, want: true},
+		{name: "auth only", plugin: &PluginDef{Auth: &ConnectionAuthDef{Type: "oauth2"}}, want: true},
+		{name: "connections only", plugin: &PluginDef{Connections: map[string]*ConnectionDef{"default": {}}}, want: true},
+		{name: "openapi with base_url", plugin: &PluginDef{OpenAPI: "https://example.com/spec.json", BaseURL: "https://api.example.com"}, want: true},
+		{name: "operations with auth", plugin: &PluginDef{Operations: []InlineOperationDef{{Name: "op"}}, Auth: &ConnectionAuthDef{Type: "oauth2"}}, want: true},
+		{name: "empty plugin", plugin: &PluginDef{}, want: false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			_, err := Load(path)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-func TestCredentialFieldValidation(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		yaml    string
-		wantErr bool
-	}{
-		{
-			name:    "manual auth without credentials",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name: "single credential field is valid",
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: token
-              label: API Token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name: "multiple credentials with auth_mapping is valid",
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: api_key
-              label: API Key
-            - name: app_key
-              label: Application Key
-          auth_mapping:
-            headers:
-              X-Api-Key: api_key
-              X-App-Key: app_key
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name:    "duplicate credential names",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: token
-            - name: token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name:    "empty credential name",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: ""
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name:    "auth_mapping references unknown credential",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: api_key
-          auth_mapping:
-            headers:
-              X-Api-Key: unknown_field
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name:    "single credential with auth_mapping",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: token
-          auth_mapping:
-            headers:
-              X-Token: token
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-		{
-			name:    "multiple credentials without auth_mapping",
-			wantErr: true,
-			yaml: `
-auth:
-  provider: ap
-datastore:
-  provider: ds
-server:
-  encryption_key: ek
-integrations:
-  svc:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: manual
-          credentials:
-            - name: api_key
-            - name: app_key
-    api:
-      type: rest
-      openapi: https://example.test/spec.json
-      connection: default
-`,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			_, err := Load(path)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			got := tc.plugin.IsInline()
+			if got != tc.want {
+				t.Fatalf("IsInline() = %v, want %v", got, tc.want)
 			}
 		})
 	}

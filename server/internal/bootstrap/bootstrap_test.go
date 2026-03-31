@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,33 +28,9 @@ func stubDatastoreFactory() bootstrap.DatastoreFactory {
 	}
 }
 
-func stubProviderFactory(name string) bootstrap.ProviderFactory {
-	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: name}}, nil
-	}
-}
-
 func stubRuntimeFactory(name string, stopFn func(context.Context) error) bootstrap.RuntimeFactory {
 	return func(_ context.Context, _ string, _ config.RuntimeDef, _ bootstrap.RuntimeDeps) (core.Runtime, error) {
 		return &coretesting.StubRuntime{N: name, StopFn: stopFn}, nil
-	}
-}
-
-type stubIntegrationWithOps struct {
-	coretesting.StubIntegration
-	ops []core.Operation
-}
-
-func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
-	return s.ops
-}
-
-func stubProviderFactoryWithOps(name string, ops []core.Operation) bootstrap.ProviderFactory {
-	return func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: name},
-			ops:             ops,
-		}}, nil
 	}
 }
 
@@ -72,6 +46,17 @@ func stubTelemetryFactory() bootstrap.TelemetryFactory {
 	}
 }
 
+func pluginIntegration() config.IntegrationDef {
+	return config.IntegrationDef{
+		Plugin: &config.PluginDef{
+			BaseURL: "https://api.example.test",
+			Operations: []config.InlineOperationDef{
+				{Name: "list_items", Method: "GET", Path: "/items"},
+			},
+		},
+	}
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth:      config.AuthConfig{Provider: "test-auth"},
@@ -79,7 +64,7 @@ func validConfig() *config.Config {
 		Secrets:   config.SecretsConfig{Provider: "test-secrets"},
 		Telemetry: config.TelemetryConfig{Provider: "test-telemetry"},
 		Integrations: map[string]config.IntegrationDef{
-			"alpha": {},
+			"alpha": pluginIntegration(),
 		},
 		Server: config.ServerConfig{
 			Port:          8080,
@@ -92,7 +77,6 @@ func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth["test-auth"] = stubAuthFactory("test-auth")
 	f.Datastores["test-store"] = stubDatastoreFactory()
-	f.Providers["alpha"] = stubProviderFactory("alpha")
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
@@ -136,11 +120,6 @@ func TestBootstrap(t *testing.T) {
 	if invoker != lister {
 		t.Fatal("expected shared invoker and capability lister to be the same instance")
 	}
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Providers.List: got %v, want [alpha]", names)
-	}
 }
 
 func TestValidate(t *testing.T) {
@@ -180,21 +159,13 @@ func TestBootstrapMultipleProviders(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations["beta"] = config.IntegrationDef{}
+	cfg.Integrations["beta"] = pluginIntegration()
 
-	factories := validFactories()
-	factories.Providers["beta"] = stubProviderFactory("beta")
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	<-result.ProvidersReady
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 2 {
-		t.Fatalf("Providers.List: got %d items, want 2", len(names))
-	}
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {
@@ -209,153 +180,8 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	<-result.ProvidersReady
-	<-result.ProvidersReady
 	if got := result.Providers.List(); len(got) != 0 {
 		t.Errorf("expected empty providers, got %v", got)
-	}
-}
-
-func TestBootstrapDefaultProviderFactory(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	factories := bootstrap.NewFactoryRegistry()
-	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
-	factories.Datastores["test-store"] = stubDatastoreFactory()
-	factories.DefaultProvider = stubProviderFactory("default-alpha")
-	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
-	factories.Telemetry["test-telemetry"] = stubTelemetryFactory()
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Providers.List: got %v, want [alpha]", names)
-	}
-}
-
-func TestBootstrapNamedOverridesDefault(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	factories := bootstrap.NewFactoryRegistry()
-	factories.Auth["test-auth"] = stubAuthFactory("test-auth")
-	factories.Datastores["test-store"] = stubDatastoreFactory()
-	factories.DefaultProvider = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return nil, fmt.Errorf("should not be called")
-	}
-	factories.Providers["alpha"] = stubProviderFactory("alpha")
-	factories.Secrets["test-secrets"] = stubSecretManagerFactory()
-	factories.Telemetry["test-telemetry"] = stubTelemetryFactory()
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Providers.List: got %v, want [alpha]", names)
-	}
-}
-
-func TestBootstrapUnknownProvider(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cases := []struct {
-		name   string
-		mutate func(*config.Config)
-	}{
-		{
-			name:   "unknown auth provider",
-			mutate: func(c *config.Config) { c.Auth.Provider = "unknown" },
-		},
-		{
-			name:   "unknown datastore",
-			mutate: func(c *config.Config) { c.Datastore.Provider = "unknown" },
-		},
-		{
-			name:   "unknown secrets provider",
-			mutate: func(c *config.Config) { c.Secrets.Provider = "unknown" },
-		},
-		{
-			name: "no factory for integration",
-			mutate: func(c *config.Config) {
-				c.Integrations["unknown"] = config.IntegrationDef{}
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := validConfig()
-			tc.mutate(cfg)
-			_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-		})
-	}
-}
-
-func TestBootstrapNilProviderFactoryFailsFast(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("direct provider", func(t *testing.T) {
-		t.Parallel()
-
-		factories := validFactories()
-		factories.Providers["alpha"] = nil
-
-		_, err := bootstrap.Bootstrap(ctx, validConfig(), factories)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `no provider factory for "alpha"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-}
-
-func TestBootstrapPluginMCPRequiresFactory(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.ExecutablePluginDef{
-			Command: "echo",
-		},
-		MCP: &config.MCPDef{
-			URL:        "https://mcp.test/sse",
-			Connection: "default",
-		},
-		Connections: map[string]config.ConnectionDef{
-			"default": {Mode: "none"},
-		},
-	}
-
-	factories := validFactories()
-	delete(factories.Providers, "alpha")
-	factories.DefaultProvider = nil
-
-	_, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err == nil {
-		t.Fatal("expected error for plugin+mcp integration with no factory")
-	}
-	if !strings.Contains(err.Error(), "no provider factory") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -365,16 +191,12 @@ func TestBootstrapPluginOnlySkipsFactory(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.ExecutablePluginDef{
+		Plugin: &config.PluginDef{
 			Command: "echo",
 		},
 	}
 
-	factories := validFactories()
-	delete(factories.Providers, "alpha")
-	factories.DefaultProvider = nil
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap should succeed for plugin-only: %v", err)
 	}
@@ -417,51 +239,6 @@ func TestBootstrapFactoryError(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 		})
-	}
-}
-
-func TestBootstrapProviderErrorSkipsProvider(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["beta"] = config.IntegrationDef{}
-
-	factories := validFactories()
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return nil, fmt.Errorf("provider broke")
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap should succeed when a provider fails: %v", err)
-	}
-	<-result.ProvidersReady
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Providers.List: got %v, want [alpha] (beta should be skipped)", names)
-	}
-}
-
-func TestValidateProviderErrorFails(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["beta"] = config.IntegrationDef{}
-
-	factories := validFactories()
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return nil, fmt.Errorf("provider broke")
-	}
-
-	_, err := bootstrap.Validate(ctx, cfg, factories)
-	if err == nil {
-		t.Fatal("expected Validate to fail when a provider fails")
-	}
-	if !strings.Contains(err.Error(), `integration "beta": provider broke`) {
-		t.Fatalf("unexpected validation error: %v", err)
 	}
 }
 
@@ -545,103 +322,6 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 	})
 }
 
-func TestBootstrapBaseURL(t *testing.T) {
-	t.Parallel()
-
-	var receivedBaseURL string
-	var receivedRedirectURL string
-	factories := validFactories()
-	factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
-		receivedBaseURL = deps.BaseURL
-		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
-	}
-	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		if conn, ok := def.Connections["default"]; ok {
-			receivedRedirectURL = conn.Auth.RedirectURL
-		}
-		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
-	}
-	factories.Secrets["env"] = stubSecretManagerFactory()
-	factories.Telemetry["stdout"] = stubTelemetryFactory()
-
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	cfgYAML := `
-auth:
-  provider: test-auth
-datastore:
-  provider: test-store
-server:
-  base_url: https://gestalt.example.com
-  encryption_key: test-key
-integrations:
-  alpha:
-    connections:
-      default:
-        mode: none
-        auth:
-          type: oauth2
-          authorization_url: https://example.com/auth
-          token_url: https://example.com/token
-          client_id: cid
-          client_secret: csec
-    api:
-      type: rest
-      openapi: https://example.com/spec.json
-      connection: default
-`
-	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	if receivedBaseURL != "https://gestalt.example.com" {
-		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://gestalt.example.com")
-	}
-	want := "https://gestalt.example.com" + config.IntegrationCallbackPath
-	if receivedRedirectURL != want {
-		t.Errorf("integration factory RedirectURL = %q, want %q", receivedRedirectURL, want)
-	}
-}
-
-func TestBootstrapAllowedOperations(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	allOps := []core.Operation{
-		{Name: "list_channels"},
-		{Name: "send_message"},
-		{Name: "delete_message"},
-	}
-
-	cfg := validConfig()
-	factories := validFactories()
-	factories.Providers["alpha"] = stubProviderFactoryWithOps("alpha", allOps[:2])
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	<-result.ProvidersReady
-	prov, err := result.Providers.Get("alpha")
-	if err != nil {
-		t.Fatalf("provider 'alpha' not found: %v", err)
-	}
-	if len(prov.ListOperations()) != 2 {
-		t.Fatalf("ListOperations: got %d ops, want 2", len(prov.ListOperations()))
-	}
-}
-
 func TestBootstrapSecretResolution(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -671,45 +351,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		<-result.ProvidersReady
 		if len(receivedKey) != 32 {
 			t.Errorf("key length: got %d, want 32", len(receivedKey))
-		}
-	})
-
-	t.Run("resolves secret:// in connection client_secret", func(t *testing.T) {
-		t.Parallel()
-
-		var receivedDef config.IntegrationDef
-		factories := validFactories()
-		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"slack-secret": "resolved-secret"},
-			}, nil
-		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-			receivedDef = intg
-			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
-		}
-
-		cfg := validConfig()
-		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:         "oauth2",
-						ClientSecret: "secret://slack-secret",
-					},
-				},
-			},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if conn.Auth.ClientSecret != "resolved-secret" {
-			t.Errorf("ClientSecret: got %q, want %q", conn.Auth.ClientSecret, "resolved-secret")
 		}
 	})
 
@@ -783,7 +424,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		// Build a yaml.Node mapping with a secret:// value.
 		cfg.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
@@ -798,7 +438,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		<-result.ProvidersReady
 
-		// The resolved node should have the value replaced.
 		var decoded map[string]string
 		if err := receivedNode.Decode(&decoded); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -835,84 +474,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "secrets broke") {
 			t.Errorf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("resolves secret:// in map[string]string fields", func(t *testing.T) {
-		t.Parallel()
-
-		var receivedDef config.IntegrationDef
-		factories := validFactories()
-		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"api-key": "resolved-key"},
-			}, nil
-		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-			receivedDef = intg
-			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
-		}
-
-		cfg := validConfig()
-		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:                "oauth2",
-						AuthorizationParams: map[string]string{"api_key": "secret://api-key"},
-					},
-				},
-			},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if conn.Auth.AuthorizationParams["api_key"] != "resolved-key" {
-			t.Errorf("AuthorizationParams[api_key]: got %q, want %q", conn.Auth.AuthorizationParams["api_key"], "resolved-key")
-		}
-	})
-
-	t.Run("resolves secret:// in []string fields", func(t *testing.T) {
-		t.Parallel()
-
-		var receivedDef config.IntegrationDef
-		factories := validFactories()
-		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"meta-val": "resolved-meta"},
-			}, nil
-		}
-		factories.Providers["alpha"] = func(_ context.Context, _ string, intg config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-			receivedDef = intg
-			return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
-		}
-
-		cfg := validConfig()
-		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:          "oauth2",
-						TokenMetadata: []string{"secret://meta-val"},
-					},
-				},
-			},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if len(conn.Auth.TokenMetadata) != 1 || conn.Auth.TokenMetadata[0] != "resolved-meta" {
-			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", conn.Auth.TokenMetadata)
 		}
 	})
 }
@@ -1029,44 +590,5 @@ func TestBootstrapUnknownBindingType(t *testing.T) {
 	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err == nil {
 		t.Fatal("expected error for unknown binding type")
-	}
-}
-
-func TestBootstrapBindingWithProviders(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["beta"] = config.IntegrationDef{}
-	cfg.Bindings = map[string]config.BindingDef{
-		"my-webhook": {
-			Type:      "webhook",
-			Providers: []string{"alpha"},
-		},
-	}
-
-	factories := validFactories()
-	factories.Providers["beta"] = stubProviderFactory("beta")
-
-	var receivedDeps bootstrap.BindingDeps
-	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
-		receivedDeps = deps
-		return &coretesting.StubBinding{N: name}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Bindings == nil {
-		t.Fatal("expected Bindings to be non-nil")
-	}
-
-	if receivedDeps.Invoker == nil {
-		t.Fatal("expected binding deps to carry an invoker")
-	}
-	if receivedDeps.Invoker == result.Invoker {
-		t.Fatal("expected binding deps to be scoped rather than reusing the shared bootstrap invoker directly")
 	}
 }

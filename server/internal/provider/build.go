@@ -283,21 +283,6 @@ func ReadIconFile(path string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func ApplyResponseMapping(def *Definition, api config.APIDef) {
-	if api.ResponseMapping != nil {
-		rm := &ResponseMappingDef{
-			DataPath: api.ResponseMapping.DataPath,
-		}
-		if api.ResponseMapping.Pagination != nil {
-			rm.Pagination = &PaginationMappingDef{
-				HasMorePath: api.ResponseMapping.Pagination.HasMorePath,
-				CursorPath:  api.ResponseMapping.Pagination.CursorPath,
-			}
-		}
-		def.ResponseMapping = rm
-	}
-}
-
 // ApplyConnectionAuth merges connection auth overrides into the Definition.
 func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	o := conn.Auth

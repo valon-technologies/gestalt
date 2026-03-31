@@ -5,20 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -53,15 +49,12 @@ type LockPluginEntry struct {
 	AssetRoot     string `json:"asset_root,omitempty"`
 }
 
-type UpstreamLoader func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error)
-
 type Lifecycle struct {
-	loadAPIUpstream UpstreamLoader
-	sourceResolver  pluginsource.Resolver
+	sourceResolver pluginsource.Resolver
 }
 
-func NewLifecycle(loadAPIUpstream UpstreamLoader, sourceResolver pluginsource.Resolver) *Lifecycle {
-	return &Lifecycle{loadAPIUpstream: loadAPIUpstream, sourceResolver: sourceResolver}
+func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
+	return &Lifecycle{sourceResolver: sourceResolver}
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
@@ -81,14 +74,6 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		Plugins:   make(map[string]LockPluginEntry),
 	}
 
-	written, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
-	if err != nil {
-		return nil, err
-	}
-	for name, entry := range written {
-		lock.Providers[name] = entry
-	}
-
 	resolvedPlugins, err := l.writePluginArtifacts(context.Background(), configPath, cfg, paths)
 	if err != nil {
 		return nil, err
@@ -101,7 +86,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		return nil, err
 	}
 
-	slog.Info("prepared providers", "count", len(lock.Providers))
+	slog.Info("prepared plugins", "count", len(lock.Plugins))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, nil
 }
@@ -115,15 +100,11 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 		return nil, nil, err
 	}
 
-	preparedProviders, err := l.providersForConfig(configPath, cfg, locked)
-	if err != nil {
-		return nil, nil, err
-	}
 	if err := l.applyLockedPlugins(configPath, cfg, locked); err != nil {
 		return nil, nil, err
 	}
 
-	return cfg, preparedProviders, nil
+	return cfg, nil, nil
 }
 
 type initPaths struct {
@@ -131,16 +112,6 @@ type initPaths struct {
 	configDir    string
 	lockfilePath string
 	providersDir string
-}
-
-type providerFingerprintInput struct {
-	Type          string `json:"type"`
-	URL           string `json:"url"`
-	DisplayName   string `json:"display_name,omitempty"`
-	Description   string `json:"description,omitempty"`
-	HasIcon       bool   `json:"has_icon,omitempty"`
-	IconSHA256    string `json:"icon_sha256,omitempty"`
-	IconReadError string `json:"icon_read_error,omitempty"`
 }
 
 type pluginFingerprintInput struct {
@@ -152,125 +123,6 @@ type pluginFingerprintInput struct {
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	Config  map[string]any    `json:"config,omitempty"`
-}
-
-func (l *Lifecycle) providersForConfig(configPath string, cfg *config.Config, locked bool) (map[string]string, error) {
-	if !configHasRemoteAPIUpstreams(cfg) {
-		return nil, nil
-	}
-
-	paths := initPathsForConfig(configPath)
-	lock, err := ReadLockfile(paths.lockfilePath)
-	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-		lock, err = l.InitAtPath(configPath)
-	}
-	if err != nil {
-		if locked {
-			return nil, fmt.Errorf("remote REST/GraphQL upstreams require prepared artifacts; run `gestaltd bundle --config %s --output DIR`: %w", configPath, err)
-		}
-		return nil, nil
-	}
-
-	preparedProviders := make(map[string]string)
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		upstream, hasRemote := remoteAPIUpstreamForPrepare(intg)
-		if !hasRemote {
-			continue
-		}
-
-		fingerprint, err := integrationFingerprint(name, intg, upstream)
-		if err != nil {
-			return nil, fmt.Errorf("fingerprinting integration %q: %w", name, err)
-		}
-
-		entry, ok := lock.Providers[name]
-		if !ok || entry.Fingerprint != fingerprint {
-			if locked {
-				return nil, fmt.Errorf("prepared artifact for integration %q is missing or stale; run `gestaltd bundle --config %s --output DIR`", name, configPath)
-			}
-			continue
-		}
-
-		absPath := resolveLockPath(paths.configDir, entry.Provider)
-		if _, statErr := os.Stat(absPath); statErr != nil {
-			if locked {
-				return nil, fmt.Errorf("prepared artifact for integration %q not found at %s; run `gestaltd bundle --config %s --output DIR`", name, absPath, configPath)
-			}
-			continue
-		}
-
-		preparedProviders[name] = absPath
-	}
-
-	return preparedProviders, nil
-}
-
-func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
-	written := make(map[string]LockProviderEntry)
-	for _, name := range slices.Sorted(maps.Keys(cfg.Integrations)) {
-		intg := cfg.Integrations[name]
-		upstream, hasRemote := remoteAPIUpstreamForPrepare(intg)
-		if !hasRemote {
-			continue
-		}
-
-		def, err := l.loadAPIUpstream(ctx, name, upstream)
-		if err != nil {
-			return nil, fmt.Errorf("compiling provider %q: %w", name, err)
-		}
-		copied := *def
-		def = &copied
-		provider.ApplyDisplayOverrides(def, intg)
-
-		outPath := filepath.Join(paths.providersDir, name+".json")
-		if err := writeJSONFile(outPath, def); err != nil {
-			return nil, fmt.Errorf("writing provider %q: %w", name, err)
-		}
-
-		fingerprint, err := integrationFingerprint(name, intg, upstream)
-		if err != nil {
-			return nil, fmt.Errorf("fingerprinting integration %q: %w", name, err)
-		}
-
-		relPath, err := filepath.Rel(paths.configDir, outPath)
-		if err != nil {
-			return nil, fmt.Errorf("computing provider path for %q: %w", name, err)
-		}
-		written[name] = LockProviderEntry{
-			Fingerprint: fingerprint,
-			Provider:    filepath.ToSlash(relPath),
-		}
-		slog.Info("wrote prepared provider", "path", outPath)
-	}
-	return written, nil
-}
-
-func remoteAPIUpstreamForPrepare(intg config.IntegrationDef) (config.APIDef, bool) {
-	if intg.API == nil {
-		return config.APIDef{}, false
-	}
-	switch intg.API.Type {
-	case config.APITypeREST:
-		if intg.API.OpenAPI != "" {
-			return *intg.API, true
-		}
-	case config.APITypeGraphQL:
-		if intg.API.URL != "" {
-			return *intg.API, true
-		}
-	}
-	return config.APIDef{}, false
-}
-
-func configHasRemoteAPIUpstreams(cfg *config.Config) bool {
-	for name := range cfg.Integrations {
-		_, ok := remoteAPIUpstreamForPrepare(cfg.Integrations[name])
-		if ok {
-			return true
-		}
-	}
-	return false
 }
 
 func configHasPlugins(cfg *config.Config) bool {
@@ -347,25 +199,6 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		upstream, ok := remoteAPIUpstreamForPrepare(intg)
-		if !ok {
-			continue
-		}
-		entry, found := lock.Providers[name]
-		if !found {
-			return false
-		}
-		fingerprint, err := integrationFingerprint(name, intg, upstream)
-		if err != nil || entry.Fingerprint != fingerprint {
-			return false
-		}
-		absPath := resolveLockPath(paths.configDir, entry.Provider)
-		if _, err := os.Stat(absPath); err != nil {
-			return false
-		}
-	}
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
 		if !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
@@ -414,7 +247,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	return true
 }
 
-func PluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (string, error) {
+func PluginFingerprint(name string, plugin *config.PluginDef, configMap map[string]any) (string, error) {
 	if plugin == nil {
 		return "", nil
 	}
@@ -462,7 +295,7 @@ func LockPluginKey(kind, name string) string {
 	return kind + ":" + name
 }
 
-func pluginEntryMatches(paths initPaths, name string, plugin *config.ExecutablePluginDef, configMap map[string]any, entry LockPluginEntry, found bool) bool {
+func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any, entry LockPluginEntry, found bool) bool {
 	if !found {
 		return false
 	}
@@ -572,7 +405,7 @@ func sourceDigestForPackage(packagePath string) (string, error) {
 	return pluginpkg.ArchiveDigest(packagePath)
 }
 
-func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (LockPluginEntry, error) {
+func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
 	packagePath := plugin.Package
 	isURL := strings.HasPrefix(packagePath, "https://")
 
@@ -636,7 +469,7 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstor
 	}, nil
 }
 
-func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (LockPluginEntry, error) {
+func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
 	src, err := pluginsource.Parse(plugin.Source)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.source %q: %w", kind, name, plugin.Source, err)
@@ -862,7 +695,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 	return nil
 }
 
-func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, plugin *config.ExecutablePluginDef, configMap map[string]any) error {
+func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
 	key := LockPluginKey(kind, name)
 	entry, ok := lock.Plugins[key]
 	if !ok {
@@ -896,9 +729,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	resolvePluginIcon(manifest, manifestPath, plugin)
 
 	plugin.ResolvedManifestPath = manifestPath
-	if kind == "integration" && manifest.IsHybridProvider() {
-		plugin.IsHybrid = true
-	} else if kind == "integration" && manifest.Provider.IsDeclarative() {
+	if kind == "integration" && manifest.Provider.IsDeclarative() {
 		plugin.IsDeclarative = true
 		return nil
 	}
@@ -919,7 +750,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	return nil
 }
 
-func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.ExecutablePluginDef) {
+func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.PluginDef) {
 	if manifest.IconFile == "" {
 		return
 	}
@@ -956,43 +787,4 @@ func manifestKind(kind string) string {
 	default:
 		return ""
 	}
-}
-
-func integrationFingerprint(name string, intg config.IntegrationDef, api config.APIDef) (string, error) {
-	specURL := api.URL
-	if api.Type == config.APITypeREST {
-		specURL = api.OpenAPI
-	}
-	input := providerFingerprintInput{
-		Type:        api.Type,
-		URL:         specURL,
-		DisplayName: intg.DisplayName,
-		Description: intg.Description,
-		HasIcon:     intg.IconFile != "",
-	}
-	if intg.IconFile != "" {
-		data, err := os.ReadFile(intg.IconFile)
-		if err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				input.IconReadError = err.Error()
-			} else {
-				input.IconReadError = os.ErrNotExist.Error()
-			}
-		} else {
-			sum := sha256.Sum256(data)
-			input.IconSHA256 = hex.EncodeToString(sum[:])
-		}
-	}
-	payload, err := json.Marshal(struct {
-		Name string `json:"name"`
-		providerFingerprintInput
-	}{
-		Name:                     name,
-		providerFingerprintInput: input,
-	})
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:]), nil
 }

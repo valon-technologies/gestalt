@@ -19,7 +19,19 @@ func TestBootstrapProducesStructuredLogs(t *testing.T) { //nolint:paralleltest /
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	result, err := bootstrap.Bootstrap(context.Background(), validConfig(), validFactories())
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"alpha": {
+			Plugin: &config.PluginDef{
+				BaseURL: "https://api.example.test",
+				Operations: []config.InlineOperationDef{
+					{Name: "list_items", Method: "GET", Path: "/items"},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -52,9 +64,6 @@ func TestBootstrapProducesStructuredLogs(t *testing.T) { //nolint:paralleltest /
 			if record["provider"] != "alpha" {
 				t.Errorf("expected provider=alpha, got provider=%v", record["provider"])
 			}
-			if _, ok := record["operations"]; !ok {
-				t.Error("loaded provider log missing 'operations' field")
-			}
 		}
 	}
 
@@ -72,16 +81,14 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 
 	cfg := validConfig()
 	cfg.Integrations = map[string]config.IntegrationDef{
-		"broken": {},
-	}
-	factories := validFactories()
-	factories.Providers = map[string]bootstrap.ProviderFactory{
-		"broken": func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-			return nil, context.DeadlineExceeded
+		"broken": {
+			Plugin: &config.PluginDef{
+				Command: "/nonexistent/path/to/plugin",
+			},
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}

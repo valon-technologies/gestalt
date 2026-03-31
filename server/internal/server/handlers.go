@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -167,36 +166,6 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				}
 				info.CredentialFields = cfInfos
 			}
-		}
-		if intg, ok := s.integrationDefs[name]; ok && len(intg.Connections) > 1 {
-			connNames := make([]string, 0, len(intg.Connections))
-			for connName := range intg.Connections {
-				connNames = append(connNames, connName)
-			}
-			sort.Strings(connNames)
-			conns := make([]connectionDefInfo, 0, len(intg.Connections))
-			for _, connName := range connNames {
-				connDef := intg.Connections[connName]
-				authType := "oauth"
-				if connDef.Auth.Type == "manual" || connDef.Auth.Type == "api_key" {
-					authType = "manual"
-				}
-				cdi := connectionDefInfo{Name: connName, AuthType: authType}
-				if len(connDef.Auth.Credentials) > 0 {
-					cfInfos := make([]credentialFieldInfo, len(connDef.Auth.Credentials))
-					for i, cf := range connDef.Auth.Credentials {
-						cfInfos[i] = credentialFieldInfo{
-							Name:        cf.Name,
-							Label:       cf.Label,
-							Description: cf.Description,
-							HelpURL:     cf.HelpURL,
-						}
-					}
-					cdi.CredentialFields = cfInfos
-				}
-				conns = append(conns, cdi)
-			}
-			info.Connections = conns
 		}
 		out = append(out, info)
 	}

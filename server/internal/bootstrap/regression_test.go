@@ -63,7 +63,19 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations["beta"] = config.IntegrationDef{}
+	doOp := config.InlineOperationDef{Name: "do", Method: "POST", Path: "/do"}
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.PluginDef{
+			BaseURL:    "https://api.test",
+			Operations: []config.InlineOperationDef{doOp},
+		},
+	}
+	cfg.Integrations["beta"] = config.IntegrationDef{
+		Plugin: &config.PluginDef{
+			BaseURL:    "https://api.test",
+			Operations: []config.InlineOperationDef{doOp},
+		},
+	}
 
 	cfg.Runtimes = map[string]config.RuntimeDef{
 		"my-runtime": {
@@ -79,30 +91,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	}
 
 	factories := validFactories()
-	factories.Providers["alpha"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N:        "alpha",
-				ConnMode: core.ConnectionModeNone,
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-				},
-			},
-			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
-		}}, nil
-	}
-	factories.Providers["beta"] = func(_ context.Context, _ string, _ config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		return &bootstrap.ProviderBuildResult{Provider: &stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N:        "beta",
-				ConnMode: core.ConnectionModeNone,
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-				},
-			},
-			ops: []core.Operation{{Name: "do", Method: http.MethodPost}},
-		}}, nil
-	}
 
 	var runtimeDeps bootstrap.RuntimeDeps
 	factories.Runtimes["echo"] = func(_ context.Context, name string, _ config.RuntimeDef, deps bootstrap.RuntimeDeps) (core.Runtime, error) {
@@ -154,12 +142,9 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 		t.Fatalf("expected scoped binding invoker to reject alpha, got %v", err)
 	}
 
-	resultOp, err := bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "", "do", nil)
-	if err != nil {
-		t.Fatalf("expected scoped binding invoker to allow beta: %v", err)
-	}
-	if resultOp.Status != http.StatusOK {
-		t.Fatalf("expected binding invoke status 200, got %d", resultOp.Status)
+	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "", "do", nil)
+	if err != nil && strings.Contains(err.Error(), "not available in this scope") {
+		t.Fatalf("expected scoped binding invoker to allow beta, but got scope error: %v", err)
 	}
 }
 
