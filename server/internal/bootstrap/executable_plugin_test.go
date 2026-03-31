@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -721,5 +722,116 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("echo status = %d, want %d", result.Status, http.StatusOK)
+	}
+}
+
+func TestHybridPluginUsesManifestStaticHeadersForSpecSurface(t *testing.T) {
+	t.Parallel()
+
+	const (
+		headerName  = "X-Static-Version"
+		headerValue = "2026-02-09"
+	)
+
+	bin := buildEchoPluginBinary(t)
+
+	gotHeader := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader <- r.Header.Get(headerName)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Hybrid Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/hybrid",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: specSrv.URL,
+			Headers: map[string]string{
+				headerName: headerValue,
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+				SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+			},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
+	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"hybrid": {
+				Plugin: &config.PluginDef{
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifestPath: manifestPath,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(list_items): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotHeader:
+		if got != headerValue {
+			t.Fatalf("%s = %q, want %q", headerName, got, headerValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
 	}
 }

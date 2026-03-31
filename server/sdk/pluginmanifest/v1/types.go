@@ -33,6 +33,7 @@ type Provider struct {
 	Auth                 *ProviderAuth                      `json:"auth,omitempty"`
 	MCP                  bool                               `json:"mcp,omitempty"`
 	BaseURL              string                             `json:"base_url,omitempty"`
+	Headers              map[string]string                  `json:"headers,omitempty"`
 	Operations           []ProviderOperation                `json:"operations,omitempty"`
 	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty"`
 	Connection           map[string]ProviderConnectionParam `json:"connection,omitempty"`

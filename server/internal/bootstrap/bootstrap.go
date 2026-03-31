@@ -831,6 +831,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, manifestProvider)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -846,6 +847,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, manifestProvider)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -858,7 +860,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, mergedHeaders(manifestProvider, intg.Plugin), deps.Egress.Resolver)
 		if err != nil {
 			return nil, "", fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
 		}
@@ -928,6 +930,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
@@ -944,6 +947,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
@@ -957,7 +961,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, mergedHeaders(mp, intg.Plugin), deps.Egress.Resolver)
 		if err != nil {
 			return nil, fmt.Errorf("create mcp upstream for %q: %w", name, err)
 		}
@@ -987,6 +991,46 @@ func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginm
 		return nil, err
 	}
 	return result, nil
+}
+
+func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) {
+	if def == nil {
+		return
+	}
+	headers := mergedHeaders(manifestProvider, plugin)
+	if len(headers) == 0 {
+		return
+	}
+	def.Headers = headers
+}
+
+func mergedManifestHeaders(manifest *pluginmanifestv1.Manifest, plugin *config.PluginDef) *pluginmanifestv1.Manifest {
+	if manifest == nil || manifest.Provider == nil {
+		return manifest
+	}
+	headers := mergedHeaders(manifest.Provider, plugin)
+	if len(headers) == 0 {
+		return manifest
+	}
+	cloned := *manifest
+	providerCopy := *manifest.Provider
+	providerCopy.Headers = headers
+	cloned.Provider = &providerCopy
+	return &cloned
+}
+
+func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) map[string]string {
+	var manifestHeaders map[string]string
+	if manifestProvider != nil {
+		manifestHeaders = manifestProvider.Headers
+	}
+
+	var pluginHeaders map[string]string
+	if plugin != nil {
+		pluginHeaders = plugin.Headers
+	}
+
+	return config.MergeHeaders(manifestHeaders, pluginHeaders)
 }
 
 func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*config.OperationOverride {
@@ -1094,6 +1138,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
 	}
+	manifest = mergedManifestHeaders(manifest, intg.Plugin)
 	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
