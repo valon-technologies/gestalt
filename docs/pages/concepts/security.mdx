@@ -42,7 +42,7 @@ Four trust boundaries:
 | --- | --- | --- |
 | Internet → Gestalt | User requests | Platform auth (session or API token) |
 | Gestalt → upstream APIs | OAuth tokens, API keys | Egress policy, credential encryption, TLS |
-| Gestalt → plugins | Config, operation requests | Process isolation, Unix socket, scoped capabilities |
+| Gestalt → plugins | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
 | Operator → Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
 
 ## Encryption at Rest
@@ -269,10 +269,10 @@ gestaltd process
 Isolation properties:
 
 - **No shared memory**: communication is message-passing over a socket
-- **No direct datastore access**: plugins cannot read or write tokens
+- **No direct datastore access**: plugins cannot query the datastore or access other users' credentials
 - **Sanitized environment**: only safe variables are passed to plugin processes (`PATH`, `HOME`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_*`, plus user-configured `env`)
 - **Scoped capabilities**: runtime plugins can only invoke providers listed in `runtimes.<name>.providers`
-- **Credential passthrough**: the host passes the access token directly to the plugin via the gRPC request, not the full credential store
+- **Token passthrough**: the host resolves the caller's access token and passes it directly to the plugin in the gRPC request. Plugins receive only the token for the current invocation, not the full credential store.
 - **Process lifecycle**: plugins are terminated when `gestaltd` shuts down (SIGTERM, then SIGKILL after timeout)
 
 ## Webhook Signature Verification
