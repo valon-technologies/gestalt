@@ -303,6 +303,12 @@
           "type": "string",
           "format": "uri"
         },
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
         "scopes": {
           "type": "array",
           "items": { "type": "string" }
@@ -332,6 +338,21 @@
         "authorization_params": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "token_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "refresh_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "accept_header": {
+          "type": "string"
+        },
+        "token_metadata": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "credentials": {
           "type": "array",

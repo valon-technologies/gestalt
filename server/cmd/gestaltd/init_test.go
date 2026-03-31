@@ -245,16 +245,36 @@ func TestPrepareConfigAcceptsPluginPackageSurfaceConnectionAliases(t *testing.T)
 	t.Parallel()
 
 	const (
-		testProviderSource   = "github.com/acme/plugins/provider"
-		testProviderVersion  = "0.1.0"
-		testArtifactContent  = "not-an-executable"
-		testConnectionName   = "api"
-		testOpenAPIURL       = "https://example.com/openapi.json"
-		testGraphQLURL       = "https://example.com/graphql"
-		testMCPURL           = "https://example.com/mcp"
-		testAuthorizationURL = "https://example.com/authorize"
-		testTokenURL         = "https://example.com/token"
+		testProviderSource      = "github.com/acme/plugins/provider"
+		testProviderVersion     = "0.1.0"
+		testArtifactContent     = "not-an-executable"
+		testConnectionName      = "api"
+		testOpenAPIURL          = "https://example.com/openapi.json"
+		testGraphQLURL          = "https://example.com/graphql"
+		testMCPURL              = "https://example.com/mcp"
+		testAuthorizationURL    = "https://example.com/authorize"
+		testTokenURL            = "https://example.com/token"
+		testClientID            = "client-id"
+		testClientSecret        = "client-secret"
+		testAcceptHeader        = "application/json"
+		testTokenMetadataTenant = "tenant_id"
+		testTokenMetadataSite   = "site_id"
+		testTokenParamAudience  = "audience"
+		testTokenParamValue     = "api://gestalt"
+		testRefreshParamPrompt  = "prompt"
+		testRefreshParamValue   = "consent"
 	)
+
+	tokenParams := map[string]string{
+		testTokenParamAudience: testTokenParamValue,
+	}
+	refreshParams := map[string]string{
+		testRefreshParamPrompt: testRefreshParamValue,
+	}
+	tokenMetadata := []string{
+		testTokenMetadataTenant,
+		testTokenMetadataSite,
+	}
 
 	dir := t.TempDir()
 	packagePath := buildPreparedTestPluginPackageWithManifestProvider(t, dir, testProviderSource, testProviderVersion, testArtifactContent, &pluginmanifestv1.Provider{
@@ -271,6 +291,12 @@ func TestPrepareConfigAcceptsPluginPackageSurfaceConnectionAliases(t *testing.T)
 					Type:             pluginmanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: testAuthorizationURL,
 					TokenURL:         testTokenURL,
+					ClientID:         testClientID,
+					ClientSecret:     testClientSecret,
+					TokenParams:      tokenParams,
+					RefreshParams:    refreshParams,
+					AcceptHeader:     testAcceptHeader,
+					TokenMetadata:    tokenMetadata,
 				},
 			},
 		},
