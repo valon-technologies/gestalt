@@ -38,6 +38,7 @@ func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, err
 	}
 	provider.ApplyDisplayOverrides(def, intg)
+	provider.ApplyResponseMapping(def, api)
 	return provider.Build(def, conn, allowedOps, opts...)
 }
 

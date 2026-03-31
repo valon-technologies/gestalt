@@ -247,6 +247,17 @@ type APIDef struct {
 	URL               string                        `yaml:"url"`
 	Connection        string                        `yaml:"connection"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
+	ResponseMapping   *ResponseMappingDef           `yaml:"response_mapping"`
+}
+
+type ResponseMappingDef struct {
+	DataPath   string                `yaml:"data_path"`
+	Pagination *PaginationMappingDef `yaml:"pagination"`
+}
+
+type PaginationMappingDef struct {
+	HasMorePath string `yaml:"has_more_path"`
+	CursorPath  string `yaml:"cursor_path"`
 }
 
 type MCPDef struct {

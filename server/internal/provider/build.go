@@ -167,6 +167,17 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 
 	base.ManualAuthEnabled = def.ManualAuth
 
+	if def.ResponseMapping != nil {
+		rm := &coreintegration.ResponseMappingConfig{
+			DataPath: def.ResponseMapping.DataPath,
+		}
+		if def.ResponseMapping.Pagination != nil {
+			rm.PaginationHasMorePath = def.ResponseMapping.Pagination.HasMorePath
+			rm.PaginationCursorPath = def.ResponseMapping.Pagination.CursorPath
+		}
+		base.ResponseMapping = rm
+	}
+
 	if len(def.CredentialFields) > 0 {
 		base.CredentialFieldDefs = make([]core.CredentialFieldDef, len(def.CredentialFields))
 		for i, cf := range def.CredentialFields {
@@ -270,6 +281,21 @@ func ReadIconFile(path string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+func ApplyResponseMapping(def *Definition, api config.APIDef) {
+	if api.ResponseMapping != nil {
+		rm := &ResponseMappingDef{
+			DataPath: api.ResponseMapping.DataPath,
+		}
+		if api.ResponseMapping.Pagination != nil {
+			rm.Pagination = &PaginationMappingDef{
+				HasMorePath: api.ResponseMapping.Pagination.HasMorePath,
+				CursorPath:  api.ResponseMapping.Pagination.CursorPath,
+			}
+		}
+		def.ResponseMapping = rm
+	}
 }
 
 // ApplyConnectionAuth merges connection auth overrides into the Definition.

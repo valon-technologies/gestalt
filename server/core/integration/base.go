@@ -108,10 +108,11 @@ type Base struct {
 	HTTPClient         *http.Client
 	Pagination         map[string]apiexec.PaginationConfig
 
-	TokenParser    func(token string) (authHeader string, extraHeaders map[string]string, err error)
-	CheckResponse  apiexec.ResponseChecker
-	ExecuteFunc    func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
-	EgressResolver *egress.Resolver
+	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)
+	CheckResponse   apiexec.ResponseChecker
+	ExecuteFunc     func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
+	EgressResolver  *egress.Resolver
+	ResponseMapping *ResponseMappingConfig
 
 	ConnectionDefs      map[string]core.ConnectionParamDef
 	DiscoveryDef        *core.DiscoveryConfig

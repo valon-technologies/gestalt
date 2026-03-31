@@ -26,6 +26,7 @@ type Definition struct {
 	CredentialFields []CredentialFieldDef `yaml:"credential_fields" json:"credential_fields,omitempty"`
 
 	PostConnectDiscovery *PostConnectDiscoveryDef `yaml:"post_connect_discovery" json:"post_connect_discovery,omitempty"`
+	ResponseMapping      *ResponseMappingDef      `yaml:"response_mapping" json:"response_mapping,omitempty"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
@@ -110,6 +111,16 @@ type CredentialFieldDef struct {
 	Label       string `yaml:"label" json:"label,omitempty"`
 	Description string `yaml:"description" json:"description,omitempty"`
 	HelpURL     string `yaml:"help_url" json:"help_url,omitempty"`
+}
+
+type ResponseMappingDef struct {
+	DataPath   string                `yaml:"data_path" json:"data_path"`
+	Pagination *PaginationMappingDef `yaml:"pagination" json:"pagination,omitempty"`
+}
+
+type PaginationMappingDef struct {
+	HasMorePath string `yaml:"has_more_path" json:"has_more_path"`
+	CursorPath  string `yaml:"cursor_path" json:"cursor_path"`
 }
 
 type ParameterDef struct {
