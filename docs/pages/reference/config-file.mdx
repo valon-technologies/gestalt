@@ -479,7 +479,7 @@ integrations:
 | `version` | Required with `source`. Must be valid SemVer. |
 | `args` | Command-line arguments. Only valid with `command`. |
 | `env` | Extra environment variables passed to the plugin process. |
-| `allowed_hosts` | Host allowlist for plugin network access. |
+| `allowed_hosts` | Host allowlist for plugin network access. When set, the plugin is automatically sandboxed: filesystem access is restricted via Landlock (Linux) or sandbox-exec (macOS), and outbound HTTP is proxied through a local allowlist enforcer. Supports exact matches and wildcards (`*.example.com`). |
 | `config` | Arbitrary plugin config payload, validated against the plugin's config schema if one exists. |
 | `allowed_operations` | Narrows exposed operations. Same override syntax as `api.allowed_operations`. |
 
