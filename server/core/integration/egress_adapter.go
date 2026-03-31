@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -13,13 +14,17 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 )
 
-func (b *Base) executeREST(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	ep, ok := b.Endpoints[operation]
-	if !ok {
+func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
+	if catOp == nil {
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
-
-	catOp := findCatalogOp(b.catalog, operation)
+	method := strings.ToUpper(strings.TrimSpace(catOp.Method))
+	if method == "" {
+		return nil, fmt.Errorf("operation %q is missing method", operation)
+	}
+	if strings.TrimSpace(catOp.Path) == "" {
+		return nil, fmt.Errorf("operation %q is missing path", operation)
+	}
 	bodyParams, queryParams, headerParams := partitionParams(catOp, params)
 
 	baseURL, headers := b.resolvedURLAndHeaders(ctx)
@@ -31,9 +36,9 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 	}
 
 	req := apiexec.Request{
-		Method:        ep.Method,
+		Method:        method,
 		BaseURL:       baseURL,
-		Path:          ep.Path,
+		Path:          catOp.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
 		CustomHeaders: headers,
