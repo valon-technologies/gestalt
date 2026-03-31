@@ -332,10 +332,6 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	}, nil
 }
 
-func ExpandedPath(method, path string, params map[string]any) string {
-	return ExpandedPathWithQuery(method, path, params, nil)
-}
-
 func ExpandedPathWithQuery(method, path string, params map[string]any, queryParams map[string]any) string {
 	params = maps.Clone(params)
 	expanded, err := substitutePath(path, params)
