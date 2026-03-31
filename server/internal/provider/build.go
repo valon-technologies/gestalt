@@ -38,7 +38,7 @@ func WithEgressResolver(r *egress.Resolver) BuildOption {
 // owns auth configuration. Display metadata (display_name, description, icon)
 // should be applied to the Definition before calling Build via
 // ApplyDisplayOverrides.
-func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[string]*config.OperationOverride, opts ...BuildOption) (core.Provider, error) {
+func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
 		opt(&bo)
@@ -211,53 +211,7 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 	}
 
 	base.SetCatalog(cat)
-
-	var result core.Provider = base
-
-	if ops := allowedOperations; ops != nil {
-		if len(ops) == 0 {
-			return nil, fmt.Errorf("%s: allowed_operations cannot be empty; omit the field to allow all", def.Provider)
-		}
-		opSet := make(map[string]struct{}, len(base.Operations))
-		for _, op := range base.Operations {
-			opSet[op.Name] = struct{}{}
-		}
-		restrictedOps := make(map[string]string, len(ops))
-		var collisions []string
-		for opName, override := range ops {
-			if _, ok := opSet[opName]; !ok {
-				return nil, fmt.Errorf("%s: allowed_operations contains unknown operation %q", def.Provider, opName)
-			}
-			if override != nil && override.Description != "" {
-				for i := range base.Operations {
-					if base.Operations[i].Name == opName {
-						base.Operations[i].Description = override.Description
-						break
-					}
-				}
-				for i := range cat.Operations {
-					if cat.Operations[i].ID == opName {
-						cat.Operations[i].Description = override.Description
-						break
-					}
-				}
-			}
-			exposedName := opName
-			if override != nil && override.Alias != "" {
-				exposedName = override.Alias
-			}
-			if existing, ok := restrictedOps[exposedName]; ok {
-				collisions = append(collisions, fmt.Sprintf("%q and %q both resolve to %q", existing, opName, exposedName))
-			}
-			restrictedOps[exposedName] = opName
-		}
-		if len(collisions) > 0 {
-			return nil, fmt.Errorf("%s: alias collisions: %s", def.Provider, strings.Join(collisions, "; "))
-		}
-		result = coreintegration.NewRestricted(result, restrictedOps)
-	}
-
-	return result, nil
+	return base, nil
 }
 
 // ApplyDisplayOverrides merges display metadata from an IntegrationDef into a
