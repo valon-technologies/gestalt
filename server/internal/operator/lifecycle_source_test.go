@@ -203,8 +203,9 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 		t.Errorf("executable not found at %s: %v", executablePath, err)
 	}
 
-	if !strings.Contains(entry.Manifest, source) {
-		t.Errorf("manifest path %q does not contain source path %q", entry.Manifest, source)
+	wantPrefix := ".gestalt/plugins/integration_alpha/"
+	if !strings.HasPrefix(entry.Manifest, wantPrefix) {
+		t.Errorf("manifest path %q does not start with %q", entry.Manifest, wantPrefix)
 	}
 
 	if resolver.calls != 1 {
@@ -245,8 +246,8 @@ func TestReadLockfileV3Compat(t *testing.T) {
 			"integration:beta": {
 				Fingerprint: "abc123",
 				Package:     "/tmp/beta.tar.gz",
-				Manifest:    ".gestalt/plugins/acme/beta/1.0.0/plugin.json",
-				Executable:  ".gestalt/plugins/acme/beta/1.0.0/artifacts/darwin/arm64/provider",
+				Manifest:    ".gestalt/plugins/integration_beta/plugin.json",
+				Executable:  ".gestalt/plugins/integration_beta/artifacts/darwin/arm64/provider",
 			},
 		},
 	}
@@ -500,10 +501,10 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("lockfile on disk version = %d, want %d", readBack.Version, LockVersion)
 	}
 
-	wantInstallSuffix := filepath.Join("github.com", testOwner, testRepo, testPlugin, testVersion)
+	wantDirName := "integration_alpha"
 	executablePath := resolveLockPath(configDir, entry.Executable)
-	if !strings.Contains(executablePath, wantInstallSuffix) {
-		t.Errorf("executable path %q does not contain expected store path %q", executablePath, wantInstallSuffix)
+	if !strings.Contains(executablePath, wantDirName) {
+		t.Errorf("executable path %q does not contain expected dir %q", executablePath, wantDirName)
 	}
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Errorf("executable not found at %s: %v", executablePath, err)

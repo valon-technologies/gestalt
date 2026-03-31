@@ -21,6 +21,7 @@ import (
 const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestalt/providers"
+	PluginsDir           = ".gestalt/plugins"
 	LockVersion          = 4
 	LockVersionCompat    = 3
 )
@@ -74,7 +75,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		Plugins:   make(map[string]LockPluginEntry),
 	}
 
-	resolvedPlugins, err := l.writePluginArtifacts(context.Background(), configPath, cfg, paths)
+	resolvedPlugins, err := l.writePluginArtifacts(context.Background(), cfg, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +113,7 @@ type initPaths struct {
 	configDir    string
 	lockfilePath string
 	providersDir string
+	pluginsDir   string
 }
 
 type pluginFingerprintInput struct {
@@ -153,7 +155,12 @@ func initPathsForConfig(configPath string) initPaths {
 		configDir:    configDir,
 		lockfilePath: filepath.Join(configDir, InitLockfileName),
 		providersDir: filepath.Join(configDir, filepath.FromSlash(PreparedProvidersDir)),
+		pluginsDir:   filepath.Join(configDir, filepath.FromSlash(PluginsDir)),
 	}
+}
+
+func pluginDestDir(paths initPaths, kind, name string) string {
+	return filepath.Join(paths.pluginsDir, kind+"_"+name)
 }
 
 func writeJSONFile(path string, v any) error {
@@ -329,8 +336,7 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, 
 	return true
 }
 
-func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string, cfg *config.Config, paths initPaths) (map[string]LockPluginEntry, error) {
-	store := pluginstore.New(configPath)
+func (l *Lifecycle) writePluginArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockPluginEntry, error) {
 	written := make(map[string]LockPluginEntry)
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
@@ -344,9 +350,9 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string,
 		var entry LockPluginEntry
 		switch {
 		case intg.Plugin.Source != "":
-			entry, err = l.lockEntryForSource(ctx, paths, store, "integration", name, intg.Plugin, configMap)
+			entry, err = l.lockEntryForSource(ctx, paths, "integration", name, intg.Plugin, configMap)
 		case intg.Plugin.Package != "":
-			entry, err = lockEntryForPackage(ctx, paths, store, "integration", name, intg.Plugin, configMap)
+			entry, err = lockEntryForPackage(ctx, paths, "integration", name, intg.Plugin, configMap)
 		default:
 			continue
 		}
@@ -367,9 +373,9 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string,
 		var entry LockPluginEntry
 		switch {
 		case rt.Plugin.Source != "":
-			entry, err = l.lockEntryForSource(ctx, paths, store, "runtime", name, rt.Plugin, configMap)
+			entry, err = l.lockEntryForSource(ctx, paths, "runtime", name, rt.Plugin, configMap)
 		case rt.Plugin.Package != "":
-			entry, err = lockEntryForPackage(ctx, paths, store, "runtime", name, rt.Plugin, configMap)
+			entry, err = lockEntryForPackage(ctx, paths, "runtime", name, rt.Plugin, configMap)
 		default:
 			continue
 		}
@@ -380,7 +386,7 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, configPath string,
 	}
 
 	if cfg.UI.Plugin.HasManagedArtifacts() {
-		entry, err := l.writeUIPluginArtifact(ctx, cfg, paths, store)
+		entry, err := l.writeUIPluginArtifact(ctx, cfg, paths)
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +411,7 @@ func sourceDigestForPackage(packagePath string) (string, error) {
 	return pluginpkg.ArchiveDigest(packagePath)
 }
 
-func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
+func lockEntryForPackage(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
 	packagePath := plugin.Package
 	isURL := strings.HasPrefix(packagePath, "https://")
 
@@ -424,11 +430,12 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstor
 		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.package %q: %w", kind, name, plugin.Package, err)
 	}
 
+	destDir := pluginDestDir(paths, kind, name)
 	var installed *pluginstore.InstalledPlugin
 	if info.IsDir() {
-		installed, err = store.InstallFromDir(packagePath)
+		installed, err = pluginstore.InstallFromDir(packagePath, destDir)
 	} else {
-		installed, err = store.Install(packagePath)
+		installed, err = pluginstore.Install(packagePath, destDir)
 	}
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.package %q: %w", kind, name, plugin.Package, err)
@@ -469,7 +476,7 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, store *pluginstor
 	}, nil
 }
 
-func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, store *pluginstore.Store, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
+func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
 	src, err := pluginsource.Parse(plugin.Source)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.source %q: %w", kind, name, plugin.Source, err)
@@ -483,7 +490,8 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, sto
 	}
 	defer resolved.Cleanup()
 
-	installed, err := store.Install(resolved.LocalPath)
+	destDir := pluginDestDir(paths, kind, name)
+	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("%s %q install source plugin: %w", kind, name, err)
 	}
@@ -525,13 +533,14 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, sto
 	}, nil
 }
 
-func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Config, paths initPaths, store *pluginstore.Store) (LockPluginEntry, error) {
+func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Config, paths initPaths) (LockPluginEntry, error) {
 	plugin := cfg.UI.Plugin
 	fingerprint, err := UIPluginFingerprint(plugin)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("fingerprinting ui plugin: %w", err)
 	}
 
+	destDir := pluginDestDir(paths, "ui", "default")
 	var installed *pluginstore.InstalledPlugin
 	var sourceDigest string
 	switch {
@@ -548,7 +557,7 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 			return LockPluginEntry{}, fmt.Errorf("ui plugin resolve source %q@%s: %w", plugin.Source, plugin.Version, err)
 		}
 		defer resolved.Cleanup()
-		installed, err = store.Install(resolved.LocalPath)
+		installed, err = pluginstore.Install(resolved.LocalPath, destDir)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("ui plugin install source: %w", err)
 		}
@@ -592,9 +601,9 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)
 		}
 		if info.IsDir() {
-			installed, err = store.InstallFromDir(packagePath)
+			installed, err = pluginstore.InstallFromDir(packagePath, destDir)
 		} else {
-			installed, err = store.Install(packagePath)
+			installed, err = pluginstore.Install(packagePath, destDir)
 		}
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)

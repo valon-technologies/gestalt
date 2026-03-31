@@ -71,8 +71,8 @@ func TestPreparedLockfileRoundTripPreservesPluginsSection(t *testing.T) {
 			"integration:external": {
 				Fingerprint: "plugin-fingerprint",
 				Package:     "./plugins/dummy.tar.gz",
-				Manifest:    ".gestalt/plugins/acme/provider/0.1.0/plugin.json",
-				Executable:  ".gestalt/plugins/acme/provider/0.1.0/artifacts/linux/amd64/provider",
+				Manifest:    ".gestalt/plugins/integration_external/plugin.json",
+				Executable:  ".gestalt/plugins/integration_external/artifacts/linux/amd64/provider",
 			},
 		},
 	}

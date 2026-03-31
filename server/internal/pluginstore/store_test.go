@@ -22,19 +22,11 @@ func TestInstall(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "configs", "gestalt.yaml")
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	store := New(cfgPath)
 	pkg1 := mustBuildPackage(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "hello from testowner")
 	pkg2 := mustBuildPackage(t, dir, "github.com/beta/plugins/provider", "1.2.3", "hello from beta")
 
-	installed1, err := store.Install(pkg1)
+	dest1 := filepath.Join(dir, "plugins", "integration_example")
+	installed1, err := Install(pkg1, dest1)
 	if err != nil {
 		t.Fatalf("Install pkg1: %v", err)
 	}
@@ -44,14 +36,13 @@ func TestInstall(t *testing.T) {
 	if installed1.Manifest == nil || installed1.Manifest.Source != "github.com/testowner/plugins/provider" {
 		t.Fatalf("unexpected installed manifest: %+v", installed1.Manifest)
 	}
-	wantRoot := filepath.Join(installed1.Root, "..")
-	if _, err := os.Stat(wantRoot); err != nil {
-		t.Fatalf("expected install root to exist: %v", err)
+	if installed1.Root != dest1 {
+		t.Fatalf("Root = %q, want %q", installed1.Root, dest1)
 	}
-	if installed1.ManifestPath != filepath.Join(installed1.Root, pluginpkg.ManifestFile) {
+	if installed1.ManifestPath != filepath.Join(dest1, pluginpkg.ManifestFile) {
 		t.Fatalf("ManifestPath = %q", installed1.ManifestPath)
 	}
-	if installed1.ExecutablePath != filepath.Join(installed1.Root, "artifacts", runtime.GOOS, runtime.GOARCH, "provider") {
+	if installed1.ExecutablePath != filepath.Join(dest1, "artifacts", runtime.GOOS, runtime.GOARCH, "provider") {
 		t.Fatalf("ExecutablePath = %q", installed1.ExecutablePath)
 	}
 	data, err := os.ReadFile(installed1.ExecutablePath)
@@ -62,7 +53,8 @@ func TestInstall(t *testing.T) {
 		t.Fatalf("unexpected executable content: %q", data)
 	}
 
-	installed2, err := store.Install(pkg2)
+	dest2 := filepath.Join(dir, "plugins", "integration_beta")
+	installed2, err := Install(pkg2, dest2)
 	if err != nil {
 		t.Fatalf("Install pkg2: %v", err)
 	}
@@ -75,14 +67,9 @@ func TestInstallRejectsDigestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
-
 	pkg := mustBuildMismatchPackage(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "hello", strings.Repeat("deadbeef", 8))
-	_, err := store.Install(pkg)
+	dest := filepath.Join(dir, "plugins", "integration_example")
+	_, err := Install(pkg, dest)
 	if err == nil {
 		t.Fatal("expected digest mismatch error")
 	}
@@ -91,38 +78,13 @@ func TestInstallRejectsDigestMismatch(t *testing.T) {
 	}
 }
 
-func TestInstallRejectsInvalidVersion(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
-
-	pkg := mustBuildRawPackage(t, dir, "github.com/testowner/plugins/provider", "../evil", "hello")
-	_, err := store.Install(pkg)
-	if err == nil {
-		t.Fatal("expected invalid manifest version error")
-	}
-	if !strings.Contains(err.Error(), "version") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestInstallRejectsDuplicateArtifactEntries(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
-
 	pkg := mustBuildPackageWithDuplicateArtifact(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "good", "evil")
-	_, err := store.Install(pkg)
+	dest := filepath.Join(dir, "plugins", "integration_example")
+	_, err := Install(pkg, dest)
 	if err == nil {
 		t.Fatal("expected duplicate artifact entry error")
 	}
@@ -135,14 +97,10 @@ func TestInstallFromDirValidatesAndCopies(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "dir-content", "")
 
-	installed, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_example")
+	installed, err := InstallFromDir(srcDir, dest)
 	if err != nil {
 		t.Fatalf("InstallFromDir: %v", err)
 	}
@@ -165,14 +123,10 @@ func TestInstallFromDirCopiesSchema(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.2.0", "binary", `{"type":"object"}`)
 
-	installed, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_example")
+	installed, err := InstallFromDir(srcDir, dest)
 	if err != nil {
 		t.Fatalf("InstallFromDir: %v", err)
 	}
@@ -187,14 +141,9 @@ func TestInstallFromDirRejectsDigestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
-
 	srcDir := mustBuildPluginDirWithDigest(t, dir, "github.com/testowner/plugins/provider", "0.3.0", "real-content", strings.Repeat("deadbeef", 8))
-	_, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_example")
+	_, err := InstallFromDir(srcDir, dest)
 	if err == nil {
 		t.Fatal("expected digest mismatch error")
 	}
@@ -203,27 +152,22 @@ func TestInstallFromDirRejectsDigestMismatch(t *testing.T) {
 	}
 }
 
-func TestInstallV2ArchiveUsesSourcePath(t *testing.T) {
+func TestInstallExtractsToDestDir(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	pkg := mustBuildV2Package(t, dir, "github.com/testorg/testrepo/testplugin", "1.0.0", "v2-binary")
 
-	installed, err := store.Install(pkg)
+	dest := filepath.Join(dir, "plugins", "integration_beta")
+	installed, err := Install(pkg, dest)
 	if err != nil {
-		t.Fatalf("Install v2: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	if installed.Source != "github.com/testorg/testrepo/testplugin" {
 		t.Fatalf("source = %q", installed.Source)
 	}
-	wantSuffix := filepath.Join("github.com", "testorg", "testrepo", "testplugin", "1.0.0")
-	if !strings.HasSuffix(installed.Root, wantSuffix) {
-		t.Fatalf("install root = %q, want suffix %q", installed.Root, wantSuffix)
+	if installed.Root != dest {
+		t.Fatalf("install root = %q, want %q", installed.Root, dest)
 	}
 	data, err := os.ReadFile(installed.ExecutablePath)
 	if err != nil {
@@ -234,27 +178,22 @@ func TestInstallV2ArchiveUsesSourcePath(t *testing.T) {
 	}
 }
 
-func TestInstallV2FromDirUsesSourcePath(t *testing.T) {
+func TestInstallFromDirExtractsToDestDir(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	srcDir := mustBuildV2PluginDir(t, dir, "github.com/testorg/testrepo/testplugin", "0.5.0", "dir-v2-binary")
 
-	installed, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_beta")
+	installed, err := InstallFromDir(srcDir, dest)
 	if err != nil {
-		t.Fatalf("InstallFromDir v2: %v", err)
+		t.Fatalf("InstallFromDir: %v", err)
 	}
 	if installed.Source != "github.com/testorg/testrepo/testplugin" {
 		t.Fatalf("source = %q", installed.Source)
 	}
-	wantSuffix := filepath.Join("github.com", "testorg", "testrepo", "testplugin", "0.5.0")
-	if !strings.HasSuffix(installed.Root, wantSuffix) {
-		t.Fatalf("install root = %q, want suffix %q", installed.Root, wantSuffix)
+	if installed.Root != dest {
+		t.Fatalf("install root = %q, want %q", installed.Root, dest)
 	}
 	data, err := os.ReadFile(installed.ExecutablePath)
 	if err != nil {
@@ -265,35 +204,14 @@ func TestInstallV2FromDirUsesSourcePath(t *testing.T) {
 	}
 }
 
-func TestInstallV2RejectsInvalidSource(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
-	pkg := mustBuildV2PackageRaw(t, dir, "not-a-valid-source", "1.0.0", "binary")
-
-	_, err := store.Install(pkg)
-	if err == nil {
-		t.Fatal("expected error for invalid v2 source")
-	}
-}
-
 func TestInstallFromDirCopiesManifestAndArtifact(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/fullcopy", "0.1.0", "test-binary", "")
 
-	installed, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_fullcopy")
+	installed, err := InstallFromDir(srcDir, dest)
 	if err != nil {
 		t.Fatalf("InstallFromDir: %v", err)
 	}
@@ -320,18 +238,14 @@ func TestInstallFromDirCopiesManifestAndArtifact(t *testing.T) {
 	}
 }
 
-func TestInstallFromDirV2SetsSource(t *testing.T) {
+func TestInstallFromDirSetsSource(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	srcDir := mustBuildV2PluginDir(t, dir, "github.com/test-org/test-repo/test-plugin", "1.0.0", "v2-install-test")
 
-	installed, err := store.InstallFromDir(srcDir)
+	dest := filepath.Join(dir, "plugins", "integration_test")
+	installed, err := InstallFromDir(srcDir, dest)
 	if err != nil {
 		t.Fatalf("InstallFromDir: %v", err)
 	}
@@ -347,14 +261,10 @@ func TestInstall_ArchiveArtifactDigestVerified(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-	store := New(cfgPath)
 	pkg := mustBuildPackage(t, dir, "github.com/testowner/plugins/digcheck", "0.1.0", "correct-content")
 
-	installed, err := store.Install(pkg)
+	dest := filepath.Join(dir, "plugins", "integration_digcheck")
+	installed, err := Install(pkg, dest)
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
@@ -518,70 +428,6 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 	archivePath := filepath.Join(dir, filepath.Base(srcDir)+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
-	return archivePath
-}
-
-func mustBuildRawPackage(t *testing.T, dir, source, version, content string) string {
-	t.Helper()
-
-	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	sum := sha256.Sum256([]byte(content))
-	manifest := map[string]any{
-		"source":  source,
-		"version": version,
-		"kinds":   []string{pluginmanifestv1.KindProvider},
-		"provider": map[string]any{
-			"protocol": map[string]any{"min": 1, "max": 1},
-		},
-		"artifacts": []map[string]any{
-			{
-				"os":     runtime.GOOS,
-				"arch":   runtime.GOARCH,
-				"path":   artifactName,
-				"sha256": hex.EncodeToString(sum[:]),
-			},
-		},
-		"entrypoints": map[string]any{
-			"provider": map[string]any{
-				"artifact_path": artifactName,
-			},
-		},
-	}
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		t.Fatalf("MarshalIndent: %v", err)
-	}
-	manifestBytes = append(manifestBytes, '\n')
-
-	archivePath := filepath.Join(dir, "raw-invalid.tar.gz")
-	out, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("Create archive: %v", err)
-	}
-	gzw := gzip.NewWriter(out)
-	tw := tar.NewWriter(gzw)
-
-	writeFile := func(name string, data []byte, mode int64) {
-		hdr := &tar.Header{Name: name, Mode: mode, Size: int64(len(data))}
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatalf("WriteHeader %s: %v", name, err)
-		}
-		if _, err := io.Copy(tw, bytes.NewReader(data)); err != nil {
-			t.Fatalf("Write file %s: %v", name, err)
-		}
-	}
-	writeFile(pluginpkg.ManifestFile, manifestBytes, 0644)
-	writeFile(artifactName, []byte(content), 0755)
-
-	if err := tw.Close(); err != nil {
-		t.Fatalf("close tar: %v", err)
-	}
-	if err := gzw.Close(); err != nil {
-		t.Fatalf("close gzip: %v", err)
-	}
-	if err := out.Close(); err != nil {
-		t.Fatalf("close archive: %v", err)
 	}
 	return archivePath
 }
@@ -763,70 +609,6 @@ func mustBuildV2Package(t *testing.T, dir, source, version, content string) stri
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(sourceDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
-	return archivePath
-}
-
-func mustBuildV2PackageRaw(t *testing.T, dir, source, version, content string) string {
-	t.Helper()
-
-	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	sum := sha256.Sum256([]byte(content))
-	manifest := map[string]any{
-		"source":  source,
-		"version": version,
-		"kinds":   []string{pluginmanifestv1.KindProvider},
-		"provider": map[string]any{
-			"protocol": map[string]any{"min": 1, "max": 1},
-		},
-		"artifacts": []map[string]any{
-			{
-				"os":     runtime.GOOS,
-				"arch":   runtime.GOARCH,
-				"path":   artifactName,
-				"sha256": hex.EncodeToString(sum[:]),
-			},
-		},
-		"entrypoints": map[string]any{
-			"provider": map[string]any{
-				"artifact_path": artifactName,
-			},
-		},
-	}
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		t.Fatalf("MarshalIndent: %v", err)
-	}
-	manifestBytes = append(manifestBytes, '\n')
-
-	archivePath := filepath.Join(dir, "raw-v2.tar.gz")
-	out, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("Create archive: %v", err)
-	}
-	gzw := gzip.NewWriter(out)
-	tw := tar.NewWriter(gzw)
-
-	writeFile := func(name string, data []byte, mode int64) {
-		hdr := &tar.Header{Name: name, Mode: mode, Size: int64(len(data))}
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatalf("WriteHeader %s: %v", name, err)
-		}
-		if _, err := io.Copy(tw, bytes.NewReader(data)); err != nil {
-			t.Fatalf("Write file %s: %v", name, err)
-		}
-	}
-	writeFile(pluginpkg.ManifestFile, manifestBytes, 0644)
-	writeFile(artifactName, []byte(content), 0755)
-
-	if err := tw.Close(); err != nil {
-		t.Fatalf("close tar: %v", err)
-	}
-	if err := gzw.Close(); err != nil {
-		t.Fatalf("close gzip: %v", err)
-	}
-	if err := out.Close(); err != nil {
-		t.Fatalf("close archive: %v", err)
 	}
 	return archivePath
 }
