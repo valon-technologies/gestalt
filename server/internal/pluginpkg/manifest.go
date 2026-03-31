@@ -183,9 +183,6 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 				}
 			}
 			if !isDeclarative || manifest.IsHybridProvider() {
-				if manifest.Provider.Protocol.Min > manifest.Provider.Protocol.Max {
-					return fmt.Errorf("provider.protocol.min must be <= provider.protocol.max")
-				}
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 					return err
 				}

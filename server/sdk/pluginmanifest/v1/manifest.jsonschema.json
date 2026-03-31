@@ -42,24 +42,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "protocol": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "min",
-            "max"
-          ],
-          "properties": {
-            "min": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "max": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        },
         "config_schema_path": {
           "type": "string",
           "minLength": 1
@@ -172,11 +154,6 @@
                 "required": [
                   "provider"
                 ]
-              },
-              "provider": {
-                "required": [
-                  "protocol"
-                ]
               }
             }
           },
@@ -203,7 +180,6 @@
               },
               "provider": {
                 "required": [
-                  "protocol",
                   "base_url",
                   "operations"
                 ]

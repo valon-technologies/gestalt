@@ -16,7 +16,6 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
   "version": "0.1.0",
   "kinds": ["provider"],
   "provider": {
-    "protocol": { "min": 1, "max": 1 },
     "config_schema_path": "schemas/config.schema.json"
   },
   "artifacts": [
@@ -51,9 +50,7 @@ func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
   "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -79,12 +76,10 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/acme/plugins/provider",
-		Version: "0.1.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   "github.com/acme/plugins/provider",
+		Version:  "0.1.0",
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     "darwin",
@@ -118,9 +113,7 @@ func validV2JSON() []byte {
   "source": "github.com/acme/plugins/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -153,12 +146,10 @@ func TestEncodeManifest_V2RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/acme/plugins/echo",
-		Version: "1.0.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   "github.com/acme/plugins/echo",
+		Version:  "1.0.0",
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     "darwin",
@@ -195,9 +186,7 @@ func TestDecodeManifest_RejectsUnknownField(t *testing.T) {
   "id": "acme/echo",
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -238,9 +227,7 @@ func TestDecodeManifest_V2RejectsInvalidSource(t *testing.T) {
   "source": "` + tc.source + `",
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -271,9 +258,7 @@ func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
   "source": "github.com/acme/plugins/echo",
   "version": "v1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -325,9 +310,7 @@ func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
 	data := []byte(`{
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -356,9 +339,7 @@ func TestDecodeManifest_V2RejectsDuplicateArtifactPlatform(t *testing.T) {
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -393,9 +374,7 @@ func TestDecodeManifest_V2RejectsAbsoluteArtifactPath(t *testing.T) {
   "source": "github.com/test-org/test-repo/test-plugin",
   "version": "1.0.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",
@@ -445,37 +424,6 @@ func TestDecodeManifest_V2ProviderWithoutMetadataRejected(t *testing.T) {
 	}
 }
 
-func TestValidateManifest_ProtocolMinGreaterThanMax(t *testing.T) {
-	t.Parallel()
-
-	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/acme/plugins/provider",
-		Version: "0.1.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 5, Max: 1},
-		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     "darwin",
-				Arch:   "arm64",
-				Path:   "artifacts/darwin/arm64/provider",
-				SHA256: sha256Hex("provider"),
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: "artifacts/darwin/arm64/provider",
-			},
-		},
-	}
-
-	err := ValidateManifest(manifest)
-	if err == nil {
-		t.Fatal("expected error for protocol min > max")
-	}
-}
-
 func TestDecodeManifest_V2WithOAuth2Auth(t *testing.T) {
 	t.Parallel()
 
@@ -484,7 +432,6 @@ func TestDecodeManifest_V2WithOAuth2Auth(t *testing.T) {
   "version": "1.0.0",
   "kinds": ["provider"],
   "provider": {
-    "protocol": { "min": 1, "max": 1 },
     "auth": {
       "type": "oauth2",
       "authorization_url": "https://example.com/authorize",
@@ -544,7 +491,6 @@ func TestDecodeManifest_V2OAuth2MissingTokenURL(t *testing.T) {
   "version": "1.0.0",
   "kinds": ["provider"],
   "provider": {
-    "protocol": { "min": 1, "max": 1 },
     "auth": {
       "type": "oauth2",
       "authorization_url": "https://example.com/authorize"
@@ -579,7 +525,6 @@ func TestDecodeManifest_V2ManualAuth(t *testing.T) {
   "version": "1.0.0",
   "kinds": ["provider"],
   "provider": {
-    "protocol": { "min": 1, "max": 1 },
     "auth": {
       "type": "manual"
     }
@@ -616,7 +561,6 @@ func TestDecodeManifest_V2InvalidAuthType(t *testing.T) {
   "version": "1.0.0",
   "kinds": ["provider"],
   "provider": {
-    "protocol": { "min": 1, "max": 1 },
     "auth": {
       "type": "bogus"
     }
@@ -662,7 +606,6 @@ func TestDecodeManifest_V2AuthRoundTrip(t *testing.T) {
 		Version: "1.0.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			Auth: &pluginmanifestv1.ProviderAuth{
 				Type:             pluginmanifestv1.AuthTypeOAuth2,
 				AuthorizationURL: "https://example.com/authorize",
@@ -709,10 +652,7 @@ source: github.com/acme/plugins/echo
 version: "1.0.0"
 kinds:
   - provider
-provider:
-  protocol:
-    min: 1
-    max: 1
+provider: {}
 artifacts:
   - os: darwin
     arch: arm64

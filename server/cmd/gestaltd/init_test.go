@@ -385,7 +385,6 @@ func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version
 		Version: version,
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{

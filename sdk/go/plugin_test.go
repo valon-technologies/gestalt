@@ -20,9 +20,9 @@ type stubProvider struct {
 	ops         []gestalt.Operation
 }
 
-func (p *stubProvider) Name() string                             { return p.name }
-func (p *stubProvider) DisplayName() string                      { return p.displayName }
-func (p *stubProvider) Description() string                      { return p.description }
+func (p *stubProvider) Name() string                           { return p.name }
+func (p *stubProvider) DisplayName() string                    { return p.displayName }
+func (p *stubProvider) Description() string                    { return p.description }
 func (p *stubProvider) ConnectionMode() gestalt.ConnectionMode { return p.connMode }
 func (p *stubProvider) ListOperations() []gestalt.Operation    { return p.ops }
 
@@ -57,7 +57,6 @@ type manualAuthStubProvider struct {
 }
 
 func (p *manualAuthStubProvider) SupportsManualAuth() bool { return true }
-
 
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
@@ -106,7 +105,6 @@ func TestProviderServerGetMetadata_ManualAuth(t *testing.T) {
 		t.Fatalf("AuthTypes = %v, want [manual]", authTypes)
 	}
 }
-
 
 func TestProviderServerListOperations(t *testing.T) {
 	t.Parallel()
@@ -265,29 +263,6 @@ func TestProviderServerConfigSchema(t *testing.T) {
 	}
 	if meta.GetConfigSchemaJson() != `{"type":"object"}` {
 		t.Errorf("ConfigSchemaJson = %q, want %q", meta.GetConfigSchemaJson(), `{"type":"object"}`)
-	}
-}
-
-func TestProviderServerMetadataProtocolVersions(t *testing.T) {
-	t.Parallel()
-
-	prov := &stubProvider{
-		name:     "test-provider",
-		connMode: gestalt.ConnectionModeNone,
-	}
-
-	client := newProviderPluginClient(t, prov)
-	ctx := context.Background()
-
-	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
-		t.Errorf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-	if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
-		t.Errorf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 }
 

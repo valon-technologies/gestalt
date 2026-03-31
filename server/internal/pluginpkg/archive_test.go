@@ -77,9 +77,7 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
   "source": "github.com/acme/plugins/provider",
   "version": "0.1.0",
   "kinds": ["provider"],
-  "provider": {
-    "protocol": { "min": 1, "max": 1 }
-  },
+  "provider": {},
   "artifacts": [
     {
       "os": "darwin",

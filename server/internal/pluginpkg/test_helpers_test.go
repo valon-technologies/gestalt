@@ -30,12 +30,10 @@ func currentArtifactPath(binary string) string {
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
