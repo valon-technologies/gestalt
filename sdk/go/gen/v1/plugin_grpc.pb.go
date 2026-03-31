@@ -590,3 +590,105 @@ var RuntimeHost_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/plugin.proto",
 }
+
+const (
+	PluginHost_ProxyHTTP_FullMethodName = "/gestalt.plugin.v1.PluginHost/ProxyHTTP"
+)
+
+// PluginHostClient is the client API for PluginHost service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type PluginHostClient interface {
+	ProxyHTTP(ctx context.Context, in *ProxyHTTPRequest, opts ...grpc.CallOption) (*ProxyHTTPResponse, error)
+}
+
+type pluginHostClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPluginHostClient(cc grpc.ClientConnInterface) PluginHostClient {
+	return &pluginHostClient{cc}
+}
+
+func (c *pluginHostClient) ProxyHTTP(ctx context.Context, in *ProxyHTTPRequest, opts ...grpc.CallOption) (*ProxyHTTPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProxyHTTPResponse)
+	err := c.cc.Invoke(ctx, PluginHost_ProxyHTTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PluginHostServer is the server API for PluginHost service.
+// All implementations must embed UnimplementedPluginHostServer
+// for forward compatibility.
+type PluginHostServer interface {
+	ProxyHTTP(context.Context, *ProxyHTTPRequest) (*ProxyHTTPResponse, error)
+	mustEmbedUnimplementedPluginHostServer()
+}
+
+// UnimplementedPluginHostServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedPluginHostServer struct{}
+
+func (UnimplementedPluginHostServer) ProxyHTTP(context.Context, *ProxyHTTPRequest) (*ProxyHTTPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProxyHTTP not implemented")
+}
+func (UnimplementedPluginHostServer) mustEmbedUnimplementedPluginHostServer() {}
+func (UnimplementedPluginHostServer) testEmbeddedByValue()                    {}
+
+// UnsafePluginHostServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PluginHostServer will
+// result in compilation errors.
+type UnsafePluginHostServer interface {
+	mustEmbedUnimplementedPluginHostServer()
+}
+
+func RegisterPluginHostServer(s grpc.ServiceRegistrar, srv PluginHostServer) {
+	// If the following call panics, it indicates UnimplementedPluginHostServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&PluginHost_ServiceDesc, srv)
+}
+
+func _PluginHost_ProxyHTTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProxyHTTPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServer).ProxyHTTP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHost_ProxyHTTP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServer).ProxyHTTP(ctx, req.(*ProxyHTTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// PluginHost_ServiceDesc is the grpc.ServiceDesc for PluginHost service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PluginHost_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.PluginHost",
+	HandlerType: (*PluginHostServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProxyHTTP",
+			Handler:    _PluginHost_ProxyHTTP_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/plugin.proto",
+}

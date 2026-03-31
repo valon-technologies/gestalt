@@ -1459,6 +1459,134 @@ func (x *StartRuntimeRequest) GetInitialCapabilities() []*Capability {
 	return nil
 }
 
+type ProxyHTTPRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Body          []byte                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProxyHTTPRequest) Reset() {
+	*x = ProxyHTTPRequest{}
+	mi := &file_v1_plugin_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProxyHTTPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProxyHTTPRequest) ProtoMessage() {}
+
+func (x *ProxyHTTPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProxyHTTPRequest.ProtoReflect.Descriptor instead.
+func (*ProxyHTTPRequest) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ProxyHTTPRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *ProxyHTTPRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *ProxyHTTPRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *ProxyHTTPRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+type ProxyHTTPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StatusCode    int32                  `protobuf:"varint,1,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Body          []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProxyHTTPResponse) Reset() {
+	*x = ProxyHTTPResponse{}
+	mi := &file_v1_plugin_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProxyHTTPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProxyHTTPResponse) ProtoMessage() {}
+
+func (x *ProxyHTTPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_plugin_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProxyHTTPResponse.ProtoReflect.Descriptor instead.
+func (*ProxyHTTPResponse) Descriptor() ([]byte, []int) {
+	return file_v1_plugin_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ProxyHTTPResponse) GetStatusCode() int32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
+func (x *ProxyHTTPResponse) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *ProxyHTTPResponse) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
 var File_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_v1_plugin_proto_rawDesc = "" +
@@ -1585,7 +1713,23 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x13StartRuntimeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12P\n" +
-	"\x14initial_capabilities\x18\x03 \x03(\v2\x1d.gestalt.plugin.v1.CapabilityR\x13initialCapabilities*\x9f\x01\n" +
+	"\x14initial_capabilities\x18\x03 \x03(\v2\x1d.gestalt.plugin.v1.CapabilityR\x13initialCapabilities\"\xd8\x01\n" +
+	"\x10ProxyHTTPRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12J\n" +
+	"\aheaders\x18\x03 \x03(\v20.gestalt.plugin.v1.ProxyHTTPRequest.HeadersEntryR\aheaders\x12\x12\n" +
+	"\x04body\x18\x04 \x01(\fR\x04body\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd1\x01\n" +
+	"\x11ProxyHTTPResponse\x12\x1f\n" +
+	"\vstatus_code\x18\x01 \x01(\x05R\n" +
+	"statusCode\x12K\n" +
+	"\aheaders\x18\x02 \x03(\v21.gestalt.plugin.v1.ProxyHTTPResponse.HeadersEntryR\aheaders\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\fR\x04body\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x9f\x01\n" +
 	"\x0eConnectionMode\x12\x1f\n" +
 	"\x1bCONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x18\n" +
@@ -1609,7 +1753,10 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xb6\x01\n" +
 	"\vRuntimeHost\x12N\n" +
 	"\x06Invoke\x12 .gestalt.plugin.v1.InvokeRequest\x1a\".gestalt.plugin.v1.OperationResult\x12W\n" +
-	"\x10ListCapabilities\x12\x16.google.protobuf.Empty\x1a+.gestalt.plugin.v1.ListCapabilitiesResponseB\xc5\x01\n" +
+	"\x10ListCapabilities\x12\x16.google.protobuf.Empty\x1a+.gestalt.plugin.v1.ListCapabilitiesResponse2d\n" +
+	"\n" +
+	"PluginHost\x12V\n" +
+	"\tProxyHTTP\x12#.gestalt.plugin.v1.ProxyHTTPRequest\x1a$.gestalt.plugin.v1.ProxyHTTPResponseB\xc5\x01\n" +
 	"\x15com.gestalt.plugin.v1B\vPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
 
 var (
@@ -1625,7 +1772,7 @@ func file_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_v1_plugin_proto_goTypes = []any{
 	(ConnectionMode)(0),               // 0: gestalt.plugin.v1.ConnectionMode
 	(PrincipalSource)(0),              // 1: gestalt.plugin.v1.PrincipalSource
@@ -1649,65 +1796,73 @@ var file_v1_plugin_proto_goTypes = []any{
 	(*StartProviderRequest)(nil),      // 19: gestalt.plugin.v1.StartProviderRequest
 	(*StartProviderResponse)(nil),     // 20: gestalt.plugin.v1.StartProviderResponse
 	(*StartRuntimeRequest)(nil),       // 21: gestalt.plugin.v1.StartRuntimeRequest
-	nil,                               // 22: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	nil,                               // 23: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                               // 24: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	nil,                               // 25: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
-	(*structpb.Value)(nil),            // 26: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil),     // 27: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),           // 28: google.protobuf.Struct
-	(*emptypb.Empty)(nil),             // 29: google.protobuf.Empty
+	(*ProxyHTTPRequest)(nil),          // 22: gestalt.plugin.v1.ProxyHTTPRequest
+	(*ProxyHTTPResponse)(nil),         // 23: gestalt.plugin.v1.ProxyHTTPResponse
+	nil,                               // 24: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
+	nil,                               // 25: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
+	nil,                               // 26: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	nil,                               // 27: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	nil,                               // 28: gestalt.plugin.v1.ProxyHTTPRequest.HeadersEntry
+	nil,                               // 29: gestalt.plugin.v1.ProxyHTTPResponse.HeadersEntry
+	(*structpb.Value)(nil),            // 30: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),     // 31: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),           // 32: google.protobuf.Struct
+	(*emptypb.Empty)(nil),             // 33: google.protobuf.Empty
 }
 var file_v1_plugin_proto_depIdxs = []int32{
 	2,  // 0: gestalt.plugin.v1.Principal.identity:type_name -> gestalt.plugin.v1.UserIdentity
 	1,  // 1: gestalt.plugin.v1.Principal.source:type_name -> gestalt.plugin.v1.PrincipalSource
-	26, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
+	30, // 2: gestalt.plugin.v1.Parameter.default_value:type_name -> google.protobuf.Value
 	4,  // 3: gestalt.plugin.v1.Operation.parameters:type_name -> gestalt.plugin.v1.Parameter
 	4,  // 4: gestalt.plugin.v1.Capability.parameters:type_name -> gestalt.plugin.v1.Parameter
 	0,  // 5: gestalt.plugin.v1.ProviderMetadata.connection_mode:type_name -> gestalt.plugin.v1.ConnectionMode
-	22, // 6: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	27, // 7: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
-	27, // 8: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
-	27, // 9: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
-	27, // 10: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 6: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
+	31, // 7: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
+	31, // 8: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	31, // 9: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
+	31, // 10: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
 	5,  // 11: gestalt.plugin.v1.ListOperationsResponse.operations:type_name -> gestalt.plugin.v1.Operation
-	28, // 12: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	23, // 13: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	24, // 14: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	32, // 12: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	25, // 13: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
+	26, // 14: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
 	10, // 15: gestalt.plugin.v1.PostConnectRequest.token:type_name -> gestalt.plugin.v1.IntegrationToken
-	25, // 16: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	27, // 16: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
 	6,  // 17: gestalt.plugin.v1.ListCapabilitiesResponse.capabilities:type_name -> gestalt.plugin.v1.Capability
 	3,  // 18: gestalt.plugin.v1.InvokeRequest.principal:type_name -> gestalt.plugin.v1.Principal
-	28, // 19: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
-	28, // 20: gestalt.plugin.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
-	28, // 21: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
+	32, // 19: gestalt.plugin.v1.InvokeRequest.params:type_name -> google.protobuf.Struct
+	32, // 20: gestalt.plugin.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	32, // 21: gestalt.plugin.v1.StartRuntimeRequest.config:type_name -> google.protobuf.Struct
 	6,  // 22: gestalt.plugin.v1.StartRuntimeRequest.initial_capabilities:type_name -> gestalt.plugin.v1.Capability
-	7,  // 23: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
-	29, // 24: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
-	19, // 25: gestalt.plugin.v1.ProviderPlugin.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
-	29, // 26: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
-	12, // 27: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
-	13, // 28: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
-	15, // 29: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
-	21, // 30: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
-	29, // 31: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
-	18, // 32: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
-	29, // 33: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
-	8,  // 34: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
-	20, // 35: gestalt.plugin.v1.ProviderPlugin.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
-	11, // 36: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
-	9,  // 37: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
-	14, // 38: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
-	16, // 39: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
-	29, // 40: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
-	29, // 41: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
-	9,  // 42: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
-	17, // 43: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
-	34, // [34:44] is the sub-list for method output_type
-	24, // [24:34] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	28, // 23: gestalt.plugin.v1.ProxyHTTPRequest.headers:type_name -> gestalt.plugin.v1.ProxyHTTPRequest.HeadersEntry
+	29, // 24: gestalt.plugin.v1.ProxyHTTPResponse.headers:type_name -> gestalt.plugin.v1.ProxyHTTPResponse.HeadersEntry
+	7,  // 25: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
+	33, // 26: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
+	19, // 27: gestalt.plugin.v1.ProviderPlugin.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
+	33, // 28: gestalt.plugin.v1.ProviderPlugin.ListOperations:input_type -> google.protobuf.Empty
+	12, // 29: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
+	13, // 30: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
+	15, // 31: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
+	21, // 32: gestalt.plugin.v1.RuntimePlugin.Start:input_type -> gestalt.plugin.v1.StartRuntimeRequest
+	33, // 33: gestalt.plugin.v1.RuntimePlugin.Stop:input_type -> google.protobuf.Empty
+	18, // 34: gestalt.plugin.v1.RuntimeHost.Invoke:input_type -> gestalt.plugin.v1.InvokeRequest
+	33, // 35: gestalt.plugin.v1.RuntimeHost.ListCapabilities:input_type -> google.protobuf.Empty
+	22, // 36: gestalt.plugin.v1.PluginHost.ProxyHTTP:input_type -> gestalt.plugin.v1.ProxyHTTPRequest
+	8,  // 37: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
+	20, // 38: gestalt.plugin.v1.ProviderPlugin.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
+	11, // 39: gestalt.plugin.v1.ProviderPlugin.ListOperations:output_type -> gestalt.plugin.v1.ListOperationsResponse
+	9,  // 40: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
+	14, // 41: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
+	16, // 42: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
+	33, // 43: gestalt.plugin.v1.RuntimePlugin.Start:output_type -> google.protobuf.Empty
+	33, // 44: gestalt.plugin.v1.RuntimePlugin.Stop:output_type -> google.protobuf.Empty
+	9,  // 45: gestalt.plugin.v1.RuntimeHost.Invoke:output_type -> gestalt.plugin.v1.OperationResult
+	17, // 46: gestalt.plugin.v1.RuntimeHost.ListCapabilities:output_type -> gestalt.plugin.v1.ListCapabilitiesResponse
+	23, // 47: gestalt.plugin.v1.PluginHost.ProxyHTTP:output_type -> gestalt.plugin.v1.ProxyHTTPResponse
+	37, // [37:48] is the sub-list for method output_type
+	26, // [26:37] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_v1_plugin_proto_init() }
@@ -1721,9 +1876,9 @@ func file_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_plugin_proto_rawDesc), len(file_v1_plugin_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   24,
+			NumMessages:   28,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_v1_plugin_proto_goTypes,
 		DependencyIndexes: file_v1_plugin_proto_depIdxs,
