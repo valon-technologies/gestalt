@@ -26,6 +26,19 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		},
 	}
 
+	if p.ResponseMapping != nil {
+		rm := &pluginmanifestv1.ManifestResponseMapping{
+			DataPath: p.ResponseMapping.DataPath,
+		}
+		if p.ResponseMapping.Pagination != nil {
+			rm.Pagination = &pluginmanifestv1.ManifestPaginationMapping{
+				HasMorePath: p.ResponseMapping.Pagination.HasMorePath,
+				CursorPath:  p.ResponseMapping.Pagination.CursorPath,
+			}
+		}
+		manifest.Provider.ResponseMapping = rm
+	}
+
 	if p.AllowedOperations != nil {
 		manifest.Provider.AllowedOperations = make(map[string]*pluginmanifestv1.ManifestOperationOverride, len(p.AllowedOperations))
 		for k, v := range p.AllowedOperations {

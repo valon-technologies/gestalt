@@ -109,9 +109,10 @@ type PluginDef struct {
 	MCPURL     string `yaml:"mcp_url"`
 	BaseURL    string `yaml:"base_url"`
 
-	Auth        *ConnectionAuthDef        `yaml:"auth"`
-	Connections map[string]*ConnectionDef `yaml:"connections"`
-	Operations  []InlineOperationDef      `yaml:"operations"`
+	Auth            *ConnectionAuthDef        `yaml:"auth"`
+	Connections     map[string]*ConnectionDef `yaml:"connections"`
+	Operations      []InlineOperationDef      `yaml:"operations"`
+	ResponseMapping *ResponseMappingDef       `yaml:"response_mapping"`
 
 	OpenAPIConnection string `yaml:"openapi_connection"`
 	GraphQLConnection string `yaml:"graphql_connection"`
@@ -155,6 +156,16 @@ type InlineOperationParam struct {
 	In          string `yaml:"in"`
 	Description string `yaml:"description"`
 	Required    bool   `yaml:"required"`
+}
+
+type ResponseMappingDef struct {
+	DataPath   string             `yaml:"data_path"`
+	Pagination *PaginationMapping `yaml:"pagination"`
+}
+
+type PaginationMapping struct {
+	HasMorePath string `yaml:"has_more_path"`
+	CursorPath  string `yaml:"cursor_path"`
 }
 
 type RuntimeDef struct {
