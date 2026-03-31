@@ -11,12 +11,20 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// ServeProvider starts a gRPC server for the given [Provider] on the Unix
+// socket specified by the GESTALT_PLUGIN_SOCKET environment variable. It
+// blocks until ctx is cancelled, at which point it drains in-flight requests
+// and returns nil. This is the main entry point for provider plugins.
 func ServeProvider(ctx context.Context, provider Provider) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
 		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider))
 	})
 }
 
+// ServeRuntime starts a gRPC server for the given [Runtime] on the Unix
+// socket specified by the GESTALT_PLUGIN_SOCKET environment variable. It
+// blocks until ctx is cancelled, at which point it drains in-flight requests
+// and returns nil. This is the main entry point for runtime plugins.
 func ServeRuntime(ctx context.Context, runtime Runtime) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
 		proto.RegisterRuntimePluginServer(srv, NewRuntimeServer(runtime))
