@@ -6,9 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
-	"sync"
 
-	"github.com/google/uuid"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -24,7 +22,6 @@ type remoteProviderBase struct {
 	catalog  *catalog.Catalog
 	iconSVG  string
 	closer   io.Closer
-	tokens   *sync.Map
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -34,10 +31,6 @@ type RemoteProviderOption func(*remoteProviderBase)
 // This is used to tie process lifecycle to provider lifecycle.
 func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
-}
-
-func WithTokens(m *sync.Map) RemoteProviderOption {
-	return func(b *remoteProviderBase) { b.tokens = m }
 }
 
 func (p *remoteProviderBase) Close() error {
@@ -110,12 +103,6 @@ func (p *remoteProviderBase) ListOperations() []core.Operation {
 }
 
 func (p *remoteProviderBase) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	invocationID := uuid.New().String()
-	if p.tokens != nil {
-		p.tokens.Store(invocationID, token)
-		defer p.tokens.Delete(invocationID)
-	}
-
 	msg, err := structFromMap(params)
 	if err != nil {
 		return nil, err
@@ -123,8 +110,8 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	resp, err := p.client.Execute(ctx, &pluginapiv1.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
+		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
-		InvocationId:     invocationID,
 	})
 	if err != nil {
 		return nil, err
@@ -164,15 +151,9 @@ func (p *remoteProviderBase) AuthTypes() []string {
 }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
-	invocationID := uuid.New().String()
-	if p.tokens != nil {
-		p.tokens.Store(invocationID, token)
-		defer p.tokens.Delete(invocationID)
-	}
-
 	resp, err := p.client.GetSessionCatalog(ctx, &pluginapiv1.GetSessionCatalogRequest{
+		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
-		InvocationId:     invocationID,
 	})
 	if err != nil {
 		return nil, err

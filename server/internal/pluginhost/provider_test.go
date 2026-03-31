@@ -135,7 +135,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Status != 201 || result.Body != "echo||hi|acme" {
+	if result.Status != 201 || result.Body != "echo|secret-token|hi|acme" {
 		t.Fatalf("unexpected execute result: %+v", result)
 	}
 
@@ -149,7 +149,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CatalogForRequest: %v", err)
 	}
-	if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != "" {
+	if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != "token-123" {
 		t.Fatalf("unexpected session catalog: %+v", sessionCat)
 	}
 

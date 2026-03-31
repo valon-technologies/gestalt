@@ -270,10 +270,9 @@ Isolation properties:
 
 - **No shared memory**: communication is message-passing over a socket
 - **No direct datastore access**: plugins cannot read or write tokens
-- **No direct network access**: all plugin HTTP requests go through the host's `ProxyHTTP` callback, which validates URLs (blocks private IPs unless `allowed_hosts` is set) and strips sensitive headers
 - **Sanitized environment**: only safe variables are passed to plugin processes (`PATH`, `HOME`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_*`, plus user-configured `env`)
 - **Scoped capabilities**: runtime plugins can only invoke providers listed in `runtimes.<name>.providers`
-- **Credential passthrough**: the host passes a single access token per invocation, not the full credential store
+- **Credential passthrough**: the host passes the access token directly to the plugin via the gRPC request, not the full credential store
 - **Process lifecycle**: plugins are terminated when `gestaltd` shuts down (SIGTERM, then SIGKILL after timeout)
 
 ## Webhook Signature Verification
@@ -322,5 +321,4 @@ These configuration choices directly affect the security posture of a deployment
 - **No session revocation**: platform sessions cannot be explicitly invalidated. They expire based on the auth provider's TTL (default 24 hours).
 - **No built-in rate limiting**: configure rate limiting at the load balancer or reverse proxy layer.
 - **No CORS configuration**: Gestalt does not set CORS headers. Configure CORS at the reverse proxy if cross-origin browser access is needed.
-- **Plugin DNS rebinding**: the host blocks obvious private IPs for plugin HTTP requests, but DNS rebinding or HTTP redirects could potentially bypass this check. Use `allowed_hosts` to restrict plugin network access to specific domains.
 - **Database encryption is application-level**: Gestalt encrypts tokens before storage, but the database itself may store metadata in plaintext. Ensure the database has appropriate access controls and encrypted backups.

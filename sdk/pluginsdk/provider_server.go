@@ -80,9 +80,6 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	if id := req.GetInvocationId(); id != "" {
-		ctx = WithInvocationID(ctx, id)
-	}
 	result, err := s.provider.Execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
