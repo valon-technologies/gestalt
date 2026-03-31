@@ -8,17 +8,15 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 )
 
 type MergedProvider struct {
-	name, displayName, desc string
-	iconSVG                 string
-	connMode                core.ConnectionMode
-	ops                     []core.Operation
-	opConn                  map[string]string
-	route                   map[string]core.Provider
-	all                     []core.Provider
-	owned                   []core.Provider
+	catalog  *catalog.Catalog
+	connMode core.ConnectionMode
+	opConn   map[string]string
+	route    map[string]core.Provider
+	owned    []core.Provider
 }
 
 type BoundProvider struct {
@@ -41,20 +39,20 @@ func NewMerged(name, displayName, desc string, providers ...core.Provider) (*Mer
 }
 
 func NewMergedWithConnections(name, displayName, desc string, providers ...BoundProvider) (*MergedProvider, error) {
-	all := make([]core.Provider, len(providers))
 	owned := make([]core.Provider, len(providers))
 	for i, p := range providers {
-		all[i] = p.Provider
 		owned[i] = p.Provider
 	}
 	m := &MergedProvider{
-		name:        name,
-		displayName: displayName,
-		desc:        desc,
-		opConn:      make(map[string]string),
-		route:       make(map[string]core.Provider),
-		all:         all,
-		owned:       owned,
+		catalog: &catalog.Catalog{
+			Name:        name,
+			DisplayName: displayName,
+			Description: desc,
+			Operations:  make([]catalog.CatalogOperation, 0),
+		},
+		opConn: make(map[string]string),
+		route:  make(map[string]core.Provider),
+		owned:  owned,
 	}
 	for i, bound := range providers {
 		p := bound.Provider
@@ -68,66 +66,32 @@ func NewMergedWithConnections(name, displayName, desc string, providers ...Bound
 				return nil, fmt.Errorf("operation %q provided by both %q and %q", op.Name, owner.Name(), p.Name())
 			}
 			m.route[op.Name] = p
-			m.ops = append(m.ops, op)
+			m.catalog.Operations = append(m.catalog.Operations, mergedCatalogOperation(p, op))
 			if bound.Connection != "" {
 				m.opConn[op.Name] = bound.Connection
 			}
 		}
 	}
+	integration.CompileSchemas(m.catalog)
 	return m, nil
 }
 
-func (m *MergedProvider) Name() string                        { return m.name }
-func (m *MergedProvider) DisplayName() string                 { return m.displayName }
-func (m *MergedProvider) Description() string                 { return m.desc }
+func (m *MergedProvider) Name() string                        { return m.catalog.Name }
+func (m *MergedProvider) DisplayName() string                 { return m.catalog.DisplayName }
+func (m *MergedProvider) Description() string                 { return m.catalog.Description }
 func (m *MergedProvider) ConnectionMode() core.ConnectionMode { return m.connMode }
-func (m *MergedProvider) ListOperations() []core.Operation    { return m.ops }
+func (m *MergedProvider) ListOperations() []core.Operation {
+	return integration.OperationsList(m.catalog)
+}
 func (m *MergedProvider) ConnectionForOperation(op string) string {
 	return m.opConn[op]
 }
 
-func (m *MergedProvider) SetDisplayName(s string) { m.displayName = s }
-func (m *MergedProvider) SetDescription(s string) { m.desc = s }
-func (m *MergedProvider) SetIconSVG(svg string)   { m.iconSVG = svg }
+func (m *MergedProvider) SetDisplayName(s string) { m.catalog.DisplayName = s }
+func (m *MergedProvider) SetDescription(s string) { m.catalog.Description = s }
+func (m *MergedProvider) SetIconSVG(svg string)   { m.catalog.IconSVG = svg }
 
-func (m *MergedProvider) Catalog() *catalog.Catalog {
-	richOps := make(map[string]catalog.CatalogOperation)
-	for _, p := range m.all {
-		cp, ok := p.(core.CatalogProvider)
-		if !ok {
-			continue
-		}
-		cat := cp.Catalog()
-		if cat == nil {
-			continue
-		}
-		for i := range cat.Operations {
-			if _, ours := m.route[cat.Operations[i].ID]; ours {
-				richOps[cat.Operations[i].ID] = cat.Operations[i]
-			}
-		}
-	}
-
-	cat := &catalog.Catalog{
-		Name:        m.name,
-		DisplayName: m.displayName,
-		Description: m.desc,
-		IconSVG:     m.iconSVG,
-	}
-	for _, op := range m.ops {
-		if rich, ok := richOps[op.Name]; ok {
-			cat.Operations = append(cat.Operations, rich)
-		} else {
-			cat.Operations = append(cat.Operations, catalog.CatalogOperation{
-				ID:          op.Name,
-				Title:       op.Name,
-				Description: op.Description,
-				Transport:   catalog.TransportREST,
-			})
-		}
-	}
-	return cat
-}
+func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }
 
 func (m *MergedProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	p, ok := m.route[op]
@@ -153,5 +117,37 @@ func (m *MergedProvider) DisownProvider(p core.Provider) {
 			m.owned = append(m.owned[:i], m.owned[i+1:]...)
 			return
 		}
+	}
+}
+
+func mergedCatalogOperation(p core.Provider, op core.Operation) catalog.CatalogOperation {
+	if cp, ok := p.(core.CatalogProvider); ok {
+		if cat := cp.Catalog(); cat != nil {
+			for i := range cat.Operations {
+				if cat.Operations[i].ID == op.Name {
+					return cat.Operations[i]
+				}
+			}
+		}
+	}
+
+	params := make([]catalog.CatalogParameter, 0, len(op.Parameters))
+	for _, param := range op.Parameters {
+		params = append(params, catalog.CatalogParameter{
+			Name:        param.Name,
+			Type:        param.Type,
+			Description: param.Description,
+			Required:    param.Required,
+			Default:     param.Default,
+		})
+	}
+
+	return catalog.CatalogOperation{
+		ID:          op.Name,
+		Method:      op.Method,
+		Title:       op.Name,
+		Description: op.Description,
+		Parameters:  params,
+		Transport:   catalog.TransportREST,
 	}
 }

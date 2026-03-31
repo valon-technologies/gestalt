@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
@@ -36,7 +36,6 @@ type Upstream struct {
 	connMode core.ConnectionMode
 	headers  map[string]string
 	cat      *catalog.Catalog
-	ops      []core.Operation
 	client   mcpclient.MCPClient
 	exposure *operationexposure.Policy
 	resolver *egress.Resolver
@@ -59,14 +58,13 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 }
 
 func newFromClient(name string, client mcpclient.MCPClient, connMode core.ConnectionMode, tools []mcpgo.Tool) *Upstream {
-	cat, ops := buildCatalog(name, tools)
+	cat := buildCatalog(name, tools)
 	return &Upstream{
 		name:     name,
 		display:  name,
 		desc:     fmt.Sprintf("MCP upstream: %s", name),
 		connMode: connMode,
 		cat:      cat,
-		ops:      ops,
 		client:   client,
 	}
 }
@@ -75,9 +73,14 @@ func (u *Upstream) Name() string                        { return u.name }
 func (u *Upstream) DisplayName() string                 { return u.display }
 func (u *Upstream) Description() string                 { return u.desc }
 func (u *Upstream) ConnectionMode() core.ConnectionMode { return u.connMode }
-func (u *Upstream) ListOperations() []core.Operation    { return slices.Clone(u.ops) }
-func (u *Upstream) Catalog() *catalog.Catalog           { return u.cat }
-func (u *Upstream) SupportsManualAuth() bool            { return true }
+func (u *Upstream) ListOperations() []core.Operation    { return integration.OperationsList(u.cat) }
+func (u *Upstream) Catalog() *catalog.Catalog {
+	if u.cat == nil {
+		return nil
+	}
+	return u.cat.Clone()
+}
+func (u *Upstream) SupportsManualAuth() bool { return true }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }
@@ -92,7 +95,7 @@ func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ stri
 }
 
 func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, _, err := u.discover(ctx, token)
+	cat, err := u.discover(ctx, token)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +138,7 @@ func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride
 		return err
 	}
 	if u.cat != nil {
-		if err := policy.Validate(u.ops); err != nil {
+		if err := policy.Validate(integration.OperationsList(u.cat)); err != nil {
 			return err
 		}
 	}
@@ -145,7 +148,6 @@ func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride
 		return nil
 	}
 
-	u.ops = policy.ApplyOperations(u.ops)
 	u.cat = policy.ApplyCatalog(u.cat)
 	return nil
 }
@@ -190,41 +192,40 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	return client, nil
 }
 
-func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, []core.Operation, error) {
+func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if u.client != nil && u.cat != nil {
-		return u.cat.Clone(), slices.Clone(u.ops), nil
+		return u.cat.Clone(), nil
 	}
 
 	client, err := u.connect(ctx, token)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer func() { _ = client.Close() }()
 
 	toolsResult, err := client.ListTools(ctx, mcpgo.ListToolsRequest{})
 	if err != nil {
-		return nil, nil, fmt.Errorf("mcpupstream %s: listing tools: %w", u.name, err)
+		return nil, fmt.Errorf("mcpupstream %s: listing tools: %w", u.name, err)
 	}
 
-	cat, ops := buildCatalog(u.name, toolsResult.Tools)
+	cat := buildCatalog(u.name, toolsResult.Tools)
+	ops := integration.OperationsList(cat)
 	if err := u.exposure.Validate(ops); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	ops = u.exposure.ApplyOperations(ops)
 	cat = u.exposure.ApplyCatalog(cat)
-	return cat, ops, nil
+	return cat, nil
 }
 
 func (u *Upstream) resolveInnerName(name string) (string, bool) {
 	return u.exposure.Resolve(name)
 }
 
-func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Operation) {
+func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 	cat := &catalog.Catalog{
 		Name:       name,
 		Operations: make([]catalog.CatalogOperation, 0, len(tools)),
 	}
-	ops := make([]core.Operation, 0, len(tools))
 
 	for i := range tools {
 		schema, _ := json.Marshal(tools[i].InputSchema)
@@ -249,12 +250,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Ope
 			OpenWorldHint:   tools[i].Annotations.OpenWorldHint,
 		}
 		cat.Operations = append(cat.Operations, catOp)
-
-		ops = append(ops, core.Operation{
-			Name:        tools[i].Name,
-			Description: tools[i].Description,
-		})
 	}
 
-	return cat, ops
+	return cat
 }

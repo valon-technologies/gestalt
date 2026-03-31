@@ -268,7 +268,7 @@ func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
 		t.Fatalf("FilterOperations: %v", err)
 	}
 
-	cat, _, err := u.discover(context.Background(), "")
+	cat, err := u.discover(context.Background(), "")
 	if err != nil {
 		t.Fatalf("discover after filter with alias: %v", err)
 	}

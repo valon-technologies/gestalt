@@ -95,6 +95,35 @@ func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[strin
 
 func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
 
+type opsOnlySDKProvider struct{}
+
+func (p *opsOnlySDKProvider) Name() string { return "ops-only" }
+
+func (p *opsOnlySDKProvider) DisplayName() string { return "Ops Only" }
+
+func (p *opsOnlySDKProvider) Description() string { return "ops-only provider" }
+
+func (p *opsOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
+	return sdkgestalt.ConnectionModeUser
+}
+
+func (p *opsOnlySDKProvider) ListOperations() []sdkgestalt.Operation {
+	return []sdkgestalt.Operation{
+		{
+			Name:        "echo",
+			Description: "Echo input",
+			Method:      http.MethodPost,
+			Parameters: []sdkgestalt.Parameter{
+				{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
+			},
+		},
+	}
+}
+
+func (p *opsOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
+	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
+}
+
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -128,6 +157,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 	if _, ok := prov.(core.AuthTypeLister); !ok {
 		t.Fatal("expected remote provider to implement AuthTypeLister")
+	}
+	if ops := prov.ListOperations(); len(ops) != 1 || len(ops[0].Parameters) != 1 || ops[0].Parameters[0].Name != "message" {
+		t.Fatalf("unexpected ListOperations result: %+v", ops)
 	}
 
 	ctx := core.WithConnectionParams(context.Background(), map[string]string{"tenant": "acme"})
@@ -206,13 +238,12 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 	t.Run("ops included in catalog when no static catalog", func(t *testing.T) {
 		t.Parallel()
 
-		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&opsOnlySDKProvider{}))
 		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
-		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
-		base.catalog = nil
+		base := prov.(*remoteProviderBase)
 		base.SetIconSVG(testSVG)
 
 		cp := prov.(core.CatalogProvider)
@@ -228,6 +259,12 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		}
 		if cat.Operations[0].ID != "echo" {
 			t.Fatalf("Operations[0].ID = %q, want echo", cat.Operations[0].ID)
+		}
+		if cat.Operations[0].Transport != catalog.TransportPlugin {
+			t.Fatalf("Transport = %q, want %q", cat.Operations[0].Transport, catalog.TransportPlugin)
+		}
+		if len(cat.Operations[0].Parameters) != 1 || cat.Operations[0].Parameters[0].Name != "message" {
+			t.Fatalf("unexpected synthesized parameters: %+v", cat.Operations[0].Parameters)
 		}
 	})
 

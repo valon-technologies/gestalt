@@ -112,7 +112,7 @@ func TestResolveCatalog_StaticCatalog(t *testing.T) {
 	}
 }
 
-func TestResolveCatalog_FlatProvider(t *testing.T) {
+func TestResolveCatalog_FlatProviderErrors(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubProvider{
@@ -139,33 +139,11 @@ func TestResolveCatalog_FlatProvider(t *testing.T) {
 	}
 
 	cat, err := resolveCatalog(context.Background(), prov, "gadget-svc", nil, nil, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error for provider without catalog, got catalog %+v", cat)
 	}
-	if len(cat.Operations) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
-	}
-
-	create := cat.Operations[0]
-	if create.ID != "create_gadget" {
-		t.Fatalf("expected id %q, got %q", "create_gadget", create.ID)
-	}
-	if create.Method != http.MethodPost {
-		t.Fatalf("expected method POST, got %q", create.Method)
-	}
-	if create.Transport != catalog.TransportREST {
-		t.Fatalf("expected transport %q, got %q", catalog.TransportREST, create.Transport)
-	}
-	if create.InputSchema == nil {
-		t.Fatal("expected inputSchema for operation with parameters")
-	}
-
-	get := cat.Operations[1]
-	if get.ID != "get_gadget" {
-		t.Fatalf("expected id %q, got %q", "get_gadget", get.ID)
-	}
-	if get.Annotations.ReadOnlyHint == nil || !*get.Annotations.ReadOnlyHint {
-		t.Fatal("expected readOnlyHint=true for GET method")
+	if got, want := err.Error(), `provider "gadget-svc" does not expose a catalog`; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
 	}
 }
 
@@ -333,7 +311,7 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 	}
 }
 
-func TestResolveCatalog_IconOnlyCatalogStillHasOperations(t *testing.T) {
+func TestResolveCatalog_IconOnlyCatalogPreserved(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubCatalogProvider{
@@ -366,21 +344,8 @@ func TestResolveCatalog_IconOnlyCatalogStillHasOperations(t *testing.T) {
 	if cat.IconSVG != `<svg/>` {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, `<svg/>`)
 	}
-	if len(cat.Operations) != 1 {
-		t.Fatalf("got %d operations, want 1", len(cat.Operations))
-	}
-	op := cat.Operations[0]
-	if op.ID != "do_thing" {
-		t.Fatalf("Operations[0].ID = %q, want do_thing", op.ID)
-	}
-	if op.Method != http.MethodPost {
-		t.Fatalf("Operations[0].Method = %q, want POST", op.Method)
-	}
-	if op.Description != "Does a thing" {
-		t.Fatalf("Operations[0].Description = %q, want %q", op.Description, "Does a thing")
-	}
-	if len(op.Parameters) != 1 || op.Parameters[0].Name != "input" {
-		t.Fatalf("Operations[0].Parameters = %+v, want [{Name:input}]", op.Parameters)
+	if len(cat.Operations) != 0 {
+		t.Fatalf("got %d operations, want 0", len(cat.Operations))
 	}
 }
 

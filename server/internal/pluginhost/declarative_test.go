@@ -366,6 +366,15 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 			t.Fatalf("Operations[%d].ID = %q, want %q", i, cat.Operations[i].ID, want)
 		}
 	}
+	if got := cat.Operations[0].Parameters[0].Location; got != "query" {
+		t.Fatalf("list_items first param location = %q, want query", got)
+	}
+	if got := cat.Operations[1].Parameters[0].Location; got != "body" {
+		t.Fatalf("create_item first param location = %q, want body", got)
+	}
+	if cat.Operations[3].InputSchema == nil {
+		t.Fatal("expected compiled input schema on update_item")
+	}
 
 	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>`
 	p.SetIconSVG(testSVG)

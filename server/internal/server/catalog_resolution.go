@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -59,20 +60,9 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 	}
 
 	if merged == nil {
-		merged = synthesizeCatalog(prov, provName)
-	} else if len(merged.Operations) == 0 {
-		merged.Operations = integration.CoreOperationsToCatalogOps(prov.ListOperations())
+		return nil, fmt.Errorf("provider %q does not expose a catalog", provName)
 	}
 
 	integration.CompileSchemas(merged)
 	return merged, nil
-}
-
-func synthesizeCatalog(prov core.Provider, provName string) *catalog.Catalog {
-	return &catalog.Catalog{
-		Name:        provName,
-		DisplayName: prov.DisplayName(),
-		Description: prov.Description(),
-		Operations:  integration.CoreOperationsToCatalogOps(prov.ListOperations()),
-	}
 }
