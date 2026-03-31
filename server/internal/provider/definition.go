@@ -126,7 +126,9 @@ type PaginationMappingDef struct {
 
 type ParameterDef struct {
 	Name        string `yaml:"name" json:"name"`
+	WireName    string `yaml:"wire_name,omitempty" json:"wire_name,omitempty"`
 	Type        string `yaml:"type" json:"type"`
+	Location    string `yaml:"location,omitempty" json:"location,omitempty"`
 	Description string `yaml:"description" json:"description"`
 	Required    bool   `yaml:"required" json:"required"`
 	Default     any    `yaml:"default" json:"default"`
