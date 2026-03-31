@@ -125,6 +125,7 @@ type PluginDef struct {
 	ResolvedManifestPath string `yaml:"-"`
 	ResolvedIconFile     string `yaml:"-"`
 	IsDeclarative        bool   `yaml:"-"`
+	HostBinary           string `yaml:"-"`
 }
 
 func (p *PluginDef) IsInline() bool {

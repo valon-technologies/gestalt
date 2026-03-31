@@ -21,6 +21,7 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/webui"
 
@@ -44,6 +45,8 @@ func run(args []string) error {
 			return runInit(args[1:])
 		case "validate":
 			return runValidate(args[1:])
+		case "__sandbox":
+			return sandbox.RunSubcommand(args[1:])
 		}
 	}
 
