@@ -287,7 +287,7 @@ When a command needs a config path:
 ## `bundle`
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
+gestaltd bundle --config ./config.yaml --output ./bundle
 ```
 
 Produces a self-contained output directory:
@@ -304,8 +304,8 @@ Run `bundle` whenever your config contains remote REST upstreams, remote GraphQL
 Production startup:
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd serve --locked --config ./bundle/config.yaml
 ```
 
 If prepared state is missing or stale, startup fails instead of mutating local state.
@@ -315,8 +315,8 @@ If prepared state is missing or stale, startup fails instead of mutating local s
 Non-mutating config validation. Expects lock state to already exist when the config depends on prepared artifacts.
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd validate --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd validate --config ./bundle/config.yaml
 ```
 
 ### `validate --init`
@@ -324,7 +324,7 @@ gestaltd validate --config ./bundle/gestalt.yaml
 Run initialization before validating. Useful when you want to validate a config that has not been bundled yet:
 
 ```sh
-gestaltd validate --init --config ./gestalt.yaml
+gestaltd validate --init --config ./config.yaml
 ```
 
 ## `plugin package`

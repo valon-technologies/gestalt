@@ -22,7 +22,7 @@ The server and embedded UI are both available at `http://localhost:8080`.
 ## Explicit Config
 
 ```sh
-gestaltd --config ./gestalt.yaml
+gestaltd --config ./config.yaml
 ```
 
 Use this when you want to control:
@@ -38,9 +38,9 @@ Use this when you want to control:
 If your config includes remote REST or GraphQL upstreams, or packaged plugins, bundle and validate first:
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd validate --config ./bundle/gestalt.yaml
-gestaltd serve --locked --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd validate --config ./bundle/config.yaml
+gestaltd serve --locked --config ./bundle/config.yaml
 ```
 
 This is the closest local approximation to a production deployment.

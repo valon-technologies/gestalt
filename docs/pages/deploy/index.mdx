@@ -75,8 +75,8 @@ For published-image examples rather than repo-local source builds, see `examples
 The bare-binary model is straightforward:
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd serve --locked --config ./bundle/config.yaml
 ```
 
 That is often the cleanest way to run Gestalt on a VM, inside systemd, or in a custom container build.
