@@ -67,11 +67,6 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	cat.BaseURL = baseURL
 	coreintegration.CompileSchemas(cat)
 
-	endpoints, err := coreintegration.EndpointsMap(cat)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", def.Provider, err)
-	}
-
 	base := &coreintegration.Base{
 		IntegrationName:    def.Provider,
 		IntegrationDisplay: def.DisplayName,
@@ -79,9 +74,6 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 		Auth:               auth,
 		BaseURL:            baseURL,
 		HTTPClient:         client,
-		Operations:         coreintegration.OperationsList(cat),
-		Endpoints:          endpoints,
-		Queries:            coreintegration.QueriesMap(cat),
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
 		EgressResolver:     bo.egress,
