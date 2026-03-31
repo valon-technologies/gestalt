@@ -19,8 +19,8 @@ const (
 )
 
 type Provider struct {
-	runner     queryRunner
-	httpClient *pluginsdk.ProxiedHTTPClient
+	runner queryRunner
+	host   pluginsdk.ProviderHost
 }
 
 var _ pluginsdk.Provider = (*Provider)(nil)
@@ -35,11 +35,11 @@ func (p *Provider) Description() string                       { return providerD
 func (p *Provider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeUser }
 
 func (p *Provider) Start(ctx context.Context, name string, config map[string]any) error {
-	_, hostClient, err := pluginsdk.DialProviderHost(ctx)
+	host, err := pluginsdk.DialProviderHost(ctx)
 	if err != nil {
 		return fmt.Errorf("dialing provider host: %w", err)
 	}
-	p.httpClient = pluginsdk.NewProxiedHTTPClient(hostClient)
+	p.host = host
 	return nil
 }
 
@@ -116,7 +116,7 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 }
 
 func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any) (*pluginsdk.OperationResult, error) {
-	if p.httpClient == nil {
+	if p.host == nil {
 		return nil, fmt.Errorf("provider not started: no HTTP client available")
 	}
 
@@ -171,7 +171,7 @@ func (p *Provider) executeREST(ctx context.Context, operation string, params map
 	}
 
 	invocationID := pluginsdk.InvocationID(ctx)
-	resp, err := p.httpClient.Do(ctx, invocationID, http.MethodGet, url, nil, nil)
+	resp, err := p.host.ProxyHTTP(ctx, invocationID, http.MethodGet, url, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("executing REST request: %w", err)
 	}
