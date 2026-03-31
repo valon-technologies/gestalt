@@ -4,26 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"time"
 
-	"github.com/valon-technologies/gestalt/sdk/go"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
 const (
 	providerName        = "bigquery"
 	providerDisplayName = "BigQuery"
 	providerDescription = "Google BigQuery data warehouse"
-
-	bigqueryBaseURL = "https://bigquery.googleapis.com/bigquery/v2"
-
-	httpTimeout          = 30 * time.Second
-	maxResponseBodyBytes = 50 << 20 // 50 MB
 )
-
-var restClient = &http.Client{Timeout: httpTimeout}
 
 type Provider struct {
 	runner queryRunner
@@ -35,61 +25,13 @@ func NewProvider() *Provider {
 	return &Provider{runner: sdkQueryRunner{}}
 }
 
-func (p *Provider) Name() string                              { return providerName }
-func (p *Provider) DisplayName() string                       { return providerDisplayName }
-func (p *Provider) Description() string                       { return providerDescription }
+func (p *Provider) Name() string                            { return providerName }
+func (p *Provider) DisplayName() string                     { return providerDisplayName }
+func (p *Provider) Description() string                     { return providerDescription }
 func (p *Provider) ConnectionMode() gestalt.ConnectionMode { return gestalt.ConnectionModeUser }
 
 func (p *Provider) ListOperations() []gestalt.Operation {
 	return []gestalt.Operation{
-		{
-			Name:        "list_datasets",
-			Description: "List datasets in a project",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
-			},
-		},
-		{
-			Name:        "get_dataset",
-			Description: "Get dataset metadata",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
-			},
-		},
-		{
-			Name:        "list_tables",
-			Description: "List tables in a dataset",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
-				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
-			},
-		},
-		{
-			Name:        "get_table",
-			Description: "Get table metadata",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
-				{Name: "table_id", Type: "string", Required: true, Description: "Table ID"},
-			},
-		},
-		{
-			Name:        "list_routines",
-			Description: "List routines in a dataset",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
-				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
-			},
-		},
 		{
 			Name:        queryOperationName,
 			Description: "Execute a BigQuery SQL query",
@@ -106,89 +48,10 @@ func (p *Provider) ListOperations() []gestalt.Operation {
 }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*gestalt.OperationResult, error) {
-	if operation == queryOperationName {
-		return p.executeQuery(ctx, params, token)
-	}
-	return p.executeREST(ctx, operation, params, token)
-}
-
-func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any, token string) (*gestalt.OperationResult, error) {
-	projectID, _ := params["project_id"].(string)
-	if projectID == "" {
-		return nil, fmt.Errorf("project_id is required")
+	if operation != queryOperationName {
+		return nil, fmt.Errorf("unknown operation %q", operation)
 	}
 
-	var path string
-	switch operation {
-	case "list_datasets":
-		path = fmt.Sprintf("/projects/%s/datasets", projectID)
-	case "get_dataset":
-		datasetID, _ := params["dataset_id"].(string)
-		if datasetID == "" {
-			return nil, fmt.Errorf("dataset_id is required")
-		}
-		path = fmt.Sprintf("/projects/%s/datasets/%s", projectID, datasetID)
-	case "list_tables":
-		datasetID, _ := params["dataset_id"].(string)
-		if datasetID == "" {
-			return nil, fmt.Errorf("dataset_id is required")
-		}
-		path = fmt.Sprintf("/projects/%s/datasets/%s/tables", projectID, datasetID)
-	case "get_table":
-		datasetID, _ := params["dataset_id"].(string)
-		tableID, _ := params["table_id"].(string)
-		if datasetID == "" || tableID == "" {
-			return nil, fmt.Errorf("dataset_id and table_id are required")
-		}
-		path = fmt.Sprintf("/projects/%s/datasets/%s/tables/%s", projectID, datasetID, tableID)
-	case "list_routines":
-		datasetID, _ := params["dataset_id"].(string)
-		if datasetID == "" {
-			return nil, fmt.Errorf("dataset_id is required")
-		}
-		path = fmt.Sprintf("/projects/%s/datasets/%s/routines", projectID, datasetID)
-	default:
-		return &gestalt.OperationResult{
-			Status: http.StatusNotFound,
-			Body:   `{"error":"unknown operation"}`,
-		}, nil
-	}
-
-	reqURL := bigqueryBaseURL + path
-	query := make(url.Values)
-	if maxResults, ok := params["maxResults"]; ok {
-		query.Set("maxResults", fmt.Sprintf("%v", maxResults))
-	}
-	if len(query) > 0 {
-		reqURL += "?" + query.Encode()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := restClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("executing REST request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-
-	return &gestalt.OperationResult{
-		Status: resp.StatusCode,
-		Body:   string(body),
-	}, nil
-}
-
-func (p *Provider) executeQuery(ctx context.Context, params map[string]any, token string) (*gestalt.OperationResult, error) {
 	projectID, _ := params[queryParamProjectID].(string)
 	if projectID == "" {
 		return nil, fmt.Errorf("%s is required", queryParamProjectID)
@@ -233,4 +96,3 @@ func (p *Provider) executeQuery(ctx context.Context, params map[string]any, toke
 		Body:   string(body),
 	}, nil
 }
-

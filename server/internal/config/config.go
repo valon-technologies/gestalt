@@ -108,6 +108,7 @@ type ExecutablePluginDef struct {
 	ResolvedManifestPath string `yaml:"-"`
 	ResolvedIconFile     string `yaml:"-"`
 	IsDeclarative        bool   `yaml:"-"`
+	IsHybrid             bool   `yaml:"-"`
 }
 
 func (p *ExecutablePluginDef) HasManagedArtifacts() bool {

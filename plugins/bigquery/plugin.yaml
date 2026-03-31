@@ -9,6 +9,7 @@ provider:
   protocol:
     min: 1
     max: 1
+  base_url: "https://bigquery.googleapis.com/bigquery/v2"
   auth:
     type: oauth2
     authorization_url: https://accounts.google.com/o/oauth2/v2/auth
@@ -18,3 +19,78 @@ provider:
     authorization_params:
       access_type: offline
       prompt: consent
+  operations:
+    - name: list_datasets
+      description: List datasets in a project
+      method: GET
+      path: "/projects/{project_id}/datasets"
+      parameters:
+        - name: project_id
+          type: string
+          in: path
+          required: true
+        - name: maxResults
+          type: int
+          in: query
+    - name: get_dataset
+      description: Get dataset metadata
+      method: GET
+      path: "/projects/{project_id}/datasets/{dataset_id}"
+      parameters:
+        - name: project_id
+          type: string
+          in: path
+          required: true
+        - name: dataset_id
+          type: string
+          in: path
+          required: true
+    - name: list_tables
+      description: List tables in a dataset
+      method: GET
+      path: "/projects/{project_id}/datasets/{dataset_id}/tables"
+      parameters:
+        - name: project_id
+          type: string
+          in: path
+          required: true
+        - name: dataset_id
+          type: string
+          in: path
+          required: true
+        - name: maxResults
+          type: int
+          in: query
+    - name: get_table
+      description: Get table metadata
+      method: GET
+      path: "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}"
+      parameters:
+        - name: project_id
+          type: string
+          in: path
+          required: true
+        - name: dataset_id
+          type: string
+          in: path
+          required: true
+        - name: table_id
+          type: string
+          in: path
+          required: true
+    - name: list_routines
+      description: List routines in a dataset
+      method: GET
+      path: "/projects/{project_id}/datasets/{dataset_id}/routines"
+      parameters:
+        - name: project_id
+          type: string
+          in: path
+          required: true
+        - name: dataset_id
+          type: string
+          in: path
+          required: true
+        - name: maxResults
+          type: int
+          in: query
