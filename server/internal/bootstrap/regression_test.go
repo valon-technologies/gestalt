@@ -3,16 +3,27 @@ package bootstrap_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -445,5 +456,515 @@ func TestSecretBackedGrant_SecretURIPrefixStripped(t *testing.T) {
 	const wantAuth = "Bearer " + secretValue
 	if resolution.Credential.Authorization != wantAuth {
 		t.Fatalf("got Authorization %q, want %q", resolution.Credential.Authorization, wantAuth)
+	}
+}
+
+func TestBootstrap_InlineProviderStaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	cases := []struct {
+		name   string
+		plugin func(apiURL string, specURL string) *config.PluginDef
+	}{
+		{
+			name: "spec_loaded_openapi",
+			plugin: func(_ string, specURL string) *config.PluginDef {
+				return &config.PluginDef{
+					OpenAPI:           specURL,
+					OpenAPIConnection: config.PluginConnectionName,
+					Headers: map[string]string{
+						headerName: headerValue,
+					},
+					Connections: map[string]*config.ConnectionDef{
+						config.PluginConnectionName: {
+							Mode: "none",
+							Auth: config.ConnectionAuthDef{Type: "none"},
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "declarative",
+			plugin: func(apiURL string, _ string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL: apiURL,
+					Headers: map[string]string{
+						headerName: headerValue,
+					},
+					Auth: &config.ConnectionAuthDef{Type: "none"},
+					Operations: []config.InlineOperationDef{
+						{
+							Name:        "list_items",
+							Description: "List items",
+							Method:      http.MethodGet,
+							Path:        "/items",
+						},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotHeader := make(chan string, 1)
+			apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotHeader <- r.Header.Get(headerName)
+				writeTestJSON(w, map[string]any{"ok": true})
+			}))
+			testutil.CloseOnCleanup(t, apiSrv)
+
+			specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeTestJSON(w, map[string]any{
+					"openapi": "3.0.0",
+					"info":    map[string]string{"title": "Test API"},
+					"servers": []any{map[string]string{"url": apiSrv.URL}},
+					"paths": map[string]any{
+						"/items": map[string]any{
+							"get": map[string]any{
+								"operationId": "list_items",
+								"summary":     "List items",
+							},
+						},
+					},
+				})
+			}))
+			testutil.CloseOnCleanup(t, specSrv)
+
+			cfg := validConfig()
+			cfg.Integrations = map[string]config.IntegrationDef{
+				"sample": {
+					Plugin: tc.plugin(apiSrv.URL, specSrv.URL),
+				},
+			}
+
+			factories := validFactories()
+			factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+				return &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+					TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+						return &core.IntegrationToken{AccessToken: ""}, nil
+					},
+				}, nil
+			}
+
+			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			<-result.ProvidersReady
+
+			p := &principal.Principal{Identity: &core.UserIdentity{Email: "tester@example.com"}}
+			if _, err := result.Invoker.Invoke(ctx, p, "sample", "", "list_items", nil); err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+
+			select {
+			case got := <-gotHeader:
+				if got != headerValue {
+					t.Fatalf("%s = %q, want %q", headerName, got, headerValue)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for upstream request")
+			}
+		})
+	}
+}
+
+func TestBootstrap_RequestAuthOverridesStaticAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		headerName  = "X-Static-Version"
+		headerValue = "2026-02-09"
+	)
+
+	cases := []struct {
+		name   string
+		plugin func(apiURL string, specURL string) *config.PluginDef
+	}{
+		{
+			name: "spec_loaded_openapi",
+			plugin: func(_ string, specURL string) *config.PluginDef {
+				return &config.PluginDef{
+					OpenAPI: specURL,
+					Headers: map[string]string{
+						"Authorization": "Bearer wrong-token",
+						headerName:      headerValue,
+					},
+				}
+			},
+		},
+		{
+			name: "declarative",
+			plugin: func(apiURL string, _ string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL: apiURL,
+					Headers: map[string]string{
+						"Authorization": "Bearer wrong-token",
+						headerName:      headerValue,
+					},
+					Operations: []config.InlineOperationDef{
+						{
+							Name:        "list_items",
+							Description: "List items",
+							Method:      http.MethodGet,
+							Path:        "/items",
+						},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+					http.Error(w, "wrong auth header", http.StatusUnauthorized)
+					return
+				}
+				if got := r.Header.Get(headerName); got != headerValue {
+					http.Error(w, "missing static header", http.StatusUnauthorized)
+					return
+				}
+				writeTestJSON(w, map[string]any{"ok": true})
+			}))
+			testutil.CloseOnCleanup(t, apiSrv)
+
+			specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeTestJSON(w, map[string]any{
+					"openapi": "3.0.0",
+					"info":    map[string]string{"title": "Test API"},
+					"servers": []any{map[string]string{"url": apiSrv.URL}},
+					"paths": map[string]any{
+						"/items": map[string]any{
+							"get": map[string]any{
+								"operationId": "list_items",
+								"summary":     "List items",
+							},
+						},
+					},
+				})
+			}))
+			testutil.CloseOnCleanup(t, specSrv)
+
+			cfg := validConfig()
+			cfg.Integrations = map[string]config.IntegrationDef{
+				"sample": {
+					Plugin: tc.plugin(apiSrv.URL, specSrv.URL),
+				},
+			}
+
+			factories := validFactories()
+			factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+				return &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+					TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+						return &core.IntegrationToken{AccessToken: "secret-token"}, nil
+					},
+				}, nil
+			}
+
+			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			<-result.ProvidersReady
+
+			p := &principal.Principal{Identity: &core.UserIdentity{Email: "tester@example.com"}}
+			if _, err := result.Invoker.Invoke(ctx, p, "sample", "", "list_items", nil); err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+		})
+	}
+}
+
+func TestBootstrap_InlineMCPProviderStaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	mcpSrv := mcpserver.NewMCPServer("test-remote", "1.0.0")
+	mcpSrv.AddTool(
+		mcpgo.NewTool("list_items", mcpgo.WithDescription("List items")),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	handler := mcpserver.NewStreamableHTTPServer(
+		mcpSrv,
+		mcpserver.WithStateLess(true),
+	)
+
+	var requestCount atomic.Int32
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(headerName); got != headerValue {
+			http.Error(w, "missing static header", http.StatusUnauthorized)
+			return
+		}
+		requestCount.Add(1)
+		handler.ServeHTTP(w, r)
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				MCPURL:        apiSrv.URL,
+				MCPConnection: config.PluginConnectionName,
+				Headers: map[string]string{
+					headerName: headerValue,
+				},
+				Connections: map[string]*config.ConnectionDef{
+					config.PluginConnectionName: {
+						Mode: string(core.ConnectionModeNone),
+						Auth: config.ConnectionAuthDef{Type: "none"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get(sample): %v", err)
+	}
+
+	sessionProv, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatalf("provider does not implement SessionCatalogProvider: %T", prov)
+	}
+	cat, err := sessionProv.CatalogForRequest(ctx, "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "list_items" {
+		t.Fatalf("unexpected catalog operations: %+v", cat.Operations)
+	}
+
+	type callToolProvider interface {
+		CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error)
+	}
+
+	caller, ok := prov.(callToolProvider)
+	if !ok {
+		t.Fatalf("provider does not support CallTool: %T", prov)
+	}
+	resultTool, err := caller.CallTool(ctx, "list_items", nil)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if resultTool.IsError {
+		t.Fatalf("unexpected tool error: %+v", resultTool.Content)
+	}
+	if requestCount.Load() == 0 {
+		t.Fatal("expected at least one MCP request to reach the upstream")
+	}
+}
+
+func TestBootstrap_InlineMCPProviderRequestTokenOverridesStaticAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		headerName  = "X-Static-Version"
+		headerValue = "2026-02-09"
+	)
+
+	mcpSrv := mcpserver.NewMCPServer("test-remote", "1.0.0")
+	mcpSrv.AddTool(
+		mcpgo.NewTool("list_items", mcpgo.WithDescription("List items")),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	handler := mcpserver.NewStreamableHTTPServer(
+		mcpSrv,
+		mcpserver.WithStateLess(true),
+	)
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+			http.Error(w, "wrong auth header", http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get(headerName); got != headerValue {
+			http.Error(w, "missing static header", http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				MCPURL:        apiSrv.URL,
+				MCPConnection: config.PluginConnectionName,
+				Headers: map[string]string{
+					"Authorization": "Bearer wrong-token",
+					headerName:      headerValue,
+				},
+				Connections: map[string]*config.ConnectionDef{
+					config.PluginConnectionName: {
+						Mode: string(core.ConnectionModeUser),
+						Auth: config.ConnectionAuthDef{Type: "none"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get(sample): %v", err)
+	}
+
+	sessionProv, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatalf("provider does not implement SessionCatalogProvider: %T", prov)
+	}
+	cat, err := sessionProv.CatalogForRequest(ctx, "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "list_items" {
+		t.Fatalf("unexpected catalog operations: %+v", cat.Operations)
+	}
+
+	type callToolProvider interface {
+		CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error)
+	}
+
+	caller, ok := prov.(callToolProvider)
+	if !ok {
+		t.Fatalf("provider does not support CallTool: %T", prov)
+	}
+	callCtx := mcpupstream.WithUpstreamToken(ctx, "secret-token")
+	resultTool, err := caller.CallTool(callCtx, "list_items", nil)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if resultTool.IsError {
+		t.Fatalf("unexpected tool error: %+v", resultTool.Content)
+	}
+}
+
+func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		headerName    = "X-Static-Version"
+		manifestValue = "from-manifest"
+		configValue   = "from-config"
+	)
+
+	gotHeader := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader <- r.Header.Get(headerName)
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/sample",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			BaseURL: apiSrv.URL,
+			Headers: map[string]string{
+				"x-static-version": manifestValue,
+			},
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:   "list_items",
+					Method: http.MethodGet,
+					Path:   "/items",
+				},
+			},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
+	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				IsDeclarative:        true,
+				ResolvedManifestPath: manifestPath,
+				Headers: map[string]string{
+					headerName: configValue,
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+
+	execResult, err := prov.Execute(ctx, "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if execResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", execResult.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotHeader:
+		if got != configValue {
+			t.Fatalf("%s = %q, want %q", headerName, got, configValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
 	}
 }

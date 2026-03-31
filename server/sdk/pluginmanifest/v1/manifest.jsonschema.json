@@ -56,12 +56,30 @@
           "type": "string",
           "minLength": 1
         },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "operations": {
           "type": "array",
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/provider_operation"
           }
+        },
+        "openapi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string",
+          "minLength": 1
         },
         "post_connect_discovery": {
           "type": "object",

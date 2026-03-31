@@ -104,10 +104,11 @@ type PluginDef struct {
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
 
-	OpenAPI    string `yaml:"openapi"`
-	GraphQLURL string `yaml:"graphql_url"`
-	MCPURL     string `yaml:"mcp_url"`
-	BaseURL    string `yaml:"base_url"`
+	OpenAPI    string            `yaml:"openapi"`
+	GraphQLURL string            `yaml:"graphql_url"`
+	MCPURL     string            `yaml:"mcp_url"`
+	BaseURL    string            `yaml:"base_url"`
+	Headers    map[string]string `yaml:"headers"`
 
 	Auth            *ConnectionAuthDef        `yaml:"auth"`
 	Connections     map[string]*ConnectionDef `yaml:"connections"`
