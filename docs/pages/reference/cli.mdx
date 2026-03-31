@@ -24,6 +24,39 @@ gestalt tokens
 | `gestalt describe` | Describe an integration or operation. |
 | `gestalt tokens` | Manage API tokens. |
 
+### `gestalt init`
+
+Interactive wizard that walks you through creating a `config.yaml`. This is an alternative to writing the config file by hand.
+
+```sh
+gestalt init
+```
+
+### `gestalt config`
+
+Manage persistent client configuration so you don't need to pass flags on every invocation.
+
+```sh
+gestalt config set url http://localhost:8080
+gestalt config get url
+gestalt config list
+```
+
+| Subcommand | Purpose |
+| --- | --- |
+| `gestalt config set url <value>` | Persist the server URL. Removes the need for `--url` on every command. |
+| `gestalt config get <key>` | Print the current value of a config key. |
+| `gestalt config list` | Show all current client config values. |
+
+### `gestalt describe`
+
+Display detailed information about an integration or a specific operation, including parameters, types, and descriptions.
+
+```sh
+gestalt describe github
+gestalt describe github repos/list-for-authenticated-user
+```
+
 ## `gestaltd` Server CLI
 
 The `gestaltd` server binary.
