@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 )
 
 // BuildOption configures optional aspects of provider construction.
@@ -214,48 +215,14 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 
 	var result core.Provider = base
 
-	if ops := allowedOperations; ops != nil {
-		if len(ops) == 0 {
-			return nil, fmt.Errorf("%s: allowed_operations cannot be empty; omit the field to allow all", def.Provider)
-		}
-		opSet := make(map[string]struct{}, len(base.Operations))
-		for _, op := range base.Operations {
-			opSet[op.Name] = struct{}{}
-		}
-		restrictedOps := make(map[string]string, len(ops))
-		var collisions []string
-		for opName, override := range ops {
-			if _, ok := opSet[opName]; !ok {
-				return nil, fmt.Errorf("%s: allowed_operations contains unknown operation %q", def.Provider, opName)
-			}
-			if override != nil && override.Description != "" {
-				for i := range base.Operations {
-					if base.Operations[i].Name == opName {
-						base.Operations[i].Description = override.Description
-						break
-					}
-				}
-				for i := range cat.Operations {
-					if cat.Operations[i].ID == opName {
-						cat.Operations[i].Description = override.Description
-						break
-					}
-				}
-			}
-			exposedName := opName
-			if override != nil && override.Alias != "" {
-				exposedName = override.Alias
-			}
-			if existing, ok := restrictedOps[exposedName]; ok {
-				collisions = append(collisions, fmt.Sprintf("%q and %q both resolve to %q", existing, opName, exposedName))
-			}
-			restrictedOps[exposedName] = opName
-		}
-		if len(collisions) > 0 {
-			return nil, fmt.Errorf("%s: alias collisions: %s", def.Provider, strings.Join(collisions, "; "))
-		}
-		result = coreintegration.NewRestricted(result, restrictedOps)
+	policy, err := operationexposure.New(allowedOperations)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", def.Provider, err)
 	}
+	if err := policy.Validate(base.Operations); err != nil {
+		return nil, fmt.Errorf("%s: %w", def.Provider, err)
+	}
+	result = policy.Wrap(result)
 
 	return result, nil
 }

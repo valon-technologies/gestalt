@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -29,18 +29,17 @@ var (
 )
 
 type Upstream struct {
-	name        string
-	display     string
-	desc        string
-	url         string
-	connMode    core.ConnectionMode
-	headers     map[string]string
-	cat         *catalog.Catalog
-	ops         []core.Operation
-	client      mcpclient.MCPClient
-	allowed     map[string]*config.OperationOverride
-	aliasToOrig map[string]string
-	resolver    *egress.Resolver
+	name     string
+	display  string
+	desc     string
+	url      string
+	connMode core.ConnectionMode
+	headers  map[string]string
+	cat      *catalog.Catalog
+	ops      []core.Operation
+	client   mcpclient.MCPClient
+	exposure *operationexposure.Policy
+	resolver *egress.Resolver
 }
 
 func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver) (*Upstream, error) {
@@ -101,11 +100,10 @@ func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalo
 }
 
 func (u *Upstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
-	if !u.isOperationAllowed(name) {
+	innerName, ok := u.resolveInnerName(name)
+	if !ok {
 		return nil, fmt.Errorf("operation %q is not allowed", name)
 	}
-
-	innerName := u.resolveInnerName(name)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = innerName
 	req.Params.Arguments = args
@@ -132,35 +130,24 @@ func (u *Upstream) Close() error {
 }
 
 func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride) error {
-	if len(allowed) == 0 {
-		return fmt.Errorf("allowed_operations cannot be empty; omit the field to allow all")
+	policy, err := operationexposure.New(allowed)
+	if err != nil {
+		return err
 	}
-
-	u.allowed = make(map[string]*config.OperationOverride, len(allowed))
-	u.aliasToOrig = make(map[string]string)
-	exposedNames := make(map[string]string, len(allowed))
-	var collisions []string
-	for name, override := range allowed {
-		u.allowed[name] = override
-		exposed := name
-		if override != nil && override.Alias != "" {
-			exposed = override.Alias
-			u.aliasToOrig[override.Alias] = name
+	if u.cat != nil {
+		if err := policy.Validate(u.ops); err != nil {
+			return err
 		}
-		if existing, ok := exposedNames[exposed]; ok {
-			collisions = append(collisions, fmt.Sprintf("%q and %q both resolve to %q", existing, name, exposed))
-		}
-		exposedNames[exposed] = name
 	}
-	if len(collisions) > 0 {
-		return fmt.Errorf("alias collisions: %s", strings.Join(collisions, "; "))
-	}
+	u.exposure = policy
 
-	if u.cat == nil {
+	if u.cat == nil || policy == nil {
 		return nil
 	}
 
-	return filterDiscovered(u.cat, &u.ops, u.allowed)
+	u.ops = policy.ApplyOperations(u.ops)
+	u.cat = policy.ApplyCatalog(u.cat)
+	return nil
 }
 
 func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClient, error) {
@@ -220,30 +207,16 @@ func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog
 	}
 
 	cat, ops := buildCatalog(u.name, toolsResult.Tools)
-	if err := filterDiscovered(cat, &ops, u.allowed); err != nil {
+	if err := u.exposure.Validate(ops); err != nil {
 		return nil, nil, err
 	}
+	ops = u.exposure.ApplyOperations(ops)
+	cat = u.exposure.ApplyCatalog(cat)
 	return cat, ops, nil
 }
 
-func (u *Upstream) resolveInnerName(name string) string {
-	if orig, ok := u.aliasToOrig[name]; ok {
-		return orig
-	}
-	return name
-}
-
-func (u *Upstream) isOperationAllowed(name string) bool {
-	if len(u.allowed) == 0 {
-		return true
-	}
-	if _, ok := u.aliasToOrig[name]; ok {
-		return true
-	}
-	if override, ok := u.allowed[name]; ok && (override == nil || override.Alias == "") {
-		return true
-	}
-	return false
+func (u *Upstream) resolveInnerName(name string) (string, bool) {
+	return u.exposure.Resolve(name)
 }
 
 func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Operation) {
@@ -284,50 +257,4 @@ func buildCatalog(name string, tools []mcpgo.Tool) (*catalog.Catalog, []core.Ope
 	}
 
 	return cat, ops
-}
-
-func filterDiscovered(cat *catalog.Catalog, ops *[]core.Operation, allowed map[string]*config.OperationOverride) error {
-	if len(allowed) == 0 {
-		return nil
-	}
-
-	opSet := make(map[string]struct{}, len(*ops))
-	for _, op := range *ops {
-		opSet[op.Name] = struct{}{}
-	}
-	for name := range allowed {
-		if _, ok := opSet[name]; !ok {
-			return fmt.Errorf("allowed_operations contains unknown operation %q", name)
-		}
-	}
-
-	filteredOps := make([]core.Operation, 0, len(allowed))
-	for _, op := range *ops {
-		if override, ok := allowed[op.Name]; ok {
-			if override != nil && override.Description != "" {
-				op.Description = override.Description
-			}
-			if override != nil && override.Alias != "" {
-				op.Name = override.Alias
-			}
-			filteredOps = append(filteredOps, op)
-		}
-	}
-
-	filteredCatOps := make([]catalog.CatalogOperation, 0, len(allowed))
-	for i := range cat.Operations {
-		if override, ok := allowed[cat.Operations[i].ID]; ok {
-			if override != nil && override.Description != "" {
-				cat.Operations[i].Description = override.Description
-			}
-			if override != nil && override.Alias != "" {
-				cat.Operations[i].ID = override.Alias
-			}
-			filteredCatOps = append(filteredCatOps, cat.Operations[i])
-		}
-	}
-
-	*ops = filteredOps
-	cat.Operations = filteredCatOps
-	return nil
 }
