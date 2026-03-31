@@ -27,7 +27,7 @@ gestaltd serve --locked --config ./config.yaml
 | `gestaltd init --config PATH` | Production prep: resolves providers and plugins and writes lock state. |
 | `gestaltd serve --locked --config PATH` | Production runtime: serves from prepared state only. |
 | `gestaltd validate --config PATH` | CI: validates config without starting the server. |
-| `gestaltd plugin package --binary PATH --id ID --output FILE` | Authoring: packages a plugin binary for distribution. |
+| `gestaltd plugin package --binary PATH --source SOURCE --output DIR` | Authoring: packages a plugin binary for distribution. |
 
 ## Docker
 
