@@ -3,8 +3,10 @@ package bootstrap_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -445,5 +448,126 @@ func TestSecretBackedGrant_SecretURIPrefixStripped(t *testing.T) {
 	const wantAuth = "Bearer " + secretValue
 	if resolution.Credential.Authorization != wantAuth {
 		t.Fatalf("got Authorization %q, want %q", resolution.Credential.Authorization, wantAuth)
+	}
+}
+
+func TestBootstrap_InlineProviderStaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	cases := []struct {
+		name   string
+		plugin func(apiURL string, specURL string) *config.PluginDef
+	}{
+		{
+			name: "spec_loaded_openapi",
+			plugin: func(_ string, specURL string) *config.PluginDef {
+				return &config.PluginDef{
+					OpenAPI:           specURL,
+					OpenAPIConnection: config.PluginConnectionName,
+					Headers: map[string]string{
+						headerName: headerValue,
+					},
+					Connections: map[string]*config.ConnectionDef{
+						config.PluginConnectionName: {
+							Mode: "none",
+							Auth: config.ConnectionAuthDef{Type: "none"},
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "declarative",
+			plugin: func(apiURL string, _ string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL: apiURL,
+					Headers: map[string]string{
+						headerName: headerValue,
+					},
+					Auth: &config.ConnectionAuthDef{Type: "none"},
+					Operations: []config.InlineOperationDef{
+						{
+							Name:        "list_items",
+							Description: "List items",
+							Method:      http.MethodGet,
+							Path:        "/items",
+						},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotHeader := make(chan string, 1)
+			apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotHeader <- r.Header.Get(headerName)
+				writeTestJSON(w, map[string]any{"ok": true})
+			}))
+			testutil.CloseOnCleanup(t, apiSrv)
+
+			specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeTestJSON(w, map[string]any{
+					"openapi": "3.0.0",
+					"info":    map[string]string{"title": "Test API"},
+					"servers": []any{map[string]string{"url": apiSrv.URL}},
+					"paths": map[string]any{
+						"/items": map[string]any{
+							"get": map[string]any{
+								"operationId": "list_items",
+								"summary":     "List items",
+							},
+						},
+					},
+				})
+			}))
+			testutil.CloseOnCleanup(t, specSrv)
+
+			cfg := validConfig()
+			cfg.Integrations = map[string]config.IntegrationDef{
+				"sample": {
+					Plugin: tc.plugin(apiSrv.URL, specSrv.URL),
+				},
+			}
+
+			factories := validFactories()
+			factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+				return &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+					TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+						return &core.IntegrationToken{AccessToken: ""}, nil
+					},
+				}, nil
+			}
+
+			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			<-result.ProvidersReady
+
+			p := &principal.Principal{Identity: &core.UserIdentity{Email: "tester@example.com"}}
+			if _, err := result.Invoker.Invoke(ctx, p, "sample", "", "list_items", nil); err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+
+			select {
+			case got := <-gotHeader:
+				if got != headerValue {
+					t.Fatalf("%s = %q, want %q", headerName, got, headerValue)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for upstream request")
+			}
+		})
 	}
 }
