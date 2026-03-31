@@ -694,6 +694,9 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		if intg.Plugin.IsDeclarative {
 			return buildDeclarativeProvider(name, intg, deps)
 		}
+		if intg.Plugin.IsHybrid {
+			return buildHybridManifestProvider(ctx, name, intg, deps)
+		}
 		pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
 		if err != nil {
 			return nil, err
@@ -804,6 +807,63 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
+	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+	if err != nil {
+		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
+	} else if authHandler != nil {
+		result.ConnectionAuth = map[string]OAuthHandler{
+			config.PluginConnectionName: authHandler,
+		}
+	}
+	return result, nil
+}
+
+func buildHybridManifestProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (_ *ProviderBuildResult, err error) {
+	_, manifest, err := pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read manifest for hybrid provider %q: %w", name, err)
+	}
+
+	declProv, err := pluginhost.NewDeclarativeProvider(manifest, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+	}
+
+	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
+	if err != nil {
+		return nil, err
+	}
+	cleanupPlugin := true
+	defer func() {
+		if cleanupPlugin {
+			if c, ok := pluginProv.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+	}()
+
+	displayName := intg.DisplayName
+	if displayName == "" {
+		displayName = manifest.DisplayName
+	}
+	if displayName == "" {
+		displayName = name
+	}
+	merged, err := composite.NewMerged(name, displayName, manifest.Description, declProv, pluginProv)
+	if err != nil {
+		return nil, fmt.Errorf("merging declarative and executable operations for %q: %w", name, err)
+	}
+	cleanupPlugin = false
+	applyPluginIcon(merged, intg)
+
+	restricted, err := applyAllowedOperations(name, intg, merged)
+	if err != nil {
+		_ = merged.Close()
+		return nil, err
+	}
+
+	result := &ProviderBuildResult{Provider: restricted}
+
 	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
 	if err != nil {
 		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)

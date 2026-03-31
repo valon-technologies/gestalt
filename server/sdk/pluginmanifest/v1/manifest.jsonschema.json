@@ -189,6 +189,26 @@
                 ]
               }
             }
+          },
+          {
+            "required": [
+              "artifacts",
+              "entrypoints"
+            ],
+            "properties": {
+              "entrypoints": {
+                "required": [
+                  "provider"
+                ]
+              },
+              "provider": {
+                "required": [
+                  "protocol",
+                  "base_url",
+                  "operations"
+                ]
+              }
+            }
           }
         ]
       }
