@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -21,6 +22,29 @@ const (
 	acceptOctetStream   = "application/octet-stream"
 	envGitHubToken      = "GITHUB_TOKEN"
 	authTokenPrefix     = "token "
+	platformAssetPrefix = "gestalt-plugin-"
+)
+
+type platformAssetMatch int
+
+const (
+	noPlatformAssetMatch platformAssetMatch = iota
+	pluginOnlyPlatformAssetMatch
+	versionedPlatformAssetMatch
+)
+
+var (
+	platformSeparators = []string{"_", "-", "."}
+	platformOSAliases  = map[string][]string{
+		"darwin":  {"darwin", "macos"},
+		"linux":   {"linux"},
+		"windows": {"windows", "win32"},
+	}
+	platformArchAliases = map[string][]string{
+		"386":   {"386", "x86"},
+		"amd64": {"amd64", "x86_64"},
+		"arm64": {"arm64", "aarch64"},
+	}
 )
 
 type releaseResponse struct {
@@ -61,8 +85,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		return nil, err
 	}
 
-	expectedName := src.AssetName(version)
-	asset, err := findAsset(release.Assets, expectedName, tag, src.RepoSlug())
+	asset, err := findAsset(release.Assets, src.Plugin, version)
 	if err != nil {
 		return nil, err
 	}
@@ -110,20 +133,153 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 	return &release, nil
 }
 
-func findAsset(assets []releaseAsset, expectedName, tag, slug string) (releaseAsset, error) {
+func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, error) {
+	if plugin == "" {
+		return releaseAsset{}, fmt.Errorf("plugin name is required")
+	}
+
+	expectedName := platformAssetName(plugin, version)
+	oldName := pluginsource.Source{Plugin: plugin}.AssetName(version)
+
+	if asset, ok := findAssetByName(assets, expectedName); ok {
+		return asset, nil
+	}
+
+	oldAsset, hasOldAsset := findAssetByName(assets, oldName)
+
+	versionedMatches := make([]releaseAsset, 0, 1)
+	pluginOnlyMatches := make([]releaseAsset, 0, 1)
 	for _, a := range assets {
-		if a.Name == expectedName {
-			return a, nil
+		switch matchesPlatformAsset(a.Name, plugin, version) {
+		case versionedPlatformAssetMatch:
+			versionedMatches = append(versionedMatches, a)
+		case pluginOnlyPlatformAssetMatch:
+			pluginOnlyMatches = append(pluginOnlyMatches, a)
 		}
+	}
+
+	switch len(versionedMatches) {
+	case 1:
+		return versionedMatches[0], nil
+	case 0:
+	default:
+		if hasOldAsset {
+			return oldAsset, nil
+		}
+		return releaseAsset{}, fmt.Errorf(
+			"multiple %s/%s assets found for plugin %q version %q: %s",
+			runtime.GOOS, runtime.GOARCH, plugin, version, joinAssetNames(versionedMatches),
+		)
+	}
+
+	switch len(pluginOnlyMatches) {
+	case 1:
+		return pluginOnlyMatches[0], nil
+	case 0:
+	default:
+		if hasOldAsset {
+			return oldAsset, nil
+		}
+		return releaseAsset{}, fmt.Errorf(
+			"multiple %s/%s assets found for plugin %q version %q: %s",
+			runtime.GOOS, runtime.GOARCH, plugin, version, joinAssetNames(pluginOnlyMatches),
+		)
+	}
+
+	if hasOldAsset {
+		return oldAsset, nil
+	}
+
+	return releaseAsset{}, fmt.Errorf(
+		"no %s/%s asset found for plugin %q in release v%s; available: %s",
+		runtime.GOOS, runtime.GOARCH, plugin, version, joinAssetNames(assets),
+	)
+}
+
+func platformAssetName(plugin, version string) string {
+	return fmt.Sprintf("%s%s_v%s_%s_%s.tar.gz", platformAssetPrefix, plugin, version, runtime.GOOS, runtime.GOARCH)
+}
+
+func findAssetByName(assets []releaseAsset, name string) (releaseAsset, bool) {
+	for _, a := range assets {
+		if a.Name == name {
+			return a, true
+		}
+	}
+	return releaseAsset{}, false
+}
+
+func matchesPlatformAsset(name, plugin, version string) platformAssetMatch {
+	stem, ok := trimPlatformArchive(name)
+	if !ok {
+		return noPlatformAssetMatch
+	}
+	if !strings.HasPrefix(stem, platformAssetPrefix) {
+		return noPlatformAssetMatch
+	}
+
+	rest := strings.TrimPrefix(stem, platformAssetPrefix)
+	if rest == plugin {
+		return pluginOnlyPlatformAssetMatch
+	}
+
+	for _, sep := range platformSeparators {
+		for _, versionToken := range []string{"v" + version, version} {
+			if rest == plugin+sep+versionToken || rest == versionToken+sep+plugin {
+				return versionedPlatformAssetMatch
+			}
+		}
+	}
+
+	return noPlatformAssetMatch
+}
+
+func trimPlatformArchive(name string) (string, bool) {
+	base, ok := trimPackageArchiveExtension(name)
+	if !ok {
+		return "", false
+	}
+	for _, goos := range platformAliases(platformOSAliases, runtime.GOOS) {
+		for _, goarch := range platformAliases(platformArchAliases, runtime.GOARCH) {
+			for _, leadSep := range platformSeparators {
+				for _, midSep := range platformSeparators {
+					suffix := leadSep + goos + midSep + goarch
+					if strings.HasSuffix(base, suffix) {
+						return strings.TrimSuffix(base, suffix), true
+					}
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+func platformAliases(aliasMap map[string][]string, name string) []string {
+	if aliases, ok := aliasMap[name]; ok {
+		return aliases
+	}
+	return []string{name}
+}
+
+// Remote plugin packages are tarball archives today; pluginpkg only reads gzip-compressed tar packages.
+func trimPackageArchiveExtension(name string) (string, bool) {
+	for _, ext := range []string{".tar.gz", ".tgz"} {
+		if strings.HasSuffix(name, ext) {
+			return strings.TrimSuffix(name, ext), true
+		}
+	}
+	return "", false
+}
+
+func joinAssetNames(assets []releaseAsset) string {
+	if len(assets) == 0 {
+		return "(none)"
 	}
 	names := make([]string, len(assets))
 	for i, a := range assets {
 		names[i] = a.Name
 	}
-	return releaseAsset{}, fmt.Errorf(
-		"release %s for %s does not contain asset %s; available assets: %s",
-		tag, slug, expectedName, strings.Join(names, ", "),
-	)
+	return strings.Join(names, ", ")
 }
 
 func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
