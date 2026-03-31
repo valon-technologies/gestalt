@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -831,6 +832,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, nil)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -846,6 +848,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, nil)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -928,6 +931,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
@@ -944,6 +948,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
@@ -987,6 +992,48 @@ func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginm
 		return nil, err
 	}
 	return result, nil
+}
+
+func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) {
+	if def == nil {
+		return
+	}
+	headers := mergedHeaders(manifestProvider, plugin)
+	if len(headers) == 0 {
+		return
+	}
+	def.Headers = headers
+}
+
+func mergedManifestHeaders(manifest *pluginmanifestv1.Manifest, plugin *config.PluginDef) *pluginmanifestv1.Manifest {
+	if manifest == nil || manifest.Provider == nil {
+		return manifest
+	}
+	headers := mergedHeaders(manifest.Provider, plugin)
+	if len(headers) == 0 {
+		return manifest
+	}
+	cloned := *manifest
+	providerCopy := *manifest.Provider
+	providerCopy.Headers = headers
+	cloned.Provider = &providerCopy
+	return &cloned
+}
+
+func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) map[string]string {
+	var headers map[string]string
+	if manifestProvider != nil && len(manifestProvider.Headers) > 0 {
+		headers = maps.Clone(manifestProvider.Headers)
+	}
+	if plugin != nil && len(plugin.Headers) > 0 {
+		if headers == nil {
+			headers = make(map[string]string, len(plugin.Headers))
+		}
+		for k, v := range plugin.Headers {
+			headers[k] = v
+		}
+	}
+	return headers
 }
 
 func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*config.OperationOverride {
@@ -1094,6 +1141,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
 	}
+	manifest = mergedManifestHeaders(manifest, intg.Plugin)
 	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)

@@ -600,3 +600,120 @@ func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *test
 		t.Fatalf("catalog IconSVG = %q, want %q", cat.IconSVG, iconSVG)
 	}
 }
+
+func TestInlineOpenAPI_StaticHeaders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	var gotValue string
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotValue = r.Header.Get("X-Static-Version")
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(w, map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				OpenAPI: specSrv.URL,
+				Headers: map[string]string{
+					"X-Static-Version": "2026-02-09",
+				},
+				Auth: &config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Get provider: %v", err)
+	}
+
+	if _, err := prov.Execute(ctx, "list_items", nil, "token-123"); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if gotValue != "2026-02-09" {
+		t.Fatalf("X-Static-Version = %q, want %q", gotValue, "2026-02-09")
+	}
+}
+
+func TestInlineDeclarative_StaticHeaders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	var gotValue string
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotValue = r.Header.Get("X-Static-Version")
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				BaseURL: apiSrv.URL,
+				Headers: map[string]string{
+					"X-Static-Version": "2026-02-09",
+				},
+				Auth: &config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+				},
+				Operations: []config.InlineOperationDef{
+					{
+						Name:        "list_items",
+						Description: "List items",
+						Method:      http.MethodGet,
+						Path:        "/items",
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Get provider: %v", err)
+	}
+
+	if _, err := prov.Execute(ctx, "list_items", nil, "token-123"); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if gotValue != "2026-02-09" {
+		t.Fatalf("X-Static-Version = %q, want %q", gotValue, "2026-02-09")
+	}
+}

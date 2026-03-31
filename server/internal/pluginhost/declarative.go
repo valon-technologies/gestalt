@@ -3,6 +3,7 @@ package pluginhost
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
@@ -28,6 +29,7 @@ type DeclarativeProvider struct {
 	description          string
 	iconSVG              string
 	baseURL              string
+	headers              map[string]string
 	auth                 *pluginmanifestv1.ProviderAuth
 	operations           []core.Operation
 	catalogOps           []catalog.CatalogOperation
@@ -54,6 +56,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		displayName:          manifest.DisplayName,
 		description:          manifest.Description,
 		baseURL:              manifest.Provider.BaseURL,
+		headers:              maps.Clone(manifest.Provider.Headers),
 		auth:                 manifest.Provider.Auth,
 		opDefs:               make(map[string]*declarativeOp, len(manifest.Provider.Operations)),
 		httpClient:           httpClient,
@@ -107,6 +110,7 @@ func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
 		DisplayName: p.displayName,
 		Description: p.description,
 		IconSVG:     p.iconSVG,
+		Headers:     maps.Clone(p.headers),
 		Operations:  p.catalogOps,
 	}
 }
@@ -153,18 +157,23 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	}
 
 	baseURL := p.baseURL
+	headers := maps.Clone(p.headers)
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		baseURL = paraminterp.Interpolate(baseURL, cp)
+		for k, v := range headers {
+			headers[k] = paraminterp.Interpolate(v, cp)
+		}
 	}
 
 	req := apiexec.Request{
-		Method:      op.method,
-		BaseURL:     baseURL,
-		Path:        op.path,
-		Params:      bodyParams,
-		QueryParams: queryParams,
-		Token:       token,
-		NoRetry:     true,
+		Method:        op.method,
+		BaseURL:       baseURL,
+		Path:          op.path,
+		Params:        bodyParams,
+		QueryParams:   queryParams,
+		CustomHeaders: headers,
+		Token:         token,
+		NoRetry:       true,
 	}
 
 	return apiexec.Do(ctx, p.httpClient, req)

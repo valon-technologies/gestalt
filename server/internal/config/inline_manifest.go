@@ -16,6 +16,7 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			BaseURL:           p.BaseURL,
+			Headers:           p.Headers,
 			MCP:               p.MCP,
 			OpenAPI:           p.OpenAPI,
 			GraphQLURL:        p.GraphQLURL,
