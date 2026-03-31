@@ -3,7 +3,7 @@ package pluginhost
 import (
 	"context"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -11,11 +11,11 @@ import (
 
 type RemoteRuntime struct {
 	name   string
-	client pluginapiv1.RuntimePluginClient
-	start  *pluginapiv1.StartRuntimeRequest
+	client proto.RuntimePluginClient
+	start  *proto.StartRuntimeRequest
 }
 
-func NewRemoteRuntime(name string, client pluginapiv1.RuntimePluginClient, config map[string]any, initialCapabilities []core.Capability) (*RemoteRuntime, error) {
+func NewRemoteRuntime(name string, client proto.RuntimePluginClient, config map[string]any, initialCapabilities []core.Capability) (*RemoteRuntime, error) {
 	cfg, err := structFromMap(config)
 	if err != nil {
 		return nil, err
@@ -27,7 +27,7 @@ func NewRemoteRuntime(name string, client pluginapiv1.RuntimePluginClient, confi
 	return &RemoteRuntime{
 		name:   name,
 		client: client,
-		start: &pluginapiv1.StartRuntimeRequest{
+		start: &proto.StartRuntimeRequest{
 			Name:                name,
 			Config:              cfg,
 			InitialCapabilities: caps,
@@ -48,7 +48,7 @@ func (r *RemoteRuntime) Stop(ctx context.Context) error {
 }
 
 type RuntimeHostServer struct {
-	pluginapiv1.UnimplementedRuntimeHostServer
+	proto.UnimplementedRuntimeHostServer
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
 }
@@ -60,7 +60,7 @@ func NewRuntimeHostServer(invoker invocation.Invoker, lister invocation.Capabili
 	}
 }
 
-func (s *RuntimeHostServer) Invoke(ctx context.Context, req *pluginapiv1.InvokeRequest) (*pluginapiv1.OperationResult, error) {
+func (s *RuntimeHostServer) Invoke(ctx context.Context, req *proto.InvokeRequest) (*proto.OperationResult, error) {
 	result, err := s.Invoker.Invoke(
 		ctx,
 		principalFromProto(req.GetPrincipal()),
@@ -72,19 +72,19 @@ func (s *RuntimeHostServer) Invoke(ctx context.Context, req *pluginapiv1.InvokeR
 	if err != nil {
 		return nil, err
 	}
-	return &pluginapiv1.OperationResult{
+	return &proto.OperationResult{
 		Status: int32(result.Status),
 		Body:   result.Body,
 	}, nil
 }
 
-func (s *RuntimeHostServer) ListCapabilities(context.Context, *emptypb.Empty) (*pluginapiv1.ListCapabilitiesResponse, error) {
+func (s *RuntimeHostServer) ListCapabilities(context.Context, *emptypb.Empty) (*proto.ListCapabilitiesResponse, error) {
 	if s.CapabilityLister == nil {
-		return &pluginapiv1.ListCapabilitiesResponse{}, nil
+		return &proto.ListCapabilitiesResponse{}, nil
 	}
 	caps, err := capabilitiesToProto(s.CapabilityLister.ListCapabilities())
 	if err != nil {
 		return nil, err
 	}
-	return &pluginapiv1.ListCapabilitiesResponse{Capabilities: caps}, nil
+	return &proto.ListCapabilitiesResponse{Capabilities: caps}, nil
 }

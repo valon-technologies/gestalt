@@ -6,7 +6,7 @@ This guide covers writing, packaging, and running a provider plugin from an exte
 
 ```sh
 GOPRIVATE=github.com/valon-technologies/gestalt \
-  go get github.com/valon-technologies/gestalt/sdk/pluginsdk@latest
+  go get github.com/valon-technologies/gestalt/sdk/go@latest
 ```
 
 ## Implement the provider interface
@@ -24,7 +24,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/go"
 )
 
 type myProvider struct{}

@@ -5,10 +5,9 @@ go 1.26
 require (
 	cloud.google.com/go v0.123.0
 	cloud.google.com/go/bigquery v1.75.0
-	github.com/valon-technologies/gestalt/sdk/pluginsdk v0.0.0-00010101000000-000000000000
+	github.com/valon-technologies/gestalt/sdk/go v0.0.0-00010101000000-000000000000
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.273.0
-	google.golang.org/grpc v1.79.3
 )
 
 require (
@@ -30,7 +29,6 @@ require (
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/pierrec/lz4/v4 v4.1.18 // indirect
-	github.com/valon-technologies/gestalt/sdk/pluginapi v0.0.0-00010101000000-000000000000 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.63.0 // indirect
@@ -52,10 +50,8 @@ require (
 	google.golang.org/genproto v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace (
-	github.com/valon-technologies/gestalt/sdk/pluginapi => ../../sdk/pluginapi
-	github.com/valon-technologies/gestalt/sdk/pluginsdk => ../../sdk/pluginsdk
-)
+replace github.com/valon-technologies/gestalt/sdk/go => ../../sdk/go

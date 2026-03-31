@@ -1,4 +1,4 @@
-package pluginsdk_test
+package gestalt_test
 
 import (
 	"context"
@@ -7,19 +7,19 @@ import (
 	"testing"
 	"time"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
-	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func newProviderPluginClient(t *testing.T, prov pluginsdk.Provider) pluginapiv1.ProviderPluginClient {
+func newProviderPluginClient(t *testing.T, prov gestalt.Provider) proto.ProviderPluginClient {
 	t.Helper()
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, pluginsdk.NewProviderServer(prov))
+	proto.RegisterProviderPluginServer(srv, gestalt.NewProviderServer(prov))
 
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
@@ -36,7 +36,7 @@ func newProviderPluginClient(t *testing.T, prov pluginsdk.Provider) pluginapiv1.
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return pluginapiv1.NewProviderPluginClient(conn)
+	return proto.NewProviderPluginClient(conn)
 }
 
 func newUnixConn(t *testing.T, socket string) *grpc.ClientConn {

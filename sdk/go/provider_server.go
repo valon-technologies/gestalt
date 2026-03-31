@@ -1,10 +1,10 @@
-package pluginsdk
+package gestalt
 
 import (
 	"context"
 	"slices"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -19,7 +19,7 @@ type ProtocolVersionProvider interface {
 }
 
 type ProviderServer struct {
-	pluginapiv1.UnimplementedProviderPluginServer
+	proto.UnimplementedProviderPluginServer
 	provider Provider
 }
 
@@ -27,7 +27,7 @@ func NewProviderServer(provider Provider) *ProviderServer {
 	return &ProviderServer{provider: provider}
 }
 
-func (s *ProviderServer) StartProvider(ctx context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
+func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -36,13 +36,13 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *pluginapiv1.Sta
 			return nil, status.Errorf(codes.Unknown, "start provider: %v", err)
 		}
 	}
-	return &pluginapiv1.StartProviderResponse{
-		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+	return &proto.StartProviderResponse{
+		ProtocolVersion: proto.CurrentProtocolVersion,
 	}, nil
 }
 
-func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
-	var connParams map[string]*pluginapiv1.ConnectionParamDef
+func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	var connParams map[string]*proto.ConnectionParamDef
 	if cpp, ok := s.provider.(ConnectionParamProvider); ok {
 		connParams = connectionParamDefsToProto(cpp.ConnectionParamDefs())
 	}
@@ -52,7 +52,7 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 	}
 	minPV, maxPV := protocolVersionRange(s.provider)
 
-	return &pluginapiv1.ProviderMetadata{
+	return &proto.ProviderMetadata{
 		Name:               s.provider.Name(),
 		DisplayName:        s.provider.DisplayName(),
 		Description:        s.provider.Description(),
@@ -65,15 +65,15 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 	}, nil
 }
 
-func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
+func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*proto.ListOperationsResponse, error) {
 	ops, err := operationsToProto(s.provider.ListOperations())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode operations: %v", err)
 	}
-	return &pluginapiv1.ListOperationsResponse{Operations: ops}, nil
+	return &proto.ListOperationsResponse{Operations: ops}, nil
 }
 
-func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRequest) (*pluginapiv1.OperationResult, error) {
+func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -87,7 +87,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	if result == nil {
 		return nil, status.Error(codes.Internal, "provider returned nil result")
 	}
-	return &pluginapiv1.OperationResult{
+	return &proto.OperationResult{
 		Status: int32(result.Status),
 		Body:   result.Body,
 	}, nil
@@ -107,5 +107,5 @@ func protocolVersionRange(p Provider) (min, max int32) {
 	if pvp, ok := p.(ProtocolVersionProvider); ok {
 		return pvp.ProtocolVersionRange()
 	}
-	return pluginapiv1.CurrentProtocolVersion, pluginapiv1.CurrentProtocolVersion
+	return proto.CurrentProtocolVersion, proto.CurrentProtocolVersion
 }

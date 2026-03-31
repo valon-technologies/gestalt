@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	bigquery "github.com/valon-technologies/gestalt/plugins/bigquery"
-	"github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	"github.com/valon-technologies/gestalt/sdk/go"
 )
 
 func main() {
@@ -21,5 +21,5 @@ func main() {
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	return pluginsdk.ServeProvider(ctx, bigquery.NewProvider())
+	return gestalt.ServeProvider(ctx, bigquery.NewProvider())
 }

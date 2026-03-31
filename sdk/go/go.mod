@@ -1,4 +1,4 @@
-module github.com/valon-technologies/gestalt/sdk/pluginsdk
+module github.com/valon-technologies/gestalt/sdk/go
 
 go 1.26
 

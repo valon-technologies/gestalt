@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -12,13 +12,13 @@ import (
 )
 
 type stubRuntimePluginServer struct {
-	pluginapiv1.UnimplementedRuntimePluginServer
-	startReq *pluginapiv1.StartRuntimeRequest
+	proto.UnimplementedRuntimePluginServer
+	startReq *proto.StartRuntimeRequest
 	started  int
 	stopped  int
 }
 
-func (s *stubRuntimePluginServer) Start(_ context.Context, req *pluginapiv1.StartRuntimeRequest) (*emptypb.Empty, error) {
+func (s *stubRuntimePluginServer) Start(_ context.Context, req *proto.StartRuntimeRequest) (*emptypb.Empty, error) {
 	s.startReq = req
 	s.started++
 	return &emptypb.Empty{}, nil
@@ -86,10 +86,10 @@ func TestRuntimeHostServer(t *testing.T) {
 		t.Fatalf("unexpected capabilities: %+v", resp.GetCapabilities())
 	}
 
-	result, err := client.Invoke(context.Background(), &pluginapiv1.InvokeRequest{
-		Principal: &pluginapiv1.Principal{
+	result, err := client.Invoke(context.Background(), &proto.InvokeRequest{
+		Principal: &proto.Principal{
 			UserId: "user-123",
-			Source: pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN,
+			Source: proto.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN,
 		},
 		Provider:  "alpha",
 		Operation: "read",

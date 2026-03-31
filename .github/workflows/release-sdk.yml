@@ -3,29 +3,29 @@ name: Release SDK
 on:
   push:
     tags:
-      - 'sdk/pluginsdk/v*'
+      - 'sdk/go/v*'
 
 permissions:
   contents: write
 
 jobs:
-  release-pluginsdk:
-    name: Release pluginsdk
+  release-go-sdk:
+    name: Release Go SDK
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SDK_MODULE: github.com/valon-technologies/gestalt/sdk/pluginsdk
+      SDK_MODULE: github.com/valon-technologies/gestalt/sdk/go
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version-file: sdk/pluginsdk/go.mod
-          cache-dependency-path: sdk/pluginsdk/go.sum
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#sdk/pluginsdk/v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#sdk/go/v}" >> "$GITHUB_OUTPUT"
       - name: Warm Go module proxy cache
         env:
           VERSION: ${{ steps.version.outputs.version }}

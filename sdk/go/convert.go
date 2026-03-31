@@ -1,24 +1,24 @@
-package pluginsdk
+package gestalt
 
 import (
 	"fmt"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func coreConnectionModeToProto(mode ConnectionMode) pluginapiv1.ConnectionMode {
+func coreConnectionModeToProto(mode ConnectionMode) proto.ConnectionMode {
 	switch mode {
 	case ConnectionModeNone, "":
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE
+		return proto.ConnectionMode_CONNECTION_MODE_NONE
 	case ConnectionModeUser:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_USER
+		return proto.ConnectionMode_CONNECTION_MODE_USER
 	case ConnectionModeIdentity:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_IDENTITY
+		return proto.ConnectionMode_CONNECTION_MODE_IDENTITY
 	case ConnectionModeEither:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_EITHER
+		return proto.ConnectionMode_CONNECTION_MODE_EITHER
 	default:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_UNSPECIFIED
+		return proto.ConnectionMode_CONNECTION_MODE_UNSPECIFIED
 	}
 }
 
@@ -36,12 +36,12 @@ func valueToProto(v any) (*structpb.Value, error) {
 	return structpb.NewValue(v)
 }
 
-func parameterToProto(p Parameter) (*pluginapiv1.Parameter, error) {
+func parameterToProto(p Parameter) (*proto.Parameter, error) {
 	def, err := valueToProto(p.Default)
 	if err != nil {
 		return nil, fmt.Errorf("parameter %q default: %w", p.Name, err)
 	}
-	return &pluginapiv1.Parameter{
+	return &proto.Parameter{
 		Name:         p.Name,
 		Type:         p.Type,
 		Description:  p.Description,
@@ -50,8 +50,8 @@ func parameterToProto(p Parameter) (*pluginapiv1.Parameter, error) {
 	}, nil
 }
 
-func parametersToProto(params []Parameter) ([]*pluginapiv1.Parameter, error) {
-	out := make([]*pluginapiv1.Parameter, 0, len(params))
+func parametersToProto(params []Parameter) ([]*proto.Parameter, error) {
+	out := make([]*proto.Parameter, 0, len(params))
 	for _, p := range params {
 		msg, err := parameterToProto(p)
 		if err != nil {
@@ -62,14 +62,14 @@ func parametersToProto(params []Parameter) ([]*pluginapiv1.Parameter, error) {
 	return out, nil
 }
 
-func operationsToProto(ops []Operation) ([]*pluginapiv1.Operation, error) {
-	out := make([]*pluginapiv1.Operation, 0, len(ops))
+func operationsToProto(ops []Operation) ([]*proto.Operation, error) {
+	out := make([]*proto.Operation, 0, len(ops))
 	for _, op := range ops {
 		params, err := parametersToProto(op.Parameters)
 		if err != nil {
 			return nil, fmt.Errorf("operation %q: %w", op.Name, err)
 		}
-		out = append(out, &pluginapiv1.Operation{
+		out = append(out, &proto.Operation{
 			Name:        op.Name,
 			Description: op.Description,
 			Method:      op.Method,
@@ -79,26 +79,26 @@ func operationsToProto(ops []Operation) ([]*pluginapiv1.Operation, error) {
 	return out, nil
 }
 
-func principalSourceToProto(src PrincipalSource) pluginapiv1.PrincipalSource {
+func principalSourceToProto(src PrincipalSource) proto.PrincipalSource {
 	switch src {
 	case PrincipalSourceSession:
-		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_SESSION
+		return proto.PrincipalSource_PRINCIPAL_SOURCE_SESSION
 	case PrincipalSourceAPIToken:
-		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN
+		return proto.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN
 	case PrincipalSourceEnv:
-		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_ENV
+		return proto.PrincipalSource_PRINCIPAL_SOURCE_ENV
 	default:
-		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_UNSPECIFIED
+		return proto.PrincipalSource_PRINCIPAL_SOURCE_UNSPECIFIED
 	}
 }
 
-func principalToProto(p Principal) *pluginapiv1.Principal {
-	msg := &pluginapiv1.Principal{
+func principalToProto(p Principal) *proto.Principal {
+	msg := &proto.Principal{
 		UserId: p.UserID,
 		Source: principalSourceToProto(p.Source),
 	}
 	if p.Identity != nil {
-		msg.Identity = &pluginapiv1.UserIdentity{
+		msg.Identity = &proto.UserIdentity{
 			Email:       p.Identity.Email,
 			DisplayName: p.Identity.DisplayName,
 			AvatarUrl:   p.Identity.AvatarURL,
@@ -107,7 +107,7 @@ func principalToProto(p Principal) *pluginapiv1.Principal {
 	return msg
 }
 
-func parameterFromProto(msg *pluginapiv1.Parameter) Parameter {
+func parameterFromProto(msg *proto.Parameter) Parameter {
 	if msg == nil {
 		return Parameter{}
 	}
@@ -124,7 +124,7 @@ func parameterFromProto(msg *pluginapiv1.Parameter) Parameter {
 	}
 }
 
-func parametersFromProto(params []*pluginapiv1.Parameter) []Parameter {
+func parametersFromProto(params []*proto.Parameter) []Parameter {
 	out := make([]Parameter, 0, len(params))
 	for _, p := range params {
 		out = append(out, parameterFromProto(p))
@@ -132,7 +132,7 @@ func parametersFromProto(params []*pluginapiv1.Parameter) []Parameter {
 	return out
 }
 
-func capabilityFromProto(msg *pluginapiv1.Capability) Capability {
+func capabilityFromProto(msg *proto.Capability) Capability {
 	if msg == nil {
 		return Capability{}
 	}
@@ -144,7 +144,7 @@ func capabilityFromProto(msg *pluginapiv1.Capability) Capability {
 	}
 }
 
-func capabilitiesFromProto(caps []*pluginapiv1.Capability) []Capability {
+func capabilitiesFromProto(caps []*proto.Capability) []Capability {
 	out := make([]Capability, 0, len(caps))
 	for _, c := range caps {
 		out = append(out, capabilityFromProto(c))
@@ -152,13 +152,13 @@ func capabilitiesFromProto(caps []*pluginapiv1.Capability) []Capability {
 	return out
 }
 
-func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*pluginapiv1.ConnectionParamDef {
+func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*proto.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
 	}
-	out := make(map[string]*pluginapiv1.ConnectionParamDef, len(defs))
+	out := make(map[string]*proto.ConnectionParamDef, len(defs))
 	for name, def := range defs {
-		out[name] = &pluginapiv1.ConnectionParamDef{
+		out[name] = &proto.ConnectionParamDef{
 			Required:     def.Required,
 			Description:  def.Description,
 			DefaultValue: def.Default,
