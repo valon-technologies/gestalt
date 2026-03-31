@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -81,6 +82,7 @@ type Broker struct {
 	datastore      core.Datastore
 	connMapper     ConnectionMapper
 	connectionAuth RefresherResolver
+	refreshGroup   singleflight.Group
 }
 
 type BrokerOption func(*Broker)
@@ -320,7 +322,10 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return token.AccessToken, nil
 	}
 
-	resp, err := b.refreshOAuth(ctx, refresher, token.RefreshToken)
+	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
+	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
+		return b.refreshOAuth(context.WithoutCancel(ctx), refresher, token.RefreshToken)
+	})
 	if err != nil {
 		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
@@ -337,6 +342,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return "", fmt.Errorf("token expired and refresh failed: %w", err)
 	}
 
+	resp := v.(*core.TokenResponse)
 	now := time.Now()
 	token.AccessToken = resp.AccessToken
 	if resp.RefreshToken != "" {
