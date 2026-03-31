@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
@@ -59,7 +59,7 @@ func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, facto
 		if err != nil {
 			return nil, fmt.Errorf("decode runtime plugin config for %q: %w", name, err)
 		}
-		return pluginapi.NewExecutableRuntime(ctx, name, pluginapi.ExecConfig{
+		return pluginhost.NewExecutableRuntime(ctx, name, pluginhost.ExecConfig{
 			Command: cfg.Plugin.Command,
 			Args:    cfg.Plugin.Args,
 			Env:     cfg.Plugin.Env,
