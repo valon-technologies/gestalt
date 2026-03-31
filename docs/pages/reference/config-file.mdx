@@ -444,7 +444,7 @@ connections:
 | --- | --- |
 | `credentials[].name` | Internal identifier for the field. Must be unique, lowercase with underscores. |
 | `credentials[].label` | Display label shown in the UI. Falls back to `name` if omitted. |
-| `credentials[].description` | Hint text shown below the label. |
+| `credentials[].description` | Hint text shown below the label. Supports inline links via `[text](url)`. |
 | `credentials[].help_url` | Link displayed next to the label for where to find the credential. |
 | `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
 
