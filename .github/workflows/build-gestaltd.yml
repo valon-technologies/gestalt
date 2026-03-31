@@ -146,7 +146,7 @@ jobs:
 
       - name: Start Go server
         run: |
-          ./gestaltd --config gestalt.dev.yaml &
+          ./gestaltd &
           ready=false
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health; then
