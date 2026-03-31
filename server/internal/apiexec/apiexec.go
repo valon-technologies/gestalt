@@ -188,14 +188,14 @@ func doOnce(
 		}
 	}
 
+	for k, v := range req.CustomHeaders {
+		httpReq.Header.Set(k, v)
+	}
+
 	if req.AuthHeader != "" {
 		httpReq.Header.Set("Authorization", req.AuthHeader)
 	} else if req.Token != "" {
 		httpReq.Header.Set("Authorization", core.BearerScheme+req.Token)
-	}
-
-	for k, v := range req.CustomHeaders {
-		httpReq.Header.Set(k, v)
 	}
 
 	resp, err := client.Do(httpReq)
@@ -280,14 +280,14 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	}
 	httpReq.Header.Set("Content-Type", core.ContentTypeJSON)
 
+	for k, v := range req.CustomHeaders {
+		httpReq.Header.Set(k, v)
+	}
+
 	if req.AuthHeader != "" {
 		httpReq.Header.Set("Authorization", req.AuthHeader)
 	} else if req.Token != "" {
 		httpReq.Header.Set("Authorization", core.BearerScheme+req.Token)
-	}
-
-	for k, v := range req.CustomHeaders {
-		httpReq.Header.Set(k, v)
 	}
 
 	resp, err := client.Do(httpReq)

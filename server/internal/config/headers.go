@@ -1,6 +1,9 @@
 package config
 
-import "net/http"
+import (
+	"net/http"
+	"sort"
+)
 
 func NormalizeHeaders(headers map[string]string) map[string]string {
 	if len(headers) == 0 {
@@ -8,7 +11,13 @@ func NormalizeHeaders(headers map[string]string) map[string]string {
 	}
 
 	out := make(map[string]string, len(headers))
-	for k, v := range headers {
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := headers[k]
 		out[http.CanonicalHeaderKey(k)] = v
 	}
 	return out
