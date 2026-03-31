@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/http"
 	"time"
@@ -79,11 +80,6 @@ func (u UpstreamAuth) StartOAuthWithOverride(authBaseURL, state string, scopes [
 	return u.Handler.AuthorizationURLWithOverride(authBaseURL, state, scopes)
 }
 
-type Endpoint struct {
-	Method string
-	Path   string
-}
-
 type AuthStyle int
 
 const (
@@ -100,9 +96,6 @@ type Base struct {
 	ConnMode           core.ConnectionMode
 	Auth               AuthHandler
 	BaseURL            string
-	Operations         []core.Operation
-	Endpoints          map[string]Endpoint
-	Queries            map[string]string // operation_name -> graphql query
 	Headers            map[string]string
 	AuthStyle          AuthStyle
 	HTTPClient         *http.Client
@@ -251,7 +244,7 @@ func (b *Base) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL s
 	return b.Auth.RefreshToken(ctx, refreshToken)
 }
 
-func (b *Base) ListOperations() []core.Operation { return b.Operations }
+func (b *Base) ListOperations() []core.Operation { return OperationsList(b.catalog) }
 
 func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
 	baseURL := b.BaseURL
@@ -277,11 +270,14 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return b.ExecuteFunc(ctx, operation, params, token)
 	}
 
-	if query, ok := b.Queries[operation]; ok {
-		return b.executeGraphQL(ctx, operation, query, params, token)
+	catOp := findCatalogOp(b.catalog, operation)
+	if catOp == nil {
+		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
-
-	return b.executeREST(ctx, operation, params, token)
+	if catOp.Query != "" {
+		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
+	}
+	return b.executeREST(ctx, operation, catOp, params, token)
 }
 
 func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
