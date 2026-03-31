@@ -299,3 +299,29 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 		}
 	}
 }
+
+func definitionParamFromOpenAPI(p *v3high.Parameter) provider.ParameterDef {
+	paramType := "string"
+	if p.Schema != nil && p.Schema.Schema() != nil {
+		if types := p.Schema.Schema().Type; len(types) > 0 {
+			paramType = types[0]
+		}
+	}
+	name, wireName := normalizeParamName(p.Name)
+	return provider.ParameterDef{
+		Name:        name,
+		WireName:    wireName,
+		Type:        paramType,
+		Location:    p.In,
+		Description: p.Description,
+		Required:    p.Required != nil && *p.Required,
+	}
+}
+
+func normalizeParamName(raw string) (name, wireName string) {
+	if !strings.ContainsAny(raw, "[]") {
+		return raw, ""
+	}
+	normalized := strings.ReplaceAll(strings.ReplaceAll(raw, "[", "_"), "]", "")
+	return normalized, raw
+}

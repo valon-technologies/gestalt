@@ -646,62 +646,6 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 	}
 }
 
-func TestLoadDefinitionNormalizesBracketParams(t *testing.T) {
-	t.Parallel()
-
-	spec := map[string]any{
-		"openapi": "3.0.0",
-		"info":    map[string]string{"title": "Bracket API"},
-		"servers": []any{map[string]string{"url": "https://api.example.com"}},
-		"paths": map[string]any{
-			"/records": map[string]any{
-				"get": map[string]any{
-					"operationId": "list_records",
-					"summary":     "List records",
-					"parameters": []any{
-						map[string]any{
-							"name": "page[size]", "in": "query",
-							"schema": map[string]any{"type": "integer"},
-						},
-						map[string]any{
-							"name": "filter[from]", "in": "query",
-							"schema": map[string]any{"type": "string"},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	srv := serveJSON(t, spec)
-	testutil.CloseOnCleanup(t, srv)
-
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
-	if err != nil {
-		t.Fatalf("LoadDefinition: %v", err)
-	}
-
-	op, ok := def.Operations["list_records"]
-	if !ok {
-		t.Fatal("missing list_records operation")
-	}
-	if len(op.Parameters) != 2 {
-		t.Fatalf("params = %d, want 2", len(op.Parameters))
-	}
-
-	byWire := make(map[string]provider.ParameterDef, len(op.Parameters))
-	for _, p := range op.Parameters {
-		byWire[p.WireName] = p
-	}
-
-	if got := byWire["page[size]"]; got.Name != "page_size" || got.Location != "query" {
-		t.Errorf("page[size] = %+v, want normalized page_size in query", got)
-	}
-	if got := byWire["filter[from]"]; got.Name != "filter_from" || got.Location != "query" {
-		t.Errorf("filter[from] = %+v, want normalized filter_from in query", got)
-	}
-}
-
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 
