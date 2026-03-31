@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
-	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 )
 
 // BuildOption configures optional aspects of provider construction.
@@ -39,7 +38,7 @@ func WithEgressResolver(r *egress.Resolver) BuildOption {
 // owns auth configuration. Display metadata (display_name, description, icon)
 // should be applied to the Definition before calling Build via
 // ApplyDisplayOverrides.
-func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[string]*config.OperationOverride, opts ...BuildOption) (core.Provider, error) {
+func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
 		opt(&bo)
@@ -212,19 +211,7 @@ func Build(def *Definition, conn config.ConnectionDef, allowedOperations map[str
 	}
 
 	base.SetCatalog(cat)
-
-	var result core.Provider = base
-
-	policy, err := operationexposure.New(allowedOperations)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", def.Provider, err)
-	}
-	if err := policy.Validate(base.Operations); err != nil {
-		return nil, fmt.Errorf("%s: %w", def.Provider, err)
-	}
-	result = policy.Wrap(result)
-
-	return result, nil
+	return base, nil
 }
 
 // ApplyDisplayOverrides merges display metadata from an IntegrationDef into a

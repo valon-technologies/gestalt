@@ -44,7 +44,7 @@ func TestBuild(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("example")
-	intg, err := Build(def, testCreds(), nil)
+	intg, err := Build(def, testCreds())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestBuildManualAuth(t *testing.T) {
 			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.ConnectionDef{}, nil)
+	intg, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestBuildDoesNotMutateDefinition(t *testing.T) {
 	_, err := Build(def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
 		ClientID: "test",
 		TokenURL: "https://override.example.com/token",
-	}}, nil)
+	}})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -93,213 +93,12 @@ func TestBuildDoesNotMutateDefinition(t *testing.T) {
 	}
 }
 
-func TestBuildAllowedOperations(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("filtered")
-	intg, err := Build(def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
-		ClientID:     "test",
-		ClientSecret: "test",
-		RedirectURL:  "http://localhost/callback",
-	}}, map[string]*config.OperationOverride{"list_items": nil})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if len(intg.ListOperations()) != 1 {
-		t.Fatalf("got %d operations, want 1", len(intg.ListOperations()))
-	}
-}
-
-func TestBuildAllowedOperationsUnknown(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{"nonexistent": nil})
-	if err == nil {
-		t.Fatal("expected error for unknown allowed operation")
-	}
-}
-
-func TestBuildAllowedOperationsEmpty(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("bad")
-	_, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{})
-	if err == nil {
-		t.Fatal("expected error for empty allowed_operations")
-	}
-}
-
-func TestBuildWithAlias(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	}))
-	t.Cleanup(srv.Close)
-
-	def := &Definition{
-		Provider:    "alias_test",
-		DisplayName: "Alias Test",
-		BaseURL:     srv.URL,
-		Auth:        AuthDef{Type: "manual"},
-		Operations: map[string]OperationDef{
-			"op_alpha": {Description: "Alpha op", Method: http.MethodGet, Path: "/alpha"},
-			"op_beta":  {Description: "Beta op", Method: http.MethodGet, Path: "/beta"},
-		},
-	}
-
-	intg, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{
-		"op_alpha": {Alias: "my_alpha"},
-		"op_beta":  nil,
-	})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	ops := intg.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("got %d operations, want 2", len(ops))
-	}
-	names := make(map[string]bool, len(ops))
-	for _, op := range ops {
-		names[op.Name] = true
-	}
-	if !names["my_alpha"] {
-		t.Error("expected aliased name my_alpha in ListOperations")
-	}
-	if !names["op_beta"] {
-		t.Error("expected original name op_beta in ListOperations")
-	}
-
-	result, err := intg.Execute(context.Background(), "my_alpha", nil, "tok")
-	if err != nil {
-		t.Fatalf("Execute(my_alpha): %v", err)
-	}
-	if result.Status != http.StatusOK {
-		t.Errorf("status = %d, want 200", result.Status)
-	}
-
-	_, err = intg.Execute(context.Background(), "op_alpha", nil, "tok")
-	if err == nil {
-		t.Fatal("expected error when calling by original name after aliasing")
-	}
-}
-
-func TestBuildWithAliasAndDescription(t *testing.T) {
-	t.Parallel()
-
-	def := &Definition{
-		Provider:    "alias_desc_test",
-		DisplayName: "Alias Desc Test",
-		BaseURL:     "https://api.example.com",
-		Auth:        AuthDef{Type: "manual"},
-		Operations: map[string]OperationDef{
-			"op_gamma": {Description: "Gamma op", Method: http.MethodGet, Path: "/gamma"},
-		},
-	}
-
-	intg, err := Build(def, config.ConnectionDef{}, map[string]*config.OperationOverride{
-		"op_gamma": {Alias: "renamed_gamma", Description: "Custom gamma description"},
-	})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	ops := intg.ListOperations()
-	if len(ops) != 1 {
-		t.Fatalf("got %d operations, want 1", len(ops))
-	}
-	if ops[0].Name != "renamed_gamma" {
-		t.Errorf("operation name = %q, want renamed_gamma", ops[0].Name)
-	}
-	if ops[0].Description != "Custom gamma description" {
-		t.Errorf("description = %q, want custom override", ops[0].Description)
-	}
-
-	cp, ok := intg.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("expected CatalogProvider")
-	}
-	cat := cp.Catalog()
-	if len(cat.Operations) != 1 {
-		t.Fatalf("got %d catalog operations, want 1", len(cat.Operations))
-	}
-	if cat.Operations[0].ID != "renamed_gamma" {
-		t.Errorf("catalog operation ID = %q, want renamed_gamma", cat.Operations[0].ID)
-	}
-	if cat.Operations[0].Description != "Custom gamma description" {
-		t.Errorf("catalog description = %q, want custom override", cat.Operations[0].Description)
-	}
-}
-
-func TestBuildWithNullOverride(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("null_override")
-	intg, err := Build(def, testCreds(), map[string]*config.OperationOverride{
-		"list_items": nil,
-		"get_item":   nil,
-	})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	ops := intg.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("got %d operations, want 2", len(ops))
-	}
-	for _, op := range ops {
-		if op.Name != "list_items" && op.Name != "get_item" {
-			t.Errorf("unexpected operation %q", op.Name)
-		}
-	}
-}
-
-func TestBuildWithDescriptionOnly(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("desc_only")
-	intg, err := Build(def, testCreds(), map[string]*config.OperationOverride{
-		"list_items": {Description: "Overridden list description"},
-	})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	ops := intg.ListOperations()
-	if len(ops) != 1 {
-		t.Fatalf("got %d operations, want 1", len(ops))
-	}
-	if ops[0].Name != "list_items" {
-		t.Errorf("name = %q, want list_items", ops[0].Name)
-	}
-	if ops[0].Description != "Overridden list description" {
-		t.Errorf("description = %q, want override", ops[0].Description)
-	}
-}
-
-func TestBuildAliasCollision(t *testing.T) {
-	t.Parallel()
-
-	def := testDefinition("collision")
-	_, err := Build(def, testCreds(), map[string]*config.OperationOverride{
-		"list_items": {Alias: "get_item"},
-		"get_item":   nil,
-	})
-	if err == nil {
-		t.Fatal("expected error for alias collision")
-	}
-	if !strings.Contains(err.Error(), "alias collision") {
-		t.Errorf("error = %q, want alias collision message", err)
-	}
-}
-
 func TestBuildUnknownAuthStyle(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("bad")
 	def.AuthStyle = "bogus"
-	_, err := Build(def, testCreds(), nil)
+	_, err := Build(def, testCreds())
 	if err == nil {
 		t.Fatal("expected error for unknown auth_style")
 	}
@@ -318,7 +117,7 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.ConnectionDef{}, nil)
+	intg, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -357,7 +156,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		},
 	}
 
-	provider, err := Build(def, config.ConnectionDef{}, nil)
+	provider, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -418,7 +217,7 @@ func TestBuildAppliesIconFile(t *testing.T) {
 	}
 
 	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: iconPath})
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -450,7 +249,7 @@ func TestBuildIconFileMissing(t *testing.T) {
 	}
 
 	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build should succeed with missing icon: %v", err)
 	}
@@ -486,7 +285,7 @@ func TestBuildAuthHeader(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -537,7 +336,7 @@ func TestBuildAuthMapping(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -584,7 +383,7 @@ func TestBuildAuthMappingMissingField(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -623,7 +422,7 @@ func TestBuildErrorMessagePath(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -660,7 +459,7 @@ func TestBuildErrorMessagePathSuccessPassthrough(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -699,7 +498,7 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 
 	def.AuthHeader = "X-Override-Key"
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -741,7 +540,7 @@ func TestBuildConnectionParams(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -785,7 +584,7 @@ func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -825,7 +624,7 @@ func TestBuildResponseCheck_SuccessMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -868,7 +667,7 @@ func TestBuildResponseCheck_FailureMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -906,7 +705,7 @@ func TestBuildResponseCheck_NonJSON200(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -943,7 +742,7 @@ func TestBuildResponseCheck_NonJSON500(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -970,7 +769,7 @@ func TestBuildResponseCheck_SuccessMatchOnly(t *testing.T) {
 		},
 	}
 
-	_, err := Build(def, config.ConnectionDef{}, nil)
+	_, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build should succeed with structured response check: %v", err)
 	}
@@ -1004,7 +803,7 @@ func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -1035,7 +834,7 @@ func TestBuildCredentialFields(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{}, nil)
+	prov, err := Build(def, config.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -1078,7 +877,7 @@ func TestBuildCredentialFieldsFromConfig(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, conn, nil)
+	prov, err := Build(def, conn)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -1130,7 +929,7 @@ func TestBuildAuthMappingFromConfig(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, conn, nil)
+	prov, err := Build(def, conn)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

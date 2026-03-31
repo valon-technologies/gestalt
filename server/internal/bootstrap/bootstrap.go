@@ -832,7 +832,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = intg.Plugin.BaseURL
 		}
 		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
 		}
@@ -848,7 +848,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = intg.Plugin.BaseURL
 		}
 		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
 		}
@@ -932,7 +932,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}
 		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
+		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
 		}
@@ -949,7 +949,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}
 		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
+		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
 		}
