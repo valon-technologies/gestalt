@@ -81,6 +81,24 @@
           "type": "string",
           "minLength": 1
         },
+        "openapi_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connections": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifest_connection_def"
+          }
+        },
         "post_connect_discovery": {
           "type": "object",
           "additionalProperties": false,
@@ -340,6 +358,19 @@
           }
         }
       ]
+    },
+    "manifest_connection_def": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["none", "user", "identity", "either"]
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
+        }
+      }
     },
     "provider_operation": {
       "type": "object",

@@ -241,6 +241,59 @@ func TestPrepareConfigRejectsPluginPackageSchemaViolation(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigAcceptsPluginPackageSurfaceConnectionAliases(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testProviderSource   = "github.com/acme/plugins/provider"
+		testProviderVersion  = "0.1.0"
+		testArtifactContent  = "not-an-executable"
+		testConnectionName   = "api"
+		testOpenAPIURL       = "https://example.com/openapi.json"
+		testGraphQLURL       = "https://example.com/graphql"
+		testMCPURL           = "https://example.com/mcp"
+		testAuthorizationURL = "https://example.com/authorize"
+		testTokenURL         = "https://example.com/token"
+	)
+
+	dir := t.TempDir()
+	packagePath := buildPreparedTestPluginPackageWithManifestProvider(t, dir, testProviderSource, testProviderVersion, testArtifactContent, &pluginmanifestv1.Provider{
+		OpenAPI:           testOpenAPIURL,
+		GraphQLURL:        testGraphQLURL,
+		MCPURL:            testMCPURL,
+		OpenAPIConnection: testConnectionName,
+		GraphQLConnection: testConnectionName,
+		MCPConnection:     testConnectionName,
+		Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+			testConnectionName: {
+				Mode: "user",
+				Auth: &pluginmanifestv1.ProviderAuth{
+					Type:             pluginmanifestv1.AuthTypeOAuth2,
+					AuthorizationURL: testAuthorizationURL,
+					TokenURL:         testTokenURL,
+				},
+			},
+		},
+	}, "")
+	cfgPath := writePreparedPluginPackageConfig(t, dir, packagePath)
+
+	if err := initConfig(cfgPath); err != nil {
+		t.Fatalf("initConfig: %v", err)
+	}
+	if err := validateConfig(cfgPath); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+
+	_, cfg, err := loadConfigForExecution(cfgPath, true)
+	if err != nil {
+		t.Fatalf("loadConfigForExecution: %v", err)
+	}
+	plugin := cfg.Integrations["example"].Plugin
+	if plugin.ResolvedManifestPath == "" {
+		t.Fatal("expected ResolvedManifestPath to be set after prepare")
+	}
+}
+
 func TestValidateConfigUsesPreparedManifestForRuntimePluginPackage(t *testing.T) {
 	t.Parallel()
 
@@ -361,6 +414,15 @@ func buildPreparedTestPluginPackage(t *testing.T, dir, source, version, content 
 
 func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version, content, schema string) string {
 	t.Helper()
+	provider := &pluginmanifestv1.Provider{}
+	if schema != "" {
+		provider.ConfigSchemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
+	}
+	return buildPreparedTestPluginPackageWithManifestProvider(t, dir, source, version, content, provider, schema)
+}
+
+func buildPreparedTestPluginPackageWithManifestProvider(t *testing.T, dir, source, version, content string, provider *pluginmanifestv1.Provider, schema string) string {
+	t.Helper()
 
 	srcDir := filepath.Join(dir, "plugin-src")
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
@@ -370,24 +432,20 @@ func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version
 	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactRel)), []byte(content), 0755); err != nil {
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
-	var schemaPath string
-	if schema != "" {
-		schemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
+	if provider != nil && provider.ConfigSchemaPath != "" {
 		if err := os.MkdirAll(filepath.Join(srcDir, "schemas"), 0755); err != nil {
 			t.Fatalf("MkdirAll schema dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(schemaPath)), []byte(schema), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(provider.ConfigSchemaPath)), []byte(schema), 0644); err != nil {
 			t.Fatalf("WriteFile schema: %v", err)
 		}
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			ConfigSchemaPath: schemaPath,
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: provider,
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
