@@ -770,12 +770,20 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 		finalProv = restricted
 	} else {
-		specProv, surface, err := buildHybridSpecProvider(ctx, name, intg, manifestProvider, deps)
+		specProv, surface, err := buildConfiguredSpecProvider(ctx, name, specProviderConfig{
+			plugin:            intg.Plugin,
+			manifestProvider:  manifestProvider,
+			allowedOperations: intg.Plugin.AllowedOperations,
+			baseURL:           intg.Plugin.BaseURL,
+			providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
+				return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
+			},
+		}, deps)
 		if err != nil {
 			if c, ok := pluginProv.(interface{ Close() error }); ok {
 				_ = c.Close()
 			}
-			return nil, err
+			return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
 		}
 		merged, err := composite.NewMergedWithConnections(
 			name,
@@ -815,65 +823,84 @@ const (
 	specSurfaceMCP     specSurface = "mcp"
 )
 
-func buildHybridSpecProvider(ctx context.Context, name string, intg config.IntegrationDef, manifestProvider *pluginmanifestv1.Provider, deps Deps) (core.Provider, specSurface, error) {
-	allowedOps := intg.Plugin.AllowedOperations
-	openAPIURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceOpenAPI)
-	graphQLURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceGraphQL)
-	mcpURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceMCP)
+type specProviderConfig struct {
+	plugin               *config.PluginDef
+	manifestProvider     *pluginmanifestv1.Provider
+	allowedOperations    map[string]*config.OperationOverride
+	baseURL              string
+	providerBuildOptions func(config.ConnectionDef) []provider.BuildOption
+	applyResponseMapping bool
+}
 
-	switch {
-	case openAPIURL != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceOpenAPI)
-		def, err := openapi.LoadDefinition(ctx, name, openAPIURL, allowedOps)
+func buildConfiguredSpecProvider(ctx context.Context, name string, cfg specProviderConfig, deps Deps) (core.Provider, specSurface, error) {
+	surface, ok := primaryConfiguredSpecSurface(cfg.plugin, cfg.manifestProvider)
+	if !ok {
+		return nil, "", fmt.Errorf("no spec URL")
+	}
+
+	url := resolvedSurfaceURL(cfg.plugin, cfg.manifestProvider, surface)
+	conn := resolvedSurfaceConnectionDef(cfg.plugin, cfg.manifestProvider, surface)
+	var buildOpts []provider.BuildOption
+	if cfg.providerBuildOptions != nil {
+		buildOpts = cfg.providerBuildOptions(conn)
+	}
+
+	switch surface {
+	case specSurfaceOpenAPI:
+		def, err := openapi.LoadDefinition(ctx, name, url, cfg.allowedOperations)
 		if err != nil {
-			return nil, "", fmt.Errorf("load hybrid openapi spec for %q: %w", name, err)
+			return nil, "", fmt.Errorf("load openapi definition: %w", err)
 		}
-		if intg.Plugin.BaseURL != "" {
-			def.BaseURL = intg.Plugin.BaseURL
+		if cfg.baseURL != "" {
+			def.BaseURL = cfg.baseURL
 		}
-		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
+		applyPluginHeaders(def, cfg.plugin, cfg.manifestProvider)
+		if cfg.applyResponseMapping {
+			applyManifestResponseMapping(def, cfg.manifestProvider)
+		}
+		prov, err := provider.Build(def, conn, buildOpts...)
 		if err != nil {
 			return nil, "", err
 		}
-		return prov, specSurfaceOpenAPI, nil
+		return prov, surface, nil
 
-	case graphQLURL != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceGraphQL)
-		def, err := graphqlupstream.LoadDefinition(ctx, name, graphQLURL, allowedOps)
+	case specSurfaceGraphQL:
+		def, err := graphqlupstream.LoadDefinition(ctx, name, url, cfg.allowedOperations)
 		if err != nil {
-			return nil, "", fmt.Errorf("load hybrid graphql schema for %q: %w", name, err)
+			return nil, "", fmt.Errorf("load graphql definition: %w", err)
 		}
-		if intg.Plugin.BaseURL != "" {
-			def.BaseURL = intg.Plugin.BaseURL
+		if cfg.baseURL != "" {
+			def.BaseURL = cfg.baseURL
 		}
-		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
+		applyPluginHeaders(def, cfg.plugin, cfg.manifestProvider)
+		if cfg.applyResponseMapping {
+			applyManifestResponseMapping(def, cfg.manifestProvider)
+		}
+		prov, err := provider.Build(def, conn, buildOpts...)
 		if err != nil {
 			return nil, "", err
 		}
-		return prov, specSurfaceGraphQL, nil
+		return prov, surface, nil
 
-	case mcpURL != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceMCP)
+	case specSurfaceMCP:
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, mergedHeaders(manifestProvider, intg.Plugin), deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, url, connMode, mergedHeaders(cfg.manifestProvider, cfg.plugin), deps.Egress.Resolver)
 		if err != nil {
-			return nil, "", fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
+			return nil, "", fmt.Errorf("create mcp upstream: %w", err)
 		}
-		if allowedOps != nil {
-			if err := up.FilterOperations(allowedOps); err != nil {
+		if cfg.allowedOperations != nil {
+			if err := up.FilterOperations(cfg.allowedOperations); err != nil {
 				_ = up.Close()
-				return nil, "", fmt.Errorf("filter hybrid mcp operations for %q: %w", name, err)
+				return nil, "", fmt.Errorf("filter mcp operations: %w", err)
 			}
 		}
-		return up, specSurfaceMCP, nil
+		return up, surface, nil
 
 	default:
-		return nil, "", fmt.Errorf("hybrid spec provider %q has no spec URL", name)
+		return nil, "", fmt.Errorf("unsupported spec surface %q", surface)
 	}
 }
 
@@ -917,77 +944,26 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
-
-	allowedOps := convertAllowedOperations(mp.AllowedOperations)
-
-	switch {
-	case mp.OpenAPI != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceOpenAPI)
-		def, err := openapi.LoadDefinition(ctx, name, mp.OpenAPI, allowedOps)
-		if err != nil {
-			return nil, fmt.Errorf("load openapi spec for %q: %w", name, err)
-		}
-		if mp.BaseURL != "" {
-			def.BaseURL = mp.BaseURL
-		}
-		applyPluginHeaders(def, intg.Plugin, mp)
-		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
-		if err != nil {
-			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
-		}
-		return specLoadedResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
-
-	case mp.GraphQLURL != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceGraphQL)
-		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
-		if err != nil {
-			return nil, fmt.Errorf("load graphql schema for %q: %w", name, err)
-		}
-		if mp.BaseURL != "" {
-			def.BaseURL = mp.BaseURL
-		}
-		applyPluginHeaders(def, intg.Plugin, mp)
-		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
-		if err != nil {
-			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
-		}
-		return specLoadedResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
-
-	case mp.MCPURL != "":
-		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceMCP)
-		connMode := core.ConnectionMode(conn.Mode)
-		if connMode == "" {
-			connMode = core.ConnectionModeUser
-		}
-		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, mergedHeaders(mp, intg.Plugin), deps.Egress.Resolver)
-		if err != nil {
-			return nil, fmt.Errorf("create mcp upstream for %q: %w", name, err)
-		}
-		if allowedOps != nil {
-			if err := up.FilterOperations(allowedOps); err != nil {
-				_ = up.Close()
-				return nil, fmt.Errorf("filter mcp operations for %q: %w", name, err)
-			}
-		}
-		result, resultErr := specLoadedResult(name, intg, manifest, pluginConfig, up, deps, regStore)
-		if resultErr != nil {
-			_ = up.Close()
-			return nil, resultErr
-		}
-		return result, nil
-
-	default:
-		return nil, fmt.Errorf("inline spec-loaded provider %q has no spec URL", name)
+	prov, _, err := buildConfiguredSpecProvider(ctx, name, specProviderConfig{
+		plugin:               intg.Plugin,
+		manifestProvider:     mp,
+		allowedOperations:    convertAllowedOperations(mp.AllowedOperations),
+		baseURL:              mp.BaseURL,
+		applyResponseMapping: true,
+		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
+			return mcpOAuthBuildOpts(conn, mp, regStore, deps)
+		},
+	}, deps)
+	if err != nil {
+		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 	}
-}
 
-func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	result := &ProviderBuildResult{Provider: prov}
-	var err error
 	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
 	if err != nil {
+		if c, ok := prov.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
 		return nil, err
 	}
 	return result, nil
