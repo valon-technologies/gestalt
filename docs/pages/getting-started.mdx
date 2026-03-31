@@ -74,6 +74,14 @@ Visit `http://localhost:8080`.
 The generated config uses `auth.provider: none`, so no sign-in is required. Add an integration to start building.
 </Steps>
 
+## Or: Generate A Config With `gestalt init`
+
+Instead of writing `config.yaml` by hand, run `gestalt init` for an interactive setup wizard that walks you through creating one.
+
+```sh
+gestalt init
+```
+
 ## 3. Switch To An Explicit Config
 
 Save this as `config.yaml`:
@@ -138,3 +146,11 @@ This is the deployment path to model in Docker, Kubernetes, or any other product
 - [Configuration](/concepts/configuration): config discovery, defaults, secret resolution, and lock state.
 - [Add an Integration](/tasks/add-an-integration): build a real integration from REST, GraphQL, MCP, or plugins.
 - [Deploy](/deploy): move the same config into Docker or Kubernetes.
+
+## Explore Operations With `gestalt describe`
+
+Once the server is running, use `gestalt describe` to inspect what operations an integration exposes and what parameters they accept:
+
+```sh
+gestalt describe github repos/list-for-authenticated-user
+```
