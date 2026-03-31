@@ -286,12 +286,6 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 			name:   "unknown secrets provider",
 			mutate: func(c *config.Config) { c.Secrets.Provider = "unknown" },
 		},
-		{
-			name: "no factory for integration",
-			mutate: func(c *config.Config) {
-				c.Integrations["unknown"] = config.IntegrationDef{}
-			},
-		},
 	}
 
 	for _, tc := range cases {
@@ -307,55 +301,30 @@ func TestBootstrapUnknownProvider(t *testing.T) {
 	}
 }
 
-func TestBootstrapNilProviderFactoryFailsFast(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("direct provider", func(t *testing.T) {
-		t.Parallel()
-
-		factories := validFactories()
-		factories.Providers["alpha"] = nil
-
-		_, err := bootstrap.Bootstrap(ctx, validConfig(), factories)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `no provider factory for "alpha"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-}
-
-func TestBootstrapPluginMCPRequiresFactory(t *testing.T) {
+func TestBootstrapNilPluginSkipsProvider(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.ExecutablePluginDef{
-			Command: "echo",
-		},
-		MCP: &config.MCPDef{
-			URL:        "https://mcp.test/sse",
-			Connection: "default",
-		},
-		Connections: map[string]config.ConnectionDef{
-			"default": {Mode: "none"},
-		},
-	}
+	cfg.Integrations["noplugin"] = config.IntegrationDef{}
 
 	factories := validFactories()
-	delete(factories.Providers, "alpha")
-	factories.DefaultProvider = nil
 
-	_, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err == nil {
-		t.Fatal("expected error for plugin+mcp integration with no factory")
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no provider factory") {
-		t.Fatalf("unexpected error: %v", err)
+	<-result.ProvidersReady
+
+	names := result.Providers.List()
+	found := false
+	for _, n := range names {
+		if n == "noplugin" {
+			found = true
+		}
+	}
+	if found {
+		t.Fatal("expected noplugin to be skipped")
 	}
 }
 
@@ -365,7 +334,7 @@ func TestBootstrapPluginOnlySkipsFactory(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.ExecutablePluginDef{
+		Plugin: &config.PluginDef{
 			Command: "echo",
 		},
 	}
@@ -549,17 +518,10 @@ func TestBootstrapBaseURL(t *testing.T) {
 	t.Parallel()
 
 	var receivedBaseURL string
-	var receivedRedirectURL string
 	factories := validFactories()
 	factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 		receivedBaseURL = deps.BaseURL
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
-	}
-	factories.Providers["alpha"] = func(_ context.Context, _ string, def config.IntegrationDef, _ bootstrap.Deps) (*bootstrap.ProviderBuildResult, error) {
-		if conn, ok := def.Connections["default"]; ok {
-			receivedRedirectURL = conn.Auth.RedirectURL
-		}
-		return &bootstrap.ProviderBuildResult{Provider: &coretesting.StubIntegration{N: "alpha"}}, nil
 	}
 	factories.Secrets["env"] = stubSecretManagerFactory()
 	factories.Telemetry["stdout"] = stubTelemetryFactory()
@@ -575,19 +537,8 @@ server:
   encryption_key: test-key
 integrations:
   alpha:
-    connections:
-      default:
-        mode: none
-        auth:
-          type: oauth2
-          authorization_url: https://example.com/auth
-          token_url: https://example.com/token
-          client_id: cid
-          client_secret: csec
-    api:
-      type: rest
-      openapi: https://example.com/spec.json
-      connection: default
+    plugin:
+      command: echo
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0644); err != nil {
 		t.Fatal(err)
@@ -605,10 +556,6 @@ integrations:
 
 	if receivedBaseURL != "https://gestalt.example.com" {
 		t.Errorf("auth factory deps.BaseURL = %q, want %q", receivedBaseURL, "https://gestalt.example.com")
-	}
-	want := "https://gestalt.example.com" + config.IntegrationCallbackPath
-	if receivedRedirectURL != want {
-		t.Errorf("integration factory RedirectURL = %q, want %q", receivedRedirectURL, want)
 	}
 }
 
@@ -674,7 +621,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in connection client_secret", func(t *testing.T) {
+	t.Run("resolves secret:// in plugin auth client_secret", func(t *testing.T) {
 		t.Parallel()
 
 		var receivedDef config.IntegrationDef
@@ -691,13 +638,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:         "oauth2",
-						ClientSecret: "secret://slack-secret",
-					},
+			Plugin: &config.PluginDef{
+				OpenAPI: "https://example.test/spec.json",
+				Auth: &config.InlineAuthDef{
+					Type:         "oauth2",
+					ClientSecret: "secret://slack-secret",
 				},
 			},
 		}
@@ -707,9 +652,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if conn.Auth.ClientSecret != "resolved-secret" {
-			t.Errorf("ClientSecret: got %q, want %q", conn.Auth.ClientSecret, "resolved-secret")
+		if receivedDef.Plugin.Auth.ClientSecret != "resolved-secret" {
+			t.Errorf("ClientSecret: got %q, want %q", receivedDef.Plugin.Auth.ClientSecret, "resolved-secret")
 		}
 	})
 
@@ -838,7 +782,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in map[string]string fields", func(t *testing.T) {
+	t.Run("resolves secret:// in plugin auth map fields", func(t *testing.T) {
 		t.Parallel()
 
 		var receivedDef config.IntegrationDef
@@ -855,13 +799,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:                "oauth2",
-						AuthorizationParams: map[string]string{"api_key": "secret://api-key"},
-					},
+			Plugin: &config.PluginDef{
+				OpenAPI: "https://example.test/spec.json",
+				Auth: &config.InlineAuthDef{
+					Type:                "oauth2",
+					AuthorizationParams: map[string]string{"api_key": "secret://api-key"},
 				},
 			},
 		}
@@ -871,13 +813,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if conn.Auth.AuthorizationParams["api_key"] != "resolved-key" {
-			t.Errorf("AuthorizationParams[api_key]: got %q, want %q", conn.Auth.AuthorizationParams["api_key"], "resolved-key")
+		if receivedDef.Plugin.Auth.AuthorizationParams["api_key"] != "resolved-key" {
+			t.Errorf("AuthorizationParams[api_key]: got %q, want %q", receivedDef.Plugin.Auth.AuthorizationParams["api_key"], "resolved-key")
 		}
 	})
 
-	t.Run("resolves secret:// in []string fields", func(t *testing.T) {
+	t.Run("resolves secret:// in plugin auth []string fields", func(t *testing.T) {
 		t.Parallel()
 
 		var receivedDef config.IntegrationDef
@@ -894,13 +835,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Integrations["alpha"] = config.IntegrationDef{
-			Connections: map[string]config.ConnectionDef{
-				"default": {
-					Mode: "none",
-					Auth: config.ConnectionAuthDef{
-						Type:          "oauth2",
-						TokenMetadata: []string{"secret://meta-val"},
-					},
+			Plugin: &config.PluginDef{
+				OpenAPI: "https://example.test/spec.json",
+				Auth: &config.InlineAuthDef{
+					Type:          "oauth2",
+					TokenMetadata: []string{"secret://meta-val"},
 				},
 			},
 		}
@@ -910,9 +849,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		<-result.ProvidersReady
-		conn := receivedDef.Connections["default"]
-		if len(conn.Auth.TokenMetadata) != 1 || conn.Auth.TokenMetadata[0] != "resolved-meta" {
-			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", conn.Auth.TokenMetadata)
+		if len(receivedDef.Plugin.Auth.TokenMetadata) != 1 || receivedDef.Plugin.Auth.TokenMetadata[0] != "resolved-meta" {
+			t.Errorf("Auth.TokenMetadata: got %v, want [resolved-meta]", receivedDef.Plugin.Auth.TokenMetadata)
 		}
 	})
 }

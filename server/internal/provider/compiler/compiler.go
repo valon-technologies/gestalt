@@ -17,7 +17,18 @@ type Result struct {
 	Catalog    *catalog.Catalog
 }
 
-func Compile(ctx context.Context, name string, api config.APIDef, preparedProviders map[string]string) (*Result, error) {
+type APISpec struct {
+	Type    string
+	OpenAPI string
+	URL     string
+}
+
+const (
+	APITypeREST    = "rest"
+	APITypeGraphQL = "graphql"
+)
+
+func Compile(ctx context.Context, name string, api APISpec, preparedProviders map[string]string) (*Result, error) {
 	def, err := loadDefinition(ctx, name, api, preparedProviders)
 	if err != nil {
 		return nil, err
@@ -28,11 +39,11 @@ func Compile(ctx context.Context, name string, api config.APIDef, preparedProvid
 	}, nil
 }
 
-func LoadDefinition(ctx context.Context, name string, api config.APIDef, preparedProviders map[string]string) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name string, api APISpec, preparedProviders map[string]string) (*provider.Definition, error) {
 	return loadDefinition(ctx, name, api, preparedProviders)
 }
 
-func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef, api config.APIDef, conn config.ConnectionDef, preparedProviders map[string]string, allowedOps map[string]*config.OperationOverride, opts ...provider.BuildOption) (core.Provider, error) {
+func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef, api APISpec, conn config.ConnectionDef, preparedProviders map[string]string, allowedOps map[string]*config.OperationOverride, opts ...provider.BuildOption) (core.Provider, error) {
 	def, err := loadDefinition(ctx, name, api, preparedProviders)
 	if err != nil {
 		return nil, err
@@ -41,17 +52,17 @@ func BuildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	return provider.Build(def, conn, allowedOps, opts...)
 }
 
-func loadDefinition(ctx context.Context, name string, api config.APIDef, preparedProviders map[string]string) (*provider.Definition, error) {
+func loadDefinition(ctx context.Context, name string, api APISpec, preparedProviders map[string]string) (*provider.Definition, error) {
 	if preparedPath := preparedProviders[name]; preparedPath != "" {
 		return provider.LoadFile(preparedPath)
 	}
 
 	switch api.Type {
-	case config.APITypeREST:
+	case APITypeREST:
 		if api.OpenAPI != "" {
 			return openapi.LoadDefinition(ctx, name, api.OpenAPI, nil)
 		}
-	case config.APITypeGraphQL:
+	case APITypeGraphQL:
 		if api.URL != "" {
 			return graphqlupstream.LoadDefinition(ctx, name, api.URL, nil)
 		}

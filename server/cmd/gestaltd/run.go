@@ -239,31 +239,18 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 	}
 
 	for name, intg := range cfg.Integrations {
-		if intg.Plugin != nil {
-			if intg.MCP == nil && !pluginDeclaresMCP(intg.Plugin) {
-				continue
-			}
-			surface.providers = append(surface.providers, name)
-			surface.apiConnection[name] = config.PluginConnectionName
-			if intg.MCP != nil {
-				surface.includeREST[name] = true
-				surface.mcpConnection[name] = config.ResolveConnectionAlias(intg.MCP.Connection)
-			} else {
-				surface.mcpConnection[name] = config.PluginConnectionName
-			}
-			if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
-				if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
-					surface.toolPrefixes[name] = src.Plugin + "_"
-				}
-			}
-		} else if intg.API != nil || intg.MCP != nil {
-			surface.providers = append(surface.providers, name)
-			if intg.API != nil {
-				surface.includeREST[name] = true
-				surface.apiConnection[name] = intg.API.Connection
-			}
-			if intg.MCP != nil {
-				surface.mcpConnection[name] = intg.MCP.Connection
+		if intg.Plugin == nil {
+			continue
+		}
+		if !pluginDeclaresMCP(intg.Plugin) {
+			continue
+		}
+		surface.providers = append(surface.providers, name)
+		surface.apiConnection[name] = config.PluginConnectionName
+		surface.mcpConnection[name] = config.PluginConnectionName
+		if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
+			if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
+				surface.toolPrefixes[name] = src.Plugin + "_"
 			}
 		}
 		if intg.MCPToolPrefix != "" {
@@ -274,7 +261,10 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 	return surface
 }
 
-func pluginDeclaresMCP(plugin *config.ExecutablePluginDef) bool {
+func pluginDeclaresMCP(plugin *config.PluginDef) bool {
+	if plugin.MCP || plugin.MCPURL != "" {
+		return true
+	}
 	if plugin.ResolvedManifestPath == "" {
 		return true
 	}
@@ -328,12 +318,12 @@ func runValidate(args []string) error {
 }
 
 func validateConfig(configFlag string) error {
-	path, cfg, preparedProviders, err := loadConfigForExecution(configFlag, true)
+	path, cfg, _, err := loadConfigForExecution(configFlag, true)
 	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
 
-	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories(preparedProviders))
+	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories())
 	if err != nil {
 		return fmt.Errorf("config invalid: %v", err)
 	}
@@ -359,20 +349,10 @@ func logConfigSummary(path string, cfg *config.Config) {
 	)
 
 	for name, intg := range cfg.Integrations {
-		switch {
-		case intg.Plugin != nil && intg.MCP == nil:
+		if intg.Plugin != nil && intg.Plugin.IsInline() {
+			slog.Info("integration configured", "integration", name, "type", "inline")
+		} else {
 			slog.Info("integration configured", "integration", name, "type", "plugin")
-		case intg.Plugin != nil:
-			slog.Info("integration configured", "integration", name, "type", "hybrid", "surfaces", []string{"plugin", "mcp"})
-		default:
-			var surfaces []string
-			if intg.API != nil {
-				surfaces = append(surfaces, intg.API.Type)
-			}
-			if intg.MCP != nil {
-				surfaces = append(surfaces, "mcp")
-			}
-			slog.Info("integration configured", "integration", name, "surfaces", surfaces, "connections", len(intg.Connections))
 		}
 	}
 

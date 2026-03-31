@@ -117,7 +117,7 @@ func TestRun_ValidateRejectsTrailingArgs(t *testing.T) {
 	}
 }
 
-func TestRun_ValidateWithStrictProviderErrors(t *testing.T) {
+func TestRun_ValidateWithMissingPlugin(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -136,13 +136,7 @@ server:
   encryption_key: test-key
 integrations:
   broken:
-    connections:
-      default:
-        mode: user
-    api:
-      type: http
-      openapi: https://example.com/openapi.json
-      connection: default
+    display_name: Missing Plugin
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -152,7 +146,7 @@ integrations:
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), `unknown api.type "http"`) {
-		t.Fatalf("expected unknown api.type error, got: %v", err)
+	if !strings.Contains(err.Error(), "requires a plugin definition") {
+		t.Fatalf("expected requires plugin error, got: %v", err)
 	}
 }
