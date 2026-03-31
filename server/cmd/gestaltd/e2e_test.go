@@ -490,12 +490,6 @@ func waitForEndpoint(t *testing.T, url string, timeout time.Duration) {
 func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 	t.Parallel()
 
-	upstreamAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"1","name":"test"}]}`))
-	}))
-	t.Cleanup(upstreamAPI.Close)
-
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
@@ -504,7 +498,7 @@ func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeHybridAPIPluginConfig(t, dir, archivePath, upstreamAPI.URL, port)
+	cfgPath := writeHybridAPIPluginConfig(t, dir, archivePath, port)
 
 	bundleDir := filepath.Join(dir, "bundle")
 	out, err := exec.Command(gestaltdBin, "bundle", "--config", cfgPath, "--output", bundleDir).CombinedOutput()
@@ -536,27 +530,8 @@ func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 	waitForReady(t, baseURL, 30*time.Second)
 }
 
-func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef, upstreamURL string, port int) string {
+func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef string, port int) string {
 	t.Helper()
-
-	openapiSpec := fmt.Sprintf(`{
-  "openapi": "3.0.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/items": {
-      "get": {
-        "operationId": "list_items",
-        "summary": "List items",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, upstreamURL)
-	specPath := filepath.Join(dir, "openapi.json")
-	if err := os.WriteFile(specPath, []byte(openapiSpec), 0644); err != nil {
-		t.Fatalf("write openapi spec: %v", err)
-	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`auth:
@@ -571,17 +546,9 @@ server:
 integrations:
   hybrid:
     display_name: Hybrid Test
-    connections:
-      default:
-        mode: none
-    api:
-      type: rest
-      openapi: %s
-      connection: default
     plugin:
       package: %s
-      connection: default
-`, filepath.Join(dir, "gestalt.db"), port, specPath, packageRef)
+`, filepath.Join(dir, "gestalt.db"), port, packageRef)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)

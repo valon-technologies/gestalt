@@ -190,7 +190,7 @@ func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPa
 		name:           name,
 		displayName:    displayName,
 		description:    description,
-		connectionMode: connectionModeFromConnections(intg.Connections),
+		connectionMode: connectionModeFromPlugin(intg),
 	}, nil
 }
 
@@ -211,8 +211,19 @@ func (r *preparedRuntimeStub) Name() string                { return r.name }
 func (r *preparedRuntimeStub) Start(context.Context) error { return nil }
 func (r *preparedRuntimeStub) Stop(context.Context) error  { return nil }
 
-func connectionModeFromConnections(conns map[string]config.ConnectionDef) core.ConnectionMode {
-	return core.ConnectionMode(config.ConnectionMode(conns))
+func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
+	if intg.Plugin == nil {
+		return core.ConnectionModeUser
+	}
+	if intg.Plugin.Auth != nil && intg.Plugin.Auth.Type == "none" {
+		return core.ConnectionModeNone
+	}
+	for _, conn := range intg.Plugin.Connections {
+		if conn != nil && conn.Mode != "" {
+			return core.ConnectionMode(conn.Mode)
+		}
+	}
+	return core.ConnectionModeUser
 }
 
 func closeSecretManager(sm core.SecretManager) {
