@@ -15,7 +15,7 @@ RUN npm run build
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build-binary
 WORKDIR /build
 COPY server/go.mod server/go.sum server/
-COPY sdk/pluginsdk/go.mod sdk/pluginsdk/go.sum sdk/pluginsdk/
+COPY sdk/go/go.mod sdk/go/go.sum sdk/go/
 RUN cd server && go mod download
 COPY . .
 COPY --from=frontend /web/out/ server/internal/webui/out/

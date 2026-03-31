@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -75,7 +75,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 		return nil, err
 	}
 
-	client := pluginapiv1.NewProviderPluginClient(proc.conn)
+	client := proto.NewProviderPluginClient(proc.conn)
 	prov, err := NewRemoteProvider(ctx, client, cfg.Name, cfg.Config, WithCloser(proc))
 	if err != nil {
 		_ = proc.Close()
@@ -92,8 +92,8 @@ func NewExecutableRuntime(
 	lister invocation.CapabilityLister,
 ) (core.Runtime, error) {
 	proc, err := startPluginProcess(ctx, cfg, func(srv *grpc.Server) {
-		pluginapiv1.RegisterRuntimeHostServer(srv, NewRuntimeHostServer(invoker, lister))
-	}, pluginapiv1.EnvRuntimeHostSocket)
+		proto.RegisterRuntimeHostServer(srv, NewRuntimeHostServer(invoker, lister))
+	}, proto.EnvRuntimeHostSocket)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func NewExecutableRuntime(
 		initialCaps = lister.ListCapabilities()
 	}
 
-	rt, err := NewRemoteRuntime(name, pluginapiv1.NewRuntimePluginClient(proc.conn), cfg.Config, initialCaps)
+	rt, err := NewRemoteRuntime(name, proto.NewRuntimePluginClient(proc.conn), cfg.Config, initialCaps)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -113,32 +113,32 @@ func NewExecutableRuntime(
 
 func ServeProvider(ctx context.Context, provider core.Provider) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		pluginapiv1.RegisterProviderPluginServer(srv, NewProviderServer(provider))
+		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider))
 	})
 }
 
-func ServeRuntime(ctx context.Context, server pluginapiv1.RuntimePluginServer) error {
+func ServeRuntime(ctx context.Context, server proto.RuntimePluginServer) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		pluginapiv1.RegisterRuntimePluginServer(srv, server)
+		proto.RegisterRuntimePluginServer(srv, server)
 	})
 }
 
-func DialRuntimeHost(ctx context.Context) (*grpc.ClientConn, pluginapiv1.RuntimeHostClient, error) {
-	socket := os.Getenv(pluginapiv1.EnvRuntimeHostSocket)
+func DialRuntimeHost(ctx context.Context) (*grpc.ClientConn, proto.RuntimeHostClient, error) {
+	socket := os.Getenv(proto.EnvRuntimeHostSocket)
 	if socket == "" {
-		return nil, nil, fmt.Errorf("%s is required", pluginapiv1.EnvRuntimeHostSocket)
+		return nil, nil, fmt.Errorf("%s is required", proto.EnvRuntimeHostSocket)
 	}
 	conn, err := dialUnixSocket(ctx, socket)
 	if err != nil {
 		return nil, nil, err
 	}
-	return conn, pluginapiv1.NewRuntimeHostClient(conn), nil
+	return conn, proto.NewRuntimeHostClient(conn), nil
 }
 
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(pluginapiv1.EnvPluginSocket)
+	socket := os.Getenv(proto.EnvPluginSocket)
 	if socket == "" {
-		return fmt.Errorf("%s is required", pluginapiv1.EnvPluginSocket)
+		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
 	}
 	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
@@ -182,7 +182,7 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	}
 	pluginSocket := filepath.Join(dir, "plugin.sock")
 	env := mergeExecEnv(cfg.Env, map[string]string{
-		pluginapiv1.EnvPluginSocket: pluginSocket,
+		proto.EnvPluginSocket: pluginSocket,
 	})
 
 	proc := &pluginProcess{dir: dir}

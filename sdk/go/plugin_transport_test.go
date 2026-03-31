@@ -1,4 +1,4 @@
-package pluginsdk_test
+package gestalt_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
-	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -18,10 +18,10 @@ type stubRuntime struct {
 	started      int
 	stopped      int
 	lastName     string
-	lastInitCaps []pluginsdk.Capability
+	lastInitCaps []gestalt.Capability
 }
 
-func (s *stubRuntime) Start(_ context.Context, name string, _ map[string]any, caps []pluginsdk.Capability, _ pluginsdk.RuntimeHost) error {
+func (s *stubRuntime) Start(_ context.Context, name string, _ map[string]any, caps []gestalt.Capability, _ gestalt.RuntimeHost) error {
 	s.started++
 	s.lastName = name
 	s.lastInitCaps = caps
@@ -34,12 +34,12 @@ func (s *stubRuntime) Stop(context.Context) error {
 }
 
 type stubRuntimeHost struct {
-	pluginapiv1.UnimplementedRuntimeHostServer
+	proto.UnimplementedRuntimeHostServer
 }
 
-func (s *stubRuntimeHost) ListCapabilities(context.Context, *emptypb.Empty) (*pluginapiv1.ListCapabilitiesResponse, error) {
-	return &pluginapiv1.ListCapabilitiesResponse{
-		Capabilities: []*pluginapiv1.Capability{
+func (s *stubRuntimeHost) ListCapabilities(context.Context, *emptypb.Empty) (*proto.ListCapabilitiesResponse, error) {
+	return &proto.ListCapabilitiesResponse{
+		Capabilities: []*proto.Capability{
 			{Provider: "alpha", Operation: "read"},
 		},
 	}, nil
@@ -47,15 +47,15 @@ func (s *stubRuntimeHost) ListCapabilities(context.Context, *emptypb.Empty) (*pl
 
 func TestServeProviderRoundTrip(t *testing.T) {
 	socket := filepath.Join(t.TempDir(), "plugin.sock")
-	t.Setenv(pluginapiv1.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvPluginSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- pluginsdk.ServeProvider(ctx, &stubProvider{
+		errCh <- gestalt.ServeProvider(ctx, &stubProvider{
 			name:        "test-provider",
 			displayName: "Test Provider",
-			connMode:    pluginsdk.ConnectionModeEither,
+			connMode:    gestalt.ConnectionModeEither,
 		})
 	}()
 	t.Cleanup(func() {
@@ -64,7 +64,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := pluginapiv1.NewProviderPluginClient(conn)
+	client := proto.NewProviderPluginClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -73,12 +73,12 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
 	}
-	if meta.GetName() != "test-provider" || meta.GetConnectionMode() != pluginapiv1.ConnectionMode_CONNECTION_MODE_EITHER {
+	if meta.GetName() != "test-provider" || meta.GetConnectionMode() != proto.ConnectionMode_CONNECTION_MODE_EITHER {
 		t.Fatalf("unexpected metadata: %+v", meta)
 	}
 }
 
-func newRuntimeTestEnv(t *testing.T, rt pluginsdk.Runtime) pluginapiv1.RuntimePluginClient {
+func newRuntimeTestEnv(t *testing.T, rt gestalt.Runtime) proto.RuntimePluginClient {
 	t.Helper()
 
 	dir, err := os.MkdirTemp("/tmp", "sdk-rt-*")
@@ -89,8 +89,8 @@ func newRuntimeTestEnv(t *testing.T, rt pluginsdk.Runtime) pluginapiv1.RuntimePl
 
 	pluginSocket := filepath.Join(dir, "rt.sock")
 	hostSocket := filepath.Join(dir, "host.sock")
-	t.Setenv(pluginapiv1.EnvPluginSocket, pluginSocket)
-	t.Setenv(pluginapiv1.EnvRuntimeHostSocket, hostSocket)
+	t.Setenv(proto.EnvPluginSocket, pluginSocket)
+	t.Setenv(proto.EnvRuntimeHostSocket, hostSocket)
 
 	hostLis, err := net.Listen("unix", hostSocket)
 	if err != nil {
@@ -99,14 +99,14 @@ func newRuntimeTestEnv(t *testing.T, rt pluginsdk.Runtime) pluginapiv1.RuntimePl
 	t.Cleanup(func() { _ = hostLis.Close() })
 
 	hostSrv := grpc.NewServer()
-	pluginapiv1.RegisterRuntimeHostServer(hostSrv, &stubRuntimeHost{})
+	proto.RegisterRuntimeHostServer(hostSrv, &stubRuntimeHost{})
 	go func() { _ = hostSrv.Serve(hostLis) }()
 	t.Cleanup(hostSrv.Stop)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- pluginsdk.ServeRuntime(ctx, rt)
+		errCh <- gestalt.ServeRuntime(ctx, rt)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -114,7 +114,7 @@ func newRuntimeTestEnv(t *testing.T, rt pluginsdk.Runtime) pluginapiv1.RuntimePl
 	})
 
 	conn := newUnixConn(t, pluginSocket)
-	return pluginapiv1.NewRuntimePluginClient(conn)
+	return proto.NewRuntimePluginClient(conn)
 }
 
 func TestServeRuntimeRoundTrip(t *testing.T) {
@@ -124,9 +124,9 @@ func TestServeRuntimeRoundTrip(t *testing.T) {
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
 
-	startReq := &pluginapiv1.StartRuntimeRequest{
+	startReq := &proto.StartRuntimeRequest{
 		Name: "echo",
-		InitialCapabilities: []*pluginapiv1.Capability{
+		InitialCapabilities: []*proto.Capability{
 			{Provider: "beta", Operation: "write", Description: "test cap"},
 		},
 	}
@@ -145,14 +145,14 @@ func TestServeRuntimeRoundTrip(t *testing.T) {
 }
 
 func TestServeRuntimeHostIntegration(t *testing.T) {
-	var capturedHost pluginsdk.RuntimeHost
+	var capturedHost gestalt.RuntimeHost
 	capturingRT := &capturingRuntime{host: &capturedHost}
 	client := newRuntimeTestEnv(t, capturingRT)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer rpcCancel()
 
-	if _, err := client.Start(rpcCtx, &pluginapiv1.StartRuntimeRequest{Name: "test-rt"}, grpc.WaitForReady(true)); err != nil {
+	if _, err := client.Start(rpcCtx, &proto.StartRuntimeRequest{Name: "test-rt"}, grpc.WaitForReady(true)); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -174,10 +174,10 @@ func TestServeRuntimeHostIntegration(t *testing.T) {
 }
 
 type capturingRuntime struct {
-	host *pluginsdk.RuntimeHost
+	host *gestalt.RuntimeHost
 }
 
-func (r *capturingRuntime) Start(_ context.Context, _ string, _ map[string]any, _ []pluginsdk.Capability, host pluginsdk.RuntimeHost) error {
+func (r *capturingRuntime) Start(_ context.Context, _ string, _ map[string]any, _ []gestalt.Capability, host gestalt.RuntimeHost) error {
 	*r.host = host
 	return nil
 }

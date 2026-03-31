@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"google.golang.org/grpc/codes"
@@ -13,7 +13,7 @@ import (
 )
 
 type ProviderServer struct {
-	pluginapiv1.UnimplementedProviderPluginServer
+	proto.UnimplementedProviderPluginServer
 	provider core.Provider
 }
 
@@ -21,7 +21,7 @@ func NewProviderServer(provider core.Provider) *ProviderServer {
 	return &ProviderServer{provider: provider}
 }
 
-func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
+func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	var defs map[string]core.ConnectionParamDef
 	if cpp, ok := s.provider.(core.ConnectionParamProvider); ok {
 		defs = cpp.ConnectionParamDefs()
@@ -32,7 +32,7 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
 	}
 
-	return &pluginapiv1.ProviderMetadata{
+	return &proto.ProviderMetadata{
 		Name:                   s.provider.Name(),
 		DisplayName:            s.provider.DisplayName(),
 		Description:            s.provider.Description(),
@@ -44,15 +44,15 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*plug
 	}, nil
 }
 
-func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
+func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*proto.ListOperationsResponse, error) {
 	ops, err := operationsToProto(s.provider.ListOperations())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode operations: %v", err)
 	}
-	return &pluginapiv1.ListOperationsResponse{Operations: ops}, nil
+	return &proto.ListOperationsResponse{Operations: ops}, nil
 }
 
-func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRequest) (*pluginapiv1.OperationResult, error) {
+func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -63,13 +63,13 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
 	}
-	return &pluginapiv1.OperationResult{
+	return &proto.OperationResult{
 		Status: int32(result.Status),
 		Body:   result.Body,
 	}, nil
 }
 
-func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1.GetSessionCatalogRequest) (*pluginapiv1.GetSessionCatalogResponse, error) {
+func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
 	scp, ok := s.provider.(core.SessionCatalogProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
@@ -85,7 +85,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
 	}
-	return &pluginapiv1.GetSessionCatalogResponse{CatalogJson: raw}, nil
+	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
 }
 
 func authTypesForProvider(prov core.Provider) []string {

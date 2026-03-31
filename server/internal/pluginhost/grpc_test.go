@@ -5,37 +5,37 @@ import (
 	"net"
 	"testing"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func newProviderPluginClient(t *testing.T, server pluginapiv1.ProviderPluginServer) pluginapiv1.ProviderPluginClient {
+func newProviderPluginClient(t *testing.T, server proto.ProviderPluginServer) proto.ProviderPluginClient {
 	t.Helper()
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		pluginapiv1.RegisterProviderPluginServer(srv, server)
+		proto.RegisterProviderPluginServer(srv, server)
 	})
-	return pluginapiv1.NewProviderPluginClient(conn)
+	return proto.NewProviderPluginClient(conn)
 }
 
-func newRuntimePluginClient(t *testing.T, server pluginapiv1.RuntimePluginServer) pluginapiv1.RuntimePluginClient {
+func newRuntimePluginClient(t *testing.T, server proto.RuntimePluginServer) proto.RuntimePluginClient {
 	t.Helper()
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		pluginapiv1.RegisterRuntimePluginServer(srv, server)
+		proto.RegisterRuntimePluginServer(srv, server)
 	})
-	return pluginapiv1.NewRuntimePluginClient(conn)
+	return proto.NewRuntimePluginClient(conn)
 }
 
-func newRuntimeHostClient(t *testing.T, server pluginapiv1.RuntimeHostServer) pluginapiv1.RuntimeHostClient {
+func newRuntimeHostClient(t *testing.T, server proto.RuntimeHostServer) proto.RuntimeHostClient {
 	t.Helper()
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		pluginapiv1.RegisterRuntimeHostServer(srv, server)
+		proto.RegisterRuntimeHostServer(srv, server)
 	})
-	return pluginapiv1.NewRuntimeHostClient(conn)
+	return proto.NewRuntimeHostClient(conn)
 }
 
 func newBufconnConn(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {

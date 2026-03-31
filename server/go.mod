@@ -26,7 +26,7 @@ require (
 	github.com/pb33f/libopenapi v0.34.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sijms/go-ora/v2 v2.9.0
-	github.com/valon-technologies/gestalt/sdk/pluginsdk v0.0.0-00010101000000-000000000000
+	github.com/valon-technologies/gestalt/sdk/go v0.0.0-00010101000000-000000000000
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.17.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0
@@ -144,4 +144,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/valon-technologies/gestalt/sdk/pluginsdk => ../sdk/pluginsdk
+replace github.com/valon-technologies/gestalt/sdk/go => ../sdk/go

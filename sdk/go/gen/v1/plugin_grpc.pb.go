@@ -4,7 +4,7 @@
 // - protoc             (unknown)
 // source: v1/plugin.proto
 
-package pluginapiv1
+package proto
 
 import (
 	context "context"

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"google.golang.org/grpc"
@@ -71,13 +71,13 @@ func (p *echoProvider) Execute(_ context.Context, operation string, params map[s
 }
 
 type echoRuntimePlugin struct {
-	pluginapiv1.UnimplementedRuntimePluginServer
+	proto.UnimplementedRuntimePluginServer
 	hostConn *grpc.ClientConn
-	host     pluginapiv1.RuntimeHostClient
+	host     proto.RuntimeHostClient
 	name     string
 }
 
-func (p *echoRuntimePlugin) Start(ctx context.Context, req *pluginapiv1.StartRuntimeRequest) (*emptypb.Empty, error) {
+func (p *echoRuntimePlugin) Start(ctx context.Context, req *proto.StartRuntimeRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -118,8 +118,8 @@ func (p *echoRuntimePlugin) Start(ctx context.Context, req *pluginapiv1.StartRun
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "probe_params: %v", err)
 		}
-		resp, err := p.host.Invoke(ctx, &pluginapiv1.InvokeRequest{
-			Principal: &pluginapiv1.Principal{},
+		resp, err := p.host.Invoke(ctx, &proto.InvokeRequest{
+			Principal: &proto.Principal{},
 			Provider:  probeProvider,
 			Operation: probeOperation,
 			Params:    params,
@@ -152,7 +152,7 @@ func (p *echoRuntimePlugin) Stop(context.Context, *emptypb.Empty) (*emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
-func capabilityNames(caps []*pluginapiv1.Capability) []string {
+func capabilityNames(caps []*proto.Capability) []string {
 	names := make([]string, 0, len(caps))
 	for _, cap := range caps {
 		names = append(names, cap.GetProvider()+"."+cap.GetOperation())

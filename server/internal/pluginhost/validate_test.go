@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -60,29 +60,29 @@ func TestValidateConfigSchema_InvalidSchema(t *testing.T) {
 }
 
 type stubProviderPluginServer struct {
-	pluginapiv1.UnimplementedProviderPluginServer
-	metadata *pluginapiv1.ProviderMetadata
+	proto.UnimplementedProviderPluginServer
+	metadata *proto.ProviderMetadata
 }
 
-func (s *stubProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
+func (s *stubProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	return s.metadata, nil
 }
 
-func (s *stubProviderPluginServer) StartProvider(_ context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
-	return &pluginapiv1.StartProviderResponse{
+func (s *stubProviderPluginServer) StartProvider(_ context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
+	return &proto.StartProviderResponse{
 		ProtocolVersion: req.GetProtocolVersion(),
 	}, nil
 }
 
-func (s *stubProviderPluginServer) ListOperations(context.Context, *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
-	return &pluginapiv1.ListOperationsResponse{}, nil
+func (s *stubProviderPluginServer) ListOperations(context.Context, *emptypb.Empty) (*proto.ListOperationsResponse, error) {
+	return &proto.ListOperationsResponse{}, nil
 }
 
 func TestNewRemoteProvider_NoSchema(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
+		metadata: &proto.ProviderMetadata{
 			Name:        "test-plugin",
 			DisplayName: "Test Plugin",
 		},
@@ -101,7 +101,7 @@ func TestNewRemoteProvider_SchemaRejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
+		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
 			ConfigSchemaJson: testConfigSchema,
@@ -121,7 +121,7 @@ func TestNewRemoteProvider_SchemaAcceptsValidConfig(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
+		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
 			ConfigSchemaJson: testConfigSchema,
@@ -141,7 +141,7 @@ func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubProviderPluginServer{
-		metadata: &pluginapiv1.ProviderMetadata{
+		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
 			ConfigSchemaJson: testConfigSchema,

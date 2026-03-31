@@ -1,4 +1,4 @@
-package pluginsdk
+package gestalt
 
 import (
 	"context"
@@ -6,27 +6,27 @@ import (
 	"net"
 	"os"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func ServeProvider(ctx context.Context, provider Provider) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		pluginapiv1.RegisterProviderPluginServer(srv, NewProviderServer(provider))
+		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider))
 	})
 }
 
 func ServeRuntime(ctx context.Context, runtime Runtime) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		pluginapiv1.RegisterRuntimePluginServer(srv, NewRuntimeServer(runtime))
+		proto.RegisterRuntimePluginServer(srv, NewRuntimeServer(runtime))
 	})
 }
 
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(pluginapiv1.EnvPluginSocket)
+	socket := os.Getenv(proto.EnvPluginSocket)
 	if socket == "" {
-		return fmt.Errorf("%s is required", pluginapiv1.EnvPluginSocket)
+		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
 	}
 	if err := os.RemoveAll(socket); err != nil {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)

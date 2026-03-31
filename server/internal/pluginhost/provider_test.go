@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	sdkpluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
@@ -83,14 +83,14 @@ func (p *manualOnlySDKProvider) DisplayName() string { return "Manual Only" }
 
 func (p *manualOnlySDKProvider) Description() string { return "manual auth provider" }
 
-func (p *manualOnlySDKProvider) ConnectionMode() sdkpluginsdk.ConnectionMode {
-	return sdkpluginsdk.ConnectionModeIdentity
+func (p *manualOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
+	return sdkgestalt.ConnectionModeIdentity
 }
 
-func (p *manualOnlySDKProvider) ListOperations() []sdkpluginsdk.Operation { return nil }
+func (p *manualOnlySDKProvider) ListOperations() []sdkgestalt.Operation { return nil }
 
-func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkpluginsdk.OperationResult, error) {
-	return &sdkpluginsdk.OperationResult{Status: 200, Body: `{}`}, nil
+func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
+	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
 }
 
 func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
@@ -168,7 +168,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 	t.Run("no icon and no catalog returns nil", func(t *testing.T) {
 		t.Parallel()
 
-		client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
+		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
 		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
@@ -185,7 +185,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 	t.Run("SetIconSVG injects icon when no static catalog", func(t *testing.T) {
 		t.Parallel()
 
-		client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
+		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
 		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
@@ -249,7 +249,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, sdkpluginsdk.NewProviderServer(&manualOnlySDKProvider{}))
+	client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
 	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
