@@ -68,7 +68,7 @@ func TestValidateConfigForManifestRuntimeFallback(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "schemas"), 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(runtimeConfigSchemaPath)), []byte(`{
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(RuntimeConfigSchemaPath)), []byte(`{
   "type": "object",
   "required": ["runtime_key"],
   "properties": {
