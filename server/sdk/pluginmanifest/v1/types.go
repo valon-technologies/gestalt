@@ -34,6 +34,18 @@ type Provider struct {
 	Operations           []ProviderOperation                `json:"operations,omitempty"`
 	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty"`
 	Connection           map[string]ProviderConnectionParam `json:"connection,omitempty"`
+
+	OpenAPI    string `json:"openapi,omitempty"`
+	GraphQLURL string `json:"graphql_url,omitempty"`
+	MCPURL     string `json:"mcp_url,omitempty"`
+
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowed_operations,omitempty"`
+
+	Connections map[string]*ManifestConnectionDef `json:"connections,omitempty"`
+
+	OpenAPIConnection  string `json:"openapi_connection,omitempty"`
+	GraphQLConnection  string `json:"graphql_connection,omitempty"`
+	MCPConnection      string `json:"mcp_connection,omitempty"`
 }
 
 type ProviderPostConnectDiscovery struct {
@@ -50,7 +62,22 @@ type ProviderConnectionParam struct {
 }
 
 func (p *Provider) IsDeclarative() bool {
-	return p != nil && len(p.Operations) > 0
+	return p != nil && (len(p.Operations) > 0 || p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
+}
+
+func (p *Provider) IsSpecLoaded() bool {
+	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
+}
+
+type ManifestConnectionDef struct {
+	Mode   string                             `json:"mode,omitempty"`
+	Auth   *ProviderAuth                      `json:"auth,omitempty"`
+	Params map[string]ProviderConnectionParam `json:"params,omitempty"`
+}
+
+type ManifestOperationOverride struct {
+	Alias       string `json:"alias,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type ProviderOperation struct {
@@ -88,6 +115,13 @@ type ProviderAuth struct {
 	ScopeSeparator      string            `json:"scope_separator,omitempty"`
 	AuthorizationParams map[string]string `json:"authorization_params,omitempty"`
 	Credentials         []CredentialField `json:"credentials,omitempty"`
+	ClientID            string            `json:"client_id,omitempty"`
+	ClientSecret        string            `json:"client_secret,omitempty"`
+	RedirectURL         string            `json:"redirect_url,omitempty"`
+	TokenParams         map[string]string `json:"token_params,omitempty"`
+	RefreshParams       map[string]string `json:"refresh_params,omitempty"`
+	AcceptHeader        string            `json:"accept_header,omitempty"`
+	TokenMetadata       []string          `json:"token_metadata,omitempty"`
 }
 
 type CredentialField struct {

@@ -113,6 +113,47 @@
               "from": { "type": "string", "enum": ["discovery"] }
             }
           }
+        },
+        "openapi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_operations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["object", "null"],
+            "properties": {
+              "alias": { "type": "string" },
+              "description": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "connections": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifest_connection_def"
+          }
+        },
+        "openapi_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_connection": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -186,6 +227,17 @@
                 "required": [
                   "base_url",
                   "operations"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "provider": {
+                "anyOf": [
+                  { "required": ["openapi"] },
+                  { "required": ["graphql_url"] },
+                  { "required": ["mcp_url"] }
                 ]
               }
             }
@@ -291,6 +343,30 @@
               "help_url": { "type": "string", "format": "uri" }
             }
           }
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
+        "redirect_url": {
+          "type": "string"
+        },
+        "token_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "refresh_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "accept_header": {
+          "type": "string"
+        },
+        "token_metadata": {
+          "type": "array",
+          "items": { "type": "string" }
         }
       },
       "allOf": [
@@ -382,6 +458,31 @@
         "sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "manifest_connection_def": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["user", "identity", "either", "none"]
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "required": { "type": "boolean" },
+              "description": { "type": "string" },
+              "from": { "type": "string", "enum": ["discovery"] }
+            }
+          }
         }
       }
     },

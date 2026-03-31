@@ -3,7 +3,10 @@ package bootstrap_test
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1069,4 +1072,257 @@ func TestBootstrapBindingWithProviders(t *testing.T) {
 	if receivedDeps.Invoker == result.Invoker {
 		t.Fatal("expected binding deps to be scoped rather than reusing the shared bootstrap invoker directly")
 	}
+}
+
+func serveOpenAPISpec(t *testing.T) *httptest.Server {
+	t.Helper()
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Test Spec API", "description": "A test API"},
+		"servers": []any{map[string]string{"url": "https://api.test-spec.example.com/v1"}},
+		"paths": map[string]any{
+			"/widgets": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_widgets",
+					"summary":     "List all widgets",
+					"parameters": []any{
+						map[string]any{
+							"name": "limit", "in": "query",
+							"schema": map[string]any{"type": "integer"},
+						},
+					},
+				},
+			},
+			"/widgets/{id}": map[string]any{
+				"get": map[string]any{
+					"operationId": "get_widget",
+					"summary":     "Get a widget by ID",
+					"parameters": []any{
+						map[string]any{
+							"name": "id", "in": "path", "required": true,
+							"schema": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(spec)
+	}))
+}
+
+func writeSpecLoadedManifest(t *testing.T, specURL string) string {
+	t.Helper()
+	manifest := map[string]any{
+		"source":  "github.com/test-org/test-repo/test-plugin",
+		"version": "0.1.0",
+		"kinds":   []string{"provider"},
+		"provider": map[string]any{
+			"openapi": specURL,
+			"auth": map[string]any{
+				"type":              "oauth2",
+				"authorization_url": "https://auth.example.com/authorize",
+				"token_url":         "https://auth.example.com/token",
+			},
+		},
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plugin.json")
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestBootstrapSpecLoadedProvider(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	specSrv := serveOpenAPISpec(t)
+	t.Cleanup(specSrv.Close)
+
+	manifestPath := writeSpecLoadedManifest(t, specSrv.URL)
+
+	cfg := validConfig()
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.ExecutablePluginDef{
+			Command:              "unused",
+			IsDeclarative:        true,
+			ResolvedManifestPath: manifestPath,
+			Config: yamlNode(map[string]any{
+				"client_id":     "test-client-id",
+				"client_secret": "test-client-secret",
+			}),
+		},
+	}
+
+	factories := validFactories()
+	delete(factories.Providers, "alpha")
+	factories.DefaultProvider = nil
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("alpha")
+	if err != nil {
+		t.Fatalf("provider 'alpha' not found: %v", err)
+	}
+
+	ops := prov.ListOperations()
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
+	}
+
+	opNames := make(map[string]bool, len(ops))
+	for _, op := range ops {
+		opNames[op.Name] = true
+	}
+	if !opNames["list_widgets"] {
+		t.Error("expected list_widgets operation")
+	}
+	if !opNames["get_widget"] {
+		t.Error("expected get_widget operation")
+	}
+
+	connAuth := result.ConnectionAuth()
+	if connAuth == nil {
+		t.Fatal("expected ConnectionAuth to be non-nil")
+	}
+	alphaConns, ok := connAuth["alpha"]
+	if !ok {
+		t.Fatal("expected connection auth for alpha")
+	}
+	if _, ok := alphaConns[config.PluginConnectionName]; !ok {
+		t.Errorf("expected oauth handler for connection %q", config.PluginConnectionName)
+	}
+}
+
+func TestBootstrapSpecLoadedProviderMultiConnection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	specSrv := serveOpenAPISpec(t)
+	t.Cleanup(specSrv.Close)
+
+	manifest := map[string]any{
+		"source":  "github.com/test-org/test-repo/test-multiconn",
+		"version": "0.1.0",
+		"kinds":   []string{"provider"},
+		"provider": map[string]any{
+			"openapi": specSrv.URL,
+			"auth": map[string]any{
+				"type":              "oauth2",
+				"authorization_url": "https://auth.example.com/authorize",
+				"token_url":         "https://auth.example.com/token",
+			},
+			"connections": map[string]any{
+				"primary": map[string]any{
+					"mode": "user",
+					"auth": map[string]any{
+						"type":              "oauth2",
+						"authorization_url": "https://auth1.example.com/authorize",
+						"token_url":         "https://auth1.example.com/token",
+					},
+				},
+				"secondary": map[string]any{
+					"mode": "user",
+					"auth": map[string]any{
+						"type":              "oauth2",
+						"authorization_url": "https://auth2.example.com/authorize",
+						"token_url":         "https://auth2.example.com/token",
+					},
+				},
+			},
+			"openapi_connection": "primary",
+		},
+	}
+
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "plugin.json")
+	if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := validConfig()
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.ExecutablePluginDef{
+			Command:              "unused",
+			IsDeclarative:        true,
+			ResolvedManifestPath: manifestPath,
+			Config: yamlNode(map[string]any{
+				"client_id":     "top-level-id",
+				"client_secret": "top-level-secret",
+				"connections": map[string]any{
+					"primary": map[string]any{
+						"client_id":     "primary-id",
+						"client_secret": "primary-secret",
+					},
+					"secondary": map[string]any{
+						"client_id":     "secondary-id",
+						"client_secret": "secondary-secret",
+					},
+				},
+			}),
+		},
+	}
+
+	factories := validFactories()
+	delete(factories.Providers, "alpha")
+	factories.DefaultProvider = nil
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("alpha")
+	if err != nil {
+		t.Fatalf("provider 'alpha' not found: %v", err)
+	}
+	if len(prov.ListOperations()) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(prov.ListOperations()))
+	}
+
+	connAuth := result.ConnectionAuth()
+	if connAuth == nil {
+		t.Fatal("expected ConnectionAuth to be non-nil")
+	}
+	alphaConns, ok := connAuth["alpha"]
+	if !ok {
+		t.Fatal("expected connection auth for alpha")
+	}
+	if _, ok := alphaConns["primary"]; !ok {
+		t.Error("expected oauth handler for primary connection")
+	}
+	if _, ok := alphaConns["secondary"]; !ok {
+		t.Error("expected oauth handler for secondary connection")
+	}
+}
+
+func yamlNode(v any) yaml.Node {
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		panic(err)
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return *node.Content[0]
+	}
+	return node
 }
