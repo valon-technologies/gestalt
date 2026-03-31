@@ -2,16 +2,16 @@
 
 Most integrations are pure configuration. Start with a declarative integration and reach for a plugin only when the upstream behavior cannot be expressed declaratively.
 
-## 1. Pick the Surface Type
+## Pick the Surface Type
 
 | Surface | When to use |
 | --- | --- |
 | `api` (REST) | You have an OpenAPI document. |
 | `api` (GraphQL) | You have a GraphQL endpoint. |
 | `mcp` | The upstream already exposes MCP tools. |
-| `plugin` | You need custom execution logic. Can compose with `mcp` (hybrid). Cannot combine with `api`. |
+| `plugin` | You need custom execution logic. Can compose with `api`, `mcp`, or both. |
 
-## 2. Start with the Smallest Useful Definition
+## Start with the Smallest Useful Definition
 
 Public REST example with no auth:
 
@@ -30,7 +30,7 @@ integrations:
 
 That is enough to build a provider and invoke the public API.
 
-## 3. Add Auth
+## Add Auth
 
 OAuth-backed example:
 
@@ -57,7 +57,7 @@ integrations:
 
 Auth lives inside the connection, not at the integration level.
 
-## 4. Add an MCP Surface
+## Add an MCP Surface
 
 Add `mcp` alongside `api`, or use it standalone:
 
@@ -80,7 +80,7 @@ integrations:
 
 Set `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
 
-## 5. Bundle and Validate
+## Bundle and Validate
 
 ```sh
 gestaltd bundle --config ./config.yaml --output ./bundle
@@ -89,7 +89,7 @@ gestaltd validate --config ./bundle/config.yaml
 
 This prepares remote provider artifacts and catches config errors.
 
-## 6. Run
+## Run
 
 ```sh
 gestaltd serve --locked --config ./bundle/config.yaml
@@ -101,7 +101,7 @@ Then:
 - List operations with `GET /api/v1/integrations/{name}/operations`
 - Invoke operations over HTTP or MCP
 
-## 7. Reach for a Plugin Only When Needed
+## Reach for a Plugin Only When Needed
 
 Write a provider plugin when you need:
 

@@ -1,10 +1,10 @@
-import { Callout, Steps } from 'nextra/components'
+import { Callout } from 'nextra/components'
 
 # Getting Started
 
 This guide starts with the true out-of-the-box flow, then moves to an explicit config and a production-style startup path.
 
-## 0. Install
+## Install
 
 **Homebrew** (macOS and Linux)
 
@@ -40,7 +40,7 @@ For production, bundle first and use the default locked mode:
 docker run -p 8080:8080 -v ./bundle:/etc/gestalt valontechnologies/gestaltd:latest
 ```
 
-## 1. Run `gestaltd` With No Config
+## Run `gestaltd` With No Config
 
 ```sh
 gestaltd
@@ -48,13 +48,7 @@ gestaltd
 
 If no config file exists and you did not pass `--config`, `gestaltd` creates `~/.gestalt/config.yaml` for you and starts immediately.
 
-The generated local config uses:
-
-- `auth.provider: none`
-- `datastore.provider: sqlite`
-- `secrets.provider: env`
-- a generated `server.encryption_key`
-- `~/.gestalt/gestalt.db` as the SQLite database
+The generated local config uses `auth.provider: none`, SQLite as the datastore at `~/.gestalt/gestalt.db`, `env` for secrets, and a generated `server.encryption_key`.
 
 The server listens on `http://localhost:8080`. The web UI is served from that same port.
 
@@ -62,17 +56,9 @@ The server listens on `http://localhost:8080`. The web UI is served from that sa
   The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd bundle` followed by `gestaltd serve --locked`.
 </Callout>
 
-## 2. Open The UI
+## Open The UI
 
-<Steps>
-### Open the server
-
-Visit `http://localhost:8080`.
-
-### Inspect the default environment
-
-The generated config uses `auth.provider: none`, so no sign-in is required. Add an integration to start building.
-</Steps>
+Visit `http://localhost:8080`. The generated config uses `auth.provider: none`, so no sign-in is required. Add an integration to start building.
 
 ## Or: Generate A Config With `gestalt init`
 
@@ -82,7 +68,7 @@ Instead of writing `config.yaml` by hand, run `gestalt init` for an interactive 
 gestalt init
 ```
 
-## 3. Switch To An Explicit Config
+## Switch To An Explicit Config
 
 Save this as `config.yaml`:
 
@@ -113,14 +99,9 @@ integrations:
       connection: default
 ```
 
-This is the smallest useful production-shaped config:
+This is the smallest useful production-shaped config: explicit `server`, `auth`, and `datastore` blocks, one named integration, one connection with `mode: none`, and one REST API surface pointing at an OpenAPI spec.
 
-- explicit `server`, `auth`, and `datastore`
-- one named integration
-- one connection with `mode: none` (no per-user credential requirement)
-- one REST API surface pointing at an OpenAPI spec
-
-## 4. Bundle And Validate It
+## Bundle And Validate It
 
 ```sh
 gestaltd bundle --config ./config.yaml --output ./bundle
@@ -132,7 +113,7 @@ gestaltd validate --config ./bundle/config.yaml
 - `gestalt.lock.json`
 - `.gestalt/providers/github.json`
 
-## 5. Start From Locked State
+## Start From Locked State
 
 ```sh
 gestaltd serve --locked --config ./bundle/config.yaml
@@ -140,7 +121,7 @@ gestaltd serve --locked --config ./bundle/config.yaml
 
 This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.
 
-## 6. What To Learn Next
+## What To Learn Next
 
 - [Platform Model](/concepts/platform-model): how config turns into providers, runtimes, bindings, and MCP.
 - [Configuration](/concepts/configuration): config discovery, defaults, secret resolution, and lock state.

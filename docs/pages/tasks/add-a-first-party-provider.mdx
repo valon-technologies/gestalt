@@ -10,7 +10,7 @@ A built-in provider makes sense when:
 - config-defined surfaces are not expressive enough
 - the code needs to ship and test with the host binary
 
-## 1. Implement The Provider Package
+## Implement The Provider Package
 
 Create a package under:
 
@@ -27,7 +27,7 @@ Depending on behavior, the provider may also implement:
 - `core.CatalogProvider`
 - connection-parameter interfaces used by the UI and MCP
 
-## 2. Register It
+## Register It
 
 Built-in named providers are registered in:
 
@@ -37,11 +37,11 @@ cmd/gestaltd/providers.go
 
 If the provider is intended to ship in the binary, it must be added there.
 
-## 3. Decide How Operators Compose It
+## Decide How Operators Compose It
 
 An integration uses the registered provider as its entire implementation by referencing it in the `plugin` block.
 
-## 4. Test It At The Provider Boundary
+## Test It At The Provider Boundary
 
 Tests should validate:
 
@@ -52,7 +52,7 @@ Tests should validate:
 
 The important boundary is the provider contract the rest of Gestalt sees, not just internal helper functions.
 
-## 5. Update The Docs
+## Update The Docs
 
 If you add a new first-party provider, update:
 

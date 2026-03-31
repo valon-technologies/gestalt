@@ -4,7 +4,7 @@ Gestalt serves a web UI alongside its API. By default it uses the embedded front
 
 ## How It Works
 
-A UI plugin is a static asset package (HTML, CSS, JS) with a `plugin.json` manifest. When configured, `gestaltd` serves the plugin's assets instead of the embedded frontend. The browser connects to the same origin and port — there is no separate UI server.
+A UI plugin is a static asset package (HTML, CSS, JS) with a `plugin.json` manifest. When configured, `gestaltd` serves the plugin's assets instead of the embedded frontend. The browser connects to the same origin and port. There is no separate UI server.
 
 API routes (`/api/v1/*`, `/mcp`, `/health`, `/ready`) always take priority. Unmatched requests fall through to the UI handler, which serves files with SPA fallback behavior:
 
@@ -49,8 +49,8 @@ my-ui-plugin/
 
 The `webui` kind differs from `provider` and `runtime`:
 
-- no `artifacts` or `entrypoints` — there is no binary
-- no platform-specific builds — static assets are platform-agnostic
+- no `artifacts` or `entrypoints` (there is no binary)
+- no platform-specific builds (static assets are platform-agnostic)
 - `asset_root` points to the directory containing `index.html`
 - `webui` cannot be combined with other kinds in the same manifest
 

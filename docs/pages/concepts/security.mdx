@@ -75,7 +75,7 @@ The `server.encryption_key` is the root deployment secret. Gestalt derives all c
 
 If the encryption key is a 64-character hex string, it is decoded directly as a 32-byte key. Otherwise, Argon2id derives a 32-byte key from the string.
 
-Every encryption operation generates a fresh random nonce using `crypto/rand`. Ciphertexts are base64-encoded for storage. GCM provides authenticated encryption -- tampering with stored ciphertexts is detected at decryption time.
+Every encryption operation generates a fresh random nonce using `crypto/rand`. Ciphertexts are base64-encoded for storage. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
 
 ### What is encrypted
 
@@ -132,7 +132,7 @@ POST /api/v1/tokens
 ```
 
 - Plaintext is returned exactly once at creation time
-- Only the SHA-256 hash is stored -- tokens cannot be recovered from the datastore
+- Only the SHA-256 hash is stored. Tokens cannot be recovered from the datastore
 - Default TTL: 30 days (configurable via `server.api_token_ttl`)
 - Revocable individually (`DELETE /api/v1/tokens/{id}`) or in bulk (`DELETE /api/v1/tokens`)
 
@@ -195,7 +195,7 @@ For proxy bindings, `Proxy-Authorization: Bearer` is checked first, then `Author
 
 ## Egress Policy Enforcement
 
-Egress policies control what outbound requests Gestalt makes on behalf of callers. Policy evaluation happens **before** credential resolution -- denied requests never trigger secret fetches or token decryption.
+Egress policies control what outbound requests Gestalt makes on behalf of callers. Policy evaluation happens **before** credential resolution. Denied requests never trigger secret fetches or token decryption.
 
 ```
 Invocation request
