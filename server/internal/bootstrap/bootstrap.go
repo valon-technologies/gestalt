@@ -757,7 +757,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 	}
 
-	_, hasSpecSurface := primaryConfiguredSpecSurface(intg.Plugin, manifestProvider)
+	resolved, hasSpecSurface := resolveConfiguredSpecSurface(intg.Plugin, manifestProvider)
 
 	var finalProv core.Provider
 	if !hasSpecSurface {
@@ -770,7 +770,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 		finalProv = restricted
 	} else {
-		specProv, surface, err := buildConfiguredSpecProvider(ctx, name, specProviderConfig{
+		specProv, err := buildConfiguredSpecProvider(ctx, name, resolved, specProviderConfig{
 			plugin:            intg.Plugin,
 			manifestProvider:  manifestProvider,
 			allowedOperations: intg.Plugin.AllowedOperations,
@@ -790,7 +790,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 			pluginProv.DisplayName(),
 			pluginProv.Description(),
 			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
-			composite.BoundProvider{Provider: specProv, Connection: resolvedSurfaceConnectionName(intg.Plugin, manifestProvider, surface)},
+			composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
 		)
 		if err != nil {
 			if c, ok := specProv.(interface{ Close() error }); ok {
@@ -824,24 +824,17 @@ type specProviderConfig struct {
 	applyResponseMapping bool
 }
 
-func buildConfiguredSpecProvider(ctx context.Context, name string, cfg specProviderConfig, deps Deps) (core.Provider, specSurface, error) {
-	surface, ok := primaryConfiguredSpecSurface(cfg.plugin, cfg.manifestProvider)
-	if !ok {
-		return nil, "", fmt.Errorf("no spec URL")
-	}
-
-	url := resolvedSurfaceURL(cfg.plugin, cfg.manifestProvider, surface)
-	conn := resolvedSurfaceConnectionDef(cfg.plugin, cfg.manifestProvider, surface)
+func buildConfiguredSpecProvider(ctx context.Context, name string, resolved resolvedSpecSurface, cfg specProviderConfig, deps Deps) (core.Provider, error) {
 	var buildOpts []provider.BuildOption
 	if cfg.providerBuildOptions != nil {
-		buildOpts = cfg.providerBuildOptions(conn)
+		buildOpts = cfg.providerBuildOptions(resolved.connection)
 	}
 
-	switch surface {
+	switch resolved.surface {
 	case specSurfaceOpenAPI:
-		def, err := openapi.LoadDefinition(ctx, name, url, cfg.allowedOperations)
+		def, err := openapi.LoadDefinition(ctx, name, resolved.url, cfg.allowedOperations)
 		if err != nil {
-			return nil, "", fmt.Errorf("load openapi definition: %w", err)
+			return nil, fmt.Errorf("load openapi definition: %w", err)
 		}
 		if cfg.baseURL != "" {
 			def.BaseURL = cfg.baseURL
@@ -850,16 +843,16 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, cfg specProvi
 		if cfg.applyResponseMapping {
 			applyManifestResponseMapping(def, cfg.manifestProvider)
 		}
-		prov, err := provider.Build(def, conn, buildOpts...)
+		prov, err := provider.Build(def, resolved.connection, buildOpts...)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
-		return prov, surface, nil
+		return prov, nil
 
 	case specSurfaceGraphQL:
-		def, err := graphqlupstream.LoadDefinition(ctx, name, url, cfg.allowedOperations)
+		def, err := graphqlupstream.LoadDefinition(ctx, name, resolved.url, cfg.allowedOperations)
 		if err != nil {
-			return nil, "", fmt.Errorf("load graphql definition: %w", err)
+			return nil, fmt.Errorf("load graphql definition: %w", err)
 		}
 		if cfg.baseURL != "" {
 			def.BaseURL = cfg.baseURL
@@ -868,31 +861,31 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, cfg specProvi
 		if cfg.applyResponseMapping {
 			applyManifestResponseMapping(def, cfg.manifestProvider)
 		}
-		prov, err := provider.Build(def, conn, buildOpts...)
+		prov, err := provider.Build(def, resolved.connection, buildOpts...)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
-		return prov, surface, nil
+		return prov, nil
 
 	case specSurfaceMCP:
-		connMode := core.ConnectionMode(conn.Mode)
+		connMode := core.ConnectionMode(resolved.connection.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, url, connMode, mergedHeaders(cfg.manifestProvider, cfg.plugin), deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, resolved.url, connMode, mergedHeaders(cfg.manifestProvider, cfg.plugin), deps.Egress.Resolver)
 		if err != nil {
-			return nil, "", fmt.Errorf("create mcp upstream: %w", err)
+			return nil, fmt.Errorf("create mcp upstream: %w", err)
 		}
 		if cfg.allowedOperations != nil {
 			if err := up.FilterOperations(cfg.allowedOperations); err != nil {
 				_ = up.Close()
-				return nil, "", fmt.Errorf("filter mcp operations: %w", err)
+				return nil, fmt.Errorf("filter mcp operations: %w", err)
 			}
 		}
-		return up, surface, nil
+		return up, nil
 
 	default:
-		return nil, "", fmt.Errorf("unsupported spec surface %q", surface)
+		return nil, fmt.Errorf("unsupported spec surface %q", resolved.surface)
 	}
 }
 
@@ -956,7 +949,11 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
-	prov, _, err := buildConfiguredSpecProvider(ctx, name, specProviderConfig{
+	resolved, ok := resolveConfiguredSpecSurface(intg.Plugin, mp)
+	if !ok {
+		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
+	}
+	prov, err := buildConfiguredSpecProvider(ctx, name, resolved, specProviderConfig{
 		plugin:               intg.Plugin,
 		manifestProvider:     mp,
 		allowedOperations:    allowedOperations,
