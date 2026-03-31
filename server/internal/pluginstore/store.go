@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"slices"
-
 	pluginpkg "github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -52,7 +50,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		return installed, nil
 	}
 
-	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
+	if manifest.IsDeclarativeOnlyProvider() {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create plugin directory: %w", err)
 		}
@@ -122,7 +120,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return installed, nil
 	}
 
-	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
+	if manifest.IsDeclarativeOnlyProvider() {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create plugin directory: %w", err)
 		}
@@ -232,7 +230,7 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	if isWebUIOnly(manifest) {
 		return "", nil
 	}
-	if manifest.Provider.IsDeclarative() && !slices.Contains(manifest.Kinds, pluginmanifestv1.KindRuntime) {
+	if manifest.IsDeclarativeOnlyProvider() {
 		return "", nil
 	}
 	var entry *pluginmanifestv1.Entrypoint
@@ -258,16 +256,14 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
 }
 
-const runtimeConfigSchemaPath = "schemas/config.schema.json"
-
 func configSchemaPaths(manifest *pluginmanifestv1.Manifest, dirPath string) []string {
 	var paths []string
 	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
 		paths = append(paths, manifest.Provider.ConfigSchemaPath)
 	}
-	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(runtimeConfigSchemaPath))
+	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(pluginpkg.RuntimeConfigSchemaPath))
 	if _, err := os.Stat(runtimeSchema); err == nil {
-		paths = append(paths, runtimeConfigSchemaPath)
+		paths = append(paths, pluginpkg.RuntimeConfigSchemaPath)
 	}
 	return paths
 }

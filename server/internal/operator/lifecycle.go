@@ -748,7 +748,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	resolvePluginIcon(manifest, manifestPath, plugin)
 
 	plugin.ResolvedManifestPath = manifestPath
-	if kind == "integration" && manifest.Provider.IsDeclarative() {
+	if kind == "integration" && manifest.IsDeclarativeOnlyProvider() {
 		plugin.IsDeclarative = true
 		return nil
 	}

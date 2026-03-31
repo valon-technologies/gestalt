@@ -1,6 +1,9 @@
 package pluginmanifestv1
 
-import _ "embed"
+import (
+	_ "embed"
+	"slices"
+)
 
 const (
 	KindProvider = "provider"
@@ -78,6 +81,10 @@ func (p *Provider) IsSpecLoaded() bool {
 
 func (m *Manifest) IsHybridProvider() bool {
 	return m != nil && m.Provider != nil && len(m.Provider.Operations) > 0 && m.Entrypoints.Provider != nil
+}
+
+func (m *Manifest) IsDeclarativeOnlyProvider() bool {
+	return m != nil && m.Provider != nil && m.Provider.IsDeclarative() && !m.IsHybridProvider() && !slices.Contains(m.Kinds, KindRuntime)
 }
 
 type ManifestOperationOverride struct {

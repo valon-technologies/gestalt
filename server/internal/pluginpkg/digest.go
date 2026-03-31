@@ -52,7 +52,7 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		digests = append(digests, sum)
 	}
 
-	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(runtimeConfigSchemaPath))
+	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(RuntimeConfigSchemaPath))
 	if _, err := os.Stat(runtimeSchema); err == nil {
 		sum, err := fileSHA256(runtimeSchema)
 		if err != nil {
