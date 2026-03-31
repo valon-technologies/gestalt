@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 func serveMCPOAuthEndpoints(t *testing.T) *httptest.Server {
@@ -300,5 +301,87 @@ func TestInlineResponseMapping_NilDoesNotBreak(t *testing.T) {
 	}
 	if len(prov.ListOperations()) == 0 {
 		t.Fatal("expected at least one operation even without response_mapping")
+	}
+}
+
+func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(w, map[string]string{
+			"api_key": r.Header.Get("DD-API-KEY"),
+			"app_key": r.Header.Get("DD-APPLICATION-KEY"),
+		})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(w, map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	const connName = "api"
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"datadog": {
+			Plugin: &config.PluginDef{
+				OpenAPI:           specSrv.URL,
+				OpenAPIConnection: connName,
+				Connections: map[string]*config.ConnectionDef{
+					connName: {
+						Auth: config.ConnectionAuthDef{
+							Type: pluginmanifestv1.AuthTypeManual,
+							AuthMapping: &config.AuthMappingDef{
+								Headers: map[string]string{
+									"DD-API-KEY":         "api_key",
+									"DD-APPLICATION-KEY": "app_key",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("datadog")
+	if err != nil {
+		t.Fatalf("Get provider: %v", err)
+	}
+
+	token := `{"api_key":"k1","app_key":"k2"}`
+	opResult, err := prov.Execute(ctx, "list_items", nil, token)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal([]byte(opResult.Body), &resp); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if resp["api_key"] != "k1" {
+		t.Errorf("DD-API-KEY = %q, want %q", resp["api_key"], "k1")
+	}
+	if resp["app_key"] != "k2" {
+		t.Errorf("DD-APPLICATION-KEY = %q, want %q", resp["app_key"], "k2")
 	}
 }

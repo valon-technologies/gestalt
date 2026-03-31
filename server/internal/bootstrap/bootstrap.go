@@ -779,11 +779,11 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 }
 
 func buildHybridSpecProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error) {
-	conn := pluginConnectionDef(intg.Plugin)
 	allowedOps := intg.Plugin.AllowedOperations
 
 	switch {
 	case intg.Plugin.OpenAPI != "":
+		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.OpenAPIConnection)
 		def, err := openapi.LoadDefinition(ctx, name, intg.Plugin.OpenAPI, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load hybrid openapi spec for %q: %w", name, err)
@@ -795,6 +795,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		return provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 
 	case intg.Plugin.GraphQLURL != "":
+		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.GraphQLConnection)
 		def, err := graphqlupstream.LoadDefinition(ctx, name, intg.Plugin.GraphQLURL, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load hybrid graphql schema for %q: %w", name, err)
@@ -806,6 +807,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		return provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 
 	case intg.Plugin.MCPURL != "":
+		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.MCPConnection)
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
@@ -871,10 +873,10 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	mp := manifest.Provider
 
 	allowedOps := convertAllowedOperations(mp.AllowedOperations)
-	conn := pluginConnectionDef(intg.Plugin)
 
 	switch {
 	case mp.OpenAPI != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.OpenAPIConnection)
 		def, err := openapi.LoadDefinition(ctx, name, mp.OpenAPI, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load openapi spec for %q: %w", name, err)
@@ -891,6 +893,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
 
 	case mp.GraphQLURL != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.GraphQLConnection)
 		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load graphql schema for %q: %w", name, err)
@@ -907,6 +910,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
 
 	case mp.MCPURL != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.MCPConnection)
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
@@ -960,10 +964,16 @@ func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperation
 	return result
 }
 
-func pluginConnectionDef(plugin *config.PluginDef) config.ConnectionDef {
+func pluginConnectionDef(plugin *config.PluginDef, connName string) config.ConnectionDef {
 	conn := config.ConnectionDef{}
 	if plugin == nil {
 		return conn
+	}
+	if connName != "" {
+		if named, ok := plugin.Connections[connName]; ok && named != nil {
+			return *named
+		}
+		slog.Warn("named connection not found, falling back to top-level auth", "connection", connName)
 	}
 	if plugin.Auth != nil {
 		conn.Auth = *plugin.Auth
@@ -1108,7 +1118,7 @@ func attachManifestOAuth(name string, intg config.IntegrationDef, manifest *plug
 			slog.Warn("mcp_oauth auth requires mcp_url", "provider", name)
 			return nil
 		}
-		conn := pluginConnectionDef(intg.Plugin)
+		conn := pluginConnectionDef(intg.Plugin, manifest.Provider.MCPConnection)
 		handler := buildMCPOAuthHandler(conn, mcpURL, regStore.get(), deps)
 		result.ConnectionAuth = map[string]OAuthHandler{
 			config.PluginConnectionName: handler,
