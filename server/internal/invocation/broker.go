@@ -337,6 +337,11 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return "", fmt.Errorf("token expired and refresh failed: %w", err)
 	}
 
+	fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+	if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
+		return fresh.AccessToken, nil
+	}
+
 	now := time.Now()
 	token.AccessToken = resp.AccessToken
 	if resp.RefreshToken != "" {
