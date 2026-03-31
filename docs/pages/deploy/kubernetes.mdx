@@ -106,9 +106,21 @@ pluginInit:
 
 ## Install
 
+From the OCI registry (recommended):
+
+```sh
+helm upgrade --install gestalt oci://ghcr.io/valon-technologies/charts/gestalt \
+  --version 0.0.1-alpha.16 \
+  -f values.yaml
+```
+
+Or from a local checkout of the repo:
+
 ```sh
 helm upgrade --install gestalt ./server/deploy/helm/gestalt -f values.yaml
 ```
+
+The GHCR registry inherits the visibility of the GitHub repository. Authenticate with `helm registry login ghcr.io` if the repo is private.
 
 If you use ingress, make sure `config.server.base_url` matches the public URL exactly. That is what Gestalt uses for callback derivation.
 
