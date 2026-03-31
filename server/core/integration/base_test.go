@@ -105,6 +105,91 @@ func TestBaseTokenParserOverridesAuthorization(t *testing.T) {
 	}
 }
 
+func TestBaseExecuteStaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"header": r.Header.Get(headerName),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Headers: map[string]string{
+			headerName: headerValue,
+		},
+		Endpoints: map[string]Endpoint{
+			"list_items": {Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	result, err := b.Execute(context.Background(), "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["header"] != headerValue {
+		t.Fatalf("%s = %v, want %q", headerName, resp["header"], headerValue)
+	}
+}
+
+func TestBaseExecuteRequestAuthOverridesStaticAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
+	const (
+		headerName  = "X-Static-Version"
+		headerValue = "2026-02-09"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":   r.Header.Get("Authorization"),
+			"header": r.Header.Get(headerName),
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Headers: map[string]string{
+			"Authorization": "Bearer wrong-token",
+			headerName:      headerValue,
+		},
+		Endpoints: map[string]Endpoint{
+			"list_items": {Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	result, err := b.Execute(context.Background(), "list_items", nil, "secret-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["auth"] != "Bearer secret-token" {
+		t.Fatalf("auth = %v, want Bearer secret-token", resp["auth"])
+	}
+	if resp["header"] != headerValue {
+		t.Fatalf("%s = %v, want %q", headerName, resp["header"], headerValue)
+	}
+}
+
 func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 	t.Parallel()
 
