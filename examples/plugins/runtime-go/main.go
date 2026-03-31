@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,12 +13,12 @@ import (
 type exampleRuntime struct{}
 
 func (r *exampleRuntime) Start(ctx context.Context, name string, config map[string]any, capabilities []gestalt.Capability, host gestalt.RuntimeHost) error {
-	log.Printf("example runtime %q started with %d initial capabilities", name, len(capabilities))
+	slog.Info("example runtime started", "runtime", name, "capability_count", len(capabilities))
 	return nil
 }
 
 func (r *exampleRuntime) Stop(ctx context.Context) error {
-	log.Println("example runtime stopped")
+	slog.Info("example runtime stopped")
 	return nil
 }
 
@@ -28,7 +27,7 @@ func main() {
 	defer stop()
 
 	if err := gestalt.ServeRuntime(ctx, &exampleRuntime{}); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		slog.Error("example runtime failed", "error", err)
 		os.Exit(1)
 	}
 }

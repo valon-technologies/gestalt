@@ -261,3 +261,33 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 		t.Errorf("expected second entry request_id=req-denied, got %v", second["request_id"])
 	}
 }
+
+func TestSlogAuditSink_UsesDefaultLoggerWhenWriterNil(t *testing.T) { //nolint:paralleltest // mutates slog.Default
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	sink := invocation.NewSlogAuditSink(nil)
+	sink.Log(context.Background(), core.AuditEntry{
+		Timestamp: time.Now(),
+		RequestID: "req-default",
+		Source:    "binding:test-hook",
+		UserID:    "user-default",
+		Provider:  "theta",
+		Operation: "read",
+		Allowed:   true,
+	})
+
+	var record map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("failed to parse JSON log output: %v", err)
+	}
+
+	if record["request_id"] != "req-default" {
+		t.Errorf("expected request_id=req-default, got %v", record["request_id"])
+	}
+	if record["log.type"] != "audit" {
+		t.Errorf("expected log.type=audit, got %v", record["log.type"])
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"os"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"go.opentelemetry.io/otel/trace"
@@ -20,7 +19,7 @@ type SlogAuditSink struct {
 
 func NewSlogAuditSink(w io.Writer) *SlogAuditSink {
 	if w == nil {
-		w = os.Stderr
+		return &SlogAuditSink{}
 	}
 	return &SlogAuditSink{
 		logger: slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -66,5 +65,9 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	if !entry.Allowed {
 		level = slog.LevelWarn
 	}
-	s.logger.LogAttrs(ctx, level, auditLogType, attrs...)
+	logger := s.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.LogAttrs(ctx, level, auditLogType, attrs...)
 }

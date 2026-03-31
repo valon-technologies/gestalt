@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,10 +23,12 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("usage: gestalt-plugin-echo <provider|runtime>")
+		slog.Error("usage", "command", "gestalt-plugin-echo <provider|runtime>")
+		os.Exit(2)
 	}
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("echo plugin failed", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -138,7 +140,7 @@ func (p *echoRuntimePlugin) Start(ctx context.Context, req *proto.StartRuntimeRe
 	}
 
 	p.name = req.GetName()
-	log.Printf("echo runtime %q started with %d capabilities", p.name, len(capsResp.GetCapabilities()))
+	slog.Info("echo runtime started", "runtime", p.name, "capability_count", len(capsResp.GetCapabilities()))
 	return &emptypb.Empty{}, nil
 }
 
@@ -148,7 +150,7 @@ func (p *echoRuntimePlugin) Stop(context.Context, *emptypb.Empty) (*emptypb.Empt
 		p.hostConn = nil
 		p.host = nil
 	}
-	log.Printf("echo runtime %q stopped", p.name)
+	slog.Info("echo runtime stopped", "runtime", p.name)
 	return &emptypb.Empty{}, nil
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,5 +149,41 @@ integrations:
 	}
 	if !strings.Contains(err.Error(), `requires a plugin`) {
 		t.Fatalf("expected requires-a-plugin error, got: %v", err)
+	}
+}
+
+func TestSetupBootstrap_InstallsTelemetryLoggerAndRestoresItOnClose(t *testing.T) { //nolint:paralleltest // mutates slog.Default
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
+telemetry:
+  provider: stdout
+  config:
+    format: json
+server:
+  encryption_key: test-key
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	prev := slog.Default()
+	env, err := setupBootstrap(cfgPath, false)
+	if err != nil {
+		t.Fatalf("setupBootstrap: %v", err)
+	}
+	if slog.Default() != env.Result.Telemetry.Logger() {
+		t.Fatal("expected setupBootstrap to install the telemetry logger as slog.Default")
+	}
+
+	env.Close()
+
+	if slog.Default() != prev {
+		t.Fatal("expected bootstrapEnv.Close to restore the previous slog.Default logger")
 	}
 }
