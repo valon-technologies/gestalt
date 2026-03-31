@@ -2,25 +2,21 @@
 
 Gestalt uses [OpenTelemetry](https://opentelemetry.io) for observability. The `telemetry` block in your config file selects a provider that controls what signals are exported:
 
-- **`otlp`** — Exports traces, metrics, and structured logs to an OpenTelemetry collector.
-- **`stdout`** — Outputs structured logs only. Traces and metrics use noop providers to keep terminal output clean during development.
-- **`noop`** — Disables all telemetry.
+- **`otlp`**: exports traces, metrics, and structured logs to an OpenTelemetry collector.
+- **`stdout`**: outputs structured logs only. Traces and metrics use noop providers to keep terminal output clean during development.
+- **`noop`**: disables all telemetry.
 
 ## Traces
 
 Trace export requires the `otlp` telemetry provider. The `stdout` provider silences traces to avoid noisy output during local development.
 
-When using `otlp`, every request is automatically traced across three layers:
-
-1. **HTTP** — `otelhttp` middleware on the chi router creates a root span for each inbound request with standard HTTP semantic conventions (method, route, status code, latency).
-2. **Broker** — `Broker.Invoke()` creates a child span with attributes for the provider, operation, user, and connection mode.
-3. **gRPC plugins** — `otelgrpc` interceptors on plugin connections propagate trace context across process boundaries, so plugin spans appear as children of the broker span.
+When using `otlp`, every request is automatically traced across three layers. At the **HTTP** layer, `otelhttp` middleware on the chi router creates a root span for each inbound request with standard HTTP semantic conventions (method, route, status code, latency). At the **broker** layer, `Broker.Invoke()` creates a child span with attributes for the provider, operation, user, and connection mode. At the **gRPC plugin** layer, `otelgrpc` interceptors on plugin connections propagate trace context across process boundaries, so plugin spans appear as children of the broker span.
 
 A single trace shows the full lifecycle: HTTP request → broker invocation → plugin RPC. When a provider invocation is slow, the trace shows whether the bottleneck was token refresh, the provider's execution, or network latency.
 
 ### Sampling (`otlp` only)
 
-The `otlp` provider supports configurable trace sampling via `traces.sampling_ratio` (default `1.0`, meaning all traces). At low to moderate scale, sample everything. When volume demands it, reduce the ratio — but note that the OTel Collector's [spanmetrics connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/spanmetricsconnector/README.md) can derive accurate RED metrics from 100% of spans _before_ the sampling decision, so metrics remain accurate even with aggressive trace sampling.
+The `otlp` provider supports configurable trace sampling via `traces.sampling_ratio` (default `1.0`, meaning all traces). At low to moderate scale, sample everything. When volume demands it, reduce the ratio, but note that the OTel Collector's [spanmetrics connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/spanmetricsconnector/README.md) can derive accurate RED metrics from 100% of spans _before_ the sampling decision, so metrics remain accurate even with aggressive trace sampling.
 
 ## Metrics
 

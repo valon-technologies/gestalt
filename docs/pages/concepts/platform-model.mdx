@@ -4,12 +4,7 @@ Gestalt has a small number of primitives, but they compose into a full integrati
 
 ## The Core Model
 
-At the highest level, `gestaltd` does four things:
-
-1. Load and validate a declarative config file.
-2. Bootstrap the platform components that config names.
-3. Build providers from integrations.
-4. Expose those providers through shared request surfaces.
+At the highest level, `gestaltd` loads and validates a declarative config file, bootstraps the platform components that config names, builds providers from integrations, and exposes those providers through shared request surfaces.
 
 ## The Main Primitives
 
@@ -93,14 +88,7 @@ The broker is responsible for:
 - injecting connection metadata into execution context
 - returning normalized operation results
 
-Because this broker is shared, the same token and policy behavior applies whether the caller is:
-
-- the web UI
-- a direct HTTP client
-- an MCP client hitting `/mcp`
-- a webhook binding
-- a proxy binding
-- a background runtime
+Because this broker is shared, the same token and policy behavior applies whether the caller is the web UI, a direct HTTP client, an MCP client hitting `/mcp`, a webhook binding, a proxy binding, or a background runtime.
 
 ## Connection Modes
 
@@ -129,15 +117,4 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 
 ## What The User Actually Programs Against
 
-As a Gestalt operator, the main primitives you compose are:
-
-- top-level config blocks
-- integration definitions
-- connection definitions
-- API and MCP surface definitions
-- runtime definitions
-- binding definitions
-- egress rules
-- optional plugin manifests and packages
-
-Everything else is a consequence of those inputs.
+As a Gestalt operator, you compose top-level config blocks, integration definitions, connection definitions, API and MCP surface definitions, runtime and binding definitions, egress rules, and optional plugin manifests and packages. Everything else is a consequence of those inputs.

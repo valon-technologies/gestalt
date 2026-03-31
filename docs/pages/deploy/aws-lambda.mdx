@@ -25,12 +25,7 @@ SQLite is not a realistic Lambda datastore.
 
 ## Practical Model
 
-The practical Lambda shape is:
-
-1. package Gestalt as a Lambda-compatible container image or custom runtime
-2. put an HTTP adapter in front of `gestaltd`
-3. use a managed SQL datastore
-4. keep `server.base_url` aligned with the API Gateway or custom domain URL
+The practical Lambda shape is to package Gestalt as a Lambda-compatible container image or custom runtime, put an HTTP adapter in front of `gestaltd`, use a managed SQL datastore, and keep `server.base_url` aligned with the API Gateway or custom domain URL.
 
 ## Config Shape
 

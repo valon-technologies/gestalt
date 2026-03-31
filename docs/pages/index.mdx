@@ -1,4 +1,4 @@
-import { Cards, Steps } from 'nextra/components'
+import { Cards } from 'nextra/components'
 
 # Gestalt
 
@@ -15,7 +15,6 @@ import { Cards, Steps } from 'nextra/components'
 
 ## The Four Foundations
 
-<Steps>
 ### Configuration
 
 Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, integrations, runtimes, bindings, and egress rules.
@@ -31,16 +30,15 @@ Each integration becomes a runtime provider. All request surfaces share the same
 ### Surfaces
 
 The same provider graph can be reached through the HTTP API, the embedded web UI, `/mcp`, webhook bindings, proxy bindings, and background runtimes.
-</Steps>
 
 ## Deployment Paths
 
-There are four real deployment modes to think about:
-
-1. `gestaltd` with no config: local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key.
-2. Docker or Docker Compose: single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`.
-3. Helm on Kubernetes: one Deployment for `gestaltd`, optional init container for locked startup.
-4. Bare binary: `gestaltd`, `gestaltd serve`, `gestaltd bundle`, and `gestaltd validate`.
+| Mode | Description |
+| --- | --- |
+| No config | Local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key. |
+| Docker or Docker Compose | Single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`. |
+| Helm on Kubernetes | One Deployment for `gestaltd`, optional init container for locked startup. |
+| Bare binary | `gestaltd`, `gestaltd serve`, `gestaltd bundle`, and `gestaltd validate`. |
 
 ## Start Here
 
