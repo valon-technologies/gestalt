@@ -178,7 +178,7 @@ server:
 `,
 		},
 		{
-			name: "missing encryption key",
+			name: "missing encryption key with auth enabled",
 			yaml: `
 auth:
   provider: auth-provider
@@ -200,6 +200,24 @@ datastore:
 				t.Fatal("ValidateRuntime: expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestValidateRuntimeAllowsNoEncryptionKeyWithAuthNone(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+auth:
+  provider: none
+datastore:
+  provider: data-store
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := ValidateRuntime(cfg); err != nil {
+		t.Fatalf("ValidateRuntime: unexpected error: %v", err)
 	}
 }
 
