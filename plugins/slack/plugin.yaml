@@ -12,6 +12,7 @@ provider:
     type: oauth2
     authorization_url: https://slack.com/oauth/v2/authorize
     token_url: https://slack.com/api/oauth.v2.access
+    access_token_path: authed_user.access_token
     scope_param: user_scope
     scope_separator: ","
     scopes:
