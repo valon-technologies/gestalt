@@ -24,13 +24,12 @@ The repository ships these deployment assets:
 | Path | What it gives you |
 | --- | --- |
 | `gestaltd` with no config | True out-of-the-box local startup. |
-| `Dockerfile` | Single-container server image with `gestaltd` as the entrypoint. |
-| `docker-compose.yml` | Single-container local deployment with mounted config and SQLite volume. |
+| `server/Dockerfile` | Single-container server image with `gestaltd` as the entrypoint. |
 | `server/deploy/helm/gestalt` | Helm chart for Kubernetes. |
 
-## Docker And Compose
+## Docker
 
-`Dockerfile` builds:
+`server/Dockerfile` builds:
 
 - the frontend static export
 - the `gestaltd` binary
@@ -51,16 +50,15 @@ If your config depends on remote REST or GraphQL upstreams, or packaged plugins,
 - bake the bundled output into a derived image
 - or prepare it in a separate init or release step and point `serve --locked` at that bundled config
 
-The bundled `docker-compose.yml` is the quickest repo-local containerized path:
+To build and run from source:
 
 ```sh
-docker compose up --build
+docker build -f server/Dockerfile -t gestaltd .
+docker run -p 8080:8080 \
+  -v ./server/deploy/docker/config.yaml:/etc/gestalt/config.yaml:ro \
+  -v gestalt-data:/data \
+  gestaltd
 ```
-
-It mounts:
-
-- `./server/deploy/docker/config.yaml` to `/etc/gestalt/config.yaml`
-- a named volume at `/data` for SQLite
 
 For published-image examples rather than repo-local source builds, see `examples/deploy/`.
 
