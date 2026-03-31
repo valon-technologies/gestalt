@@ -1609,8 +1609,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xb6\x01\n" +
 	"\vRuntimeHost\x12N\n" +
 	"\x06Invoke\x12 .gestalt.plugin.v1.InvokeRequest\x1a\".gestalt.plugin.v1.OperationResult\x12W\n" +
-	"\x10ListCapabilities\x12\x16.google.protobuf.Empty\x1a+.gestalt.plugin.v1.ListCapabilitiesResponseB\xce\x01\n" +
-	"\x15com.gestalt.plugin.v1B\vPluginProtoP\x01ZBgithub.com/valon-technologies/gestalt/sdk/pluginapi/v1;pluginapiv1\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
+	"\x10ListCapabilities\x12\x16.google.protobuf.Empty\x1a+.gestalt.plugin.v1.ListCapabilitiesResponseB\xd4\x01\n" +
+	"\x15com.gestalt.plugin.v1B\vPluginProtoP\x01ZHgithub.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1;pluginapiv1\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
 
 var (
 	file_v1_plugin_proto_rawDescOnce sync.Once
