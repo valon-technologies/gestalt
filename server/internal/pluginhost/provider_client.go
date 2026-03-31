@@ -17,12 +17,14 @@ import (
 )
 
 type remoteProviderBase struct {
-	client   proto.ProviderPluginClient
-	metadata *proto.ProviderMetadata
-	ops      []core.Operation
-	catalog  *catalog.Catalog
-	iconSVG  string
-	closer   io.Closer
+	client      proto.ProviderPluginClient
+	metadata    *proto.ProviderMetadata
+	ops         []core.Operation
+	catalog     *catalog.Catalog
+	iconSVG     string
+	displayOver string
+	descOver    string
+	closer      io.Closer
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -86,9 +88,22 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 
 func (p *remoteProviderBase) Name() string { return p.metadata.GetName() }
 
-func (p *remoteProviderBase) DisplayName() string { return p.metadata.GetDisplayName() }
+func (p *remoteProviderBase) DisplayName() string {
+	if p.displayOver != "" {
+		return p.displayOver
+	}
+	return p.metadata.GetDisplayName()
+}
 
-func (p *remoteProviderBase) Description() string { return p.metadata.GetDescription() }
+func (p *remoteProviderBase) Description() string {
+	if p.descOver != "" {
+		return p.descOver
+	}
+	return p.metadata.GetDescription()
+}
+
+func (p *remoteProviderBase) SetDisplayName(s string) { p.displayOver = s }
+func (p *remoteProviderBase) SetDescription(s string) { p.descOver = s }
 
 func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 	return protoConnectionModeToCore(p.metadata.GetConnectionMode())
@@ -133,13 +148,19 @@ func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 		}
 		return &catalog.Catalog{
 			Name:        p.metadata.GetName(),
-			DisplayName: p.metadata.GetDisplayName(),
-			Description: p.metadata.GetDescription(),
+			DisplayName: p.DisplayName(),
+			Description: p.Description(),
 			IconSVG:     p.iconSVG,
 			Operations:  integration.CoreOperationsToCatalogOps(p.ops),
 		}
 	}
 	cat := p.catalog.Clone()
+	if p.displayOver != "" {
+		cat.DisplayName = p.displayOver
+	}
+	if p.descOver != "" {
+		cat.Description = p.descOver
+	}
 	if cat.IconSVG == "" && p.iconSVG != "" {
 		cat.IconSVG = p.iconSVG
 	}

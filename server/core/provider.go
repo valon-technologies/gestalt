@@ -49,6 +49,13 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error)
 }
 
+// OperationConnectionProvider is an optional interface for providers whose
+// operations should default to different stored connections. This is used by
+// composite providers that route different operations to different backends.
+type OperationConnectionProvider interface {
+	ConnectionForOperation(operation string) string
+}
+
 type ConnectionParamDef struct {
 	Required    bool
 	Description string

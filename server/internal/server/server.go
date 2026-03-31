@@ -32,6 +32,7 @@ type Server struct {
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
 	defaultConnection  map[string]string
+	catalogConnection  map[string]string
 	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
 	integrationDefs    map[string]config.IntegrationDef
 	noAuth             bool
@@ -54,6 +55,7 @@ type Config struct {
 	Bindings          *registry.PluginMap[core.Binding]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
+	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	IntegrationDefs   map[string]config.IntegrationDef
 	SecureCookies     bool
@@ -105,6 +107,7 @@ func New(cfg Config) (*Server, error) {
 		resolver:          resolver,
 		invoker:           cfg.Invoker,
 		defaultConnection: cfg.DefaultConnection,
+		catalogConnection: cfg.CatalogConnection,
 		connectionAuth:    cfg.ConnectionAuth,
 		integrationDefs:   cfg.IntegrationDefs,
 		noAuth:            noAuth,
