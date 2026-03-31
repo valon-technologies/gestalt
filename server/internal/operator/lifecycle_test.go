@@ -406,8 +406,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 			"integration:example": {
 				Fingerprint: "plugin-fp",
 				Package:     "./test-plugin",
-				Manifest:    ".gestalt/plugins/testowner/provider/0.1.0/plugin.json",
-				Executable:  ".gestalt/plugins/testowner/provider/0.1.0/artifacts/darwin/arm64/provider",
+				Manifest:    ".gestalt/plugins/integration_example/plugin.json",
+				Executable:  ".gestalt/plugins/integration_example/artifacts/darwin/arm64/provider",
 			},
 		},
 	}
