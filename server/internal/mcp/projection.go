@@ -32,7 +32,7 @@ func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov co
 		}
 
 		tool := mcpgo.NewTool(name, opts...)
-		handler := makeHandler(cfg.Invoker, provName, op.Name, cfg.APIConnection[provName])
+		handler := makeHandler(cfg.Invoker, provName, op.Name, "")
 		srv.AddTool(tool, handler)
 	}
 }
@@ -73,19 +73,18 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 			tool.RawOutputSchema = op.OutputSchema
 		}
 
-		var conn string
-		switch op.Transport {
-		case catalog.TransportMCPPassthrough:
+		// Direct token resolution bypasses Invoke, so it needs an explicit
+		// connection instead of relying on broker-side provider defaults.
+		conn := cfg.APIConnection[provName]
+		if op.Transport == catalog.TransportMCPPassthrough {
 			conn = cfg.MCPConnection[provName]
-		default:
-			conn = cfg.APIConnection[provName]
 		}
 
 		var handler mcpserver.ToolHandlerFunc
 		if isDirect && op.Transport != catalog.TransportREST {
 			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller)
 		} else {
-			handler = makeHandler(cfg.Invoker, provName, op.ID, conn)
+			handler = makeHandler(cfg.Invoker, provName, op.ID, "")
 		}
 		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: handler}
 	}

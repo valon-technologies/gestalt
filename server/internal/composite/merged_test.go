@@ -130,3 +130,33 @@ func TestMergedDisownProvider(t *testing.T) {
 		t.Error("owned provider should be closed by merged")
 	}
 }
+
+func TestMergedSettersUpdateCatalogMetadata(t *testing.T) {
+	t.Parallel()
+
+	merged, err := composite.NewMerged("test", "Test", "desc",
+		&fakeProvider{name: "api", ops: []core.Operation{{Name: "list_items"}}},
+		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "query"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	merged.SetDisplayName("Override")
+	merged.SetDescription("Override description")
+	merged.SetIconSVG("<svg/>")
+
+	cat := merged.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.DisplayName != "Override" {
+		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Override")
+	}
+	if cat.Description != "Override description" {
+		t.Fatalf("Description = %q, want %q", cat.Description, "Override description")
+	}
+	if cat.IconSVG != "<svg/>" {
+		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
+	}
+}

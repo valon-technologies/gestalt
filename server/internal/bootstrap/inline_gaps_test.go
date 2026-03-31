@@ -6,12 +6,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	testOpenAPIConnectionName = "api"
+	testOpenAPIAccessToken    = "api-token"
 )
 
 func serveMCPOAuthEndpoints(t *testing.T) *httptest.Server {
@@ -79,6 +90,39 @@ func serveOpenAPISpec(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(spec)
 	}))
+	testutil.CloseOnCleanup(t, srv)
+	return srv
+}
+
+func serveOpenAPIBackend(t *testing.T, wantToken string) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		baseURL := "http://" + r.Host
+		writeTestJSON(w, map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Token Test API"},
+			"servers": []any{map[string]string{"url": baseURL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+					},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("GET /items", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+wantToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		writeTestJSON(w, map[string]any{"items": []string{"alpha"}})
+	})
+
+	srv := httptest.NewServer(mux)
 	testutil.CloseOnCleanup(t, srv)
 	return srv
 }
@@ -181,6 +225,113 @@ func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 	authURL, _ := handler.StartOAuth("s1", nil)
 	if authURL == "" {
 		t.Fatal("expected non-empty authorization URL from mcp_oauth handler for spec-loaded provider")
+	}
+}
+
+func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	specSrv := serveOpenAPISpec(t)
+	var pluginConfig yaml.Node
+	if err := pluginConfig.Encode(map[string]any{
+		"client_id":     "vendor-id",
+		"client_secret": "vendor-secret",
+	}); err != nil {
+		t.Fatalf("pluginConfig.Encode: %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.Server.BaseURL = "https://gestalt.example.com"
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"vendor": {
+			Plugin: &config.PluginDef{
+				OpenAPI:           specSrv.URL,
+				OpenAPIConnection: testOpenAPIConnectionName,
+				Config:            pluginConfig,
+				Auth: &config.ConnectionAuthDef{
+					Type:             pluginmanifestv1.AuthTypeOAuth2,
+					AuthorizationURL: "https://example.com/authorize",
+					TokenURL:         "https://example.com/token",
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	connAuth := result.ConnectionAuth()
+	vendorAuth, ok := connAuth["vendor"]
+	if !ok {
+		t.Fatal("expected connection auth for vendor integration")
+	}
+	handler, ok := vendorAuth[testOpenAPIConnectionName]
+	if !ok {
+		t.Fatalf("expected handler for connection %q", testOpenAPIConnectionName)
+	}
+	if handler.AuthorizationBaseURL() != "https://example.com/authorize" {
+		t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/authorize")
+	}
+	if handler.TokenURL() != "https://example.com/token" {
+		t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/token")
+	}
+}
+
+func TestBootstrapInvoke_UsesNamedOpenAPIConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	apiSrv := serveOpenAPIBackend(t, testOpenAPIAccessToken)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"vendor": {
+			Plugin: &config.PluginDef{
+				OpenAPI:           apiSrv.URL + "/openapi.json",
+				OpenAPIConnection: testOpenAPIConnectionName,
+				Auth: &config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+				},
+			},
+		},
+	}
+
+	var gotConnection string
+	factories := validFactories()
+	factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			TokenFn: func(_ context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+				gotConnection = connection
+				return &core.IntegrationToken{
+					UserID:      userID,
+					Integration: integration,
+					Connection:  connection,
+					Instance:    instance,
+					AccessToken: testOpenAPIAccessToken,
+				}, nil
+			},
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	resp, err := result.Invoker.Invoke(ctx, &principal.Principal{UserID: "u1"}, "vendor", "", "list_items", nil)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.Status, http.StatusOK)
+	}
+	if gotConnection != testOpenAPIConnectionName {
+		t.Fatalf("connection = %q, want %q", gotConnection, testOpenAPIConnectionName)
 	}
 }
 
@@ -383,5 +534,69 @@ func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 	}
 	if resp["app_key"] != "k2" {
 		t.Errorf("DD-APPLICATION-KEY = %q, want %q", resp["app_key"], "k2")
+	}
+}
+
+func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const iconSVG = `<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>`
+	iconPath := filepath.Join(t.TempDir(), "icon.svg")
+	if err := os.WriteFile(iconPath, []byte(iconSVG), 0o644); err != nil {
+		t.Fatalf("Write icon: %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"alpha": {
+			DisplayName: "Alpha Display",
+			Description: "Alpha Description",
+			IconFile:    iconPath,
+			Plugin: &config.PluginDef{
+				Auth: &config.ConnectionAuthDef{Type: "none"},
+				Operations: []config.InlineOperationDef{
+					{Name: "do_thing", Method: http.MethodPost, Path: "/things"},
+				},
+				AllowedOperations: map[string]*config.OperationOverride{
+					"do_thing": nil,
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("alpha")
+	if err != nil {
+		t.Fatalf("Get provider: %v", err)
+	}
+	if prov.DisplayName() != "Alpha Display" {
+		t.Fatalf("DisplayName = %q, want %q", prov.DisplayName(), "Alpha Display")
+	}
+	if prov.Description() != "Alpha Description" {
+		t.Fatalf("Description = %q, want %q", prov.Description(), "Alpha Description")
+	}
+
+	cp, ok := prov.(core.CatalogProvider)
+	if !ok {
+		t.Fatal("expected provider to implement core.CatalogProvider")
+	}
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.DisplayName != "Alpha Display" {
+		t.Fatalf("catalog DisplayName = %q, want %q", cat.DisplayName, "Alpha Display")
+	}
+	if cat.Description != "Alpha Description" {
+		t.Fatalf("catalog Description = %q, want %q", cat.Description, "Alpha Description")
+	}
+	if cat.IconSVG != iconSVG {
+		t.Fatalf("catalog IconSVG = %q, want %q", cat.IconSVG, iconSVG)
 	}
 }

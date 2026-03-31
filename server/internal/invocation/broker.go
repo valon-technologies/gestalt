@@ -177,6 +177,11 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	conn := ConnectionFromContext(ctx)
+	if conn == "" {
+		if ocp, ok := prov.(core.OperationConnectionProvider); ok {
+			conn = ocp.ConnectionForOperation(operation)
+		}
+	}
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}

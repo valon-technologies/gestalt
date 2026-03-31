@@ -110,8 +110,9 @@ func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 
 	result := env.Result
+	connMaps := bootstrap.BuildConnectionMaps(env.Config)
 
-	mcpSurface := buildMCPSurface(env.Config)
+	mcpSurface := buildMCPSurface(env.Config, connMaps)
 
 	if env.Config.Server.BaseURL != "" {
 		slog.Info("gestaltd base URL configured",
@@ -145,7 +146,8 @@ func runServer(env *bootstrapEnv) error {
 		Runtimes:          result.Runtimes,
 		Bindings:          result.Bindings,
 		Invoker:           result.Invoker,
-		DefaultConnection: bootstrap.BuildConnectionMap(env.Config),
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
 		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
@@ -233,7 +235,7 @@ type mcpSurface struct {
 	mcpConnection map[string]string
 }
 
-func buildMCPSurface(cfg *config.Config) mcpSurface {
+func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpSurface {
 	surface := mcpSurface{
 		providers:     []string{},
 		toolPrefixes:  make(map[string]string),
@@ -249,8 +251,8 @@ func buildMCPSurface(cfg *config.Config) mcpSurface {
 			continue
 		}
 		surface.providers = append(surface.providers, name)
-		surface.apiConnection[name] = config.PluginConnectionName
-		surface.mcpConnection[name] = config.PluginConnectionName
+		surface.apiConnection[name] = connMaps.APIConnection[name]
+		surface.mcpConnection[name] = connMaps.MCPConnection[name]
 		if intg.MCPToolPrefix == "" && intg.Plugin.Source != "" {
 			if src, err := pluginsource.Parse(intg.Plugin.Source); err == nil {
 				surface.toolPrefixes[name] = src.Plugin + "_"

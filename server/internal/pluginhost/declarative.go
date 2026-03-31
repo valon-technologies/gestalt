@@ -97,7 +97,9 @@ func (p *DeclarativeProvider) Name() string        { return p.name }
 func (p *DeclarativeProvider) DisplayName() string { return p.displayName }
 func (p *DeclarativeProvider) Description() string { return p.description }
 
-func (p *DeclarativeProvider) SetIconSVG(svg string) { p.iconSVG = svg }
+func (p *DeclarativeProvider) SetDisplayName(s string) { p.displayName = s }
+func (p *DeclarativeProvider) SetDescription(s string) { p.description = s }
+func (p *DeclarativeProvider) SetIconSVG(svg string)   { p.iconSVG = svg }
 
 func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{

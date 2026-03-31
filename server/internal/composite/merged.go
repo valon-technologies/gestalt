@@ -12,30 +12,52 @@ import (
 
 type MergedProvider struct {
 	name, displayName, desc string
+	iconSVG                 string
 	connMode                core.ConnectionMode
 	ops                     []core.Operation
+	opConn                  map[string]string
 	route                   map[string]core.Provider
 	all                     []core.Provider
 	owned                   []core.Provider
 }
 
+type BoundProvider struct {
+	Provider   core.Provider
+	Connection string
+}
+
 var (
-	_ core.Provider        = (*MergedProvider)(nil)
-	_ core.CatalogProvider = (*MergedProvider)(nil)
+	_ core.Provider                    = (*MergedProvider)(nil)
+	_ core.CatalogProvider             = (*MergedProvider)(nil)
+	_ core.OperationConnectionProvider = (*MergedProvider)(nil)
 )
 
 func NewMerged(name, displayName, desc string, providers ...core.Provider) (*MergedProvider, error) {
+	bound := make([]BoundProvider, len(providers))
+	for i, p := range providers {
+		bound[i] = BoundProvider{Provider: p}
+	}
+	return NewMergedWithConnections(name, displayName, desc, bound...)
+}
+
+func NewMergedWithConnections(name, displayName, desc string, providers ...BoundProvider) (*MergedProvider, error) {
 	all := make([]core.Provider, len(providers))
-	copy(all, providers)
+	owned := make([]core.Provider, len(providers))
+	for i, p := range providers {
+		all[i] = p.Provider
+		owned[i] = p.Provider
+	}
 	m := &MergedProvider{
 		name:        name,
 		displayName: displayName,
 		desc:        desc,
+		opConn:      make(map[string]string),
 		route:       make(map[string]core.Provider),
 		all:         all,
-		owned:       providers,
+		owned:       owned,
 	}
-	for i, p := range providers {
+	for i, bound := range providers {
+		p := bound.Provider
 		if i == 0 {
 			m.connMode = p.ConnectionMode()
 		} else {
@@ -47,6 +69,9 @@ func NewMerged(name, displayName, desc string, providers ...core.Provider) (*Mer
 			}
 			m.route[op.Name] = p
 			m.ops = append(m.ops, op)
+			if bound.Connection != "" {
+				m.opConn[op.Name] = bound.Connection
+			}
 		}
 	}
 	return m, nil
@@ -57,6 +82,13 @@ func (m *MergedProvider) DisplayName() string                 { return m.display
 func (m *MergedProvider) Description() string                 { return m.desc }
 func (m *MergedProvider) ConnectionMode() core.ConnectionMode { return m.connMode }
 func (m *MergedProvider) ListOperations() []core.Operation    { return m.ops }
+func (m *MergedProvider) ConnectionForOperation(op string) string {
+	return m.opConn[op]
+}
+
+func (m *MergedProvider) SetDisplayName(s string) { m.displayName = s }
+func (m *MergedProvider) SetDescription(s string) { m.desc = s }
+func (m *MergedProvider) SetIconSVG(svg string)   { m.iconSVG = svg }
 
 func (m *MergedProvider) Catalog() *catalog.Catalog {
 	richOps := make(map[string]catalog.CatalogOperation)
@@ -80,6 +112,7 @@ func (m *MergedProvider) Catalog() *catalog.Catalog {
 		Name:        m.name,
 		DisplayName: m.displayName,
 		Description: m.desc,
+		IconSVG:     m.iconSVG,
 	}
 	for _, op := range m.ops {
 		if rich, ok := richOps[op.Name]; ok {
