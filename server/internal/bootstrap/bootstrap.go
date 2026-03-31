@@ -725,7 +725,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	case intg.Plugin.IsInline():
 		result, err = buildInlineProvider(ctx, name, intg, deps, regStore)
 	case intg.Plugin.IsDeclarative:
-		result, err = buildDeclarativeProvider(name, intg, deps, regStore)
+		result, err = buildDeclarativeProvider(ctx, name, intg, deps, regStore)
 	default:
 		result, err = buildExternalPluginProvider(ctx, name, intg, deps, regStore)
 	}
@@ -922,6 +922,18 @@ func buildRestrictedDeclarativeProvider(kind, name string, intg config.Integrati
 	return restricted, nil
 }
 
+func buildManifestBackedProvider(ctx context.Context, kind, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
+	if manifest.Provider.IsSpecLoaded() {
+		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, deps, regStore, allowedOperations)
+	}
+
+	prov, err := buildRestrictedDeclarativeProvider(kind, name, intg, manifest)
+	if err != nil {
+		return nil, err
+	}
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+}
+
 func buildInlineProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	manifest, err := config.InlineToManifest(name, intg.Plugin)
 	if err != nil {
@@ -931,14 +943,7 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 	if err != nil {
 		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
-	if manifest.Provider.IsSpecLoaded() {
-		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, deps, regStore)
-	}
-	prov, err := buildRestrictedDeclarativeProvider("inline", name, intg, manifest)
-	if err != nil {
-		return nil, err
-	}
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+	return buildManifestBackedProvider(ctx, "inline", name, intg, manifest, pluginConfig, deps, regStore, intg.Plugin.AllowedOperations)
 }
 
 func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider, regStore *lazyRegStore, deps Deps) []provider.BuildOption {
@@ -949,12 +954,12 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 	return []provider.BuildOption{provider.WithAuthHandler(handler)}
 }
 
-func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
 	prov, _, err := buildConfiguredSpecProvider(ctx, name, specProviderConfig{
 		plugin:               intg.Plugin,
 		manifestProvider:     mp,
-		allowedOperations:    convertAllowedOperations(mp.AllowedOperations),
+		allowedOperations:    allowedOperations,
 		baseURL:              mp.BaseURL,
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
@@ -1007,12 +1012,12 @@ func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.P
 	return config.MergeHeaders(manifestHeaders, pluginHeaders)
 }
 
-func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*config.OperationOverride {
-	if ops == nil {
+func manifestAllowedOperations(provider *pluginmanifestv1.Provider) map[string]*config.OperationOverride {
+	if provider == nil || provider.AllowedOperations == nil {
 		return nil
 	}
-	result := make(map[string]*config.OperationOverride, len(ops))
-	for k, v := range ops {
+	result := make(map[string]*config.OperationOverride, len(provider.AllowedOperations))
+	for k, v := range provider.AllowedOperations {
 		if v == nil {
 			result[k] = nil
 			continue
@@ -1104,7 +1109,7 @@ func mergeConnectionAuth(dst *config.ConnectionAuthDef, src config.ConnectionAut
 	}
 }
 
-func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildDeclarativeProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
 		return nil, fmt.Errorf("declarative provider %q has no resolved manifest path", name)
 	}
@@ -1117,11 +1122,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
-	prov, err := buildRestrictedDeclarativeProvider("declarative", name, intg, manifest)
-	if err != nil {
-		return nil, err
-	}
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+	return buildManifestBackedProvider(ctx, "declarative", name, intg, manifest, pluginConfig, deps, regStore, manifestAllowedOperations(manifest.Provider))
 }
 
 func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {

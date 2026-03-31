@@ -40,20 +40,6 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		manifest.Provider.ResponseMapping = rm
 	}
 
-	if p.AllowedOperations != nil {
-		manifest.Provider.AllowedOperations = make(map[string]*pluginmanifestv1.ManifestOperationOverride, len(p.AllowedOperations))
-		for k, v := range p.AllowedOperations {
-			if v == nil {
-				manifest.Provider.AllowedOperations[k] = nil
-				continue
-			}
-			manifest.Provider.AllowedOperations[k] = &pluginmanifestv1.ManifestOperationOverride{
-				Alias:       v.Alias,
-				Description: v.Description,
-			}
-		}
-	}
-
 	if len(p.Connections) > 0 {
 		manifest.Provider.Connections = make(map[string]*pluginmanifestv1.ManifestConnectionDef, len(p.Connections))
 		for k, v := range p.Connections {
