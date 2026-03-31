@@ -804,15 +804,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		finalProv = merged
 	}
 
-	buildResult := &ProviderBuildResult{Provider: finalProv}
-	buildResult.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
-	if err != nil {
-		if c, ok := finalProv.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-		return nil, err
-	}
-	return buildResult, nil
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, finalProv, deps, regStore)
 }
 
 type specSurface string
@@ -904,6 +896,32 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, cfg specProvi
 	}
 }
 
+func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+	result := &ProviderBuildResult{Provider: prov}
+	var err error
+	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	if err != nil {
+		if c, ok := prov.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		return nil, err
+	}
+	return result, nil
+}
+
+func buildRestrictedDeclarativeProvider(kind, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest) (core.Provider, error) {
+	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create %s provider %q: %w", kind, name, err)
+	}
+
+	restricted, err := applyAllowedOperations(name, intg, prov)
+	if err != nil {
+		return nil, err
+	}
+	return restricted, nil
+}
+
 func buildInlineProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	manifest, err := config.InlineToManifest(name, intg.Plugin)
 	if err != nil {
@@ -916,22 +934,11 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 	if manifest.Provider.IsSpecLoaded() {
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, deps, regStore)
 	}
-	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create inline provider %q: %w", name, err)
-	}
-
-	restricted, err := applyAllowedOperations(name, intg, prov)
+	prov, err := buildRestrictedDeclarativeProvider("inline", name, intg, manifest)
 	if err != nil {
 		return nil, err
 	}
-
-	result := &ProviderBuildResult{Provider: restricted}
-	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 }
 
 func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider, regStore *lazyRegStore, deps Deps) []provider.BuildOption {
@@ -957,16 +964,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	if err != nil {
 		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 	}
-
-	result := &ProviderBuildResult{Provider: prov}
-	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
-	if err != nil {
-		if c, ok := prov.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-		return nil, err
-	}
-	return result, nil
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 }
 
 func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) {
@@ -1115,25 +1113,15 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
 	}
 	manifest = mergedManifestHeaders(manifest, intg.Plugin)
-	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
-	}
 	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
 	if err != nil {
 		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
-
-	restricted, err := applyAllowedOperations(name, intg, prov)
+	prov, err := buildRestrictedDeclarativeProvider("declarative", name, intg, manifest)
 	if err != nil {
 		return nil, err
 	}
-	result := &ProviderBuildResult{Provider: restricted}
-	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 }
 
 func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {
