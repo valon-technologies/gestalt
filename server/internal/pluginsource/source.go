@@ -53,10 +53,6 @@ func (s Source) String() string {
 	return s.Host + "/" + s.Owner + "/" + s.Repo + "/" + s.Plugin
 }
 
-func (s Source) StorePath() string {
-	return s.String()
-}
-
 func (s Source) AssetName(version string) string {
 	return assetPrefix + s.Plugin + "_" + versionPrefix + version + assetSuffix
 }

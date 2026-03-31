@@ -11,24 +11,8 @@ import (
 	"slices"
 
 	pluginpkg "github.com/valon-technologies/gestalt/server/internal/pluginpkg"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
-
-func storeRootForConfigPath(configPath string) string {
-	if configPath == "" {
-		return filepath.Join(".gestalt", "plugins")
-	}
-	return filepath.Join(filepath.Dir(configPath), ".gestalt", "plugins")
-}
-
-type Store struct {
-	root string
-}
-
-func New(configPath string) *Store {
-	return &Store{root: storeRootForConfigPath(configPath)}
-}
 
 type InstalledPlugin struct {
 	Source         string
@@ -46,16 +30,8 @@ func isWebUIOnly(manifest *pluginmanifestv1.Manifest) bool {
 	return len(manifest.Kinds) == 1 && manifest.Kinds[0] == pluginmanifestv1.KindWebUI
 }
 
-func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
-	if s == nil {
-		return nil, fmt.Errorf("store is required")
-	}
+func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	_, manifest, err := pluginpkg.ReadPackageManifest(packagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	destDir, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -124,16 +100,8 @@ func (s *Store) Install(packagePath string) (*InstalledPlugin, error) {
 	return installed, nil
 }
 
-func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
-	if s == nil {
-		return nil, fmt.Errorf("store is required")
-	}
+func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 	_, manifest, _, err := pluginpkg.LoadManifestFromPath(dirPath)
-	if err != nil {
-		return nil, err
-	}
-
-	destDir, err := s.destDirForManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -238,21 +206,6 @@ func (s *Store) InstallFromDir(dirPath string) (*InstalledPlugin, error) {
 
 	installed := buildInstalledPlugin(manifest, destDir, manifestDest, executablePath, artifact, "")
 	return installed, nil
-}
-
-func (s *Store) destDirForManifest(manifest *pluginmanifestv1.Manifest) (string, error) {
-	if s == nil || s.root == "" {
-		return "", fmt.Errorf("store root is required")
-	}
-	if manifest == nil {
-		return "", fmt.Errorf("manifest is required")
-	}
-	src, err := pluginsource.Parse(manifest.Source)
-	if err != nil {
-		return "", fmt.Errorf("manifest source: %w", err)
-	}
-	destDir := filepath.Join(s.root, filepath.FromSlash(src.StorePath()), manifest.Version)
-	return destDir, nil
 }
 
 func buildInstalledPlugin(manifest *pluginmanifestv1.Manifest, destDir, manifestPath, executablePath string, artifact *pluginmanifestv1.Artifact, assetRoot string) *InstalledPlugin {

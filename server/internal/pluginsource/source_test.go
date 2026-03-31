@@ -98,15 +98,6 @@ func TestSourceStringRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSourceStorePath(t *testing.T) {
-	t.Parallel()
-
-	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
-	if got := src.StorePath(); got != src.String() {
-		t.Errorf("StorePath() = %q, want %q", got, src.String())
-	}
-}
-
 func TestSourceAssetName(t *testing.T) {
 	t.Parallel()
 
