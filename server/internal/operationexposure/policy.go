@@ -156,7 +156,8 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 
 	filtered := cat.Clone()
 	filtered.Operations = make([]catalog.CatalogOperation, 0, len(p.exposedToOriginal))
-	for _, op := range cat.Operations {
+	for i := range cat.Operations {
+		op := cat.Operations[i]
 		exposed, ok := p.originalToExposed[op.ID]
 		if !ok {
 			continue

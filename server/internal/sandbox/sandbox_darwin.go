@@ -84,9 +84,9 @@ func buildSBPLProfile(policy *Policy) string {
 }
 
 func sbplAllowWrite(b *strings.Builder, p string) {
-	b.WriteString(fmt.Sprintf("(allow file-write* (subpath %s))\n", sbplQuote(p)))
+	fmt.Fprintf(b, "(allow file-write* (subpath %s))\n", sbplQuote(p))
 	if resolved, err := filepath.EvalSymlinks(p); err == nil && resolved != p {
-		b.WriteString(fmt.Sprintf("(allow file-write* (subpath %s))\n", sbplQuote(resolved)))
+		fmt.Fprintf(b, "(allow file-write* (subpath %s))\n", sbplQuote(resolved))
 	}
 }
 
