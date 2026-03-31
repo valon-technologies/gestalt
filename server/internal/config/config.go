@@ -103,6 +103,7 @@ type ExecutablePluginDef struct {
 	AllowedHosts      []string                      `yaml:"allowed_hosts"`
 	Config            yaml.Node                     `yaml:"config"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
+	Connection        string                        `yaml:"connection"`
 
 	ResolvedManifestPath string `yaml:"-"`
 	ResolvedIconFile     string `yaml:"-"`
@@ -525,8 +526,25 @@ func validateHybridIntegration(name string, intg IntegrationDef) error {
 		return err
 	}
 
+	if intg.Plugin.Connection != "" {
+		if len(intg.Connections) == 0 {
+			return fmt.Errorf("config validation: integration %q plugin.connection requires connections to be defined", name)
+		}
+		if _, ok := intg.Connections[intg.Plugin.Connection]; !ok {
+			return fmt.Errorf("config validation: integration %q plugin.connection %q not found in connections", name, intg.Plugin.Connection)
+		}
+	}
+
 	if intg.API != nil {
-		return fmt.Errorf("config validation: integration %q cannot compose plugin with api; only plugin + mcp is supported", name)
+		if intg.Plugin.Connection == "" {
+			return fmt.Errorf("config validation: integration %q plugin.connection is required when composing plugin with api", name)
+		}
+		if err := validateAPIDef(name, intg.API, intg.Connections); err != nil {
+			return err
+		}
+		if intg.API.Connection != intg.Plugin.Connection {
+			return fmt.Errorf("config validation: integration %q plugin.connection and api.connection must reference the same connection", name)
+		}
 	}
 
 	if intg.MCP != nil {
@@ -545,8 +563,8 @@ func validateHybridIntegration(name string, intg IntegrationDef) error {
 	}
 
 	if len(intg.Connections) > 0 {
-		if intg.MCP == nil {
-			return fmt.Errorf("config validation: integration %q has connections but no mcp surface; plugin + bare connections is not supported", name)
+		if intg.MCP == nil && intg.API == nil && intg.Plugin.Connection == "" {
+			return fmt.Errorf("config validation: integration %q has connections but no surface references them; use plugin.connection, api, or mcp", name)
 		}
 		if err := validateConnectionModes(name, intg.Connections); err != nil {
 			return err

@@ -708,12 +708,19 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, err
 		}
 
+		if intg.API != nil {
+			return buildAPIPluginProvider(ctx, name, intg, restricted, pluginConfig, factories, deps)
+		}
 		if intg.MCP != nil {
 			return buildPluginMCPProvider(ctx, name, intg, restricted, pluginConfig, factories, deps)
 		}
 
 		buildResult := &ProviderBuildResult{Provider: restricted}
-		attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
+		if intg.Plugin.Connection == "" {
+			attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
+		} else {
+			attachPluginOAuthForConnection(name, intg, pluginConfig, deps, buildResult)
+		}
 		return buildResult, nil
 	}
 
@@ -722,6 +729,55 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, err
 	}
 	return factory(ctx, name, intg, deps)
+}
+
+func buildAPIPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginProv core.Provider, pluginConfig map[string]any, factories *FactoryRegistry, deps Deps) (_ *ProviderBuildResult, err error) {
+	cleanupPlugin := true
+	defer func() {
+		if cleanupPlugin {
+			if c, ok := pluginProv.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+	}()
+
+	factory, err := providerFactoryForName(name, factories)
+	if err != nil {
+		return nil, err
+	}
+	apiResult, err := factory(ctx, name, intg, deps)
+	if err != nil {
+		return nil, fmt.Errorf("building api surface for %q: %w", name, err)
+	}
+
+	displayName := intg.DisplayName
+	if displayName == "" {
+		displayName = name
+	}
+	merged, err := composite.NewMerged(name, displayName, intg.Description, apiResult.Provider, pluginProv)
+	if err != nil {
+		if c, ok := apiResult.Provider.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		return nil, fmt.Errorf("merging api and plugin for %q: %w", name, err)
+	}
+	cleanupPlugin = false
+
+	var prov core.Provider = merged
+	if intg.MCP != nil {
+		mcpUp, ok := apiResult.Provider.(composite.MCPUpstream)
+		if !ok {
+			_ = merged.Close()
+			return nil, fmt.Errorf("integration %q has mcp surface but api factory did not return MCPUpstream", name)
+		}
+		merged.DisownProvider(apiResult.Provider)
+		prov = composite.New(name, merged, mcpUp)
+	}
+
+	return &ProviderBuildResult{
+		Provider:       prov,
+		ConnectionAuth: apiResult.ConnectionAuth,
+	}, nil
 }
 
 func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
@@ -870,10 +926,36 @@ func buildPluginMCPProvider(ctx context.Context, name string, intg config.Integr
 		Provider:       composed,
 		ConnectionAuth: mcpResult.ConnectionAuth,
 	}
-	attachPluginOAuth(name, intg, pluginConfig, deps, result)
+	if intg.Plugin.Connection == "" {
+		attachPluginOAuth(name, intg, pluginConfig, deps, result)
+	} else {
+		attachPluginOAuthForConnection(name, intg, pluginConfig, deps, result)
+	}
 
 	cleanupPlugin = false
 	return result, nil
+}
+
+func attachPluginOAuthForConnection(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
+	if intg.Plugin == nil || intg.Plugin.Connection == "" {
+		return
+	}
+	conn, ok := intg.Connections[intg.Plugin.Connection]
+	if !ok || conn.Auth.Type != "oauth2" {
+		return
+	}
+	authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
+	if err != nil {
+		slog.Warn("cannot build oauth handler for shared connection", "provider", name, "connection", intg.Plugin.Connection, "error", err)
+		return
+	}
+	if authHandler == nil {
+		return
+	}
+	if result.ConnectionAuth == nil {
+		result.ConnectionAuth = make(map[string]OAuthHandler)
+	}
+	result.ConnectionAuth[intg.Plugin.Connection] = authHandler
 }
 
 func attachPluginOAuth(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
@@ -962,7 +1044,7 @@ func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFa
 }
 
 func validateProviderBuildAvailable(name string, intg config.IntegrationDef, factories *FactoryRegistry) error {
-	if intg.Plugin != nil && intg.MCP == nil {
+	if intg.Plugin != nil && intg.MCP == nil && intg.API == nil {
 		return nil
 	}
 	_, err := providerFactoryForName(name, factories)
@@ -977,6 +1059,8 @@ func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
 	m := make(invocation.ConnectionMap, len(cfg.Integrations))
 	for name, intg := range cfg.Integrations {
 		switch {
+		case intg.Plugin != nil && intg.Plugin.Connection != "":
+			m[name] = intg.Plugin.Connection
 		case intg.Plugin != nil:
 			m[name] = config.PluginConnectionName
 		case intg.API != nil:

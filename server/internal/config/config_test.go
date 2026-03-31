@@ -1596,7 +1596,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: "plugin.source",
 		},
 		{
-			name: "plugin with connections but no mcp is rejected",
+			name: "plugin with connections but no surface reference is rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
@@ -1605,19 +1605,72 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "plugin + bare connections is not supported",
+			wantErr: "no surface references them",
 		},
 		{
-			name: "plugin with api is rejected",
+			name: "plugin with connection referencing pool is valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
-						Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin"},
-						API:    &APIDef{Type: "rest"},
+						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
+						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "default"},
 					},
 				},
 			},
-			wantErr: "cannot compose plugin with api",
+		},
+		{
+			name: "plugin with api requires plugin.connection",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
+						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin"},
+						API:         &APIDef{Type: "rest", Connection: "default"},
+					},
+				},
+			},
+			wantErr: "plugin.connection is required when composing plugin with api",
+		},
+		{
+			name: "plugin with api and shared connection is valid",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
+						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "default"},
+						API:         &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "default"},
+					},
+				},
+			},
+		},
+		{
+			name: "plugin with api but missing connection rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Connections: map[string]ConnectionDef{"default": {Mode: "user"}},
+						Plugin:      &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "nonexistent"},
+						API:         &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "default"},
+					},
+				},
+			},
+			wantErr: `plugin.connection "nonexistent" not found`,
+		},
+		{
+			name: "plugin with api using different connections rejected",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Connections: map[string]ConnectionDef{
+							"api_conn":    {Mode: "user"},
+							"plugin_conn": {Mode: "user"},
+						},
+						Plugin: &ExecutablePluginDef{Command: "/usr/bin/plugin", Connection: "plugin_conn"},
+						API:    &APIDef{Type: "rest", OpenAPI: "https://example.com/spec.json", Connection: "api_conn"},
+					},
+				},
+			},
+			wantErr: "plugin.connection and api.connection must reference the same connection",
 		},
 		{
 			name: "runtime plugin with type rejected",
