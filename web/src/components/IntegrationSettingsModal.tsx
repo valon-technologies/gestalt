@@ -346,6 +346,17 @@ export default function IntegrationSettingsModal({
   );
 }
 
+const LINK_RE = /(\[[^\]]+\]\(https?:\/\/[^)]+\))/;
+const LINK_MATCH_RE = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/;
+
+function renderLinkedText(text: string): (string | JSX.Element)[] {
+  return text.split(LINK_RE).map((seg, i) => {
+    const m = seg.match(LINK_MATCH_RE);
+    if (!m) return seg;
+    return <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="text-timber-500 hover:underline">{m[1]}</a>;
+  });
+}
+
 function TokenForm({
   integrationName,
   headingId,
@@ -414,7 +425,7 @@ function TokenForm({
             )}
           </label>
           {field.description && (
-            <p className="mt-0.5 text-xs text-stone-400">{field.description}</p>
+            <p className="mt-0.5 text-xs text-stone-400">{renderLinkedText(field.description)}</p>
           )}
           <input
             id={`cred_${field.name}-${integrationName}`}
