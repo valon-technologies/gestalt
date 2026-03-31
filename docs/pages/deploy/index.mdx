@@ -55,12 +55,12 @@ To build and run from source:
 ```sh
 docker build -f server/Dockerfile -t gestaltd .
 docker run -p 8080:8080 \
-  -v ./server/deploy/docker/config.yaml:/etc/gestalt/config.yaml:ro \
+  -v ./your-config.yaml:/etc/gestalt/config.yaml:ro \
   -v gestalt-data:/data \
   gestaltd
 ```
 
-For published-image examples rather than repo-local source builds, see `examples/deploy/`.
+For a starting-point config and published-image examples, see `examples/deploy/`.
 
 ## Bare Binary
 
