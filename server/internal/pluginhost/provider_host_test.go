@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 )
 
 func TestProxyHTTPInjectsToken(t *testing.T) {

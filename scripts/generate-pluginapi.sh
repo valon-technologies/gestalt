@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-cd "${ROOT}/sdk/pluginapi"
+cd "${ROOT}/sdk/pluginsdk/proto"
 
 if command -v buf &>/dev/null; then
   buf generate
@@ -21,5 +21,5 @@ else
     --go_opt=paths=source_relative \
     --go-grpc_out=. \
     --go-grpc_opt=paths=source_relative \
-    sdk/pluginapi/v1/plugin.proto
+    sdk/pluginsdk/proto/v1/plugin.proto
 fi

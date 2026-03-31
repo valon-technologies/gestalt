@@ -3,10 +3,7 @@ name: Release SDK
 on:
   push:
     tags:
-      - 'sdk/pluginapi/v*'
-
-permissions:
-  contents: write
+      - 'sdk/pluginsdk/v*'
 
 jobs:
   release-pluginsdk:
@@ -14,42 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      API_MODULE: github.com/valon-technologies/gestalt/sdk/pluginapi
       SDK_MODULE: github.com/valon-technologies/gestalt/sdk/pluginsdk
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: sdk/pluginsdk/go.mod
           cache-dependency-path: sdk/pluginsdk/go.sum
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#sdk/pluginapi/v}" >> "$GITHUB_OUTPUT"
-      - name: Pin pluginsdk to released pluginapi
-        env:
-          GOPRIVATE: github.com/valon-technologies/gestalt
-          GONOSUMCHECK: github.com/valon-technologies/gestalt/*
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          cd sdk/pluginsdk
-          go mod edit -dropreplace="${API_MODULE}"
-          go mod edit -require="${API_MODULE}@v${VERSION}"
-          go mod tidy
-      - name: Commit, tag, and push pluginsdk
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sdk/pluginsdk/go.mod sdk/pluginsdk/go.sum
-          git commit -m "sdk/pluginsdk: pin pluginapi v${VERSION} for release"
-          git tag "sdk/pluginsdk/v${VERSION}"
-          git push origin "sdk/pluginsdk/v${VERSION}"
+        run: echo "version=${GITHUB_REF_NAME#sdk/pluginsdk/v}" >> "$GITHUB_OUTPUT"
       - name: Warm Go module proxy cache
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          GOPROXY=proxy.golang.org go list -m "${API_MODULE}@v${VERSION}" || true
           GOPROXY=proxy.golang.org go list -m "${SDK_MODULE}@v${VERSION}" || true

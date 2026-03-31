@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

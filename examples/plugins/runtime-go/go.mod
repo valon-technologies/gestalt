@@ -5,7 +5,6 @@ go 1.26
 require github.com/valon-technologies/gestalt/sdk/pluginsdk v0.0.0-00010101000000-000000000000
 
 require (
-	github.com/valon-technologies/gestalt/sdk/pluginapi v0.0.0-00010101000000-000000000000 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
@@ -14,7 +13,4 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace (
-	github.com/valon-technologies/gestalt/sdk/pluginapi => ../../../sdk/pluginapi
-	github.com/valon-technologies/gestalt/sdk/pluginsdk => ../../../sdk/pluginsdk
-)
+replace github.com/valon-technologies/gestalt/sdk/pluginsdk => ../../../sdk/pluginsdk
