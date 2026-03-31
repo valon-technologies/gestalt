@@ -831,7 +831,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
-		applyPluginHeaders(def, intg.Plugin, nil)
+		applyPluginHeaders(def, intg.Plugin, manifestProvider)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -847,7 +847,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
-		applyPluginHeaders(def, intg.Plugin, nil)
+		applyPluginHeaders(def, intg.Plugin, manifestProvider)
 		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
@@ -860,7 +860,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, mergedHeaders(nil, intg.Plugin), deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, mergedHeaders(manifestProvider, intg.Plugin), deps.Egress.Resolver)
 		if err != nil {
 			return nil, "", fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
 		}

@@ -180,7 +180,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 			if token != "" {
 				authHeaders = map[string]string{"Authorization": core.BearerScheme + token}
 			}
-			return config.MergeHeaders(authHeaders, u.headers)
+			return config.MergeHeaders(u.headers, authHeaders)
 		}),
 	)
 	if err != nil {

@@ -69,6 +69,18 @@
             "$ref": "#/$defs/provider_operation"
           }
         },
+        "openapi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string",
+          "minLength": 1
+        },
         "post_connect_discovery": {
           "type": "object",
           "additionalProperties": false,
