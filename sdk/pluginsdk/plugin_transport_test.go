@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"

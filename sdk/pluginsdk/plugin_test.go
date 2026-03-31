@@ -7,7 +7,7 @@ import (
 
 	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )

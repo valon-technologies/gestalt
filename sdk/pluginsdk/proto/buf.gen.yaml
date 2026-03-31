@@ -3,7 +3,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package
-      value: github.com/valon-technologies/gestalt/sdk/pluginapi/v1;pluginapiv1
+      value: github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1;pluginapiv1
 plugins:
   # Go messages
   - remote: buf.build/protocolbuffers/go
@@ -19,12 +19,12 @@ plugins:
 
   # TypeScript (ts-proto generates both messages and gRPC client/server code)
   - remote: buf.build/community/timostamm-protobuf-ts
-    out: ../../sdk/plugin/typescript/gen
+    out: ../../../sdk/plugin/typescript/gen
     opt:
       - long_type_string
 
   # Python messages + gRPC stubs
   - remote: buf.build/protocolbuffers/python
-    out: ../../sdk/plugin/python/gen
+    out: ../../../sdk/plugin/python/gen
   - remote: buf.build/grpc/python
-    out: ../../sdk/plugin/python/gen
+    out: ../../../sdk/plugin/python/gen
