@@ -81,6 +81,24 @@
           "type": "string",
           "minLength": 1
         },
+        "openapi_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphql_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connections": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifest_connection_def"
+          }
+        },
         "post_connect_discovery": {
           "type": "object",
           "additionalProperties": false,
@@ -285,6 +303,12 @@
           "type": "string",
           "format": "uri"
         },
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
         "scopes": {
           "type": "array",
           "items": { "type": "string" }
@@ -315,6 +339,21 @@
           "type": "object",
           "additionalProperties": { "type": "string" }
         },
+        "token_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "refresh_params": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "accept_header": {
+          "type": "string"
+        },
+        "token_metadata": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "credentials": {
           "type": "array",
           "items": {
@@ -340,6 +379,19 @@
           }
         }
       ]
+    },
+    "manifest_connection_def": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["none", "user", "identity", "either"]
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
+        }
+      }
     },
     "provider_operation": {
       "type": "object",
