@@ -38,13 +38,7 @@ A minimal provider package manifest looks like this:
 }
 ```
 
-The important ideas are:
-
-- `source` identifies the plugin in the managed artifact system
-- the package declares which kinds it supports
-- the manifest names platform-specific artifacts
-- entrypoints point at one of those packaged artifacts
-- provider packages may also ship a JSON Schema for config validation
+`source` identifies the plugin in the managed artifact system. The package declares which kinds it supports, names platform-specific artifacts, and defines entrypoints that point at those artifacts. Provider packages may also ship a JSON Schema for config validation.
 
 ### Web UI package
 
@@ -116,12 +110,4 @@ When you later run `gestaltd serve --locked` against the bundled config, startup
 
 ## Why Packaging Matters
 
-Packaging gives you:
-
-- repeatable installs
-- artifact digest verification
-- platform-specific binaries in one archive
-- optional config schema validation
-- deterministic production startup
-
-For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd bundle` is the stronger model.
+Packaging gives you repeatable installs, artifact digest verification, platform-specific binaries in one archive, optional config schema validation, and deterministic production startup. For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd bundle` is the stronger model.

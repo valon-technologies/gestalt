@@ -2,7 +2,7 @@
 
 Packaged plugins are the deployment-oriented way to run executable providers and runtimes.
 
-## 1. Reference The Package
+## Reference The Package
 
 ```yaml
 integrations:
@@ -19,7 +19,7 @@ integrations:
 - a local `.tar.gz`
 - an HTTPS URL
 
-## 2. Bundle It
+## Bundle It
 
 ```sh
 gestaltd bundle --config ./config.yaml --output ./bundle
@@ -27,7 +27,7 @@ gestaltd bundle --config ./config.yaml --output ./bundle
 
 This validates the manifest, selects the current platform artifact, installs the package into the output directory, and records the prepared result in `gestalt.lock.json`.
 
-## 3. Validate The Bundled Deployment
+## Validate The Bundled Deployment
 
 ```sh
 gestaltd validate --config ./bundle/config.yaml
@@ -35,7 +35,7 @@ gestaltd validate --config ./bundle/config.yaml
 
 Validation uses the prepared plugin state instead of re-resolving the package every time.
 
-## 4. Start From Locked State
+## Start From Locked State
 
 ```sh
 gestaltd serve --locked --config ./bundle/config.yaml
@@ -43,7 +43,7 @@ gestaltd serve --locked --config ./bundle/config.yaml
 
 That is the normal production path for packaged plugins.
 
-## 5. Refresh A Remote Package
+## Refresh A Remote Package
 
 If `plugin.package` points at an HTTPS URL and the remote archive changes, rerun:
 

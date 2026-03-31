@@ -2,7 +2,7 @@
 
 Gestalt exposes integrations to any MCP client through `/mcp`.
 
-## 1. Automatic MCP Projection
+## Automatic MCP Projection
 
 All declarative API operations are automatically projected as MCP tools. There is no opt-in flag; if an integration has an `api` surface, its operations appear on `/mcp`.
 
@@ -30,7 +30,7 @@ integrations:
 
 `mcp_tool_prefix` controls tool naming so that tools from different integrations do not collide.
 
-## 2. Connect To A Native MCP Server
+## Connect To A Native MCP Server
 
 Adding an `mcp` surface connects Gestalt to an upstream MCP server and republishes its tools:
 
@@ -47,11 +47,11 @@ integrations:
 
 An integration can declare both `api` and `mcp` surfaces. The resulting provider namespace contains generated HTTP operations and imported MCP tools.
 
-## 3. Plugin-Only Integrations
+## Plugin-Only Integrations
 
 Plugin-only integrations are mounted on `/mcp` if the plugin exposes a catalog.
 
-## 4. Start The Server
+## Start The Server
 
 ```sh
 gestaltd serve --locked --config ./config.yaml
@@ -59,7 +59,7 @@ gestaltd serve --locked --config ./config.yaml
 
 Gestalt mounts `/mcp` on the same HTTP server as the rest of the API.
 
-## 5. Create A Gestalt API Token
+## Create A Gestalt API Token
 
 Use the web UI or the HTTP API:
 
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8080/api/v1/tokens \
 
 The returned token is what the MCP client uses to authenticate to Gestalt.
 
-## 6. Point Your MCP Client At Gestalt
+## Point Your MCP Client At Gestalt
 
 Example client config:
 
@@ -89,13 +89,13 @@ Example client config:
 }
 ```
 
-## 7. Understand The Auth Layers
+## Understand The Auth Layers
 
 The MCP client authenticates to Gestalt with the API token above.
 
 Then Gestalt resolves upstream credentials using the integration's connection mode. That means MCP inherits the same per-user, shared-identity, or no-auth behavior as the regular HTTP API.
 
-## 8. Troubleshoot Missing Tools
+## Troubleshoot Missing Tools
 
 Check these in order:
 

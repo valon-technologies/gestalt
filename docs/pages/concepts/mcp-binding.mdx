@@ -61,15 +61,7 @@ That gives you one provider namespace that can contain:
 
 ## What The MCP Client Sees
 
-The MCP client does not talk directly to your upstream APIs. It talks to Gestalt:
-
-1. the client connects to `/mcp`
-2. Gestalt advertises tools from all integrations that expose operations
-3. tool invocations flow through the same invocation broker as HTTP requests
-4. the broker resolves credentials, instances, refresh, and connection metadata
-5. Gestalt executes the underlying provider operation
-
-This means MCP inherits the same auth and connection behavior as the rest of the platform.
+The MCP client does not talk directly to your upstream APIs. It connects to `/mcp`, where Gestalt advertises tools from all integrations that expose operations. Tool invocations flow through the same invocation broker as HTTP requests, so the broker resolves credentials, instances, refresh, and connection metadata before Gestalt executes the underlying provider operation. MCP inherits the same auth and connection behavior as the rest of the platform.
 
 ## Auth Behavior
 
