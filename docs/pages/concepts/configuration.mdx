@@ -104,8 +104,8 @@ After that, `gestaltd serve --locked --config <output>/PATH` starts only if the 
 `gestaltd validate --config PATH` is non-mutating and expects existing lock state. Bundle first, then validate the bundled output:
 
 ```sh
-gestaltd bundle --config ./gestalt.yaml --output ./bundle
-gestaltd validate --config ./bundle/gestalt.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd validate --config ./bundle/config.yaml
 ```
 
 ## Relative Paths
