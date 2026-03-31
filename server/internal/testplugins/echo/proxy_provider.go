@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
@@ -65,7 +66,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return nil, err
 		}
 		url, _ := params["url"].(string)
-		invocationID := pluginhost.InvocationID(ctx)
+		invocationID := pluginsdk.InvocationID(ctx)
 		resp, err := p.host.ProxyHTTP(ctx, &pluginapiv1.ProxyHTTPRequest{
 			InvocationId: invocationID,
 			Method:       http.MethodGet,

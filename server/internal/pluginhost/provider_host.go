@@ -33,17 +33,6 @@ func blockedProxyHeader(name string) bool {
 
 const maxProxyResponseBytes = 50 << 20 // 50 MB
 
-type invocationIDKey struct{}
-
-func WithInvocationID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, invocationIDKey{}, id)
-}
-
-func InvocationID(ctx context.Context) string {
-	id, _ := ctx.Value(invocationIDKey{}).(string)
-	return id
-}
-
 type ProviderHostServer struct {
 	pluginapiv1.UnimplementedProviderHostServer
 	tokens       *sync.Map

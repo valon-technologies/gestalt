@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -60,7 +61,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *pluginapiv1.ExecuteRe
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
 	if id := req.GetInvocationId(); id != "" {
-		ctx = WithInvocationID(ctx, id)
+		ctx = pluginsdk.WithInvocationID(ctx, id)
 	}
 	result, err := s.provider.Execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
@@ -81,7 +82,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *pluginapiv1
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
 	if id := req.GetInvocationId(); id != "" {
-		ctx = WithInvocationID(ctx, id)
+		ctx = pluginsdk.WithInvocationID(ctx, id)
 	}
 	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
 	if err != nil {
