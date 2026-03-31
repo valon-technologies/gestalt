@@ -293,6 +293,10 @@ var validHTTPMethods = map[string]bool{
 }
 
 func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
+	if provider.IsSpecLoaded() {
+		return validateSpecLoadedProvider(provider)
+	}
+
 	if provider.BaseURL == "" {
 		return fmt.Errorf("provider.base_url is required for declarative providers")
 	}
@@ -328,6 +332,50 @@ func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
 			}
 		}
 	}
+	return nil
+}
+
+func validateSpecLoadedProvider(provider *pluginmanifestv1.Provider) error {
+	if len(provider.Operations) > 0 {
+		return fmt.Errorf("spec-loaded providers cannot also declare hand-written operations")
+	}
+	if provider.OpenAPI != "" && provider.GraphQLURL != "" {
+		return fmt.Errorf("openapi and graphql_url are mutually exclusive")
+	}
+
+	if len(provider.Connections) > 0 {
+		var firstMode string
+		var firstName string
+		for cname, conn := range provider.Connections {
+			mode := conn.Mode
+			if mode == "" {
+				mode = "user"
+			}
+			if firstName == "" {
+				firstName = cname
+				firstMode = mode
+			} else if mode != firstMode {
+				return fmt.Errorf("all connections must share the same mode (%q=%q, %q=%q)", firstName, firstMode, cname, mode)
+			}
+		}
+
+		if provider.OpenAPIConnection != "" {
+			if _, ok := provider.Connections[provider.OpenAPIConnection]; !ok {
+				return fmt.Errorf("openapi_connection references unknown connection %q", provider.OpenAPIConnection)
+			}
+		}
+		if provider.GraphQLConnection != "" {
+			if _, ok := provider.Connections[provider.GraphQLConnection]; !ok {
+				return fmt.Errorf("graphql_connection references unknown connection %q", provider.GraphQLConnection)
+			}
+		}
+		if provider.MCPConnection != "" {
+			if _, ok := provider.Connections[provider.MCPConnection]; !ok {
+				return fmt.Errorf("mcp_connection references unknown connection %q", provider.MCPConnection)
+			}
+		}
+	}
+
 	return nil
 }
 
