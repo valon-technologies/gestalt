@@ -10,19 +10,30 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// ConfigSchemaProvider is an optional interface a [Provider] can implement
+// to declare a JSON Schema for the provider-level configuration it accepts.
+// The host uses this schema to validate configuration before starting the plugin.
 type ConfigSchemaProvider interface {
 	ConfigSchemaJSON() string
 }
 
+// ProtocolVersionProvider is an optional interface a [Provider] can implement
+// to advertise the range of protocol versions it supports. If not implemented,
+// the server reports the current protocol version as both min and max.
 type ProtocolVersionProvider interface {
 	ProtocolVersionRange() (min, max int32)
 }
 
+// ProviderServer adapts a [Provider] implementation to the gRPC
+// ProviderPlugin service. Most plugin authors should use [ServeProvider]
+// instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedProviderPluginServer
 	provider Provider
 }
 
+// NewProviderServer wraps a [Provider] in a [ProviderServer] ready to be
+// registered on a gRPC server.
 func NewProviderServer(provider Provider) *ProviderServer {
 	return &ProviderServer{provider: provider}
 }

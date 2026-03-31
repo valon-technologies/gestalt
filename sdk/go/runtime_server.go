@@ -14,6 +14,9 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// RuntimeServer adapts a [Runtime] implementation to the gRPC
+// RuntimePlugin service. Most plugin authors should use [ServeRuntime]
+// instead of constructing this directly.
 type RuntimeServer struct {
 	proto.UnimplementedRuntimePluginServer
 	runtime Runtime
@@ -21,6 +24,8 @@ type RuntimeServer struct {
 	host    *runtimeHostClient
 }
 
+// NewRuntimeServer wraps a [Runtime] in a [RuntimeServer] ready to be
+// registered on a gRPC server.
 func NewRuntimeServer(runtime Runtime) *RuntimeServer {
 	return &RuntimeServer{runtime: runtime}
 }
