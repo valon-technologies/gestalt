@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
+	"google.golang.org/grpc"
 )
 
 type invocationIDKey struct{}
@@ -23,16 +24,13 @@ type HTTPResponse struct {
 	Body       []byte
 }
 
-type ProxiedHTTPClient struct {
-	host pluginapiv1.ProviderHostClient
+type providerHostClient struct {
+	client pluginapiv1.ProviderHostClient
+	conn   *grpc.ClientConn
 }
 
-func NewProxiedHTTPClient(host pluginapiv1.ProviderHostClient) *ProxiedHTTPClient {
-	return &ProxiedHTTPClient{host: host}
-}
-
-func (c *ProxiedHTTPClient) Do(ctx context.Context, invocationID, method, url string, headers map[string]string, body []byte) (*HTTPResponse, error) {
-	resp, err := c.host.ProxyHTTP(ctx, &pluginapiv1.ProxyHTTPRequest{
+func (c *providerHostClient) ProxyHTTP(ctx context.Context, invocationID, method, url string, headers map[string]string, body []byte) (*HTTPResponse, error) {
+	resp, err := c.client.ProxyHTTP(ctx, &pluginapiv1.ProxyHTTPRequest{
 		InvocationId: invocationID,
 		Method:       method,
 		Url:          url,
@@ -47,4 +45,8 @@ func (c *ProxiedHTTPClient) Do(ctx context.Context, invocationID, method, url st
 		Headers:    resp.GetHeaders(),
 		Body:       resp.GetBody(),
 	}, nil
+}
+
+func (c *providerHostClient) Close() error {
+	return c.conn.Close()
 }
