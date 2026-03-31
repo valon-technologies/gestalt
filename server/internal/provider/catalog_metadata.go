@@ -34,7 +34,9 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 		for _, p := range opDef.Parameters {
 			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
 				Name:        p.Name,
+				WireName:    p.WireName,
 				Type:        p.Type,
+				Location:    p.Location,
 				Description: p.Description,
 				Required:    p.Required,
 				Default:     p.Default,

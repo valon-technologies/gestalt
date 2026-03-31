@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,7 +142,8 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 				Method:      http.MethodGet,
 				Path:        "/things",
 				Parameters: []ParameterDef{
-					{Name: "limit", Type: "integer", Description: "Max results", Default: 25},
+					{Name: "limit", Type: "integer", Location: "query", Description: "Max results", Default: 25},
+					{Name: "page_size", WireName: "page[size]", Type: "integer", Location: "query", Description: "Nested pagination size"},
 					{Name: "cursor", Type: "string", Description: "Pagination cursor"},
 				},
 			},
@@ -182,6 +184,23 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 	}
 
 	for _, op := range cat.Operations {
+		if op.ID == "list" {
+			if len(op.Parameters) != 3 {
+				t.Fatalf("list params = %d, want 3", len(op.Parameters))
+			}
+			if op.Parameters[0].Location != "query" {
+				t.Errorf("list limit location = %q, want query", op.Parameters[0].Location)
+			}
+			if op.Parameters[1].Name != "page_size" {
+				t.Errorf("page param name = %q, want page_size", op.Parameters[1].Name)
+			}
+			if op.Parameters[1].WireName != "page[size]" {
+				t.Errorf("page param wire name = %q, want page[size]", op.Parameters[1].WireName)
+			}
+			if op.Parameters[1].Location != "query" {
+				t.Errorf("page param location = %q, want query", op.Parameters[1].Location)
+			}
+		}
 		if op.InputSchema == nil {
 			t.Errorf("operation %q should have synthesized InputSchema", op.ID)
 			continue
@@ -194,6 +213,74 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		if schema["type"] != "object" {
 			t.Errorf("operation %q schema type = %v", op.ID, schema["type"])
 		}
+	}
+}
+
+func TestBuildExecuteRoutesQueryParamsUsingCatalogMetadata(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query": r.URL.RawQuery,
+			"body":  body,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "routing",
+		DisplayName: "Routing API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"create": {
+				Description: "Create a thing",
+				Method:      http.MethodPost,
+				Path:        "/things",
+				Parameters: []ParameterDef{
+					{Name: "name", Type: "string", Location: "body", Required: true},
+					{Name: "page_size", WireName: "page[size]", Type: "integer", Location: "query"},
+				},
+			},
+		},
+	}
+
+	prov, err := Build(def, config.ConnectionDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "create", map[string]any{
+		"name":      "widget",
+		"page_size": 25,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	query, err := url.ParseQuery(resp["query"].(string))
+	if err != nil {
+		t.Fatalf("url.ParseQuery: %v", err)
+	}
+	if query.Get("page[size]") != "25" {
+		t.Fatalf("query page[size] = %q, want 25", query.Get("page[size]"))
+	}
+
+	body := resp["body"].(map[string]any)
+	if body["name"] != "widget" {
+		t.Fatalf("body[name] = %v, want widget", body["name"])
+	}
+	if _, ok := body["page_size"]; ok {
+		t.Fatalf("body should not contain page_size when parameter is routed to query")
 	}
 }
 

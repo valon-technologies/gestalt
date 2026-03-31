@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -112,10 +113,22 @@ func TestLoadDefinition(t *testing.T) {
 	if listOp.Description != "List items with pagination" {
 		t.Errorf("list_items description = %q, want override", listOp.Description)
 	}
+	if len(listOp.Parameters) != 1 {
+		t.Fatalf("list_items params = %d, want 1", len(listOp.Parameters))
+	}
+	if listOp.Parameters[0].Location != "query" {
+		t.Errorf("list_items param location = %q, want query", listOp.Parameters[0].Location)
+	}
 
 	getOp := def.Operations["get_item"]
 	if getOp.Description != "Get an item by ID" {
 		t.Errorf("get_item description = %q, want spec default", getOp.Description)
+	}
+	if len(getOp.Parameters) != 1 {
+		t.Fatalf("get_item params = %d, want 1", len(getOp.Parameters))
+	}
+	if getOp.Parameters[0].Location != "path" {
+		t.Errorf("get_item param location = %q, want path", getOp.Parameters[0].Location)
 	}
 }
 
@@ -619,6 +632,73 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 	}
 	if !hasValue {
 		t.Error("expected 'value' body property to be included")
+	}
+
+	byName := make(map[string]provider.ParameterDef, len(op.Parameters))
+	for _, p := range op.Parameters {
+		byName[p.Name] = p
+	}
+	if byName["name"].Location != "path" {
+		t.Errorf("name location = %q, want path", byName["name"].Location)
+	}
+	if byName["value"].Location != "body" {
+		t.Errorf("value location = %q, want body", byName["value"].Location)
+	}
+}
+
+func TestLoadDefinitionNormalizesBracketParams(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Bracket API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/records": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_records",
+					"summary":     "List records",
+					"parameters": []any{
+						map[string]any{
+							"name": "page[size]", "in": "query",
+							"schema": map[string]any{"type": "integer"},
+						},
+						map[string]any{
+							"name": "filter[from]", "in": "query",
+							"schema": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	op, ok := def.Operations["list_records"]
+	if !ok {
+		t.Fatal("missing list_records operation")
+	}
+	if len(op.Parameters) != 2 {
+		t.Fatalf("params = %d, want 2", len(op.Parameters))
+	}
+
+	byWire := make(map[string]provider.ParameterDef, len(op.Parameters))
+	for _, p := range op.Parameters {
+		byWire[p.WireName] = p
+	}
+
+	if got := byWire["page[size]"]; got.Name != "page_size" || got.Location != "query" {
+		t.Errorf("page[size] = %+v, want normalized page_size in query", got)
+	}
+	if got := byWire["filter[from]"]; got.Name != "filter_from" || got.Location != "query" {
+		t.Errorf("filter[from] = %+v, want normalized filter_from in query", got)
 	}
 }
 
