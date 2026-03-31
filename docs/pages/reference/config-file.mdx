@@ -193,7 +193,7 @@ telemetry:
 | `format` | No | `text` | `text` or `json`. |
 | `level` | No | `info` | `debug`, `info`, `warn`, or `error`. |
 
-Prints traces and metrics to standard output. Default provider when `telemetry` is omitted.
+Outputs structured logs to standard output. Traces and metrics use noop providers to keep terminal output clean. Default provider when `telemetry` is omitted.
 
 ### `otlp`
 
