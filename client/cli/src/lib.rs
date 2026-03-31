@@ -1,5 +1,6 @@
 pub mod api;
 pub mod catalog;
+pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod credentials;
