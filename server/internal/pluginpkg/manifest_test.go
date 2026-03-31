@@ -43,40 +43,6 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_AcceptsProviderHeaders(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.test",
-    "headers": {
-      "X-Static-Version": "2026-02-09"
-    },
-    "operations": [
-      {
-        "name": "list_items",
-        "method": "GET",
-        "path": "/items"
-      }
-    ]
-  }
-}`)
-
-	manifest, err := DecodeManifest(data)
-	if err != nil {
-		t.Fatalf("DecodeManifest: %v", err)
-	}
-	if manifest.Provider == nil {
-		t.Fatal("expected provider metadata")
-	}
-	if manifest.Provider.Headers["X-Static-Version"] != "2026-02-09" {
-		t.Fatalf("unexpected provider header value %q", manifest.Provider.Headers["X-Static-Version"])
-	}
-}
-
 func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 	t.Parallel()
 

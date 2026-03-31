@@ -2,8 +2,6 @@ package config
 
 import "net/http"
 
-// NormalizeHeaders canonicalizes header names so overrides are deterministic
-// regardless of the input casing.
 func NormalizeHeaders(headers map[string]string) map[string]string {
 	if len(headers) == 0 {
 		return nil
@@ -16,8 +14,6 @@ func NormalizeHeaders(headers map[string]string) map[string]string {
 	return out
 }
 
-// MergeHeaders overlays override on top of base using case-insensitive header
-// names. Values from override win.
 func MergeHeaders(base, override map[string]string) map[string]string {
 	out := NormalizeHeaders(base)
 	if len(override) == 0 {
