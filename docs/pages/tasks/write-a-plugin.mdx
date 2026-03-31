@@ -78,29 +78,39 @@ func main() {
 go build -o ./my-tool .
 ```
 
-## Package
+## Release
 
-Package the binary into a plugin directory:
-
-```sh
-gestaltd plugin package \
-  --binary ./my-tool \
-  --source github.com/myorg/my-repo/my-tool \
-  --output ./dist/my-tool
-```
-
-The `--os` and `--arch` flags default to your current platform. For cross-compilation:
+Release the plugin for all platforms:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o ./my-tool-linux .
-gestaltd plugin package \
-  --binary ./my-tool-linux \
-  --source github.com/myorg/my-repo/my-tool \
-  --os linux --arch amd64 \
-  --output ./dist/my-tool
+gestaltd plugin release --version 0.1.0
 ```
 
-For remote distribution, use a `.tar.gz` output path to produce an archive instead.
+This cross-compiles for macOS and Linux (amd64 and arm64), creates per-platform archives, and generates a checksums file in `dist/`.
+
+Upload the release artifacts to GitHub:
+
+```sh
+gh release create v0.1.0 dist/*
+```
+
+For CI automation, use the reusable workflow:
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  release:
+    uses: valon-technologies/gestalt/.github/workflows/release-plugin-reusable.yml@<pinned-ref>
+    with:
+      version: ${{ github.ref_name }}
+      gestaltd-version: <same-pinned-ref>
+```
+
+Use the same tag or commit SHA for both `<pinned-ref>` values so the workflow and installed `gestaltd` stay in lockstep.
 
 ## Configure and run
 

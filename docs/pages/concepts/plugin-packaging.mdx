@@ -65,6 +65,31 @@ That copies the validated plugin directory to the output path. If you need an ar
 gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider.tar.gz
 ```
 
+## Releasing A Compiled Plugin
+
+For compiled plugins, `gestaltd plugin release` handles cross-compilation, packaging, and checksum generation in one step:
+
+```sh
+cd my-plugin
+gestaltd plugin release --version 1.0.0
+```
+
+This produces per-platform archives in `dist/`:
+
+- `gestalt-plugin-my-plugin_v1.0.0_darwin_amd64.tar.gz`
+- `gestalt-plugin-my-plugin_v1.0.0_darwin_arm64.tar.gz`
+- `gestalt-plugin-my-plugin_v1.0.0_linux_amd64.tar.gz`
+- `gestalt-plugin-my-plugin_v1.0.0_linux_arm64.tar.gz`
+- `gestalt-plugin-my-plugin_v1.0.0_checksums.txt`
+
+Each archive contains a `plugin.json` manifest, the platform-specific binary, and any assets. Upload the contents of `dist/` to a GitHub release and reference the plugin via `plugin.source` in your config.
+
+Use `--platform` to restrict to specific platforms:
+
+```sh
+gestaltd plugin release --version 1.0.0 --platform linux/amd64,linux/arm64
+```
+
 ## Using A Package In Config
 
 Packages can come from:
