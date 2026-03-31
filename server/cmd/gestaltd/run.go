@@ -164,6 +164,8 @@ func runServer(env *bootstrapEnv) error {
 		Addr:              addr,
 		Handler:           srv,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	listenErr := make(chan error, 1)
