@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
 
@@ -29,8 +27,8 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 		},
 	})
 
-	result, err := Compile(context.Background(), "prepared", config.APIDef{
-		Type: config.APITypeREST,
+	result, err := Compile(context.Background(), "prepared", APISurface{
+		Type: "rest",
 	}, map[string]string{
 		"prepared": preparedPath,
 	})
@@ -58,7 +56,7 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 	}
 }
 
-func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
+func TestLoadDefinitionUsesPreparedArtifact(t *testing.T) {
 	t.Parallel()
 
 	preparedPath := writePreparedDefinition(t, provider.Definition{
@@ -84,34 +82,20 @@ func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
 		},
 	})
 
-	built, err := BuildProvider(context.Background(), "prepared", config.IntegrationDef{
-		DisplayName: "Runtime Provider",
-		Description: "Runtime description",
-	}, config.APIDef{
-		Type: config.APITypeREST,
-	}, config.ConnectionDef{}, map[string]string{
+	def, err := LoadDefinition(context.Background(), "prepared", APISurface{
+		Type: "rest",
+	}, map[string]string{
 		"prepared": preparedPath,
-	}, nil)
+	})
 	if err != nil {
-		t.Fatalf("BuildProvider: %v", err)
+		t.Fatalf("LoadDefinition: %v", err)
 	}
 
-	cp, ok := built.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("expected built provider to expose a catalog")
+	if def.Provider != "prepared" {
+		t.Fatalf("Definition.Provider = %q, want %q", def.Provider, "prepared")
 	}
-	cat := cp.Catalog()
-	if cat == nil {
-		t.Fatal("expected non-nil catalog")
-	}
-	if cat.DisplayName != "Runtime Provider" {
-		t.Fatalf("Catalog.DisplayName = %q, want %q", cat.DisplayName, "Runtime Provider")
-	}
-	if cat.Description != "Runtime description" {
-		t.Fatalf("Catalog.Description = %q, want %q", cat.Description, "Runtime description")
-	}
-	if len(cat.Operations) != 2 {
-		t.Fatalf("len(Catalog.Operations) = %d, want %d", len(cat.Operations), 2)
+	if len(def.Operations) != 2 {
+		t.Fatalf("len(Operations) = %d, want %d", len(def.Operations), 2)
 	}
 }
 

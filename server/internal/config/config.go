@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -93,33 +92,76 @@ type EgressCredentialGrant struct {
 	PathPrefix  string `yaml:"path_prefix"`
 }
 
-type ExecutablePluginDef struct {
-	Command           string                        `yaml:"command"`
-	Package           string                        `yaml:"package"`
-	Source            string                        `yaml:"source"`
-	Version           string                        `yaml:"version"`
-	Args              []string                      `yaml:"args"`
-	Env               map[string]string             `yaml:"env"`
-	AllowedHosts      []string                      `yaml:"allowed_hosts"`
-	Config            yaml.Node                     `yaml:"config"`
+type PluginDef struct {
+	Command    string            `yaml:"command"`
+	Package    string            `yaml:"package"`
+	Source     string            `yaml:"source"`
+	Version    string            `yaml:"version"`
+	Args       []string          `yaml:"args"`
+	Env        map[string]string `yaml:"env"`
+	Connection string            `yaml:"connection"`
+
+	Config       yaml.Node `yaml:"config"`
+	AllowedHosts []string  `yaml:"allowed_hosts"`
+
+	OpenAPI    string `yaml:"openapi"`
+	GraphQLURL string `yaml:"graphql_url"`
+	MCPURL     string `yaml:"mcp_url"`
+	BaseURL    string `yaml:"base_url"`
+
+	Auth        *ConnectionAuthDef        `yaml:"auth"`
+	Connections map[string]*ConnectionDef `yaml:"connections"`
+	Operations  []InlineOperationDef      `yaml:"operations"`
+
+	OpenAPIConnection string `yaml:"openapi_connection"`
+	GraphQLConnection string `yaml:"graphql_connection"`
+	MCPConnection     string `yaml:"mcp_connection"`
+
+	ConnectionParams  map[string]ConnectionParamDef `yaml:"params"`
+	MCP               bool                          `yaml:"mcp"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
-	Connection        string                        `yaml:"connection"`
 
 	ResolvedManifestPath string `yaml:"-"`
 	ResolvedIconFile     string `yaml:"-"`
 	IsDeclarative        bool   `yaml:"-"`
-	IsHybrid             bool   `yaml:"-"`
 }
 
-func (p *ExecutablePluginDef) HasManagedArtifacts() bool {
+func (p *PluginDef) IsInline() bool {
+	if p == nil {
+		return false
+	}
+	if p.Source != "" || p.Package != "" || p.Command != "" {
+		return false
+	}
+	return p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "" || len(p.Operations) > 0 ||
+		p.BaseURL != "" || p.Auth != nil || len(p.Connections) > 0
+}
+
+func (p *PluginDef) HasManagedArtifacts() bool {
 	return p != nil && (p.Package != "" || p.Source != "")
 }
 
+type InlineOperationDef struct {
+	Name        string                 `yaml:"name"`
+	Description string                 `yaml:"description"`
+	Method      string                 `yaml:"method"`
+	Path        string                 `yaml:"path"`
+	Parameters  []InlineOperationParam `yaml:"parameters"`
+}
+
+type InlineOperationParam struct {
+	Name        string `yaml:"name"`
+	Type        string `yaml:"type"`
+	In          string `yaml:"in"`
+	Description string `yaml:"description"`
+	Required    bool   `yaml:"required"`
+}
+
 type RuntimeDef struct {
-	Type      string               `yaml:"type"`
-	Providers []string             `yaml:"providers"`
-	Config    yaml.Node            `yaml:"config"`
-	Plugin    *ExecutablePluginDef `yaml:"plugin"`
+	Type      string     `yaml:"type"`
+	Providers []string   `yaml:"providers"`
+	Config    yaml.Node  `yaml:"config"`
+	Plugin    *PluginDef `yaml:"plugin"`
 }
 
 type BindingDef struct {
@@ -150,18 +192,12 @@ type ServerConfig struct {
 	APITokenTTL   string `yaml:"api_token_ttl"`
 }
 
-// IntegrationDef represents a declarative integration (connections +
-// api/mcp surfaces), a plugin-only integration, or a hybrid that composes
-// a plugin with an MCP surface.
 type IntegrationDef struct {
-	Connections   map[string]ConnectionDef `yaml:"connections"`
-	API           *APIDef                  `yaml:"api"`
-	MCP           *MCPDef                  `yaml:"mcp"`
-	Plugin        *ExecutablePluginDef     `yaml:"plugin"`
-	DisplayName   string                   `yaml:"display_name"`
-	Description   string                   `yaml:"description"`
-	MCPToolPrefix string                   `yaml:"mcp_tool_prefix"`
-	IconFile      string                   `yaml:"icon_file"`
+	Plugin        *PluginDef `yaml:"plugin"`
+	DisplayName   string     `yaml:"display_name"`
+	Description   string     `yaml:"description"`
+	MCPToolPrefix string     `yaml:"mcp_tool_prefix"`
+	IconFile      string     `yaml:"icon_file"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -189,8 +225,8 @@ type ConnectionAuthDef struct {
 	TokenParams         map[string]string    `yaml:"token_params"`
 	RefreshParams       map[string]string    `yaml:"refresh_params"`
 	AcceptHeader        string               `yaml:"accept_header"`
-	TokenMetadata       []string             `yaml:"token_metadata"`
 	AccessTokenPath     string               `yaml:"access_token_path"`
+	TokenMetadata       []string             `yaml:"token_metadata"`
 	Credentials         []CredentialFieldDef `yaml:"credentials"`
 	AuthMapping         *AuthMappingDef      `yaml:"auth_mapping"`
 }
@@ -210,11 +246,6 @@ type ConnectionParamDef struct {
 	Required bool `yaml:"required"`
 }
 
-const (
-	APITypeREST    = "rest"
-	APITypeGraphQL = "graphql"
-)
-
 // ResolveConnectionAlias maps the user-facing "plugin" alias to the
 // internal PluginConnectionName. All other names pass through unchanged.
 func ResolveConnectionAlias(name string) string {
@@ -224,47 +255,10 @@ func ResolveConnectionAlias(name string) string {
 	return name
 }
 
-// ConnectionMode returns the shared connection mode for a set of connections.
-// All connections are validated to have the same mode; this returns the first
-// non-empty mode found, defaulting to "user".
-func ConnectionMode(connections map[string]ConnectionDef) string {
-	for cname := range connections {
-		if connections[cname].Mode != "" {
-			return connections[cname].Mode
-		}
-	}
-	return "user"
-}
-
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride struct {
 	Alias       string `yaml:"alias" json:"alias,omitempty"`
 	Description string `yaml:"description" json:"description,omitempty"`
-}
-
-type APIDef struct {
-	Type              string                        `yaml:"type"`
-	OpenAPI           string                        `yaml:"openapi"`
-	URL               string                        `yaml:"url"`
-	Connection        string                        `yaml:"connection"`
-	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
-	ResponseMapping   *ResponseMappingDef           `yaml:"response_mapping"`
-}
-
-type ResponseMappingDef struct {
-	DataPath   string                `yaml:"data_path"`
-	Pagination *PaginationMappingDef `yaml:"pagination"`
-}
-
-type PaginationMappingDef struct {
-	HasMorePath string `yaml:"has_more_path"`
-	CursorPath  string `yaml:"cursor_path"`
-}
-
-type MCPDef struct {
-	URL               string                        `yaml:"url"`
-	Connection        string                        `yaml:"connection"`
-	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 }
 
 func Load(path string) (*Config, error) {
@@ -352,19 +346,6 @@ func resolveBaseURL(cfg *Config) {
 		return
 	}
 	cfg.Server.BaseURL = base
-
-	redirectURL := base + IntegrationCallbackPath
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		for cname := range intg.Connections {
-			conn := intg.Connections[cname]
-			if conn.Auth.RedirectURL == "" {
-				conn.Auth.RedirectURL = redirectURL
-				intg.Connections[cname] = conn
-			}
-		}
-		cfg.Integrations[name] = intg
-	}
 }
 
 func resolveRelativePaths(configPath string, cfg *Config) {
@@ -378,12 +359,18 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
-		if intg.API != nil && intg.API.OpenAPI != "" {
-			intg.API.OpenAPI = resolveUpstreamURL(baseDir, intg.API.OpenAPI)
-		}
 		if intg.Plugin != nil {
 			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
 			intg.Plugin.Package = resolvePackagePath(baseDir, intg.Plugin.Package)
+			if intg.Plugin.OpenAPI != "" {
+				intg.Plugin.OpenAPI = resolveUpstreamURL(baseDir, intg.Plugin.OpenAPI)
+			}
+			if intg.Plugin.GraphQLURL != "" {
+				intg.Plugin.GraphQLURL = resolveUpstreamURL(baseDir, intg.Plugin.GraphQLURL)
+			}
+			if intg.Plugin.MCPURL != "" {
+				intg.Plugin.MCPURL = resolveUpstreamURL(baseDir, intg.Plugin.MCPURL)
+			}
 		}
 		cfg.Integrations[name] = intg
 	}
@@ -433,8 +420,6 @@ func resolvePackagePath(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
-var templateParamRe = regexp.MustCompile(`\{(\w+)\}`)
-
 // ValidateStructure checks config shape: integration references, plugin
 // declarations, connection references, URL template params, egress rules.
 // Called by Load (and therefore by bundle and validate). Does not require
@@ -453,13 +438,13 @@ func ValidateStructure(cfg *Config) error {
 	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if err := validateIntegration(name, intg); err != nil {
+		if err := validatePluginIntegration(name, intg); err != nil {
 			return err
 		}
 	}
 	for name := range cfg.Runtimes {
 		rt := cfg.Runtimes[name]
-		if err := validateExecutablePlugin("runtime", name, rt.Plugin); err != nil {
+		if err := validateExternalPlugin("runtime", name, rt.Plugin); err != nil {
 			return err
 		}
 		if rt.Plugin != nil {
@@ -495,245 +480,36 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validateIntegration(name string, intg IntegrationDef) error {
-	if intg.Plugin != nil {
-		return validateHybridIntegration(name, intg)
+func validatePluginIntegration(name string, intg IntegrationDef) error {
+	if intg.Plugin == nil {
+		return fmt.Errorf("config validation: integration %q requires a plugin", name)
 	}
-
-	if len(intg.Connections) == 0 {
-		return fmt.Errorf("config validation: integration %q requires connections (or use plugin for plugin-only integrations)", name)
+	p := intg.Plugin
+	if p.IsInline() {
+		return validateInlinePlugin(name, p)
 	}
-	if intg.API == nil && intg.MCP == nil {
-		return fmt.Errorf("config validation: integration %q requires at least one of api or mcp", name)
-	}
-
-	if err := validateConnectionModes(name, intg.Connections); err != nil {
-		return err
-	}
-
-	if intg.API != nil {
-		if err := validateAPIDef(name, intg.API, intg.Connections); err != nil {
-			return err
-		}
-	}
-	if intg.MCP != nil {
-		if err := validateMCPDef(name, intg.MCP, intg.Connections); err != nil {
-			return err
-		}
-	}
-
-	for cname := range intg.Connections {
-		if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
-			return err
-		}
-		if err := validateCredentialFields(name, cname, intg.Connections[cname].Auth); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return validateExternalPlugin("integration", name, p)
 }
 
-func validateHybridIntegration(name string, intg IntegrationDef) error {
-	if err := validateExecutablePlugin("integration", name, intg.Plugin); err != nil {
-		return err
+func validateInlinePlugin(name string, p *PluginDef) error {
+	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
+		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
 	}
-
-	if intg.Plugin.Connection != "" {
-		if len(intg.Connections) == 0 {
-			return fmt.Errorf("config validation: integration %q plugin.connection requires connections to be defined", name)
+	for i, op := range p.Operations {
+		if op.Name == "" {
+			return fmt.Errorf("config validation: integration %q operations[%d].name is required", name, i)
 		}
-		if _, ok := intg.Connections[intg.Plugin.Connection]; !ok {
-			return fmt.Errorf("config validation: integration %q plugin.connection %q not found in connections", name, intg.Plugin.Connection)
+		if op.Method == "" {
+			return fmt.Errorf("config validation: integration %q operations[%d].method is required", name, i)
 		}
-	}
-
-	if intg.API != nil {
-		if intg.Plugin.Connection == "" {
-			return fmt.Errorf("config validation: integration %q plugin.connection is required when composing plugin with api", name)
-		}
-		if err := validateAPIDef(name, intg.API, intg.Connections); err != nil {
-			return err
-		}
-		if intg.API.Connection != intg.Plugin.Connection {
-			return fmt.Errorf("config validation: integration %q plugin.connection and api.connection must reference the same connection", name)
-		}
-	}
-
-	if intg.MCP != nil {
-		if intg.MCP.Connection == "" {
-			return fmt.Errorf("config validation: integration %q mcp.connection is required when composing with plugin", name)
-		}
-		if intg.MCP.Connection != PluginConnectionAlias {
-			if err := validateMCPDef(name, intg.MCP, intg.Connections); err != nil {
-				return err
-			}
-		} else {
-			if intg.MCP.URL == "" {
-				return fmt.Errorf("config validation: integration %q mcp.url is required", name)
-			}
-		}
-	}
-
-	if len(intg.Connections) > 0 {
-		if intg.MCP == nil && intg.API == nil && intg.Plugin.Connection == "" {
-			return fmt.Errorf("config validation: integration %q has connections but no surface references them; use plugin.connection, api, or mcp", name)
-		}
-		if err := validateConnectionModes(name, intg.Connections); err != nil {
-			return err
-		}
-		for cname := range intg.Connections {
-			if err := validateConnectionAuthURLParams(name, cname, intg.Connections[cname]); err != nil {
-				return err
-			}
-			if err := validateCredentialFields(name, cname, intg.Connections[cname].Auth); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func validateConnectionModes(intgName string, connections map[string]ConnectionDef) error {
-	var firstMode string
-	var firstName string
-	for cname := range connections {
-		mode := connections[cname].Mode
-		if mode == "" {
-			mode = "user"
-		}
-		switch mode {
-		case "user", "identity", "either", "none":
-		default:
-			return fmt.Errorf("config validation: integration %q connection %q has unknown mode %q", intgName, cname, mode)
-		}
-		if firstName == "" {
-			firstName = cname
-			firstMode = mode
-		} else if mode != firstMode {
-			return fmt.Errorf("config validation: integration %q connections have mixed modes (%q=%q, %q=%q); all connections must share the same mode", intgName, firstName, firstMode, cname, mode)
+		if op.Path == "" {
+			return fmt.Errorf("config validation: integration %q operations[%d].path is required", name, i)
 		}
 	}
 	return nil
 }
 
-func validateAPIDef(intgName string, api *APIDef, connections map[string]ConnectionDef) error {
-	switch api.Type {
-	case APITypeREST:
-		if api.OpenAPI == "" {
-			return fmt.Errorf("config validation: integration %q api.type rest requires api.openapi", intgName)
-		}
-	case APITypeGraphQL:
-		if api.URL == "" {
-			return fmt.Errorf("config validation: integration %q api.type graphql requires api.url", intgName)
-		}
-	case "":
-		return fmt.Errorf("config validation: integration %q api.type is required", intgName)
-	default:
-		return fmt.Errorf("config validation: integration %q has unknown api.type %q", intgName, api.Type)
-	}
-
-	conn, err := resolveConnectionRef(intgName, "api", api.Connection, connections)
-	if err != nil {
-		return err
-	}
-	if api.URL != "" {
-		if err := validateURLTemplateParams(intgName, "api.url", api.URL, conn); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateMCPDef(intgName string, mcp *MCPDef, connections map[string]ConnectionDef) error {
-	if mcp.URL == "" {
-		return fmt.Errorf("config validation: integration %q mcp.url is required", intgName)
-	}
-	conn, err := resolveConnectionRef(intgName, "mcp", mcp.Connection, connections)
-	if err != nil {
-		return err
-	}
-	return validateURLTemplateParams(intgName, "mcp.url", mcp.URL, conn)
-}
-
-func resolveConnectionRef(intgName, surface, connName string, connections map[string]ConnectionDef) (ConnectionDef, error) {
-	if connName == "" {
-		return ConnectionDef{}, fmt.Errorf("config validation: integration %q %s.connection is required", intgName, surface)
-	}
-	conn, ok := connections[connName]
-	if !ok {
-		return ConnectionDef{}, fmt.Errorf("config validation: integration %q %s.connection references unknown connection %q", intgName, surface, connName)
-	}
-	return conn, nil
-}
-
-func validateCredentialFields(intgName, connName string, auth ConnectionAuthDef) error {
-	if auth.Type != "manual" && auth.Type != "api_key" {
-		return nil
-	}
-	if len(auth.Credentials) == 0 {
-		return fmt.Errorf("config validation: integration %q connection %q requires credentials when auth type is %q", intgName, connName, auth.Type)
-	}
-	names := make(map[string]bool, len(auth.Credentials))
-	for i, cf := range auth.Credentials {
-		if cf.Name == "" {
-			return fmt.Errorf("config validation: integration %q connection %q credentials[%d].name is required", intgName, connName, i)
-		}
-		if names[cf.Name] {
-			return fmt.Errorf("config validation: integration %q connection %q has duplicate credential name %q", intgName, connName, cf.Name)
-		}
-		names[cf.Name] = true
-	}
-	if auth.AuthMapping != nil {
-		for header, field := range auth.AuthMapping.Headers {
-			if !names[field] {
-				return fmt.Errorf("config validation: integration %q connection %q auth_mapping header %q references unknown credential %q", intgName, connName, header, field)
-			}
-		}
-	}
-	hasMapping := auth.AuthMapping != nil && len(auth.AuthMapping.Headers) > 0
-	if len(auth.Credentials) == 1 && hasMapping {
-		return fmt.Errorf("config validation: integration %q connection %q has auth_mapping with a single credential; use auth_header on the provider definition for single-credential header injection", intgName, connName)
-	}
-	if len(auth.Credentials) > 1 && !hasMapping {
-		return fmt.Errorf("config validation: integration %q connection %q has multiple credentials but no auth_mapping", intgName, connName)
-	}
-	return nil
-}
-
-func validateConnectionAuthURLParams(intgName, connName string, conn ConnectionDef) error {
-	if conn.Auth.AuthorizationURL != "" {
-		field := fmt.Sprintf("connections.%s.auth.authorization_url", connName)
-		if err := validateURLTemplateParams(intgName, field, conn.Auth.AuthorizationURL, conn); err != nil {
-			return err
-		}
-	}
-	if conn.Auth.TokenURL != "" {
-		field := fmt.Sprintf("connections.%s.auth.token_url", connName)
-		if err := validateURLTemplateParams(intgName, field, conn.Auth.TokenURL, conn); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateURLTemplateParams(intgName, field, url string, conn ConnectionDef) error {
-	matches := templateParamRe.FindAllStringSubmatch(url, -1)
-	for _, m := range matches {
-		paramName := m[1]
-		p, ok := conn.Params[paramName]
-		if !ok {
-			return fmt.Errorf("config validation: integration %q %s references param {%s} not declared in connection params", intgName, field, paramName)
-		}
-		if !p.Required {
-			return fmt.Errorf("config validation: integration %q %s references param {%s} which must be required", intgName, field, paramName)
-		}
-	}
-	return nil
-}
-
-func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) error {
+func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if plugin == nil {
 		return nil
 	}
@@ -775,6 +551,13 @@ func validateExecutablePlugin(kind, name string, plugin *ExecutablePluginDef) er
 	if strings.HasPrefix(plugin.Package, "http://") {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
+
+	hasInline := plugin.OpenAPI != "" || plugin.GraphQLURL != "" || plugin.MCPURL != "" ||
+		plugin.BaseURL != "" || len(plugin.Operations) > 0 || plugin.Auth != nil || len(plugin.Connections) > 0
+	if hasInline {
+		return fmt.Errorf("config validation: %s %q external plugin cannot use inline fields (openapi, graphql_url, mcp_url, base_url, operations, auth, connections)", kind, name)
+	}
+
 	return nil
 }
 

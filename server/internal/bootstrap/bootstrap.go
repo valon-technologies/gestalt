@@ -12,10 +12,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/integration"
-	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
@@ -88,9 +90,8 @@ func (a *upstreamHandlerAdapter) RefreshTokenWithURL(ctx context.Context, refres
 func (a *upstreamHandlerAdapter) AuthorizationBaseURL() string { return a.h.AuthorizationBaseURL() }
 func (a *upstreamHandlerAdapter) TokenURL() string             { return a.h.TokenURL() }
 
-// ProviderBuildResult is the return value of a ProviderFactory. It carries
-// the constructed provider and an OAuth handler for each named connection
-// that uses oauth2 or mcp_oauth auth.
+// ProviderBuildResult carries the constructed provider and an OAuth handler
+// for each named connection that uses oauth2 or mcp_oauth auth.
 type ProviderBuildResult struct {
 	Provider       core.Provider
 	ConnectionAuth map[string]OAuthHandler
@@ -107,27 +108,23 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
-type ProviderFactory func(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 
 type FactoryRegistry struct {
-	Auth            map[string]AuthFactory
-	Datastores      map[string]DatastoreFactory
-	Providers       map[string]ProviderFactory
-	DefaultProvider ProviderFactory
-	Secrets         map[string]SecretManagerFactory
-	Telemetry       map[string]TelemetryFactory
-	Runtimes        map[string]RuntimeFactory
-	Bindings        map[string]BindingFactory
-	Builtins        []core.Provider
+	Auth       map[string]AuthFactory
+	Datastores map[string]DatastoreFactory
+	Secrets    map[string]SecretManagerFactory
+	Telemetry  map[string]TelemetryFactory
+	Runtimes   map[string]RuntimeFactory
+	Bindings   map[string]BindingFactory
+	Builtins   []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
 		Auth:       make(map[string]AuthFactory),
 		Datastores: make(map[string]DatastoreFactory),
-		Providers:  make(map[string]ProviderFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
 		Telemetry:  make(map[string]TelemetryFactory),
 		Runtimes:   make(map[string]RuntimeFactory),
@@ -448,24 +445,17 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&intg, resolve); err != nil {
 			return err
 		}
-		for cname := range intg.Connections {
-			conn := intg.Connections[cname]
-			if err := resolveStringFields(&conn, resolve); err != nil {
-				return err
-			}
-			intg.Connections[cname] = conn
-		}
-		if intg.API != nil {
-			if err := resolveStringFields(intg.API, resolve); err != nil {
-				return err
-			}
-		}
-		if intg.MCP != nil {
-			if err := resolveStringFields(intg.MCP, resolve); err != nil {
-				return err
-			}
-		}
 		if intg.Plugin != nil {
+			if err := resolveStringFields(intg.Plugin, resolve); err != nil {
+				return err
+			}
+			for _, conn := range intg.Plugin.Connections {
+				if conn != nil {
+					if err := resolveStringFields(conn, resolve); err != nil {
+						return err
+					}
+				}
+			}
 			if err := resolveYAMLNode(&intg.Plugin.Config, resolve); err != nil {
 				return err
 			}
@@ -649,10 +639,6 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	var wg sync.WaitGroup
 	for name := range cfg.Integrations {
 		intgDef := cfg.Integrations[name]
-		if err := validateProviderBuildAvailable(name, intgDef, factories); err != nil {
-			close(ready)
-			return nil, nil, nil, fmt.Errorf("bootstrap: %w", err)
-		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -690,97 +676,170 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
-	if intg.Plugin != nil {
-		if intg.Plugin.IsDeclarative {
-			return buildDeclarativeProvider(name, intg, deps)
-		}
-		if intg.Plugin.IsHybrid {
-			return buildHybridManifestProvider(ctx, name, intg, deps)
-		}
-		pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
-		if err != nil {
-			return nil, err
-		}
-		applyPluginIcon(pluginProv, intg)
-
-		restricted, err := applyAllowedOperations(name, intg, pluginProv)
-		if err != nil {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
-			return nil, err
-		}
-
-		if intg.API != nil {
-			return buildAPIPluginProvider(ctx, name, intg, restricted, pluginConfig, factories, deps)
-		}
-		if intg.MCP != nil {
-			return buildPluginMCPProvider(ctx, name, intg, restricted, pluginConfig, factories, deps)
-		}
-
-		buildResult := &ProviderBuildResult{Provider: restricted}
-		if intg.Plugin.Connection == "" {
-			attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
-		} else {
-			attachPluginOAuthForConnection(name, intg, pluginConfig, deps, buildResult)
-		}
-		return buildResult, nil
+	if intg.Plugin == nil {
+		return nil, fmt.Errorf("integration %q has no plugin defined", name)
 	}
 
-	factory, err := providerFactoryForName(name, factories)
+	if intg.Plugin.IsInline() {
+		return buildInlineProvider(ctx, name, intg, deps)
+	}
+
+	if intg.Plugin.IsDeclarative {
+		return buildDeclarativeProvider(name, intg, deps)
+	}
+
+	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
 	if err != nil {
 		return nil, err
 	}
-	return factory(ctx, name, intg, deps)
-}
+	applyPluginIcon(pluginProv, intg)
 
-func buildAPIPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginProv core.Provider, pluginConfig map[string]any, factories *FactoryRegistry, deps Deps) (_ *ProviderBuildResult, err error) {
-	cleanupPlugin := true
-	defer func() {
-		if cleanupPlugin {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
-		}
-	}()
-
-	factory, err := providerFactoryForName(name, factories)
+	restricted, err := applyAllowedOperations(name, intg, pluginProv)
 	if err != nil {
-		return nil, err
-	}
-	apiResult, err := factory(ctx, name, intg, deps)
-	if err != nil {
-		return nil, fmt.Errorf("building api surface for %q: %w", name, err)
-	}
-
-	displayName := intg.DisplayName
-	if displayName == "" {
-		displayName = name
-	}
-	merged, err := composite.NewMerged(name, displayName, intg.Description, apiResult.Provider, pluginProv)
-	if err != nil {
-		if c, ok := apiResult.Provider.(interface{ Close() error }); ok {
+		if c, ok := pluginProv.(interface{ Close() error }); ok {
 			_ = c.Close()
 		}
-		return nil, fmt.Errorf("merging api and plugin for %q: %w", name, err)
+		return nil, err
 	}
-	cleanupPlugin = false
 
-	var prov core.Provider = merged
-	if intg.MCP != nil {
-		mcpUp, ok := apiResult.Provider.(composite.MCPUpstream)
-		if !ok {
-			_ = merged.Close()
-			return nil, fmt.Errorf("integration %q has mcp surface but api factory did not return MCPUpstream", name)
+	buildResult := &ProviderBuildResult{Provider: restricted}
+	attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
+	return buildResult, nil
+}
+
+func buildInlineProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+	manifest, err := config.InlineToManifest(name, intg.Plugin)
+	if err != nil {
+		return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
+	}
+	if intg.DisplayName != "" {
+		manifest.DisplayName = intg.DisplayName
+	}
+	if intg.Description != "" {
+		manifest.Description = intg.Description
+	}
+	if manifest.Provider.IsSpecLoaded() {
+		return buildSpecLoadedProvider(ctx, name, intg, manifest, deps)
+	}
+	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create inline provider %q: %w", name, err)
+	}
+	applyPluginIcon(prov, intg)
+
+	restricted, err := applyAllowedOperations(name, intg, prov)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ProviderBuildResult{Provider: restricted}
+	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps) (*ProviderBuildResult, error) {
+	mp := manifest.Provider
+
+	allowedOps := convertAllowedOperations(mp.AllowedOperations)
+	conn := pluginConnectionDef(intg.Plugin)
+
+	switch {
+	case mp.OpenAPI != "":
+		def, err := openapi.LoadDefinition(ctx, name, mp.OpenAPI, allowedOps)
+		if err != nil {
+			return nil, fmt.Errorf("load openapi spec for %q: %w", name, err)
 		}
-		merged.DisownProvider(apiResult.Provider)
-		prov = composite.New(name, merged, mcpUp)
-	}
+		if mp.BaseURL != "" {
+			def.BaseURL = mp.BaseURL
+		}
+		provider.ApplyDisplayOverrides(def, intg)
+		prov, err := provider.Build(def, conn, nil)
+		if err != nil {
+			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
+		}
+		return specLoadedResult(name, intg, manifest, prov, deps)
 
-	return &ProviderBuildResult{
-		Provider:       prov,
-		ConnectionAuth: apiResult.ConnectionAuth,
-	}, nil
+	case mp.GraphQLURL != "":
+		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
+		if err != nil {
+			return nil, fmt.Errorf("load graphql schema for %q: %w", name, err)
+		}
+		if mp.BaseURL != "" {
+			def.BaseURL = mp.BaseURL
+		}
+		provider.ApplyDisplayOverrides(def, intg)
+		prov, err := provider.Build(def, conn, nil)
+		if err != nil {
+			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
+		}
+		return specLoadedResult(name, intg, manifest, prov, deps)
+
+	case mp.MCPURL != "":
+		connMode := core.ConnectionMode(conn.Mode)
+		if connMode == "" {
+			connMode = core.ConnectionModeUser
+		}
+		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, deps.Egress.Resolver)
+		if err != nil {
+			return nil, fmt.Errorf("create mcp upstream for %q: %w", name, err)
+		}
+		if allowedOps != nil {
+			if err := up.FilterOperations(allowedOps); err != nil {
+				_ = up.Close()
+				return nil, fmt.Errorf("filter mcp operations for %q: %w", name, err)
+			}
+		}
+		result, resultErr := specLoadedResult(name, intg, manifest, up, deps)
+		if resultErr != nil {
+			_ = up.Close()
+			return nil, resultErr
+		}
+		return result, nil
+
+	default:
+		return nil, fmt.Errorf("inline spec-loaded provider %q has no spec URL", name)
+	}
+}
+
+func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, prov core.Provider, deps Deps) (*ProviderBuildResult, error) {
+	applyPluginIcon(prov, intg)
+	result := &ProviderBuildResult{Provider: prov}
+	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*config.OperationOverride {
+	if ops == nil {
+		return nil
+	}
+	result := make(map[string]*config.OperationOverride, len(ops))
+	for k, v := range ops {
+		if v == nil {
+			result[k] = nil
+			continue
+		}
+		result[k] = &config.OperationOverride{
+			Alias:       v.Alias,
+			Description: v.Description,
+		}
+	}
+	return result
+}
+
+func pluginConnectionDef(plugin *config.PluginDef) config.ConnectionDef {
+	conn := config.ConnectionDef{}
+	if plugin == nil {
+		return conn
+	}
+	if plugin.Auth != nil {
+		conn.Auth = *plugin.Auth
+	}
+	conn.Params = plugin.ConnectionParams
+	return conn
 }
 
 func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
@@ -802,75 +861,8 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 		return nil, err
 	}
 	result := &ProviderBuildResult{Provider: restricted}
-
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
-	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
-	if err != nil {
-		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
-	} else if authHandler != nil {
-		result.ConnectionAuth = map[string]OAuthHandler{
-			config.PluginConnectionName: authHandler,
-		}
-	}
-	return result, nil
-}
-
-func buildHybridManifestProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (_ *ProviderBuildResult, err error) {
-	_, manifest, err := pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest for hybrid provider %q: %w", name, err)
-	}
-
-	declProv, err := pluginhost.NewDeclarativeProvider(manifest, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
-	}
-
-	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
-	if err != nil {
+	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
 		return nil, err
-	}
-	cleanupPlugin := true
-	defer func() {
-		if cleanupPlugin {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
-		}
-	}()
-
-	displayName := intg.DisplayName
-	if displayName == "" {
-		displayName = manifest.DisplayName
-	}
-	if displayName == "" {
-		displayName = name
-	}
-	merged, err := composite.NewMerged(name, displayName, manifest.Description, declProv, pluginProv)
-	if err != nil {
-		return nil, fmt.Errorf("merging declarative and executable operations for %q: %w", name, err)
-	}
-	cleanupPlugin = false
-	applyPluginIcon(merged, intg)
-
-	restricted, err := applyAllowedOperations(name, intg, merged)
-	if err != nil {
-		_ = merged.Close()
-		return nil, err
-	}
-
-	result := &ProviderBuildResult{Provider: restricted}
-
-	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
-	if err != nil {
-		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
-	} else if authHandler != nil {
-		result.ConnectionAuth = map[string]OAuthHandler{
-			config.PluginConnectionName: authHandler,
-		}
 	}
 	return result, nil
 }
@@ -953,69 +945,26 @@ func applyPluginIcon(prov core.Provider, intg config.IntegrationDef) {
 	}
 }
 
-func buildPluginMCPProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginProv core.Provider, pluginConfig map[string]any, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
-	cleanupPlugin := true
-	defer func() {
-		if cleanupPlugin {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+func attachManifestOAuth(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, result *ProviderBuildResult) error {
+	if manifest.Provider == nil || manifest.Provider.Auth == nil ||
+		manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+		return nil
+	}
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return fmt.Errorf("decode plugin config for %q: %w", name, err)
+	}
+	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+	if err != nil {
+		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
+		return nil
+	}
+	if authHandler != nil {
+		result.ConnectionAuth = map[string]OAuthHandler{
+			config.PluginConnectionName: authHandler,
 		}
-	}()
-
-	factory, err := providerFactoryForName(name, factories)
-	if err != nil {
-		return nil, fmt.Errorf("building mcp surface for plugin+mcp %q: %w", name, err)
 	}
-
-	mcpResult, err := factory(ctx, name, intg, deps)
-	if err != nil {
-		return nil, fmt.Errorf("building mcp surface for plugin+mcp %q: %w", name, err)
-	}
-
-	mcpUp, ok := mcpResult.Provider.(composite.MCPUpstream)
-	if !ok {
-		if c, ok := mcpResult.Provider.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-		return nil, fmt.Errorf("plugin+mcp %q: provider factory returned %T which does not implement MCPUpstream", name, mcpResult.Provider)
-	}
-	composed := composite.New(name, pluginProv, mcpUp)
-
-	result := &ProviderBuildResult{
-		Provider:       composed,
-		ConnectionAuth: mcpResult.ConnectionAuth,
-	}
-	if intg.Plugin.Connection == "" {
-		attachPluginOAuth(name, intg, pluginConfig, deps, result)
-	} else {
-		attachPluginOAuthForConnection(name, intg, pluginConfig, deps, result)
-	}
-
-	cleanupPlugin = false
-	return result, nil
-}
-
-func attachPluginOAuthForConnection(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
-	if intg.Plugin == nil || intg.Plugin.Connection == "" {
-		return
-	}
-	conn, ok := intg.Connections[intg.Plugin.Connection]
-	if !ok || conn.Auth.Type != "oauth2" {
-		return
-	}
-	authHandler, err := buildPluginOAuthHandler(intg, pluginConfig, deps)
-	if err != nil {
-		slog.Warn("cannot build oauth handler for shared connection", "provider", name, "connection", intg.Plugin.Connection, "error", err)
-		return
-	}
-	if authHandler == nil {
-		return
-	}
-	if result.ConnectionAuth == nil {
-		result.ConnectionAuth = make(map[string]OAuthHandler)
-	}
-	result.ConnectionAuth[intg.Plugin.Connection] = authHandler
+	return nil
 }
 
 func attachPluginOAuth(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
@@ -1053,10 +1002,16 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 	}
 	auth := manifest.Provider.Auth
 
-	clientID, _ := pluginConfig["client_id"].(string)
-	clientSecret, _ := pluginConfig["client_secret"].(string)
+	clientID := auth.ClientID
+	clientSecret := auth.ClientSecret
+	if id, _ := pluginConfig["client_id"].(string); id != "" {
+		clientID = id
+	}
+	if sec, _ := pluginConfig["client_secret"].(string); sec != "" {
+		clientSecret = sec
+	}
 	if clientID == "" || clientSecret == "" {
-		return nil, fmt.Errorf("plugin.config must provide client_id and client_secret for oauth2 auth")
+		return nil, fmt.Errorf("client_id and client_secret are required for oauth2 auth (set in plugin.auth or plugin.config)")
 	}
 
 	redirectURL := deps.BaseURL + config.IntegrationCallbackPath
@@ -1083,6 +1038,9 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 		ScopeSeparator:      auth.ScopeSeparator,
 		TokenExchange:       tokenExchange,
 		AuthorizationParams: auth.AuthorizationParams,
+		TokenParams:         auth.TokenParams,
+		RefreshParams:       auth.RefreshParams,
+		AcceptHeader:        auth.AcceptHeader,
 		AccessTokenPath:     auth.AccessTokenPath,
 	}
 	if auth.ClientAuth == "header" {
@@ -1093,42 +1051,10 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 	return WrapUpstreamHandler(handler), nil
 }
 
-func providerFactoryForName(name string, factories *FactoryRegistry) (ProviderFactory, error) {
-	factory, ok := factories.Providers[name]
-	if !ok {
-		factory = factories.DefaultProvider
-	}
-	if factory == nil {
-		return nil, fmt.Errorf("no provider factory for %q and no default factory registered", name)
-	}
-	return factory, nil
-}
-
-func validateProviderBuildAvailable(name string, intg config.IntegrationDef, factories *FactoryRegistry) error {
-	if intg.Plugin != nil && intg.MCP == nil && intg.API == nil {
-		return nil
-	}
-	_, err := providerFactoryForName(name, factories)
-	return err
-}
-
-// BuildConnectionMap returns a map from integration name to its default
-// connection name. Used by the broker and server to resolve connections.
-// For hybrid integrations, the default is PluginConnectionName; the MCP and
-// server handlers pass per-tool connection names from the surface config.
 func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
 	m := make(invocation.ConnectionMap, len(cfg.Integrations))
-	for name, intg := range cfg.Integrations {
-		switch {
-		case intg.Plugin != nil && intg.Plugin.Connection != "":
-			m[name] = intg.Plugin.Connection
-		case intg.Plugin != nil:
-			m[name] = config.PluginConnectionName
-		case intg.API != nil:
-			m[name] = intg.API.Connection
-		case intg.MCP != nil:
-			m[name] = intg.MCP.Connection
-		}
+	for name := range cfg.Integrations {
+		m[name] = config.PluginConnectionName
 	}
 	return m
 }
@@ -1158,46 +1084,4 @@ func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string
 		out[intg] = inner
 	}
 	return out
-}
-
-// BuildResultWithOAuth wraps a provider in a ProviderBuildResult and builds an
-// OAuth handler for the API connection when applicable. Named provider factories
-// (BigQuery, Jira, etc.) use this to avoid duplicating the connection auth
-// construction logic.
-func BuildResultWithOAuth(prov core.Provider, def *provider.Definition, intg config.IntegrationDef, conn config.ConnectionDef) *ProviderBuildResult {
-	result := &ProviderBuildResult{Provider: prov}
-	if intg.API == nil {
-		return result
-	}
-	switch conn.Auth.Type {
-	case "manual", "api_key":
-		return result
-	case "":
-		if conn.Auth.AuthorizationURL == "" && conn.Auth.ClientID == "" {
-			return result
-		}
-	}
-	upstream, err := provider.BuildOAuthUpstream(def, conn, def.BaseURL, nil)
-	if err != nil {
-		slog.Warn("cannot build oauth handler for connection", "provider", prov.Name(), "connection", intg.API.Connection, "error", err)
-		return result
-	}
-	result.ConnectionAuth = map[string]OAuthHandler{
-		intg.API.Connection: WrapUpstreamHandler(upstream),
-	}
-	return result
-}
-
-// ResolveAPIConnection returns the ConnectionDef referenced by the
-// integration's API surface. Named provider factories use this to extract
-// auth configuration from the V1 manifest.
-func ResolveAPIConnection(intg config.IntegrationDef) (config.ConnectionDef, error) {
-	if intg.API == nil {
-		return config.ConnectionDef{}, fmt.Errorf("integration has no api surface")
-	}
-	conn, ok := intg.Connections[intg.API.Connection]
-	if !ok {
-		return config.ConnectionDef{}, fmt.Errorf("api.connection %q not found in connections", intg.API.Connection)
-	}
-	return conn, nil
 }

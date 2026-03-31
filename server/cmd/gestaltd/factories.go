@@ -45,14 +45,14 @@ type bootstrapEnv struct {
 }
 
 func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
-	_, cfg, preparedProviders, err := loadConfigForExecution(configFlag, locked)
+	_, cfg, err := loadConfigForExecution(configFlag, locked)
 	if err != nil {
 		return nil, err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
-	factories := buildFactories(preparedProviders)
+	factories := buildFactories()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
@@ -85,7 +85,7 @@ func (e *bootstrapEnv) Close() {
 	_ = e.Result.Close(ctx)
 }
 
-func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegistry {
+func buildFactories() *bootstrap.FactoryRegistry {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Telemetry["noop"] = telemetrynoop.Factory
 	factories.Telemetry["stdout"] = telemetrystdout.Factory
@@ -102,7 +102,6 @@ func buildFactories(preparedProviders map[string]string) *bootstrap.FactoryRegis
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
-	factories.DefaultProvider = defaultProviderFactory(preparedProviders)
 	factories.Bindings["webhook"] = webhook.Factory
 	factories.Bindings["proxy"] = proxy.Factory
 	factories.Secrets["env"] = secretsenv.Factory
