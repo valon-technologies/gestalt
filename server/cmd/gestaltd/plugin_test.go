@@ -103,6 +103,99 @@ func TestRun_PluginPackageFromBinaryWithSource(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Swaps os.Stdout via captureStdout.
+func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	src := newPluginPackageFixture(t, dir)
+	outPath := filepath.Join(dir, "output-dir")
+
+	output := captureStdout(t, func() error {
+		return run([]string{"plugin", "package", "--input", src, "--output", outPath})
+	})
+
+	info, err := os.Stat(outPath)
+	if err != nil {
+		t.Fatalf("expected output directory to exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected output to be a directory")
+	}
+	manifestPath := filepath.Join(outPath, "plugin.json")
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Fatalf("expected manifest in output directory: %v", err)
+	}
+	artifactPath := filepath.Join(outPath, "artifacts", runtime.GOOS, runtime.GOARCH, "provider")
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("expected artifact in output directory: %v", err)
+	}
+	if string(data) != "provider" {
+		t.Fatalf("unexpected artifact content: %q", data)
+	}
+	if !strings.Contains(output, "packaged") {
+		t.Fatalf("expected packaged output, got: %q", output)
+	}
+}
+
+//nolint:paralleltest // Swaps os.Stdout via captureStdout.
+func TestRun_PluginPackageFromBinaryCreatesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	binaryPath := filepath.Join(dir, "my-provider")
+	if err := os.WriteFile(binaryPath, []byte("fake-binary-content"), 0755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	outPath := filepath.Join(dir, "my-plugin-dir")
+
+	output := captureStdout(t, func() error {
+		return run([]string{
+			"plugin", "package",
+			"--binary", binaryPath,
+			"--source", "github.com/testorg/testrepo/testplugin",
+			"--version", "1.0.0",
+			"--output", outPath,
+		})
+	})
+
+	info, err := os.Stat(outPath)
+	if err != nil {
+		t.Fatalf("expected output directory to exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected output to be a directory")
+	}
+	manifestPath := filepath.Join(outPath, "plugin.json")
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Fatalf("expected manifest in output directory: %v", err)
+	}
+	artifactPath := filepath.Join(outPath, "artifacts", runtime.GOOS, runtime.GOARCH, "provider")
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("expected artifact in output directory: %v", err)
+	}
+	if string(data) != "fake-binary-content" {
+		t.Fatalf("unexpected artifact content: %q", data)
+	}
+	if !strings.Contains(output, "packaged") {
+		t.Fatalf("expected packaged output, got: %q", output)
+	}
+}
+
+func TestRun_PluginPackageRejectsOutputInsideInput(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	src := newPluginPackageFixture(t, dir)
+	outPath := filepath.Join(src, "dist")
+
+	err := run([]string{"plugin", "package", "--input", src, "--output", outPath})
+	if err == nil {
+		t.Fatal("expected error when output is inside input")
+	}
+	if !strings.Contains(err.Error(), "must not be inside source") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRun_PluginRejectsUnknownSubcommand(t *testing.T) {
 	t.Parallel()
 

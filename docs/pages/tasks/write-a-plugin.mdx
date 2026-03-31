@@ -80,13 +80,13 @@ go build -o ./my-tool .
 
 ## Package
 
-Package the binary directly into a distributable archive:
+Package the binary into a plugin directory:
 
 ```sh
 gestaltd plugin package \
   --binary ./my-tool \
   --source github.com/myorg/my-repo/my-tool \
-  --output ./my-tool.tar.gz
+  --output ./dist/my-tool
 ```
 
 The `--os` and `--arch` flags default to your current platform. For cross-compilation:
@@ -97,8 +97,10 @@ gestaltd plugin package \
   --binary ./my-tool-linux \
   --source github.com/myorg/my-repo/my-tool \
   --os linux --arch amd64 \
-  --output ./my-tool.tar.gz
+  --output ./dist/my-tool
 ```
+
+For remote distribution, use a `.tar.gz` output path to produce an archive instead.
 
 ## Configure and run
 
@@ -108,7 +110,7 @@ Reference the package in your Gestalt config:
 integrations:
   my-tool:
     plugin:
-      package: ./my-tool.tar.gz
+      package: ./dist/my-tool
 ```
 
 Then bundle and serve:
