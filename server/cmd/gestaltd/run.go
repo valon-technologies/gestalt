@@ -267,6 +267,9 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 }
 
 func pluginDeclaresMCP(plugin *config.PluginDef) bool {
+	if plugin == nil {
+		return false
+	}
 	if plugin.MCP || plugin.MCPURL != "" || plugin.OpenAPI != "" || plugin.GraphQLURL != "" || len(plugin.Operations) > 0 {
 		return true
 	}
@@ -278,7 +281,7 @@ func pluginDeclaresMCP(plugin *config.PluginDef) bool {
 		slog.Warn("reading plugin manifest", "path", plugin.ResolvedManifestPath, "error", err)
 		return true
 	}
-	return manifest.Provider != nil && manifest.Provider.MCP
+	return manifest.Provider != nil && (manifest.Provider.MCP || manifest.Provider.IsSpecLoaded() || len(manifest.Provider.Operations) > 0)
 }
 
 func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {

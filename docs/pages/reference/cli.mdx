@@ -246,6 +246,7 @@ gestaltd init [--config PATH]
 gestaltd serve [--config PATH] [--locked]
 gestaltd validate [--config PATH] [--init]
 gestaltd plugin package [flags]
+gestaltd plugin release [flags]
 gestaltd version
 ```
 
@@ -258,7 +259,8 @@ gestaltd version
 | `gestaltd serve` | Start the server from an explicit config path. |
 | `gestaltd serve --locked` | Start the server. Fail if prepared state is missing or stale. |
 | `gestaltd validate` | Load and validate config without starting the server. |
-| `gestaltd plugin package` | Package a plugin directory or binary. |
+| `gestaltd plugin package` | Package an existing plugin directory. |
+| `gestaltd plugin release` | Cross-compile and package a plugin release. |
 | `gestaltd version` | Print the binary version and exit. |
 
 ## Default Command Behavior
@@ -328,46 +330,39 @@ gestaltd validate --init --config ./config.yaml
 
 ## `plugin package`
 
-Two packaging flows:
-
-### From a manifest directory
-
-Package an existing plugin directory that already contains a `plugin.json` manifest:
+Package an existing plugin directory that already contains a `plugin.json`, `plugin.yaml`, or `plugin.yml` manifest:
 
 ```sh
 gestaltd plugin package --input ./build/my-plugin --output ./dist/my-plugin
-```
-
-### From a pre-built binary
-
-Scaffold a manifest and package a binary in one step:
-
-```sh
-gestaltd plugin package \
-  --binary ./my-plugin \
-  --source github.com/myorg/my-repo/my-plugin \
-  --output ./dist/my-plugin
 ```
 
 Output format is determined by the `--output` path: paths ending in `.tar.gz` produce an archive for remote distribution, all other paths produce a directory.
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
-| `--binary` | — | Path to pre-built binary. |
-| `--source` | — | Plugin source identifier (`github.com/owner/repo/plugin`). Required with `--binary`. |
+| `--input` | — | Path to a plugin manifest or plugin directory. |
 | `--output` | — | Output path (directory, or `.tar.gz` for archive). |
-| `--kind` | `provider` | Plugin kind: `provider` or `runtime`. |
-| `--os` | Current platform | Target OS for the artifact. |
-| `--arch` | Current platform | Target architecture. |
-| `--version` | `0.0.0-alpha.1` | Manifest version. Must be valid SemVer. |
 
-Cross-compilation example:
+## `plugin release`
+
+Cross-compile a plugin and produce release archives plus a versioned checksums file:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o ./my-plugin-linux .
-gestaltd plugin package \
-  --binary ./my-plugin-linux \
-  --source github.com/myorg/my-repo/my-plugin \
-  --os linux --arch amd64 \
-  --output ./dist/my-plugin
+gestaltd plugin release --version 1.0.0
+```
+
+Run this command from the plugin source directory. Compiled plugins produce one archive per platform, while declarative plugins produce a single archive.
+
+When publishing a GitHub release for `plugin.source`, use the tag format `plugin/<plugin>/v<version>` and pass bare SemVer to `--version`.
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--version` | — | Release version. Must be valid SemVer. |
+| `--output` | `dist/` | Output directory for release artifacts. |
+| `--platform` | `darwin/amd64,darwin/arm64,linux/amd64,linux/arm64` | Comma-separated target platforms for compiled plugins. |
+
+Limit a release to specific platforms:
+
+```sh
+gestaltd plugin release --version 1.0.0 --platform linux/amd64,linux/arm64
 ```

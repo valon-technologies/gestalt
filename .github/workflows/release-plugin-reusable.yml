@@ -32,22 +32,30 @@ jobs:
           echo "release=${VERSION#v}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
-      - name: Detect plugin type
+          go-version-file: server/go.mod
+      - name: Resolve plugin metadata
         id: plugin
         run: |
-          is_main_package() {
-            local package_name
-            package_name="$(cd "$1" && go list -f '{{.Name}}' "$2" 2>/dev/null)" || return 1
-            [ "$package_name" = "main" ]
-          }
+          PLUGIN_DIR="${{ inputs.plugin-dir }}"
+          MANIFEST_PATH="${PLUGIN_DIR}/plugin.yaml"
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "ERROR: ${MANIFEST_PATH} not found"
+            exit 1
+          fi
 
-          if [ ! -f "${{ inputs.plugin-dir }}/go.mod" ]; then
-            echo "compiled=false" >> "$GITHUB_OUTPUT"
-          elif is_main_package "${{ inputs.plugin-dir }}" ./cmd || is_main_package "${{ inputs.plugin-dir }}" .; then
-            echo "compiled=true" >> "$GITHUB_OUTPUT"
+          SOURCE="$(sed -nE "s/^[[:space:]]*source:[[:space:]]*['\"]?([^'\"[:space:]]+)['\"]?[[:space:]]*$/\\1/p" "$MANIFEST_PATH" | head -n1)"
+          if [ -z "$SOURCE" ]; then
+            echo "ERROR: unable to parse source from ${MANIFEST_PATH}"
+            exit 1
+          fi
+
+          PLUGIN_NAME="${SOURCE##*/}"
+          echo "name=${PLUGIN_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag=plugin/${PLUGIN_NAME}/v${{ steps.version.outputs.release }}" >> "$GITHUB_OUTPUT"
+          if [ -f "${PLUGIN_DIR}/go.mod" ]; then
+            echo "has-go-mod=true" >> "$GITHUB_OUTPUT"
           else
-            echo "compiled=false" >> "$GITHUB_OUTPUT"
+            echo "has-go-mod=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Install gestaltd
         env:
@@ -57,7 +65,7 @@ jobs:
           echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/valon-technologies/gestalt/server/cmd/gestaltd@${{ inputs.gestaltd-version }}
       - uses: actions/setup-go@v5
-        if: steps.plugin.outputs.compiled == 'true'
+        if: steps.plugin.outputs.has-go-mod == 'true'
         with:
           go-version-file: ${{ inputs.plugin-dir }}/go.mod
       - name: Release
@@ -68,5 +76,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.version.outputs.release }}" --generate-notes \
+          gh release create "${{ steps.plugin.outputs.tag }}" --generate-notes \
             "${{ inputs.plugin-dir }}"/dist/*

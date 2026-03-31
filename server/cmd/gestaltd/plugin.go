@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -93,6 +95,8 @@ type releasePlatform struct {
 	GOARCH string
 }
 
+var errNoGoMainPackage = errors.New("no Go main package found")
+
 func runPluginRelease(args []string) error {
 	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
 	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
@@ -126,7 +130,6 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
-	pluginName := src.Plugin
 
 	if err := validateReleaseOutputDir(srcManifest, ".", *outputDir); err != nil {
 		return err
@@ -135,51 +138,69 @@ func runPluginRelease(args []string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildTarget, compiled, err := findReleaseBuildTarget(".")
+	platList, err := parseReleasePlatforms(*platforms)
 	if err != nil {
-		return fmt.Errorf("detect build target: %w", err)
+		return err
 	}
-	var archivePaths []string
+	pluginDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
 
-	if compiled {
-		platList, err := parseReleasePlatforms(*platforms)
-		if err != nil {
-			return err
+	compiled := false
+	for _, plat := range platList {
+		if _, err := detectGoBuildTarget(pluginDir, src.Plugin, plat.GOOS, plat.GOARCH); err == nil {
+			compiled = true
+			break
+		} else if !errors.Is(err, errNoGoMainPackage) {
+			return fmt.Errorf("detect Go build target for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 		}
+	}
+	if !compiled && releaseRequiresBuildTarget(srcManifest) {
+		return errNoGoMainPackage
+	}
+
+	var archivePaths []string
+	if compiled {
 		for _, plat := range platList {
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget, plat, *outputDir)
+			buildTarget, err := detectGoBuildTarget(pluginDir, src.Plugin, plat.GOOS, plat.GOARCH)
+			if err != nil {
+				return fmt.Errorf("detect Go build target for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
+			}
+			archivePath, err := buildPlatformArchive(srcManifest, src, *version, buildTarget, plat, pluginDir, *outputDir)
 			if err != nil {
 				return fmt.Errorf("build %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
 	} else {
-		archivePath, err := buildSourceArchive(srcManifest, pluginName, *version, *outputDir)
+		archivePath, err := buildSourceArchive(srcManifest, src, *version, *outputDir)
 		if err != nil {
 			return err
 		}
 		archivePaths = append(archivePaths, archivePath)
 	}
 
-	if err := writeChecksums(*outputDir, archivePaths); err != nil {
+	if err := writeChecksums(filepath.Join(*outputDir, src.ChecksumsName(*version)), archivePaths); err != nil {
 		return fmt.Errorf("write checksums: %w", err)
 	}
 
 	return nil
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildTarget string, plat releasePlatform, outputDir string) (string, error) {
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, src pluginsource.Source, version, buildTarget string, plat releasePlatform, pluginDir, outputDir string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	binaryName := releaseBinaryName(pluginName, plat.GOOS)
+	binaryName := releaseBinaryName(src.Plugin, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
 
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+plat.GOOS, "GOARCH="+plat.GOARCH)
+	cmd := exec.Command("go", "-C", pluginDir, "build", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
+	cmd.Dir = pluginDir
+	cmd.Env = append(goPlatformEnv(pluginDir, plat.GOOS, plat.GOARCH), "CGO_ENABLED=0")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -204,11 +225,11 @@ func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, ve
 		return "", err
 	}
 
-	if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, false); err != nil {
+	if err := copyReleasePackageFiles(srcManifest, pluginDir, stagingDir, false); err != nil {
 		return "", err
 	}
 
-	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
+	archiveName := src.PlatformAssetName(version, plat.GOOS, plat.GOARCH)
 	archivePath := filepath.Join(outputDir, archiveName)
 	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
 		return "", err
@@ -218,73 +239,99 @@ func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, ve
 	return archivePath, nil
 }
 
-func findReleaseBuildTarget(root string) (string, bool, error) {
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		if os.IsNotExist(err) {
-			return "", false, nil
-		}
-		return "", false, err
+func detectGoBuildTarget(dir, pluginName, goos, goarch string) (string, error) {
+	var fatalErr error
+	var targets []string
+	if pluginName != "" {
+		targets = append(targets, releaseCmdBuildTarget+"/"+pluginName)
 	}
-
-	cmdDirHasGoFiles, err := dirHasGoFiles(filepath.Join(root, "cmd"))
-	if err != nil {
-		return "", false, err
-	}
-	if cmdDirHasGoFiles {
-		isMain, err := isMainPackage(root, releaseCmdBuildTarget)
+	targets = append(targets, releaseCmdBuildTarget, releaseRootBuildTarget)
+	for _, target := range targets {
+		name, err := goPackageName(dir, target, goos, goarch)
 		if err != nil {
-			return "", false, err
-		}
-		if isMain {
-			return releaseCmdBuildTarget, true, nil
-		}
-	}
-
-	rootHasGoFiles, err := dirHasGoFiles(root)
-	if err != nil {
-		return "", false, err
-	}
-	if rootHasGoFiles {
-		isMain, err := isMainPackage(root, releaseRootBuildTarget)
-		if err != nil {
-			return "", false, err
-		}
-		if isMain {
-			return releaseRootBuildTarget, true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
-func dirHasGoFiles(dir string) (bool, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
+			if isMissingGoPackageError(err) {
+				continue
+			}
+			if fatalErr == nil {
+				fatalErr = fmt.Errorf("%s: %w", target, err)
+			}
 			continue
 		}
-		if strings.HasSuffix(entry.Name(), ".go") && !strings.HasSuffix(entry.Name(), "_test.go") {
-			return true, nil
+		if name == "main" {
+			return target, nil
 		}
 	}
-	return false, nil
+
+	cmdTargets, err := goMainPackageTargets(dir, "./cmd/...", goos, goarch)
+	switch {
+	case err != nil:
+		if !isMissingGoPackageError(err) && fatalErr == nil {
+			fatalErr = err
+		}
+	case pluginName != "":
+		var namedTargets []string
+		for _, target := range cmdTargets {
+			if path.Base(target) == pluginName {
+				namedTargets = append(namedTargets, target)
+			}
+		}
+		if len(namedTargets) == 1 {
+			return namedTargets[0], nil
+		}
+		if len(namedTargets) > 1 {
+			return "", fmt.Errorf("multiple Go main packages found under ./cmd matching plugin %q for %s/%s: %s", pluginName, goos, goarch, strings.Join(namedTargets, ", "))
+		}
+	}
+
+	if fatalErr != nil {
+		return "", fatalErr
+	}
+	return "", errNoGoMainPackage
 }
 
-func isMainPackage(root, buildTarget string) (bool, error) {
-	cmd := exec.Command("go", "list", "-f", "{{.Name}}", buildTarget)
-	cmd.Dir = root
+func goPackageName(dir, target, goos, goarch string) (string, error) {
+	cmd := exec.Command("go", "-C", dir, "list", "-f", "{{.Name}}", target)
+	cmd.Dir = dir
+	cmd.Env = goPlatformEnv(dir, goos, goarch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("%s", strings.TrimSpace(stderr.String()))
 	}
-	return strings.TrimSpace(string(out)) == "main", nil
+	return strings.TrimSpace(string(out)), nil
+}
+
+func goMainPackageTargets(dir, pattern, goos, goarch string) ([]string, error) {
+	cmd := exec.Command("go", "-C", dir, "list", "-f", "{{if eq .Name \"main\"}}{{.Dir}}{{end}}", pattern)
+	cmd.Dir = dir
+	cmd.Env = goPlatformEnv(dir, goos, goarch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s", strings.TrimSpace(stderr.String()))
+	}
+
+	var targets []string
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rel, err := filepath.Rel(dir, line)
+		if err != nil {
+			return nil, fmt.Errorf("compute relative path for %q: %w", line, err)
+		}
+		target := filepath.ToSlash("." + string(filepath.Separator) + rel)
+		if _, ok := seen[target]; ok {
+			continue
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+	return targets, nil
 }
 
 func parseReleasePlatforms(value string) ([]releasePlatform, error) {
@@ -304,7 +351,7 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 	return platforms, nil
 }
 
-func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir string) (string, error) {
+func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, src pluginsource.Source, version, outputDir string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
@@ -332,7 +379,7 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		return "", err
 	}
 
-	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
+	archiveName := src.AssetName(version)
 	archivePath := filepath.Join(outputDir, archiveName)
 	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
 		return "", err
@@ -378,7 +425,61 @@ func releaseBinaryName(pluginName, goos string) string {
 	return binaryName
 }
 
-func writeChecksums(dir string, archivePaths []string) error {
+func goCommandEnv(dir string) []string {
+	return envWithPWD(os.Environ(), dir)
+}
+
+func goPlatformEnv(dir, goos, goarch string) []string {
+	env := goCommandEnv(dir)
+	if goos != "" {
+		env = append(env, "GOOS="+goos)
+	}
+	if goarch != "" {
+		env = append(env, "GOARCH="+goarch)
+	}
+	return env
+}
+
+func envWithPWD(env []string, dir string) []string {
+	filtered := env[:0]
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, "PWD=") {
+			filtered = append(filtered, entry)
+		}
+	}
+	return append(filtered, "PWD="+dir)
+}
+
+func isMissingGoPackageError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "directory not found") ||
+		strings.Contains(msg, "no such file or directory") ||
+		strings.Contains(msg, "go.mod file not found") ||
+		strings.Contains(msg, "cannot find main module") ||
+		strings.Contains(msg, "does not contain main module or its selected dependencies") ||
+		strings.Contains(msg, "no Go files") ||
+		strings.Contains(msg, "build constraints exclude all Go files") ||
+		strings.Contains(msg, "matched no packages")
+}
+
+func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
+	if manifest == nil {
+		return false
+	}
+	for _, kind := range manifest.Kinds {
+		switch kind {
+		case pluginmanifestv1.KindRuntime:
+			return true
+		case pluginmanifestv1.KindProvider:
+			if manifest.Provider == nil || !manifest.Provider.IsDeclarative() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func writeChecksums(checksumPath string, archivePaths []string) error {
 	var lines []string
 	for _, archivePath := range archivePaths {
 		digest, err := fileSHA256Hex(archivePath)
@@ -392,7 +493,6 @@ func writeChecksums(dir string, archivePaths []string) error {
 		return nil
 	}
 
-	checksumPath := filepath.Join(dir, "checksums.txt")
 	content := strings.Join(lines, "\n") + "\n"
 	if err := os.WriteFile(checksumPath, []byte(content), 0644); err != nil {
 		return err

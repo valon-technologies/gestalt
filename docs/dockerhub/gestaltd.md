@@ -173,10 +173,11 @@ RUN apk add --no-cache git
 COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
-RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
-    gestaltd plugin package --binary /tmp/myplugin --source github.com/example/myrepo/myplugin --output ./deploy/plugins/myplugin && \
-    gestaltd init --config ./deploy/config.yaml
+RUN cd ./plugins/myplugin && \
+    gestaltd plugin release --version 1.0.0 --platform linux/amd64 --output /tmp/plugin-dist
 ```
+
+For local-only packaging, first assemble a plugin directory with a manifest plus any referenced assets or schemas, then archive it with `gestaltd plugin package --input /path/to/plugin-dir --output ./deploy/plugins/myplugin.tar.gz`.
 
 ## Caveats
 

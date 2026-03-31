@@ -57,6 +57,14 @@ func (s Source) AssetName(version string) string {
 	return assetPrefix + s.Plugin + "_" + versionPrefix + version + assetSuffix
 }
 
+func (s Source) PlatformAssetName(version, goos, goarch string) string {
+	return assetPrefix + s.Plugin + "_" + versionPrefix + version + "_" + goos + "_" + goarch + assetSuffix
+}
+
+func (s Source) ChecksumsName(version string) string {
+	return assetPrefix + s.Plugin + "_" + versionPrefix + version + "_checksums.txt"
+}
+
 func (s Source) ReleaseTag(version string) string {
 	return pluginTagPrefix + s.Plugin + "/" + versionPrefix + version
 }

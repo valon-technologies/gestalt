@@ -79,6 +79,12 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	return httptest.NewServer(srv)
 }
 
+type testInvoker func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
+
+func (f testInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+	return f(ctx, p, providerName, instance, operation, params)
+}
+
 // testOAuthHandler adapts a test stub into bootstrap.OAuthHandler for use in
 // server tests. Only the methods actually exercised by each test need non-nil
 // implementations.
@@ -281,6 +287,33 @@ func TestReadinessCheck(t *testing.T) {
 	}
 	if body["status"] != "ok" {
 		t.Fatalf("expected status ok, got %q", body["status"])
+	}
+}
+
+func TestExecuteOperationContextHasRouteTimeout(t *testing.T) {
+	t.Parallel()
+
+	var hasDeadline atomic.Bool
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Invoker = testInvoker(func(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			_, ok := ctx.Deadline()
+			hasDeadline.Store(ok)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/test/long_running_operation")
+	if err != nil {
+		t.Fatalf("GET executeOperation route: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if !hasDeadline.Load() {
+		t.Fatal("expected executeOperation request context to inherit the API route timeout")
 	}
 }
 

@@ -380,6 +380,38 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	}
 }
 
+func TestResolvedSurfaceConnectionDefUsesManifestNamedConnection(t *testing.T) {
+	t.Parallel()
+
+	conn := resolvedSurfaceConnectionDef(&config.PluginDef{
+		Auth: &config.ConnectionAuthDef{
+			Type:     pluginmanifestv1.AuthTypeBearer,
+			ClientID: "fallback-client",
+		},
+	}, &pluginmanifestv1.Provider{
+		OpenAPIConnection: "api",
+		Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+			"api": {
+				Mode: "user",
+				Auth: &pluginmanifestv1.ProviderAuth{
+					Type:     pluginmanifestv1.AuthTypeOAuth2,
+					ClientID: "named-client",
+				},
+			},
+		},
+	}, specSurfaceOpenAPI)
+
+	if conn.Mode != "user" {
+		t.Fatalf("Mode = %q, want %q", conn.Mode, "user")
+	}
+	if conn.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+		t.Fatalf("Auth.Type = %q, want %q", conn.Auth.Type, pluginmanifestv1.AuthTypeOAuth2)
+	}
+	if conn.Auth.ClientID != "named-client" {
+		t.Fatalf("Auth.ClientID = %q, want %q", conn.Auth.ClientID, "named-client")
+	}
+}
+
 func TestPluginProcessEnvIsolation(t *testing.T) {
 	t.Parallel()
 	bin := buildEchoPluginBinary(t)
