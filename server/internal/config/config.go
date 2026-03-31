@@ -190,6 +190,7 @@ type ConnectionAuthDef struct {
 	RefreshParams       map[string]string    `yaml:"refresh_params"`
 	AcceptHeader        string               `yaml:"accept_header"`
 	TokenMetadata       []string             `yaml:"token_metadata"`
+	AccessTokenPath     string               `yaml:"access_token_path"`
 	Credentials         []CredentialFieldDef `yaml:"credentials"`
 	AuthMapping         *AuthMappingDef      `yaml:"auth_mapping"`
 }
