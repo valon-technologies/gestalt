@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -112,10 +113,22 @@ func TestLoadDefinition(t *testing.T) {
 	if listOp.Description != "List items with pagination" {
 		t.Errorf("list_items description = %q, want override", listOp.Description)
 	}
+	if len(listOp.Parameters) != 1 {
+		t.Fatalf("list_items params = %d, want 1", len(listOp.Parameters))
+	}
+	if listOp.Parameters[0].Location != "query" {
+		t.Errorf("list_items param location = %q, want query", listOp.Parameters[0].Location)
+	}
 
 	getOp := def.Operations["get_item"]
 	if getOp.Description != "Get an item by ID" {
 		t.Errorf("get_item description = %q, want spec default", getOp.Description)
+	}
+	if len(getOp.Parameters) != 1 {
+		t.Fatalf("get_item params = %d, want 1", len(getOp.Parameters))
+	}
+	if getOp.Parameters[0].Location != "path" {
+		t.Errorf("get_item param location = %q, want path", getOp.Parameters[0].Location)
 	}
 }
 
@@ -619,6 +632,17 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 	}
 	if !hasValue {
 		t.Error("expected 'value' body property to be included")
+	}
+
+	byName := make(map[string]provider.ParameterDef, len(op.Parameters))
+	for _, p := range op.Parameters {
+		byName[p.Name] = p
+	}
+	if byName["name"].Location != "path" {
+		t.Errorf("name location = %q, want path", byName["name"].Location)
+	}
+	if byName["value"].Location != "body" {
+		t.Errorf("value location = %q, want body", byName["value"].Location)
 	}
 }
 
