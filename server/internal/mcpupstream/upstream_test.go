@@ -73,6 +73,11 @@ func newTestUpstreamFromServer(t *testing.T, name string, srv *mcpserver.MCPServ
 
 func newAuthenticatedHTTPTestServer(t *testing.T, expectedAuth string) *httptest.Server {
 	t.Helper()
+	return newHeaderAuthenticatedHTTPTestServer(t, map[string]string{"Authorization": expectedAuth})
+}
+
+func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[string]string) *httptest.Server {
+	t.Helper()
 
 	handler := mcpserver.NewStreamableHTTPServer(
 		newTestServer(),
@@ -80,9 +85,11 @@ func newAuthenticatedHTTPTestServer(t *testing.T, expectedAuth string) *httptest
 	)
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != expectedAuth {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+		for name, value := range expectedHeaders {
+			if r.Header.Get(name) != value {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 		}
 		handler.ServeHTTP(w, r)
 	}))
@@ -296,7 +303,7 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil)
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -319,6 +326,39 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	}
 }
 
+func TestUpstream_StaticHeadersReachLazyDiscoveryAndToolCalls(t *testing.T) {
+	t.Parallel()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	ts := newHeaderAuthenticatedHTTPTestServer(t, map[string]string{headerName: headerValue})
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeNone, map[string]string{
+		"x-static-version": headerValue,
+	}, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cat, err := u.CatalogForRequest(context.Background(), "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+
+	result, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
 func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
 	t.Parallel()
 
@@ -326,7 +366,7 @@ func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, &egress.Resolver{
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, &egress.Resolver{
 		Subjects: egress.ContextSubjectResolver{},
 		Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
 			gotPolicy = input

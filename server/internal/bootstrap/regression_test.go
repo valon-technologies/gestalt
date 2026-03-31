@@ -5,9 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -569,5 +572,98 @@ func TestBootstrap_InlineProviderStaticHeadersReachUpstream(t *testing.T) {
 				t.Fatal("timed out waiting for upstream request")
 			}
 		})
+	}
+}
+
+func TestBootstrap_InlineMCPProviderStaticHeadersReachUpstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const headerName = "X-Static-Version"
+	const headerValue = "2026-02-09"
+
+	mcpSrv := mcpserver.NewMCPServer("test-remote", "1.0.0")
+	mcpSrv.AddTool(
+		mcpgo.NewTool("list_items", mcpgo.WithDescription("List items")),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	handler := mcpserver.NewStreamableHTTPServer(
+		mcpSrv,
+		mcpserver.WithStateLess(true),
+	)
+
+	var requestCount atomic.Int32
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(headerName); got != headerValue {
+			http.Error(w, "missing static header", http.StatusUnauthorized)
+			return
+		}
+		requestCount.Add(1)
+		handler.ServeHTTP(w, r)
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				MCPURL:        apiSrv.URL,
+				MCPConnection: config.PluginConnectionName,
+				Headers: map[string]string{
+					headerName: headerValue,
+				},
+				Connections: map[string]*config.ConnectionDef{
+					config.PluginConnectionName: {
+						Mode: string(core.ConnectionModeNone),
+						Auth: config.ConnectionAuthDef{Type: "none"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get(sample): %v", err)
+	}
+
+	sessionProv, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatalf("provider does not implement SessionCatalogProvider: %T", prov)
+	}
+	cat, err := sessionProv.CatalogForRequest(ctx, "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "list_items" {
+		t.Fatalf("unexpected catalog operations: %+v", cat.Operations)
+	}
+
+	type callToolProvider interface {
+		CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error)
+	}
+
+	caller, ok := prov.(callToolProvider)
+	if !ok {
+		t.Fatalf("provider does not support CallTool: %T", prov)
+	}
+	resultTool, err := caller.CallTool(ctx, "list_items", nil)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if resultTool.IsError {
+		t.Fatalf("unexpected tool error: %+v", resultTool.Content)
+	}
+	if requestCount.Load() == 0 {
+		t.Fatal("expected at least one MCP request to reach the upstream")
 	}
 }

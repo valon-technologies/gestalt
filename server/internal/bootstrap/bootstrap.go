@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -861,7 +860,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, mergedHeaders(nil, intg.Plugin), deps.Egress.Resolver)
 		if err != nil {
 			return nil, "", fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
 		}
@@ -962,7 +961,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mp.MCPURL, connMode, mergedHeaders(mp, intg.Plugin), deps.Egress.Resolver)
 		if err != nil {
 			return nil, fmt.Errorf("create mcp upstream for %q: %w", name, err)
 		}
@@ -1021,19 +1020,17 @@ func mergedManifestHeaders(manifest *pluginmanifestv1.Manifest, plugin *config.P
 }
 
 func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) map[string]string {
-	var headers map[string]string
-	if manifestProvider != nil && len(manifestProvider.Headers) > 0 {
-		headers = maps.Clone(manifestProvider.Headers)
+	var manifestHeaders map[string]string
+	if manifestProvider != nil {
+		manifestHeaders = manifestProvider.Headers
 	}
-	if plugin != nil && len(plugin.Headers) > 0 {
-		if headers == nil {
-			headers = make(map[string]string, len(plugin.Headers))
-		}
-		for k, v := range plugin.Headers {
-			headers[k] = v
-		}
+
+	var pluginHeaders map[string]string
+	if plugin != nil {
+		pluginHeaders = plugin.Headers
 	}
-	return headers
+
+	return config.MergeHeaders(manifestHeaders, pluginHeaders)
 }
 
 func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*config.OperationOverride {

@@ -34,6 +34,7 @@ type Upstream struct {
 	desc        string
 	url         string
 	connMode    core.ConnectionMode
+	headers     map[string]string
 	cat         *catalog.Catalog
 	ops         []core.Operation
 	client      mcpclient.MCPClient
@@ -42,7 +43,7 @@ type Upstream struct {
 	resolver    *egress.Resolver
 }
 
-func New(_ context.Context, name string, url string, connMode core.ConnectionMode, resolver *egress.Resolver) (*Upstream, error) {
+func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
@@ -53,6 +54,7 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		desc:     fmt.Sprintf("MCP upstream: %s", url),
 		url:      url,
 		connMode: connMode,
+		headers:  config.NormalizeHeaders(headers),
 		resolver: resolver,
 	}, nil
 }
@@ -174,10 +176,11 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	client, err := mcpclient.NewStreamableHttpClient(u.url,
 		transport.WithHTTPBasicClient(httpClient),
 		transport.WithHTTPHeaderFunc(func(context.Context) map[string]string {
+			var authHeaders map[string]string
 			if token != "" {
-				return map[string]string{"Authorization": core.BearerScheme + token}
+				authHeaders = map[string]string{"Authorization": core.BearerScheme + token}
 			}
-			return nil
+			return config.MergeHeaders(authHeaders, u.headers)
 		}),
 	)
 	if err != nil {
