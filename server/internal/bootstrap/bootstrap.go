@@ -743,10 +743,10 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	mp := manifest.Provider
 
 	allowedOps := convertAllowedOperations(mp.AllowedOperations)
-	conn := pluginConnectionDef(intg.Plugin)
 
 	switch {
 	case mp.OpenAPI != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.OpenAPIConnection)
 		def, err := openapi.LoadDefinition(ctx, name, mp.OpenAPI, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load openapi spec for %q: %w", name, err)
@@ -762,6 +762,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		return specLoadedResult(name, intg, manifest, prov, deps)
 
 	case mp.GraphQLURL != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.GraphQLConnection)
 		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load graphql schema for %q: %w", name, err)
@@ -777,6 +778,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		return specLoadedResult(name, intg, manifest, prov, deps)
 
 	case mp.MCPURL != "":
+		conn := pluginConnectionDef(intg.Plugin, mp.MCPConnection)
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
@@ -830,10 +832,15 @@ func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperation
 	return result
 }
 
-func pluginConnectionDef(plugin *config.PluginDef) config.ConnectionDef {
+func pluginConnectionDef(plugin *config.PluginDef, connName string) config.ConnectionDef {
 	conn := config.ConnectionDef{}
 	if plugin == nil {
 		return conn
+	}
+	if connName != "" {
+		if named, ok := plugin.Connections[connName]; ok && named != nil {
+			return *named
+		}
 	}
 	if plugin.Auth != nil {
 		conn.Auth = *plugin.Auth
