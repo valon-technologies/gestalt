@@ -23,21 +23,6 @@ func ServeRuntime(ctx context.Context, runtime Runtime) error {
 	})
 }
 
-func DialProviderHost(ctx context.Context) (ProviderHost, error) {
-	socket := os.Getenv(pluginapiv1.EnvProviderHostSocket)
-	if socket == "" {
-		return nil, fmt.Errorf("%s is required", pluginapiv1.EnvProviderHostSocket)
-	}
-	conn, err := dialUnixSocket(ctx, socket)
-	if err != nil {
-		return nil, err
-	}
-	return &providerHostClient{
-		client: pluginapiv1.NewProviderHostClient(conn),
-		conn:   conn,
-	}, nil
-}
-
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	socket := os.Getenv(pluginapiv1.EnvPluginSocket)
 	if socket == "" {
