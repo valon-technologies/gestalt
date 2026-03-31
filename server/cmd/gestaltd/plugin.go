@@ -37,7 +37,7 @@ func runPluginPackage(args []string) error {
 	fs := flag.NewFlagSet("gestaltd plugin package", flag.ContinueOnError)
 	fs.Usage = func() { printPluginPackageUsage(fs.Output()) }
 	input := fs.String("input", "", "path to plugin manifest or build directory")
-	output := fs.String("output", "", "path to write the packaged archive")
+	output := fs.String("output", "", "output path (directory, or .tar.gz for archive)")
 	binary := fs.String("binary", "", "path to pre-built binary (scaffolds manifest automatically)")
 	source := fs.String("source", "", "plugin source (github.com/owner/repo/plugin), required with --binary")
 	kind := fs.String("kind", "provider", "plugin kind (provider or runtime), used with --binary")
@@ -72,8 +72,14 @@ func packageFromDir(input, output string) error {
 		sourceDir = filepath.Dir(input)
 	}
 
-	if err := pluginpkg.CreatePackageFromDir(sourceDir, output); err != nil {
-		return err
+	if isArchiveOutput(output) {
+		if err := pluginpkg.CreatePackageFromDir(sourceDir, output); err != nil {
+			return err
+		}
+	} else {
+		if err := pluginpkg.CopyPackageDir(sourceDir, output); err != nil {
+			return err
+		}
 	}
 	_, _ = fmt.Fprintf(os.Stdout, "packaged %s -> %s\n", sourceDir, output)
 	return nil
@@ -97,14 +103,24 @@ func packageFromBinary(binaryPath, source, kind, version, targetOS, targetArch, 
 		return fmt.Errorf("invalid --version for source plugin: %w", err)
 	}
 
-	workDir, err := os.MkdirTemp("", "gestalt-plugin-pkg-*")
-	if err != nil {
-		return err
+	scaffoldDir := output
+	var cleanup func()
+	if isArchiveOutput(output) {
+		tmp, err := os.MkdirTemp("", "gestalt-plugin-pkg-*")
+		if err != nil {
+			return err
+		}
+		cleanup = func() { _ = os.RemoveAll(tmp) }
+		defer cleanup()
+		scaffoldDir = tmp
+	} else {
+		if err := os.MkdirAll(output, 0755); err != nil {
+			return fmt.Errorf("create output dir: %w", err)
+		}
 	}
-	defer func() { _ = os.RemoveAll(workDir) }()
 
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", targetOS, targetArch, kind))
-	artifactAbs := filepath.Join(workDir, filepath.FromSlash(artifactRel))
+	artifactAbs := filepath.Join(scaffoldDir, filepath.FromSlash(artifactRel))
 
 	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0755); err != nil {
 		return err
@@ -120,12 +136,14 @@ func packageFromBinary(binaryPath, source, kind, version, targetOS, targetArch, 
 	if err != nil {
 		return fmt.Errorf("encoding manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(workDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(scaffoldDir, pluginpkg.ManifestFile), data, 0644); err != nil {
 		return fmt.Errorf("writing manifest: %w", err)
 	}
 
-	if err := pluginpkg.CreatePackageFromDir(workDir, output); err != nil {
-		return err
+	if isArchiveOutput(output) {
+		if err := pluginpkg.CreatePackageFromDir(scaffoldDir, output); err != nil {
+			return err
+		}
 	}
 	_, _ = fmt.Fprintf(os.Stdout, "packaged %s (%s) -> %s\n", source, binaryPath, output)
 	return nil
@@ -193,6 +211,10 @@ func copyAndDigest(src, dst string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+func isArchiveOutput(path string) bool {
+	return strings.HasSuffix(path, ".tar.gz") || strings.HasSuffix(path, ".tgz")
+}
+
 func printPluginUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
@@ -210,9 +232,12 @@ func printPluginPackageUsage(w io.Writer) {
 	writeUsageLine(w, "directory containing a manifest, or --binary to scaffold and package")
 	writeUsageLine(w, "a pre-built binary in one step.")
 	writeUsageLine(w, "")
+	writeUsageLine(w, "Output format is determined by the --output path: paths ending in")
+	writeUsageLine(w, ".tar.gz produce an archive, all other paths produce a directory.")
+	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --input     Path to plugin manifest or build directory")
-	writeUsageLine(w, "  --output    Path to write the packaged archive")
+	writeUsageLine(w, "  --output    Output path (directory, or .tar.gz for archive)")
 	writeUsageLine(w, "  --binary    Path to pre-built binary (scaffolds manifest automatically)")
 	writeUsageLine(w, "  --source    Plugin source (github.com/owner/repo/plugin), required with --binary")
 	writeUsageLine(w, "  --kind      Plugin kind: provider or runtime (default: provider)")

@@ -62,18 +62,21 @@ Web UI manifests have no `artifacts` or `entrypoints` and cannot be combined wit
 Build a directory that contains `plugin.json` plus the referenced artifacts, then run:
 
 ```sh
-gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider.tar.gz
+gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider
 ```
 
-That creates a distributable archive.
+That copies the validated plugin directory to the output path. If you need an archive for remote distribution, use a `.tar.gz` output path:
+
+```sh
+gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider.tar.gz
+```
 
 ## Using A Package In Config
 
 Packages can come from:
 
-- a local `.tar.gz`
 - a local directory
-- an HTTPS URL
+- an HTTPS URL (`.tar.gz`)
 
 Example:
 
@@ -81,18 +84,18 @@ Example:
 integrations:
   example:
     plugin:
-      package: https://example.com/example-provider.tar.gz
+      package: ./dist/example-provider
       config:
         greeting: hello
 ```
 
-or:
+or from a remote archive:
 
 ```yaml
 integrations:
   example:
     plugin:
-      package: ./dist/example-provider.tar.gz
+      package: https://example.com/example-provider.tar.gz
 ```
 
 Plain `http://` is rejected. Remote packages must use HTTPS.
