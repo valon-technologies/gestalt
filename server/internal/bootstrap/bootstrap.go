@@ -1083,6 +1083,7 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 		ScopeSeparator:      auth.ScopeSeparator,
 		TokenExchange:       tokenExchange,
 		AuthorizationParams: auth.AuthorizationParams,
+		AccessTokenPath:     auth.AccessTokenPath,
 	}
 	if auth.ClientAuth == "header" {
 		oauthCfg.ClientAuthMethod = oauth.ClientAuthHeader

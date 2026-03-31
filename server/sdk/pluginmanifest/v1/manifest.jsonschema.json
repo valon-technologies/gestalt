@@ -287,6 +287,10 @@
           "type": "string",
           "enum": ["form", "json"]
         },
+        "access_token_path": {
+          "type": "string",
+          "description": "Dot-separated JSON path to extract the access token from the token response"
+        },
         "scope_param": {
           "type": "string",
           "description": "Query parameter name for scopes (default: scope)"

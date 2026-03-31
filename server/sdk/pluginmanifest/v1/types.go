@@ -88,6 +88,7 @@ type ProviderAuth struct {
 	PKCE                bool              `json:"pkce,omitempty"`
 	ClientAuth          string            `json:"client_auth,omitempty"`
 	TokenExchange       string            `json:"token_exchange,omitempty"`
+	AccessTokenPath     string            `json:"access_token_path,omitempty"`
 	ScopeParam          string            `json:"scope_param,omitempty"`
 	ScopeSeparator      string            `json:"scope_separator,omitempty"`
 	AuthorizationParams map[string]string `json:"authorization_params,omitempty"`
