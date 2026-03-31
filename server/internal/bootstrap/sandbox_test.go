@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,14 +18,10 @@ import (
 
 func buildGestaltdBinary(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "gestaltd")
-	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/gestaltd")
-	cmd.Dir = filepath.Join(root, "server")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build gestaltd: %v\n%s", err, out)
+	if sharedGestaltdBin == "" {
+		t.Fatal("shared gestaltd binary not initialized")
 	}
-	return bin
+	return sharedGestaltdBin
 }
 
 func sandboxAvailable(t *testing.T) bool {
