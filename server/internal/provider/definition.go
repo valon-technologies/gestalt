@@ -78,6 +78,7 @@ type AuthDef struct {
 	RefreshParams       map[string]string `yaml:"refresh_params" json:"refresh_params"`
 	AcceptHeader        string            `yaml:"accept_header" json:"accept_header"`
 	TokenMetadata       []string          `yaml:"token_metadata" json:"token_metadata"`
+	AccessTokenPath     string            `yaml:"access_token_path" json:"access_token_path,omitempty"`
 	ResponseCheck       *ResponseCheckDef `yaml:"response_check" json:"response_check,omitempty"`
 }
 

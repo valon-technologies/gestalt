@@ -763,3 +763,64 @@ func TestTokenResponseExtra(t *testing.T) {
 		t.Errorf("Extra[custom_field] = %v, want custom_value", resp.Extra["custom_field"])
 	}
 }
+
+func TestAccessTokenPathExtractsNestedToken(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"ok": true,
+			"access_token": "xoxb-bot-token",
+			"token_type": "bot",
+			"authed_user": {
+				"id": "U12345",
+				"access_token": "xoxp-user-token",
+				"token_type": "user",
+				"scope": "chat:write"
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:        "cid",
+		ClientSecret:    "csec",
+		TokenURL:        srv.URL + "/token",
+		RedirectURL:     "http://localhost/cb",
+		AccessTokenPath: "authed_user.access_token",
+	})
+
+	resp, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if resp.AccessToken != "xoxp-user-token" {
+		t.Errorf("AccessToken = %q, want xoxp-user-token", resp.AccessToken)
+	}
+}
+
+func TestAccessTokenPathFallsBackToTopLevel(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token": "standard-token", "token_type": "Bearer"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := NewUpstream(UpstreamConfig{
+		ClientID:     "cid",
+		ClientSecret: "csec",
+		TokenURL:     srv.URL + "/token",
+		RedirectURL:  "http://localhost/cb",
+	})
+
+	resp, err := h.ExchangeCode(context.Background(), "code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if resp.AccessToken != "standard-token" {
+		t.Errorf("AccessToken = %q, want standard-token", resp.AccessToken)
+	}
+}

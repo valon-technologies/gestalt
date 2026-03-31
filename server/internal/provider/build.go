@@ -312,6 +312,7 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	setStr(&def.Auth.ScopeParam, o.ScopeParam)
 	setStr(&def.Auth.ScopeSeparator, o.ScopeSeparator)
 	setStr(&def.Auth.AcceptHeader, o.AcceptHeader)
+	setStr(&def.Auth.AccessTokenPath, o.AccessTokenPath)
 	if o.PKCE {
 		def.Auth.PKCE = true
 	}
@@ -395,6 +396,7 @@ func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL stri
 		RefreshParams:       def.Auth.RefreshParams,
 		TokenExchange:       tokenExchange,
 		AcceptHeader:        def.Auth.AcceptHeader,
+		AccessTokenPath:     def.Auth.AccessTokenPath,
 	}
 
 	if def.Auth.ClientAuth == "header" {
