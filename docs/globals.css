@@ -15,3 +15,11 @@
     width: 12rem;
   }
 }
+
+/* Limit "On this page" TOC to h2–h3 only.
+   Nextra applies _ms-8 / _ms-12 / _ms-16 to depths 4 / 5 / 6. */
+nav[aria-label="table of contents"] li:has(> a._ms-8),
+nav[aria-label="table of contents"] li:has(> a._ms-12),
+nav[aria-label="table of contents"] li:has(> a._ms-16) {
+  display: none;
+}
