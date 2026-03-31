@@ -850,3 +850,43 @@ func TestIsInline(t *testing.T) {
 		})
 	}
 }
+
+func TestExternalPluginRejectsInlineOperations(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Integrations: map[string]IntegrationDef{
+			"bad": {
+				Plugin: &PluginDef{
+					Command: "echo",
+					Operations: []InlineOperationDef{
+						{Name: "op", Method: "GET", Path: "/op"},
+					},
+				},
+			},
+		},
+	}
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for command + inline operations")
+	}
+	if !strings.Contains(err.Error(), "external plugin cannot use inline operations") {
+		t.Fatalf("error = %q, want to contain 'external plugin cannot use inline operations'", err)
+	}
+}
+
+func TestExternalPluginAllowsSpecURL(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Integrations: map[string]IntegrationDef{
+			"ok": {
+				Plugin: &PluginDef{
+					Command: "echo",
+					OpenAPI: "https://example.com/spec.json",
+				},
+			},
+		},
+	}
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+}

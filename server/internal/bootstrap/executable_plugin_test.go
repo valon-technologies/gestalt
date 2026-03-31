@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -632,5 +634,92 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	}
 	if !env.Found || env.Value == "" {
 		t.Fatal("plugin process should see PATH")
+	}
+}
+
+func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Hybrid Test API"},
+		"servers": []any{map[string]string{"url": "https://api.hybrid.example/v1"}},
+		"paths": map[string]any{
+			"/messages": map[string]any{
+				"get": map[string]any{
+					"operationId": "list_messages",
+					"summary":     "List messages",
+				},
+			},
+			"/messages/{id}": map[string]any{
+				"get": map[string]any{
+					"operationId": "get_message",
+					"summary":     "Get a message by ID",
+					"parameters": []any{
+						map[string]any{
+							"name":     "id",
+							"in":       "path",
+							"required": true,
+							"schema":   map[string]string{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(spec)
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"hybrid": {
+				Plugin: &config.PluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+					OpenAPI: specSrv.URL,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+
+	ops := prov.ListOperations()
+	opNames := make(map[string]bool, len(ops))
+	for _, op := range ops {
+		opNames[op.Name] = true
+	}
+
+	if !opNames["echo"] {
+		t.Error("expected plugin operation 'echo' to be present")
+	}
+	if !opNames["list_messages"] {
+		t.Error("expected spec operation 'list_messages' to be present")
+	}
+	if !opNames["get_message"] {
+		t.Error("expected spec operation 'get_message' to be present")
+	}
+
+	result, err := prov.Execute(context.Background(), "echo", map[string]any{"msg": "hello"}, "")
+	if err != nil {
+		t.Fatalf("Execute(echo): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("echo status = %d, want %d", result.Status, http.StatusOK)
 	}
 }
