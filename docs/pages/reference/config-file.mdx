@@ -452,7 +452,7 @@ connections:
 
 ### `plugin`
 
-Plugin integrations delegate execution to an external binary. A plugin integration may optionally compose with an `mcp` surface (hybrid pattern) but cannot declare an `api` surface.
+Plugin integrations delegate execution to an external binary. A plugin can compose with `api`, `mcp`, or both.
 
 ```yaml
 integrations:
@@ -653,8 +653,7 @@ Structural validation runs at config load time (`bundle`, `validate`, `serve`). 
 
 ### Structural
 
-- Integrations are declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `mcp`)
-- Plugin integrations cannot declare `api`
+- Integrations are declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `api`, `mcp`, or both)
 - Exactly one of `command`, `package`, or `source` per plugin
 - `plugin.version` is required with `source` and invalid with `command` or `package`
 - `plugin.args` are only valid with `command`
