@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 )
 
 const defaultTimeout = 10 * time.Second
@@ -52,8 +53,9 @@ type UpstreamConfig struct {
 	TokenParams         map[string]string
 	RefreshParams       map[string]string
 
-	TokenExchange TokenExchangeFormat
-	AcceptHeader  string
+	TokenExchange   TokenExchangeFormat
+	AcceptHeader    string
+	AccessTokenPath string
 }
 
 type ResponseHook func(body []byte) error
@@ -295,7 +297,14 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tok
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decoding token response: %w", err)
 	}
-	accessToken, _ := raw["access_token"].(string)
+	var accessToken string
+	if h.cfg.AccessTokenPath != "" {
+		if v, ok := apiexec.ExtractJSONPath(raw, h.cfg.AccessTokenPath); ok {
+			accessToken, _ = v.(string)
+		}
+	} else {
+		accessToken, _ = raw["access_token"].(string)
+	}
 	if accessToken == "" {
 		return nil, fmt.Errorf("token response missing access_token")
 	}
