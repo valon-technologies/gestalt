@@ -8,40 +8,19 @@ import (
 	"os/signal"
 	"syscall"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type exampleRuntime struct {
-	pluginapiv1.UnimplementedRuntimePluginServer
-	hostConn *grpc.ClientConn
-	host     pluginapiv1.RuntimeHostClient
+type exampleRuntime struct{}
+
+func (r *exampleRuntime) Start(ctx context.Context, name string, config map[string]any, capabilities []pluginsdk.Capability, host pluginsdk.RuntimeHost) error {
+	log.Printf("example runtime %q started with %d initial capabilities", name, len(capabilities))
+	return nil
 }
 
-func (r *exampleRuntime) Start(ctx context.Context, req *pluginapiv1.StartRuntimeRequest) (*emptypb.Empty, error) {
-	conn, host, err := pluginsdk.DialRuntimeHost(ctx)
-	if err != nil {
-		return nil, err
-	}
-	r.hostConn = conn
-	r.host = host
-
-	caps, err := host.ListCapabilities(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("example runtime %q started with %d capabilities", req.GetName(), len(caps.GetCapabilities()))
-	return &emptypb.Empty{}, nil
-}
-
-func (r *exampleRuntime) Stop(_ context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
-	if r.hostConn != nil {
-		_ = r.hostConn.Close()
-	}
+func (r *exampleRuntime) Stop(ctx context.Context) error {
 	log.Println("example runtime stopped")
-	return &emptypb.Empty{}, nil
+	return nil
 }
 
 func main() {
