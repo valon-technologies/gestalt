@@ -294,6 +294,10 @@ func newSocketDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create plugin temp dir: %w", err)
 	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		os.Remove(dir)
+		return "", fmt.Errorf("restrict plugin temp dir permissions: %w", err)
+	}
 	return dir, nil
 }
 
