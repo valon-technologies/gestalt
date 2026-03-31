@@ -80,28 +80,12 @@ jobs:
             plugins/${{ env.PLUGIN_NAME }}/gestalt-plugin-*.sha256
           if-no-files-found: error
 
-  build-compiled:
-    name: Build - ${{ matrix.platform.name }}
+  release-compiled:
+    name: Release Compiled Plugin
     needs: prepare
     if: needs.prepare.outputs.plugin-type == 'compiled'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - name: macOS-ARM64
-            goos: darwin
-            goarch: arm64
-          - name: macOS-x86_64
-            goos: darwin
-            goarch: amd64
-          - name: Linux-x86_64
-            goos: linux
-            goarch: amd64
-          - name: Linux-ARM64
-            goos: linux
-            goarch: arm64
     env:
       PLUGIN_NAME: ${{ needs.prepare.outputs.plugin-name }}
       PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin-version }}
@@ -111,95 +95,22 @@ jobs:
         with:
           go-version-file: plugins/${{ env.PLUGIN_NAME }}/go.mod
           cache-dependency-path: plugins/${{ env.PLUGIN_NAME }}/go.sum
-      - name: Build
-        env:
-          CGO_ENABLED: '0'
-          GOOS: ${{ matrix.platform.goos }}
-          GOARCH: ${{ matrix.platform.goarch }}
+      - name: Build gestaltd
+        run: cd server && go build -o ../gestaltd ./cmd/gestaltd
+      - name: Release plugin
         run: |
           cd "plugins/${PLUGIN_NAME}"
-          go build -o "../../gestalt-plugin-${PLUGIN_NAME}" ./cmd
-      - uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.platform.goos }}-${{ matrix.platform.goarch }}
-          path: gestalt-plugin-${{ env.PLUGIN_NAME }}
-          if-no-files-found: error
-
-  assemble-compiled:
-    name: Assemble Compiled Plugin
-    needs: [prepare, build-compiled]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      PLUGIN_NAME: ${{ needs.prepare.outputs.plugin-name }}
-      PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin-version }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: binary-*
-          path: binaries
-      - name: Assemble multi-platform package
-        run: |
-          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}"
-          PLUGIN_DIR="plugins/${PLUGIN_NAME}"
-          BINARY_NAME="gestalt-plugin-${PLUGIN_NAME}"
-
-          MANIFEST=$(yq -o json "${PLUGIN_DIR}/plugin.yaml")
-
-          ARTIFACTS="[]"
-          for platform_dir in binaries/binary-*; do
-            PLATFORM=$(basename "$platform_dir" | sed 's/^binary-//')
-            GOOS=$(echo "$PLATFORM" | cut -d- -f1)
-            GOARCH=$(echo "$PLATFORM" | cut -d- -f2)
-            ARTIFACT_PATH="artifacts/${GOOS}/${GOARCH}/${BINARY_NAME}"
-
-            mkdir -p "staging/artifacts/${GOOS}/${GOARCH}"
-            cp "${platform_dir}/${BINARY_NAME}" "staging/${ARTIFACT_PATH}"
-            chmod +x "staging/${ARTIFACT_PATH}"
-
-            DIGEST=$(shasum -a 256 "staging/${ARTIFACT_PATH}" | cut -d' ' -f1)
-            ARTIFACTS=$(echo "$ARTIFACTS" | jq \
-              --arg os "$GOOS" --arg arch "$GOARCH" \
-              --arg path "$ARTIFACT_PATH" --arg sha256 "$DIGEST" \
-              '. + [{"os": $os, "arch": $arch, "path": $path, "sha256": $sha256}]')
-          done
-
-          ENTRYPOINT_PATH="artifacts/linux/amd64/${BINARY_NAME}"
-          if [ ! -f "staging/${ENTRYPOINT_PATH}" ]; then
-            echo "ERROR: entrypoint artifact ${ENTRYPOINT_PATH} not found in staging"
-            exit 1
-          fi
-
-          echo "$MANIFEST" | jq \
-            --argjson artifacts "$ARTIFACTS" \
-            --arg entrypoint "$ENTRYPOINT_PATH" \
-            '. + {"artifacts": $artifacts, "entrypoints": {"provider": {"artifact_path": $entrypoint}}}' \
-            > staging/plugin.json
-
-          TAR_ARGS="plugin.json"
-          if [ -d "${PLUGIN_DIR}/assets" ]; then
-            cp -r "${PLUGIN_DIR}/assets" staging/
-            TAR_ARGS="${TAR_ARGS} assets/"
-          fi
-          TAR_ARGS="${TAR_ARGS} artifacts/"
-
-          cd staging
-          tar -czvf "../${ASSET}.tar.gz" ${TAR_ARGS}
-          cd ..
-          shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256"
+          ../../gestaltd plugin release --version "${PLUGIN_VERSION}"
       - uses: actions/upload-artifact@v4
         with:
           name: gestalt-plugin-${{ env.PLUGIN_NAME }}
-          path: |
-            gestalt-plugin-*.tar.gz
-            gestalt-plugin-*.sha256
+          path: plugins/${{ env.PLUGIN_NAME }}/dist/*
           if-no-files-found: error
 
   release:
     name: Create Release
-    needs: [prepare, build-declarative, assemble-compiled]
-    if: always() && needs.prepare.result == 'success' && (needs.build-declarative.result == 'success' || needs.assemble-compiled.result == 'success')
+    needs: [prepare, build-declarative, release-compiled]
+    if: always() && needs.prepare.result == 'success' && (needs.build-declarative.result == 'success' || needs.release-compiled.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

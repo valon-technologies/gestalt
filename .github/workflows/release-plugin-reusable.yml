@@ -1,0 +1,40 @@
+name: Release Gestalt Plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin-dir:
+        description: Path to plugin directory containing plugin.yaml
+        type: string
+        default: '.'
+      version:
+        description: Semantic version for the release
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.plugin-dir }}/go.mod
+      - name: Install gestaltd
+        run: go install github.com/valon-technologies/gestalt/server/cmd/gestaltd@latest
+      - name: Release
+        run: |
+          cd "${{ inputs.plugin-dir }}"
+          gestaltd plugin release --version "${{ inputs.version }}"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          gh release create "v${VERSION}" --generate-notes \
+            "${{ inputs.plugin-dir }}"/dist/*
