@@ -79,6 +79,79 @@ func operationsToProto(ops []Operation) ([]*pluginapiv1.Operation, error) {
 	return out, nil
 }
 
+func principalSourceToProto(src PrincipalSource) pluginapiv1.PrincipalSource {
+	switch src {
+	case PrincipalSourceSession:
+		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_SESSION
+	case PrincipalSourceAPIToken:
+		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN
+	case PrincipalSourceEnv:
+		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_ENV
+	default:
+		return pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_UNSPECIFIED
+	}
+}
+
+func principalToProto(p Principal) *pluginapiv1.Principal {
+	msg := &pluginapiv1.Principal{
+		UserId: p.UserID,
+		Source: principalSourceToProto(p.Source),
+	}
+	if p.Identity != nil {
+		msg.Identity = &pluginapiv1.UserIdentity{
+			Email:       p.Identity.Email,
+			DisplayName: p.Identity.DisplayName,
+			AvatarUrl:   p.Identity.AvatarURL,
+		}
+	}
+	return msg
+}
+
+func parameterFromProto(msg *pluginapiv1.Parameter) Parameter {
+	if msg == nil {
+		return Parameter{}
+	}
+	var def any
+	if msg.GetDefaultValue() != nil {
+		def = msg.GetDefaultValue().AsInterface()
+	}
+	return Parameter{
+		Name:        msg.GetName(),
+		Type:        msg.GetType(),
+		Description: msg.GetDescription(),
+		Required:    msg.GetRequired(),
+		Default:     def,
+	}
+}
+
+func parametersFromProto(params []*pluginapiv1.Parameter) []Parameter {
+	out := make([]Parameter, 0, len(params))
+	for _, p := range params {
+		out = append(out, parameterFromProto(p))
+	}
+	return out
+}
+
+func capabilityFromProto(msg *pluginapiv1.Capability) Capability {
+	if msg == nil {
+		return Capability{}
+	}
+	return Capability{
+		Provider:    msg.GetProvider(),
+		Operation:   msg.GetOperation(),
+		Description: msg.GetDescription(),
+		Parameters:  parametersFromProto(msg.GetParameters()),
+	}
+}
+
+func capabilitiesFromProto(caps []*pluginapiv1.Capability) []Capability {
+	out := make([]Capability, 0, len(caps))
+	for _, c := range caps {
+		out = append(out, capabilityFromProto(c))
+	}
+	return out
+}
+
 func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*pluginapiv1.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
