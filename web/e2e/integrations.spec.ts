@@ -10,6 +10,11 @@ const MANUAL_INTEGRATION: Integration = {
   credential_fields: [{ name: "token", label: "API Token" }],
 };
 
+const MANUAL_WITH_LINKED_DESC: Integration = {
+  name: "linked-svc", display_name: "Linked Service", auth_types: ["manual"],
+  credential_fields: [{ name: "api_key", label: "API Key", description: "Find yours in [Account Settings](https://example.com/settings)" }],
+};
+
 const sampleIntegrations: Integration[] = [
   OAUTH_INTEGRATION,
   MANUAL_INTEGRATION,
@@ -287,5 +292,22 @@ test.describe("Integrations", () => {
     await dialog.getByLabel("Connection name").fill("second");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByLabel(/API token/i)).toBeVisible();
+  });
+
+  test("credential field description renders inline links", async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, [MANUAL_WITH_LINKED_DESC]);
+    await mockTokens(page, []);
+
+    await page.goto("/integrations");
+    await page.getByRole("button", { name: "Linked Service settings" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Connect" }).click();
+
+    const link = dialog.getByRole("link", { name: "Account Settings" });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", "https://example.com/settings");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(dialog.getByText("Find yours in")).toBeVisible();
   });
 });
