@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -29,6 +30,7 @@ type DeclarativeProvider struct {
 	baseURL              string
 	auth                 *pluginmanifestv1.ProviderAuth
 	operations           []core.Operation
+	catalogOps           []catalog.CatalogOperation
 	opDefs               map[string]*declarativeOp
 	httpClient           *http.Client
 	postConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery
@@ -86,6 +88,8 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		p.operations = append(p.operations, coreOp)
 	}
 
+	p.catalogOps = integration.CoreOperationsToCatalogOps(p.operations)
+
 	return p, nil
 }
 
@@ -96,10 +100,13 @@ func (p *DeclarativeProvider) Description() string { return p.description }
 func (p *DeclarativeProvider) SetIconSVG(svg string) { p.iconSVG = svg }
 
 func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
-	if p.iconSVG == "" {
-		return nil
+	return &catalog.Catalog{
+		Name:        p.name,
+		DisplayName: p.displayName,
+		Description: p.description,
+		IconSVG:     p.iconSVG,
+		Operations:  p.catalogOps,
 	}
-	return &catalog.Catalog{IconSVG: p.iconSVG}
 }
 
 func (p *DeclarativeProvider) ConnectionMode() core.ConnectionMode {

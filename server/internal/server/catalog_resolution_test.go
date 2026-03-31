@@ -333,6 +333,57 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 	}
 }
 
+func TestResolveCatalog_IconOnlyCatalogStillHasOperations(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubCatalogProvider{
+		stubProvider: stubProvider{
+			name:        "icon-api",
+			displayName: "Icon API",
+			description: "Has icon and operations",
+			connMode:    core.ConnectionModeUser,
+			ops: []core.Operation{
+				{
+					Name:        "do_thing",
+					Method:      http.MethodPost,
+					Description: "Does a thing",
+					Parameters: []core.Parameter{
+						{Name: "input", Type: "string", Required: true},
+					},
+				},
+			},
+		},
+		cat: &catalog.Catalog{
+			Name:    "icon-api",
+			IconSVG: `<svg/>`,
+		},
+	}
+
+	cat, err := resolveCatalog(context.Background(), prov, "icon-api", nil, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cat.IconSVG != `<svg/>` {
+		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, `<svg/>`)
+	}
+	if len(cat.Operations) != 1 {
+		t.Fatalf("got %d operations, want 1", len(cat.Operations))
+	}
+	op := cat.Operations[0]
+	if op.ID != "do_thing" {
+		t.Fatalf("Operations[0].ID = %q, want do_thing", op.ID)
+	}
+	if op.Method != http.MethodPost {
+		t.Fatalf("Operations[0].Method = %q, want POST", op.Method)
+	}
+	if op.Description != "Does a thing" {
+		t.Fatalf("Operations[0].Description = %q, want %q", op.Description, "Does a thing")
+	}
+	if len(op.Parameters) != 1 || op.Parameters[0].Name != "input" {
+		t.Fatalf("Operations[0].Parameters = %+v, want [{Name:input}]", op.Parameters)
+	}
+}
+
 func TestResolveCatalog_CloneSafety(t *testing.T) {
 	t.Parallel()
 

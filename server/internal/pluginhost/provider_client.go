@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -127,10 +128,16 @@ func (p *remoteProviderBase) SetIconSVG(svg string) { p.iconSVG = svg }
 
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 	if p.catalog == nil {
-		if p.iconSVG != "" {
-			return &catalog.Catalog{IconSVG: p.iconSVG}
+		if len(p.ops) == 0 && p.iconSVG == "" {
+			return nil
 		}
-		return nil
+		return &catalog.Catalog{
+			Name:        p.metadata.GetName(),
+			DisplayName: p.metadata.GetDisplayName(),
+			Description: p.metadata.GetDescription(),
+			IconSVG:     p.iconSVG,
+			Operations:  integration.CoreOperationsToCatalogOps(p.ops),
+		}
 	}
 	cat := p.catalog.Clone()
 	if cat.IconSVG == "" && p.iconSVG != "" {
