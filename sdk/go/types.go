@@ -1,4 +1,4 @@
-package pluginsdk
+package gestalt
 
 import (
 	"context"

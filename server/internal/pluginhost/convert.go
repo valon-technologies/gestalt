@@ -7,55 +7,55 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func coreConnectionModeToProto(mode core.ConnectionMode) pluginapiv1.ConnectionMode {
+func coreConnectionModeToProto(mode core.ConnectionMode) proto.ConnectionMode {
 	switch mode {
 	case core.ConnectionModeNone:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE
+		return proto.ConnectionMode_CONNECTION_MODE_NONE
 	case core.ConnectionModeUser, "":
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_USER
+		return proto.ConnectionMode_CONNECTION_MODE_USER
 	case core.ConnectionModeIdentity:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_IDENTITY
+		return proto.ConnectionMode_CONNECTION_MODE_IDENTITY
 	case core.ConnectionModeEither:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_EITHER
+		return proto.ConnectionMode_CONNECTION_MODE_EITHER
 	default:
-		return pluginapiv1.ConnectionMode_CONNECTION_MODE_UNSPECIFIED
+		return proto.ConnectionMode_CONNECTION_MODE_UNSPECIFIED
 	}
 }
 
-func protoConnectionModeToCore(mode pluginapiv1.ConnectionMode) core.ConnectionMode {
+func protoConnectionModeToCore(mode proto.ConnectionMode) core.ConnectionMode {
 	switch mode {
-	case pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE:
+	case proto.ConnectionMode_CONNECTION_MODE_NONE:
 		return core.ConnectionModeNone
-	case pluginapiv1.ConnectionMode_CONNECTION_MODE_USER, pluginapiv1.ConnectionMode_CONNECTION_MODE_UNSPECIFIED:
+	case proto.ConnectionMode_CONNECTION_MODE_USER, proto.ConnectionMode_CONNECTION_MODE_UNSPECIFIED:
 		return core.ConnectionModeUser
-	case pluginapiv1.ConnectionMode_CONNECTION_MODE_IDENTITY:
+	case proto.ConnectionMode_CONNECTION_MODE_IDENTITY:
 		return core.ConnectionModeIdentity
-	case pluginapiv1.ConnectionMode_CONNECTION_MODE_EITHER:
+	case proto.ConnectionMode_CONNECTION_MODE_EITHER:
 		return core.ConnectionModeEither
 	default:
 		return core.ConnectionModeUser
 	}
 }
 
-func protoPrincipalSourceToCore(src pluginapiv1.PrincipalSource) principal.Source {
+func protoPrincipalSourceToCore(src proto.PrincipalSource) principal.Source {
 	switch src {
-	case pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN:
+	case proto.PrincipalSource_PRINCIPAL_SOURCE_API_TOKEN:
 		return principal.SourceAPIToken
-	case pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_ENV:
+	case proto.PrincipalSource_PRINCIPAL_SOURCE_ENV:
 		return principal.SourceEnv
-	case pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_SESSION, pluginapiv1.PrincipalSource_PRINCIPAL_SOURCE_UNSPECIFIED:
+	case proto.PrincipalSource_PRINCIPAL_SOURCE_SESSION, proto.PrincipalSource_PRINCIPAL_SOURCE_UNSPECIFIED:
 		return principal.SourceSession
 	default:
 		return principal.SourceSession
 	}
 }
 
-func principalFromProto(msg *pluginapiv1.Principal) *principal.Principal {
+func principalFromProto(msg *proto.Principal) *principal.Principal {
 	if msg == nil {
 		return nil
 	}
@@ -101,12 +101,12 @@ func valueFromProto(v *structpb.Value) any {
 	return v.AsInterface()
 }
 
-func parameterToProto(p core.Parameter) (*pluginapiv1.Parameter, error) {
+func parameterToProto(p core.Parameter) (*proto.Parameter, error) {
 	def, err := valueToProto(p.Default)
 	if err != nil {
 		return nil, fmt.Errorf("parameter %q default: %w", p.Name, err)
 	}
-	return &pluginapiv1.Parameter{
+	return &proto.Parameter{
 		Name:         p.Name,
 		Type:         p.Type,
 		Description:  p.Description,
@@ -115,7 +115,7 @@ func parameterToProto(p core.Parameter) (*pluginapiv1.Parameter, error) {
 	}, nil
 }
 
-func parameterFromProto(msg *pluginapiv1.Parameter) core.Parameter {
+func parameterFromProto(msg *proto.Parameter) core.Parameter {
 	if msg == nil {
 		return core.Parameter{}
 	}
@@ -128,8 +128,8 @@ func parameterFromProto(msg *pluginapiv1.Parameter) core.Parameter {
 	}
 }
 
-func parametersToProto(params []core.Parameter) ([]*pluginapiv1.Parameter, error) {
-	out := make([]*pluginapiv1.Parameter, 0, len(params))
+func parametersToProto(params []core.Parameter) ([]*proto.Parameter, error) {
+	out := make([]*proto.Parameter, 0, len(params))
 	for _, p := range params {
 		msg, err := parameterToProto(p)
 		if err != nil {
@@ -140,7 +140,7 @@ func parametersToProto(params []core.Parameter) ([]*pluginapiv1.Parameter, error
 	return out, nil
 }
 
-func parametersFromProto(params []*pluginapiv1.Parameter) []core.Parameter {
+func parametersFromProto(params []*proto.Parameter) []core.Parameter {
 	out := make([]core.Parameter, 0, len(params))
 	for _, p := range params {
 		out = append(out, parameterFromProto(p))
@@ -148,12 +148,12 @@ func parametersFromProto(params []*pluginapiv1.Parameter) []core.Parameter {
 	return out
 }
 
-func operationToProto(op core.Operation) (*pluginapiv1.Operation, error) {
+func operationToProto(op core.Operation) (*proto.Operation, error) {
 	params, err := parametersToProto(op.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("operation %q: %w", op.Name, err)
 	}
-	return &pluginapiv1.Operation{
+	return &proto.Operation{
 		Name:        op.Name,
 		Description: op.Description,
 		Method:      op.Method,
@@ -161,7 +161,7 @@ func operationToProto(op core.Operation) (*pluginapiv1.Operation, error) {
 	}, nil
 }
 
-func operationFromProto(msg *pluginapiv1.Operation) core.Operation {
+func operationFromProto(msg *proto.Operation) core.Operation {
 	if msg == nil {
 		return core.Operation{}
 	}
@@ -173,8 +173,8 @@ func operationFromProto(msg *pluginapiv1.Operation) core.Operation {
 	}
 }
 
-func operationsToProto(ops []core.Operation) ([]*pluginapiv1.Operation, error) {
-	out := make([]*pluginapiv1.Operation, 0, len(ops))
+func operationsToProto(ops []core.Operation) ([]*proto.Operation, error) {
+	out := make([]*proto.Operation, 0, len(ops))
 	for _, op := range ops {
 		msg, err := operationToProto(op)
 		if err != nil {
@@ -185,7 +185,7 @@ func operationsToProto(ops []core.Operation) ([]*pluginapiv1.Operation, error) {
 	return out, nil
 }
 
-func operationsFromProto(ops []*pluginapiv1.Operation) []core.Operation {
+func operationsFromProto(ops []*proto.Operation) []core.Operation {
 	out := make([]core.Operation, 0, len(ops))
 	for _, op := range ops {
 		out = append(out, operationFromProto(op))
@@ -193,12 +193,12 @@ func operationsFromProto(ops []*pluginapiv1.Operation) []core.Operation {
 	return out
 }
 
-func capabilityToProto(cap *core.Capability) (*pluginapiv1.Capability, error) {
+func capabilityToProto(cap *core.Capability) (*proto.Capability, error) {
 	params, err := parametersToProto(cap.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("capability %q/%q: %w", cap.Provider, cap.Operation, err)
 	}
-	return &pluginapiv1.Capability{
+	return &proto.Capability{
 		Provider:    cap.Provider,
 		Operation:   cap.Operation,
 		Description: cap.Description,
@@ -206,8 +206,8 @@ func capabilityToProto(cap *core.Capability) (*pluginapiv1.Capability, error) {
 	}, nil
 }
 
-func capabilitiesToProto(caps []core.Capability) ([]*pluginapiv1.Capability, error) {
-	out := make([]*pluginapiv1.Capability, 0, len(caps))
+func capabilitiesToProto(caps []core.Capability) ([]*proto.Capability, error) {
+	out := make([]*proto.Capability, 0, len(caps))
 	for i := range caps {
 		msg, err := capabilityToProto(&caps[i])
 		if err != nil {
@@ -218,13 +218,13 @@ func capabilitiesToProto(caps []core.Capability) ([]*pluginapiv1.Capability, err
 	return out, nil
 }
 
-func connectionParamDefsToProto(defs map[string]core.ConnectionParamDef) map[string]*pluginapiv1.ConnectionParamDef {
+func connectionParamDefsToProto(defs map[string]core.ConnectionParamDef) map[string]*proto.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
 	}
-	out := make(map[string]*pluginapiv1.ConnectionParamDef, len(defs))
+	out := make(map[string]*proto.ConnectionParamDef, len(defs))
 	for name, def := range defs {
-		out[name] = &pluginapiv1.ConnectionParamDef{
+		out[name] = &proto.ConnectionParamDef{
 			Required:     def.Required,
 			Description:  def.Description,
 			DefaultValue: def.Default,
@@ -235,7 +235,7 @@ func connectionParamDefsToProto(defs map[string]core.ConnectionParamDef) map[str
 	return out
 }
 
-func connectionParamDefsFromProto(defs map[string]*pluginapiv1.ConnectionParamDef) map[string]core.ConnectionParamDef {
+func connectionParamDefsFromProto(defs map[string]*proto.ConnectionParamDef) map[string]core.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
 	}

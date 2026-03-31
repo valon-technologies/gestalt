@@ -1,4 +1,4 @@
-package pluginsdk
+package gestalt
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,7 +15,7 @@ import (
 )
 
 type RuntimeServer struct {
-	pluginapiv1.UnimplementedRuntimePluginServer
+	proto.UnimplementedRuntimePluginServer
 	runtime Runtime
 	mu      sync.Mutex
 	host    *runtimeHostClient
@@ -25,7 +25,7 @@ func NewRuntimeServer(runtime Runtime) *RuntimeServer {
 	return &RuntimeServer{runtime: runtime}
 }
 
-func (s *RuntimeServer) Start(ctx context.Context, req *pluginapiv1.StartRuntimeRequest) (*emptypb.Empty, error) {
+func (s *RuntimeServer) Start(ctx context.Context, req *proto.StartRuntimeRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -38,9 +38,9 @@ func (s *RuntimeServer) Start(ctx context.Context, req *pluginapiv1.StartRuntime
 		s.host = nil
 	}
 
-	socket := os.Getenv(pluginapiv1.EnvRuntimeHostSocket)
+	socket := os.Getenv(proto.EnvRuntimeHostSocket)
 	if socket == "" {
-		return nil, status.Errorf(codes.FailedPrecondition, "%s is required", pluginapiv1.EnvRuntimeHostSocket)
+		return nil, status.Errorf(codes.FailedPrecondition, "%s is required", proto.EnvRuntimeHostSocket)
 	}
 	conn, err := dialUnixSocket(ctx, socket)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *RuntimeServer) Start(ctx context.Context, req *pluginapiv1.StartRuntime
 	}
 
 	s.host = &runtimeHostClient{
-		client: pluginapiv1.NewRuntimeHostClient(conn),
+		client: proto.NewRuntimeHostClient(conn),
 		conn:   conn,
 	}
 
@@ -77,7 +77,7 @@ func (s *RuntimeServer) Stop(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 }
 
 type runtimeHostClient struct {
-	client pluginapiv1.RuntimeHostClient
+	client proto.RuntimeHostClient
 	conn   *grpc.ClientConn
 }
 
@@ -90,7 +90,7 @@ func (c *runtimeHostClient) Invoke(ctx context.Context, p Principal, provider, i
 			return nil, fmt.Errorf("encode params: %w", err)
 		}
 	}
-	resp, err := c.client.Invoke(ctx, &pluginapiv1.InvokeRequest{
+	resp, err := c.client.Invoke(ctx, &proto.InvokeRequest{
 		Principal: principalToProto(p),
 		Provider:  provider,
 		Instance:  instance,

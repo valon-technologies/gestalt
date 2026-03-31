@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"slices"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"google.golang.org/grpc/codes"
@@ -16,8 +16,8 @@ import (
 )
 
 type remoteProviderBase struct {
-	client   pluginapiv1.ProviderPluginClient
-	metadata *pluginapiv1.ProviderMetadata
+	client   proto.ProviderPluginClient
+	metadata *proto.ProviderMetadata
 	ops      []core.Operation
 	catalog  *catalog.Catalog
 	iconSVG  string
@@ -40,7 +40,7 @@ func (p *remoteProviderBase) Close() error {
 	return nil
 }
 
-func NewRemoteProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
+func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
-	resp, err := p.client.Execute(ctx, &pluginapiv1.ExecuteRequest{
+	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
 		Token:            token,
@@ -151,7 +151,7 @@ func (p *remoteProviderBase) AuthTypes() []string {
 }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
-	resp, err := p.client.GetSessionCatalog(ctx, &pluginapiv1.GetSessionCatalogRequest{
+	resp, err := p.client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
 	})
@@ -167,35 +167,35 @@ func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context
 	return p.sessionCatalog(ctx, token)
 }
 
-func checkProtocolCompatibility(meta *pluginapiv1.ProviderMetadata) error {
+func checkProtocolCompatibility(meta *proto.ProviderMetadata) error {
 	minV := meta.GetMinProtocolVersion()
 	maxV := meta.GetMaxProtocolVersion()
 	if minV == 0 && maxV == 0 {
 		return nil
 	}
 	if maxV == 0 {
-		if pluginapiv1.CurrentProtocolVersion < minV {
+		if proto.CurrentProtocolVersion < minV {
 			return fmt.Errorf("plugin requires protocol version %d+, host speaks %d",
-				minV, pluginapiv1.CurrentProtocolVersion)
+				minV, proto.CurrentProtocolVersion)
 		}
 		return nil
 	}
-	if pluginapiv1.CurrentProtocolVersion < minV || pluginapiv1.CurrentProtocolVersion > maxV {
+	if proto.CurrentProtocolVersion < minV || proto.CurrentProtocolVersion > maxV {
 		return fmt.Errorf("plugin requires protocol version %d-%d, host speaks %d",
-			minV, maxV, pluginapiv1.CurrentProtocolVersion)
+			minV, maxV, proto.CurrentProtocolVersion)
 	}
 	return nil
 }
 
-func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginClient, name string, config map[string]any) error {
+func callStartProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any) error {
 	cfgStruct, err := structFromMap(config)
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)
 	}
-	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
 		Name:            name,
 		Config:          cfgStruct,
-		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
@@ -203,9 +203,9 @@ func callStartProvider(ctx context.Context, client pluginapiv1.ProviderPluginCli
 		}
 		return fmt.Errorf("start provider: %w", err)
 	}
-	if v := resp.GetProtocolVersion(); v != pluginapiv1.CurrentProtocolVersion {
+	if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
 		return fmt.Errorf("plugin responded with protocol version %d, host requires %d",
-			v, pluginapiv1.CurrentProtocolVersion)
+			v, proto.CurrentProtocolVersion)
 	}
 	return nil
 }

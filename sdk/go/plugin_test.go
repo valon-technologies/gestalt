@@ -1,13 +1,13 @@
-package pluginsdk_test
+package gestalt_test
 
 import (
 	"context"
 	"net/http"
 	"testing"
 
-	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -16,18 +16,18 @@ type stubProvider struct {
 	name        string
 	displayName string
 	description string
-	connMode    pluginsdk.ConnectionMode
-	ops         []pluginsdk.Operation
+	connMode    gestalt.ConnectionMode
+	ops         []gestalt.Operation
 }
 
 func (p *stubProvider) Name() string                             { return p.name }
 func (p *stubProvider) DisplayName() string                      { return p.displayName }
 func (p *stubProvider) Description() string                      { return p.description }
-func (p *stubProvider) ConnectionMode() pluginsdk.ConnectionMode { return p.connMode }
-func (p *stubProvider) ListOperations() []pluginsdk.Operation    { return p.ops }
+func (p *stubProvider) ConnectionMode() gestalt.ConnectionMode { return p.connMode }
+func (p *stubProvider) ListOperations() []gestalt.Operation    { return p.ops }
 
-func (p *stubProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*pluginsdk.OperationResult, error) {
-	return &pluginsdk.OperationResult{
+func (p *stubProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
+	return &gestalt.OperationResult{
 		Status: 200,
 		Body:   `{"operation":"` + operation + `"}`,
 	}, nil
@@ -81,7 +81,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	if meta.GetDisplayName() != "Test Provider" {
 		t.Errorf("DisplayName = %q, want %q", meta.GetDisplayName(), "Test Provider")
 	}
-	if meta.GetConnectionMode() != pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE {
+	if meta.GetConnectionMode() != proto.ConnectionMode_CONNECTION_MODE_NONE {
 		t.Errorf("ConnectionMode = %v, want CONNECTION_MODE_NONE", meta.GetConnectionMode())
 	}
 	if len(meta.GetAuthTypes()) != 0 {
@@ -113,13 +113,13 @@ func TestProviderServerListOperations(t *testing.T) {
 
 	prov := &stubProvider{
 		name:     "test-provider",
-		connMode: pluginsdk.ConnectionModeNone,
-		ops: []pluginsdk.Operation{
+		connMode: gestalt.ConnectionModeNone,
+		ops: []gestalt.Operation{
 			{
 				Name:        "list_items",
 				Description: "List all items",
 				Method:      http.MethodGet,
-				Parameters: []pluginsdk.Parameter{
+				Parameters: []gestalt.Parameter{
 					{Name: "limit", Type: "integer", Description: "Max results", Required: false, Default: 10},
 				},
 			},
@@ -127,7 +127,7 @@ func TestProviderServerListOperations(t *testing.T) {
 				Name:        "create_item",
 				Description: "Create a new item",
 				Method:      http.MethodPost,
-				Parameters: []pluginsdk.Parameter{
+				Parameters: []gestalt.Parameter{
 					{Name: "name", Type: "string", Description: "Item name", Required: true},
 				},
 			},
@@ -166,14 +166,14 @@ func TestProviderServerExecute(t *testing.T) {
 
 	prov := &stubProvider{
 		name:     "test-provider",
-		connMode: pluginsdk.ConnectionModeNone,
+		connMode: gestalt.ConnectionModeNone,
 	}
 
 	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
 	params, _ := structpb.NewStruct(map[string]any{"key": "value"})
-	resp, err := client.Execute(ctx, &pluginapiv1.ExecuteRequest{
+	resp, err := client.Execute(ctx, &proto.ExecuteRequest{
 		Operation: "test_op",
 		Params:    params,
 		Token:     "tok",
@@ -195,7 +195,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 	prov := &startableStubProvider{
 		stubProvider: stubProvider{
 			name:     "test-provider",
-			connMode: pluginsdk.ConnectionModeNone,
+			connMode: gestalt.ConnectionModeNone,
 		},
 	}
 
@@ -203,16 +203,16 @@ func TestProviderServerStartProvider(t *testing.T) {
 	ctx := context.Background()
 
 	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
-	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
 		Name:            "my-instance",
 		Config:          cfg,
-		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("StartProvider: %v", err)
 	}
-	if resp.GetProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
-		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
+	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 	if prov.startName != "my-instance" {
 		t.Errorf("startName = %q, want %q", prov.startName, "my-instance")
@@ -227,21 +227,21 @@ func TestProviderServerStartProviderNoOp(t *testing.T) {
 
 	prov := &stubProvider{
 		name:     "test-provider",
-		connMode: pluginsdk.ConnectionModeNone,
+		connMode: gestalt.ConnectionModeNone,
 	}
 
 	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
-	resp, err := client.StartProvider(ctx, &pluginapiv1.StartProviderRequest{
+	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
 		Name:            "my-instance",
-		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("StartProvider: %v", err)
 	}
-	if resp.GetProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
-		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
+	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 }
 
@@ -251,7 +251,7 @@ func TestProviderServerConfigSchema(t *testing.T) {
 	prov := &schemaStubProvider{
 		stubProvider: stubProvider{
 			name:     "test-provider",
-			connMode: pluginsdk.ConnectionModeNone,
+			connMode: gestalt.ConnectionModeNone,
 		},
 		schema: `{"type":"object"}`,
 	}
@@ -273,7 +273,7 @@ func TestProviderServerMetadataProtocolVersions(t *testing.T) {
 
 	prov := &stubProvider{
 		name:     "test-provider",
-		connMode: pluginsdk.ConnectionModeNone,
+		connMode: gestalt.ConnectionModeNone,
 	}
 
 	client := newProviderPluginClient(t, prov)
@@ -283,11 +283,11 @@ func TestProviderServerMetadataProtocolVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
 	}
-	if meta.GetMinProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
-		t.Errorf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
+	if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Errorf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
 	}
-	if meta.GetMaxProtocolVersion() != pluginapiv1.CurrentProtocolVersion {
-		t.Errorf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), pluginapiv1.CurrentProtocolVersion)
+	if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Errorf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 }
 
@@ -296,18 +296,18 @@ func TestProviderServerUnimplementedRPCs(t *testing.T) {
 
 	prov := &stubProvider{
 		name:     "test-provider",
-		connMode: pluginsdk.ConnectionModeNone,
+		connMode: gestalt.ConnectionModeNone,
 	}
 
 	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
-	_, err := client.GetSessionCatalog(ctx, &pluginapiv1.GetSessionCatalogRequest{Token: "t"})
+	_, err := client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{Token: "t"})
 	if err == nil {
 		t.Error("GetSessionCatalog should return UNIMPLEMENTED")
 	}
 
-	_, err = client.PostConnect(ctx, &pluginapiv1.PostConnectRequest{})
+	_, err = client.PostConnect(ctx, &proto.PostConnectRequest{})
 	if err == nil {
 		t.Error("PostConnect should return UNIMPLEMENTED")
 	}

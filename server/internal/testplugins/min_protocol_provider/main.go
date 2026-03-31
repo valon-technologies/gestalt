@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginsdk/proto/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,31 +17,31 @@ import (
 )
 
 type minProtocolProviderServer struct {
-	pluginapiv1.UnimplementedProviderPluginServer
+	proto.UnimplementedProviderPluginServer
 }
 
-func (s *minProtocolProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*pluginapiv1.ProviderMetadata, error) {
-	return &pluginapiv1.ProviderMetadata{
+func (s *minProtocolProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	return &proto.ProviderMetadata{
 		Name:               "minproto",
 		DisplayName:        "Min Protocol Provider",
 		Description:        "test fixture",
-		ConnectionMode:     pluginapiv1.ConnectionMode_CONNECTION_MODE_NONE,
-		MinProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+		ConnectionMode:     proto.ConnectionMode_CONNECTION_MODE_NONE,
+		MinProtocolVersion: proto.CurrentProtocolVersion,
 	}, nil
 }
 
-func (s *minProtocolProviderServer) StartProvider(_ context.Context, req *pluginapiv1.StartProviderRequest) (*pluginapiv1.StartProviderResponse, error) {
+func (s *minProtocolProviderServer) StartProvider(_ context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	return &pluginapiv1.StartProviderResponse{
-		ProtocolVersion: pluginapiv1.CurrentProtocolVersion,
+	return &proto.StartProviderResponse{
+		ProtocolVersion: proto.CurrentProtocolVersion,
 	}, nil
 }
 
-func (s *minProtocolProviderServer) ListOperations(context.Context, *emptypb.Empty) (*pluginapiv1.ListOperationsResponse, error) {
-	return &pluginapiv1.ListOperationsResponse{
-		Operations: []*pluginapiv1.Operation{
+func (s *minProtocolProviderServer) ListOperations(context.Context, *emptypb.Empty) (*proto.ListOperationsResponse, error) {
+	return &proto.ListOperationsResponse{
+		Operations: []*proto.Operation{
 			{
 				Name:        "ping",
 				Description: "Ping",
@@ -62,9 +62,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	socket := os.Getenv(pluginapiv1.EnvPluginSocket)
+	socket := os.Getenv(proto.EnvPluginSocket)
 	if socket == "" {
-		return fmt.Errorf("%s is required", pluginapiv1.EnvPluginSocket)
+		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
 	}
 	if err := os.RemoveAll(socket); err != nil {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
@@ -80,7 +80,7 @@ func run() error {
 	}()
 
 	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderPluginServer(srv, &minProtocolProviderServer{})
+	proto.RegisterProviderPluginServer(srv, &minProtocolProviderServer{})
 
 	stopped := make(chan struct{})
 	go func() {

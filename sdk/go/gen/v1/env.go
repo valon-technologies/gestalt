@@ -1,4 +1,4 @@
-package pluginapiv1
+package proto
 
 const (
 	// EnvPluginSocket is the Unix socket path an executable plugin should bind.

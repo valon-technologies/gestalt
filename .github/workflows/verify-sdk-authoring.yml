@@ -42,7 +42,7 @@ jobs:
           mkdir -p /tmp/sdk-authoring-test
           cd /tmp/sdk-authoring-test
           go mod init external-test-plugin
-          go get "github.com/valon-technologies/gestalt/sdk/pluginsdk@v${SDK_VERSION}"
+          go get "github.com/valon-technologies/gestalt/sdk/go@v${SDK_VERSION}"
 
           cat > main.go <<'GO'
           package main
@@ -55,7 +55,7 @@ jobs:
           	"os/signal"
           	"syscall"
 
-          	pluginsdk "github.com/valon-technologies/gestalt/sdk/pluginsdk"
+          	pluginsdk "github.com/valon-technologies/gestalt/sdk/go"
           )
 
           type provider struct{ prefix string }

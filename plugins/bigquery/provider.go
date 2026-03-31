@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/valon-technologies/gestalt/sdk/pluginsdk"
+	"github.com/valon-technologies/gestalt/sdk/go"
 )
 
 const (
@@ -29,7 +29,7 @@ type Provider struct {
 	runner queryRunner
 }
 
-var _ pluginsdk.Provider = (*Provider)(nil)
+var _ gestalt.Provider = (*Provider)(nil)
 
 func NewProvider() *Provider {
 	return &Provider{runner: sdkQueryRunner{}}
@@ -38,15 +38,15 @@ func NewProvider() *Provider {
 func (p *Provider) Name() string                              { return providerName }
 func (p *Provider) DisplayName() string                       { return providerDisplayName }
 func (p *Provider) Description() string                       { return providerDescription }
-func (p *Provider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeUser }
+func (p *Provider) ConnectionMode() gestalt.ConnectionMode { return gestalt.ConnectionModeUser }
 
-func (p *Provider) ListOperations() []pluginsdk.Operation {
-	return []pluginsdk.Operation{
+func (p *Provider) ListOperations() []gestalt.Operation {
+	return []gestalt.Operation{
 		{
 			Name:        "list_datasets",
 			Description: "List datasets in a project",
 			Method:      http.MethodGet,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
 			},
@@ -55,7 +55,7 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 			Name:        "get_dataset",
 			Description: "Get dataset metadata",
 			Method:      http.MethodGet,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
 			},
@@ -64,7 +64,7 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 			Name:        "list_tables",
 			Description: "List tables in a dataset",
 			Method:      http.MethodGet,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
 				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
@@ -74,7 +74,7 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 			Name:        "get_table",
 			Description: "Get table metadata",
 			Method:      http.MethodGet,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
 				{Name: "table_id", Type: "string", Required: true, Description: "Table ID"},
@@ -84,7 +84,7 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 			Name:        "list_routines",
 			Description: "List routines in a dataset",
 			Method:      http.MethodGet,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: "project_id", Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: "dataset_id", Type: "string", Required: true, Description: "Dataset ID"},
 				{Name: "maxResults", Type: "integer", Description: "Maximum results"},
@@ -94,7 +94,7 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 			Name:        queryOperationName,
 			Description: "Execute a BigQuery SQL query",
 			Method:      http.MethodPost,
-			Parameters: []pluginsdk.Parameter{
+			Parameters: []gestalt.Parameter{
 				{Name: queryParamProjectID, Type: "string", Required: true, Description: "GCP project ID"},
 				{Name: queryParamSQL, Type: "string", Required: true, Description: "SQL query to execute"},
 				{Name: queryParamMaxResults, Type: "integer", Description: "Maximum number of rows to return", Default: defaultQueryMaxResults},
@@ -105,14 +105,14 @@ func (p *Provider) ListOperations() []pluginsdk.Operation {
 	}
 }
 
-func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
+func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*gestalt.OperationResult, error) {
 	if operation == queryOperationName {
 		return p.executeQuery(ctx, params, token)
 	}
 	return p.executeREST(ctx, operation, params, token)
 }
 
-func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
+func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any, token string) (*gestalt.OperationResult, error) {
 	projectID, _ := params["project_id"].(string)
 	if projectID == "" {
 		return nil, fmt.Errorf("project_id is required")
@@ -148,7 +148,7 @@ func (p *Provider) executeREST(ctx context.Context, operation string, params map
 		}
 		path = fmt.Sprintf("/projects/%s/datasets/%s/routines", projectID, datasetID)
 	default:
-		return &pluginsdk.OperationResult{
+		return &gestalt.OperationResult{
 			Status: http.StatusNotFound,
 			Body:   `{"error":"unknown operation"}`,
 		}, nil
@@ -182,13 +182,13 @@ func (p *Provider) executeREST(ctx context.Context, operation string, params map
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	return &pluginsdk.OperationResult{
+	return &gestalt.OperationResult{
 		Status: resp.StatusCode,
 		Body:   string(body),
 	}, nil
 }
 
-func (p *Provider) executeQuery(ctx context.Context, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
+func (p *Provider) executeQuery(ctx context.Context, params map[string]any, token string) (*gestalt.OperationResult, error) {
 	projectID, _ := params[queryParamProjectID].(string)
 	if projectID == "" {
 		return nil, fmt.Errorf("%s is required", queryParamProjectID)
@@ -228,7 +228,7 @@ func (p *Provider) executeQuery(ctx context.Context, params map[string]any, toke
 		return nil, fmt.Errorf("marshaling result: %w", err)
 	}
 
-	return &pluginsdk.OperationResult{
+	return &gestalt.OperationResult{
 		Status: http.StatusOK,
 		Body:   string(body),
 	}, nil
