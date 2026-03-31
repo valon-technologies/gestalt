@@ -43,10 +43,8 @@ func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"list_items": {Method: http.MethodGet, Path: "/api/items"},
-		},
 	}
+	setTestCatalog(b, restCatalogOp("list_items", http.MethodGet, "/api/items"))
 
 	result, err := b.Execute(context.Background(), "list_items", nil, "test-token")
 	if err != nil {
@@ -80,13 +78,11 @@ func TestBaseTokenParserOverridesAuthorization(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"op": {Method: http.MethodGet, Path: "/test"},
-		},
 		TokenParser: func(token string) (string, map[string]string, error) {
 			return "Token " + token, map[string]string{"X-Custom": "value"}, nil
 		},
 	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
 
 	result, err := b.Execute(context.Background(), "op", nil, "abc123")
 	if err != nil {
@@ -125,10 +121,8 @@ func TestBaseExecuteStaticHeadersReachUpstream(t *testing.T) {
 		Headers: map[string]string{
 			headerName: headerValue,
 		},
-		Endpoints: map[string]Endpoint{
-			"list_items": {Method: http.MethodGet, Path: "/items"},
-		},
 	}
+	setTestCatalog(b, restCatalogOp("list_items", http.MethodGet, "/items"))
 
 	result, err := b.Execute(context.Background(), "list_items", nil, "")
 	if err != nil {
@@ -168,10 +162,8 @@ func TestBaseExecuteRequestAuthOverridesStaticAuthorizationHeader(t *testing.T) 
 			"Authorization": "Bearer wrong-token",
 			headerName:      headerValue,
 		},
-		Endpoints: map[string]Endpoint{
-			"list_items": {Method: http.MethodGet, Path: "/items"},
-		},
 	}
+	setTestCatalog(b, restCatalogOp("list_items", http.MethodGet, "/items"))
 
 	result, err := b.Execute(context.Background(), "list_items", nil, "secret-token")
 	if err != nil {
@@ -207,9 +199,6 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		Auth:            mockAuth{},
 		IntegrationName: "test-provider",
 		BaseURL:         srv.URL,
-		Endpoints: map[string]Endpoint{
-			"op": {Method: http.MethodGet, Path: "/test"},
-		},
 		EgressResolver: &egress.Resolver{
 			Subjects: egress.StaticSubjectResolver{
 				Subject: egress.Subject{Kind: egress.SubjectUser, ID: "user-1"},
@@ -220,6 +209,7 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 			}),
 		},
 	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
 
 	if _, err := b.Execute(context.Background(), "op", nil, "test-token"); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -279,13 +269,11 @@ func TestBaseExecuteRoutesGraphQLOperations(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Queries: map[string]string{
-			"get_viewer": "{ viewer { login } }",
-		},
-		Endpoints: map[string]Endpoint{
-			"list_items": {Method: http.MethodGet, Path: "/api/items"},
-		},
 	}
+	setTestCatalog(b,
+		graphQLCatalogOp("get_viewer", "{ viewer { login } }"),
+		restCatalogOp("list_items", http.MethodGet, "/api/items"),
+	)
 
 	result, err := b.Execute(context.Background(), "get_viewer", nil, "gql-token")
 	if err != nil {
@@ -326,10 +314,8 @@ func TestBaseExecuteGraphQLWithVariables(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Queries: map[string]string{
-			"list_repos": "query($first: Int) { viewer { repositories(first: $first) { nodes { name } } } }",
-		},
 	}
+	setTestCatalog(b, graphQLCatalogOp("list_repos", "query($first: Int) { viewer { repositories(first: $first) { nodes { name } } } }"))
 
 	result, err := b.Execute(context.Background(), "list_repos", map[string]any{"first": 5}, "tok")
 	if err != nil {
@@ -366,9 +352,6 @@ func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL + "/graphql",
-		Queries: map[string]string{
-			"get_viewer": "{ viewer { login } }",
-		},
 		TokenParser: func(token string) (string, map[string]string, error) {
 			return "Token " + token, map[string]string{"X-Org": "acme"}, nil
 		},
@@ -381,6 +364,7 @@ func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
 			}),
 		},
 	}
+	setTestCatalog(b, graphQLCatalogOp("get_viewer", "{ viewer { login } }"))
 
 	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "user-graphql"})
 	result, err := b.Execute(ctx, "get_viewer", nil, "gql-token")
@@ -434,13 +418,11 @@ func TestBaseExecuteGraphQLWithTokenParser(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Queries: map[string]string{
-			"get_viewer": "{ viewer { login } }",
-		},
 		TokenParser: func(token string) (string, map[string]string, error) {
 			return "Token " + token, map[string]string{"X-Org": "acme"}, nil
 		},
 	}
+	setTestCatalog(b, graphQLCatalogOp("get_viewer", "{ viewer { login } }"))
 
 	result, err := b.Execute(context.Background(), "get_viewer", nil, "my-token")
 	if err != nil {
@@ -471,10 +453,8 @@ func TestBaseExecuteGraphQLErrorsReturned(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Queries: map[string]string{
-			"get_viewer": "{ viewer { login } }",
-		},
 	}
+	setTestCatalog(b, graphQLCatalogOp("get_viewer", "{ viewer { login } }"))
 
 	_, err := b.Execute(context.Background(), "get_viewer", nil, "tok")
 	if err == nil {
@@ -500,10 +480,8 @@ func TestBaseExecuteBasicAuthStyle(t *testing.T) {
 		Auth:      mockAuth{},
 		BaseURL:   srv.URL,
 		AuthStyle: AuthStyleBasic,
-		Endpoints: map[string]Endpoint{
-			"op": {Method: http.MethodGet, Path: "/test"},
-		},
 	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
 
 	result, err := b.Execute(context.Background(), "op", nil, "user:pass")
 	if err != nil {
@@ -524,12 +502,7 @@ func TestBaseExecuteBasicAuthStyle(t *testing.T) {
 func TestBaseExecuteUnknownOperationFallsThrough(t *testing.T) {
 	t.Parallel()
 
-	b := &Base{
-		Auth: mockAuth{},
-		Queries: map[string]string{
-			"get_viewer": "{ viewer { login } }",
-		},
-	}
+	b := &Base{Auth: mockAuth{}}
 
 	_, err := b.Execute(context.Background(), "nonexistent", nil, "tok")
 	if err == nil {

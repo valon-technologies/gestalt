@@ -186,9 +186,6 @@ func TestExecuteREST_CatalogQueryParam(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"create_item": {Method: http.MethodPost, Path: "/items"},
-		},
 	}
 	b.SetCatalog(cat)
 
@@ -220,56 +217,6 @@ func TestExecuteREST_CatalogQueryParam(t *testing.T) {
 	}
 	if _, hasPage := body["page"]; hasPage {
 		t.Fatalf("body should not contain page (it should be in query)")
-	}
-}
-
-func TestExecuteREST_NoCatalog_PreservesLegacy(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bodyBytes, _ := io.ReadAll(r.Body)
-		var body map[string]any
-		_ = json.Unmarshal(bodyBytes, &body)
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"query": r.URL.RawQuery,
-			"body":  body,
-		})
-	}))
-	t.Cleanup(func() { srv.Close() })
-
-	b := &Base{
-		Auth:    mockAuth{},
-		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"create_item": {Method: http.MethodPost, Path: "/items"},
-		},
-	}
-
-	result, err := b.Execute(context.Background(), "create_item", map[string]any{
-		"name": "widget",
-		"page": 2,
-	}, "test-token")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-
-	if resp["query"] != "" {
-		t.Fatalf("query = %q, want empty (legacy POST puts everything in body)", resp["query"])
-	}
-
-	body := resp["body"].(map[string]any)
-	if body["name"] != "widget" {
-		t.Fatalf("body[name] = %v, want widget", body["name"])
-	}
-	if body["page"] != float64(2) {
-		t.Fatalf("body[page] = %v, want 2", body["page"])
 	}
 }
 
@@ -309,9 +256,6 @@ func TestExecuteREST_WireNameQueryParam(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			opID: {Method: http.MethodGet, Path: opPath},
-		},
 	}
 	b.SetCatalog(cat)
 
@@ -372,9 +316,6 @@ func TestExecuteREST_CatalogHeaderParam(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"create_item": {Method: http.MethodPost, Path: "/items"},
-		},
 	}
 	b.SetCatalog(cat)
 
