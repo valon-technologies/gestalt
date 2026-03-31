@@ -58,8 +58,6 @@ type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
-
-
 type ManualAuthProvider interface {
 	SupportsManualAuth() bool
 }
@@ -116,7 +114,3 @@ type Capability struct {
 	Parameters  []Parameter
 }
 
-type ProviderHost interface {
-	ProxyHTTP(ctx context.Context, invocationID, method, url string, headers map[string]string, body []byte) (*HTTPResponse, error)
-	Close() error
-}

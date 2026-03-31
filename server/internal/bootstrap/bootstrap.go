@@ -807,12 +807,11 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 		return nil, nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
-		Command:      intg.Plugin.Command,
-		Args:         intg.Plugin.Args,
-		Env:          intg.Plugin.Env,
-		Name:         name,
-		Config:       pluginConfig,
-		AllowedHosts: intg.Plugin.AllowedHosts,
+		Command: intg.Plugin.Command,
+		Args:    intg.Plugin.Args,
+		Env:     intg.Plugin.Env,
+		Name:    name,
+		Config:  pluginConfig,
 	})
 	if err != nil {
 		return nil, nil, err

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"strings"
+	"net/url"
+	"time"
 
 	"github.com/valon-technologies/gestalt/sdk/pluginsdk"
 )
@@ -16,11 +18,15 @@ const (
 	providerDescription = "Google BigQuery data warehouse"
 
 	bigqueryBaseURL = "https://bigquery.googleapis.com/bigquery/v2"
+
+	httpTimeout          = 30 * time.Second
+	maxResponseBodyBytes = 50 << 20 // 50 MB
 )
+
+var restClient = &http.Client{Timeout: httpTimeout}
 
 type Provider struct {
 	runner queryRunner
-	host   pluginsdk.ProviderHost
 }
 
 var _ pluginsdk.Provider = (*Provider)(nil)
@@ -33,15 +39,6 @@ func (p *Provider) Name() string                              { return providerN
 func (p *Provider) DisplayName() string                       { return providerDisplayName }
 func (p *Provider) Description() string                       { return providerDescription }
 func (p *Provider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeUser }
-
-func (p *Provider) Start(ctx context.Context, name string, config map[string]any) error {
-	host, err := pluginsdk.DialProviderHost(ctx)
-	if err != nil {
-		return fmt.Errorf("dialing provider host: %w", err)
-	}
-	p.host = host
-	return nil
-}
 
 func (p *Provider) ListOperations() []pluginsdk.Operation {
 	return []pluginsdk.Operation{
@@ -112,14 +109,10 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 	if operation == queryOperationName {
 		return p.executeQuery(ctx, params, token)
 	}
-	return p.executeREST(ctx, operation, params)
+	return p.executeREST(ctx, operation, params, token)
 }
 
-func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any) (*pluginsdk.OperationResult, error) {
-	if p.host == nil {
-		return nil, fmt.Errorf("provider not started: no HTTP client available")
-	}
-
+func (p *Provider) executeREST(ctx context.Context, operation string, params map[string]any, token string) (*pluginsdk.OperationResult, error) {
 	projectID, _ := params["project_id"].(string)
 	if projectID == "" {
 		return nil, fmt.Errorf("project_id is required")
@@ -161,24 +154,37 @@ func (p *Provider) executeREST(ctx context.Context, operation string, params map
 		}, nil
 	}
 
-	url := bigqueryBaseURL + path
-	var queryParts []string
+	reqURL := bigqueryBaseURL + path
+	query := make(url.Values)
 	if maxResults, ok := params["maxResults"]; ok {
-		queryParts = append(queryParts, fmt.Sprintf("maxResults=%v", maxResults))
+		query.Set("maxResults", fmt.Sprintf("%v", maxResults))
 	}
-	if len(queryParts) > 0 {
-		url += "?" + strings.Join(queryParts, "&")
+	if len(query) > 0 {
+		reqURL += "?" + query.Encode()
 	}
 
-	invocationID := pluginsdk.InvocationID(ctx)
-	resp, err := p.host.ProxyHTTP(ctx, invocationID, http.MethodGet, url, nil, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := restClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executing REST request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
 	return &pluginsdk.OperationResult{
 		Status: resp.StatusCode,
-		Body:   string(resp.Body),
+		Body:   string(body),
 	}, nil
 }
 

@@ -3,7 +3,6 @@ package pluginsdk_test
 import (
 	"context"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -187,67 +186,3 @@ func (r *capturingRuntime) Stop(context.Context) error {
 	return nil
 }
 
-type stubProviderHost struct {
-	pluginapiv1.UnimplementedProviderHostServer
-}
-
-const (
-	stubStatusCode  = 418
-	stubHeaderKey   = "X-Stub"
-	stubHeaderValue = "dummy"
-	stubBodyContent = "response-body-bytes"
-)
-
-func (s *stubProviderHost) ProxyHTTP(_ context.Context, req *pluginapiv1.ProxyHTTPRequest) (*pluginapiv1.ProxyHTTPResponse, error) {
-	return &pluginapiv1.ProxyHTTPResponse{
-		StatusCode: int32(stubStatusCode),
-		Headers:    map[string]string{stubHeaderKey: stubHeaderValue},
-		Body:       []byte(stubBodyContent),
-	}, nil
-}
-
-func TestDialProviderHostIntegration(t *testing.T) {
-	dir, err := os.MkdirTemp("/tmp", "sdk-ph-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-
-	socket := filepath.Join(dir, "ph.sock")
-
-	lis, err := net.Listen("unix", socket)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	srv := grpc.NewServer()
-	pluginapiv1.RegisterProviderHostServer(srv, &stubProviderHost{})
-	go func() { _ = srv.Serve(lis) }()
-	t.Cleanup(srv.Stop)
-
-	t.Setenv(pluginapiv1.EnvProviderHostSocket, socket)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	host, err := pluginsdk.DialProviderHost(ctx)
-	if err != nil {
-		t.Fatalf("DialProviderHost: %v", err)
-	}
-	defer func() { _ = host.Close() }()
-
-	resp, err := host.ProxyHTTP(ctx, "inv-123", http.MethodGet, "https://dummy.example.com/items", nil, nil)
-	if err != nil {
-		t.Fatalf("ProxyHTTP: %v", err)
-	}
-	if resp.StatusCode != stubStatusCode {
-		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, stubStatusCode)
-	}
-	if resp.Headers[stubHeaderKey] != stubHeaderValue {
-		t.Errorf("Headers[%q] = %q, want %q", stubHeaderKey, resp.Headers[stubHeaderKey], stubHeaderValue)
-	}
-	if string(resp.Body) != stubBodyContent {
-		t.Errorf("Body = %q, want %q", string(resp.Body), stubBodyContent)
-	}
-}
