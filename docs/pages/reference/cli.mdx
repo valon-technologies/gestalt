@@ -258,7 +258,7 @@ gestaltd version
 | `gestaltd serve --locked` | Start the server. Fail if prepared state is missing or stale. |
 | `gestaltd bundle` | Resolve remote artifacts and packaged plugins into a self-contained output directory. |
 | `gestaltd validate` | Load and validate config without starting the server. |
-| `gestaltd plugin package` | Build a distributable plugin archive. |
+| `gestaltd plugin package` | Package a plugin directory or binary. |
 | `gestaltd version` | Print the binary version and exit. |
 
 ## Default Command Behavior
@@ -336,7 +336,7 @@ Two packaging flows:
 Package an existing plugin directory that already contains a `plugin.json` manifest:
 
 ```sh
-gestaltd plugin package --input ./build/my-plugin --output ./dist/my-plugin.tar.gz
+gestaltd plugin package --input ./build/my-plugin --output ./dist/my-plugin
 ```
 
 ### From a pre-built binary
@@ -347,14 +347,16 @@ Scaffold a manifest and package a binary in one step:
 gestaltd plugin package \
   --binary ./my-plugin \
   --source github.com/myorg/my-repo/my-plugin \
-  --output ./my-plugin.tar.gz
+  --output ./dist/my-plugin
 ```
+
+Output format is determined by the `--output` path: paths ending in `.tar.gz` produce an archive for remote distribution, all other paths produce a directory.
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
 | `--binary` | — | Path to pre-built binary. |
 | `--source` | — | Plugin source identifier (`github.com/owner/repo/plugin`). Required with `--binary`. |
-| `--output` | — | Path to write the `.tar.gz` archive. |
+| `--output` | — | Output path (directory, or `.tar.gz` for archive). |
 | `--kind` | `provider` | Plugin kind: `provider` or `runtime`. |
 | `--os` | Current platform | Target OS for the artifact. |
 | `--arch` | Current platform | Target architecture. |
@@ -368,5 +370,5 @@ gestaltd plugin package \
   --binary ./my-plugin-linux \
   --source github.com/myorg/my-repo/my-plugin \
   --os linux --arch amd64 \
-  --output ./my-plugin.tar.gz
+  --output ./dist/my-plugin
 ```

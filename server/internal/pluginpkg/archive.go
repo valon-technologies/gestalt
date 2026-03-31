@@ -79,6 +79,51 @@ func LoadManifestFromPath(inputPath string) ([]byte, *pluginmanifestv1.Manifest,
 	return data, manifest, inputPath, err
 }
 
+func CopyPackageDir(sourceDir, destDir string) error {
+	sourceDir = filepath.Clean(sourceDir)
+	if _, err := ValidatePackageDir(sourceDir); err != nil {
+		return err
+	}
+	destDir = filepath.Clean(destDir)
+	if rel, err := filepath.Rel(sourceDir, destDir); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("output directory %q must not be inside source directory %q", destDir, sourceDir)
+	}
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+	return filepath.WalkDir(sourceDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(sourceDir, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destDir, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		src, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = src.Close() }()
+		dst, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(dst, src); err != nil {
+			_ = dst.Close()
+			return err
+		}
+		return dst.Close()
+	})
+}
+
 func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 	sourceDir = filepath.Clean(sourceDir)
 	if _, err := ValidatePackageDir(sourceDir); err != nil {

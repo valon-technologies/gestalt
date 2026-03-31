@@ -174,7 +174,7 @@ COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
-    gestaltd plugin package --binary /tmp/myplugin --id example/myplugin --output ./deploy/plugins/myplugin.tar.gz && \
+    gestaltd plugin package --binary /tmp/myplugin --source github.com/example/myrepo/myplugin --output ./deploy/plugins/myplugin && \
     gestaltd bundle --config ./deploy/config.yaml --output /app
 ```
 

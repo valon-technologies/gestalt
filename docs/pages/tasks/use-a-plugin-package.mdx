@@ -8,7 +8,7 @@ Packaged plugins are the deployment-oriented way to run executable providers and
 integrations:
   acme:
     plugin:
-      package: ./plugins/acme-provider.tar.gz
+      package: ./plugins/acme-provider
       config:
         endpoint: https://api.example.com
 ```
@@ -16,8 +16,7 @@ integrations:
 `plugin.package` accepts:
 
 - a local directory
-- a local `.tar.gz`
-- an HTTPS URL
+- an HTTPS URL (`.tar.gz`)
 
 ## Bundle It
 
