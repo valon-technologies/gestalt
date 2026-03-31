@@ -147,7 +147,11 @@ func (h *testOAuthHandler) RefreshTokenWithURL(ctx context.Context, refreshToken
 func (h *testOAuthHandler) AuthorizationBaseURL() string { return h.authorizationBaseURLVal }
 func (h *testOAuthHandler) TokenURL() string             { return h.tokenURLVal }
 
-const testDefaultConnection = "default"
+const (
+	testDefaultConnection = "default"
+	testCatalogConnection = "catalog"
+	testCatalogToken      = "catalog-token"
+)
 
 func testConnectionAuth(integration string, handler bootstrap.OAuthHandler) func() map[string]map[string]bootstrap.OAuthHandler {
 	m := map[string]map[string]bootstrap.OAuthHandler{
@@ -961,6 +965,72 @@ func TestListOperations(t *testing.T) {
 	}
 	if ops[0]["id"] != "do_thing" {
 		t.Fatalf("expected id 'do_thing', got %v", ops[0]["id"])
+	}
+}
+
+func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
+	t.Parallel()
+
+	var gotConnection string
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != testCatalogToken {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{
+				Name: "test-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+				},
+			}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"test-int": testDefaultConnection}
+		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, integration, connection, _ string) (*core.IntegrationToken, error) {
+				if integration != "test-int" {
+					return nil, fmt.Errorf("unexpected integration %q", integration)
+				}
+				gotConnection = connection
+				return &core.IntegrationToken{AccessToken: testCatalogToken}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	if ops[0]["id"] != "session_only" {
+		t.Fatalf("expected id 'session_only', got %v", ops[0]["id"])
+	}
+	if gotConnection != testCatalogConnection {
+		t.Fatalf("connection = %q, want %q", gotConnection, testCatalogConnection)
 	}
 }
 
@@ -2029,6 +2099,23 @@ type stubIntegrationWithOps struct {
 
 func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 	return s.ops
+}
+
+type stubIntegrationWithSessionCatalog struct {
+	stubIntegrationWithOps
+	catalog             *catalog.Catalog
+	catalogForRequestFn func(context.Context, string) (*catalog.Catalog, error)
+}
+
+func (s *stubIntegrationWithSessionCatalog) Catalog() *catalog.Catalog {
+	return s.catalog
+}
+
+func (s *stubIntegrationWithSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if s.catalogForRequestFn != nil {
+		return s.catalogForRequestFn(ctx, token)
+	}
+	return s.catalog, nil
 }
 
 type stubAuthWithLoginURL struct {

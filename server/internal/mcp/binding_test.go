@@ -12,6 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/composite"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
@@ -21,6 +23,12 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+)
+
+const (
+	testAPIConnectionName   = "api"
+	testPluginAccessToken   = "plugin-token"
+	testNamedAPIAccessToken = "api-token"
 )
 
 type catalogProvider struct {
@@ -632,11 +640,15 @@ func (p *directCallerProvider) CallTool(ctx context.Context, name string, args m
 }
 
 type stubTokenResolver struct {
-	token string
-	err   error
+	token     string
+	err       error
+	resolveFn func(context.Context, *principal.Principal, string, string, string) (string, error)
 }
 
-func (r *stubTokenResolver) ResolveToken(_ context.Context, _ *principal.Principal, _, _, _ string) (string, error) {
+func (r *stubTokenResolver) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+	if r.resolveFn != nil {
+		return r.resolveFn(ctx, p, providerName, connection, instance)
+	}
 	return r.token, r.err
 }
 
@@ -727,6 +739,161 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 	if text.Text != "query result" {
 		t.Fatalf("expected direct passthrough result, got %q", text.Text)
+	}
+}
+
+func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
+	t.Parallel()
+
+	pluginProv := &flatProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "plugin",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "plugin_echo", Description: "Plugin-backed echo", Method: http.MethodGet}},
+	}
+	apiProv := &flatProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "api",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "api_echo", Description: "API-backed echo", Method: http.MethodGet}},
+	}
+
+	merged, err := composite.NewMergedWithConnections(
+		"hybrid",
+		"Hybrid",
+		"Hybrid provider",
+		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+		composite.BoundProvider{Provider: apiProv, Connection: testAPIConnectionName},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+
+	providers := testutil.NewProviderRegistry(t, merged)
+	datastore := &coretesting.StubDatastore{
+		TokenFn: func(_ context.Context, _, integration, connection, _ string) (*core.IntegrationToken, error) {
+			if integration != "hybrid" {
+				return nil, fmt.Errorf("unexpected integration %q", integration)
+			}
+			switch connection {
+			case config.PluginConnectionName:
+				return &core.IntegrationToken{AccessToken: testPluginAccessToken}, nil
+			case testAPIConnectionName:
+				return &core.IntegrationToken{AccessToken: testNamedAPIAccessToken}, nil
+			default:
+				return nil, fmt.Errorf("unexpected connection %q", connection)
+			}
+		},
+	}
+	broker := invocation.NewBroker(
+		providers,
+		datastore,
+		invocation.WithConnectionMapper(invocation.ConnectionMap{"hybrid": testAPIConnectionName}),
+	)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		Providers:     providers,
+		APIConnection: map[string]string{"hybrid": testAPIConnectionName},
+	})
+
+	callTool := func(name string) string {
+		t.Helper()
+		tool := srv.GetTool(name)
+		if tool == nil {
+			t.Fatalf("tool %q not found", name)
+		}
+		req := mcpgo.CallToolRequest{}
+		req.Params.Name = name
+
+		result, err := tool.Handler(ctxWithPrincipal(), req)
+		if err != nil {
+			t.Fatalf("tool %q: %v", name, err)
+		}
+		if result.IsError {
+			t.Fatalf("tool %q returned error: %v", name, result.Content)
+		}
+		text, ok := result.Content[0].(mcpgo.TextContent)
+		if !ok {
+			t.Fatalf("tool %q content type = %T", name, result.Content[0])
+		}
+		return text.Text
+	}
+
+	if got := callTool("hybrid_plugin_echo"); got != testPluginAccessToken {
+		t.Fatalf("plugin tool token = %q, want %q", got, testPluginAccessToken)
+	}
+	if got := callTool("hybrid_api_echo"); got != testNamedAPIAccessToken {
+		t.Fatalf("api tool token = %q, want %q", got, testNamedAPIAccessToken)
+	}
+}
+
+func TestNewServer_DirectCallerUsesAPIConnectionForNonPassthroughTools(t *testing.T) {
+	t.Parallel()
+
+	var gotConnection string
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "notion"},
+		ops:             []core.Operation{{Name: "search", Description: "Search workspace"}},
+		cat: &catalog.Catalog{
+			Name: "notion",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "search",
+					Description: "Search workspace",
+					InputSchema: json.RawMessage(`{"type":"object"}`),
+				},
+			},
+		},
+		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			if name != "search" {
+				t.Fatalf("CallTool name = %q, want %q", name, "search")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{resolveFn: func(_ context.Context, _ *principal.Principal, providerName, connection, instance string) (string, error) {
+			if providerName != "notion" {
+				t.Fatalf("provider = %q, want %q", providerName, "notion")
+			}
+			if instance != "" {
+				t.Fatalf("instance = %q, want empty", instance)
+			}
+			gotConnection = connection
+			return "upstream-token", nil
+		}},
+		Providers:     providers,
+		APIConnection: map[string]string{"notion": testAPIConnectionName},
+	})
+
+	tool := srv.GetTool("notion_search")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "notion_search"
+	result, err := tool.Handler(ctxWithPrincipal(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if gotConnection != testAPIConnectionName {
+		t.Fatalf("connection = %q, want %q", gotConnection, testAPIConnectionName)
 	}
 }
 

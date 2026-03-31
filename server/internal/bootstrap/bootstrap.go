@@ -718,21 +718,46 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, fmt.Errorf("integration %q has no plugin defined", name)
 	}
 
-	if intg.Plugin.IsInline() {
-		return buildInlineProvider(ctx, name, intg, deps, regStore)
+	var result *ProviderBuildResult
+	var err error
+
+	switch {
+	case intg.Plugin.IsInline():
+		result, err = buildInlineProvider(ctx, name, intg, deps, regStore)
+	case intg.Plugin.IsDeclarative:
+		result, err = buildDeclarativeProvider(name, intg, deps, regStore)
+	default:
+		result, err = buildExternalPluginProvider(ctx, name, intg, deps, regStore)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	if intg.Plugin.IsDeclarative {
-		return buildDeclarativeProvider(name, intg, deps, regStore)
-	}
+	applyConfigDisplayOverrides(result.Provider, intg)
+	return result, nil
+}
 
+func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
 	if err != nil {
 		return nil, err
 	}
-	applyPluginIcon(pluginProv, intg)
+	var manifest *pluginmanifestv1.Manifest
+	var manifestProvider *pluginmanifestv1.Provider
+	if intg.Plugin != nil && intg.Plugin.ResolvedManifestPath != "" {
+		_, manifest, err = pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
+		if err != nil {
+			if c, ok := pluginProv.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+			return nil, fmt.Errorf("read manifest for external provider %q: %w", name, err)
+		}
+		if manifest != nil {
+			manifestProvider = manifest.Provider
+		}
+	}
 
-	hasSpecSurface := intg.Plugin.OpenAPI != "" || intg.Plugin.GraphQLURL != "" || intg.Plugin.MCPURL != ""
+	_, hasSpecSurface := primaryConfiguredSpecSurface(intg.Plugin, manifestProvider)
 
 	var finalProv core.Provider
 	if !hasSpecSurface {
@@ -745,22 +770,20 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		}
 		finalProv = restricted
 	} else {
-		specProv, err := buildHybridSpecProvider(ctx, name, intg, deps)
+		specProv, surface, err := buildHybridSpecProvider(ctx, name, intg, manifestProvider, deps)
 		if err != nil {
 			if c, ok := pluginProv.(interface{ Close() error }); ok {
 				_ = c.Close()
 			}
 			return nil, err
 		}
-		displayName := intg.DisplayName
-		if displayName == "" {
-			displayName = pluginProv.DisplayName()
-		}
-		description := intg.Description
-		if description == "" {
-			description = pluginProv.Description()
-		}
-		merged, err := composite.NewMerged(name, displayName, description, pluginProv, specProv)
+		merged, err := composite.NewMergedWithConnections(
+			name,
+			pluginProv.DisplayName(),
+			pluginProv.Description(),
+			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+			composite.BoundProvider{Provider: specProv, Connection: resolvedSurfaceConnectionName(intg.Plugin, manifestProvider, surface)},
+		)
 		if err != nil {
 			if c, ok := specProv.(interface{ Close() error }); ok {
 				_ = c.Close()
@@ -774,58 +797,81 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 
 	buildResult := &ProviderBuildResult{Provider: finalProv}
-	attachPluginOAuth(name, intg, pluginConfig, deps, buildResult)
+	buildResult.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	if err != nil {
+		if c, ok := finalProv.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		return nil, err
+	}
 	return buildResult, nil
 }
 
-func buildHybridSpecProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (core.Provider, error) {
+type specSurface string
+
+const (
+	specSurfaceOpenAPI specSurface = "openapi"
+	specSurfaceGraphQL specSurface = "graphql"
+	specSurfaceMCP     specSurface = "mcp"
+)
+
+func buildHybridSpecProvider(ctx context.Context, name string, intg config.IntegrationDef, manifestProvider *pluginmanifestv1.Provider, deps Deps) (core.Provider, specSurface, error) {
 	allowedOps := intg.Plugin.AllowedOperations
+	openAPIURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceOpenAPI)
+	graphQLURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceGraphQL)
+	mcpURL := resolvedSurfaceURL(intg.Plugin, manifestProvider, specSurfaceMCP)
 
 	switch {
-	case intg.Plugin.OpenAPI != "":
-		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.OpenAPIConnection)
-		def, err := openapi.LoadDefinition(ctx, name, intg.Plugin.OpenAPI, allowedOps)
+	case openAPIURL != "":
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceOpenAPI)
+		def, err := openapi.LoadDefinition(ctx, name, openAPIURL, allowedOps)
 		if err != nil {
-			return nil, fmt.Errorf("load hybrid openapi spec for %q: %w", name, err)
+			return nil, "", fmt.Errorf("load hybrid openapi spec for %q: %w", name, err)
 		}
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
-		provider.ApplyDisplayOverrides(def, intg)
-		return provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
-
-	case intg.Plugin.GraphQLURL != "":
-		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.GraphQLConnection)
-		def, err := graphqlupstream.LoadDefinition(ctx, name, intg.Plugin.GraphQLURL, allowedOps)
+		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
-			return nil, fmt.Errorf("load hybrid graphql schema for %q: %w", name, err)
+			return nil, "", err
+		}
+		return prov, specSurfaceOpenAPI, nil
+
+	case graphQLURL != "":
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceGraphQL)
+		def, err := graphqlupstream.LoadDefinition(ctx, name, graphQLURL, allowedOps)
+		if err != nil {
+			return nil, "", fmt.Errorf("load hybrid graphql schema for %q: %w", name, err)
 		}
 		if intg.Plugin.BaseURL != "" {
 			def.BaseURL = intg.Plugin.BaseURL
 		}
-		provider.ApplyDisplayOverrides(def, intg)
-		return provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		if err != nil {
+			return nil, "", err
+		}
+		return prov, specSurfaceGraphQL, nil
 
-	case intg.Plugin.MCPURL != "":
-		conn := pluginConnectionDef(intg.Plugin, intg.Plugin.MCPConnection)
+	case mcpURL != "":
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, manifestProvider, specSurfaceMCP)
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
-		up, err := mcpupstream.New(ctx, name, intg.Plugin.MCPURL, connMode, deps.Egress.Resolver)
+		up, err := mcpupstream.New(ctx, name, mcpURL, connMode, deps.Egress.Resolver)
 		if err != nil {
-			return nil, fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
+			return nil, "", fmt.Errorf("create hybrid mcp upstream for %q: %w", name, err)
 		}
 		if allowedOps != nil {
 			if err := up.FilterOperations(allowedOps); err != nil {
 				_ = up.Close()
-				return nil, fmt.Errorf("filter hybrid mcp operations for %q: %w", name, err)
+				return nil, "", fmt.Errorf("filter hybrid mcp operations for %q: %w", name, err)
 			}
 		}
-		return up, nil
+		return up, specSurfaceMCP, nil
 
 	default:
-		return nil, fmt.Errorf("hybrid spec provider %q has no spec URL", name)
+		return nil, "", fmt.Errorf("hybrid spec provider %q has no spec URL", name)
 	}
 }
 
@@ -834,20 +880,17 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 	if err != nil {
 		return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
 	}
-	if intg.DisplayName != "" {
-		manifest.DisplayName = intg.DisplayName
-	}
-	if intg.Description != "" {
-		manifest.Description = intg.Description
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
 	if manifest.Provider.IsSpecLoaded() {
-		return buildSpecLoadedProvider(ctx, name, intg, manifest, deps, regStore)
+		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, deps, regStore)
 	}
 	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create inline provider %q: %w", name, err)
 	}
-	applyPluginIcon(prov, intg)
 
 	restricted, err := applyAllowedOperations(name, intg, prov)
 	if err != nil {
@@ -855,7 +898,8 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 	}
 
 	result := &ProviderBuildResult{Provider: restricted}
-	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
+	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	if err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -869,14 +913,14 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 	return []provider.BuildOption{provider.WithAuthHandler(handler)}
 }
 
-func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
 
 	allowedOps := convertAllowedOperations(mp.AllowedOperations)
 
 	switch {
 	case mp.OpenAPI != "":
-		conn := pluginConnectionDef(intg.Plugin, mp.OpenAPIConnection)
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceOpenAPI)
 		def, err := openapi.LoadDefinition(ctx, name, mp.OpenAPI, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load openapi spec for %q: %w", name, err)
@@ -885,15 +929,14 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = mp.BaseURL
 		}
 		applyManifestResponseMapping(def, mp)
-		provider.ApplyDisplayOverrides(def, intg)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
 		}
-		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
+		return specLoadedResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 
 	case mp.GraphQLURL != "":
-		conn := pluginConnectionDef(intg.Plugin, mp.GraphQLConnection)
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceGraphQL)
 		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("load graphql schema for %q: %w", name, err)
@@ -902,15 +945,14 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = mp.BaseURL
 		}
 		applyManifestResponseMapping(def, mp)
-		provider.ApplyDisplayOverrides(def, intg)
 		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
 		}
-		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
+		return specLoadedResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 
 	case mp.MCPURL != "":
-		conn := pluginConnectionDef(intg.Plugin, mp.MCPConnection)
+		conn := resolvedSurfaceConnectionDef(intg.Plugin, mp, specSurfaceMCP)
 		connMode := core.ConnectionMode(conn.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
@@ -925,7 +967,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 				return nil, fmt.Errorf("filter mcp operations for %q: %w", name, err)
 			}
 		}
-		result, resultErr := specLoadedResult(name, intg, manifest, up, deps, regStore)
+		result, resultErr := specLoadedResult(name, intg, manifest, pluginConfig, up, deps, regStore)
 		if resultErr != nil {
 			_ = up.Close()
 			return nil, resultErr
@@ -937,10 +979,11 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	}
 }
 
-func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	applyPluginIcon(prov, intg)
+func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	result := &ProviderBuildResult{Provider: prov}
-	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
+	var err error
+	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	if err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -964,22 +1007,83 @@ func convertAllowedOperations(ops map[string]*pluginmanifestv1.ManifestOperation
 	return result
 }
 
-func pluginConnectionDef(plugin *config.PluginDef, connName string) config.ConnectionDef {
-	conn := config.ConnectionDef{}
+func pluginSurfaceConnectionName(plugin *config.PluginDef, surface specSurface) string {
 	if plugin == nil {
-		return conn
+		return ""
 	}
-	if connName != "" {
-		if named, ok := plugin.Connections[connName]; ok && named != nil {
-			return *named
+	switch surface {
+	case specSurfaceOpenAPI:
+		return plugin.OpenAPIConnection
+	case specSurfaceGraphQL:
+		return plugin.GraphQLConnection
+	case specSurfaceMCP:
+		return plugin.MCPConnection
+	default:
+		return ""
+	}
+}
+
+func mergeConnectionDef(dst *config.ConnectionDef, src *config.ConnectionDef) {
+	if dst == nil || src == nil {
+		return
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	mergeConnectionAuth(&dst.Auth, src.Auth)
+	if len(src.Params) > 0 {
+		dst.Params = src.Params
+	}
+}
+
+func mergeConnectionAuth(dst *config.ConnectionAuthDef, src config.ConnectionAuthDef) {
+	if dst == nil {
+		return
+	}
+	if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
+		*dst = config.ConnectionAuthDef{}
+	}
+	setString := func(dst *string, src string) {
+		if src != "" {
+			*dst = src
 		}
-		slog.Warn("named connection not found, falling back to top-level auth", "connection", connName)
 	}
-	if plugin.Auth != nil {
-		conn.Auth = *plugin.Auth
+	setString(&dst.Type, src.Type)
+	setString(&dst.AuthorizationURL, src.AuthorizationURL)
+	setString(&dst.TokenURL, src.TokenURL)
+	setString(&dst.ClientID, src.ClientID)
+	setString(&dst.ClientSecret, src.ClientSecret)
+	setString(&dst.RedirectURL, src.RedirectURL)
+	setString(&dst.ClientAuth, src.ClientAuth)
+	setString(&dst.TokenExchange, src.TokenExchange)
+	if src.Scopes != nil {
+		dst.Scopes = src.Scopes
 	}
-	conn.Params = plugin.ConnectionParams
-	return conn
+	setString(&dst.ScopeParam, src.ScopeParam)
+	setString(&dst.ScopeSeparator, src.ScopeSeparator)
+	if src.PKCE {
+		dst.PKCE = true
+	}
+	if src.AuthorizationParams != nil {
+		dst.AuthorizationParams = src.AuthorizationParams
+	}
+	if src.TokenParams != nil {
+		dst.TokenParams = src.TokenParams
+	}
+	if src.RefreshParams != nil {
+		dst.RefreshParams = src.RefreshParams
+	}
+	setString(&dst.AcceptHeader, src.AcceptHeader)
+	setString(&dst.AccessTokenPath, src.AccessTokenPath)
+	if src.TokenMetadata != nil {
+		dst.TokenMetadata = src.TokenMetadata
+	}
+	if len(src.Credentials) > 0 {
+		dst.Credentials = src.Credentials
+	}
+	if src.AuthMapping != nil {
+		dst.AuthMapping = src.AuthMapping
+	}
 }
 
 func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
@@ -994,14 +1098,18 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 	}
-	applyPluginIcon(prov, intg)
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+	}
 
 	restricted, err := applyAllowedOperations(name, intg, prov)
 	if err != nil {
 		return nil, err
 	}
 	result := &ProviderBuildResult{Provider: restricted}
-	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
+	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	if err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -1069,126 +1177,37 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 	return prov, pluginConfig, nil
 }
 
-func applyPluginIcon(prov core.Provider, intg config.IntegrationDef) {
-	if intg.IconFile == "" {
-		return
-	}
-	svg, err := provider.ReadIconFile(intg.IconFile)
-	if err != nil {
-		slog.Warn("could not read plugin icon_file", "path", intg.IconFile, "error", err)
-		return
-	}
-	if svg == "" {
-		return
-	}
+// applyConfigDisplayOverrides applies display_name, description, and icon_file
+// from the integration config onto the final provider. Called once at the end of
+// buildProvider so every provider type (MCP, OpenAPI, plugin, composite) gets
+// consistent treatment.
+func applyConfigDisplayOverrides(prov core.Provider, intg config.IntegrationDef) {
+	type displayNameSetter interface{ SetDisplayName(string) }
+	type descriptionSetter interface{ SetDescription(string) }
 	type iconSetter interface{ SetIconSVG(string) }
-	if setter, ok := prov.(iconSetter); ok {
-		setter.SetIconSVG(svg)
-	}
-}
 
-func attachManifestOAuth(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, regStore *lazyRegStore, result *ProviderBuildResult) error {
-	if manifest.Provider == nil || manifest.Provider.Auth == nil {
-		return nil
+	if intg.DisplayName != "" {
+		if s, ok := prov.(displayNameSetter); ok {
+			s.SetDisplayName(intg.DisplayName)
+		}
 	}
-
-	switch manifest.Provider.Auth.Type {
-	case pluginmanifestv1.AuthTypeOAuth2:
-		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-		if err != nil {
-			return fmt.Errorf("decode plugin config for %q: %w", name, err)
+	if intg.Description != "" {
+		if s, ok := prov.(descriptionSetter); ok {
+			s.SetDescription(intg.Description)
 		}
-		authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+	}
+	if intg.IconFile != "" {
+		svg, err := provider.ReadIconFile(intg.IconFile)
 		if err != nil {
-			slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
-			return nil
+			slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
+			return
 		}
-		if authHandler != nil {
-			result.ConnectionAuth = map[string]OAuthHandler{
-				config.PluginConnectionName: authHandler,
+		if svg != "" {
+			if s, ok := prov.(iconSetter); ok {
+				s.SetIconSVG(svg)
 			}
 		}
-
-	case pluginmanifestv1.AuthTypeMCPOAuth:
-		mcpURL := manifest.Provider.MCPURL
-		if mcpURL == "" && intg.Plugin != nil {
-			mcpURL = intg.Plugin.MCPURL
-		}
-		if mcpURL == "" {
-			slog.Warn("mcp_oauth auth requires mcp_url", "provider", name)
-			return nil
-		}
-		conn := pluginConnectionDef(intg.Plugin, manifest.Provider.MCPConnection)
-		handler := buildMCPOAuthHandler(conn, mcpURL, regStore.get(), deps)
-		result.ConnectionAuth = map[string]OAuthHandler{
-			config.PluginConnectionName: handler,
-		}
 	}
-
-	return nil
-}
-
-func attachPluginOAuth(name string, intg config.IntegrationDef, pluginConfig map[string]any, deps Deps, result *ProviderBuildResult) {
-	if intg.Plugin == nil {
-		return
-	}
-	var authHandler OAuthHandler
-	var err error
-	if intg.Plugin.ResolvedManifestPath != "" {
-		authHandler, err = buildPluginOAuthHandler(intg, pluginConfig, deps)
-		if err != nil {
-			slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
-		}
-	}
-	if authHandler == nil && intg.Plugin.Auth != nil && intg.Plugin.Auth.Type == "oauth2" {
-		authHandler, err = buildOAuthHandlerFromAuth(intg.Plugin.Auth, pluginConfig, deps)
-		if err != nil {
-			slog.Warn("cannot build oauth handler from inline auth", "provider", name, "error", err)
-		}
-	}
-	if authHandler == nil {
-		return
-	}
-	if result.ConnectionAuth == nil {
-		result.ConnectionAuth = make(map[string]OAuthHandler)
-	}
-	result.ConnectionAuth[config.PluginConnectionName] = authHandler
-}
-
-func buildPluginOAuthHandler(intg config.IntegrationDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
-	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
-		return nil, nil
-	}
-	_, manifest, err := pluginpkg.ReadManifestFile(intg.Plugin.ResolvedManifestPath)
-	if err != nil {
-		return nil, err
-	}
-	return buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
-}
-
-func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
-	if manifest.Provider == nil || manifest.Provider.Auth == nil || manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
-		return nil, nil
-	}
-	a := manifest.Provider.Auth
-	return buildOAuthHandlerFromAuth(&config.ConnectionAuthDef{
-		Type:                a.Type,
-		AuthorizationURL:    a.AuthorizationURL,
-		TokenURL:            a.TokenURL,
-		ClientID:            a.ClientID,
-		ClientSecret:        a.ClientSecret,
-		Scopes:              a.Scopes,
-		PKCE:                a.PKCE,
-		ClientAuth:          a.ClientAuth,
-		TokenExchange:       a.TokenExchange,
-		ScopeParam:          a.ScopeParam,
-		ScopeSeparator:      a.ScopeSeparator,
-		AuthorizationParams: a.AuthorizationParams,
-		TokenParams:         a.TokenParams,
-		RefreshParams:       a.RefreshParams,
-		AcceptHeader:        a.AcceptHeader,
-		AccessTokenPath:     a.AccessTokenPath,
-	}, pluginConfig, deps)
 }
 
 func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
@@ -1273,11 +1292,7 @@ func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1
 }
 
 func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
-	m := make(invocation.ConnectionMap, len(cfg.Integrations))
-	for name := range cfg.Integrations {
-		m[name] = config.PluginConnectionName
-	}
-	return m
+	return invocation.ConnectionMap(BuildConnectionMaps(cfg).DefaultConnection)
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {

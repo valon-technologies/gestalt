@@ -315,7 +315,11 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(tokenResolver); ok {
 		resolver = tr
 	}
-	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, s.defaultConnection[name])
+	catalogConnection := s.catalogConnection[name]
+	if catalogConnection == "" {
+		catalogConnection = s.defaultConnection[name]
+	}
+	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, catalogConnection)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve catalog")
 		return
