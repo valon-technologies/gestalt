@@ -25,15 +25,13 @@ func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"list": {Method: http.MethodPost, Path: "/list"},
-		},
 		ResponseMapping: &ResponseMappingConfig{
 			DataPath:              "results",
 			PaginationHasMorePath: "moreDataAvailable",
 			PaginationCursorPath:  "nextCursor",
 		},
 	}
+	setTestCatalog(b, restCatalogOp("list", http.MethodPost, "/list"))
 
 	result, err := b.Execute(context.Background(), "list", nil, "test-token")
 	if err != nil {
@@ -83,13 +81,11 @@ func TestResponseMappingNestedDataPath(t *testing.T) {
 	t.Cleanup(func() { srv.Close() })
 
 	b := &Base{
-		Auth:    mockAuth{},
-		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"list": {Method: http.MethodGet, Path: "/list"},
-		},
+		Auth:            mockAuth{},
+		BaseURL:         srv.URL,
 		ResponseMapping: &ResponseMappingConfig{DataPath: "response.items"},
 	}
+	setTestCatalog(b, restCatalogOp("list", http.MethodGet, "/list"))
 
 	result, err := b.Execute(context.Background(), "list", nil, "tok")
 	if err != nil {
@@ -118,14 +114,12 @@ func TestResponseMappingPassesThroughErrors(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"op": {Method: http.MethodGet, Path: "/op"},
-		},
 		CheckResponse: func(status int, body []byte) error {
 			return nil
 		},
 		ResponseMapping: &ResponseMappingConfig{DataPath: "results"},
 	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/op"))
 
 	result, err := b.Execute(context.Background(), "op", nil, "tok")
 	if err != nil {
@@ -151,10 +145,8 @@ func TestResponseMappingWithoutConfig(t *testing.T) {
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
-		Endpoints: map[string]Endpoint{
-			"op": {Method: http.MethodGet, Path: "/op"},
-		},
 	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/op"))
 
 	result, err := b.Execute(context.Background(), "op", nil, "tok")
 	if err != nil {
