@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,11 +28,13 @@ const (
 )
 
 type ExecConfig struct {
-	Command string
-	Args    []string
-	Env     map[string]string
-	Name    string
-	Config  map[string]any
+	Command      string
+	Args         []string
+	Env          map[string]string
+	Name         string
+	Config       map[string]any
+	AllowedHosts []string
+	HostBinary   string
 }
 
 type managedRuntime struct {
@@ -59,14 +63,17 @@ func (r *managedRuntime) Stop(ctx context.Context) error {
 }
 
 type pluginProcess struct {
-	cmd       *exec.Cmd
-	dir       string
-	conn      *grpc.ClientConn
-	waitCh    chan error
-	hostSrv   *grpc.Server
-	hostLis   net.Listener
-	closeOnce sync.Once
-	closeErr  error
+	cmd            *exec.Cmd
+	dir            string
+	sandboxTmp     string
+	conn           *grpc.ClientConn
+	waitCh         chan error
+	hostSrv        *grpc.Server
+	hostLis        net.Listener
+	proxy          *sandbox.ProxyServer
+	sandboxCleanup func()
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
@@ -176,6 +183,8 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 		return nil, fmt.Errorf("plugin command is required")
 	}
 
+	sandboxActive := len(cfg.AllowedHosts) > 0
+
 	dir, err := newSocketDir()
 	if err != nil {
 		return nil, err
@@ -203,19 +212,72 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 		env[hostSocketEnv] = hostSocket
 	}
 
-	cmd := exec.Command(cfg.Command, cfg.Args...)
-	cmd.Env = append(safeBaseEnv(), envSlice(env)...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	if sandboxActive {
+		sandboxTmp, err := os.MkdirTemp("", "gstp-sandbox-tmp-")
+		if err != nil {
+			_ = proc.Close()
+			return nil, fmt.Errorf("create sandbox tmpdir: %w", err)
+		}
+		proc.sandboxTmp = sandboxTmp
+		env["TMPDIR"] = sandboxTmp
 
-	if err := cmd.Start(); err != nil {
-		_ = proc.Close()
-		return nil, fmt.Errorf("start plugin process: %w", err)
+		policy := &sandbox.Policy{
+			ReadOnlyPaths:  append(sandbox.DefaultReadOnlyPaths(), filepath.Dir(cfg.Command)),
+			ReadWritePaths: []string{dir, sandboxTmp},
+			AllowedHosts:   cfg.AllowedHosts,
+			HostBinary:     cfg.HostBinary,
+		}
+
+		proxy := sandbox.NewProxyServer(policy.AllowedHosts)
+		port, err := proxy.Start()
+		if err != nil {
+			_ = proc.Close()
+			return nil, fmt.Errorf("start sandbox proxy: %w", err)
+		}
+		proc.proxy = proxy
+		policy.ProxyPort = port
+		proxyAddr := fmt.Sprintf("http://127.0.0.1:%d", port)
+		env["HTTP_PROXY"] = proxyAddr
+		env["HTTPS_PROXY"] = proxyAddr
+
+		cmd := exec.Command(cfg.Command, cfg.Args...)
+		cmd.Env = buildPluginEnv(env, sandboxActive)
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		wrapped, cleanup, err := sandbox.Wrap(policy, cmd)
+		if err != nil {
+			_ = proc.Close()
+			return nil, fmt.Errorf("sandbox wrap: %w", err)
+		}
+		proc.sandboxCleanup = cleanup
+		cmd = wrapped
+
+		if err := cmd.Start(); err != nil {
+			if proc.sandboxCleanup != nil {
+				proc.sandboxCleanup()
+			}
+			_ = proc.Close()
+			return nil, fmt.Errorf("start plugin process: %w", err)
+		}
+		proc.cmd = cmd
+	} else {
+		cmd := exec.Command(cfg.Command, cfg.Args...)
+		cmd.Env = append(safeBaseEnv(), envSlice(env)...)
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Start(); err != nil {
+			_ = proc.Close()
+			return nil, fmt.Errorf("start plugin process: %w", err)
+		}
+		proc.cmd = cmd
 	}
-	proc.cmd = cmd
+
 	proc.waitCh = make(chan error, 1)
 	go func() {
-		proc.waitCh <- cmd.Wait()
+		proc.waitCh <- proc.cmd.Wait()
 		close(proc.waitCh)
 	}()
 
@@ -230,6 +292,21 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	proc.conn = conn
 
 	return proc, nil
+}
+
+func buildPluginEnv(env map[string]string, sandboxActive bool) []string {
+	base := safeBaseEnv()
+	if sandboxActive {
+		var filtered []string
+		for _, entry := range base {
+			key := entry[:strings.IndexByte(entry, '=')]
+			if _, overridden := env[key]; !overridden {
+				filtered = append(filtered, entry)
+			}
+		}
+		base = filtered
+	}
+	return append(base, envSlice(env)...)
 }
 
 func (p *pluginProcess) Close() error {
@@ -253,7 +330,11 @@ func (p *pluginProcess) Close() error {
 			}
 		}
 		if p.cmd != nil && p.cmd.Process != nil {
-			_ = p.cmd.Process.Signal(syscall.SIGTERM)
+			if p.proxy != nil {
+				_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
+			} else {
+				_ = p.cmd.Process.Signal(syscall.SIGTERM)
+			}
 			select {
 			case err := <-p.waitCh:
 				if err != nil && !errors.Is(err, context.Canceled) {
@@ -263,8 +344,12 @@ func (p *pluginProcess) Close() error {
 					}
 				}
 			case <-time.After(processShutdownTimeout):
-				if err := p.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-					errs = append(errs, fmt.Errorf("kill plugin process: %w", err))
+				if p.proxy != nil {
+					_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+				} else {
+					if err := p.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+						errs = append(errs, fmt.Errorf("kill plugin process: %w", err))
+					}
 				}
 				if err := <-p.waitCh; err != nil && !errors.Is(err, context.Canceled) {
 					var exitErr *exec.ExitError
@@ -272,6 +357,19 @@ func (p *pluginProcess) Close() error {
 						errs = append(errs, fmt.Errorf("wait for killed plugin process: %w", err))
 					}
 				}
+			}
+		}
+		if p.proxy != nil {
+			if err := p.proxy.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close sandbox proxy: %w", err))
+			}
+		}
+		if p.sandboxCleanup != nil {
+			p.sandboxCleanup()
+		}
+		if p.sandboxTmp != "" {
+			if err := os.RemoveAll(p.sandboxTmp); err != nil {
+				errs = append(errs, fmt.Errorf("remove sandbox tmpdir: %w", err))
 			}
 		}
 		if p.dir != "" {

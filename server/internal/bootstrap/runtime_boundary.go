@@ -60,11 +60,13 @@ func buildRuntime(ctx context.Context, name string, cfg config.RuntimeDef, facto
 			return nil, fmt.Errorf("decode runtime plugin config for %q: %w", name, err)
 		}
 		return pluginhost.NewExecutableRuntime(ctx, name, pluginhost.ExecConfig{
-			Command: cfg.Plugin.Command,
-			Args:    cfg.Plugin.Args,
-			Env:     cfg.Plugin.Env,
-			Name:    name,
-			Config:  m,
+			Command:      cfg.Plugin.Command,
+			Args:         cfg.Plugin.Args,
+			Env:          cfg.Plugin.Env,
+			Name:         name,
+			Config:       m,
+			AllowedHosts: cfg.Plugin.AllowedHosts,
+			HostBinary:   cfg.Plugin.HostBinary,
 		}, deps.Invoker, deps.CapabilityLister)
 	}
 

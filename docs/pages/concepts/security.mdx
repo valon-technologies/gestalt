@@ -275,6 +275,42 @@ Isolation properties:
 - **Token passthrough**: the host resolves the caller's access token and passes it directly to the plugin in the gRPC request. Plugins receive only the token for the current invocation, not the full credential store.
 - **Process lifecycle**: plugins are terminated when `gestaltd` shuts down (SIGTERM, then SIGKILL after timeout)
 
+### OS-level sandbox
+
+Plugins are automatically sandboxed when `allowed_hosts` is configured. No additional configuration is needed:
+
+```yaml
+integrations:
+  my-plugin:
+    plugin:
+      source: github.com/acme/plugins/my-plugin
+      version: 1.0.0
+      allowed_hosts:
+        - "api.example.com"
+        - "*.slack.com"
+```
+
+Without `allowed_hosts`, the plugin runs unrestricted:
+
+```yaml
+integrations:
+  trusted-plugin:
+    plugin:
+      command: ./my-trusted-plugin
+```
+
+**Filesystem restrictions:**
+
+On Linux, the sandbox uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) to restrict file access. Plugins can only read system libraries, SSL certificates, and DNS configuration. Writes are limited to the plugin's socket directory and its isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec` with a generated Seatbelt profile.
+
+**Network restrictions:**
+
+When `allowed_hosts` is configured, `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the plugin's environment. Plugins use standard HTTP libraries unchanged. The proxy checks each request's target hostname against the allowlist before forwarding. Wildcards are supported (`*.example.com` matches `api.example.com`). On Linux, Landlock additionally restricts TCP connections to only the proxy port.
+
+**Process group isolation:**
+
+Sandboxed plugins run in their own process group. On shutdown, `gestaltd` signals the entire group, ensuring child processes spawned by the plugin are also cleaned up.
+
 ## Webhook Signature Verification
 
 Webhook bindings with `auth_mode: signed` verify request authenticity using HMAC-SHA256:

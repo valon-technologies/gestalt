@@ -52,3 +52,4 @@ server/internal/webui/out/
 !server/internal/manifest/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+server/gestaltd

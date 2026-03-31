@@ -21,6 +21,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/jackc/pgx/v5 v5.8.0
+	github.com/landlock-lsm/go-landlock v0.7.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/microsoft/go-mssqldb v1.9.8
 	github.com/pb33f/libopenapi v0.34.3
@@ -139,6 +140,7 @@ require (
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	kernel.org/pub/linux/libs/security/libcap/psx v1.2.77 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

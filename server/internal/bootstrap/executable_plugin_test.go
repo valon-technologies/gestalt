@@ -88,7 +88,7 @@ func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
 	if got.Name != "echoextrt" {
 		t.Fatalf("runtime output name = %q", got.Name)
 	}
-	if got.CapabilityCount != 2 {
+	if got.CapabilityCount != 4 {
 		t.Fatalf("runtime output capability_count = %d", got.CapabilityCount)
 	}
 	if got.ProbeStatus != http.StatusOK {
