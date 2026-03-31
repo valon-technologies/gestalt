@@ -1,6 +1,11 @@
 package server
 
-import "github.com/go-chi/chi/v5"
+import (
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
 
 func (s *Server) routes() {
 	r := s.router
@@ -34,6 +39,7 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 
 func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(middleware.Timeout(60 * time.Second))
 		s.mountAuthRoutes(r)
 		s.mountBindingRoutes(r)
 		s.mountAuthenticatedRoutes(r)
