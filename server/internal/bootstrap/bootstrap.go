@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
@@ -616,10 +618,45 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 	return ds, nil
 }
 
+func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
+	db, ok := deps.SQLDB.(*sql.DB)
+	if !ok || db == nil {
+		return nil
+	}
+	dialect, ok := deps.SQLDialect.(mcpoauth.SQLDialect)
+	if !ok || dialect == nil {
+		return nil
+	}
+	enc, err := crypto.NewAESGCM(deps.EncryptionKey)
+	if err != nil {
+		slog.Warn("cannot create encryptor for registration store", "component", "mcpoauth", "error", err)
+		return nil
+	}
+	store := mcpoauth.NewSQLStore(db, enc, dialect)
+	if err := store.Migrate(context.Background()); err != nil {
+		slog.Error("registration store migration failed", "component", "mcpoauth", "error", err)
+	}
+	return store
+}
+
+type lazyRegStore struct {
+	once  sync.Once
+	store mcpoauth.RegistrationStore
+	deps  Deps
+}
+
+func (l *lazyRegStore) get() mcpoauth.RegistrationStore {
+	l.once.Do(func() {
+		l.store = buildRegistrationStore(l.deps)
+	})
+	return l.store
+}
+
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex
+	regStore := &lazyRegStore{deps: deps}
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
@@ -642,7 +679,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, err := buildProvider(ctx, name, intgDef, factories, deps)
+			result, err := buildProvider(ctx, name, intgDef, factories, deps, regStore)
 			if err != nil {
 				slog.Warn("skipping provider", "provider", name, "error", err)
 				return
@@ -675,17 +712,17 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, ready, resolver, nil
 }
 
-func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
+func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil {
 		return nil, fmt.Errorf("integration %q has no plugin defined", name)
 	}
 
 	if intg.Plugin.IsInline() {
-		return buildInlineProvider(ctx, name, intg, deps)
+		return buildInlineProvider(ctx, name, intg, deps, regStore)
 	}
 
 	if intg.Plugin.IsDeclarative {
-		return buildDeclarativeProvider(name, intg, deps)
+		return buildDeclarativeProvider(name, intg, deps, regStore)
 	}
 
 	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg)
@@ -707,7 +744,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	return buildResult, nil
 }
 
-func buildInlineProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+func buildInlineProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	manifest, err := config.InlineToManifest(name, intg.Plugin)
 	if err != nil {
 		return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
@@ -719,7 +756,7 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 		manifest.Description = intg.Description
 	}
 	if manifest.Provider.IsSpecLoaded() {
-		return buildSpecLoadedProvider(ctx, name, intg, manifest, deps)
+		return buildSpecLoadedProvider(ctx, name, intg, manifest, deps, regStore)
 	}
 	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
@@ -733,13 +770,21 @@ func buildInlineProvider(ctx context.Context, name string, intg config.Integrati
 	}
 
 	result := &ProviderBuildResult{Provider: restricted}
-	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
+	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps) (*ProviderBuildResult, error) {
+func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider, regStore *lazyRegStore, deps Deps) []provider.BuildOption {
+	if conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || mp.MCPURL == "" {
+		return nil
+	}
+	handler := buildMCPOAuthHandler(conn, mp.MCPURL, regStore.get(), deps)
+	return []provider.BuildOption{provider.WithAuthHandler(handler)}
+}
+
+func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
 
 	allowedOps := convertAllowedOperations(mp.AllowedOperations)
@@ -754,12 +799,13 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyManifestResponseMapping(def, mp)
 		provider.ApplyDisplayOverrides(def, intg)
-		prov, err := provider.Build(def, conn, nil)
+		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
 		}
-		return specLoadedResult(name, intg, manifest, prov, deps)
+		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
 
 	case mp.GraphQLURL != "":
 		def, err := graphqlupstream.LoadDefinition(ctx, name, mp.GraphQLURL, allowedOps)
@@ -769,12 +815,13 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if mp.BaseURL != "" {
 			def.BaseURL = mp.BaseURL
 		}
+		applyManifestResponseMapping(def, mp)
 		provider.ApplyDisplayOverrides(def, intg)
-		prov, err := provider.Build(def, conn, nil)
+		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
 		}
-		return specLoadedResult(name, intg, manifest, prov, deps)
+		return specLoadedResult(name, intg, manifest, prov, deps, regStore)
 
 	case mp.MCPURL != "":
 		connMode := core.ConnectionMode(conn.Mode)
@@ -791,7 +838,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 				return nil, fmt.Errorf("filter mcp operations for %q: %w", name, err)
 			}
 		}
-		result, resultErr := specLoadedResult(name, intg, manifest, up, deps)
+		result, resultErr := specLoadedResult(name, intg, manifest, up, deps, regStore)
 		if resultErr != nil {
 			_ = up.Close()
 			return nil, resultErr
@@ -803,10 +850,10 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	}
 }
 
-func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, prov core.Provider, deps Deps) (*ProviderBuildResult, error) {
+func specLoadedResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	applyPluginIcon(prov, intg)
 	result := &ProviderBuildResult{Provider: prov}
-	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
+	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -842,7 +889,7 @@ func pluginConnectionDef(plugin *config.PluginDef) config.ConnectionDef {
 	return conn
 }
 
-func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
 		return nil, fmt.Errorf("declarative provider %q has no resolved manifest path", name)
 	}
@@ -861,7 +908,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 		return nil, err
 	}
 	result := &ProviderBuildResult{Provider: restricted}
-	if err := attachManifestOAuth(name, intg, manifest, deps, result); err != nil {
+	if err := attachManifestOAuth(name, intg, manifest, deps, regStore, result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -945,25 +992,44 @@ func applyPluginIcon(prov core.Provider, intg config.IntegrationDef) {
 	}
 }
 
-func attachManifestOAuth(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, result *ProviderBuildResult) error {
-	if manifest.Provider == nil || manifest.Provider.Auth == nil ||
-		manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+func attachManifestOAuth(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, deps Deps, regStore *lazyRegStore, result *ProviderBuildResult) error {
+	if manifest.Provider == nil || manifest.Provider.Auth == nil {
 		return nil
 	}
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
-	authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
-	if err != nil {
-		slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
-		return nil
-	}
-	if authHandler != nil {
+
+	switch manifest.Provider.Auth.Type {
+	case pluginmanifestv1.AuthTypeOAuth2:
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
+		authHandler, err := buildOAuthHandlerFromManifest(manifest, pluginConfig, deps)
+		if err != nil {
+			slog.Warn("cannot build oauth handler from manifest", "provider", name, "error", err)
+			return nil
+		}
+		if authHandler != nil {
+			result.ConnectionAuth = map[string]OAuthHandler{
+				config.PluginConnectionName: authHandler,
+			}
+		}
+
+	case pluginmanifestv1.AuthTypeMCPOAuth:
+		mcpURL := manifest.Provider.MCPURL
+		if mcpURL == "" && intg.Plugin != nil {
+			mcpURL = intg.Plugin.MCPURL
+		}
+		if mcpURL == "" {
+			slog.Warn("mcp_oauth auth requires mcp_url", "provider", name)
+			return nil
+		}
+		conn := pluginConnectionDef(intg.Plugin)
+		handler := buildMCPOAuthHandler(conn, mcpURL, regStore.get(), deps)
 		result.ConnectionAuth = map[string]OAuthHandler{
-			config.PluginConnectionName: authHandler,
+			config.PluginConnectionName: handler,
 		}
 	}
+
 	return nil
 }
 
@@ -1049,6 +1115,36 @@ func buildOAuthHandlerFromManifest(manifest *pluginmanifestv1.Manifest, pluginCo
 
 	handler := oauth.NewUpstream(oauthCfg)
 	return WrapUpstreamHandler(handler), nil
+}
+
+func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoauth.RegistrationStore, deps Deps) *mcpoauth.Handler {
+	redirectURL := conn.Auth.RedirectURL
+	if redirectURL == "" {
+		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
+	}
+	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+		MCPURL:       mcpURL,
+		Store:        store,
+		RedirectURL:  redirectURL,
+		ClientID:     conn.Auth.ClientID,
+		ClientSecret: conn.Auth.ClientSecret,
+	})
+}
+
+func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1.Provider) {
+	if mp.ResponseMapping == nil {
+		return
+	}
+	rm := &provider.ResponseMappingDef{
+		DataPath: mp.ResponseMapping.DataPath,
+	}
+	if mp.ResponseMapping.Pagination != nil {
+		rm.Pagination = &provider.PaginationMappingDef{
+			HasMorePath: mp.ResponseMapping.Pagination.HasMorePath,
+			CursorPath:  mp.ResponseMapping.Pagination.CursorPath,
+		}
+	}
+	def.ResponseMapping = rm
 }
 
 func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {

@@ -109,6 +109,7 @@ func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
+	regStore := &lazyRegStore{deps: deps}
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
@@ -124,7 +125,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		intgDef := cfg.Integrations[name]
-		result, err := buildProviderForValidation(ctx, name, intgDef, factories, deps)
+		result, err := buildProviderForValidation(ctx, name, intgDef, factories, deps, regStore)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
@@ -148,9 +149,9 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps) (*ProviderBuildResult, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
-		return buildProvider(ctx, name, intg, factories, deps)
+		return buildProvider(ctx, name, intg, factories, deps, regStore)
 	}
 	prov, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
 	if err != nil {

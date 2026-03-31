@@ -42,6 +42,17 @@ type Provider struct {
 	GraphQLConnection string                                `json:"graphql_connection,omitempty"`
 	MCPConnection     string                                `json:"mcp_connection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty"`
+}
+
+type ManifestResponseMapping struct {
+	DataPath   string                     `json:"data_path"`
+	Pagination *ManifestPaginationMapping `json:"pagination,omitempty"`
+}
+
+type ManifestPaginationMapping struct {
+	HasMorePath string `json:"has_more_path"`
+	CursorPath  string `json:"cursor_path"`
 }
 
 type ProviderPostConnectDiscovery struct {
@@ -96,10 +107,11 @@ type ProviderParameter struct {
 }
 
 const (
-	AuthTypeOAuth2 = "oauth2"
-	AuthTypeBearer = "bearer"
-	AuthTypeManual = "manual"
-	AuthTypeNone   = "none"
+	AuthTypeOAuth2   = "oauth2"
+	AuthTypeMCPOAuth = "mcp_oauth"
+	AuthTypeBearer   = "bearer"
+	AuthTypeManual   = "manual"
+	AuthTypeNone     = "none"
 )
 
 type ProviderAuth struct {

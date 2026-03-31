@@ -95,6 +95,25 @@
               "from": { "type": "string", "enum": ["discovery"] }
             }
           }
+        },
+        "response_mapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["data_path"],
+          "properties": {
+            "data_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pagination": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "has_more_path": { "type": "string" },
+                "cursor_path": { "type": "string" }
+              }
+            }
+          }
         }
       }
     },
@@ -238,7 +257,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["oauth2", "bearer", "manual", "none"]
+          "enum": ["oauth2", "mcp_oauth", "bearer", "manual", "none"]
         },
         "authorization_url": {
           "type": "string",
