@@ -39,7 +39,7 @@ Components registered by the `gestaltd` binary at startup.
 
 | Name | Purpose |
 | --- | --- |
-| `stdout` | Prints traces and logs to standard output. Default when `telemetry` is omitted. |
+| `stdout` | Outputs structured logs to standard output. Traces and metrics use noop providers. Default when `telemetry` is omitted. |
 | `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
 | `noop` | Disables all telemetry collection. |
 
