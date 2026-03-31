@@ -41,12 +41,25 @@ jobs:
             echo "ERROR: ${PLUGIN_DIR}/plugin.yaml not found"
             exit 1
           fi
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache: false
       - name: Detect plugin type
         id: detect
         env:
           PLUGIN_NAME: ${{ steps.parse.outputs.plugin-name }}
         run: |
-          if [ -f "plugins/${PLUGIN_NAME}/go.mod" ] && [ -d "plugins/${PLUGIN_NAME}/cmd" ]; then
+          is_main_package() {
+            local package_name
+            package_name="$(cd "$1" && go list -f '{{.Name}}' "$2" 2>/dev/null)" || return 1
+            [ "$package_name" = "main" ]
+          }
+
+          PLUGIN_DIR="plugins/${PLUGIN_NAME}"
+          if [ ! -f "${PLUGIN_DIR}/go.mod" ]; then
+            echo "plugin-type=declarative" >> "$GITHUB_OUTPUT"
+          elif is_main_package "${PLUGIN_DIR}" ./cmd || is_main_package "${PLUGIN_DIR}" .; then
             echo "plugin-type=compiled" >> "$GITHUB_OUTPUT"
           else
             echo "plugin-type=declarative" >> "$GITHUB_OUTPUT"

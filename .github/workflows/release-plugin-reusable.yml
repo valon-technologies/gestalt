@@ -30,17 +30,25 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           echo "release=${VERSION#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
       - name: Detect plugin type
         id: plugin
         run: |
-          if [ -f "${{ inputs.plugin-dir }}/go.mod" ] && [ -d "${{ inputs.plugin-dir }}/cmd" ]; then
+          is_main_package() {
+            local package_name
+            package_name="$(cd "$1" && go list -f '{{.Name}}' "$2" 2>/dev/null)" || return 1
+            [ "$package_name" = "main" ]
+          }
+
+          if [ ! -f "${{ inputs.plugin-dir }}/go.mod" ]; then
+            echo "compiled=false" >> "$GITHUB_OUTPUT"
+          elif is_main_package "${{ inputs.plugin-dir }}" ./cmd || is_main_package "${{ inputs.plugin-dir }}" .; then
             echo "compiled=true" >> "$GITHUB_OUTPUT"
           else
             echo "compiled=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26.0'
       - name: Install gestaltd
         env:
           GOBIN: ${{ runner.temp }}/bin
