@@ -29,8 +29,8 @@ The easiest way to make docs drift is to copy previous prose instead of reading 
 ```sh
 go test ./...
 
-gestaltd bundle --config ./gestalt.dev.yaml --output ./bundle
-gestaltd validate --config ./bundle/gestalt.dev.yaml
+gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd validate --config ./bundle/config.yaml
 
 cd docs
 npm ci

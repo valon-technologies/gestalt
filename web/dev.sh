@@ -8,7 +8,7 @@
 #   ./dev.sh [config.yaml]
 #
 # Examples:
-#   ./dev.sh                              # uses gestalt.dev.yaml
+#   ./dev.sh                              # auto-generates ~/.gestalt/config.yaml
 #   ./dev.sh gestalt.local.yaml           # custom config
 #   API_PORT=9090 WEB_PORT=4000 ./dev.sh  # custom ports
 
@@ -55,19 +55,15 @@ if [[ -f "$GESTALT_DIR/.env" ]]; then
     set +a
 fi
 
-CONFIG="${1:-${GESTALT_CONFIG:-$GESTALT_DIR/gestalt.dev.yaml}}"
-if [[ "$CONFIG" != /* ]]; then
-    CONFIG="$GESTALT_DIR/$CONFIG"
-fi
-
-if [[ ! -f "$CONFIG" ]]; then
-    err "Config not found: $CONFIG"
-    echo ""
-    echo "Quick start options:"
-    echo "  1. Use the built-in dev config:  ./dev.sh"
-    echo "  2. Use a custom config:          ./dev.sh path/to/config.yaml"
-    echo "  3. Copy and customize:           cp gestalt.dev.yaml gestalt.local.yaml"
-    exit 1
+CONFIG="${1:-${GESTALT_CONFIG:-}}"
+if [[ -n "$CONFIG" ]]; then
+    if [[ "$CONFIG" != /* ]]; then
+        CONFIG="$GESTALT_DIR/$CONFIG"
+    fi
+    if [[ ! -f "$CONFIG" ]]; then
+        err "Config not found: $CONFIG"
+        exit 1
+    fi
 fi
 
 if ! command -v go &>/dev/null; then
@@ -75,10 +71,16 @@ if ! command -v go &>/dev/null; then
     exit 1
 fi
 
-info "Config: $CONFIG"
+if [[ -n "$CONFIG" ]]; then
+    info "Config: $CONFIG"
+fi
 info "Starting Go API server on port $API_PORT..."
 warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
-(cd "$GESTALT_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
+if [[ -n "$CONFIG" ]]; then
+    (cd "$GESTALT_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
+else
+    (cd "$GESTALT_DIR" && go run ./cmd/gestaltd) &
+fi
 API_PID=$!
 
 API_READY=false
@@ -89,7 +91,7 @@ for i in $(seq 1 30); do
         break
     fi
     if ! kill -0 "$API_PID" 2>/dev/null; then
-        err "Go server exited unexpectedly. Check your config: $CONFIG"
+        err "Go server exited unexpectedly.${CONFIG:+ Check your config: $CONFIG}"
         wait "$API_PID" || true
         exit 1
     fi
