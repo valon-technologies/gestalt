@@ -433,7 +433,7 @@ func resolvePackagePath(baseDir, value string) string {
 
 // ValidateStructure checks config shape: integration references, plugin
 // declarations, connection references, URL template params, egress rules.
-// Called by Load (and therefore by bundle and validate). Does not require
+// Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key, auth.provider, or datastore.provider.
 func ValidateStructure(cfg *Config) error {
 	if cfg.Server.APITokenTTL != "" {
@@ -477,7 +477,7 @@ func ValidateStructure(cfg *Config) error {
 // ValidateRuntime checks runtime-only requirements: encryption key, auth
 // provider, and datastore provider. Callers that need a fully operational
 // config (serve) should call this after Load. Callers that only need
-// structural correctness (bundle, validate) should not.
+// structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
 	if cfg.Auth.Provider == "" {
 		return fmt.Errorf("config validation: auth.provider is required")

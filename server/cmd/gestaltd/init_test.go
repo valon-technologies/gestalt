@@ -109,11 +109,11 @@ func TestPluginFingerprintStable(t *testing.T) {
 		Env:     map[string]string{"API_KEY": "abc123"},
 	}
 
-	first, err := pluginFingerprint("external", plugin, nil)
+	first, err := pluginFingerprint("external", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint: %v", err)
 	}
-	second, err := pluginFingerprint("external", plugin, nil)
+	second, err := pluginFingerprint("external", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint second: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestPluginFingerprintStable(t *testing.T) {
 	}
 
 	plugin.Package = "./plugins/dummy.tar.gz"
-	third, err := pluginFingerprint("external", plugin, nil)
+	third, err := pluginFingerprint("external", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint third: %v", err)
 	}
@@ -136,11 +136,11 @@ func TestPluginFingerprintIncludesPreparedConfig(t *testing.T) {
 
 	plugin := &config.PluginDef{Package: "./plugins/dummy.tar.gz"}
 
-	first, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "one"})
+	first, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "one"}, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint first: %v", err)
 	}
-	second, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "two"})
+	second, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "two"}, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint second: %v", err)
 	}
@@ -168,8 +168,9 @@ func TestPrepareConfigResolvesPluginPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
-	if entry.Package != packagePath {
-		t.Fatalf("entry.Package = %q, want %q", entry.Package, packagePath)
+	wantPackage := filepath.ToSlash(filepath.Base(packagePath))
+	if entry.Package != wantPackage {
+		t.Fatalf("entry.Package = %q, want %q (relative to config dir)", entry.Package, wantPackage)
 	}
 
 	_, cfg, err := loadConfigForExecution(cfgPath, true)
@@ -192,7 +193,7 @@ func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginPackage(t *testing.T
 	if err == nil {
 		t.Fatal("expected unprepared plugin package to fail")
 	}
-	if !strings.Contains(err.Error(), "gestaltd bundle") {
+	if !strings.Contains(err.Error(), "gestaltd init") {
 		t.Fatalf("expected init guidance, got: %v", err)
 	}
 }

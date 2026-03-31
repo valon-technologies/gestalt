@@ -1,6 +1,6 @@
 # Plugin Packaging
 
-Gestalt can run plugins directly from a local executable, but it can also install and lock packaged plugins. Packaged plugins are the better fit for deployment because they give `gestaltd bundle` something explicit to verify and install.
+Gestalt can run plugins directly from a local executable, but it can also install and lock packaged plugins. Packaged plugins are the better fit for deployment because they give `gestaltd init` something explicit to verify and install.
 
 ## The Manifest
 
@@ -100,17 +100,17 @@ integrations:
 
 Plain `http://` is rejected. Remote packages must use HTTPS.
 
-## What `bundle` Does
+## What `init` Does
 
-`gestaltd bundle` installs packaged plugins into the output directory and records them in `gestalt.lock.json`.
+`gestaltd init` installs packaged plugins and records them in `gestalt.lock.json`.
 
-The bundled state includes:
+The prepared state includes:
 
 - `.gestalt/plugins/...`
 - `gestalt.lock.json`
 
-When you later run `gestaltd serve --locked` against the bundled config, startup succeeds only if those prepared artifacts still match the config.
+When you later run `gestaltd serve --locked`, startup succeeds only if those prepared artifacts still match the config.
 
 ## Why Packaging Matters
 
-Packaging gives you repeatable installs, artifact digest verification, platform-specific binaries in one archive, optional config schema validation, and deterministic production startup. For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd bundle` is the stronger model.
+Packaging gives you repeatable installs, artifact digest verification, platform-specific binaries in one archive, optional config schema validation, and deterministic production startup. For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd init` is the stronger model.

@@ -10,8 +10,8 @@ import { Cards } from 'nextra/components'
 | --- | --- |
 | `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
 | `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, integrations, runtimes, bindings, and egress policy. |
-| `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd bundle`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
-| Deploy assets | `server/Dockerfile`, `client/Dockerfile`, and a Helm chart for the bundled deployment paths. |
+| `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd init`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
+| Deploy assets | `server/Dockerfile`, `client/Dockerfile`, and a Helm chart for production deployment paths. |
 
 ## The Four Foundations
 
@@ -21,7 +21,7 @@ Your YAML file declares the feature sets that make up a Gestalt deployment: plat
 
 ### Prepared State
 
-If your config points at remote OpenAPI specs, GraphQL endpoints, or packaged plugins, `gestaltd bundle` resolves them into a self-contained output directory. Production deployments normally start from that bundled state with `gestaltd serve --locked`.
+If your config points at remote OpenAPI specs, GraphQL endpoints, or packaged plugins, `gestaltd init` resolves them and writes lock state next to the config. Production deployments normally start from that prepared state with `gestaltd serve --locked`.
 
 ### Providers And Invocation
 
@@ -38,7 +38,7 @@ The same provider graph can be reached through the HTTP API, the embedded web UI
 | No config | Local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key. |
 | Docker | Single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`. |
 | Helm on Kubernetes | One Deployment for `gestaltd`, optional init container for locked startup. |
-| Bare binary | `gestaltd`, `gestaltd serve`, `gestaltd bundle`, and `gestaltd validate`. |
+| Bare binary | `gestaltd`, `gestaltd serve`, `gestaltd init`, and `gestaltd validate`. |
 
 ## Start Here
 
@@ -50,7 +50,7 @@ The same provider graph can be reached through the HTTP API, the embedded web UI
     See how config, providers, the invocation broker, bindings, runtimes, and MCP fit together.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/concepts/configuration">
-    Learn the top-level primitives and the lifecycle of `bundle`, `validate`, and `serve --locked`.
+    Learn the top-level primitives and the lifecycle of `init`, `validate`, and `serve --locked`.
   </Cards.Card>
   <Cards.Card title="Deploy" href="/deploy">
     Use the shipped Docker and Helm paths, then adapt the same model to Fly.io, Railway, Render, or Lambda.

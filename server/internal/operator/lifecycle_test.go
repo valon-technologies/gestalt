@@ -83,8 +83,9 @@ func TestInitAtPath_WritesLockfileWithPluginEntry(t *testing.T) {
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry %q: %+v", key, lock.Plugins)
 	}
-	if entry.Package != pluginDir {
-		t.Fatalf("entry.Package = %q, want %q", entry.Package, pluginDir)
+	wantPackage := filepath.ToSlash(filepath.Base(pluginDir))
+	if entry.Package != wantPackage {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, wantPackage)
 	}
 	if entry.Manifest == "" {
 		t.Fatal("entry.Manifest is empty")
@@ -302,11 +303,11 @@ func TestPluginFingerprint_Stable(t *testing.T) {
 	plugin := &config.PluginDef{
 		Package: "./test-plugin-dir",
 	}
-	first, err := PluginFingerprint("example", plugin, nil)
+	first, err := PluginFingerprint("example", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("example", plugin, nil)
+	second, err := PluginFingerprint("example", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
@@ -321,11 +322,11 @@ func TestPluginFingerprint_ChangesWithConfig(t *testing.T) {
 	plugin := &config.PluginDef{
 		Package: "./test-plugin-dir",
 	}
-	first, err := PluginFingerprint("example", plugin, map[string]any{"key": "one"})
+	first, err := PluginFingerprint("example", plugin, map[string]any{"key": "one"}, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("example", plugin, map[string]any{"key": "two"})
+	second, err := PluginFingerprint("example", plugin, map[string]any{"key": "two"}, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
@@ -340,11 +341,11 @@ func TestPluginFingerprint_ChangesWithName(t *testing.T) {
 	plugin := &config.PluginDef{
 		Package: "./test-plugin-dir",
 	}
-	first, err := PluginFingerprint("alpha", plugin, nil)
+	first, err := PluginFingerprint("alpha", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("beta", plugin, nil)
+	second, err := PluginFingerprint("beta", plugin, nil, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
@@ -485,8 +486,9 @@ func TestInitAtPath_RuntimePlugin(t *testing.T) {
 	if !ok {
 		t.Fatalf("lockfile missing runtime plugin entry %q", key)
 	}
-	if entry.Package != srcDir {
-		t.Fatalf("entry.Package = %q, want %q", entry.Package, srcDir)
+	wantRuntimePkg := filepath.ToSlash(filepath.Base(srcDir))
+	if entry.Package != wantRuntimePkg {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, wantRuntimePkg)
 	}
 	if entry.Manifest == "" {
 		t.Fatal("entry.Manifest is empty")

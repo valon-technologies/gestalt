@@ -34,10 +34,10 @@ docker run -p 8080:8080 -v ./config.yaml:/etc/gestalt/config.yaml valontechnolog
 
 The trailing `gestaltd` overrides the default CMD (`serve --locked`) so the server auto-prepares missing state on startup.
 
-For production, bundle first and use the default locked mode:
+For production, init first and use the default locked mode:
 
 ```sh
-docker run -p 8080:8080 -v ./bundle:/etc/gestalt valontechnologies/gestaltd:latest
+docker run -p 8080:8080 -v ./config:/etc/gestalt valontechnologies/gestaltd:latest
 ```
 
 ## Run `gestaltd` With No Config
@@ -53,7 +53,7 @@ The generated local config uses `auth.provider: none`, SQLite as the datastore a
 The server listens on `http://localhost:8080`. The web UI is served from that same port.
 
 <Callout>
-  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd bundle` followed by `gestaltd serve --locked`.
+  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd init` followed by `gestaltd serve --locked`.
 </Callout>
 
 ## Open The UI
@@ -101,14 +101,14 @@ integrations:
 
 This is the smallest useful production-shaped config: explicit `server`, `auth`, and `datastore` blocks, one named integration, one connection with `mode: none`, and one REST API surface pointing at an OpenAPI spec.
 
-## Bundle And Validate It
+## Init And Validate It
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
-gestaltd validate --config ./bundle/config.yaml
+gestaltd init --config ./config.yaml
+gestaltd validate --config ./config.yaml
 ```
 
-`bundle` resolves remote provider inputs into a self-contained output directory. For the config above, the bundle contains:
+`init` resolves remote provider inputs in-place. For the config above, init creates:
 
 - `gestalt.lock.json`
 - `.gestalt/providers/github.json`
@@ -116,7 +116,7 @@ gestaltd validate --config ./bundle/config.yaml
 ## Start From Locked State
 
 ```sh
-gestaltd serve --locked --config ./bundle/config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
 
 This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.

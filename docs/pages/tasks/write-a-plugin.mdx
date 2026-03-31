@@ -113,11 +113,11 @@ integrations:
       package: ./dist/my-tool
 ```
 
-Then bundle and serve:
+Then init and serve:
 
 ```sh
-gestaltd bundle --config config.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/config.yaml
+gestaltd init --config config.yaml
+gestaltd serve --locked --config config.yaml
 ```
 
 ## Manual auth plugins

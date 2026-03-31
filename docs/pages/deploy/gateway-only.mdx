@@ -183,7 +183,7 @@ egress:
 
 ## Startup
 
-Gateway-only configs have no remote API specs to fetch, so locked startup works without `gestaltd bundle`:
+Gateway-only configs have no remote API specs to fetch, so locked startup works without `gestaltd init`:
 
 ```sh
 gestaltd serve --config ./gateway.yaml
@@ -192,8 +192,8 @@ gestaltd serve --config ./gateway.yaml
 For production, you can still use the locked flow:
 
 ```sh
-gestaltd bundle --config ./gateway.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/gateway.yaml
+gestaltd init --config ./gateway.yaml
+gestaltd serve --locked --config ./gateway.yaml
 ```
 
 See [Deploy Overview](/deploy) for Docker, Kubernetes, and other deployment targets.

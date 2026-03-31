@@ -99,16 +99,16 @@ ui:
 
 `gestaltd` resolves the package from the GitHub release, installs it into `.gestalt/plugins/`, and locks it in `gestalt.lock.json`.
 
-## Bundled Deployment
+## Locked Deployment
 
-For production, use `gestaltd bundle` to prepare a self-contained deployment:
+For production, use `gestaltd init` to prepare lock state:
 
 ```sh
-gestaltd bundle --config config.yaml --output ./deploy
-gestaltd serve --locked --config ./deploy/config.yaml
+gestaltd init --config config.yaml
+gestaltd serve --locked --config config.yaml
 ```
 
-The bundle includes the resolved UI plugin assets and lock state. `--locked` prevents automatic resolution at startup.
+The prepared state includes the resolved UI plugin assets and lockfile. `--locked` prevents automatic resolution at startup.
 
 ## No UI Plugin
 

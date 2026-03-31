@@ -242,8 +242,8 @@ The `gestaltd` server binary.
 
 ```sh
 gestaltd [--config PATH]
+gestaltd init [--config PATH]
 gestaltd serve [--config PATH] [--locked]
-gestaltd bundle --config PATH --output DIR
 gestaltd validate [--config PATH] [--init]
 gestaltd plugin package [flags]
 gestaltd version
@@ -254,9 +254,9 @@ gestaltd version
 | Command | Purpose |
 | --- | --- |
 | `gestaltd` | Default start. Auto-generates a local config if none exists. Auto-prepares missing state. |
+| `gestaltd init` | Resolve remote providers and packaged plugins and write lock state. |
 | `gestaltd serve` | Start the server from an explicit config path. |
 | `gestaltd serve --locked` | Start the server. Fail if prepared state is missing or stale. |
-| `gestaltd bundle` | Resolve remote artifacts and packaged plugins into a self-contained output directory. |
 | `gestaltd validate` | Load and validate config without starting the server. |
 | `gestaltd plugin package` | Package a plugin directory or binary. |
 | `gestaltd version` | Print the binary version and exit. |
@@ -284,28 +284,27 @@ When a command needs a config path:
 4. `~/.gestalt/config.yaml`
 5. `/etc/gestalt/config.yaml`
 
-## `bundle`
+## `init`
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
+gestaltd init --config ./config.yaml
 ```
 
-Produces a self-contained output directory:
+Resolves remote providers and packaged plugins and writes lock state next to the config:
 
-- The bundled config
 - `gestalt.lock.json`
 - `.gestalt/providers/*.json` (prepared provider artifacts)
 - `.gestalt/plugins/...` (installed plugin packages)
 
-Run `bundle` whenever your config contains remote REST upstreams, remote GraphQL upstreams, `plugin.package`, or `plugin.source`.
+Run `init` whenever your config contains remote REST upstreams, remote GraphQL upstreams, `plugin.package`, or `plugin.source`.
 
 ## `serve --locked`
 
 Production startup:
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/config.yaml
+gestaltd init --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
 
 If prepared state is missing or stale, startup fails instead of mutating local state.
@@ -315,13 +314,13 @@ If prepared state is missing or stale, startup fails instead of mutating local s
 Non-mutating config validation. Expects lock state to already exist when the config depends on prepared artifacts.
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
-gestaltd validate --config ./bundle/config.yaml
+gestaltd init --config ./config.yaml
+gestaltd validate --config ./config.yaml
 ```
 
 ### `validate --init`
 
-Run initialization before validating. Useful when you want to validate a config that has not been bundled yet:
+Run initialization before validating:
 
 ```sh
 gestaltd validate --init --config ./config.yaml
