@@ -13,7 +13,7 @@ import (
 
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,9 +36,9 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return pluginapi.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
+		return pluginhost.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
 	case "runtime":
-		return pluginapi.ServeRuntime(ctx, &echoRuntimePlugin{})
+		return pluginhost.ServeRuntime(ctx, &echoRuntimePlugin{})
 	default:
 		return fmt.Errorf("unknown mode %q", os.Args[1])
 	}
@@ -83,7 +83,7 @@ func (p *echoRuntimePlugin) Start(ctx context.Context, req *pluginapiv1.StartRun
 	}
 
 	if p.hostConn == nil {
-		conn, host, err := pluginapi.DialRuntimeHost(ctx)
+		conn, host, err := pluginhost.DialRuntimeHost(ctx)
 		if err != nil {
 			return nil, status.Errorf(codes.Unavailable, "dial runtime host: %v", err)
 		}
