@@ -30,7 +30,6 @@ func TestValidateConfigForManifest(t *testing.T) {
 		Version: "0.1.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: "schemas/config.schema.json",
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -120,7 +119,6 @@ func TestValidateConfigForManifestRuntimeDoesNotUseProviderSchema(t *testing.T) 
 		Version: "0.1.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: "schemas/provider.schema.json",
 		},
 		Artifacts: []pluginmanifestv1.Artifact{

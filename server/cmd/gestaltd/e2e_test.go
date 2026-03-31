@@ -357,12 +357,10 @@ func writeManifest(t *testing.T, pluginDir, version string) {
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/test/plugins/provider",
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   "github.com/test/plugins/provider",
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
