@@ -54,7 +54,16 @@ func (b *Base) executeREST(ctx context.Context, operation string, params map[str
 		return apiexec.DoPaginatedWithExecutor(ctx, b.httpClient(), req, pgn, executeEgressHTTP)
 	}
 
-	return executeEgressHTTP(ctx, b.httpClient(), req)
+	result, err := executeEgressHTTP(ctx, b.httpClient(), req)
+	if err != nil {
+		return nil, err
+	}
+
+	if b.ResponseMapping != nil {
+		result = applyResponseMapping(result, b.ResponseMapping)
+	}
+
+	return result, nil
 }
 
 func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.Request) (egress.Resolution, error) {
