@@ -388,39 +388,6 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 }
 
-func TestExecutableProviderAcceptsMinOnlyProtocolVersion(t *testing.T) {
-	t.Parallel()
-
-	bin := buildMinProtocolProviderBinary(t)
-	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
-			"minproto": {
-				Plugin: &config.PluginDef{
-					Command: bin,
-				},
-			},
-		},
-	}
-
-	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("minproto")
-	if err != nil {
-		t.Fatalf("providers.Get(minproto): %v", err)
-	}
-	if prov.Name() != "minproto" {
-		t.Fatalf("provider name = %q", prov.Name())
-	}
-	if len(prov.ListOperations()) != 1 || prov.ListOperations()[0].Name != "ping" {
-		t.Fatalf("operations = %+v", prov.ListOperations())
-	}
-}
-
 func buildEchoPluginBinary(t *testing.T) string {
 	t.Helper()
 
@@ -443,19 +410,6 @@ func buildExampleProviderBinary(t *testing.T) string {
 	cmd.Dir = filepath.Join(root, "examples", "plugins", "provider-go")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build example provider: %v\n%s", err, out)
-	}
-	return bin
-}
-
-func buildMinProtocolProviderBinary(t *testing.T) string {
-	t.Helper()
-
-	bin := filepath.Join(t.TempDir(), "minproto-provider")
-	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-o", bin, "./internal/testplugins/min_protocol_provider")
-	cmd.Dir = filepath.Join(root, "server")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build min protocol provider: %v\n%s", err, out)
 	}
 	return bin
 }
@@ -503,7 +457,6 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		Version: "1.0.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			Auth: &pluginmanifestv1.ProviderAuth{
 				Type:             pluginmanifestv1.AuthTypeOAuth2,
 				AuthorizationURL: "https://example.com/authorize",
@@ -583,12 +536,10 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	bin := buildEchoPluginBinary(t)
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/acme/plugins/echo",
-		Version: "1.0.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   "github.com/acme/plugins/echo",
+		Version:  "1.0.0",
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		},

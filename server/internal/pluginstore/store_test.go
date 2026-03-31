@@ -306,7 +306,6 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 		Version: version,
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Protocol:         pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
 			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -345,12 +344,10 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -397,12 +394,10 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		digest = digestOverride
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -436,12 +431,10 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 	t.Helper()
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -500,12 +493,10 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(firstContent))
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -562,12 +553,10 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	return &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		},
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

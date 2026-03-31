@@ -50,12 +50,6 @@ A runtime plugin is long-lived. After startup, it can call back into the host th
 
 That is how a runtime plugin participates in the same execution model as built-in runtimes.
 
-## Protocol Versioning
-
-The host and plugin speak an explicit protocol version. Provider metadata includes a supported range, and startup fails if the current host version is outside that range.
-
-That check is what allows packaged plugins to be validated during `bundle`.
-
 ## Config Placement
 
 Provider plugin config lives here:

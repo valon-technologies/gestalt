@@ -45,9 +45,6 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 	if err != nil {
 		return nil, err
 	}
-	if err := checkProtocolCompatibility(meta); err != nil {
-		return nil, err
-	}
 	if schemaJSON := meta.GetConfigSchemaJson(); schemaJSON != "" {
 		slog.Warn("validating plugin config requires executing plugin binary", "plugin", name)
 		validationTarget := config
@@ -165,26 +162,6 @@ type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
 
 func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.sessionCatalog(ctx, token)
-}
-
-func checkProtocolCompatibility(meta *proto.ProviderMetadata) error {
-	minV := meta.GetMinProtocolVersion()
-	maxV := meta.GetMaxProtocolVersion()
-	if minV == 0 && maxV == 0 {
-		return nil
-	}
-	if maxV == 0 {
-		if proto.CurrentProtocolVersion < minV {
-			return fmt.Errorf("plugin requires protocol version %d+, host speaks %d",
-				minV, proto.CurrentProtocolVersion)
-		}
-		return nil
-	}
-	if proto.CurrentProtocolVersion < minV || proto.CurrentProtocolVersion > maxV {
-		return fmt.Errorf("plugin requires protocol version %d-%d, host speaks %d",
-			minV, maxV, proto.CurrentProtocolVersion)
-	}
-	return nil
 }
 
 func callStartProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any) error {

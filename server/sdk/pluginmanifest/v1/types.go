@@ -26,7 +26,6 @@ type WebUIMetadata struct {
 }
 
 type Provider struct {
-	Protocol             ProtocolRange                      `json:"protocol,omitzero"`
 	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty"`
 	Auth                 *ProviderAuth                      `json:"auth,omitempty"`
 	MCP                  bool                               `json:"mcp,omitempty"`
@@ -129,11 +128,6 @@ type CredentialField struct {
 	Label       string `json:"label,omitempty"`
 	Description string `json:"description,omitempty"`
 	HelpURL     string `json:"help_url,omitempty"`
-}
-
-type ProtocolRange struct {
-	Min int `json:"min"`
-	Max int `json:"max"`
 }
 
 type Artifact struct {

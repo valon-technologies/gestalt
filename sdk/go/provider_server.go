@@ -17,13 +17,6 @@ type ConfigSchemaProvider interface {
 	ConfigSchemaJSON() string
 }
 
-// ProtocolVersionProvider is an optional interface a [Provider] can implement
-// to advertise the range of protocol versions it supports. If not implemented,
-// the server reports the current protocol version as both min and max.
-type ProtocolVersionProvider interface {
-	ProtocolVersionRange() (min, max int32)
-}
-
 // ProviderServer adapts a [Provider] implementation to the gRPC
 // ProviderPlugin service. Most plugin authors should use [ServeProvider]
 // instead of constructing this directly.
@@ -61,18 +54,14 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	if csp, ok := s.provider.(ConfigSchemaProvider); ok {
 		configSchema = csp.ConfigSchemaJSON()
 	}
-	minPV, maxPV := protocolVersionRange(s.provider)
-
 	return &proto.ProviderMetadata{
-		Name:               s.provider.Name(),
-		DisplayName:        s.provider.DisplayName(),
-		Description:        s.provider.Description(),
-		ConnectionMode:     coreConnectionModeToProto(s.provider.ConnectionMode()),
-		ConnectionParams:   connParams,
-		ConfigSchemaJson:   configSchema,
-		MinProtocolVersion: minPV,
-		MaxProtocolVersion: maxPV,
-		AuthTypes:          authTypes(s.provider),
+		Name:             s.provider.Name(),
+		DisplayName:      s.provider.DisplayName(),
+		Description:      s.provider.Description(),
+		ConnectionMode:   coreConnectionModeToProto(s.provider.ConnectionMode()),
+		ConnectionParams: connParams,
+		ConfigSchemaJson: configSchema,
+		AuthTypes:        authTypes(s.provider),
 	}, nil
 }
 
@@ -112,11 +101,4 @@ func authTypes(p Provider) []string {
 		return []string{"manual"}
 	}
 	return nil
-}
-
-func protocolVersionRange(p Provider) (min, max int32) {
-	if pvp, ok := p.(ProtocolVersionProvider); ok {
-		return pvp.ProtocolVersionRange()
-	}
-	return proto.CurrentProtocolVersion, proto.CurrentProtocolVersion
 }

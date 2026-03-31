@@ -153,9 +153,7 @@ func newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, diges
 
 	switch kind {
 	case pluginmanifestv1.KindProvider:
-		m.Provider = &pluginmanifestv1.Provider{
-			Protocol: pluginmanifestv1.ProtocolRange{Min: 1, Max: 1},
-		}
+		m.Provider = &pluginmanifestv1.Provider{}
 		m.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{
 			ArtifactPath: artifactRel,
 		}
