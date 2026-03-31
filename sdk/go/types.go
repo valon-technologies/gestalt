@@ -4,15 +4,29 @@ import (
 	"context"
 )
 
+// ConnectionMode controls how a provider authenticates with its upstream
+// service. The mode is declared as provider metadata and tells the host
+// whether a user-supplied OAuth token, a service-level identity, both,
+// or neither is required.
 type ConnectionMode string
 
 const (
-	ConnectionModeNone     ConnectionMode = "none"
-	ConnectionModeUser     ConnectionMode = "user"
+	// ConnectionModeNone means the provider needs no credentials.
+	ConnectionModeNone ConnectionMode = "none"
+	// ConnectionModeUser requires per-user OAuth tokens supplied by the host.
+	ConnectionModeUser ConnectionMode = "user"
+	// ConnectionModeIdentity uses a shared service identity configured on the host.
 	ConnectionModeIdentity ConnectionMode = "identity"
-	ConnectionModeEither   ConnectionMode = "either"
+	// ConnectionModeEither accepts either a user token or a service identity.
+	ConnectionModeEither ConnectionMode = "either"
 )
 
+// Provider is the core interface that every provider plugin must implement.
+// It declares metadata about the provider, lists the operations it supports,
+// and executes individual operations when called by the host.
+//
+// The token argument to Execute is a user OAuth token supplied by the host
+// when [ConnectionMode] is [ConnectionModeUser] or [ConnectionModeEither].
 type Provider interface {
 	Name() string
 	DisplayName() string
@@ -22,10 +36,15 @@ type Provider interface {
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
+// ProviderStarter is an optional interface that a [Provider] can implement
+// to receive one-time initialization when the host starts the plugin. The
+// config map contains provider-level configuration set in the plugin manifest.
 type ProviderStarter interface {
 	Start(ctx context.Context, name string, config map[string]any) error
 }
 
+// Operation describes a single invocable action exposed by a [Provider].
+// Method is an HTTP-like verb (GET, POST, etc.) used for categorization.
 type Operation struct {
 	Name        string
 	Description string
@@ -33,6 +52,7 @@ type Operation struct {
 	Parameters  []Parameter
 }
 
+// Parameter describes a single input to an [Operation].
 type Parameter struct {
 	Name        string
 	Type        string
@@ -41,11 +61,16 @@ type Parameter struct {
 	Default     any
 }
 
+// OperationResult holds the response from a [Provider.Execute] call.
+// Status is an HTTP-like status code; Body is the response payload, typically JSON.
 type OperationResult struct {
 	Status int
 	Body   string
 }
 
+// ConnectionParamDef describes a single credential or configuration value that
+// a provider needs from the host's connection store. From and Field control
+// where the value is sourced (e.g. from an OAuth token field).
 type ConnectionParamDef struct {
 	Required    bool
 	Description string
@@ -54,63 +79,96 @@ type ConnectionParamDef struct {
 	Field       string
 }
 
+// ConnectionParamProvider is an optional interface a [Provider] can implement
+// to declare the connection parameters it needs. The host resolves these
+// parameters and delivers them via [WithConnectionParams] on each Execute call.
 type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
+// ManualAuthProvider is an optional interface a [Provider] can implement to
+// indicate it accepts manually-entered credentials instead of OAuth.
 type ManualAuthProvider interface {
 	SupportsManualAuth() bool
 }
 
+// AuthTypeLister is an optional interface a [Provider] can implement to
+// advertise the authentication methods it supports (e.g. "oauth", "manual").
 type AuthTypeLister interface {
 	AuthTypes() []string
 }
 
 type connectionParamsKey struct{}
 
+// WithConnectionParams returns a child context carrying the given connection
+// parameters. The host calls this before invoking [Provider.Execute] so that
+// providers implementing [ConnectionParamProvider] can retrieve their
+// resolved credentials via [ConnectionParams].
 func WithConnectionParams(ctx context.Context, params map[string]string) context.Context {
 	return context.WithValue(ctx, connectionParamsKey{}, params)
 }
 
+// ConnectionParams extracts the connection parameters stored by
+// [WithConnectionParams]. Returns nil if none are present.
 func ConnectionParams(ctx context.Context) map[string]string {
 	params, _ := ctx.Value(connectionParamsKey{}).(map[string]string)
 	return params
 }
 
+// Runtime is the interface that every runtime plugin must implement. Unlike
+// providers, runtimes are long-lived processes that react to external events
+// and call back into the platform via a [RuntimeHost].
+//
+// Start is called once with the plugin's configuration, the set of available
+// capabilities, and a host handle for making callbacks. Stop signals the
+// runtime to shut down gracefully.
 type Runtime interface {
 	Start(ctx context.Context, name string, config map[string]any, capabilities []Capability, host RuntimeHost) error
 	Stop(ctx context.Context) error
 }
 
+// RuntimeHost gives a [Runtime] the ability to call back into the Gestalt
+// platform. Invoke executes an operation on another provider instance, and
+// ListCapabilities returns the currently available operations across all
+// connected providers.
 type RuntimeHost interface {
 	Invoke(ctx context.Context, principal Principal, provider, instance, operation string, params map[string]any) (*OperationResult, error)
 	ListCapabilities(ctx context.Context) ([]Capability, error)
 }
 
+// Principal identifies the user on whose behalf a runtime invokes an
+// operation. Source indicates how the user was authenticated.
 type Principal struct {
 	UserID   string
 	Identity *UserIdentity
 	Source   PrincipalSource
 }
 
+// UserIdentity holds display information about a user.
 type UserIdentity struct {
 	Email       string
 	DisplayName string
 	AvatarURL   string
 }
 
+// PrincipalSource indicates how a [Principal] was authenticated.
 type PrincipalSource string
 
 const (
-	PrincipalSourceSession  PrincipalSource = "session"
+	// PrincipalSourceSession identifies a user authenticated via a browser session.
+	PrincipalSourceSession PrincipalSource = "session"
+	// PrincipalSourceAPIToken identifies a user authenticated via an API token.
 	PrincipalSourceAPIToken PrincipalSource = "api_token"
-	PrincipalSourceEnv      PrincipalSource = "env"
+	// PrincipalSourceEnv identifies a system-level principal from the environment.
+	PrincipalSourceEnv PrincipalSource = "env"
 )
 
+// Capability describes a single operation available through the platform,
+// including which provider exposes it. Runtimes receive these on startup and
+// can refresh them via [RuntimeHost.ListCapabilities].
 type Capability struct {
 	Provider    string
 	Operation   string
 	Description string
 	Parameters  []Parameter
 }
-
