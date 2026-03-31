@@ -69,6 +69,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
 	}
+	noAuth := cfg.Auth.Name() == "none"
 	var stateCodec *integrationOAuthStateCodec
 	var encryptor *cryptoutil.AESGCMEncryptor
 	if len(cfg.StateSecret) > 0 {
@@ -82,6 +83,8 @@ func New(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("init state encryptor: %w", err)
 		}
 		encryptor = enc
+	} else if !noAuth {
+		return nil, fmt.Errorf("state secret is required when auth is enabled")
 	}
 	now := cfg.Now
 	if now == nil {
@@ -89,7 +92,6 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	resolver := principal.NewResolver(cfg.Auth, cfg.Datastore)
-	noAuth := cfg.Auth.Name() == "none"
 
 	router := chi.NewRouter()
 	s := &Server{

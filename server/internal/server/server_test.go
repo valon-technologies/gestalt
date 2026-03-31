@@ -160,6 +160,27 @@ func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Conte
 	return testConnectionAuth(integration, &testOAuthHandler{refreshTokenFn: refreshFn})
 }
 
+func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
+	t.Parallel()
+	ds := &coretesting.StubDatastore{}
+	providers := func() *registry.PluginMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	_, err := server.New(server.Config{
+		Auth:      &coretesting.StubAuthProvider{N: "google"},
+		Datastore: ds,
+		Providers: providers,
+		Invoker:   invocation.NewBroker(providers, ds),
+	})
+	if err == nil {
+		t.Fatal("expected error when auth is enabled without state secret")
+	}
+	if !strings.Contains(err.Error(), "state secret is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestHealthCheck(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t)

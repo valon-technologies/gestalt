@@ -239,8 +239,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	encKey := crypto.DeriveKey(cfg.Server.EncryptionKey)
-	if encKey == nil {
-		slog.Warn("no encryption key configured; stored secrets will not be encrypted")
+	if encKey == nil && cfg.Auth.Provider != "none" {
+		return nil, fmt.Errorf("bootstrap: server.encryption_key is required when auth is enabled")
 	}
 
 	deps := Deps{

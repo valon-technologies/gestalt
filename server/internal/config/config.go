@@ -486,8 +486,8 @@ func ValidateRuntime(cfg *Config) error {
 	if cfg.Datastore.Provider == "" {
 		return fmt.Errorf("config validation: datastore.provider is required")
 	}
-	if cfg.Server.EncryptionKey == "" {
-		return fmt.Errorf("config validation: server.encryption_key is required")
+	if cfg.Server.EncryptionKey == "" && cfg.Auth.Provider != "none" {
+		return fmt.Errorf("config validation: server.encryption_key is required when auth is enabled (auth.provider is %q)", cfg.Auth.Provider)
 	}
 	return nil
 }
