@@ -1,8 +1,8 @@
-FROM valontechnologies/gestaltd:latest AS bundle
+FROM valontechnologies/gestaltd:latest AS init
 USER root
-COPY config.yaml /src/config.yaml
-RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
+COPY config.yaml /app/config.yaml
+RUN ["/gestaltd", "init", "--config", "/app/config.yaml"]
 
 FROM valontechnologies/gestaltd:latest
-COPY --from=bundle /app/ /app/
+COPY --from=init /app/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]

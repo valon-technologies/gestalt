@@ -80,11 +80,11 @@ integrations:
 
 Set `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
 
-## Bundle and Validate
+## Init and Validate
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
-gestaltd validate --config ./bundle/config.yaml
+gestaltd init --config ./config.yaml
+gestaltd validate --config ./config.yaml
 ```
 
 This prepares remote provider artifacts and catches config errors.
@@ -92,7 +92,7 @@ This prepares remote provider artifacts and catches config errors.
 ## Run
 
 ```sh
-gestaltd serve --locked --config ./bundle/config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
 
 Then:

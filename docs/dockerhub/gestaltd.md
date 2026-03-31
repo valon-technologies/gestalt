@@ -20,7 +20,7 @@
 
 - Default config path: `/etc/gestalt/config.yaml`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config depends on remote OpenAPI or GraphQL specs, or on `plugin.package`, bundle the config first and run from the prepared output.
+- Locked startup is the default. If your config depends on remote OpenAPI or GraphQL specs, or on `plugin.package`, init the config first.
 
 ## Supported tags
 
@@ -66,18 +66,18 @@ datastore:
 integrations: {}
 ```
 
-## Run a bundled production image
+## Run a prepared production image
 
 If your config references remote OpenAPI or GraphQL sources, or `plugin.package`, prepare it during the image build:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:latest AS bundle
+FROM valontechnologies/gestaltd:latest AS init
 USER root
-COPY config.yaml /src/config.yaml
-RUN ["/gestaltd", "bundle", "--config", "/src/config.yaml", "--output", "/app"]
+COPY config.yaml /app/config.yaml
+RUN ["/gestaltd", "init", "--config", "/app/config.yaml"]
 
 FROM valontechnologies/gestaltd:latest
-COPY --from=bundle /app/ /app/
+COPY --from=init /app/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
@@ -161,7 +161,7 @@ You can also use it to check startup behavior directly:
 docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
-## Building plugins and bundles
+## Building plugins
 
 To compile Go plugins, use a standard `golang:` image and copy `gestaltd` from the runtime image:
 
@@ -175,7 +175,7 @@ WORKDIR /src
 COPY . .
 RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
     gestaltd plugin package --binary /tmp/myplugin --source github.com/example/myrepo/myplugin --output ./deploy/plugins/myplugin && \
-    gestaltd bundle --config ./deploy/config.yaml --output /app
+    gestaltd init --config ./deploy/config.yaml
 ```
 
 ## Caveats
