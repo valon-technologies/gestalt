@@ -136,7 +136,7 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 
 	needsArtifacts := false
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && !isDeclarative) {
+		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && (!isDeclarative || manifest.IsHybridProvider())) {
 			needsArtifacts = true
 			break
 		}
@@ -181,7 +181,8 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
 					return err
 				}
-			} else {
+			}
+			if !isDeclarative || manifest.IsHybridProvider() {
 				if manifest.Provider.Protocol.Min > manifest.Provider.Protocol.Max {
 					return fmt.Errorf("provider.protocol.min must be <= provider.protocol.max")
 				}

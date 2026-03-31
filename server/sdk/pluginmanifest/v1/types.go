@@ -53,6 +53,10 @@ func (p *Provider) IsDeclarative() bool {
 	return p != nil && len(p.Operations) > 0
 }
 
+func (m *Manifest) IsHybridProvider() bool {
+	return m != nil && m.Provider != nil && len(m.Provider.Operations) > 0 && m.Entrypoints.Provider != nil
+}
+
 type ProviderOperation struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description,omitempty"`
