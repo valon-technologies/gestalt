@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -210,37 +209,18 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 
 func buildEchoPluginBinary(t *testing.T) string {
 	t.Helper()
-
-	bin := filepath.Join(t.TempDir(), "gestalt-plugin-echo")
-	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-o", bin, "./internal/testplugins/echo")
-	cmd.Dir = filepath.Join(root, "server")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build plugin binary: %v\n%s", err, out)
+	if sharedEchoPluginBin == "" {
+		t.Fatal("shared echo plugin binary not initialized")
 	}
-	return bin
+	return sharedEchoPluginBin
 }
 
 func buildExampleProviderBinary(t *testing.T) string {
 	t.Helper()
-
-	bin := filepath.Join(t.TempDir(), "provider-go")
-	root := repoRoot(t)
-	cmd := exec.Command("go", "build", "-o", bin, ".")
-	cmd.Dir = filepath.Join(root, "examples", "plugins", "provider-go")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build example provider: %v\n%s", err, out)
+	if sharedExampleProviderBin == "" {
+		t.Fatal("shared example provider binary not initialized")
 	}
-	return bin
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	return sharedExampleProviderBin
 }
 
 func mustNode(t *testing.T, value any) yaml.Node {
