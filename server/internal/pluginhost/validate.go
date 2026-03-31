@@ -1,4 +1,4 @@
-package pluginapi
+package pluginhost
 
 import (
 	"encoding/json"

@@ -10,7 +10,7 @@ import (
 
 	pluginapiv1 "github.com/valon-technologies/gestalt/sdk/pluginapi/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"google.golang.org/grpc"
 )
 
@@ -65,7 +65,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return nil, err
 		}
 		url, _ := params["url"].(string)
-		invocationID := pluginapi.InvocationID(ctx)
+		invocationID := pluginhost.InvocationID(ctx)
 		resp, err := p.host.ProxyHTTP(ctx, &pluginapiv1.ProxyHTTPRequest{
 			InvocationId: invocationID,
 			Method:       http.MethodGet,
@@ -92,7 +92,7 @@ func (p *proxyProvider) ensureHost(ctx context.Context) error {
 	if p.host != nil {
 		return nil
 	}
-	conn, host, err := pluginapi.DialProviderHost(ctx)
+	conn, host, err := pluginhost.DialProviderHost(ctx)
 	if err != nil {
 		return err
 	}

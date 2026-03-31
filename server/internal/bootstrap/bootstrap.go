@@ -16,7 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
-	"github.com/valon-technologies/gestalt/server/internal/pluginapi"
+	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -732,7 +732,7 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 	if err != nil {
 		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
 	}
-	prov, err := pluginapi.NewDeclarativeProvider(manifest, nil)
+	prov, err := pluginhost.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 	}
@@ -806,7 +806,7 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 	if err != nil {
 		return nil, nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
-	prov, err := pluginapi.NewExecutableProvider(ctx, pluginapi.ExecConfig{
+	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
 		Command:      intg.Plugin.Command,
 		Args:         intg.Plugin.Args,
 		Env:          intg.Plugin.Env,
