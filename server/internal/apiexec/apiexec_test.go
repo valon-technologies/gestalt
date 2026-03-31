@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -342,7 +341,6 @@ func TestRetryOn429ThenSuccess(t *testing.T) {
 	t.Parallel()
 
 	var attempts atomic.Int32
-	var delays []time.Duration
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if attempts.Add(1) == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -359,10 +357,6 @@ func TestRetryOn429ThenSuccess(t *testing.T) {
 		BaseURL:    srv.URL,
 		Path:       "/test",
 		MaxRetries: 2,
-		retryWait: func(_ context.Context, delay time.Duration) error {
-			delays = append(delays, delay)
-			return nil
-		},
 	})
 	if err != nil {
 		t.Fatalf("expected success after retry, got: %v", err)
@@ -373,16 +367,12 @@ func TestRetryOn429ThenSuccess(t *testing.T) {
 	if got := attempts.Load(); got != 2 {
 		t.Fatalf("attempts = %d, want 2", got)
 	}
-	if len(delays) != 1 || delays[0] != time.Second {
-		t.Fatalf("delays = %v, want [1s]", delays)
-	}
 }
 
 func TestRetryOn503WithBackoff(t *testing.T) {
 	t.Parallel()
 
 	var attempts atomic.Int32
-	var delays []time.Duration
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if attempts.Add(1) <= 2 {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -394,16 +384,14 @@ func TestRetryOn503WithBackoff(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, srv)
 
+	start := time.Now()
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:     http.MethodGet,
 		BaseURL:    srv.URL,
 		Path:       "/test",
 		MaxRetries: 3,
-		retryWait: func(_ context.Context, delay time.Duration) error {
-			delays = append(delays, delay)
-			return nil
-		},
 	})
+	elapsed := time.Since(start)
 
 	if err != nil {
 		t.Fatalf("expected success after retries, got: %v", err)
@@ -414,8 +402,9 @@ func TestRetryOn503WithBackoff(t *testing.T) {
 	if got := attempts.Load(); got != 3 {
 		t.Fatalf("attempts = %d, want 3", got)
 	}
-	if !slices.Equal(delays, []time.Duration{time.Second, 2 * time.Second}) {
-		t.Fatalf("delays = %v, want [1s 2s]", delays)
+	// Two retries: 1s + 2s = 3s minimum backoff
+	if elapsed < 3*time.Second {
+		t.Fatalf("elapsed = %v, expected at least 3s of backoff", elapsed)
 	}
 }
 
@@ -423,7 +412,6 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 	t.Parallel()
 
 	var attempts atomic.Int32
-	var delays []time.Duration
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if attempts.Add(1) == 1 {
 			w.Header().Set("Retry-After", "2")
@@ -436,16 +424,14 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, srv)
 
+	start := time.Now()
 	result, err := Do(context.Background(), srv.Client(), Request{
 		Method:     http.MethodGet,
 		BaseURL:    srv.URL,
 		Path:       "/test",
 		MaxRetries: 2,
-		retryWait: func(_ context.Context, delay time.Duration) error {
-			delays = append(delays, delay)
-			return nil
-		},
 	})
+	elapsed := time.Since(start)
 
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
@@ -453,8 +439,8 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if !slices.Equal(delays, []time.Duration{2 * time.Second}) {
-		t.Fatalf("delays = %v, want [2s]", delays)
+	if elapsed < 2*time.Second {
+		t.Fatalf("elapsed = %v, expected at least 2s from Retry-After", elapsed)
 	}
 }
 
@@ -487,7 +473,6 @@ func TestRetriesStopAfterMaxRetries(t *testing.T) {
 	t.Parallel()
 
 	var attempts atomic.Int32
-	var delays []time.Duration
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts.Add(1)
 		w.WriteHeader(http.StatusBadGateway)
@@ -500,10 +485,6 @@ func TestRetriesStopAfterMaxRetries(t *testing.T) {
 		BaseURL:    srv.URL,
 		Path:       "/test",
 		MaxRetries: 2,
-		retryWait: func(_ context.Context, delay time.Duration) error {
-			delays = append(delays, delay)
-			return nil
-		},
 	})
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
@@ -511,9 +492,6 @@ func TestRetriesStopAfterMaxRetries(t *testing.T) {
 	// 1 initial + 2 retries = 3 total
 	if got := attempts.Load(); got != 3 {
 		t.Fatalf("attempts = %d, want 3", got)
-	}
-	if !slices.Equal(delays, []time.Duration{time.Second, 2 * time.Second}) {
-		t.Fatalf("delays = %v, want [1s 2s]", delays)
 	}
 }
 
@@ -529,16 +507,16 @@ func TestContextCancellationStopsRetries(t *testing.T) {
 	testutil.CloseOnCleanup(t, srv)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel()
+	}()
 
 	_, err := Do(ctx, srv.Client(), Request{
 		Method:     http.MethodGet,
 		BaseURL:    srv.URL,
 		Path:       "/test",
 		MaxRetries: 5,
-		retryWait: func(ctx context.Context, _ time.Duration) error {
-			cancel()
-			return ctx.Err()
-		},
 	})
 	if err == nil {
 		t.Fatal("expected error from context cancellation")

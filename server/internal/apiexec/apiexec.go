@@ -35,8 +35,6 @@ var retryableStatusCodes = map[int]bool{
 
 var pathParamRe = regexp.MustCompile(`\{([^}]+)\}`)
 
-type retryWaiter func(context.Context, time.Duration) error
-
 // ResponseChecker validates a response body beyond the default HTTP status check.
 // If it returns a non-nil error, Do treats the response as a failure.
 type ResponseChecker func(status int, body []byte) error
@@ -80,10 +78,6 @@ type Request struct {
 	MaxRetries int
 	// NoRetry disables automatic retry for this request.
 	NoRetry bool
-
-	// retryDelay and retryWait are test hooks for overriding retry timing.
-	retryDelay func(status int, retryAfter string, attempt int) time.Duration
-	retryWait  retryWaiter
 }
 
 // Do executes the request and returns an OperationResult.
@@ -129,14 +123,6 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 	if req.NoRetry {
 		maxRetries = 0
 	}
-	delayForRetry := req.retryDelay
-	if delayForRetry == nil {
-		delayForRetry = retryDelay
-	}
-	waitForRetry := req.retryWait
-	if waitForRetry == nil {
-		waitForRetry = waitForRetryDelay
-	}
 
 	var lastErr error
 	for attempt := range maxRetries + 1 {
@@ -156,9 +142,13 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 			break
 		}
 
-		delay := delayForRetry(statusCode, retryAfter, attempt)
-		if err := waitForRetry(ctx, delay); err != nil {
-			return nil, err
+		delay := retryDelay(statusCode, retryAfter, attempt)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
 		}
 	}
 
@@ -246,18 +236,6 @@ func retryDelay(_ int, retryAfter string, attempt int) time.Duration {
 		}
 	}
 	return baseRetryDelay * (1 << attempt)
-}
-
-func waitForRetryDelay(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 // GraphQLRequest describes a GraphQL API call.
