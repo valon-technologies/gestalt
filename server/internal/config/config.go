@@ -563,10 +563,20 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
 
-	hasInline := plugin.OpenAPI != "" || plugin.GraphQLURL != "" || plugin.MCPURL != "" ||
-		plugin.BaseURL != "" || len(plugin.Operations) > 0 || plugin.Auth != nil || len(plugin.Connections) > 0
-	if hasInline {
-		return fmt.Errorf("config validation: %s %q external plugin cannot use inline fields (openapi, graphql_url, mcp_url, base_url, operations, auth, connections)", kind, name)
+	if len(plugin.Operations) > 0 {
+		return fmt.Errorf("config validation: %s %q external plugin cannot use inline operations", kind, name)
+	}
+
+	if kind != "integration" {
+		hasInline := plugin.OpenAPI != "" || plugin.GraphQLURL != "" || plugin.MCPURL != "" ||
+			plugin.BaseURL != "" || plugin.Auth != nil || len(plugin.Connections) > 0
+		if hasInline {
+			return fmt.Errorf("config validation: %s %q plugin cannot use inline fields", kind, name)
+		}
+	}
+
+	if kind == "integration" && len(plugin.Connections) > 0 {
+		return fmt.Errorf("config validation: integration %q external plugin cannot use inline connections; declare connections in the plugin manifest instead", name)
 	}
 
 	return nil
