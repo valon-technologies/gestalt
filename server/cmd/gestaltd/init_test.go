@@ -192,7 +192,7 @@ func TestLoadConfigForExecutionPreferRejectsUnpreparedPluginPackage(t *testing.T
 	if err == nil {
 		t.Fatal("expected unprepared plugin package to fail")
 	}
-	if !strings.Contains(err.Error(), "gestaltd bundle") {
+	if !strings.Contains(err.Error(), "gestaltd init") {
 		t.Fatalf("expected init guidance, got: %v", err)
 	}
 }

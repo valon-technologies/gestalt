@@ -13,18 +13,18 @@ Bare `gestaltd` auto-generates a local config, boots with `auth.provider: none` 
 ## Production Deployment
 
 ```sh
-gestaltd bundle --config ./config.yaml --output ./bundle
-gestaltd serve --locked --config ./bundle/config.yaml
+gestaltd init --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
 
-`bundle` resolves remote provider specs, installs plugin packages, writes a lockfile, and produces a self-contained output directory. `serve --locked` starts the server from that prepared state without fetching or mutating anything.
+`init` resolves remote provider specs, installs plugin packages, and writes a lockfile. `serve --locked` starts the server from that prepared state without fetching or mutating anything.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `gestaltd` | Local dev: auto-prepares and serves. |
-| `gestaltd bundle --config PATH --output DIR` | Production prep: produces a self-contained deployable bundle. |
+| `gestaltd init --config PATH` | Production prep: resolves providers and plugins and writes lock state. |
 | `gestaltd serve --locked --config PATH` | Production runtime: serves from prepared state only. |
 | `gestaltd validate --config PATH` | CI: validates config without starting the server. |
 | `gestaltd plugin package --binary PATH --id ID --output FILE` | Authoring: packages a plugin binary for distribution. |

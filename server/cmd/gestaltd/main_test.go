@@ -36,11 +36,11 @@ func TestGestaltd_HelpExitsCleanly(t *testing.T) {
 	if !strings.Contains(string(out), "gestaltd validate") {
 		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd bundle") {
-		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd init") {
+		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
 	}
-	if strings.Contains(string(out), "gestaltd init") {
-		t.Fatalf("expected init to be removed from usage, got: %s", out)
+	if strings.Contains(string(out), "gestaltd bundle") {
+		t.Fatalf("expected bundle to be removed from usage, got: %s", out)
 	}
 	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
 		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
@@ -68,15 +68,15 @@ func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
 	}
 }
 
-func TestGestaltdBundleHelpExitsCleanly(t *testing.T) {
+func TestGestaltdInitHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "bundle", "--help")
+	cmd := exec.Command("go", "run", ".", "init", "--help")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'bundle --help', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'init --help', got error: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "gestaltd bundle") {
-		t.Fatalf("expected usage output containing 'gestaltd bundle', got: %s", out)
+	if !strings.Contains(string(out), "gestaltd init") {
+		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
 	}
 }
 

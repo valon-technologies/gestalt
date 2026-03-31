@@ -12,7 +12,7 @@ The chart creates:
 - one `Service`
 - an optional `Ingress`
 - an optional persistent volume claim for `/data`
-- an optional init container for `gestaltd bundle`
+- an optional init container for `gestaltd init`
 
 There is no separate web Deployment. The web UI is served by the same `gestaltd` container as the API.
 
@@ -32,8 +32,8 @@ The chart supports an init container behind `pluginInit.enabled`.
 
 When enabled, the init container:
 
-1. runs `gestaltd bundle --config /etc/gestalt/config.yaml --output /data/bundle`
-2. leaves the bundled config, `gestalt.lock.json`, and `.gestalt/` in a shared volume
+1. copies the config into a writable volume and runs `gestaltd init --config /etc/gestalt/config.yaml`
+2. leaves the config, `gestalt.lock.json`, and `.gestalt/` in a shared volume
 
 The main container then reads from that prepared state.
 

@@ -1,8 +1,8 @@
 # Example: deploying Gestalt with custom Go plugins.
 #
 # This demonstrates the full plugin deployment pipeline: compile Go plugin
-# binaries, package them into plugin directories, and bundle everything
-# into a locked, self-contained deployment artifact.
+# binaries, package them into plugin directories, and initialize lock
+# state for a production deployment.
 #
 # Prerequisites:
 #   - Plugin source code in ./plugins/cmd/<name>/
@@ -26,8 +26,8 @@ RUN --mount=type=secret,id=github_token \
     fi && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
     gestaltd plugin package --binary /tmp/myplugin --source github.com/example/myrepo/myplugin --output ./deploy/plugins/myplugin && \
-    gestaltd bundle --config ./deploy/config.yaml --output /app
+    gestaltd init --config ./deploy/config.yaml
 
 FROM valontechnologies/gestaltd:latest
-COPY --from=build /app/ /app/
+COPY --from=build /src/deploy/ /app/deploy/
 CMD ["serve", "--locked", "--config", "/app/deploy/config.yaml"]

@@ -40,8 +40,8 @@ func run(args []string) error {
 			return runPlugin(args[1:])
 		case "serve":
 			return runServe(args[1:])
-		case "bundle":
-			return runBundle(args[1:])
+		case "init":
+			return runInit(args[1:])
 		case "validate":
 			return runValidate(args[1:])
 		}
@@ -293,6 +293,20 @@ func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {
 	), nil
 }
 
+func runInit(args []string) error {
+	fs := flag.NewFlagSet("gestaltd init", flag.ContinueOnError)
+	fs.Usage = func() { printInitUsage(fs.Output()) }
+	configPath := fs.String("config", "", "path to config file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+
+	return initConfig(*configPath)
+}
+
 func runValidate(args []string) error {
 	fs := flag.NewFlagSet("gestaltd validate", flag.ContinueOnError)
 	fs.Usage = func() { printValidateUsage(fs.Output()) }
@@ -381,13 +395,13 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]")
-	writeUsageLine(w, "  gestaltd bundle --config PATH --output DIR")
+	writeUsageLine(w, "  gestaltd init [--config PATH]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--init]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  bundle      Prepare a self-contained bundle for production deployment")
+	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
 	writeUsageLine(w, "  plugin      Package plugins for distribution")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
@@ -403,7 +417,19 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
 	writeUsageLine(w, "Use --locked for production deployments to prevent automatic mutation")
-	writeUsageLine(w, "at startup. When locked, run `gestaltd bundle` first to prepare state.")
+	writeUsageLine(w, "at startup. When locked, run `gestaltd init` first to prepare state.")
+}
+
+func printInitUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd init [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Resolve remote providers and packaged plugins and write lock state.")
+	writeUsageLine(w, "Creates gestalt.lock.json and .gestalt/ in the config directory.")
+	writeUsageLine(w, "Use this before `gestaltd serve --locked` for production deployments.")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Flags:")
+	writeUsageLine(w, "  --config    Path to the config file")
 }
 
 func printValidateUsage(w io.Writer) {
