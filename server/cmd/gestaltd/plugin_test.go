@@ -332,6 +332,40 @@ func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleasePreservesCompiledWebUIMetadata(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newCompiledWebUIReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	testVersion := "0.0.21-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-compiled-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+
+	manifestData, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.ManifestFile))
+	if err != nil {
+		t.Fatalf("read plugin.json: %v", err)
+	}
+
+	var manifest pluginmanifestv1.Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("unmarshal manifest: %v", err)
+	}
+	if manifest.WebUI == nil || manifest.WebUI.AssetRoot != "out" {
+		t.Fatalf("manifest webui = %#v, want asset_root %q", manifest.WebUI, "out")
+	}
+
+	if _, err := os.Stat(filepath.Join(extractDir, "out", "index.html")); err != nil {
+		t.Fatalf("expected webui asset in archive: %v", err)
+	}
+}
+
 func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	t.Parallel()
 
@@ -355,6 +389,31 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)
 		}
+	}
+}
+
+func TestRun_PluginReleaseTreatsGoModWithoutCmdAsDeclarative(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	testVersion := "0.0.4-test"
+
+	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/webui-test\n\ngo 1.22\n"), 0644)
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-webui-test_v" + testVersion + ".tar.gz"
+	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
+		t.Fatalf("expected declarative archive %s to exist: %v", archiveName, err)
+	}
+
+	compiledArchiveName := "gestalt-plugin-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
+		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
 	}
 }
 
@@ -715,6 +774,31 @@ func newHybridReleaseFixture(t *testing.T, dir string) string {
 			},
 		},
 	})
+
+	return pluginDir
+}
+
+func newCompiledWebUIReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, "compiled-webui-test")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/compiled-webui-test\n\ngo 1.22\n"), 0644)
+	writeTestFile(t, pluginDir, "cmd/main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/compiled-webui-test",
+		Version:     "0.0.1",
+		DisplayName: "Compiled WebUI Test",
+		IconFile:    "branding/icon.svg",
+		Kinds:       []string{pluginmanifestv1.KindWebUI},
+		WebUI: &pluginmanifestv1.WebUIMetadata{
+			AssetRoot: "out",
+		},
+	})
+	writeTestFile(t, pluginDir, "branding/icon.svg", []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, "out/index.html", []byte("<html></html>\n"), 0644)
 	return pluginDir
 }
 

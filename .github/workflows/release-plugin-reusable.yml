@@ -1,0 +1,72 @@
+name: Release Gestalt Plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin-dir:
+        description: Path to plugin directory containing plugin.yaml
+        type: string
+        default: '.'
+      version:
+        description: Semantic version for the release
+        type: string
+        required: true
+      gestaltd-version:
+        description: Pinned Gestalt module version, tag, or commit SHA used to install gestaltd
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "release=${VERSION#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+      - name: Detect plugin type
+        id: plugin
+        run: |
+          is_main_package() {
+            local package_name
+            package_name="$(cd "$1" && go list -f '{{.Name}}' "$2" 2>/dev/null)" || return 1
+            [ "$package_name" = "main" ]
+          }
+
+          if [ ! -f "${{ inputs.plugin-dir }}/go.mod" ]; then
+            echo "compiled=false" >> "$GITHUB_OUTPUT"
+          elif is_main_package "${{ inputs.plugin-dir }}" ./cmd || is_main_package "${{ inputs.plugin-dir }}" .; then
+            echo "compiled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compiled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install gestaltd
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/valon-technologies/gestalt/server/cmd/gestaltd@${{ inputs.gestaltd-version }}
+      - uses: actions/setup-go@v5
+        if: steps.plugin.outputs.compiled == 'true'
+        with:
+          go-version-file: ${{ inputs.plugin-dir }}/go.mod
+      - name: Release
+        run: |
+          cd "${{ inputs.plugin-dir }}"
+          gestaltd plugin release --version "${{ steps.version.outputs.release }}"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.release }}" --generate-notes \
+            "${{ inputs.plugin-dir }}"/dist/*
