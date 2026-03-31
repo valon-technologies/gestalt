@@ -2,7 +2,6 @@ package stdout
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,12 +9,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/metric"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -31,8 +28,8 @@ type yamlConfig struct {
 
 type Provider struct {
 	logger *slog.Logger
-	tp     *sdktrace.TracerProvider
-	mp     *sdkmetric.MeterProvider
+	tp     trace.TracerProvider
+	mp     metric.MeterProvider
 }
 
 func New(cfg yamlConfig) (*Provider, error) {
@@ -47,18 +44,8 @@ func New(cfg yamlConfig) (*Provider, error) {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 
-	traceExporter, err := stdouttrace.New()
-	if err != nil {
-		return nil, fmt.Errorf("stdout telemetry: creating trace exporter: %w", err)
-	}
-
-	metricExporter, err := stdoutmetric.New()
-	if err != nil {
-		return nil, fmt.Errorf("stdout telemetry: creating metric exporter: %w", err)
-	}
-
-	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)))
+	tp := nooptrace.NewTracerProvider()
+	mp := noopmetric.NewMeterProvider()
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
@@ -74,12 +61,7 @@ func (p *Provider) Logger() *slog.Logger                 { return p.logger }
 func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
 func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 
-func (p *Provider) Shutdown(ctx context.Context) error {
-	return errors.Join(
-		p.tp.Shutdown(ctx),
-		p.mp.Shutdown(ctx),
-	)
-}
+func (p *Provider) Shutdown(context.Context) error { return nil }
 
 var Factory bootstrap.TelemetryFactory = func(node yaml.Node) (core.TelemetryProvider, error) {
 	var cfg yamlConfig
