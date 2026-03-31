@@ -74,7 +74,7 @@ func TestInitAtPath_WritesLockfileWithPluginEntry(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "init-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	lock, err := lc.InitAtPath(cfgPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
@@ -111,7 +111,7 @@ func TestLockMatchesConfig_TrueAfterInit(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "match-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	if _, err := lc.InitAtPath(cfgPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestLockMatchesConfig_FalseWhenPackageChanged(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "original-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	if _, err := lc.InitAtPath(cfgPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestLockMatchesConfig_FalseWhenManifestMissing(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "manifest-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	if _, err := lc.InitAtPath(cfgPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestLockMatchesConfig_FalseWhenExecutableMissing(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "exec-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	if _, err := lc.InitAtPath(cfgPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestLockMatchesConfig_FalseWhenFingerprintChanged(t *testing.T) {
 	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "fp-test-binary")
 	cfgPath := writeTestConfig(t, dir, pluginDir)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	if _, err := lc.InitAtPath(cfgPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestInitAtPath_RuntimePlugin(t *testing.T) {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	lock, err := lc.InitAtPath(cfgPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)

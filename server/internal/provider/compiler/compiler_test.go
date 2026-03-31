@@ -29,8 +29,8 @@ func TestCompileUsesPreparedArtifact(t *testing.T) {
 		},
 	})
 
-	result, err := Compile(context.Background(), "prepared", config.APIDef{
-		Type: config.APITypeREST,
+	result, err := Compile(context.Background(), "prepared", APISpec{
+		Type: APITypeREST,
 	}, map[string]string{
 		"prepared": preparedPath,
 	})
@@ -87,8 +87,8 @@ func TestBuildProviderAppliesRuntimeOverrides(t *testing.T) {
 	built, err := BuildProvider(context.Background(), "prepared", config.IntegrationDef{
 		DisplayName: "Runtime Provider",
 		Description: "Runtime description",
-	}, config.APIDef{
-		Type: config.APITypeREST,
+	}, APISpec{
+		Type: APITypeREST,
 	}, config.ConnectionDef{}, map[string]string{
 		"prepared": preparedPath,
 	}, nil)

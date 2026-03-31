@@ -152,7 +152,7 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
 		return buildProvider(ctx, name, intg, factories, deps)
 	}
-	prov, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
+	prov, err := newPreparedProviderStub(name, intg.Plugin.ResolvedManifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ type preparedProviderStub struct {
 	connectionMode core.ConnectionMode
 }
 
-func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPath string) (core.Provider, error) {
+func newPreparedProviderStub(name string, manifestPath string) (core.Provider, error) {
 	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read prepared manifest: %w", err)
@@ -187,10 +187,9 @@ func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPa
 		description = fmt.Sprintf("prepared plugin stub for %s", name)
 	}
 	return &preparedProviderStub{
-		name:           name,
-		displayName:    displayName,
-		description:    description,
-		connectionMode: connectionModeFromConnections(intg.Connections),
+		name:        name,
+		displayName: displayName,
+		description: description,
 	}, nil
 }
 
@@ -210,10 +209,6 @@ type preparedRuntimeStub struct {
 func (r *preparedRuntimeStub) Name() string                { return r.name }
 func (r *preparedRuntimeStub) Start(context.Context) error { return nil }
 func (r *preparedRuntimeStub) Stop(context.Context) error  { return nil }
-
-func connectionModeFromConnections(conns map[string]config.ConnectionDef) core.ConnectionMode {
-	return core.ConnectionMode(config.ConnectionMode(conns))
-}
 
 func closeSecretManager(sm core.SecretManager) {
 	if closer, ok := sm.(interface{ Close() error }); ok {
