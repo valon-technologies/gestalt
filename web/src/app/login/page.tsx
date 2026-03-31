@@ -48,17 +48,17 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm">
-        <h1 className="text-center text-2xl font-heading font-bold text-timber-800">
+        <h1 className="text-center text-2xl font-heading font-bold text-timber-800 dark:text-timber-200">
           Gestalt
         </h1>
-        <p className="mt-2 text-center text-sm text-stone-500">
+        <p className="mt-2 text-center text-sm text-stone-500 dark:text-stone-400">
           Sign in to manage your integrations.
         </p>
-        <p className="mt-2 text-center text-sm text-stone-500">
+        <p className="mt-2 text-center text-sm text-stone-500 dark:text-stone-400">
           Or read the{" "}
           <a
             href="/docs"
-            className="font-medium text-timber-600 hover:text-timber-700"
+            className="font-medium text-timber-600 hover:text-timber-700 dark:text-timber-400 dark:hover:text-timber-300"
           >
             documentation
           </a>

@@ -35,10 +35,10 @@ export default function DashboardPage() {
       <div className="min-h-screen">
         <Nav />
         <main className="mx-auto max-w-5xl px-6 py-8">
-          <h1 className="text-2xl font-heading font-bold text-stone-900">
+          <h1 className="text-2xl font-heading font-bold text-stone-900 dark:text-stone-100">
             Dashboard
           </h1>
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
             Your Gestalt overview at a glance.
           </p>
 
@@ -49,27 +49,27 @@ export default function DashboardPage() {
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
               href="/integrations"
-              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300"
+              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300 dark:hover:border-timber-600"
             >
-              <p className="text-sm font-medium text-stone-500">
+              <p className="text-sm font-medium text-stone-500 dark:text-stone-400">
                 Integrations
               </p>
-              <p className="mt-2 text-3xl font-heading font-bold text-stone-900">
+              <p className="mt-2 text-3xl font-heading font-bold text-stone-900 dark:text-stone-100">
                 {data.integrations ?? "--"}
               </p>
-              <p className="mt-1 text-sm font-medium text-timber-600">
+              <p className="mt-1 text-sm font-medium text-timber-600 dark:text-timber-400">
                 Manage integrations &rarr;
               </p>
             </Link>
             <Link
               href="/tokens"
-              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300"
+              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300 dark:hover:border-timber-600"
             >
-              <p className="text-sm font-medium text-stone-500">API Tokens</p>
-              <p className="mt-2 text-3xl font-heading font-bold text-stone-900">
+              <p className="text-sm font-medium text-stone-500 dark:text-stone-400">API Tokens</p>
+              <p className="mt-2 text-3xl font-heading font-bold text-stone-900 dark:text-stone-100">
                 {data.tokens ?? "--"}
               </p>
-              <p className="mt-1 text-sm font-medium text-timber-600">
+              <p className="mt-1 text-sm font-medium text-timber-600 dark:text-timber-400">
                 Manage tokens &rarr;
               </p>
             </Link>
