@@ -80,7 +80,7 @@ func ConnectionParams(ctx context.Context) map[string]string {
 }
 
 type Runtime interface {
-	Start(ctx context.Context, name string, config map[string]any, host RuntimeHost) error
+	Start(ctx context.Context, name string, config map[string]any, capabilities []Capability, host RuntimeHost) error
 	Stop(ctx context.Context) error
 }
 

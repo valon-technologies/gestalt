@@ -15,14 +15,16 @@ import (
 )
 
 type stubRuntime struct {
-	started  int
-	stopped  int
-	lastName string
+	started      int
+	stopped      int
+	lastName     string
+	lastInitCaps []pluginsdk.Capability
 }
 
-func (s *stubRuntime) Start(_ context.Context, name string, _ map[string]any, _ pluginsdk.RuntimeHost) error {
+func (s *stubRuntime) Start(_ context.Context, name string, _ map[string]any, caps []pluginsdk.Capability, _ pluginsdk.RuntimeHost) error {
 	s.started++
 	s.lastName = name
+	s.lastInitCaps = caps
 	return nil
 }
 
@@ -122,7 +124,13 @@ func TestServeRuntimeRoundTrip(t *testing.T) {
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
 
-	if _, err := client.Start(rpcCtx, &pluginapiv1.StartRuntimeRequest{Name: "echo"}, grpc.WaitForReady(true)); err != nil {
+	startReq := &pluginapiv1.StartRuntimeRequest{
+		Name: "echo",
+		InitialCapabilities: []*pluginapiv1.Capability{
+			{Provider: "beta", Operation: "write", Description: "test cap"},
+		},
+	}
+	if _, err := client.Start(rpcCtx, startReq, grpc.WaitForReady(true)); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if _, err := client.Stop(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true)); err != nil {
@@ -130,6 +138,9 @@ func TestServeRuntimeRoundTrip(t *testing.T) {
 	}
 	if rt.started != 1 || rt.stopped != 1 || rt.lastName != "echo" {
 		t.Fatalf("unexpected runtime state: started=%d stopped=%d lastName=%q", rt.started, rt.stopped, rt.lastName)
+	}
+	if len(rt.lastInitCaps) != 1 || rt.lastInitCaps[0].Provider != "beta" || rt.lastInitCaps[0].Operation != "write" {
+		t.Fatalf("unexpected initial capabilities: %+v", rt.lastInitCaps)
 	}
 }
 
@@ -166,7 +177,7 @@ type capturingRuntime struct {
 	host *pluginsdk.RuntimeHost
 }
 
-func (r *capturingRuntime) Start(_ context.Context, _ string, _ map[string]any, host pluginsdk.RuntimeHost) error {
+func (r *capturingRuntime) Start(_ context.Context, _ string, _ map[string]any, _ []pluginsdk.Capability, host pluginsdk.RuntimeHost) error {
 	*r.host = host
 	return nil
 }

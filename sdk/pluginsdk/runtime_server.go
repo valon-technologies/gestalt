@@ -52,7 +52,8 @@ func (s *RuntimeServer) Start(ctx context.Context, req *pluginapiv1.StartRuntime
 		conn:   conn,
 	}
 
-	if err := s.runtime.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig()), s.host); err != nil {
+	caps := capabilitiesFromProto(req.GetInitialCapabilities())
+	if err := s.runtime.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig()), caps, s.host); err != nil {
 		_ = conn.Close()
 		s.host = nil
 		return nil, status.Errorf(codes.Unknown, "start runtime: %v", err)

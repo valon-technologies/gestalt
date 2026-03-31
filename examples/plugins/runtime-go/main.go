@@ -13,12 +13,8 @@ import (
 
 type exampleRuntime struct{}
 
-func (r *exampleRuntime) Start(ctx context.Context, name string, config map[string]any, host pluginsdk.RuntimeHost) error {
-	caps, err := host.ListCapabilities(ctx)
-	if err != nil {
-		return err
-	}
-	log.Printf("example runtime %q started with %d capabilities", name, len(caps))
+func (r *exampleRuntime) Start(ctx context.Context, name string, config map[string]any, capabilities []pluginsdk.Capability, host pluginsdk.RuntimeHost) error {
+	log.Printf("example runtime %q started with %d initial capabilities", name, len(capabilities))
 	return nil
 }
 
