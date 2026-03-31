@@ -115,3 +115,8 @@ type Capability struct {
 	Description string
 	Parameters  []Parameter
 }
+
+type ProviderHost interface {
+	ProxyHTTP(ctx context.Context, invocationID, method, url string, headers map[string]string, body []byte) (*HTTPResponse, error)
+	Close() error
+}
