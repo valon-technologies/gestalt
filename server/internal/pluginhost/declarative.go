@@ -17,23 +17,11 @@ import (
 
 const declarativeHTTPTimeout = 30 * time.Second
 
-type declarativeOp struct {
-	method    string
-	path      string
-	paramLocs map[string]string
-}
-
 type DeclarativeProvider struct {
-	name                 string
-	displayName          string
-	description          string
-	iconSVG              string
+	catalog              *catalog.Catalog
+	opsByName            map[string]*catalog.CatalogOperation
 	baseURL              string
-	headers              map[string]string
 	auth                 *pluginmanifestv1.ProviderAuth
-	operations           []core.Operation
-	catalogOps           []catalog.CatalogOperation
-	opDefs               map[string]*declarativeOp
 	httpClient           *http.Client
 	postConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery
 	connectionDefs       map[string]pluginmanifestv1.ProviderConnectionParam
@@ -52,13 +40,16 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	}
 
 	p := &DeclarativeProvider{
-		name:                 manifest.Source,
-		displayName:          manifest.DisplayName,
-		description:          manifest.Description,
+		catalog: &catalog.Catalog{
+			Name:        manifest.Source,
+			DisplayName: manifest.DisplayName,
+			Description: manifest.Description,
+			Headers:     maps.Clone(manifest.Provider.Headers),
+			Operations:  make([]catalog.CatalogOperation, 0, len(manifest.Provider.Operations)),
+		},
+		opsByName:            make(map[string]*catalog.CatalogOperation, len(manifest.Provider.Operations)),
 		baseURL:              manifest.Provider.BaseURL,
-		headers:              maps.Clone(manifest.Provider.Headers),
 		auth:                 manifest.Provider.Auth,
-		opDefs:               make(map[string]*declarativeOp, len(manifest.Provider.Operations)),
 		httpClient:           httpClient,
 		postConnectDiscovery: manifest.Provider.PostConnectDiscovery,
 		connectionDefs:       manifest.Provider.Connection,
@@ -66,67 +57,55 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 
 	for i := range manifest.Provider.Operations {
 		mop := &manifest.Provider.Operations[i]
-		locs := make(map[string]string, len(mop.Parameters))
-		for _, mp := range mop.Parameters {
-			locs[mp.Name] = mp.In
-		}
-		p.opDefs[mop.Name] = &declarativeOp{
-			method:    mop.Method,
-			path:      mop.Path,
-			paramLocs: locs,
-		}
-		coreOp := core.Operation{
-			Name:        mop.Name,
-			Description: mop.Description,
+		catOp := catalog.CatalogOperation{
+			ID:          mop.Name,
 			Method:      mop.Method,
+			Path:        mop.Path,
+			Description: mop.Description,
+			Transport:   catalog.TransportREST,
+			Parameters:  make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
 		}
 		for _, mp := range mop.Parameters {
-			coreOp.Parameters = append(coreOp.Parameters, core.Parameter{
+			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
 				Name:        mp.Name,
 				Type:        mp.Type,
+				Location:    mp.In,
 				Description: mp.Description,
 				Required:    mp.Required,
 			})
 		}
-		p.operations = append(p.operations, coreOp)
+		p.catalog.Operations = append(p.catalog.Operations, catOp)
 	}
 
-	p.catalogOps = integration.CoreOperationsToCatalogOps(p.operations)
+	integration.CompileSchemas(p.catalog)
+	for i := range p.catalog.Operations {
+		op := &p.catalog.Operations[i]
+		p.opsByName[op.ID] = op
+	}
 
 	return p, nil
 }
 
-func (p *DeclarativeProvider) Name() string        { return p.name }
-func (p *DeclarativeProvider) DisplayName() string { return p.displayName }
-func (p *DeclarativeProvider) Description() string { return p.description }
+func (p *DeclarativeProvider) Name() string        { return p.catalog.Name }
+func (p *DeclarativeProvider) DisplayName() string { return p.catalog.DisplayName }
+func (p *DeclarativeProvider) Description() string { return p.catalog.Description }
 
-func (p *DeclarativeProvider) SetDisplayName(s string) { p.displayName = s }
-func (p *DeclarativeProvider) SetDescription(s string) { p.description = s }
-func (p *DeclarativeProvider) SetIconSVG(svg string)   { p.iconSVG = svg }
+func (p *DeclarativeProvider) SetDisplayName(s string) { p.catalog.DisplayName = s }
+func (p *DeclarativeProvider) SetDescription(s string) { p.catalog.Description = s }
+func (p *DeclarativeProvider) SetIconSVG(svg string)   { p.catalog.IconSVG = svg }
 
-func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
-	return &catalog.Catalog{
-		Name:        p.name,
-		DisplayName: p.displayName,
-		Description: p.description,
-		IconSVG:     p.iconSVG,
-		Headers:     maps.Clone(p.headers),
-		Operations:  p.catalogOps,
-	}
-}
+func (p *DeclarativeProvider) Catalog() *catalog.Catalog { return p.catalog.Clone() }
 
 func (p *DeclarativeProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeUser
 }
 
 func (p *DeclarativeProvider) ListOperations() []core.Operation {
-	out := make([]core.Operation, len(p.operations))
-	copy(out, p.operations)
-	return out
+	return integration.OperationsList(p.catalog)
 }
 
 func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	op, ok := p.opDefs[operation]
+	op, ok := p.opsByName[operation]
 	if !ok {
 		return &core.OperationResult{
 			Status: http.StatusNotFound,
@@ -137,10 +116,10 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	queryParams := make(map[string]any)
 	bodyParams := make(map[string]any)
 
-	isBodyMethod := op.method == http.MethodPost || op.method == http.MethodPut || op.method == http.MethodPatch
+	isBodyMethod := op.Method == http.MethodPost || op.Method == http.MethodPut || op.Method == http.MethodPatch
 
 	for k, v := range params {
-		loc, declared := op.paramLocs[k]
+		loc, declared := declarativeParamLocation(op, k)
 		if !declared {
 			if isBodyMethod {
 				loc = "body"
@@ -157,7 +136,7 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	}
 
 	baseURL := p.baseURL
-	headers := maps.Clone(p.headers)
+	headers := maps.Clone(p.catalog.Headers)
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		baseURL = paraminterp.Interpolate(baseURL, cp)
 		for k, v := range headers {
@@ -166,9 +145,9 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	}
 
 	req := apiexec.Request{
-		Method:        op.method,
+		Method:        op.Method,
 		BaseURL:       baseURL,
-		Path:          op.path,
+		Path:          op.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
 		CustomHeaders: headers,
@@ -177,6 +156,15 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	}
 
 	return apiexec.Do(ctx, p.httpClient, req)
+}
+
+func declarativeParamLocation(op *catalog.CatalogOperation, name string) (string, bool) {
+	for _, param := range op.Parameters {
+		if param.Name == name {
+			return param.Location, true
+		}
+	}
+	return "", false
 }
 
 func (p *DeclarativeProvider) SupportsManualAuth() bool {
