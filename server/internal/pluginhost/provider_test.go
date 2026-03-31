@@ -165,7 +165,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 
 	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>`
 
-	t.Run("no icon and no catalog returns nil", func(t *testing.T) {
+	t.Run("no icon no catalog no ops returns nil", func(t *testing.T) {
 		t.Parallel()
 
 		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
@@ -200,6 +200,34 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		}
 		if cat.IconSVG != testSVG {
 			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
+		}
+	})
+
+	t.Run("ops included in catalog when no static catalog", func(t *testing.T) {
+		t.Parallel()
+
+		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		if err != nil {
+			t.Fatalf("NewRemoteProvider: %v", err)
+		}
+		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
+		base.catalog = nil
+		base.SetIconSVG(testSVG)
+
+		cp := prov.(core.CatalogProvider)
+		cat := cp.Catalog()
+		if cat == nil {
+			t.Fatal("expected non-nil catalog")
+		}
+		if cat.IconSVG != testSVG {
+			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
+		}
+		if len(cat.Operations) != 1 {
+			t.Fatalf("expected 1 operation, got %d", len(cat.Operations))
+		}
+		if cat.Operations[0].ID != "echo" {
+			t.Fatalf("Operations[0].ID = %q, want echo", cat.Operations[0].ID)
 		}
 	})
 

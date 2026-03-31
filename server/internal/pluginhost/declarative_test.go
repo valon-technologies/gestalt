@@ -333,7 +333,7 @@ func TestDeclarativeProvider_AuthTypes(t *testing.T) {
 	}
 }
 
-func TestDeclarativeProviderIcon(t *testing.T) {
+func TestDeclarativeProviderCatalog(t *testing.T) {
 	t.Parallel()
 
 	p, err := NewDeclarativeProvider(testManifest("http://example.com"), nil)
@@ -343,19 +343,39 @@ func TestDeclarativeProviderIcon(t *testing.T) {
 
 	var _ core.CatalogProvider = p
 
-	if cat := p.Catalog(); cat != nil {
-		t.Fatalf("expected nil catalog before SetIconSVG, got %+v", cat)
+	cat := p.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.Name != "github.com/acme/plugins/testapi" {
+		t.Fatalf("Name = %q, want github.com/acme/plugins/testapi", cat.Name)
+	}
+	if cat.DisplayName != "Test API" {
+		t.Fatalf("DisplayName = %q, want Test API", cat.DisplayName)
+	}
+	if cat.IconSVG != "" {
+		t.Fatalf("IconSVG = %q, want empty before SetIconSVG", cat.IconSVG)
+	}
+
+	wantIDs := []string{"list_items", "create_item", "get_item", "update_item"}
+	if len(cat.Operations) != len(wantIDs) {
+		t.Fatalf("got %d operations, want %d", len(cat.Operations), len(wantIDs))
+	}
+	for i, want := range wantIDs {
+		if cat.Operations[i].ID != want {
+			t.Fatalf("Operations[%d].ID = %q, want %q", i, cat.Operations[i].ID, want)
+		}
 	}
 
 	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>`
 	p.SetIconSVG(testSVG)
 
-	cat := p.Catalog()
-	if cat == nil {
-		t.Fatal("expected non-nil catalog after SetIconSVG")
-	}
+	cat = p.Catalog()
 	if cat.IconSVG != testSVG {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
+	}
+	if len(cat.Operations) != len(wantIDs) {
+		t.Fatalf("got %d operations after SetIconSVG, want %d", len(cat.Operations), len(wantIDs))
 	}
 }
 

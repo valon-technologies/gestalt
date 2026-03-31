@@ -60,6 +60,8 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 
 	if merged == nil {
 		merged = synthesizeCatalog(prov, provName)
+	} else if len(merged.Operations) == 0 {
+		merged.Operations = integration.CoreOperationsToCatalogOps(prov.ListOperations())
 	}
 
 	integration.CompileSchemas(merged)
@@ -67,31 +69,10 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 }
 
 func synthesizeCatalog(prov core.Provider, provName string) *catalog.Catalog {
-	ops := prov.ListOperations()
-	cat := &catalog.Catalog{
+	return &catalog.Catalog{
 		Name:        provName,
 		DisplayName: prov.DisplayName(),
 		Description: prov.Description(),
-		Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
+		Operations:  integration.CoreOperationsToCatalogOps(prov.ListOperations()),
 	}
-	for _, op := range ops {
-		params := make([]catalog.CatalogParameter, 0, len(op.Parameters))
-		for _, p := range op.Parameters {
-			params = append(params, catalog.CatalogParameter{
-				Name:        p.Name,
-				Type:        p.Type,
-				Description: p.Description,
-				Required:    p.Required,
-				Default:     p.Default,
-			})
-		}
-		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
-			ID:          op.Name,
-			Method:      op.Method,
-			Description: op.Description,
-			Parameters:  params,
-			Transport:   catalog.TransportREST,
-		})
-	}
-	return cat
 }
