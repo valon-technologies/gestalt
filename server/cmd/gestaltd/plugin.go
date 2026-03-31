@@ -3,12 +3,15 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -28,6 +31,8 @@ func runPlugin(args []string) error {
 		return flag.ErrHelp
 	case "package":
 		return runPluginPackage(args[1:])
+	case "release":
+		return runPluginRelease(args[1:])
 	default:
 		return fmt.Errorf("unknown plugin command %q", args[0])
 	}
@@ -38,21 +43,11 @@ func runPluginPackage(args []string) error {
 	fs.Usage = func() { printPluginPackageUsage(fs.Output()) }
 	input := fs.String("input", "", "path to plugin manifest or build directory")
 	output := fs.String("output", "", "output path (directory, or .tar.gz for archive)")
-	binary := fs.String("binary", "", "path to pre-built binary (scaffolds manifest automatically)")
-	source := fs.String("source", "", "plugin source (github.com/owner/repo/plugin), required with --binary")
-	kind := fs.String("kind", "provider", "plugin kind (provider or runtime), used with --binary")
-	targetOS := fs.String("os", runtime.GOOS, "target OS for the artifact, used with --binary")
-	targetArch := fs.String("arch", runtime.GOARCH, "target architecture, used with --binary")
-	version := fs.String("version", "0.0.0-alpha.1", "manifest version, used with --binary")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-
-	if *binary != "" {
-		return packageFromBinary(*binary, *source, *kind, *version, *targetOS, *targetArch, *output)
 	}
 	return packageFromDir(*input, *output)
 }
@@ -85,128 +80,541 @@ func packageFromDir(input, output string) error {
 	return nil
 }
 
-func packageFromBinary(binaryPath, source, kind, version, targetOS, targetArch, output string) error {
-	if source == "" {
-		return fmt.Errorf("usage: gestaltd plugin package --binary PATH --source SOURCE --output PATH")
+const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
+const defaultReleaseOutputDir = "dist/"
+const releaseCmdBuildTarget = "./cmd"
+const releaseRootBuildTarget = "."
+const releaseBinaryPrefix = "gestalt-plugin-"
+const windowsOS = "windows"
+const windowsExecutableSuffix = ".exe"
+
+type releasePlatform struct {
+	GOOS   string
+	GOARCH string
+}
+
+func runPluginRelease(args []string) error {
+	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
+	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
+	version := fs.String("version", "", "semantic version string (required)")
+	outputDir := fs.String("output", defaultReleaseOutputDir, "output directory")
+	platforms := fs.String("platform", defaultPlatforms, "comma-separated platforms (os/arch)")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	if output == "" {
-		return fmt.Errorf("--output is required")
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
-	if kind != pluginmanifestv1.KindProvider && kind != pluginmanifestv1.KindRuntime {
-		return fmt.Errorf("kind must be %q or %q", pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime)
+	if *version == "" {
+		return fmt.Errorf("--version is required")
 	}
 
-	if _, err := pluginsource.Parse(source); err != nil {
-		return fmt.Errorf("invalid --source: %w", err)
-	}
-	if err := pluginsource.ValidateVersion(version); err != nil {
-		return fmt.Errorf("invalid --version for source plugin: %w", err)
+	if err := pluginsource.ValidateVersion(*version); err != nil {
+		return fmt.Errorf("invalid --version: %w", err)
 	}
 
-	scaffoldDir := output
-	var cleanup func()
-	if isArchiveOutput(output) {
-		tmp, err := os.MkdirTemp("", "gestalt-plugin-pkg-*")
+	manifestPath, err := pluginpkg.FindManifestFile(".")
+	if err != nil {
+		return err
+	}
+	_, srcManifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("decode %s: %w", manifestPath, err)
+	}
+
+	src, err := pluginsource.Parse(srcManifest.Source)
+	if err != nil {
+		return fmt.Errorf("invalid source in manifest: %w", err)
+	}
+	pluginName := src.Plugin
+
+	if err := validateReleaseOutputDir(srcManifest, ".", *outputDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(*outputDir, 0755); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+
+	buildTarget, compiled, err := findReleaseBuildTarget(".")
+	if err != nil {
+		return fmt.Errorf("detect build target: %w", err)
+	}
+	var archivePaths []string
+
+	if compiled {
+		platList, err := parseReleasePlatforms(*platforms)
 		if err != nil {
 			return err
 		}
-		cleanup = func() { _ = os.RemoveAll(tmp) }
-		defer cleanup()
-		scaffoldDir = tmp
-	} else {
-		if err := os.MkdirAll(output, 0755); err != nil {
-			return fmt.Errorf("create output dir: %w", err)
+		for _, plat := range platList {
+			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget, plat, *outputDir)
+			if err != nil {
+				return fmt.Errorf("build %s/%s: %w", plat.GOOS, plat.GOARCH, err)
+			}
+			archivePaths = append(archivePaths, archivePath)
 		}
-	}
-
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", targetOS, targetArch, kind))
-	artifactAbs := filepath.Join(scaffoldDir, filepath.FromSlash(artifactRel))
-
-	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0755); err != nil {
-		return err
-	}
-
-	digest, err := copyAndDigest(binaryPath, artifactAbs)
-	if err != nil {
-		return fmt.Errorf("copying binary: %w", err)
-	}
-
-	manifest := buildManifest(source, kind, version, targetOS, targetArch, artifactRel, digest)
-	data, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		return fmt.Errorf("encoding manifest: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(scaffoldDir, pluginpkg.ManifestFile), data, 0644); err != nil {
-		return fmt.Errorf("writing manifest: %w", err)
-	}
-
-	if isArchiveOutput(output) {
-		if err := pluginpkg.CreatePackageFromDir(scaffoldDir, output); err != nil {
+	} else {
+		archivePath, err := buildSourceArchive(srcManifest, pluginName, *version, *outputDir)
+		if err != nil {
 			return err
 		}
+		archivePaths = append(archivePaths, archivePath)
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "packaged %s (%s) -> %s\n", source, binaryPath, output)
+
+	if err := writeChecksums(*outputDir, archivePaths); err != nil {
+		return fmt.Errorf("write checksums: %w", err)
+	}
+
 	return nil
 }
 
-func buildManifest(source, kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
-	m := newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest)
-	m.Source = source
-	return m
-}
-
-func newManifestSkeleton(kind, version, targetOS, targetArch, artifactRel, digest string) *pluginmanifestv1.Manifest {
-	m := &pluginmanifestv1.Manifest{
-		Version: version,
-		Kinds:   []string{kind},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     targetOS,
-				Arch:   targetArch,
-				Path:   artifactRel,
-				SHA256: digest,
-			},
-		},
-	}
-
-	switch kind {
-	case pluginmanifestv1.KindProvider:
-		m.Provider = &pluginmanifestv1.Provider{}
-		m.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{
-			ArtifactPath: artifactRel,
-		}
-	case pluginmanifestv1.KindRuntime:
-		m.Entrypoints.Runtime = &pluginmanifestv1.Entrypoint{
-			ArtifactPath: artifactRel,
-		}
-	}
-
-	return m
-}
-
-func copyAndDigest(src, dst string) (string, error) {
-	in, err := os.Open(src)
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildTarget string, plat releasePlatform, outputDir string) (string, error) {
+	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
+	}
+	defer func() { _ = os.RemoveAll(stagingDir) }()
+
+	binaryName := releaseBinaryName(pluginName, plat.GOOS)
+	binaryPath := filepath.Join(stagingDir, binaryName)
+
+	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+plat.GOOS, "GOARCH="+plat.GOARCH)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("go build: %w", err)
+	}
+
+	digest, err := fileSHA256Hex(binaryPath)
+	if err != nil {
+		return "", fmt.Errorf("hash binary: %w", err)
+	}
+
+	manifest, err := buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
+	if err != nil {
+		return "", err
+	}
+
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		return "", fmt.Errorf("encode manifest: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+		return "", err
+	}
+
+	if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, false); err != nil {
+		return "", err
+	}
+
+	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
+	archivePath := filepath.Join(outputDir, archiveName)
+	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
+		return "", err
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
+	return archivePath, nil
+}
+
+func findReleaseBuildTarget(root string) (string, bool, error) {
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+
+	cmdDirHasGoFiles, err := dirHasGoFiles(filepath.Join(root, "cmd"))
+	if err != nil {
+		return "", false, err
+	}
+	if cmdDirHasGoFiles {
+		isMain, err := isMainPackage(root, releaseCmdBuildTarget)
+		if err != nil {
+			return "", false, err
+		}
+		if isMain {
+			return releaseCmdBuildTarget, true, nil
+		}
+	}
+
+	rootHasGoFiles, err := dirHasGoFiles(root)
+	if err != nil {
+		return "", false, err
+	}
+	if rootHasGoFiles {
+		isMain, err := isMainPackage(root, releaseRootBuildTarget)
+		if err != nil {
+			return "", false, err
+		}
+		if isMain {
+			return releaseRootBuildTarget, true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+func dirHasGoFiles(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(entry.Name(), ".go") && !strings.HasSuffix(entry.Name(), "_test.go") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func isMainPackage(root, buildTarget string) (bool, error) {
+	cmd := exec.Command("go", "list", "-f", "{{.Name}}", buildTarget)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(string(out)) == "main", nil
+}
+
+func parseReleasePlatforms(value string) ([]releasePlatform, error) {
+	parts := strings.Split(value, ",")
+	platforms := make([]releasePlatform, 0, len(parts))
+	for _, part := range parts {
+		plat := strings.TrimSpace(part)
+		pieces := strings.SplitN(plat, "/", 2)
+		if len(pieces) != 2 || pieces[0] == "" || pieces[1] == "" {
+			return nil, fmt.Errorf("invalid platform %q, expected os/arch", plat)
+		}
+		platforms = append(platforms, releasePlatform{
+			GOOS:   pieces[0],
+			GOARCH: pieces[1],
+		})
+	}
+	return platforms, nil
+}
+
+func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir string) (string, error) {
+	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(stagingDir) }()
+
+	manifest, err := cloneManifest(srcManifest)
+	if err != nil {
+		return "", fmt.Errorf("clone manifest: %w", err)
+	}
+	manifest.Version = version
+
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		return "", fmt.Errorf("encode manifest: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+		return "", err
+	}
+
+	if err := validateReleaseArtifactDigests(srcManifest, "."); err != nil {
+		return "", err
+	}
+	if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, true); err != nil {
+		return "", err
+	}
+
+	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
+	archivePath := filepath.Join(outputDir, archiveName)
+	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
+		return "", err
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
+	return archivePath, nil
+}
+
+func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
+	manifest, err := cloneManifest(srcManifest)
+	if err != nil {
+		return nil, fmt.Errorf("clone manifest: %w", err)
+	}
+	manifest.Version = version
+	manifest.Artifacts = []pluginmanifestv1.Artifact{
+		{OS: plat.GOOS, Arch: plat.GOARCH, Path: binaryName, SHA256: digest},
+	}
+
+	for _, kind := range manifest.Kinds {
+		switch kind {
+		case pluginmanifestv1.KindProvider:
+			if manifest.Entrypoints.Provider == nil {
+				manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
+			}
+			manifest.Entrypoints.Provider.ArtifactPath = binaryName
+		case pluginmanifestv1.KindRuntime:
+			if manifest.Entrypoints.Runtime == nil {
+				manifest.Entrypoints.Runtime = &pluginmanifestv1.Entrypoint{}
+			}
+			manifest.Entrypoints.Runtime.ArtifactPath = binaryName
+		}
+	}
+
+	return manifest, nil
+}
+
+func releaseBinaryName(pluginName, goos string) string {
+	binaryName := releaseBinaryPrefix + pluginName
+	if goos == windowsOS {
+		return binaryName + windowsExecutableSuffix
+	}
+	return binaryName
+}
+
+func writeChecksums(dir string, archivePaths []string) error {
+	var lines []string
+	for _, archivePath := range archivePaths {
+		digest, err := fileSHA256Hex(archivePath)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s", digest, filepath.Base(archivePath)))
+	}
+
+	if len(lines) == 0 {
+		return nil
+	}
+
+	checksumPath := filepath.Join(dir, "checksums.txt")
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(checksumPath, []byte(content), 0644); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", checksumPath)
+	return nil
+}
+
+func fileSHA256Hex(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func cloneManifest(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Manifest, error) {
+	if manifest == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	var cloned pluginmanifestv1.Manifest
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return nil, err
+	}
+	return &cloned, nil
+}
+
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		return copyReleaseFile(p, target)
+	})
+}
+
+func copyReleaseFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	info, err := in.Stat()
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	h := sha256.New()
-	w := io.MultiWriter(out, h)
-	if _, err := io.Copy(w, in); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
 		_ = out.Close()
-		return "", err
+		return err
 	}
-	if err := out.Close(); err != nil {
-		return "", err
+	return out.Close()
+}
+
+func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, stagingDir string, includeArtifacts bool) error {
+	if manifest == nil {
+		return nil
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+	copied := make(map[string]struct{})
+	copyPath := func(rel string, optional bool) error {
+		if rel == "" {
+			return nil
+		}
+
+		cleanRel, err := normalizeReleasePath(rel)
+		if err != nil {
+			return err
+		}
+		if _, seen := copied[cleanRel]; seen {
+			return nil
+		}
+		copied[cleanRel] = struct{}{}
+
+		srcPath := filepath.Join(sourceDir, filepath.FromSlash(cleanRel))
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			if optional && os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("stat support path %s: %w", rel, err)
+		}
+
+		dstPath := filepath.Join(stagingDir, filepath.FromSlash(cleanRel))
+		if info.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return fmt.Errorf("copy support directory %s: %w", rel, err)
+			}
+			return nil
+		}
+		if err := copyReleaseFile(srcPath, dstPath); err != nil {
+			return fmt.Errorf("copy support file %s: %w", rel, err)
+		}
+		return nil
+	}
+
+	if err := copyPath(manifest.IconFile, false); err != nil {
+		return err
+	}
+	if manifest.Provider != nil {
+		if err := copyPath(manifest.Provider.ConfigSchemaPath, false); err != nil {
+			return err
+		}
+	}
+	if manifest.WebUI != nil {
+		if err := copyPath(manifest.WebUI.AssetRoot, false); err != nil {
+			return err
+		}
+	}
+	if includeArtifacts {
+		for _, artifact := range manifest.Artifacts {
+			if err := copyPath(artifact.Path, false); err != nil {
+				return err
+			}
+		}
+	}
+	if err := copyPath(pluginpkg.RuntimeConfigSchemaPath, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateReleaseArtifactDigests(manifest *pluginmanifestv1.Manifest, sourceDir string) error {
+	if manifest == nil {
+		return nil
+	}
+
+	for _, artifact := range manifest.Artifacts {
+		cleanPath, err := normalizeReleasePath(artifact.Path)
+		if err != nil {
+			return err
+		}
+
+		digest, err := fileSHA256Hex(filepath.Join(sourceDir, filepath.FromSlash(cleanPath)))
+		if err != nil {
+			return fmt.Errorf("hash artifact %s: %w", artifact.Path, err)
+		}
+		if digest != artifact.SHA256 {
+			return fmt.Errorf("artifact %s sha256 mismatch: manifest=%s actual=%s", artifact.Path, artifact.SHA256, digest)
+		}
+	}
+
+	return nil
+}
+
+func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, outputDir string) error {
+	if manifest == nil || manifest.WebUI == nil || manifest.WebUI.AssetRoot == "" {
+		return nil
+	}
+
+	assetRoot, err := normalizeReleasePath(manifest.WebUI.AssetRoot)
+	if err != nil {
+		return err
+	}
+
+	sourceAbs, err := filepath.Abs(sourceDir)
+	if err != nil {
+		return fmt.Errorf("resolve plugin root: %w", err)
+	}
+
+	assetRootAbs := filepath.Join(sourceAbs, filepath.FromSlash(assetRoot))
+	outputDirAbs := outputDir
+	if !filepath.IsAbs(outputDirAbs) {
+		outputDirAbs = filepath.Join(sourceAbs, outputDirAbs)
+	}
+	outputDirAbs = filepath.Clean(outputDirAbs)
+
+	insideAssetRoot, err := pathWithinBase(outputDirAbs, assetRootAbs)
+	if err != nil {
+		return fmt.Errorf("compare output dir to webui asset_root: %w", err)
+	}
+	if insideAssetRoot {
+		return fmt.Errorf("--output %q must not be inside webui.asset_root %q", outputDir, manifest.WebUI.AssetRoot)
+	}
+
+	return nil
+}
+
+func pathWithinBase(path, base string) (bool, error) {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false, err
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))), nil
+}
+
+func normalizeReleasePath(rel string) (string, error) {
+	if rel == "" {
+		return "", nil
+	}
+
+	cleanPath := path.Clean(strings.ReplaceAll(rel, "\\", "/"))
+	if path.IsAbs(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
+		return "", fmt.Errorf("release path %q must stay within plugin root", rel)
+	}
+	return cleanPath, nil
 }
 
 func isArchiveOutput(path string) bool {
@@ -219,16 +627,14 @@ func printPluginUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  package     Package a plugin for distribution")
+	writeUsageLine(w, "  release     Cross-compile and package a plugin for release")
 }
 
 func printPluginPackageUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd plugin package --input PATH --output PATH")
-	writeUsageLine(w, "  gestaltd plugin package --binary PATH --source SOURCE --output PATH")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Package a plugin for distribution. Use --input with an existing plugin")
-	writeUsageLine(w, "directory containing a manifest, or --binary to scaffold and package")
-	writeUsageLine(w, "a pre-built binary in one step.")
+	writeUsageLine(w, "Package an existing plugin directory for distribution.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Output format is determined by the --output path: paths ending in")
 	writeUsageLine(w, ".tar.gz produce an archive, all other paths produce a directory.")
@@ -236,10 +642,17 @@ func printPluginPackageUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --input     Path to plugin manifest or build directory")
 	writeUsageLine(w, "  --output    Output path (directory, or .tar.gz for archive)")
-	writeUsageLine(w, "  --binary    Path to pre-built binary (scaffolds manifest automatically)")
-	writeUsageLine(w, "  --source    Plugin source (github.com/owner/repo/plugin), required with --binary")
-	writeUsageLine(w, "  --kind      Plugin kind: provider or runtime (default: provider)")
-	writeUsageLine(w, "  --os        Target OS (default: current platform)")
-	writeUsageLine(w, "  --arch      Target architecture (default: current platform)")
-	writeUsageLine(w, "  --version   Manifest version (default: 0.0.0-alpha.1)")
+}
+
+func printPluginReleaseUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Cross-compile a plugin for multiple platforms and produce per-platform")
+	writeUsageLine(w, "tar.gz archives and a checksums file. Run from the plugin source directory.")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Flags:")
+	writeUsageLine(w, "  --version    Semantic version string (required)")
+	writeUsageLine(w, "  --output     Output directory (default: dist/)")
+	writeUsageLine(w, "  --platform   Comma-separated platforms (default: darwin/amd64,darwin/arm64,linux/amd64,linux/arm64)")
 }
