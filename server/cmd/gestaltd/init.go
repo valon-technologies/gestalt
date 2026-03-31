@@ -1,13 +1,9 @@
 package main
 
 import (
-	"context"
-
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	github "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
-	providercompiler "github.com/valon-technologies/gestalt/server/internal/provider/compiler"
 )
 
 const (
@@ -21,9 +17,7 @@ type lockProviderEntry = operator.LockProviderEntry
 type lockPluginEntry = operator.LockPluginEntry
 
 func operatorLifecycle() *operator.Lifecycle {
-	return operator.NewLifecycle(func(ctx context.Context, name string, api config.APIDef) (*provider.Definition, error) {
-		return providercompiler.LoadDefinition(ctx, name, api, nil)
-	}, &github.GitHubResolver{})
+	return operator.NewLifecycle(&github.GitHubResolver{})
 }
 
 func initConfig(configFlag string) error {
@@ -53,7 +47,7 @@ func writeLockfile(path string, lock *initLockfile) error {
 	return operator.WriteLockfile(path, lock)
 }
 
-func pluginFingerprint(name string, plugin *config.ExecutablePluginDef, configMap map[string]any) (string, error) {
+func pluginFingerprint(name string, plugin *config.PluginDef, configMap map[string]any) (string, error) {
 	return operator.PluginFingerprint(name, plugin, configMap)
 }
 

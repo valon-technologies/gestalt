@@ -168,21 +168,21 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				info.CredentialFields = cfInfos
 			}
 		}
-		if intg, ok := s.integrationDefs[name]; ok && len(intg.Connections) > 1 {
-			connNames := make([]string, 0, len(intg.Connections))
-			for connName := range intg.Connections {
+		if intg, ok := s.integrationDefs[name]; ok && intg.Plugin != nil && len(intg.Plugin.Connections) > 1 {
+			connNames := make([]string, 0, len(intg.Plugin.Connections))
+			for connName := range intg.Plugin.Connections {
 				connNames = append(connNames, connName)
 			}
 			sort.Strings(connNames)
-			conns := make([]connectionDefInfo, 0, len(intg.Connections))
+			conns := make([]connectionDefInfo, 0, len(intg.Plugin.Connections))
 			for _, connName := range connNames {
-				connDef := intg.Connections[connName]
+				connDef := intg.Plugin.Connections[connName]
 				authType := "oauth"
-				if connDef.Auth.Type == "manual" || connDef.Auth.Type == "api_key" {
+				if connDef.Auth != nil && (connDef.Auth.Type == "manual" || connDef.Auth.Type == "api_key") {
 					authType = "manual"
 				}
 				cdi := connectionDefInfo{Name: connName, AuthType: authType}
-				if len(connDef.Auth.Credentials) > 0 {
+				if connDef.Auth != nil && len(connDef.Auth.Credentials) > 0 {
 					cfInfos := make([]credentialFieldInfo, len(connDef.Auth.Credentials))
 					for i, cf := range connDef.Auth.Credentials {
 						cfInfos[i] = credentialFieldInfo{

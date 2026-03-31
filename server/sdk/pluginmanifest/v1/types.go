@@ -34,6 +34,26 @@ type Provider struct {
 	Operations           []ProviderOperation                `json:"operations,omitempty"`
 	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty"`
 	Connection           map[string]ProviderConnectionParam `json:"connection,omitempty"`
+
+	OpenAPI           string                                `json:"openapi,omitempty"`
+	GraphQLURL        string                                `json:"graphql_url,omitempty"`
+	MCPURL            string                                `json:"mcp_url,omitempty"`
+	AllowedOperations map[string]*ProviderOperationOverride `json:"allowed_operations,omitempty"`
+	OpenAPIConnection string                                `json:"openapi_connection,omitempty"`
+	GraphQLConnection string                                `json:"graphql_connection,omitempty"`
+	MCPConnection     string                                `json:"mcp_connection,omitempty"`
+	Connections       map[string]*ProviderConnectionDef     `json:"connections,omitempty"`
+}
+
+type ProviderOperationOverride struct {
+	Alias       string `json:"alias,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type ProviderConnectionDef struct {
+	Mode   string                             `json:"mode,omitempty"`
+	Auth   *ProviderAuth                      `json:"auth,omitempty"`
+	Params map[string]ProviderConnectionParam `json:"params,omitempty"`
 }
 
 type ProviderPostConnectDiscovery struct {

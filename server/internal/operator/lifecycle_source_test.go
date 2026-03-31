@@ -157,7 +157,7 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 
 	configPath := writeConfigYAML(t, dir, source, version)
 
-	lc := NewLifecycle(nil, resolver)
+	lc := NewLifecycle(resolver)
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
@@ -318,7 +318,7 @@ func TestSourcePluginNilResolver(t *testing.T) {
 
 	configPath := writeConfigYAML(t, dir, source, version)
 
-	lc := NewLifecycle(nil, nil)
+	lc := NewLifecycle(nil)
 	_, err := lc.InitAtPath(configPath)
 	if err == nil {
 		t.Fatal("expected error with nil resolver")
@@ -372,7 +372,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil, resolver)
+	lc := NewLifecycle(resolver)
 	_, err = lc.InitAtPath(configPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
@@ -455,7 +455,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}
 
 	resolver := &ghresolver.GitHubResolver{BaseURL: srv.URL}
-	lc := NewLifecycle(nil, resolver)
+	lc := NewLifecycle(resolver)
 
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
