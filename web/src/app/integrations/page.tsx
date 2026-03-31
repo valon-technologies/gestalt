@@ -39,11 +39,11 @@ function IntegrationsContent() {
       <Nav />
       <main className="mx-auto max-w-5xl px-6 py-8">
         {toast && (
-          <div className="mb-6 flex items-center justify-between rounded-lg border border-grove-200 bg-grove-50 px-4 py-3 text-sm text-grove-700">
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-grove-200 bg-grove-50 px-4 py-3 text-sm text-grove-700 dark:border-grove-600 dark:bg-grove-700/20 dark:text-grove-200">
             <span>{toast}</span>
             <button
               onClick={() => setToast(null)}
-              className="ml-4 text-grove-400 hover:text-grove-600"
+              className="ml-4 text-grove-400 hover:text-grove-600 dark:text-grove-500 dark:hover:text-grove-200"
               aria-label="Dismiss"
             >
               &times;
@@ -51,10 +51,10 @@ function IntegrationsContent() {
           </div>
         )}
 
-        <h1 className="text-2xl font-heading font-bold text-stone-900">
+        <h1 className="text-2xl font-heading font-bold text-stone-900 dark:text-stone-100">
           Integrations
         </h1>
-        <p className="mt-1 text-sm text-stone-500">
+        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
           Browse and connect third-party services.
         </p>
 
@@ -95,7 +95,7 @@ export default function IntegrationsPage() {
           <div className="min-h-screen">
             <Nav />
             <main className="mx-auto max-w-5xl px-6 py-8">
-              <p className="text-sm text-stone-400">Loading...</p>
+              <p className="text-sm text-stone-400 dark:text-stone-500">Loading...</p>
             </main>
           </div>
         }

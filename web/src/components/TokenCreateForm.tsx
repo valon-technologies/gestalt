@@ -41,7 +41,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
         <div>
           <label
             htmlFor="token-name"
-            className="block text-sm font-medium text-stone-700"
+            className="block text-sm font-medium text-stone-700 dark:text-stone-300"
           >
             Token name
           </label>
@@ -51,7 +51,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
             type="text"
             required
             placeholder="e.g. ci-pipeline"
-            className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25"
+            className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
           />
         </div>
         <Button type="submit" disabled={creating}>
@@ -60,11 +60,11 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
       </form>
 
       {plaintext && (
-        <div className="mt-4 rounded-lg border border-harvest-300 bg-harvest-50 p-4">
-          <p className="text-sm font-medium text-harvest-700">
+        <div className="mt-4 rounded-lg border border-harvest-300 bg-harvest-50 p-4 dark:border-harvest-600 dark:bg-harvest-700/20">
+          <p className="text-sm font-medium text-harvest-700 dark:text-harvest-300">
             Copy this token now. It will not be shown again.
           </p>
-          <code className="mt-2 block break-all rounded-md bg-stone-100 p-2 font-mono text-sm text-stone-900">
+          <code className="mt-2 block break-all rounded-md bg-stone-100 p-2 font-mono text-sm text-stone-900 dark:bg-stone-800 dark:text-stone-100">
             {plaintext}
           </code>
         </div>

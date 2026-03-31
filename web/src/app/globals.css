@@ -12,6 +12,14 @@
     --radius: 0.5rem;
   }
 
+  .dark {
+    --background: 30 15% 7%;
+    --surface: 30 12% 10%;
+    --surface-raised: 30 10% 14%;
+    --border: 30 8% 22%;
+    --foreground: 36 20% 88%;
+  }
+
   html {
     scroll-behavior: smooth;
   }
