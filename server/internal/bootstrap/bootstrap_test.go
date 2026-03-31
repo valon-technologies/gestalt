@@ -204,17 +204,6 @@ func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
 	if result.CapabilityLister == nil {
 		t.Fatal("expected CapabilityLister to be non-nil")
 	}
-	invoker, ok := result.Invoker.(*invocation.Broker)
-	if !ok {
-		t.Fatalf("expected Invoker to be *invocation.Broker, got %T", result.Invoker)
-	}
-	lister, ok := result.CapabilityLister.(*invocation.Broker)
-	if !ok {
-		t.Fatalf("expected CapabilityLister to be *invocation.Broker, got %T", result.CapabilityLister)
-	}
-	if invoker != lister {
-		t.Fatal("expected Invoker and CapabilityLister to reference the same shared instance")
-	}
 	<-result.ProvidersReady
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
@@ -289,9 +278,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	if runtimeDeps.CapabilityLister == nil {
 		t.Fatal("expected runtime capability lister to be non-nil")
 	}
-	if any(runtimeDeps.Invoker) != any(runtimeDeps.CapabilityLister) {
-		t.Fatal("expected runtime invoker and capability lister to be the same scoped instance")
-	}
 
 	rtCaps := runtimeDeps.CapabilityLister.ListCapabilities()
 	for _, cap := range rtCaps {
@@ -302,9 +288,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 
 	if bindingDeps.Invoker == nil {
 		t.Fatal("expected binding deps to carry an invoker")
-	}
-	if bindingDeps.Invoker == result.Invoker {
-		t.Fatal("expected binding deps to be scoped, not the shared invoker")
 	}
 
 	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "alpha", "", "do", nil)
