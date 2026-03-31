@@ -11,6 +11,10 @@ on:
         description: Semantic version for the release
         type: string
         required: true
+      gestaltd-version:
+        description: Pinned Gestalt module version, tag, or commit SHA used to install gestaltd
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -21,20 +25,40 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Normalize version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "release=${VERSION#v}" >> "$GITHUB_OUTPUT"
+      - name: Detect plugin type
+        id: plugin
+        run: |
+          if [ -f "${{ inputs.plugin-dir }}/go.mod" ] && [ -d "${{ inputs.plugin-dir }}/cmd" ]; then
+            echo "compiled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compiled=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ inputs.plugin-dir }}/go.mod
+          go-version: '1.26.0'
       - name: Install gestaltd
-        run: go install github.com/valon-technologies/gestalt/server/cmd/gestaltd@latest
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/valon-technologies/gestalt/server/cmd/gestaltd@${{ inputs.gestaltd-version }}
+      - uses: actions/setup-go@v5
+        if: steps.plugin.outputs.compiled == 'true'
+        with:
+          go-version-file: ${{ inputs.plugin-dir }}/go.mod
       - name: Release
         run: |
           cd "${{ inputs.plugin-dir }}"
-          gestaltd plugin release --version "${{ inputs.version }}"
+          gestaltd plugin release --version "${{ steps.version.outputs.release }}"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION="${VERSION#v}"
-          gh release create "v${VERSION}" --generate-notes \
+          gh release create "v${{ steps.version.outputs.release }}" --generate-notes \
             "${{ inputs.plugin-dir }}"/dist/*
