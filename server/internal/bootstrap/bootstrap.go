@@ -12,7 +12,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -21,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
+	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
@@ -832,7 +832,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = intg.Plugin.BaseURL
 		}
 		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
 		}
@@ -848,7 +848,7 @@ func buildHybridSpecProvider(ctx context.Context, name string, intg config.Integ
 			def.BaseURL = intg.Plugin.BaseURL
 		}
 		applyPluginHeaders(def, intg.Plugin, manifestProvider)
-		prov, err := provider.Build(def, conn, nil, provider.WithEgressResolver(deps.Egress.Resolver))
+		prov, err := provider.Build(def, conn, provider.WithEgressResolver(deps.Egress.Resolver))
 		if err != nil {
 			return nil, "", err
 		}
@@ -932,7 +932,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}
 		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
+		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build openapi provider %q: %w", name, err)
 		}
@@ -949,7 +949,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}
 		applyPluginHeaders(def, intg.Plugin, mp)
 		applyManifestResponseMapping(def, mp)
-		prov, err := provider.Build(def, conn, nil, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
+		prov, err := provider.Build(def, conn, mcpOAuthBuildOpts(conn, mp, regStore, deps)...)
 		if err != nil {
 			return nil, fmt.Errorf("build graphql provider %q: %w", name, err)
 		}
@@ -1161,45 +1161,17 @@ func buildDeclarativeProvider(name string, intg config.IntegrationDef, deps Deps
 }
 
 func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {
-	if intg.Plugin.AllowedOperations != nil && len(intg.Plugin.AllowedOperations) == 0 {
-		return nil, fmt.Errorf("integration %q plugin.allowed_operations cannot be empty; omit the field to allow all", name)
+	policy, err := operationexposure.New(intg.Plugin.AllowedOperations)
+	if err != nil {
+		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
-	if len(intg.Plugin.AllowedOperations) == 0 {
+	if policy == nil {
 		return pluginProv, nil
 	}
-
-	provOps := make(map[string]struct{}, len(pluginProv.ListOperations()))
-	for _, op := range pluginProv.ListOperations() {
-		provOps[op.Name] = struct{}{}
+	if err := policy.Validate(pluginProv.ListOperations()); err != nil {
+		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
-
-	opsMap := make(map[string]string, len(intg.Plugin.AllowedOperations))
-	descs := make(map[string]string)
-	exposedNames := make(map[string]string, len(intg.Plugin.AllowedOperations))
-	for opName, override := range intg.Plugin.AllowedOperations {
-		if _, ok := provOps[opName]; !ok {
-			return nil, fmt.Errorf("integration %q plugin.allowed_operations references unknown operation %q", name, opName)
-		}
-		exposed := opName
-		if override != nil && override.Alias != "" {
-			exposed = override.Alias
-			opsMap[exposed] = opName
-		} else {
-			opsMap[opName] = ""
-		}
-		if existing, ok := exposedNames[exposed]; ok {
-			return nil, fmt.Errorf("integration %q plugin: alias collision: %q and %q both resolve to %q", name, existing, opName, exposed)
-		}
-		exposedNames[exposed] = opName
-		if override != nil && override.Description != "" {
-			descs[exposed] = override.Description
-		}
-	}
-	var opts []integration.RestrictedOption
-	if len(descs) > 0 {
-		opts = append(opts, integration.WithDescriptions(descs))
-	}
-	return integration.NewRestricted(pluginProv, opsMap, opts...), nil
+	return policy.Wrap(pluginProv), nil
 }
 
 func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef) (core.Provider, map[string]any, error) {
