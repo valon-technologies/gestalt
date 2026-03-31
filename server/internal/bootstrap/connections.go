@@ -195,14 +195,31 @@ func basePluginConnectionDef(plugin *config.PluginDef, manifestProvider *pluginm
 }
 
 func resolvedNamedConnectionDef(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) config.ConnectionDef {
-	conn := basePluginConnectionDef(plugin, manifestProvider)
+	conn, ok := explicitNamedConnectionDef(plugin, manifestProvider, name)
+	if ok {
+		return conn
+	}
+	return basePluginConnectionDef(plugin, manifestProvider)
+}
+
+func explicitNamedConnectionDef(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) (config.ConnectionDef, bool) {
+	conn := config.ConnectionDef{}
+	found := false
+
 	if manifestProvider != nil {
-		mergeConnectionDef(&conn, manifestNamedConnectionDef(manifestProvider, name))
+		if _, ok := manifestProvider.Connections[name]; ok {
+			found = true
+			mergeConnectionDef(&conn, manifestNamedConnectionDef(manifestProvider, name))
+		}
 	}
 	if plugin != nil {
-		mergeConnectionDef(&conn, plugin.Connections[name])
+		if def, ok := plugin.Connections[name]; ok {
+			found = true
+			mergeConnectionDef(&conn, def)
+		}
 	}
-	return conn
+
+	return conn, found
 }
 
 func manifestTopLevelConnectionDef(provider *pluginmanifestv1.Provider) *config.ConnectionDef {
