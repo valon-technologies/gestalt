@@ -493,8 +493,8 @@ func TestExtractAuthHTTPBasic(t *testing.T) {
 	if def.Auth.Type != "manual" {
 		t.Errorf("Auth.Type = %q, want manual", def.Auth.Type)
 	}
-	if def.AuthStyle != "" {
-		t.Errorf("AuthStyle = %q, want empty (basic deferred to Phase 2)", def.AuthStyle)
+	if def.AuthStyle != "basic" {
+		t.Errorf("AuthStyle = %q, want basic", def.AuthStyle)
 	}
 }
 

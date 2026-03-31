@@ -3,6 +3,7 @@ package egress
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
@@ -52,8 +53,12 @@ func MaterializeCredential(token string, style AuthStyle, parser TokenParser) (C
 		if token == "" {
 			return CredentialMaterialization{}, nil
 		}
+		cred := token
+		if !strings.Contains(cred, ":") {
+			cred += ":"
+		}
 		return CredentialMaterialization{
-			Authorization: "Basic " + base64.StdEncoding.EncodeToString([]byte(token)),
+			Authorization: "Basic " + base64.StdEncoding.EncodeToString([]byte(cred)),
 		}, nil
 	case AuthStyleNone:
 		return CredentialMaterialization{}, nil

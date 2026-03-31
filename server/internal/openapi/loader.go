@@ -145,6 +145,9 @@ func extractAuth(model *v3high.Document, def *provider.Definition) {
 
 		case secTypeHTTP:
 			def.Auth.Type = "manual"
+			if ss.Scheme == "basic" {
+				def.AuthStyle = "basic"
+			}
 			return
 		}
 	}
