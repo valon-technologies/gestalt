@@ -779,15 +779,16 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 
 	meta := resolveProviderMetadata(intg)
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
 
 	var result *ProviderBuildResult
+	var err error
 
 	switch {
 	case intg.Plugin.IsInline():
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
 		manifest, err := config.InlineToManifest(name, intg.Plugin)
 		if err != nil {
 			return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
@@ -797,6 +798,10 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, err
 		}
 	case intg.Plugin.IsDeclarative:
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
 		if !intg.Plugin.HasResolvedManifest() {
 			return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
 		}
