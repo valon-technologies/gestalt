@@ -808,7 +808,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	if err != nil {
 		return nil, fmt.Errorf("create provider %q: %w", name, err)
 	}
-	prov, err := applyAllowedOperations(name, intg, declarative)
+	prov, err := applyAllowedOperations(name, allowedOperations, declarative)
 	if err != nil {
 		return nil, err
 	}
@@ -846,11 +846,24 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	}
 	manifest := intg.Plugin.ResolvedManifest
 	manifestProvider := intg.Plugin.ManifestProvider()
+	allowedOperations := intg.Plugin.AllowedOperations
+	if intg.Plugin.HasResolvedManifest() {
+		resolvedManifest, resolvedAllowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
+		if err != nil {
+			closeIfPossible(pluginProv)
+			return nil, err
+		}
+		manifest = resolvedManifest
+		if manifest != nil {
+			manifestProvider = manifest.Provider
+		}
+		allowedOperations = resolvedAllowedOperations
+	}
 	plan := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
 	resolved, hasSpecSurface := plan.configuredSpecSurface()
 
 	if !hasSpecSurface {
-		restricted, err := applyAllowedOperations(name, intg, pluginProv)
+		restricted, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, err
@@ -861,7 +874,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	specProv, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		plugin:            intg.Plugin,
 		manifestProvider:  manifestProvider,
-		allowedOperations: intg.Plugin.AllowedOperations,
+		allowedOperations: allowedOperations,
 		baseURL:           intg.Plugin.BaseURL,
 		providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
 			return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
@@ -1287,8 +1300,8 @@ func mergeConnectionAuth(dst *config.ConnectionAuthDef, src config.ConnectionAut
 	}
 }
 
-func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv core.Provider) (core.Provider, error) {
-	policy, err := operationexposure.New(intg.Plugin.AllowedOperations)
+func applyAllowedOperations(name string, allowedOperations map[string]*config.OperationOverride, pluginProv core.Provider) (core.Provider, error) {
+	policy, err := operationexposure.New(allowedOperations)
 	if err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}

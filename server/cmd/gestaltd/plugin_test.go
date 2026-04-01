@@ -36,6 +36,8 @@ const (
 	prebuiltHybridPluginName   = "prebuilt-hybrid"
 	prebuiltHybridSource       = "github.com/testowner/plugins/prebuilt-hybrid"
 	prebuiltHybridArtifactPath = "bin/provider"
+	specLoadedHybridPluginName = "spec-loaded-hybrid"
+	specLoadedHybridSource     = "github.com/testowner/plugins/spec-loaded-hybrid"
 )
 
 func TestRun_PluginHelpExitsCleanly(t *testing.T) {
@@ -585,6 +587,45 @@ func TestRun_PluginReleasePreservesPrebuiltHybridProvider(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleasePreservesSpecLoadedHybridProvider(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSpecLoadedHybridReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.5-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + specLoadedHybridPluginName + "_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != prebuiltHybridArtifactPath {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+	if manifest.Entrypoints.Provider == nil {
+		t.Fatal("expected provider entrypoint")
+	}
+	if manifest.Entrypoints.Provider.ArtifactPath != prebuiltHybridArtifactPath {
+		t.Fatalf("provider artifact path = %q", manifest.Entrypoints.Provider.ArtifactPath)
+	}
+	if manifest.Provider == nil || manifest.Provider.OpenAPI != "specs/openapi.yaml" {
+		t.Fatalf("provider openapi = %#v, want specs/openapi.yaml", manifest.Provider)
+	}
+	if len(manifest.Provider.AllowedOperations) != 2 {
+		t.Fatalf("allowed operations = %+v", manifest.Provider.AllowedOperations)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(prebuiltHybridArtifactPath))); err != nil {
+		t.Fatalf("expected prebuilt artifact in archive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, "specs", "openapi.yaml")); err != nil {
+		t.Fatalf("expected spec file in archive: %v", err)
+	}
+}
+
 func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	t.Parallel()
 
@@ -1090,6 +1131,47 @@ func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("prebuilt-provider"), 0755)
+	return pluginDir
+}
+
+func newSpecLoadedHybridReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, specLoadedHybridPluginName)
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      specLoadedHybridSource,
+		Version:     "0.0.1",
+		DisplayName: "Spec Loaded Hybrid",
+		IconFile:    releaseTestIconPath,
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "specs/openapi.yaml",
+			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
+				"gmail.users.messages.list": {Alias: "messages.list"},
+				"gmail.users.getProfile":    {Alias: "getProfile"},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   prebuiltHybridArtifactPath,
+				SHA256: sha256HexForTest("spec-loaded-hybrid-provider"),
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: prebuiltHybridArtifactPath,
+				Args:         []string{releaseHybridArg},
+			},
+		},
+	})
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("spec-loaded-hybrid-provider"), 0755)
+	writeTestFile(t, pluginDir, "specs/openapi.yaml", []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644)
 	return pluginDir
 }
 
