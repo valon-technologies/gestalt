@@ -1,7 +1,7 @@
 source: github.com/valon-technologies/gestalt/rippling
-version: 0.0.1-alpha.2
+version: 0.0.1-alpha.3
 display_name: Rippling
-description: Access employees, departments, work locations, current company, and leave data.
+description: Access company, employee, org structure, and leave data from Rippling.
 icon_file: assets/icon.svg
 kinds:
   - provider
@@ -31,6 +31,10 @@ provider:
           type: int
           in: query
           description: Pagination offset
+    - name: list_bank_accounts
+      description: List bank accounts for the current company
+      method: GET
+      path: /bank_accounts
     - name: list_employees
       description: List active employees for the current company
       method: GET
@@ -44,6 +48,31 @@ provider:
           type: int
           in: query
           description: Pagination offset
+        - name: countryCode
+          type: string
+          in: query
+          description: Two-letter company entity country code filter
+    - name: list_employees_including_terminated
+      description: List active and terminated employees for the current company
+      method: GET
+      path: /employees/include_terminated
+      parameters:
+        - name: limit
+          type: int
+          in: query
+          description: Maximum number of employees to return
+        - name: offset
+          type: int
+          in: query
+          description: Pagination offset
+        - name: EIN
+          type: int
+          in: query
+          description: Employer identification number filter
+        - name: send_all_roles
+          type: bool
+          in: query
+          description: Return all roles, including non-provisioned roles
     - name: get_employee
       description: Get a single employee by ID
       method: GET
@@ -54,6 +83,10 @@ provider:
           in: path
           required: true
           description: Unique identifier for the employee within Rippling
+    - name: get_current_user
+      description: Get basic information about the Rippling user tied to the token
+      method: GET
+      path: /me
     - name: list_work_locations
       description: List work locations for the current company
       method: GET
@@ -67,6 +100,66 @@ provider:
           type: int
           in: query
           description: Pagination offset
+    - name: list_custom_fields
+      description: List custom fields for the current company
+      method: GET
+      path: /custom_fields
+      parameters:
+        - name: limit
+          type: int
+          in: query
+          description: Maximum number of custom fields to return
+        - name: offset
+          type: int
+          in: query
+          description: Pagination offset
+    - name: list_teams
+      description: List teams for the current company
+      method: GET
+      path: /teams
+      parameters:
+        - name: limit
+          type: int
+          in: query
+          description: Maximum number of teams to return
+        - name: offset
+          type: int
+          in: query
+          description: Pagination offset
+    - name: list_levels
+      description: List levels for the current company
+      method: GET
+      path: /levels
+      parameters:
+        - name: limit
+          type: int
+          in: query
+          description: Maximum number of levels to return
+        - name: offset
+          type: int
+          in: query
+          description: Pagination offset
+    - name: list_company_activity
+      description: List company activity events with optional cursor/date filtering
+      method: GET
+      path: /company_activity
+      parameters:
+        - name: startDate
+          type: string
+          in: query
+          description: Start date for activity retrieval (inclusive)
+        - name: endDate
+          type: string
+          in: query
+          description: End date for activity retrieval (inclusive)
+        - name: next
+          type: string
+          in: query
+          description: Pagination cursor returned by a previous activity response
+        - name: limit
+          type: int
+          in: query
+          description: Maximum number of events to return
     - name: list_leave_requests
       description: List leave requests with optional filtering
       method: GET
@@ -120,6 +213,15 @@ provider:
           type: int
           in: query
           description: Pagination offset
+    - name: list_company_leave_types
+      description: List company leave types with optional managed-by filtering
+      method: GET
+      path: /company_leave_types
+      parameters:
+        - name: managedBy
+          type: string
+          in: query
+          description: Filter leave types by managing system identifier
     - name: list_leave_balances
       description: List leave balances for employees
       method: GET
@@ -133,3 +235,13 @@ provider:
           type: int
           in: query
           description: Pagination offset
+    - name: get_leave_balance
+      description: Get leave balances for a single employee role
+      method: GET
+      path: /leave_balances/{role}
+      parameters:
+        - name: role
+          type: string
+          in: path
+          required: true
+          description: Employee role ID returned by Rippling employee endpoints
