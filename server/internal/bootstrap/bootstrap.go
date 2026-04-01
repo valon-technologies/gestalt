@@ -837,22 +837,7 @@ func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*plugin
 		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
 	}
 
-	var allowedOperations map[string]*config.OperationOverride
-	if manifest.Provider.AllowedOperations != nil {
-		allowedOperations = make(map[string]*config.OperationOverride, len(manifest.Provider.AllowedOperations))
-		for name, override := range manifest.Provider.AllowedOperations {
-			if override == nil {
-				allowedOperations[name] = nil
-				continue
-			}
-			allowedOperations[name] = &config.OperationOverride{
-				Alias:       override.Alias,
-				Description: override.Description,
-			}
-		}
-	}
-
-	return manifest, allowedOperations, nil
+	return manifest, config.OperationOverridesFromManifest(manifest.Provider.AllowedOperations), nil
 }
 
 func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {

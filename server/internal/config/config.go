@@ -303,6 +303,24 @@ type OperationOverride struct {
 	Description string `yaml:"description" json:"description,omitempty"`
 }
 
+func OperationOverridesFromManifest(overrides map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
+	if overrides == nil {
+		return nil
+	}
+	result := make(map[string]*OperationOverride, len(overrides))
+	for name, override := range overrides {
+		if override == nil {
+			result[name] = nil
+			continue
+		}
+		result[name] = &OperationOverride{
+			Alias:       override.Alias,
+			Description: override.Description,
+		}
+	}
+	return result
+}
+
 func Load(path string) (*Config, error) {
 	return LoadWithLookup(path, os.LookupEnv)
 }
