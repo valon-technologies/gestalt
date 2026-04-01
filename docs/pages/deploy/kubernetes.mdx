@@ -6,8 +6,12 @@ The repository includes a Helm chart under `server/deploy/helm/gestalt`.
 
 ```sh
 helm upgrade --install gestalt ./server/deploy/helm/gestalt \
-  --set image.tag=<version>
+  --set image.tag=<version> \
+  --dry-run --debug
 ```
+
+Remove `--dry-run --debug` when you are ready to apply the release to a real
+cluster.
 
 ## Important Chart Values
 
@@ -58,8 +62,6 @@ Enable the init container when your config uses:
 
 The init container copies the rendered config and runs:
 
-```sh
-/gestaltd init --config /etc/gestalt/config.yaml
-```
+`/gestaltd init --config /etc/gestalt/config.yaml`
 
 The main container then starts in locked mode against the prepared state.

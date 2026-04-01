@@ -12,8 +12,7 @@ integrations:
     description: Read and send Gmail messages
     mcp_tool_prefix: gmail_
     plugin:
-      source: github.com/valon-technologies/gestalt/gmail
-      version: 0.0.1-alpha.4
+      package: ./dist/gmail-plugin.tar.gz
 ```
 
 At the top level, an integration has presentation metadata plus a single
@@ -34,16 +33,19 @@ Inline declarative providers use `base_url` plus `operations`.
 
 ```yaml
 integrations:
-  ipinfo:
+  support:
     plugin:
       auth:
-        type: none
-      base_url: https://httpbin.org
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+      base_url: https://api.support.example.com
       operations:
-        - name: get_ip
-          description: Return caller IP information
+        - name: list_tickets
+          description: Return open support tickets
           method: GET
-          path: /ip
+          path: /tickets
 ```
 
 This is the simplest path when you already know the exact operations you want.
@@ -55,24 +57,20 @@ MCP.
 
 ```yaml
 integrations:
-  notion:
-    mcp_tool_prefix: notion_
+  httpbin:
+    mcp_tool_prefix: httpbin_
     plugin:
-      openapi: ./openapi/notion.yaml
-      mcp_url: https://mcp.notion.com/mcp
-      mcp_connection: MCP
-      headers:
-        Notion-Version: "2026-03-11"
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
       connections:
-        MCP:
-          mode: user
+        public:
+          mode: none
           auth:
-            type: mcp_oauth
+            type: none
       allowed_operations:
-        pages.retrieve:
-          alias: get_page
-        search:
-          alias: search
+        get_ip:
+          alias: get_ip
 ```
 
 `allowed_operations` narrows the exposed surface and can rename operations with
@@ -84,15 +82,14 @@ Packaged providers come from one of three sources:
 
 - `command`: run an executable directly
 - `package`: load a local directory, local archive, or HTTPS archive
-- `source`: resolve a versioned plugin source during `init`
+- `source` plus `version`: resolve a published plugin package during `init`
 
 ```yaml
 integrations:
-  slack:
-    display_name: Slack
+  support:
+    display_name: Support
     plugin:
-      source: github.com/valon-technologies/gestalt/slack
-      version: 0.0.1-alpha.7
+      package: ./dist/support-plugin.tar.gz
 ```
 
 Packaged providers carry their own manifest, auth model, and operation catalog.
@@ -101,16 +98,21 @@ Packaged providers carry their own manifest, auth model, and operation catalog.
 
 A packaged plugin can also layer in spec-backed surfaces.
 
+Assume `./dist/support-plugin.tar.gz` and `./openapi/support.yaml` already
+exist.
+
 ```yaml
 integrations:
   support:
     display_name: Support
     mcp_tool_prefix: support_
     plugin:
-      package: ./dist/support-plugin
-      openapi: https://api.example.com/openapi.json
-      mcp_url: https://mcp.example.com/mcp
+      package: ./dist/support-plugin.tar.gz
+      openapi: ./openapi/support.yaml
+      openapi_connection: plugin
+      mcp_url: https://mcp.support.example.com/mcp
       mcp_connection: plugin
+      default_connection: plugin
       allowed_operations:
         tickets.list:
           alias: list_tickets
@@ -147,9 +149,11 @@ plugin:
 
 Use `plugin.connections` when different surfaces need different auth flows.
 
+These next blocks are `plugin:` fragments, not complete integration files.
+
 ```yaml
 plugin:
-  openapi: https://api.example.com/openapi.json
+  openapi: ./openapi/workspace.yaml
   mcp_url: https://mcp.example.com/mcp
   openapi_connection: api
   mcp_connection: mcp
@@ -188,7 +192,7 @@ before an operation is exposed.
 
 ```yaml
 plugin:
-  openapi: https://api.example.com/openapi.json
+  openapi: ./openapi/workspace.yaml
   managed_parameters:
     - in: header
       name: X-API-Version

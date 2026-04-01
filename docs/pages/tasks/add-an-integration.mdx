@@ -8,41 +8,46 @@ Use this when the surface is small and custom.
 
 ```yaml
 integrations:
-  httpbin:
-    display_name: HTTPBin
+  support:
+    display_name: Support
     plugin:
       auth:
-        type: none
-      base_url: https://httpbin.org
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+      base_url: https://api.support.example.com
       operations:
-        - name: get_ip
+        - name: list_tickets
           method: GET
-          path: /ip
+          path: /tickets
 ```
 
 ## Inline OpenAPI
 
 Use this when the upstream already publishes a spec.
 
+Assume you already have a local OpenAPI file such as `./openapi/httpbin.yaml`.
+
 ```yaml
 integrations:
-  notion:
-    display_name: Notion
-    mcp_tool_prefix: notion_
+  httpbin:
+    display_name: HTTPBin
+    mcp_tool_prefix: httpbin_
     plugin:
-      openapi: ./openapi/notion.yaml
-      headers:
-        Notion-Version: "2026-03-11"
-      auth:
-        type: bearer
-        credentials:
-          - name: token
-            label: API Token
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
       allowed_operations:
-        search:
-          alias: search
-        pages.retrieve:
-          alias: get_page
+        get_ip:
+          alias: get_ip
+        get_headers:
+          alias: get_headers
 ```
 
 ## Packaged Plugin
@@ -51,11 +56,10 @@ Use this when the logic belongs in code or should be versioned independently.
 
 ```yaml
 integrations:
-  slack:
-    display_name: Slack
+  support:
+    display_name: Support
     plugin:
-      source: github.com/valon-technologies/gestalt/slack
-      version: 0.0.1-alpha.7
+      package: ./dist/support-plugin.tar.gz
 ```
 
 Prepare it and start from locked state:
@@ -69,16 +73,21 @@ gestaltd serve --locked --config ./config.yaml
 
 Use this when you want packaged custom logic plus spec-backed operations.
 
+Assume you already have a local package such as `./dist/support-plugin.tar.gz`
+and a local OpenAPI file such as `./openapi/support.yaml`.
+
 ```yaml
 integrations:
   support:
     display_name: Support
     mcp_tool_prefix: support_
     plugin:
-      package: ./dist/support-plugin
-      openapi: https://api.support.example.com/openapi.json
+      package: ./dist/support-plugin.tar.gz
+      openapi: ./openapi/support.yaml
+      openapi_connection: plugin
       mcp_url: https://mcp.support.example.com/mcp
       mcp_connection: plugin
+      default_connection: plugin
       allowed_operations:
         tickets.list:
           alias: list_tickets
@@ -92,7 +101,7 @@ Use named connections when different surfaces need different auth flows.
 integrations:
   workspace:
     plugin:
-      openapi: https://api.example.com/openapi.json
+      openapi: ./openapi/workspace.yaml
       mcp_url: https://mcp.example.com/mcp
       openapi_connection: api
       mcp_connection: mcp

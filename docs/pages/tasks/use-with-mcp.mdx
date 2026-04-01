@@ -2,25 +2,46 @@
 
 Gestalt exposes one MCP endpoint at `/mcp`.
 
-## Expose Inline Operations As MCP Tools
+## Expose OpenAPI Operations As MCP Tools
+
+Assume you already have a local OpenAPI file such as `./openapi/httpbin.yaml`.
+
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+```
 
 ```yaml
 integrations:
   httpbin:
     mcp_tool_prefix: httpbin_
     plugin:
-      auth:
-        type: none
-      base_url: https://httpbin.org
-      operations:
-        - name: get_ip
-          method: GET
-          path: /ip
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
 Start the server and `/mcp` is mounted automatically.
 
 ## Add An Upstream MCP Surface
+
+Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
 
 ```yaml
 integrations:
@@ -28,9 +49,18 @@ integrations:
     mcp_tool_prefix: notion_
     plugin:
       openapi: ./openapi/notion.yaml
+      openapi_connection: REST
       mcp_url: https://mcp.notion.com/mcp
       mcp_connection: MCP
+      default_connection: REST
       connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
         MCP:
           mode: user
           auth:
@@ -49,12 +79,13 @@ Use the same credentials as the HTTP API:
 - session cookie
 - `Authorization: Bearer gst_api_...`
 
+If `auth.provider` is `none`, no extra MCP client credential is required.
+
 ## Verify The Endpoint
 
 ```sh
 curl http://localhost:8080/ready
 curl -X POST http://localhost:8080/mcp \
-  -H "Authorization: Bearer gst_api_..." \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```

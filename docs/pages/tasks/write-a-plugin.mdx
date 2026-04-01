@@ -5,14 +5,29 @@ and runtime examples in Go.
 
 ## Implement A Provider
 
-The minimal provider shape is:
+Start from a complete provider, not a fragment:
 
 ```go
-type exampleProvider struct{}
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+    "os/signal"
+
+    gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type exampleProvider struct {
+    greeting string
+}
 
 func (p *exampleProvider) Name() string        { return "example" }
 func (p *exampleProvider) DisplayName() string { return "Example Provider" }
-func (p *exampleProvider) Description() string { return "Minimal provider" }
+func (p *exampleProvider) Description() string { return "A minimal example provider" }
 func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
     return gestalt.ConnectionModeNone
 }
@@ -21,19 +36,40 @@ func (p *exampleProvider) Catalog() *gestalt.Catalog {
     return &gestalt.Catalog{
         Name: "example",
         Operations: []gestalt.CatalogOperation{
-            {ID: "hello", Method: "GET", Description: "Say hello"},
+            {
+                ID:          "greet",
+                Method:      http.MethodGet,
+                Description: "Say hello",
+                Parameters: []gestalt.CatalogParameter{
+                    {Name: "name", Type: "string", Description: "Name to greet"},
+                },
+            },
         },
     }
 }
 
-func (p *exampleProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*gestalt.OperationResult, error) {
-    return &gestalt.OperationResult{Status: 200, Body: `{"message":"hello"}`}, nil
+func (p *exampleProvider) Execute(_ context.Context, _ string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
+    name, _ := params["name"].(string)
+    if name == "" {
+        name = "World"
+    }
+    greeting := p.greeting
+    if greeting == "" {
+        greeting = "Hello"
+    }
+    body, _ := json.Marshal(map[string]string{
+        "message": fmt.Sprintf("%s, %s!", greeting, name),
+    })
+    return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 }
 
 func main() {
     ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
     defer cancel()
-    _ = gestalt.ServeProvider(ctx, &exampleProvider{})
+    if err := gestalt.ServeProvider(ctx, &exampleProvider{}); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
 }
 ```
 
@@ -44,55 +80,8 @@ The repository examples live under:
 
 ## Add A YAML Manifest
 
-### Basic Provider Manifest
-
-```yaml
-source: github.com/acme/plugins/example
-version: 0.1.0
-display_name: Example
-description: Minimal packaged provider
-icon_file: assets/icon.svg
-kinds:
-  - provider
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/provider
-    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-entrypoints:
-  provider:
-    artifact_path: artifacts/linux/amd64/provider
-```
-
-### Advanced Hybrid Manifest
-
-Use this style when the package should ship custom code plus a spec-backed API
-or upstream MCP surface.
-
-```yaml
-source: github.com/acme/plugins/support
-version: 1.2.3
-display_name: Support
-kinds:
-  - provider
-provider:
-  openapi: https://api.support.example.com/openapi.json
-  mcp_url: https://mcp.support.example.com/mcp
-  mcp_connection: mcp
-  connections:
-    mcp:
-      mode: user
-      auth:
-        type: mcp_oauth
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/provider
-    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-entrypoints:
-  provider:
-    artifact_path: artifacts/linux/amd64/provider
-```
+Add a `plugin.yaml` or `plugin.json` to the plugin root. For manifest fields
+and worked examples, use [Plugin Manifests](/reference/plugin-manifests).
 
 ## Package It
 

@@ -2,7 +2,10 @@
 
 This page documents the current `config.yaml` shape used by `gestaltd`.
 
-## Complete Example
+## Representative Example
+
+This file shows several features together in one place. The smaller blocks
+below are field excerpts, not standalone configs.
 
 ```yaml
 server:
@@ -39,11 +42,20 @@ integrations:
     mcp_tool_prefix: notion_
     plugin:
       openapi: ./openapi/notion.yaml
+      openapi_connection: REST
       mcp_url: https://mcp.notion.com/mcp
       mcp_connection: MCP
+      default_connection: REST
       headers:
         Notion-Version: "2026-03-11"
       connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
         MCP:
           mode: user
           auth:
@@ -57,8 +69,7 @@ integrations:
   slack:
     display_name: Slack
     plugin:
-      source: github.com/valon-technologies/gestalt/slack
-      version: 0.0.1-alpha.7
+      package: ./dist/slack-plugin.tar.gz
 
 runtimes:
   notifier:
@@ -231,9 +242,14 @@ integrations:
     icon_file: ./icons/github.svg
     mcp_tool_prefix: github_
     plugin:
-      auth:
-        type: none
       openapi: ./openapi/github.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
       allowed_operations:
         repos.get:
           alias: get_repo
@@ -352,15 +368,18 @@ Connection modes:
 ```yaml
 plugin:
   auth:
-    type: none
-  base_url: https://httpbin.org
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  base_url: https://api.support.example.com
   operations:
-    - name: get_ip
+    - name: list_tickets
       method: GET
-      path: /ip
-    - name: get_headers
+      path: /tickets
+    - name: get_ticket
       method: GET
-      path: /headers
+      path: /tickets/{ticket_id}
 ```
 
 Each operation accepts:
@@ -378,6 +397,13 @@ Parameter locations can be `query`, `body`, or `path`.
 ```yaml
 plugin:
   openapi: https://api.example.com/openapi.json
+  openapi_connection: public
+  default_connection: public
+  connections:
+    public:
+      mode: none
+      auth:
+        type: none
   managed_parameters:
     - in: header
       name: X-API-Version
@@ -396,6 +422,9 @@ plugin:
   graphql_url: https://api.example.com/graphql
   auth:
     type: bearer
+    credentials:
+      - name: token
+        label: API Token
   response_mapping:
     data_path: data.items
     pagination:

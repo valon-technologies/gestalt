@@ -11,6 +11,26 @@ port `8080`.
 
 ## Explicit Local Config
 
+Save this as `openapi/httpbin.yaml`:
+
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+```
+
+Save this as `config.yaml`:
+
 ```yaml
 server:
   port: 8080
@@ -28,13 +48,14 @@ datastore:
 integrations:
   httpbin:
     plugin:
-      auth:
-        type: none
-      base_url: https://httpbin.org
-      operations:
-        - name: get_ip
-          method: GET
-          path: /ip
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
 Start it:

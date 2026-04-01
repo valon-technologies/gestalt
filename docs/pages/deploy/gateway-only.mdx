@@ -10,14 +10,8 @@ The published image is `valontechnologies/gestaltd`.
 
 ## Mount A Prepared Config Directory
 
-If you already ran `gestaltd init`, mount the whole config directory:
-
-```sh
-docker run \
-  -p 8080:8080 \
-  -v "$(pwd)/deploy:/etc/gestalt:ro" \
-  valontechnologies/gestaltd:latest
-```
+If you already ran `gestaltd init`, mount the whole config directory at
+`/etc/gestalt`.
 
 That directory should contain:
 
@@ -27,29 +21,11 @@ That directory should contain:
 
 ## Mutable Local Startup In Docker
 
-For local development, override the default command and let the container start
-without locked mode:
-
-```sh
-docker run \
-  -p 8080:8080 \
-  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
-  valontechnologies/gestaltd:latest \
-  gestaltd
-```
+For local development, override the default command and start the container with
+`serve --config /etc/gestalt/config.yaml`.
 
 ## Bake Prepared State Into A Derived Image
 
-```dockerfile
-FROM valontechnologies/gestaltd:latest AS init
-USER root
-COPY config.yaml /app/config.yaml
-RUN ["/gestaltd", "init", "--config", "/app/config.yaml"]
-
-FROM valontechnologies/gestaltd:latest
-COPY --from=init /app/ /app/
-CMD ["serve", "--locked", "--config", "/app/config.yaml"]
-```
-
-This pattern is appropriate when your config depends on packaged plugins and you
-want the runtime image to be immutable.
+If you want an immutable runtime image, run `gestaltd init` in a build stage,
+copy the prepared config directory plus `.gestalt/` into the final image, and
+keep the runtime container on the default locked command.

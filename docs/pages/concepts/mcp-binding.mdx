@@ -61,15 +61,26 @@ integration can use different named connections.
 
 ## Example
 
+Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
+
 ```yaml
 integrations:
   notion:
     mcp_tool_prefix: notion_
     plugin:
       openapi: ./openapi/notion.yaml
+      openapi_connection: REST
       mcp_url: https://mcp.notion.com/mcp
       mcp_connection: MCP
+      default_connection: REST
       connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
         MCP:
           mode: user
           auth:

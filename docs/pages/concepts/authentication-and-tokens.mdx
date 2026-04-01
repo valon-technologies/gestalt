@@ -35,7 +35,8 @@ Integration auth lives inside `integrations.*.plugin`.
 
 Examples:
 
-- `type: none` for public APIs
+- `type: none` for public spec-backed surfaces that use a `mode: none`
+  connection
 - `type: oauth2` for user-scoped or shared OAuth flows
 - `type: manual` or `type: bearer` for manually entered credentials
 - `type: mcp_oauth` for upstream MCP servers that implement MCP OAuth

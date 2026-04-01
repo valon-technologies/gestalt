@@ -43,26 +43,29 @@ A package can contain:
 This example is a declarative-only provider package. It does not need a binary.
 
 ```yaml
-source: github.com/acme/plugins/httpbin
+source: github.com/acme/plugins/support-api
 version: 0.1.0
-display_name: HTTPBin
-description: Small public HTTP inspection API
+display_name: Support API
+description: Small ticket API
 icon_file: assets/icon.svg
 kinds:
   - provider
 provider:
-  base_url: https://httpbin.org
+  base_url: https://api.support.example.com
   auth:
-    type: none
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
   operations:
-    - name: get_ip
-      description: Return caller IP information
+    - name: list_tickets
+      description: Return open tickets
       method: GET
-      path: /ip
-    - name: get_headers
-      description: Return inbound request headers
+      path: /tickets
+    - name: get_ticket
+      description: Return one ticket
       method: GET
-      path: /headers
+      path: /tickets/{ticket_id}
 ```
 
 Use this style when:
@@ -128,11 +131,11 @@ artifacts:
   - os: darwin
     arch: arm64
     path: artifacts/darwin/arm64/provider
-    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   - os: linux
     arch: amd64
     path: artifacts/linux/amd64/provider
-    sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 entrypoints:
   provider:
     artifact_path: artifacts/linux/amd64/provider
@@ -156,7 +159,7 @@ artifacts:
   - os: linux
     arch: amd64
     path: artifacts/linux/amd64/runtime
-    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 entrypoints:
   runtime:
     artifact_path: artifacts/linux/amd64/runtime
@@ -185,6 +188,8 @@ webui:
   `entrypoints`.
 - Provider or runtime packages that include executable code do require artifacts
   and entrypoints.
+- `sha256` must match the artifact bytes. Replace the example values with the
+  hash from your own build.
 - `config_schema_path` validates `integrations.*.plugin.config`.
 - `schemas/config.schema.json` validates `runtimes.*.config`.
 

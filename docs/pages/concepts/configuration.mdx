@@ -41,6 +41,8 @@ egress: {}
 ui: {}
 ```
 
+This is the top-level map shape, not a complete file.
+
 The full field reference lives at [Config File](/reference/config-file).
 
 ## Local And Locked Startup
@@ -117,6 +119,24 @@ absolute callback URLs or set secure cookies correctly. When it is set:
 
 ## The Smallest Useful Config
 
+With one local OpenAPI file:
+
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+```
+
 ```yaml
 server:
   port: 8080
@@ -133,13 +153,14 @@ datastore:
 integrations:
   example:
     plugin:
-      auth:
-        type: none
-      base_url: https://httpbin.org
-      operations:
-        - name: get_ip
-          method: GET
-          path: /ip
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
 That is enough to boot a local server, expose an operation over HTTP, and make

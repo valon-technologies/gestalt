@@ -22,16 +22,11 @@ and place them on your `PATH`.
 
 **Docker**
 
-```sh
-docker run \
-  -p 8080:8080 \
-  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
-  valontechnologies/gestaltd:latest \
-  gestaltd
-```
-
-The image defaults to `serve --locked --config /etc/gestalt/config.yaml`. Using
-`gestaltd` directly keeps startup mutable for local development.
+The published image is `valontechnologies/gestaltd`. It expects
+`/etc/gestalt/config.yaml` and defaults to
+`serve --locked --config /etc/gestalt/config.yaml`.
+See [Docker](/deploy/gateway-only) for the container layout and mount
+expectations.
 
 ## Run A Local Server With No Config
 
@@ -59,6 +54,30 @@ The generated SQLite database lives at `~/.gestalt/gestalt.db`.
 
 ## Write An Explicit Config
 
+Save this as `openapi/httpbin.yaml`:
+
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+  /headers:
+    get:
+      operationId: get_headers
+      responses:
+        "200":
+          description: OK
+```
+
 Save this as `config.yaml`:
 
 ```yaml
@@ -81,18 +100,14 @@ integrations:
     description: Public request and response inspection API
     mcp_tool_prefix: httpbin_
     plugin:
-      auth:
-        type: none
-      base_url: https://httpbin.org
-      operations:
-        - name: get_ip
-          description: Return the caller IP information
-          method: GET
-          path: /ip
-        - name: get_headers
-          description: Return the inbound request headers
-          method: GET
-          path: /headers
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
 This is the smallest useful Gestalt config:
@@ -100,7 +115,7 @@ This is the smallest useful Gestalt config:
 - one explicit server block
 - no platform auth
 - SQLite storage
-- one inline declarative integration
+- one inline OpenAPI integration
 
 ## Validate And Start It
 
