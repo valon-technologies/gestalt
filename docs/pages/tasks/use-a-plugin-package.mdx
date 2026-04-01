@@ -1,53 +1,52 @@
-# Use a Plugin Package
+# Use A Plugin Package
 
-Packaged plugins are the deployment-oriented way to run executable providers and runtimes.
+Gestalt can load plugin packages from a local directory, a local archive, an
+HTTPS archive, or a versioned source.
 
-## Reference The Package
+## Local Directory
 
 ```yaml
 integrations:
-  acme:
+  slack:
     plugin:
-      package: ./plugins/acme-provider
-      config:
-        endpoint: https://api.example.com
+      package: ./dist/slack
 ```
 
-`plugin.package` accepts:
+## Local Archive
 
-- a local directory
-- an HTTPS URL (`.tar.gz`)
+```yaml
+integrations:
+  slack:
+    plugin:
+      package: ./dist/slack.tar.gz
+```
 
-## Init It
+## Remote Archive
+
+Remote package archives use the same field:
+`package: https://downloads.example.com/slack-0.1.0.tar.gz`
+
+Only HTTPS archives are supported.
+
+## Versioned Source
+
+Published package sources use `source` plus `version`, for example:
+`source: github.com/acme/plugins/slack` and `version: 1.2.3`
+
+## Prepare And Serve
 
 ```sh
 gestaltd init --config ./config.yaml
-```
-
-This validates the manifest, selects the current platform artifact, installs the package in-place, and records the prepared result in `gestalt.lock.json`.
-
-## Validate The Prepared Config
-
-```sh
-gestaltd validate --config ./config.yaml
-```
-
-Validation uses the prepared plugin state instead of re-resolving the package every time.
-
-## Start From Locked State
-
-```sh
 gestaltd serve --locked --config ./config.yaml
 ```
 
-That is the normal production path for packaged plugins.
+`init` extracts or resolves the package into `.gestalt/plugins/...` and records
+the prepared state in `gestalt.lock.json`.
 
-## Refresh A Remote Package
-
-If `plugin.package` points at an HTTPS URL and the remote archive changes, rerun:
+## Package A Plugin Yourself
 
 ```sh
-gestaltd init --config ./config.yaml
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 ```
 
-Remote packages are intentionally refreshed during explicit `init`.
+See [Plugin Manifests](/reference/plugin-manifests) for the package layout.

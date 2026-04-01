@@ -1,6 +1,6 @@
 # gestaltd Docker image
 
-`gestaltd` is a self-hosted integration runtime. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
+`gestaltd` is a self-hosted integration gateway. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
 
 - an HTTP API
 - an embedded web UI
@@ -20,7 +20,7 @@
 
 - Default config path: `/etc/gestalt/config.yaml`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config depends on remote OpenAPI or GraphQL specs, or on `plugin.package`, init the config first.
+- Locked startup is the default. If your config uses packaged integrations, runtimes, or a packaged UI, run `init` first.
 
 ## Supported tags
 
@@ -68,7 +68,7 @@ integrations: {}
 
 ## Run a prepared production image
 
-If your config references remote OpenAPI or GraphQL sources, or `plugin.package`, prepare it during the image build:
+If your config uses packaged integrations, runtimes, or a packaged UI, prepare it during the image build:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest AS init
@@ -161,9 +161,10 @@ You can also use it to check startup behavior directly:
 docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
-## Building plugins
+## Packaging plugins
 
-To compile Go plugins, use a standard `golang:` image and copy `gestaltd` from the runtime image:
+If you build a plugin package in Docker, compile your binaries into a plugin
+directory first, then package that directory with `gestaltd`:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest AS gestaltd
@@ -173,8 +174,8 @@ RUN apk add --no-cache git
 COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
-RUN go build -o /tmp/myplugin ./plugins/cmd/myplugin && \
-    gestaltd plugin package --binary /tmp/myplugin --source github.com/example/myrepo/myplugin --output ./deploy/plugins/myplugin && \
+RUN go build -o ./my-plugin/artifacts/linux/amd64/provider ./plugins/cmd/myplugin && \
+    gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz && \
     gestaltd init --config ./deploy/config.yaml
 ```
 

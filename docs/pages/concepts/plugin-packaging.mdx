@@ -1,135 +1,102 @@
 # Plugin Packaging
 
-Gestalt can run plugins directly from a local executable, but it can also install and lock packaged plugins. Packaged plugins are the better fit for deployment because they give `gestaltd init` something explicit to verify and install.
+Gestalt uses one package format for:
 
-## The Manifest
+- provider plugins
+- runtime plugins
+- web UI bundles
 
-Every package is rooted by `plugin.json`.
+Each package is described by a manifest file named one of:
 
-A minimal provider package manifest looks like this:
+- `plugin.yaml`
+- `plugin.yml`
+- `plugin.json`
 
-```json
-{
-  "source": "github.com/your-org/your-repo/example-provider",
-  "version": "1.0.0",
-  "display_name": "Example Provider",
-  "description": "Minimal packaged provider",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "linux",
-      "arch": "amd64",
-      "path": "bin/example-provider-linux-amd64",
-      "sha256": "..."
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "bin/example-provider-linux-amd64"
-    }
-  }
-}
-```
+## How Plugins Enter A Config
 
-`source` identifies the plugin in the managed artifact system. The package declares which kinds it supports, names platform-specific artifacts, and defines entrypoints that point at those artifacts. Provider packages may also ship a JSON Schema for config validation.
+There are three ways to point at a packaged plugin from `config.yaml`.
 
-### Web UI package
+### `command`
 
-UI plugins use the `webui` kind. They contain static assets instead of executables:
-
-```json
-{
-  "source": "github.com/your-org/your-repo/console",
-  "version": "1.0.0",
-  "kinds": ["webui"],
-  "webui": {
-    "asset_root": "out"
-  }
-}
-```
-
-Web UI manifests have no `artifacts` or `entrypoints` and cannot be combined with `provider` or `runtime` kinds. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
-
-## Creating A Package
-
-Build a directory that contains `plugin.json` plus the referenced artifacts, then run:
-
-```sh
-gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider
-```
-
-That copies the validated plugin directory to the output path. If you need an archive for remote distribution, use a `.tar.gz` output path:
-
-```sh
-gestaltd plugin package --input ./build/example-provider --output ./dist/example-provider.tar.gz
-```
-
-## Releasing A Compiled Plugin
-
-For compiled plugins, `gestaltd plugin release` handles cross-compilation, packaging, and checksum generation in one step:
-
-```sh
-cd my-plugin
-gestaltd plugin release --version 1.0.0
-```
-
-This produces per-platform archives in `dist/`:
-
-- `gestalt-plugin-my-plugin_v1.0.0_darwin_amd64.tar.gz`
-- `gestalt-plugin-my-plugin_v1.0.0_darwin_arm64.tar.gz`
-- `gestalt-plugin-my-plugin_v1.0.0_linux_amd64.tar.gz`
-- `gestalt-plugin-my-plugin_v1.0.0_linux_arm64.tar.gz`
-- `gestalt-plugin-my-plugin_v1.0.0_checksums.txt`
-
-Each archive contains a `plugin.json` manifest, the platform-specific binary, and any assets. Upload the contents of `dist/` to a GitHub release and reference the plugin via `plugin.source` in your config.
-
-Use `--platform` to restrict to specific platforms:
-
-```sh
-gestaltd plugin release --version 1.0.0 --platform linux/amd64,linux/arm64
-```
-
-## Using A Package In Config
-
-Packages can come from:
-
-- a local directory
-- an HTTPS URL (`.tar.gz`)
-
-Example:
+Use a local executable directly.
 
 ```yaml
 integrations:
   example:
     plugin:
-      package: ./dist/example-provider
+      command: ./bin/example-provider
       config:
         greeting: hello
 ```
 
-or from a remote archive:
+This is best for local development.
+
+### `package`
+
+Load a local directory, local archive, or HTTPS archive.
 
 ```yaml
 integrations:
-  example:
+  slack:
     plugin:
-      package: https://example.com/example-provider.tar.gz
+      package: ./dist/slack
 ```
 
-Plain `http://` is rejected. Remote packages must use HTTPS.
+### `source`
 
-## What `init` Does
+Resolve a versioned plugin source during `init`.
 
-`gestaltd init` installs packaged plugins and records them in `gestalt.lock.json`.
+In config, that looks like `source: github.com/acme/plugins/gmail` plus
+`version: 1.2.3`.
 
-The prepared state includes:
+This is the cleanest path for reusable, versioned packages.
 
-- `.gestalt/plugins/...`
-- `gestalt.lock.json`
+## What `init` Does For Packaged Plugins
 
-When you later run `gestaltd serve --locked`, startup succeeds only if those prepared artifacts still match the config.
+`gestaltd init` resolves and prepares:
 
-## Why Packaging Matters
+- `plugin.source`
+- `plugin.package`
+- runtime plugins
+- UI plugins
 
-Packaging gives you repeatable installs, artifact digest verification, platform-specific binaries in one archive, optional config schema validation, and deterministic production startup. For development, `plugin.command` is usually simpler. For deployment, `plugin.package` plus `gestaltd init` is the stronger model.
+It writes lock state and extracts the prepared artifacts under `.gestalt/`.
+
+## Packaging Commands
+
+### Package A Plugin Directory
+
+```sh
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
+```
+
+### Build A Cross-Platform Release
+
+```sh
+gestaltd plugin release --version 0.1.0
+```
+
+Run `plugin release` from the plugin source directory. It cross-compiles the
+plugin, produces per-platform archives, and writes a checksums file.
+
+## Declarative-Only Packages
+
+A provider manifest can be declarative-only. In that case the package contains a
+manifest and optional schemas or assets, but no executable artifact is required.
+
+That is useful when you want to ship:
+
+- a reusable declarative REST provider
+- a reusable OpenAPI-backed integration
+- a reusable web UI bundle
+
+## Package Layout
+
+Typical contents:
+
+- `plugin.yaml`
+- `artifacts/...` for compiled binaries
+- `schemas/config.schema.json` for provider config validation
+- `assets/...` for icons or web assets
+
+The exact layout is controlled by the manifest.

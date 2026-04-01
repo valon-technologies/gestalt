@@ -1,79 +1,70 @@
 # Plugin Protocol
 
-Executable plugins let `gestaltd` extend integrations and runtimes without compiling new code into the host binary.
+Packaged provider and runtime plugins speak a small gRPC protocol. Most plugin
+authors should use the Go SDK instead of implementing the wire protocol by hand.
 
-## What A Plugin Is
+## Provider Plugins
 
-A plugin is a separate process started by `gestaltd`. The host and plugin communicate over a local Unix socket using the Gestalt plugin gRPC protocol.
+A provider plugin is responsible for:
 
-Two plugin kinds are supported:
+- reporting metadata
+- exposing a catalog of operations
+- executing an operation when the host asks for it
 
-| Kind | Purpose |
-| --- | --- |
-| Provider plugin | Adds a provider for `integrations:`. |
-| Runtime plugin | Adds a background runtime under `runtimes:`. |
+In the Go SDK, that means implementing:
 
-## Startup Model
+- `Name`
+- `DisplayName`
+- `Description`
+- `ConnectionMode`
+- `Catalog`
+- `Execute`
 
-When `gestaltd` starts a plugin process, it:
+Optional provider interfaces add:
 
-1. creates a temporary Unix socket
-2. sets `GESTALT_PLUGIN_SOCKET` for the child process
-3. for runtime plugins, also starts a host callback socket and sets `GESTALT_RUNTIME_HOST_SOCKET`
-4. launches the plugin executable
-5. dials the plugin and validates protocol compatibility
-6. sends the plugin its name and config
+- startup hooks
+- dynamic session-scoped catalogs
+- manual auth support
+- connection parameter definitions
 
-The public Go SDK in `sdk/go` handles this for you.
+## Runtime Plugins
 
-## Provider Plugin Contract
+A runtime plugin is long-lived. It starts once, receives the set of available
+capabilities, and can call back into Gestalt through the runtime host.
 
-A provider plugin is expected to:
+In the Go SDK, a runtime implements:
 
-- report provider metadata such as name, display name, description, and connection mode
-- expose its discovery catalog
-- execute operations
-- optionally expose a request-scoped catalog
-- optionally expose a config schema
-- optionally run startup logic when the host sends `StartProvider`
+- `Start`
+- `Stop`
 
-The SDK's `ProviderStarter` path receives:
+The runtime host provides:
 
-- the configured integration name
-- the plugin config block as a map
+- `Invoke`
+- `ListCapabilities`
 
-## Runtime Plugin Contract
+## Catalogs Are The Contract
 
-A runtime plugin is long-lived. After startup, it can call back into the host through the runtime host socket to:
+Gestalt does not ask provider plugins to register HTTP routes. Instead, provider
+plugins publish a catalog and Gestalt projects that catalog into:
 
-- list the capabilities it has been granted
-- invoke allowed providers
+- the HTTP API
+- the embedded UI
+- `/mcp`
 
-That is how a runtime plugin participates in the same execution model as built-in runtimes.
+That keeps packaged providers consistent with inline declarative integrations.
 
-## Config Placement
+## Sockets And Lifecycle
 
-Provider plugin config lives here:
+The host starts packaged plugins over a Unix socket whose path is provided
+through environment variables. The Go SDK helpers:
 
-```yaml
-integrations:
-  example:
-    plugin:
-      command: ./provider
-      config:
-        greeting: hello
-```
+- `ServeProvider`
+- `ServeRuntime`
 
-Runtime plugin config lives here:
+handle socket setup, gRPC registration, and graceful shutdown.
 
-```yaml
-runtimes:
-  syncer:
-    providers: [github]
-    plugin:
-      command: ./runtime
-    config:
-      interval: 30s
-```
+## Which Docs To Use
 
-That distinction matters because runtime plugin config belongs at `runtimes.<name>.config`, not under `runtimes.<name>.plugin.config`.
+- [Write A Plugin](/tasks/write-a-plugin) for a practical walkthrough
+- [Plugin Manifests](/reference/plugin-manifests) for packaging metadata
+- [CLI](/reference/cli) for `gestaltd plugin package` and `plugin release`

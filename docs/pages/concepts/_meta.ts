@@ -1,12 +1,12 @@
 export default {
   "platform-model": "Platform Model",
   configuration: "Configuration",
-  security: "Security Model",
-  observability: "Observability",
   integrations: "Integrations",
-  "authentication-and-tokens": "Authentication and Tokens",
-  "mcp-binding": "MCP Binding",
+  "authentication-and-tokens": "Authentication And Tokens",
+  "mcp-binding": "MCP",
   "plugin-protocol": "Plugin Protocol",
   "plugin-packaging": "Plugin Packaging",
   "ui-plugins": "UI Plugins",
+  security: "Security",
+  observability: "Observability",
 };

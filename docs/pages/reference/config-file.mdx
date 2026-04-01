@@ -1,32 +1,139 @@
 # Config File
 
-Authoritative reference for `gestaltd` configuration.
+This page documents the current `config.yaml` shape used by `gestaltd`.
 
-## Top-Level Shape
+## Representative Example
+
+This file shows several features together in one place. The smaller blocks
+below are field excerpts, not standalone configs.
 
 ```yaml
-auth: {}
-datastore: {}
-secrets: {}
-telemetry: {}
-integrations: {}
-runtimes: {}
-bindings: {}
-server: {}
-egress: {}
-ui: {}
+server:
+  port: 8080
+  base_url: https://gestalt.example.com
+  encryption_key: ${GESTALT_ENCRYPTION_KEY}
+  api_token_ttl: 30d
+
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: ${OIDC_CLIENT_SECRET}
+    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
+
+datastore:
+  provider: postgres
+  config:
+    dsn: ${DATABASE_URL}
+
+secrets:
+  provider: env
+  config:
+    prefix: GESTALT_SECRET_
+
+telemetry:
+  provider: stdout
+
+integrations:
+  notion:
+    display_name: Notion
+    description: REST and MCP access to Notion
+    mcp_tool_prefix: notion_
+    plugin:
+      openapi: ./openapi/notion.yaml
+      openapi_connection: REST
+      mcp_url: https://mcp.notion.com/mcp
+      mcp_connection: MCP
+      default_connection: REST
+      headers:
+        Notion-Version: "2026-03-11"
+      connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
+        MCP:
+          mode: user
+          auth:
+            type: mcp_oauth
+      allowed_operations:
+        search:
+          alias: search
+        pages.retrieve:
+          alias: get_page
+
+  slack:
+    display_name: Slack
+    plugin:
+      package: ./dist/slack-plugin.tar.gz
+
+runtimes:
+  notifier:
+    providers: [slack]
+    plugin:
+      package: ./dist/notifier-runtime
+    config:
+      channel: alerts
+
+bindings:
+  inbound-hook:
+    type: webhook
+    providers: [slack]
+    config:
+      path: /incoming
+      provider: slack
+      operation: chat.postMessage
+      auth_mode: signed
+      signing_secret: ${WEBHOOK_SECRET}
+
+  support-proxy:
+    type: proxy
+    providers: [slack]
+    config:
+      path: /proxy/slack
+
+egress:
+  default_action: deny
+  policies:
+    - action: allow
+      subject_kind: system
+      subject_id: support-proxy
+      host: slack.com
+      path_prefix: /api
+
+ui:
+  plugin:
+    package: ./dist/custom-ui
 ```
 
-## Load Semantics
+## Global Rules
 
-- `${ENV_VAR}` expansion happens before YAML decode
-- If `${ENV_VAR}` is unset and `ENV_VAR_FILE` is set, Gestalt reads the value from that file path
-- Unknown YAML fields are rejected
-- `server.port` defaults to `8080`
-- `secrets.provider` defaults to `env`
-- `telemetry.provider` defaults to `stdout`
-- Relative paths resolve relative to the config file directory
-- `secret://...` values are resolved during bootstrap, not during YAML parsing
+- `${VAR}` expansion happens before YAML decoding.
+- `${VAR_FILE}` reads the file contents and trims trailing newlines.
+- Unknown fields are rejected.
+- Relative paths are resolved from the config file directory.
+- `server.port` defaults to `8080`.
+- `secrets.provider` defaults to `env`.
+- `telemetry.provider` defaults to `stdout`.
+
+## Top-Level Keys
+
+| Key | Purpose |
+| --- | --- |
+| `server` | HTTP listener settings, callback base URL, encryption key, API token TTL. |
+| `auth` | Platform auth for the user of Gestalt. |
+| `datastore` | Storage for users, integration tokens, API tokens, and staged connections. |
+| `secrets` | Runtime secret lookup for features such as egress credential grants. |
+| `telemetry` | Logging and OpenTelemetry export. |
+| `integrations` | Providers exposed over HTTP, the UI, and `/mcp`. |
+| `runtimes` | Long-lived background plugins. |
+| `bindings` | Extra HTTP routes for inbound webhooks or outbound proxying. |
+| `egress` | Outbound HTTP allow or deny policy plus credential grants. |
+| `ui` | Optional packaged replacement for the embedded web app. |
 
 ## `server`
 
@@ -34,64 +141,18 @@ ui: {}
 server:
   port: 8080
   base_url: https://gestalt.example.com
-  encryption_key: secret://gestalt-encryption-key
+  encryption_key: ${GESTALT_ENCRYPTION_KEY}
   api_token_ttl: 30d
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `port` | No | `8080` | HTTP listen port. |
-| `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted. |
-| `encryption_key` | Yes | — | Root deployment secret. Used for encryption and derived session material. |
-| `api_token_ttl` | No | `30d` | Lifetime of newly issued API tokens. Accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). |
+| Field | Purpose |
+| --- | --- |
+| `port` | HTTP listen port. Defaults to `8080`. |
+| `base_url` | Public base URL used for callback URLs and secure cookie behavior. |
+| `encryption_key` | Required when platform auth is enabled. |
+| `api_token_ttl` | Optional lifetime for API tokens. Supports Go durations such as `24h` and day values such as `30d`. |
 
 ## `auth`
-
-### `none`
-
-```yaml
-auth:
-  provider: none
-```
-
-Disables platform authentication. Every request is treated as a single anonymous user.
-
-### `local`
-
-```yaml
-auth:
-  provider: local
-  config:
-    email: local@example.com
-```
-
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `email` | No | `local@gestalt.local` | Identity of the single local user. |
-
-### `google`
-
-```yaml
-auth:
-  provider: google
-  config:
-    client_id: ${GOOGLE_CLIENT_ID}
-    client_secret: secret://google-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
-    allowed_domains:
-      - example.com
-```
-
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `client_id` | Yes | — | Google OAuth client ID. |
-| `client_secret` | Yes | — | Google OAuth client secret. |
-| `redirect_url` | No | Derived from `server.base_url` | Login callback URL. |
-| `allowed_domains` | No | — | Restrict login to specific email domains. |
-
-Google checks `email_verified` on every login. Unverified accounts are rejected.
-
-### `oidc`
 
 ```yaml
 auth:
@@ -99,103 +160,60 @@ auth:
   config:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
-    allowed_domains:
-      - example.com
-    scopes:
-      - openid
-      - email
-      - profile
-    session_secret: secret://oidc-session-secret
-    session_ttl: 24h
-    pkce: true
-    display_name: Company SSO
+    client_secret: ${OIDC_CLIENT_SECRET}
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `issuer_url` | Yes | — | OIDC discovery base URL. |
-| `client_id` | Yes | — | OIDC client ID. |
-| `client_secret` | Conditional | — | OIDC client secret. May be omitted for PKCE-only public clients. |
-| `redirect_url` | No | Derived from `server.base_url` | Login callback URL. |
-| `allowed_domains` | No | — | Email-domain allowlist. |
-| `scopes` | No | `openid`, `email`, `profile` | OIDC scopes to request. |
-| `session_secret` | Yes | — | Secret for signing session tokens. |
-| `session_ttl` | No | `24h` | Session token lifetime. |
-| `pkce` | No | `false` | Enable PKCE for the login flow. |
-| `display_name` | No | `SSO` | Name shown in the login UI. |
+Built-in auth providers:
 
-OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
+- `none`
+- `local`
+- `google`
+- `oidc`
+
+The `config` block is provider-specific. See [Built-in Plugins](/reference/built-in-plugins)
+for the available providers.
 
 ## `datastore`
 
 ```yaml
 datastore:
-  provider: postgres
+  provider: sqlite
   config:
-    dsn: ${DATABASE_URL}
+    path: ./gestalt.db
 ```
 
-| Provider | Config fields | Purpose |
-| --- | --- | --- |
-| `sqlite` | `path` | Defaults to `./gestalt.db`. Single-node deployments. |
-| `postgres` | `dsn` | Recommended production datastore. |
-| `mysql` | `dsn` | SQL-backed production option. |
-| `dynamodb` | `table`, `region`, `endpoint` | `table` defaults to `gestalt`. |
-| `mongodb` | `uri`, `database` | `database` defaults to `gestalt`. |
-| `oracle` | `dsn` | Enterprise SQL option. |
-| `firestore` | `project_id`, `database` | Firestore-backed deployment. |
-| `sqlserver` | `dsn` | SQL Server-backed deployment. |
+Common datastore providers:
 
-Some features, such as staged connections, rely on SQL-backed datastore support.
+- `sqlite`
+- `postgres`
+- `mysql`
+- `dynamodb`
+- `mongodb`
+- `oracle`
+- `firestore`
+- `sqlserver`
+
+SQL-backed providers typically use `config.dsn`. SQLite uses `config.path`.
 
 ## `secrets`
 
 ```yaml
 secrets:
-  provider: file
+  provider: env
   config:
-    dir: /etc/gestalt-secrets
+    prefix: GESTALT_SECRET_
 ```
 
-| Provider | Config fields | Purpose |
-| --- | --- | --- |
-| `env` | `prefix` | Reads secrets from environment variables. |
-| `file` | `dir` | Reads one secret per file from a base directory. Works with Kubernetes volume-mounted secrets. |
-| `google_secret_manager` | `project`, `version` | Google Cloud Secret Manager. `version` defaults to `latest`. |
-| `aws_secrets_manager` | `region`, `version_stage`, `endpoint` | AWS Secrets Manager. `version_stage` defaults to `AWSCURRENT`. |
-| `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `mount_path` defaults to `secret`. |
-| `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `version` defaults to latest. |
+Built-in secret providers:
 
-Any string value outside `secrets.config` may use the `secret://` prefix:
-
-```yaml
-encryption_key: secret://name-of-secret
-```
+- `env`
+- `file`
+- `google_secret_manager`
+- `aws_secrets_manager`
+- `vault`
+- `azure_key_vault`
 
 ## `telemetry`
-
-Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced.
-
-### `stdout`
-
-```yaml
-telemetry:
-  provider: stdout
-  config:
-    format: text
-    level: info
-```
-
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `format` | No | `text` | `text` or `json`. |
-| `level` | No | `info` | `debug`, `info`, `warn`, or `error`. |
-
-Outputs structured logs to standard output. Traces and metrics use noop providers to keep terminal output clean. Default provider when `telemetry` is omitted.
-
-### `otlp`
 
 ```yaml
 telemetry:
@@ -204,471 +222,336 @@ telemetry:
     endpoint: otel-collector:4317
     protocol: grpc
     service_name: gestaltd
-    insecure: false
-    headers:
-      Authorization: Bearer ${OTEL_TOKEN}
-    resource_attributes:
-      deployment.environment: production
-      service.version: "1.0.0"
-    traces:
-      sampling_ratio: 1.0
-    metrics:
-      interval: 60s
-    logs:
-      level: info
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `endpoint` | No | SDK default | OTLP collector address. |
-| `protocol` | No | `grpc` | `grpc` or `http`. |
-| `service_name` | No | `gestaltd` | OpenTelemetry service name. |
-| `insecure` | No | `false` | Skip TLS verification. |
-| `headers` | No | — | Extra headers on every export request. |
-| `resource_attributes` | No | — | Key-value pairs attached as resource attributes. |
-| `traces.sampling_ratio` | No | `1.0` | Fraction of traces to sample, `0.0` to `1.0`. |
-| `metrics.interval` | No | `60s` | Metric export interval. |
-| `logs.level` | No | `info` | Minimum exported log level. |
+Built-in telemetry providers:
 
-Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent).
-
-### `noop`
-
-```yaml
-telemetry:
-  provider: noop
-```
-
-Disables all telemetry. Instrumentation points remain but produce zero overhead.
-
-### Trace spans
-
-| Layer | Span name | Key attributes |
-| --- | --- | --- |
-| HTTP | `gestaltd: {method} {route}` | Standard HTTP semantic conventions |
-| Broker | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.user_id`, `gestalt.connection_mode` |
-| gRPC plugin | Per-RPC spans | Standard gRPC semantic conventions |
-
-### Audit logs
-
-Audit records are emitted as structured log entries with `log.type=audit`. Route them to a dedicated audit backend using OTel Collector attribute-based filtering. See [Observability](/concepts/observability) for details.
+- `stdout`
+- `otlp`
+- `noop`
 
 ## `integrations`
 
-Each integration follows one of three patterns: declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `mcp`). See [Integrations](/concepts/integrations) for the conceptual model.
-
-### Declarative integration
+Every integration has one `plugin` block plus optional presentation metadata.
 
 ```yaml
 integrations:
   github:
     display_name: GitHub
-    description: GitHub REST API
-    mcp_tool_prefix: github_
+    description: Public GitHub operations
     icon_file: ./icons/github.svg
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: ${GITHUB_CLIENT_SECRET}
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/.../api.github.com.json
-      connection: default
+    mcp_tool_prefix: github_
+    plugin:
+      openapi: ./openapi/github.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
       allowed_operations:
-        repos/list-for-authenticated-user:
-        issues/list-for-authenticated-user:
+        repos.get:
+          alias: get_repo
 ```
+
+### Integration Fields
 
 | Field | Purpose |
 | --- | --- |
-| `display_name`, `description` | Presentation metadata. |
-| `mcp_tool_prefix` | Prefix tool names on the MCP endpoint. |
-| `icon_file` | SVG path, resolved relative to the config file. |
-| `connections` | Named connections that own mode, auth, and params. |
-| `api` | REST or GraphQL surface. |
-| `mcp` | Upstream MCP surface. |
+| `display_name` | UI and API display name override. |
+| `description` | UI and API description override. |
+| `icon_file` | SVG icon path resolved from the config directory. |
+| `mcp_tool_prefix` | Prefix for tools exposed on `/mcp`. |
+| `plugin` | The actual provider definition. Required. |
 
-### `connections`
+### `integrations.*.plugin`
 
-```yaml
-connections:
-  default:
-    mode: user
-    params:
-      subdomain:
-        required: true
-    auth:
-      type: oauth2
-      authorization_url: https://accounts.example.com/oauth/authorize
-      token_url: https://accounts.example.com/oauth/token
-      client_id: ${CLIENT_ID}
-      client_secret: ${CLIENT_SECRET}
-```
+The same `plugin` block supports inline providers, packaged providers, and
+hybrid providers.
+
+#### Package Source Fields
 
 | Field | Purpose |
 | --- | --- |
-| `mode` | `user` (default), `identity`, `either`, or `none`. All connections in an integration must share the same mode. |
-| `params` | Named parameters callers supply when connecting. Used for URL template expansion. |
-| `auth` | Auth configuration for this connection. |
+| `command` | Execute a local binary directly. |
+| `package` | Load a local directory, local archive, or HTTPS archive. |
+| `source` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
+| `version` | Required with `source`. Invalid with `command` or `package`. |
+| `args` | Extra process arguments for `command`. |
+| `env` | Extra environment variables for external plugins. |
+| `config` | Provider-specific config passed into packaged providers. |
 
-### `api`
+`command`, `package`, and `source` are mutually exclusive.
 
-```yaml
-api:
-  type: rest
-  openapi: https://example.com/openapi.json
-  connection: default
-  allowed_operations:
-    listThings:
-```
+#### Inline Provider Fields
 
 | Field | Purpose |
 | --- | --- |
-| `type` | `rest` or `graphql`. |
-| `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
-| `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
-| `connection` | References a named connection in the same integration. |
-| `allowed_operations` | Narrows exposed operations. Bare key keeps the upstream description. Object with `alias` and/or `description` overrides it. |
+| `auth` | Auth definition for the implicit plugin connection. |
+| `params` | Connection parameters for the implicit plugin connection. |
+| `connections` | Named connections for inline integrations. |
+| `openapi` | OpenAPI document URL or local file path. |
+| `graphql_url` | GraphQL endpoint. |
+| `mcp_url` | Upstream MCP endpoint. |
+| `base_url` | Base URL for declarative REST operations. |
+| `headers` | Static headers applied to spec-backed or declarative requests. |
+| `managed_parameters` | Fixed header or path values injected before exposure. |
+| `operations` | Inline declarative REST operations. |
+| `response_mapping` | Data and pagination mapping for spec-backed providers. |
+| `allowed_operations` | Surface allowlist plus `alias` and `description` overrides. |
+| `openapi_connection` | Named connection to use for OpenAPI. |
+| `graphql_connection` | Named connection to use for GraphQL. |
+| `mcp_connection` | Named connection to use for upstream MCP. |
+| `default_connection` | Default connection used when the caller does not specify one. |
+| `mcp` | Expose packaged provider operations on `/mcp`. |
 
-### `mcp`
+Inline integrations omit `command`, `package`, and `source`.
 
-```yaml
-mcp:
-  url: https://mcp.example.com
-  connection: mcp_conn
-  allowed_operations:
-    search:
-```
+### Auth Shapes Inside `plugin`
 
-| Field | Purpose |
-| --- | --- |
-| `url` | Required. The upstream MCP server URL. |
-| `connection` | References a named connection in the same integration. |
-| `allowed_operations` | Optional. Narrows exposed tools. Same override syntax as `api`. |
-
-### `auth`
-
-Auth configuration for a connection.
+Top-level `plugin.auth` and named connection auth blocks use the same shape:
 
 ```yaml
 auth:
   type: oauth2
-  authorization_url: https://provider.example.com/oauth/authorize
-  token_url: https://provider.example.com/oauth/token
+  authorization_url: https://accounts.example.com/oauth/authorize
+  token_url: https://accounts.example.com/oauth/token
   client_id: ${CLIENT_ID}
   client_secret: ${CLIENT_SECRET}
-  client_auth: body
-  token_exchange: form
   scopes:
     - read
     - write
-  scope_param: user_scope
-  scope_separator: ","
-  pkce: true
-  authorization_params:
-    audience: https://api.example.com
-  token_params:
-    resource: api
-  refresh_params: {}
-  accept_header: application/json
-  token_metadata:
-    - workspace_id
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `type` | `oauth2`, `manual`, or `mcp_oauth`. |
-| `authorization_url` | OAuth authorization endpoint. |
-| `token_url` | OAuth token endpoint. |
-| `client_id`, `client_secret` | OAuth client credentials. |
-| `redirect_url` | Override the derived callback URL. |
-| `client_auth` | How client credentials are sent: `body` (default) or `header`. |
-| `token_exchange` | Token request encoding: `form` (default) or `json`. |
-| `scopes` | OAuth scopes to request. |
-| `scope_param` | Query parameter name for scopes. Defaults to `scope`. Set to `user_scope` for Slack and other providers that use a non-standard parameter. |
-| `scope_separator` | Separator between scope values. Defaults to space. |
-| `pkce` | Enable Proof Key for Code Exchange. |
-| `authorization_params` | Extra query parameters on the authorization request. |
-| `token_params` | Extra parameters on the token exchange request. |
-| `refresh_params` | Extra parameters on the token refresh request. |
-| `accept_header` | `Accept` header for the token endpoint. |
-| `token_metadata` | Fields to extract from the token response and store as connection metadata. |
+Supported auth types in config today:
 
-`mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates authorization URL and token URL resolution to the upstream MCP server.
+- `none`
+- `oauth2`
+- `manual`
+- `bearer`
+- `mcp_oauth`
 
-#### Manual auth with custom credential fields
-
-For manual-auth connections, you can customize the credential input form with `credentials`. Each entry defines a field the user must fill in, with an optional label, description, and help URL.
-
-Single credential with a custom label:
+### Named Connections
 
 ```yaml
-connections:
-  default:
-    mode: user
-    auth:
-      type: manual
-      credentials:
-        - name: token
-          label: API Access Token
-          help_url: https://app.example.com/settings/tokens
-```
-
-Multiple credentials (requires `auth_mapping` to map each field to an HTTP header):
-
-```yaml
-connections:
-  default:
-    mode: user
-    auth:
-      type: manual
-      credentials:
-        - name: api_key
-          label: API Key
-          help_url: https://us5.datadoghq.com/organization-settings/api-keys
-        - name: app_key
-          label: Application Key
-          help_url: https://us5.datadoghq.com/organization-settings/application-keys
-      auth_mapping:
-        headers:
-          DD-API-KEY: api_key
-          DD-APPLICATION-KEY: app_key
-```
-
-| Field | Notes |
-| --- | --- |
-| `credentials[].name` | Internal identifier for the field. Must be unique, lowercase with underscores. |
-| `credentials[].label` | Display label shown in the UI. Falls back to `name` if omitted. |
-| `credentials[].description` | Hint text shown below the label. Supports inline links via `[text](url)`. |
-| `credentials[].help_url` | Link displayed next to the label for where to find the credential. |
-| `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
-
-`credentials` is required when `auth.type` is `manual`.
-
-### `plugin`
-
-Plugin integrations delegate execution to an external binary. A plugin can compose with `api`, `mcp`, or both.
-
-```yaml
-integrations:
-  custom_tool:
-    plugin:
-      command: ./my-plugin
-```
-
-```yaml
-integrations:
-  custom_tool:
-    plugin:
-      source: github.com/your-org/your-repo/custom-tool
-      version: 1.0.0
-      config:
-        greeting: hello
-```
-
-| Field | Purpose |
-| --- | --- |
-| `command` | Local executable path. Mutually exclusive with `package` and `source`. |
-| `package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `command` and `source`. |
-| `source` | Managed plugin source address (`github.com/owner/repo/plugin`). Mutually exclusive with `command` and `package`. Requires `version`. |
-| `version` | Required with `source`. Must be valid SemVer. |
-| `args` | Command-line arguments. Only valid with `command`. |
-| `env` | Extra environment variables passed to the plugin process. |
-| `allowed_hosts` | Host allowlist for plugin network access. When set, the plugin is automatically sandboxed: filesystem access is restricted via Landlock (Linux) or sandbox-exec (macOS), and outbound HTTP is proxied through a local allowlist enforcer. Supports exact matches and wildcards (`*.example.com`). |
-| `config` | Arbitrary plugin config payload, validated against the plugin's config schema if one exists. |
-| `allowed_operations` | Narrows exposed operations. Same override syntax as `api.allowed_operations`. |
-
-### Hybrid integration (plugin + MCP)
-
-```yaml
-integrations:
-  slack:
-    plugin:
-      source: github.com/valon-technologies/gestalt/slack
-      version: 0.0.1-alpha.3
+plugin:
+  openapi: https://api.example.com/openapi.json
+  mcp_url: https://mcp.example.com/mcp
+  openapi_connection: api
+  mcp_connection: mcp
+  default_connection: api
+  connections:
+    api:
+      mode: user
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.example.com/oauth/authorize
+        token_url: https://accounts.example.com/oauth/token
+        client_id: ${CLIENT_ID}
+        client_secret: ${CLIENT_SECRET}
     mcp:
-      url: https://mcp.slack.com
-      connection: plugin
+      mode: user
+      auth:
+        type: mcp_oauth
 ```
 
-Setting `mcp.connection` to `plugin` reuses the plugin's OAuth token for the MCP surface. Declare explicit `connections` and reference one from `mcp.connection` for separate credentials.
+Connection modes:
+
+- `none`
+- `user`
+- `identity`
+- `either`
+
+### Declarative Operations
+
+```yaml
+plugin:
+  auth:
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  base_url: https://api.support.example.com
+  operations:
+    - name: list_tickets
+      method: GET
+      path: /tickets
+    - name: get_ticket
+      method: GET
+      path: /tickets/{ticket_id}
+```
+
+Each operation accepts:
+
+- `name`
+- `description`
+- `method`
+- `path`
+- `parameters`
+
+Parameter locations can be `query`, `body`, or `path`.
+
+### Managed Parameters
+
+```yaml
+plugin:
+  openapi: https://api.example.com/openapi.json
+  openapi_connection: public
+  default_connection: public
+  connections:
+    public:
+      mode: none
+      auth:
+        type: none
+  managed_parameters:
+    - in: header
+      name: X-API-Version
+      value: "2026-04-01"
+    - in: path
+      name: account_id
+      value: primary
+```
+
+Managed parameter locations can be `header` or `path`.
+
+### Response Mapping
+
+```yaml
+plugin:
+  graphql_url: https://api.example.com/graphql
+  auth:
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  response_mapping:
+    data_path: data.items
+    pagination:
+      has_more_path: pageInfo.hasNextPage
+      cursor_path: pageInfo.endCursor
+```
 
 ## `runtimes`
 
+Gestalt does not ship built-in runtime types. Use a packaged runtime plugin.
+
 ```yaml
 runtimes:
-  syncer:
-    providers:
-      - github
+  notifier:
+    providers: [slack, notion]
     plugin:
-      command: ./runtime-plugin
+      package: ./dist/notifier-runtime
     config:
-      interval: 30s
+      channel: alerts
 ```
 
 | Field | Purpose |
 | --- | --- |
-| `type` | Built-in runtime type. See [Built-in Plugins](/reference/built-in-plugins) for available types. |
-| `providers` | Allowlist of providers the runtime can invoke. |
-| `config` | Runtime config payload. Must be at `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`. |
-| `plugin` | Executable runtime plugin. Same fields as integration `plugin` (`command`, `package`, `source`, `version`). |
-
-A runtime must set either `type` or `plugin`, not both.
+| `providers` | Providers whose capabilities should be visible to the runtime. |
+| `plugin` | Packaged runtime plugin. |
+| `config` | Runtime-specific config passed to the plugin. |
 
 ## `bindings`
 
+Built-in binding types are `webhook` and `proxy`.
+
+### Webhook Binding
+
 ```yaml
 bindings:
-  inbound:
+  inbound-hook:
     type: webhook
-    providers:
-      - github
+    providers: [slack]
     config:
-      path: /events/github
-      provider: github
-      operation: issues_listForAuthenticatedUser
+      path: /incoming
+      provider: slack
+      operation: chat.postMessage
       auth_mode: signed
-      signing_secret: secret://webhook-secret
+      signing_secret: ${WEBHOOK_SECRET}
 ```
+
+Webhook config fields:
+
+- `path`
+- `provider`
+- `instance`
+- `operation`
+- `auth_mode`
+- `signing_secret`
+- `signature_header`
+- `user_header`
+- `trusted_sources`
+
+`auth_mode` can be `public`, `signed`, or `trusted_user_header`.
+
+### Proxy Binding
 
 ```yaml
 bindings:
-  outbound_proxy:
+  support-proxy:
     type: proxy
-    providers:
-      - github
+    providers: [support]
     config:
-      path: /proxy
-      instance: default
+      path: /proxy/support
 ```
 
-### Common binding fields
-
-| Field | Purpose |
-| --- | --- |
-| `type` | `webhook` or `proxy`. |
-| `providers` | Allowlist of providers the binding can access. |
-| `config` | Binding-type-specific config. |
-
-### Webhook binding config
-
-| Field | Purpose |
-| --- | --- |
-| `path` | Required. Must start with `/`. |
-| `provider` | Optional target provider for forwarding. |
-| `instance` | Optional provider instance. |
-| `operation` | Optional target operation. |
-| `auth_mode` | `public`, `signed`, or `trusted_user_header`. |
-| `signing_secret` | Required for `signed`. |
-| `signature_header` | Header carrying the HMAC signature. Defaults to `X-Signature`. |
-| `user_header` | Required for `trusted_user_header`. |
-| `trusted_sources` | Source IP allowlist for `trusted_user_header`. |
-
-### Proxy binding config
-
-| Field | Purpose |
-| --- | --- |
-| `path` | Required. Must start with `/`. |
-
-Proxy bindings may declare zero or one provider in `bindings.<name>.providers`. Webhook forwarding requires the forwarded provider to be present in the binding allowlist.
+Proxy bindings currently require only `config.path`.
 
 ## `egress`
+
+`egress` controls outbound HTTP from bindings and upstream clients.
 
 ```yaml
 egress:
   default_action: deny
   policies:
     - action: allow
-      subject_kind: user
-      provider: github
-      method: GET
-      host: api.github.com
-      path_prefix: /repos
+      subject_kind: system
+      subject_id: support-proxy
+      host: api.example.com
+      path_prefix: /v1
   credentials:
-    - host: api.github.com
-      secret_ref: github-api-key
+    - secret_ref: secret://support-api-token
       auth_style: bearer
-    - host: api.openai.com
-      secret_ref: openai-api-key
-      auth_style: bearer
+      subject_kind: system
+      subject_id: support-proxy
+      host: api.example.com
+      path_prefix: /v1
 ```
 
-### `policies`
+### Policy Fields
 
-| Field | Purpose |
-| --- | --- |
-| `action` | `allow` or `deny`. |
-| `subject_kind` | Match a subject kind. |
-| `subject_id` | Match a specific subject. |
-| `provider` | Match a provider name. |
-| `operation` | Match an operation name. |
-| `method` | Match an HTTP method. |
-| `host` | Match an outbound host. |
-| `path_prefix` | Match a path prefix. |
+- `action`
+- `subject_kind`
+- `subject_id`
+- `provider`
+- `operation`
+- `method`
+- `host`
+- `path_prefix`
 
-### `credentials`
+### Credential Grant Fields
 
-| Field | Purpose |
-| --- | --- |
-| `secret_ref` | Required. Secret manager key resolved at request time. |
-| `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Defaults to `bearer`. |
-| `subject_kind` | Optional subject filter. |
-| `subject_id` | Optional subject filter. |
-| `operation` | Optional operation filter. |
-| `method` | Optional HTTP-method filter. |
-| `host` | Optional host filter. |
-| `path_prefix` | Optional path filter. |
+- `secret_ref`
+- `auth_style`
+- `subject_kind`
+- `subject_id`
+- `operation`
+- `method`
+- `host`
+- `path_prefix`
 
 ## `ui`
 
-```yaml
-ui:
-  plugin:
-    package: ./my-ui-plugin
-```
+Use `ui.plugin` to replace the embedded web UI.
 
 ```yaml
 ui:
   plugin:
-    source: github.com/your-org/your-repo/console
-    version: 1.0.0
+    source: github.com/acme/plugins/gestalt-ui
+    version: 1.2.0
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `plugin.package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `source`. |
-| `plugin.source` | Managed plugin source address. Requires `version`. |
-| `plugin.version` | Required with `source`. Must be valid SemVer without leading `v`. |
-
-When `ui` is omitted, `gestaltd` serves the embedded frontend. When `ui.plugin` is configured, the plugin's assets are served instead. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
-
-## Validation Rules
-
-Structural validation runs at config load time (`init`, `validate`, `serve`). Runtime validation runs only at `serve` time.
-
-### Structural
-
-- Integrations are declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `api`, `mcp`, or both)
-- Exactly one of `command`, `package`, or `source` per plugin
-- `plugin.version` is required with `source` and invalid with `command` or `package`
-- `plugin.args` are only valid with `command`
-- Plain `http://` package URLs are rejected
-- All connections in an integration must share the same mode
-- `api.connection` and `mcp.connection` must reference a declared connection
-- REST API surfaces require `api.openapi`; GraphQL surfaces require `api.url`
-- URL templates in surface URLs and auth URLs must reference required params
-- Runtime plugins must use `runtimes.<name>.config`, not `runtimes.<name>.plugin.config`
-- `egress.default_action` and policy `action` must be `allow` or `deny`
-- `ui.plugin` requires exactly one of `package` or `source`
-- `ui.plugin.version` is required with `source` and invalid with `package`
-
-### Runtime
-
-- `auth.provider` is required
-- `datastore.provider` is required
-- `server.encryption_key` is required
+`ui.plugin` supports `package`, `source`, and `version` in the same way as
+other packaged plugins.

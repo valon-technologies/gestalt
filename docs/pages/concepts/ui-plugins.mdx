@@ -1,115 +1,41 @@
 # UI Plugins
 
-Gestalt serves a web UI alongside its API. By default it uses the embedded frontend compiled into the `gestaltd` binary. UI plugins let you replace that frontend with a custom one without rebuilding `gestaltd`.
+Gestalt serves an embedded web app by default. You can replace it with a
+packaged UI bundle under `ui.plugin`.
 
-## How It Works
-
-A UI plugin is a static asset package (HTML, CSS, JS) with a `plugin.json` manifest. When configured, `gestaltd` serves the plugin's assets instead of the embedded frontend. The browser connects to the same origin and port. There is no separate UI server.
-
-API routes (`/api/v1/*`, `/mcp`, `/health`, `/ready`) always take priority. Unmatched requests fall through to the UI handler, which serves files with SPA fallback behavior:
-
-1. Exact file match
-2. `path.html` fallback (for static export routes)
-3. `path/index.html` fallback (for directory routes)
-4. `index.html` fallback (for client-side routing)
-
-## Creating a UI Plugin
-
-Any static site generator that outputs HTML, CSS, and JS works. The only requirements are:
-
-- an `index.html` at the asset root
-- a `plugin.json` manifest
-
-### Directory Layout
-
-```
-my-ui-plugin/
-├── plugin.json
-└── out/
-    ├── index.html
-    ├── style.css
-    └── assets/
-        └── app.js
-```
-
-### Manifest
-
-```json
-{
-  "source": "github.com/your-org/your-repo/console",
-  "version": "1.0.0",
-  "display_name": "Custom Console",
-  "description": "Custom Gestalt UI",
-  "kinds": ["webui"],
-  "webui": {
-    "asset_root": "out"
-  }
-}
-```
-
-The `webui` kind differs from `provider` and `runtime`:
-
-- no `artifacts` or `entrypoints` (there is no binary)
-- no platform-specific builds (static assets are platform-agnostic)
-- `asset_root` points to the directory containing `index.html`
-- `webui` cannot be combined with other kinds in the same manifest
-
-The `source` field follows the managed plugin source grammar: `github.com/<owner>/<repo>/<plugin>`.
-
-## Local Development
-
-Point `ui.plugin.package` at your build output:
+## Config Shape
 
 ```yaml
 ui:
   plugin:
-    package: ./my-ui-plugin
+    package: ./dist/my-ui
 ```
 
-Then run `gestaltd serve --config config.yaml`. Changes to the package directory are detected on restart.
-
-This works with any build tool. For example, with Next.js:
-
-```sh
-cd my-ui && npm run build
-# next.config.js must have output: 'export'
-# output lands in my-ui/out/
-```
-
-Then configure `ui.plugin.package: ./my-ui` with `asset_root: "out"` in the manifest.
-
-## Publishing
-
-Package the plugin directory into an archive for GitHub release:
-
-```sh
-gestaltd plugin package --input ./my-ui-plugin --output gestalt-plugin-console_v1.0.0.tar.gz
-```
-
-Upload the archive to a GitHub release. The release tag must be `v<version>` and the asset name must follow `gestalt-plugin-<plugin>_v<version>.tar.gz`.
-
-Then configure with source and version:
+Or resolve a versioned UI package during `init`:
 
 ```yaml
 ui:
   plugin:
-    source: github.com/your-org/your-repo/console
-    version: 1.0.0
+    source: github.com/acme/plugins/gestalt-ui
+    version: 1.2.0
 ```
 
-`gestaltd` resolves the package from the GitHub release, installs it into `.gestalt/plugins/`, and locks it in `gestalt.lock.json`.
+## Manifest Requirements
 
-## Locked Deployment
+A UI package uses the same manifest system as provider plugins, but the manifest
+kind is `webui`.
 
-For production, use `gestaltd init` to prepare lock state:
+The manifest points at an asset root:
 
-```sh
-gestaltd init --config config.yaml
-gestaltd serve --locked --config config.yaml
+```yaml
+kinds:
+  - webui
+webui:
+  asset_root: ui/out
 ```
 
-The prepared state includes the resolved UI plugin assets and lockfile. `--locked` prevents automatic resolution at startup.
+## Runtime Behavior
 
-## No UI Plugin
-
-When no `ui:` section is in the config, `gestaltd` serves the embedded frontend. If the embedded frontend was not built into the binary (the `internal/webui/out` directory was empty at compile time), no UI is served and `gestaltd` runs as an API-only server.
+- `gestaltd init` prepares the UI package and records it in lock state.
+- `gestaltd serve --locked` serves the prepared asset root.
+- If `ui.plugin` is omitted, Gestalt falls back to the built-in UI.
