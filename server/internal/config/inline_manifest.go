@@ -17,6 +17,7 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		Provider: &pluginmanifestv1.Provider{
 			BaseURL:           p.BaseURL,
 			Headers:           NormalizeHeaders(p.Headers),
+			ManagedParameters: NormalizeManagedParameters(p.ManagedParameters),
 			MCP:               p.MCP,
 			OpenAPI:           p.OpenAPI,
 			GraphQLURL:        p.GraphQLURL,

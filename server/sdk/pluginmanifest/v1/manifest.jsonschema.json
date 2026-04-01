@@ -62,6 +62,12 @@
             "type": "string"
           }
         },
+        "managed_parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/managed_parameter"
+          }
+        },
         "operations": {
           "type": "array",
           "minItems": 1,
@@ -459,6 +465,25 @@
         },
         "description": {
           "type": "string"
+        }
+      }
+    },
+    "managed_parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in", "name", "value"],
+      "properties": {
+        "in": {
+          "type": "string",
+          "enum": ["header"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

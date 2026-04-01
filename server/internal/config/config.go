@@ -104,11 +104,12 @@ type PluginDef struct {
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
 
-	OpenAPI    string            `yaml:"openapi"`
-	GraphQLURL string            `yaml:"graphql_url"`
-	MCPURL     string            `yaml:"mcp_url"`
-	BaseURL    string            `yaml:"base_url"`
-	Headers    map[string]string `yaml:"headers"`
+	OpenAPI           string                `yaml:"openapi"`
+	GraphQLURL        string                `yaml:"graphql_url"`
+	MCPURL            string                `yaml:"mcp_url"`
+	BaseURL           string                `yaml:"base_url"`
+	Headers           map[string]string     `yaml:"headers"`
+	ManagedParameters []ManagedParameterDef `yaml:"managed_parameters"`
 
 	Auth            *ConnectionAuthDef        `yaml:"auth"`
 	Connections     map[string]*ConnectionDef `yaml:"connections"`
@@ -193,6 +194,8 @@ type ResponseMappingDef struct {
 	DataPath   string             `yaml:"data_path"`
 	Pagination *PaginationMapping `yaml:"pagination"`
 }
+
+type ManagedParameterDef = pluginmanifestv1.ManagedParameter
 
 type PaginationMapping struct {
 	HasMorePath string `yaml:"has_more_path"`
@@ -555,6 +558,9 @@ func validateInlinePlugin(name string, p *PluginDef) error {
 	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
 		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
 	}
+	if err := validateManagedParameterConfig("config validation: integration "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
+		return err
+	}
 	for i, op := range p.Operations {
 		if op.Name == "" {
 			return fmt.Errorf("config validation: integration %q operations[%d].name is required", name, i)
@@ -572,6 +578,9 @@ func validateInlinePlugin(name string, p *PluginDef) error {
 func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if plugin == nil {
 		return nil
+	}
+	if err := validateManagedParameterConfig("config validation: "+kind+" "+strconv.Quote(name), plugin.Headers, plugin.ManagedParameters); err != nil {
+		return err
 	}
 	sourceCount := 0
 	if plugin.Command != "" {
@@ -628,6 +637,19 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		return fmt.Errorf("config validation: integration %q external plugin cannot use inline connections; declare connections in the plugin manifest instead", name)
 	}
 
+	return nil
+}
+
+func validateManagedParameterConfig(prefix string, headers map[string]string, params []ManagedParameterDef) error {
+	if len(params) == 0 {
+		return nil
+	}
+	if err := ValidateManagedParameters(params); err != nil {
+		return fmt.Errorf("%s %w", prefix, err)
+	}
+	if err := ValidateManagedParameterHeaderConflicts(NormalizeHeaders(headers), params); err != nil {
+		return fmt.Errorf("%s %w", prefix, err)
+	}
 	return nil
 }
 

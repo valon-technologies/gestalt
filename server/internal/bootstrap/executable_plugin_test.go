@@ -607,3 +607,135 @@ func TestHybridPluginUsesManifestStaticHeadersForSpecSurface(t *testing.T) {
 		t.Fatal("timed out waiting for upstream request")
 	}
 }
+
+func TestHybridPluginUsesManifestManagedParametersForSpecSurface(t *testing.T) {
+	t.Parallel()
+
+	const (
+		headerName  = "Intercom-Version"
+		headerValue = "2.11"
+	)
+
+	bin := buildEchoPluginBinary(t)
+
+	gotHeader := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader <- r.Header.Get(headerName)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Hybrid Managed Parameters Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+						"parameters": []any{
+							map[string]any{
+								"name":     headerName,
+								"in":       "header",
+								"required": true,
+								"schema":   map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/hybrid",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: specSrv.URL,
+			ManagedParameters: []pluginmanifestv1.ManagedParameter{
+				{
+					In:    "header",
+					Name:  "intercom-version",
+					Value: headerValue,
+				},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+				SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+			},
+		},
+	}
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"hybrid": {
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	foundListItems := false
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == "list_items" {
+			foundListItems = true
+			if got := cat.Operations[i].Parameters; len(got) != 0 {
+				t.Fatalf("catalog params = %+v, want none", got)
+			}
+			break
+		}
+	}
+	if !foundListItems {
+		t.Fatalf("expected list_items operation in catalog: %+v", cat.Operations)
+	}
+
+	result, err := prov.Execute(context.Background(), "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(list_items): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotHeader:
+		if got != headerValue {
+			t.Fatalf("%s = %q, want %q", headerName, got, headerValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
+	}
+}
