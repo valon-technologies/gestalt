@@ -89,15 +89,6 @@ type CatalogParameter struct {
 	Default     any    `json:"default,omitempty"`
 }
 
-// Parameter describes a single input to a runtime [Capability].
-type Parameter struct {
-	Name        string
-	Type        string
-	Description string
-	Required    bool
-	Default     any
-}
-
 // OperationResult holds the response from a [Provider.Execute] call.
 // Status is an HTTP-like status code; Body is the response payload, typically JSON.
 type OperationResult struct {
@@ -150,62 +141,4 @@ func WithConnectionParams(ctx context.Context, params map[string]string) context
 func ConnectionParams(ctx context.Context) map[string]string {
 	params, _ := ctx.Value(connectionParamsKey{}).(map[string]string)
 	return params
-}
-
-// Runtime is the interface that every runtime plugin must implement. Unlike
-// providers, runtimes are long-lived processes that react to external events
-// and call back into the platform via a [RuntimeHost].
-//
-// Start is called once with the plugin's configuration, the set of available
-// capabilities, and a host handle for making callbacks. Stop signals the
-// runtime to shut down gracefully.
-type Runtime interface {
-	Start(ctx context.Context, name string, config map[string]any, capabilities []Capability, host RuntimeHost) error
-	Stop(ctx context.Context) error
-}
-
-// RuntimeHost gives a [Runtime] the ability to call back into the Gestalt
-// platform. Invoke executes an operation on another provider instance, and
-// ListCapabilities returns the currently available operations across all
-// connected providers.
-type RuntimeHost interface {
-	Invoke(ctx context.Context, principal Principal, provider, instance, operation string, params map[string]any) (*OperationResult, error)
-	ListCapabilities(ctx context.Context) ([]Capability, error)
-}
-
-// Principal identifies the user on whose behalf a runtime invokes an
-// operation. Source indicates how the user was authenticated.
-type Principal struct {
-	UserID   string
-	Identity *UserIdentity
-	Source   PrincipalSource
-}
-
-// UserIdentity holds display information about a user.
-type UserIdentity struct {
-	Email       string
-	DisplayName string
-	AvatarURL   string
-}
-
-// PrincipalSource indicates how a [Principal] was authenticated.
-type PrincipalSource string
-
-const (
-	// PrincipalSourceSession identifies a user authenticated via a browser session.
-	PrincipalSourceSession PrincipalSource = "session"
-	// PrincipalSourceAPIToken identifies a user authenticated via an API token.
-	PrincipalSourceAPIToken PrincipalSource = "api_token"
-	// PrincipalSourceEnv identifies a system-level principal from the environment.
-	PrincipalSourceEnv PrincipalSource = "env"
-)
-
-// Capability describes a single operation available through the platform,
-// including which provider exposes it. Runtimes receive these on startup and
-// can refresh them via [RuntimeHost.ListCapabilities].
-type Capability struct {
-	Provider    string
-	Operation   string
-	Description string
-	Parameters  []Parameter
 }

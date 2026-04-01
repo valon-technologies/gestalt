@@ -20,24 +20,6 @@ func newProviderPluginClient(t *testing.T, server proto.ProviderPluginServer) pr
 	return proto.NewProviderPluginClient(conn)
 }
 
-func newRuntimePluginClient(t *testing.T, server proto.RuntimePluginServer) proto.RuntimePluginClient {
-	t.Helper()
-
-	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterRuntimePluginServer(srv, server)
-	})
-	return proto.NewRuntimePluginClient(conn)
-}
-
-func newRuntimeHostClient(t *testing.T, server proto.RuntimeHostServer) proto.RuntimeHostClient {
-	t.Helper()
-
-	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterRuntimeHostServer(srv, server)
-	})
-	return proto.NewRuntimeHostClient(conn)
-}
-
 func newBufconnConn(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
 	t.Helper()
 

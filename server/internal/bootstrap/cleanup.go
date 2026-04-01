@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -49,26 +48,6 @@ func CloseBindings(bindings *registry.PluginMap[core.Binding], names []string) e
 		}
 		if err := binding.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("closing binding %q: %w", name, err))
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
-func StopRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime], names []string) error {
-	if runtimes == nil {
-		return nil
-	}
-
-	var errs []error
-	for _, name := range names {
-		rt, err := runtimes.Get(name)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("looking up runtime %q during shutdown: %w", name, err))
-			continue
-		}
-		if err := rt.Stop(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("stopping runtime %q: %w", name, err))
 		}
 	}
 

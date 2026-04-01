@@ -34,7 +34,7 @@ RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=build-binary /gestaltd /gestaltd
 RUN mkdir -p /data && chown nobody:nobody /data
 LABEL org.opencontainers.image.title="gestaltd" \
-      org.opencontainers.image.description="Self-hosted integration runtime for REST, GraphQL, MCP, and plugins." \
+      org.opencontainers.image.description="Self-hosted integration server for REST, GraphQL, MCP, and plugins." \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
       org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
       org.opencontainers.image.url="${GESTALT_URL}" \

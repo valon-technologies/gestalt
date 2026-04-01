@@ -42,14 +42,12 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
-	runtimes, bindings, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress, buildRuntimeForValidation)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
 	if err != nil {
 		return warnings, err
 	}
-	if runtimes != nil || bindings != nil {
-		// Validation does not start runtimes, but extension factories may still
-		// allocate resources that need to be released after construction.
-		defer func() { _ = shutdownExtensions(context.Background(), runtimes, bindings) }()
+	if bindings != nil {
+		defer func() { _ = CloseBindings(bindings, bindingNames(bindings)) }()
 	}
 
 	return warnings, nil
@@ -124,13 +122,6 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 	return &ProviderBuildResult{Provider: prov}, nil
 }
 
-func buildRuntimeForValidation(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
-	if cfg.Plugin != nil && cfg.Plugin.Package != "" && cfg.Plugin.HasResolvedManifest() {
-		return &preparedRuntimeStub{name: name}, nil
-	}
-	return buildRuntime(ctx, name, cfg, factories, deps)
-}
-
 type preparedProviderStub struct {
 	name           string
 	displayName    string
@@ -173,14 +164,6 @@ func (p *preparedProviderStub) Catalog() *catalog.Catalog {
 func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
 }
-
-type preparedRuntimeStub struct {
-	name string
-}
-
-func (r *preparedRuntimeStub) Name() string                { return r.name }
-func (r *preparedRuntimeStub) Start(context.Context) error { return nil }
-func (r *preparedRuntimeStub) Stop(context.Context) error  { return nil }
 
 func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
 	if intg.Plugin == nil {

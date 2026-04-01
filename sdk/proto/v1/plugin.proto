@@ -16,40 +16,6 @@ enum ConnectionMode {
   CONNECTION_MODE_EITHER = 4;
 }
 
-enum PrincipalSource {
-  PRINCIPAL_SOURCE_UNSPECIFIED = 0;
-  PRINCIPAL_SOURCE_SESSION = 1;
-  PRINCIPAL_SOURCE_API_TOKEN = 2;
-  PRINCIPAL_SOURCE_ENV = 3;
-}
-
-message UserIdentity {
-  string email = 1;
-  string display_name = 2;
-  string avatar_url = 3;
-}
-
-message Principal {
-  string user_id = 1;
-  UserIdentity identity = 2;
-  PrincipalSource source = 3;
-}
-
-message Parameter {
-  string name = 1;
-  string type = 2;
-  string description = 3;
-  bool required = 4;
-  google.protobuf.Value default_value = 5;
-}
-
-message Capability {
-  string provider = 1;
-  string operation = 2;
-  string description = 3;
-  repeated Parameter parameters = 4;
-}
-
 message ConnectionParamDef {
   bool required = 1;
   string description = 2;
@@ -122,18 +88,6 @@ message PostConnectResponse {
   map<string, string> metadata = 1;
 }
 
-message ListCapabilitiesResponse {
-  repeated Capability capabilities = 1;
-}
-
-message InvokeRequest {
-  Principal principal = 1;
-  string provider = 2;
-  string instance = 3;
-  string operation = 4;
-  google.protobuf.Struct params = 5;
-}
-
 message StartProviderRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
@@ -144,26 +98,10 @@ message StartProviderResponse {
   int32 protocol_version = 1;
 }
 
-message StartRuntimeRequest {
-  string name = 1;
-  google.protobuf.Struct config = 2;
-  repeated Capability initial_capabilities = 3;
-}
-
 service ProviderPlugin {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
-}
-
-service RuntimePlugin {
-  rpc Start(StartRuntimeRequest) returns (google.protobuf.Empty);
-  rpc Stop(google.protobuf.Empty) returns (google.protobuf.Empty);
-}
-
-service RuntimeHost {
-  rpc Invoke(InvokeRequest) returns (OperationResult);
-  rpc ListCapabilities(google.protobuf.Empty) returns (ListCapabilitiesResponse);
 }

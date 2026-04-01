@@ -29,12 +29,6 @@ func stubDatastoreFactory() bootstrap.DatastoreFactory {
 	}
 }
 
-func stubRuntimeFactory(name string, stopFn func(context.Context) error) bootstrap.RuntimeFactory {
-	return func(_ context.Context, _ string, _ config.RuntimeDef, _ bootstrap.RuntimeDeps) (core.Runtime, error) {
-		return &coretesting.StubRuntime{N: name, StopFn: stopFn}, nil
-	}
-}
-
 func stubSecretManagerFactory() bootstrap.SecretManagerFactory {
 	return func(yaml.Node) (core.SecretManager, error) {
 		return &coretesting.StubSecretManager{}, nil
@@ -160,30 +154,6 @@ func TestValidateRejectsInvalidManagedParameters(t *testing.T) {
 	}
 }
 
-func TestValidateStopsConstructedRuntimes(t *testing.T) {
-	t.Parallel()
-
-	stopped := false
-
-	cfg := validConfig()
-	cfg.Runtimes = map[string]config.RuntimeDef{
-		"echo": {Type: "test-runtime"},
-	}
-
-	factories := validFactories()
-	factories.Runtimes["test-runtime"] = stubRuntimeFactory("echo", func(context.Context) error {
-		stopped = true
-		return nil
-	})
-
-	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("Validate: %v", err)
-	}
-	if !stopped {
-		t.Fatal("expected Validate to stop constructed runtimes")
-	}
-}
-
 func TestBootstrapMultipleProviders(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -215,12 +185,11 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	}
 }
 
-func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
+func TestGatewayMode_NoBindingsRequired(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Runtimes = nil
 	cfg.Bindings = nil
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
@@ -238,15 +207,12 @@ func TestGatewayMode_NoRuntimesOrBindingsRequired(t *testing.T) {
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
 	}
-	if result.Runtimes != nil {
-		t.Error("expected Runtimes to be nil")
-	}
 	if result.Bindings != nil {
 		t.Error("expected Bindings to be nil")
 	}
 }
 
-func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
+func TestPlatformMode_BindingsUseScopedInvoker(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -265,12 +231,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 		},
 	}
 
-	cfg.Runtimes = map[string]config.RuntimeDef{
-		"my-runtime": {
-			Type:      "echo",
-			Providers: []string{"alpha"},
-		},
-	}
 	cfg.Bindings = map[string]config.BindingDef{
 		"my-binding": {
 			Type:      "test-binding",
@@ -279,12 +239,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	}
 
 	factories := validFactories()
-
-	var runtimeDeps bootstrap.RuntimeDeps
-	factories.Runtimes["echo"] = func(_ context.Context, name string, _ config.RuntimeDef, deps bootstrap.RuntimeDeps) (core.Runtime, error) {
-		runtimeDeps = deps
-		return &coretesting.StubRuntime{N: name}, nil
-	}
 
 	var bindingDeps bootstrap.BindingDeps
 	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
@@ -299,20 +253,6 @@ func TestPlatformMode_BindingsAndRuntimesWithSafetyLayer(t *testing.T) {
 	<-result.ProvidersReady
 	if result.AuditSink == nil {
 		t.Fatal("expected AuditSink to be non-nil")
-	}
-
-	if runtimeDeps.Invoker == nil {
-		t.Fatal("expected runtime invoker to be non-nil")
-	}
-	if runtimeDeps.CapabilityLister == nil {
-		t.Fatal("expected runtime capability lister to be non-nil")
-	}
-
-	rtCaps := runtimeDeps.CapabilityLister.ListCapabilities()
-	for _, cap := range rtCaps {
-		if cap.Provider != "alpha" {
-			t.Errorf("runtime broker should only see alpha, got %q", cap.Provider)
-		}
 	}
 
 	if bindingDeps.Invoker == nil {
@@ -623,18 +563,45 @@ func TestBootstrapSecretResolution(t *testing.T) {
 	})
 }
 
-func TestBootstrapUnknownRuntimeType(t *testing.T) {
+func TestBootstrapWithBindings(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Runtimes = map[string]config.RuntimeDef{
-		"bad": {Type: "nonexistent"},
+	cfg.Bindings = map[string]config.BindingDef{
+		"my-webhook": {Type: "webhook"},
 	}
 
-	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err == nil {
-		t.Fatal("expected error for unknown runtime type")
+	factories := validFactories()
+	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ bootstrap.BindingDeps) (core.Binding, error) {
+		return &coretesting.StubBinding{N: name}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+	if result.Bindings == nil {
+		t.Fatal("expected Bindings to be non-nil")
+	}
+	names := result.Bindings.List()
+	if len(names) != 1 || names[0] != "my-webhook" {
+		t.Fatalf("Bindings.List: got %v, want [my-webhook]", names)
+	}
+}
+
+func TestBootstrapNoBindings(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+	if result.Bindings != nil {
+		t.Fatalf("expected Bindings to be nil, got %v", result.Bindings.List())
 	}
 }
 

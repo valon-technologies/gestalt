@@ -15,7 +15,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -38,31 +37,6 @@ type ExecConfig struct {
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
-}
-
-type managedRuntime struct {
-	core.Runtime
-	proc     *pluginProcess
-	stopOnce sync.Once
-	stopErr  error
-}
-
-func (r *managedRuntime) Stop(ctx context.Context) error {
-	r.stopOnce.Do(func() {
-		var errs []error
-		if r.Runtime != nil {
-			if err := r.Runtime.Stop(ctx); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		if r.proc != nil {
-			if err := r.proc.Close(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		r.stopErr = errors.Join(errs...)
-	})
-	return r.stopErr
 }
 
 type pluginProcess struct {
@@ -101,55 +75,10 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 	return prov, nil
 }
 
-func NewExecutableRuntime(
-	ctx context.Context,
-	name string,
-	cfg ExecConfig,
-	invoker invocation.Invoker,
-	lister invocation.CapabilityLister,
-) (core.Runtime, error) {
-	proc, err := startPluginProcess(ctx, cfg, func(srv *grpc.Server) {
-		proto.RegisterRuntimeHostServer(srv, NewRuntimeHostServer(invoker, lister))
-	}, proto.EnvRuntimeHostSocket)
-	if err != nil {
-		return nil, err
-	}
-
-	var initialCaps []core.Capability
-	if lister != nil {
-		initialCaps = lister.ListCapabilities()
-	}
-
-	rt, err := NewRemoteRuntime(name, proto.NewRuntimePluginClient(proc.conn), cfg.Config, initialCaps)
-	if err != nil {
-		_ = proc.Close()
-		return nil, err
-	}
-	return &managedRuntime{Runtime: rt, proc: proc}, nil
-}
-
 func ServeProvider(ctx context.Context, provider core.Provider) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
 		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider))
 	})
-}
-
-func ServeRuntime(ctx context.Context, server proto.RuntimePluginServer) error {
-	return servePlugin(ctx, func(srv *grpc.Server) {
-		proto.RegisterRuntimePluginServer(srv, server)
-	})
-}
-
-func DialRuntimeHost(ctx context.Context) (*grpc.ClientConn, proto.RuntimeHostClient, error) {
-	socket := os.Getenv(proto.EnvRuntimeHostSocket)
-	if socket == "" {
-		return nil, nil, fmt.Errorf("%s is required", proto.EnvRuntimeHostSocket)
-	}
-	conn, err := dialUnixSocket(ctx, socket)
-	if err != nil {
-		return nil, nil, err
-	}
-	return conn, proto.NewRuntimeHostClient(conn), nil
 }
 
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
