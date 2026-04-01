@@ -31,7 +31,6 @@
 //				ID:          "hello",
 //				Description: "Says hello",
 //				Method:      "GET",
-//				Path:        "/hello",
 //			}},
 //		}
 //	}

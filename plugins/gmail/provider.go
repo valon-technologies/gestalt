@@ -43,7 +43,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "send_message",
 				Description: "Send an email message",
 				Method:      http.MethodPost,
-				Path:        "/send_message",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
 					{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
@@ -57,7 +56,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "create_draft",
 				Description: "Create an email draft",
 				Method:      http.MethodPost,
-				Path:        "/create_draft",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
 					{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
@@ -71,7 +69,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "reply_to_message",
 				Description: "Reply to an existing message",
 				Method:      http.MethodPost,
-				Path:        "/reply_to_message",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "message_id", Type: "string", Required: true, Description: "Original message ID"},
 					{Name: "body", Type: "string", Required: true, Description: "Reply body"},
@@ -84,7 +81,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "forward_message",
 				Description: "Forward a message to new recipients",
 				Method:      http.MethodPost,
-				Path:        "/forward_message",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "message_id", Type: "string", Required: true, Description: "Message to forward"},
 					{Name: "to", Type: "string", Required: true, Description: "Forward recipient"},
