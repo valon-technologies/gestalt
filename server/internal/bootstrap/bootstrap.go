@@ -1058,7 +1058,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		type operationFilter interface {
 			FilterOperations(map[string]*config.OperationOverride) error
 		}
-		if filtered := matchingAllowedOperations(allowedOperations, mcpProv.ListOperations()); len(filtered) > 0 {
+		if filtered := matchingAllowedOperations(allowedOperations, mcpProv.Catalog()); len(filtered) > 0 {
 			filterable, ok := mcpProv.(operationFilter)
 			if !ok {
 				_ = mcpUp.Close()
@@ -1160,13 +1160,13 @@ func manifestAllowedOperations(provider *pluginmanifestv1.Provider) map[string]*
 	return result
 }
 
-func matchingAllowedOperations(allowed map[string]*config.OperationOverride, ops []core.Operation) map[string]*config.OperationOverride {
-	if len(allowed) == 0 || len(ops) == 0 {
+func matchingAllowedOperations(allowed map[string]*config.OperationOverride, cat *catalog.Catalog) map[string]*config.OperationOverride {
+	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
 		return nil
 	}
-	available := make(map[string]struct{}, len(ops))
-	for _, op := range ops {
-		available[op.Name] = struct{}{}
+	available := make(map[string]struct{}, len(cat.Operations))
+	for i := range cat.Operations {
+		available[cat.Operations[i].ID] = struct{}{}
 	}
 	filtered := make(map[string]*config.OperationOverride)
 	for name, override := range allowed {

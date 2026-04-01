@@ -323,11 +323,7 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Providers.Get: %v", err)
 	}
-	cp, ok := prov.(core.CatalogProvider)
-	if !ok {
-		t.Fatalf("provider does not implement CatalogProvider: %T", prov)
-	}
-	cat := cp.Catalog()
+	cat := prov.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
 	}
