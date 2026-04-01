@@ -702,6 +702,9 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 		return fmt.Errorf("config validation: integration %q requires a plugin", name)
 	}
 	p := intg.Plugin
+	if p.Connection != "" {
+		return fmt.Errorf("config validation: integration %q plugin.connection is not supported; use default_connection or surface-specific *_connection fields", name)
+	}
 	if p.IsInline() {
 		return validateInlinePlugin(name, p)
 	}

@@ -86,12 +86,6 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, err
 	}
-	if err := l.applyLockedPlugins(configPath, cfg, true); err != nil {
-		return nil, err
-	}
-	if err := config.ValidateExecution(cfg); err != nil {
-		return nil, err
-	}
 
 	slog.Info("prepared plugins", "count", len(lock.Plugins))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
@@ -108,9 +102,6 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 	}
 
 	if err := l.applyLockedPlugins(configPath, cfg, locked); err != nil {
-		return nil, nil, err
-	}
-	if err := config.ValidateExecution(cfg); err != nil {
 		return nil, nil, err
 	}
 
