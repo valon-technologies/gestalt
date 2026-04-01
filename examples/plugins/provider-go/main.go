@@ -31,7 +31,7 @@ func (p *exampleProvider) Catalog() *gestalt.Catalog {
 		Name:        p.Name(),
 		DisplayName: p.DisplayName(),
 		Description: p.Description(),
-		Operations: []gestalt.Operation{
+		Operations: []gestalt.CatalogOperation{
 			{
 				ID:          "greet",
 				Description: "Return a greeting message",

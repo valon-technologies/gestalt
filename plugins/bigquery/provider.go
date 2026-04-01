@@ -35,7 +35,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 		Name:        providerName,
 		DisplayName: providerDisplayName,
 		Description: providerDescription,
-		Operations: []gestalt.Operation{
+		Operations: []gestalt.CatalogOperation{
 			{
 				ID:          queryOperationName,
 				Description: "Execute a BigQuery SQL query",

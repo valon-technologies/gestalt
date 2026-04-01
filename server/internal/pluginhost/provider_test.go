@@ -79,7 +79,7 @@ func (p *manualOnlySDKProvider) Catalog() *sdkgestalt.Catalog {
 		Name:        "manual-only",
 		DisplayName: "Manual Only",
 		Description: "manual auth provider",
-		Operations: []sdkgestalt.Operation{
+		Operations: []sdkgestalt.CatalogOperation{
 			{
 				ID:          "echo",
 				Description: "Echo input",

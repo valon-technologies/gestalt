@@ -49,17 +49,17 @@ type ProviderStarter interface {
 }
 
 type Catalog struct {
-	Name        string      `json:"name"`
-	DisplayName string      `json:"displayName"`
-	Description string      `json:"description"`
-	IconSVG     string      `json:"iconSvg,omitempty"`
-	Operations  []Operation `json:"operations"`
+	Name        string             `json:"name"`
+	DisplayName string             `json:"displayName"`
+	Description string             `json:"description"`
+	IconSVG     string             `json:"iconSvg,omitempty"`
+	Operations  []CatalogOperation `json:"operations"`
 }
 
-// Operation describes a single executable operation exposed by a provider
+// CatalogOperation describes a single executable operation exposed by a provider
 // plugin. Operations are invoked by ID; executable plugins do not declare
 // HTTP routes.
-type Operation struct {
+type CatalogOperation struct {
 	ID             string               `json:"id"`
 	Method         string               `json:"method"`
 	Title          string               `json:"title,omitempty"`
@@ -73,9 +73,6 @@ type Operation struct {
 	ReadOnly       bool                 `json:"readOnly,omitempty"`
 	Visible        *bool                `json:"visible,omitempty"`
 }
-
-// CatalogOperation is kept as a compatibility alias for Operation.
-type CatalogOperation = Operation
 
 type OperationAnnotations struct {
 	ReadOnlyHint    *bool `json:"readOnlyHint,omitempty"`

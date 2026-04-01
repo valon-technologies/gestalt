@@ -124,7 +124,7 @@ func TestProviderServerGetMetadata_StaticCatalog(t *testing.T) {
 		connMode: gestalt.ConnectionModeNone,
 		catalog: &gestalt.Catalog{
 			Name: "test-provider",
-			Operations: []gestalt.Operation{
+			Operations: []gestalt.CatalogOperation{
 				{
 					ID:          "list_items",
 					Description: "List all items",
@@ -173,14 +173,14 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			connMode: gestalt.ConnectionModeUser,
 			catalog: &gestalt.Catalog{
 				Name: "test-provider",
-				Operations: []gestalt.Operation{
+				Operations: []gestalt.CatalogOperation{
 					{ID: "static_op", Method: http.MethodGet},
 				},
 			},
 		},
 		sessionCatalog: &gestalt.Catalog{
 			Name: "test-provider",
-			Operations: []gestalt.Operation{
+			Operations: []gestalt.CatalogOperation{
 				{ID: "session_op", Method: http.MethodPost},
 			},
 		},
