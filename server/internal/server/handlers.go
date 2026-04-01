@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,7 +80,7 @@ type credentialFieldInfo struct {
 
 type connectionDefInfo struct {
 	Name             string                `json:"name"`
-	AuthType         string                `json:"auth_type"`
+	AuthTypes        []string              `json:"auth_types"`
 	CredentialFields []credentialFieldInfo `json:"credential_fields,omitempty"`
 }
 
@@ -117,14 +118,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		var authTypes []string
-		if atl, ok := prov.(core.AuthTypeLister); ok {
-			authTypes = atl.AuthTypes()
-		} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
-			authTypes = []string{"manual"}
-		} else {
-			authTypes = []string{"oauth"}
-		}
+		authTypes := integrationAuthTypesForProvider(prov)
 		instances := connected[name]
 		info := integrationInfo{
 			Name:        name,
@@ -153,19 +147,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				info.ConnectionParams = userParams
 			}
 		}
-		if cfp, ok := prov.(core.CredentialFieldsProvider); ok {
-			if fields := cfp.CredentialFields(); len(fields) > 0 {
-				cfInfos := make([]credentialFieldInfo, len(fields))
-				for i, f := range fields {
-					cfInfos[i] = credentialFieldInfo{
-						Name:        f.Name,
-						Label:       f.Label,
-						Description: f.Description,
-						HelpURL:     f.HelpURL,
-					}
-				}
-				info.CredentialFields = cfInfos
-			}
+		if fields := credentialFieldInfosFromProvider(prov); len(fields) > 0 {
+			info.CredentialFields = fields
+		}
+		if connections := s.integrationConnectionInfos(name, authTypes, info.CredentialFields); len(connections) > 0 {
+			info.Connections = connections
 		}
 		out = append(out, info)
 	}
@@ -194,7 +180,10 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 	}
 	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
-		m[tok.Integration] = append(m[tok.Integration], instanceInfo{Name: tok.Instance, Connection: tok.Connection})
+		m[tok.Integration] = append(m[tok.Integration], instanceInfo{
+			Name:       tok.Instance,
+			Connection: userFacingConnectionName(tok.Connection),
+		})
 	}
 	return m, nil
 }
@@ -212,6 +201,13 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	requestedInstance := r.URL.Query().Get("instance")
 	requestedConnection := r.URL.Query().Get("connection")
+	if requestedConnection != "" {
+		if !safeParamValue.MatchString(requestedConnection) {
+			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+			return
+		}
+		requestedConnection = config.ResolveConnectionAlias(requestedConnection)
+	}
 
 	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
 	if err != nil {
@@ -304,6 +300,49 @@ func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connect
 	return handler, true
 }
 
+func (s *Server) resolveRequestedConnection(w http.ResponseWriter, integration, requested string) (string, bool) {
+	if requested != "" {
+		if !safeParamValue.MatchString(requested) {
+			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+			return "", false
+		}
+		return config.ResolveConnectionAlias(requested), true
+	}
+
+	connection := s.defaultConnection[integration]
+	if connection == "" {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q requires an explicit connection", integration))
+		return "", false
+	}
+	return connection, true
+}
+
+func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, bool) {
+	instance := requested
+	if instance == "" {
+		instance = defaultTokenInstance
+	}
+	if !safeParamValue.MatchString(instance) {
+		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+		return "", false
+	}
+	return instance, true
+}
+
+func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided map[string]string) (map[string]string, bool) {
+	cpp, ok := prov.(core.ConnectionParamProvider)
+	if !ok {
+		return nil, true
+	}
+
+	connParams, err := validateConnectionParams(cpp.ConnectionParamDefs(), provided)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	return connParams, true
+}
+
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	prov, ok := s.getProvider(w, name)
@@ -368,8 +407,18 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 	instance, _ := params["_instance"].(string)
 	delete(params, "_instance")
+	connection, _ := params["_connection"].(string)
+	delete(params, "_connection")
+	ctx := r.Context()
+	if connection != "" {
+		if !safeParamValue.MatchString(connection) {
+			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+			return
+		}
+		ctx = invocation.WithConnection(ctx, config.ResolveConnectionAlias(connection))
+	}
 
-	result, err := s.invoker.Invoke(r.Context(), p, providerName, instance, operationName, params)
+	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
 		var upstreamErr *apiexec.UpstreamHTTPError
 		switch {
@@ -693,19 +742,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := s.getProvider(w, req.Integration); !ok {
+	prov, ok := s.getProvider(w, req.Integration)
+	if !ok {
 		return
 	}
 
-	connection := req.Connection
-	if connection == "" {
-		connection = s.defaultConnection[req.Integration]
-	}
-	if connection == "" {
-		connection = config.PluginConnectionName
-	}
-	if !safeParamValue.MatchString(connection) {
-		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+	connection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
+	if !ok {
 		return
 	}
 
@@ -724,25 +767,14 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	instance := req.Instance
-	if instance == "" {
-		instance = "default"
-	}
-	if !safeParamValue.MatchString(instance) {
-		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+	instance, ok := resolveRequestedInstance(w, req.Instance)
+	if !ok {
 		return
 	}
 
-	prov, _ := s.providers.Get(req.Integration)
-
-	var connParams map[string]string
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
-		var valErr error
-		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
-		if valErr != nil {
-			writeError(w, http.StatusBadRequest, valErr.Error())
-			return
-		}
+	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
+	if !ok {
+		return
 	}
 
 	var (
@@ -923,47 +955,24 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "not authenticated")
+	dbUserID, ok := s.resolveUserID(w, r)
+	if !ok {
 		return
 	}
 
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+	manualInstance, ok := resolveRequestedInstance(w, req.Instance)
+	if !ok {
 		return
 	}
 
-	manualInstance := req.Instance
-	if manualInstance == "" {
-		manualInstance = "default"
-	}
-	if !safeParamValue.MatchString(manualInstance) {
-		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
+	if !ok {
 		return
 	}
 
-	manualConnection := req.Connection
-	if manualConnection == "" {
-		manualConnection = s.defaultConnection[req.Integration]
-	}
-	if manualConnection == "" {
-		manualConnection = config.PluginConnectionName
-	}
-	if !safeParamValue.MatchString(manualConnection) {
-		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
+	if !ok {
 		return
-	}
-
-	var connParams map[string]string
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok {
-		var valErr error
-		connParams, valErr = validateConnectionParams(cpp.ConnectionParamDefs(), req.ConnectionParams)
-		if valErr != nil {
-			writeError(w, http.StatusBadRequest, valErr.Error())
-			return
-		}
 	}
 
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
@@ -973,7 +982,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tm := tokenMaterial{
-		UserID:       dbUser.ID,
+		UserID:       dbUserID,
 		Integration:  req.Integration,
 		Connection:   manualConnection,
 		Instance:     manualInstance,
@@ -1068,6 +1077,174 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 		out = append(out, apiTokenInfoFromCore(t))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+	intg, ok := s.integrationDefs[name]
+	if !ok || intg.Plugin == nil {
+		return nil
+	}
+	return connectionInfosForPlugin(intg.Plugin, integrationAuthTypes, defaultCredentialFields)
+}
+
+func connectionInfosForPlugin(plugin *config.PluginDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+	if plugin == nil {
+		return nil
+	}
+	manifestProvider := plugin.ManifestProvider()
+
+	var infos []connectionDefInfo
+	if info, ok := connectionInfoFromAuth(config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {
+		infos = append(infos, info)
+	}
+
+	names := make([]string, 0, len(plugin.Connections))
+	seen := make(map[string]struct{})
+	addName := func(raw string) {
+		resolved := config.ResolveConnectionAlias(raw)
+		if resolved == "" || resolved == config.PluginConnectionName {
+			return
+		}
+		if _, ok := seen[resolved]; ok {
+			return
+		}
+		seen[resolved] = struct{}{}
+		names = append(names, resolved)
+	}
+	if manifestProvider != nil {
+		for name := range manifestProvider.Connections {
+			addName(name)
+		}
+	}
+	for name := range plugin.Connections {
+		addName(name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
+		if !ok {
+			continue
+		}
+		if info, ok := connectionInfoFromAuth(name, conn.Auth, integrationAuthTypes, defaultCredentialFields); ok {
+			infos = append(infos, info)
+		}
+	}
+
+	return infos
+}
+
+func userFacingConnectionName(name string) string {
+	if name == config.PluginConnectionName {
+		return config.PluginConnectionAlias
+	}
+	return name
+}
+
+func integrationAuthTypesForProvider(prov core.Provider) []string {
+	var authTypes []string
+	if atl, ok := prov.(core.AuthTypeLister); ok {
+		authTypes = atl.AuthTypes()
+	} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+		authTypes = []string{"manual"}
+	} else {
+		authTypes = []string{"oauth"}
+	}
+	return userFacingAuthTypes(authTypes)
+}
+
+func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo {
+	cfp, ok := prov.(core.CredentialFieldsProvider)
+	if !ok {
+		return nil
+	}
+	return credentialFieldInfos(cfp.CredentialFields(), func(field core.CredentialFieldDef) credentialFieldInfo {
+		return credentialFieldInfo{
+			Name:        field.Name,
+			Label:       field.Label,
+			Description: field.Description,
+			HelpURL:     field.HelpURL,
+		}
+	})
+}
+
+func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInfo) []credentialFieldInfo {
+	if len(fields) == 0 {
+		return nil
+	}
+	infos := make([]credentialFieldInfo, len(fields))
+	for i, field := range fields {
+		infos[i] = mapField(field)
+	}
+	return infos
+}
+
+func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
+	authTypes := connectionAuthTypes(auth.Type, integrationAuthTypes)
+	if len(authTypes) == 0 {
+		return connectionDefInfo{}, false
+	}
+
+	info := connectionDefInfo{Name: name, AuthTypes: authTypes}
+	if fields := credentialFieldInfos(auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
+		return credentialFieldInfo{
+			Name:        field.Name,
+			Label:       field.Label,
+			Description: field.Description,
+			HelpURL:     field.HelpURL,
+		}
+	}); len(fields) > 0 {
+		info.CredentialFields = fields
+	} else if authTypesContain(authTypes, "manual") && len(defaultCredentialFields) > 0 {
+		info.CredentialFields = append([]credentialFieldInfo(nil), defaultCredentialFields...)
+	}
+	return info, true
+}
+
+func connectionAuthTypes(authType string, integrationAuthTypes []string) []string {
+	authTypes := userFacingAuthTypes([]string{authType})
+	if len(authTypes) == 0 {
+		return nil
+	}
+	if authTypesContain(integrationAuthTypes, "manual") && !authTypesContain(authTypes, "manual") {
+		authTypes = append(authTypes, "manual")
+	}
+	return authTypes
+}
+
+func authTypesContain(authTypes []string, want string) bool {
+	for _, authType := range authTypes {
+		if authType == want {
+			return true
+		}
+	}
+	return false
+}
+
+func userFacingAuthTypes(authTypes []string) []string {
+	if len(authTypes) == 0 {
+		return nil
+	}
+	var out []string
+	for _, authType := range authTypes {
+		normalized, ok := userFacingAuthType(authType)
+		if !ok || authTypesContain(out, normalized) {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func userFacingAuthType(authType string) (string, bool) {
+	switch authType {
+	case "", "oauth", "oauth2", "mcp_oauth":
+		return "oauth", true
+	case "manual", "bearer":
+		return "manual", true
+	default:
+		return "", false
+	}
 }
 
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {

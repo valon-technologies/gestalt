@@ -60,6 +60,99 @@ func TestE2EInitArchiveAndValidate(t *testing.T) {
 	}
 }
 
+func TestE2EValidateRejectsInvalidInlineConnectionConfigs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		pluginYAML string
+		wantError  string
+	}{
+		{
+			name: "operations require default connection",
+			pluginYAML: `base_url: https://api.example.test
+auth:
+  type: manual
+connections:
+  workspace:
+    auth:
+      type: manual
+operations:
+  - name: list_items
+    method: GET
+    path: /items`,
+			wantError: "plugin.default_connection is required when using inline operations with named connections",
+		},
+		{
+			name: "openapi requires explicit surface connection",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+connections:
+  workspace:
+    auth:
+      type: manual`,
+			wantError: "plugin.openapi_connection is required when using openapi with named connections and no top-level auth",
+		},
+		{
+			name: "graphql still requires surface connection when openapi also exists",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+openapi_connection: workspace
+graphql_url: https://api.example.test/graphql
+connections:
+  workspace:
+    auth:
+      type: manual`,
+			wantError: "plugin.graphql_connection is required when using graphql_url with named connections and no top-level auth",
+		},
+		{
+			name: "default connection reference must exist",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+openapi_connection: workspace
+default_connection: missing
+connections:
+  workspace:
+    auth:
+      type: manual`,
+			wantError: "plugin.default_connection references undeclared connection",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := fmt.Sprintf(`auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  port: 18080
+  encryption_key: test-e2e-key
+integrations:
+  example:
+    plugin:
+      %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected %q, got: %s", tc.wantError, out)
+			}
+		})
+	}
+}
+
 func TestE2EInitDirectoryPackage(t *testing.T) {
 	t.Parallel()
 

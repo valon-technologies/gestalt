@@ -28,15 +28,24 @@ fn run() -> anyhow::Result<()> {
             let client = ApiClient::from_env(url)?;
             match command {
                 IntegrationCommands::List => commands::integrations::list(&client, format),
-                IntegrationCommands::Connect { name } => {
-                    commands::integrations::connect(&client, &name)
-                }
+                IntegrationCommands::Connect {
+                    name,
+                    connection,
+                    instance,
+                } => commands::integrations::connect(
+                    &client,
+                    &name,
+                    connection.as_deref(),
+                    instance.as_deref(),
+                ),
             }
         }
         Commands::Invoke {
             integration,
             operation,
             params,
+            connection,
+            instance,
             select,
             input_file,
         } => {
@@ -47,8 +56,12 @@ fn run() -> anyhow::Result<()> {
                     &integration,
                     &op,
                     &params,
-                    select.as_deref(),
-                    input_file.as_deref(),
+                    commands::invoke::InvokeOptions {
+                        connection: connection.as_deref(),
+                        instance: instance.as_deref(),
+                        select: select.as_deref(),
+                        input_file: input_file.as_deref(),
+                    },
                     format,
                 ),
                 None => {

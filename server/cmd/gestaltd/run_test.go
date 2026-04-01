@@ -71,7 +71,11 @@ func TestBuildMCPSurfaceIncludesManifestDeclaredProviders(t *testing.T) {
 				},
 			}
 
-			surface := buildMCPSurface(cfg, bootstrap.BuildConnectionMaps(cfg))
+			connMaps, err := bootstrap.BuildConnectionMaps(cfg)
+			if err != nil {
+				t.Fatalf("BuildConnectionMaps: %v", err)
+			}
+			surface := buildMCPSurface(cfg, connMaps)
 			if len(surface.providers) != 1 || surface.providers[0] != "example" {
 				t.Fatalf("providers = %v", surface.providers)
 			}
@@ -106,7 +110,11 @@ func TestBuildMCPSurfaceExcludesResolvedManifestWithoutProvider(t *testing.T) {
 		},
 	}
 
-	surface := buildMCPSurface(cfg, bootstrap.BuildConnectionMaps(cfg))
+	connMaps, err := bootstrap.BuildConnectionMaps(cfg)
+	if err != nil {
+		t.Fatalf("BuildConnectionMaps: %v", err)
+	}
+	surface := buildMCPSurface(cfg, connMaps)
 	if len(surface.providers) != 0 {
 		t.Fatalf("providers = %v, want none", surface.providers)
 	}

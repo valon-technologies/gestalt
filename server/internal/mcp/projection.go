@@ -55,10 +55,7 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 
 		// Direct token resolution bypasses Invoke, so it needs an explicit
 		// connection instead of relying on broker-side provider defaults.
-		conn := cfg.APIConnection[provName]
-		if op.Transport == catalog.TransportMCPPassthrough {
-			conn = cfg.MCPConnection[provName]
-		}
+		conn := connectionForCatalogTransport(cfg, provName, op.Transport)
 
 		var handler mcpserver.ToolHandlerFunc
 		if isDirect && op.Transport != catalog.TransportREST {

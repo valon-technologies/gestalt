@@ -6,17 +6,131 @@ import Button from "./Button";
 import { CheckCircleIcon, CloseIcon } from "./icons";
 
 type ModalView = "default" | "disconnect" | "instance" | "token";
+type AuthType = "oauth" | "manual";
+type ConnectionTarget = {
+  instance?: string;
+  connection?: string;
+};
+
+type AuthTarget = {
+  key: string;
+  connection?: string;
+  label: string;
+  authTypes: AuthType[];
+  credentialFields?: CredentialFieldDef[];
+};
+
+type AuthAction = {
+  key: string;
+  authType: AuthType;
+  connection?: string;
+  label: string;
+  variant?: "primary" | "secondary";
+};
+
+type PendingAuthAction = ConnectionTarget & {
+  authType: AuthType;
+};
 
 interface IntegrationSettingsModalProps {
   integration: Integration;
   onClose: () => void;
   onStartOAuth: (instance?: string, connection?: string) => void;
   onSubmitToken: (credential: string | Record<string, string>, connectionParams?: Record<string, string>, instance?: string, connection?: string) => void;
-  onDisconnect: (instance?: string) => void;
+  onDisconnect: (instance?: string, connection?: string) => void;
   reconnecting: boolean;
   disconnecting: boolean;
   submitting: boolean;
   error: string | null;
+}
+
+function normalizeAuthTypes(authTypes?: AuthType[], fallbackToOAuth = true): AuthType[] {
+  const normalized: AuthType[] = [];
+  if (authTypes?.includes("oauth")) {
+    normalized.push("oauth");
+  }
+  if (authTypes?.includes("manual")) {
+    normalized.push("manual");
+  }
+  if (normalized.length === 0 && fallbackToOAuth) {
+    normalized.push("oauth");
+  }
+  return normalized;
+}
+
+function resolveAuthTargets(integration: Integration): AuthTarget[] {
+  const defaultCredentialFields = integration.credential_fields;
+  if (integration.connections?.length) {
+    return integration.connections
+      .map((connection) => ({
+        key: connection.name,
+        connection: connection.name,
+        label: connection.name,
+        authTypes: normalizeAuthTypes(connection.auth_types, false),
+        credentialFields: connection.credential_fields?.length
+          ? connection.credential_fields
+          : defaultCredentialFields,
+      }))
+      .filter((target) => target.authTypes.length > 0);
+  }
+
+  return [{
+    key: integration.name,
+    label: integration.display_name || integration.name,
+    authTypes: normalizeAuthTypes(integration.auth_types),
+    credentialFields: defaultCredentialFields,
+  }];
+}
+
+function buildAuthActionLabel(
+  target: AuthTarget,
+  authType: AuthType,
+  connected: boolean,
+  showTargetNames: boolean,
+): string {
+  const dualAuth = target.authTypes.includes("oauth") && target.authTypes.includes("manual");
+  if (connected) {
+    if (authType === "manual" && dualAuth) {
+      return showTargetNames ? `Add ${target.label} with API Token` : "Add with API Token";
+    }
+    return showTargetNames ? `Add ${target.label}` : "Add Connection";
+  }
+
+  if (authType === "manual") {
+    if (dualAuth) {
+      return showTargetNames ? `Use API Token for ${target.label}` : "Use API Token";
+    }
+    return showTargetNames ? `Connect with ${target.label}` : "Connect";
+  }
+
+  return showTargetNames ? `Connect with ${target.label}` : dualAuth ? "Connect with OAuth" : "Connect";
+}
+
+function buildAuthActions(targets: AuthTarget[], connected: boolean): AuthAction[] {
+  const showTargetNames = targets.length > 1;
+  const actions: AuthAction[] = [];
+
+  for (const target of targets) {
+    if (target.authTypes.includes("oauth")) {
+      actions.push({
+        key: `${target.key}:oauth`,
+        authType: "oauth",
+        connection: target.connection,
+        label: buildAuthActionLabel(target, "oauth", connected, showTargetNames),
+      });
+    }
+    if (target.authTypes.includes("manual")) {
+      actions.push({
+        key: `${target.key}:manual`,
+        authType: "manual",
+        connection: target.connection,
+        label: buildAuthActionLabel(target, "manual", connected, showTargetNames),
+        variant: target.authTypes.includes("oauth") ? "secondary" : "primary",
+      });
+    }
+  }
+
+  return actions;
 }
 
 export default function IntegrationSettingsModal({
@@ -32,10 +146,8 @@ export default function IntegrationSettingsModal({
 }: IntegrationSettingsModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<ModalView>("default");
-  const [disconnectInstance, setDisconnectInstance] = useState<string | undefined>();
-  const [pendingConnection, setPendingConnection] = useState<string | undefined>();
-  const [pendingAuthType, setPendingAuthType] = useState<"oauth" | "manual">("oauth");
-  const [pendingInstance, setPendingInstance] = useState<string | undefined>();
+  const [disconnectTarget, setDisconnectTarget] = useState<ConnectionTarget>({});
+  const [pendingAction, setPendingAction] = useState<PendingAuthAction | undefined>();
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -43,12 +155,10 @@ export default function IntegrationSettingsModal({
 
   const displayName = integration.display_name || integration.name;
   const headingId = `settings-modal-heading-${integration.name}`;
-  const authTypes = integration.auth_types ?? ["oauth"];
-  const supportsOAuth = authTypes.includes("oauth");
-  const supportsManual = authTypes.includes("manual");
-  const isDualAuth = supportsOAuth && supportsManual;
-  const isManualOnly = supportsManual && !supportsOAuth;
-  const hasMultipleConnections = (integration.connections?.length ?? 0) > 1;
+  const authTargets = resolveAuthTargets(integration);
+  const defaultTarget = authTargets.length === 1 ? authTargets[0] : undefined;
+  const defaultConnection = defaultTarget?.connection;
+  const connectionActions = buildAuthActions(authTargets, !!integration.connected);
   const needsParams = integration.connection_params && Object.keys(integration.connection_params).length > 0;
 
   function handleCancel(e: React.SyntheticEvent<HTMLDialogElement>) {
@@ -67,15 +177,15 @@ export default function IntegrationSettingsModal({
     dialogRef.current?.close();
   }
 
-  function startAddConnection(authType: "oauth" | "manual", connection?: string) {
-    setPendingConnection(connection);
-    setPendingAuthType(authType);
+  function startAddConnection(authType: "oauth" | "manual", connection = defaultConnection) {
+    const action = { authType, connection };
+    setPendingAction(action);
     if (integration.connected) {
       setView("instance");
     } else if (authType === "manual") {
       setView("token");
     } else {
-      onStartOAuth(undefined, connection);
+      onStartOAuth(undefined, action.connection);
     }
   }
 
@@ -83,20 +193,26 @@ export default function IntegrationSettingsModal({
     e.preventDefault();
     const name = (new FormData(e.currentTarget).get("instance_name") as string)?.trim();
     if (!name) return;
-    setPendingInstance(name);
-    if (pendingAuthType === "manual") {
+    const action = pendingAction ? { ...pendingAction, instance: name } : undefined;
+    setPendingAction(action);
+    if (action?.authType === "manual") {
       setView("token");
     } else {
-      onStartOAuth(name, pendingConnection);
+      onStartOAuth(action?.instance, action?.connection);
     }
   }
 
   function resolveCredentialFields(): CredentialFieldDef[] | undefined {
-    if (pendingConnection && integration.connections) {
-      const conn = integration.connections.find(c => c.name === pendingConnection);
-      return conn?.credential_fields?.length ? conn.credential_fields : undefined;
-    }
-    return integration.credential_fields;
+    const target = pendingAction?.connection
+      ? authTargets.find((authTarget) => authTarget.connection === pendingAction.connection)
+      : defaultTarget;
+    return target?.credentialFields ?? integration.credential_fields;
+  }
+
+  function isPendingAction(action: AuthAction): boolean {
+    return reconnecting
+      && pendingAction?.authType === action.authType
+      && pendingAction?.connection === action.connection;
   }
 
   function handleTokenSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -130,70 +246,23 @@ export default function IntegrationSettingsModal({
       }
       if (Object.keys(collected).length > 0) params = collected;
     }
-    onSubmitToken(credential, params, pendingInstance, pendingConnection);
+    onSubmitToken(credential, params, pendingAction?.instance, pendingAction?.connection);
   }
 
   function renderConnectionButtons() {
-    if (hasMultipleConnections) {
-      return (
-        <div className="mt-6 flex flex-col gap-2">
-          {integration.connections!.map((conn) => (
-            <Button
-              key={conn.name}
-              className="w-full"
-              onClick={() => startAddConnection(conn.auth_type, conn.name)}
-              disabled={reconnecting || submitting}
-            >
-              {integration.connected ? `Add ${conn.name}` : `Connect with ${conn.name}`}
-            </Button>
-          ))}
-        </div>
-      );
-    }
-
-    if (integration.connected) {
-      return (
-        <div className="mt-6 flex flex-col gap-2">
-          <Button
-            className="w-full"
-            onClick={() => startAddConnection(isDualAuth ? "oauth" : isManualOnly ? "manual" : "oauth")}
-            disabled={reconnecting || submitting}
-          >
-            {reconnecting ? "Connecting..." : "Add Connection"}
-          </Button>
-          {isDualAuth && (
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => startAddConnection("manual")}
-              disabled={reconnecting || submitting}
-            >
-              Add with API Token
-            </Button>
-          )}
-        </div>
-      );
-    }
-
     return (
       <div className="mt-6 flex flex-col gap-2">
-        <Button
-          className="w-full"
-          onClick={() => startAddConnection(isManualOnly ? "manual" : "oauth")}
-          disabled={reconnecting || submitting}
-        >
-          {reconnecting ? "Connecting..." : isDualAuth ? "Connect with OAuth" : "Connect"}
-        </Button>
-        {isDualAuth && (
+        {connectionActions.map((action) => (
           <Button
-            variant="secondary"
+            key={action.key}
+            variant={action.variant}
             className="w-full"
-            onClick={() => startAddConnection("manual")}
+            onClick={() => startAddConnection(action.authType, action.connection)}
             disabled={reconnecting || submitting}
           >
-            Use API Token
+            {isPendingAction(action) ? "Connecting..." : action.label}
           </Button>
-        )}
+        ))}
       </div>
     );
   }
@@ -225,7 +294,10 @@ export default function IntegrationSettingsModal({
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => { setView("default"); setDisconnectInstance(undefined); }}
+                onClick={() => {
+                  setView("default");
+                  setDisconnectTarget({});
+                }}
                 disabled={disconnecting}
               >
                 Cancel
@@ -233,7 +305,7 @@ export default function IntegrationSettingsModal({
               <Button
                 variant="danger"
                 className="flex-1"
-                onClick={() => onDisconnect(disconnectInstance)}
+                onClick={() => onDisconnect(disconnectTarget.instance, disconnectTarget.connection)}
                 disabled={disconnecting}
               >
                 {disconnecting ? "Disconnecting..." : "Disconnect"}
@@ -315,10 +387,18 @@ export default function IntegrationSettingsModal({
                       <div key={inst.name} className="flex items-center justify-between rounded border border-border px-3 py-2">
                         <div className="flex items-center gap-2">
                           <CheckCircleIcon className="h-4 w-4 text-grove-500" />
-                          <span className="text-sm text-stone-700 dark:text-stone-300">{inst.name}</span>
+                          <div>
+                            <div className="text-sm text-stone-700 dark:text-stone-300">{inst.name}</div>
+                            {inst.connection && (
+                              <div className="text-xs text-stone-500 dark:text-stone-400">{inst.connection}</div>
+                            )}
+                          </div>
                         </div>
                         <button
-                          onClick={() => { setDisconnectInstance(inst.name); setView("disconnect"); }}
+                          onClick={() => {
+                            setDisconnectTarget({ instance: inst.name, connection: inst.connection });
+                            setView("disconnect");
+                          }}
                           disabled={disconnecting}
                           className="text-xs text-ember-500 hover:text-ember-600"
                         >

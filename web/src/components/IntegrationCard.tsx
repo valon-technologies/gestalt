@@ -54,6 +54,11 @@ function hasConnectionParams(integration: Integration): boolean {
   );
 }
 
+type ConnectionTarget = {
+  instance?: string;
+  connection?: string;
+};
+
 export default function IntegrationCard({
   integration,
   onConnected,
@@ -68,8 +73,7 @@ export default function IntegrationCard({
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showParamForm, setShowParamForm] = useState(false);
-  const [pendingInstance, setPendingInstance] = useState("");
-  const [pendingConnection, setPendingConnection] = useState<string | undefined>();
+  const [pendingOAuthTarget, setPendingOAuthTarget] = useState<ConnectionTarget>({});
   const [submitting, setSubmitting] = useState(false);
 
   const safeIconSVG = integration.icon_svg
@@ -89,27 +93,34 @@ export default function IntegrationCard({
     return params;
   }
 
+  async function beginOAuth(connectionParams?: Record<string, string>, target: ConnectionTarget = pendingOAuthTarget) {
+    setLoading(true);
+    setError(null);
+    try {
+      const { url } = await startIntegrationOAuth(
+        integration.name,
+        undefined,
+        connectionParams,
+        target.instance,
+        target.connection,
+      );
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start OAuth");
+      setLoading(false);
+    }
+  }
+
   async function handleStartOAuth(instance?: string, connection?: string) {
-    setPendingInstance(instance || "");
-    setPendingConnection(connection);
+    const target = { instance, connection };
+    setPendingOAuthTarget(target);
     if (needsParams && !showParamForm) {
       setSettingsOpen(false);
       setShowParamForm(true);
       setError(null);
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const { url } = await startIntegrationOAuth(
-        integration.name, undefined, undefined, instance, connection,
-      );
-      window.location.href = url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start OAuth");
-    } finally {
-      setLoading(false);
-    }
+    await beginOAuth(undefined, target);
   }
 
   async function handleSubmitToken(credential: string | Record<string, string>, connectionParams?: Record<string, string>, instance?: string, connection?: string) {
@@ -131,35 +142,20 @@ export default function IntegrationCard({
   async function handleParamSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const params = collectConnectionParams(e.currentTarget);
-    setLoading(true);
-    setError(null);
-    try {
-      const { url } = await startIntegrationOAuth(
-        integration.name,
-        undefined,
-        params,
-        pendingInstance || undefined,
-        pendingConnection,
-      );
-      window.location.href = url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start OAuth");
-      setLoading(false);
-    }
+    await beginOAuth(params);
   }
 
   function handleCancelForm() {
     setShowParamForm(false);
-    setPendingInstance("");
-    setPendingConnection(undefined);
+    setPendingOAuthTarget({});
     setError(null);
   }
 
-  async function handleDisconnect(instance?: string) {
+  async function handleDisconnect(instance?: string, connection?: string) {
     setDisconnecting(true);
     setError(null);
     try {
-      await disconnectIntegration(integration.name, instance);
+      await disconnectIntegration(integration.name, instance, connection);
       onDisconnected?.();
       setSettingsOpen(false);
     } catch (err) {
