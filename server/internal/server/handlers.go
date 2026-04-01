@@ -369,6 +369,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.invoker.Invoke(r.Context(), p, providerName, instance, operationName, params)
 	if err != nil {
+		var upstreamErr *apiexec.UpstreamHTTPError
 		switch {
 		case errors.Is(err, invocation.ErrProviderNotFound):
 			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
@@ -390,6 +391,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
 		case errors.Is(err, apiexec.ErrMissingPathParam):
 			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.As(err, &upstreamErr):
+			writeOperationResult(w, &core.OperationResult{
+				Status:  upstreamErr.Status,
+				Headers: upstreamErr.Headers,
+				Body:    upstreamErr.Body,
+			})
 		default:
 			slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 			writeError(w, http.StatusBadGateway, "operation failed")
@@ -397,9 +404,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", core.ContentTypeJSON)
-	w.WriteHeader(result.Status)
-	_, _ = fmt.Fprint(w, result.Body)
+	writeOperationResult(w, result)
 }
 
 type loginRequest struct {

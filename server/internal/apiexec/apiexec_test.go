@@ -153,6 +153,40 @@ func TestDoUsesCustomAuthHeaderAndBodyOverride(t *testing.T) {
 	}
 }
 
+func TestDoReturnsUpstreamHTTPError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid parameter: limit"}}`))
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	_, err := Do(context.Background(), srv.Client(), Request{
+		Method:  http.MethodGet,
+		BaseURL: srv.URL,
+		Path:    "/items",
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var upstreamErr *UpstreamHTTPError
+	if !errors.As(err, &upstreamErr) {
+		t.Fatalf("expected UpstreamHTTPError, got %T", err)
+	}
+	if upstreamErr.Status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", upstreamErr.Status, http.StatusBadRequest)
+	}
+	if upstreamErr.Body != `{"error":{"message":"invalid parameter: limit"}}` {
+		t.Fatalf("body = %q", upstreamErr.Body)
+	}
+	if got := upstreamErr.Headers.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+}
+
 func TestDoGraphQLBasicQuery(t *testing.T) {
 	t.Parallel()
 

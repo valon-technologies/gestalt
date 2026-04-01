@@ -4423,6 +4423,73 @@ func TestErrorSanitization(t *testing.T) {
 	}
 }
 
+func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "invalid parameter: limit",
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, upstream)
+
+	prov, err := provider.Build(&provider.Definition{
+		Provider:         "test-int",
+		DisplayName:      "Test Integration",
+		BaseURL:          upstream.URL,
+		ConnectionMode:   "none",
+		Auth:             provider.AuthDef{Type: "manual"},
+		ErrorMessagePath: "error.message",
+		Operations: map[string]provider.OperationDef{
+			"do_thing": {Description: "Do a thing", Method: http.MethodGet, Path: "/do_thing"},
+		},
+	}, config.ConnectionDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 400: %s", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), `"operation failed"`) {
+		t.Fatalf("expected upstream body, got generic error: %s", body)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decoding upstream body: %v", err)
+	}
+	errObj, ok := decoded["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested error object, got %v", decoded)
+	}
+	if errObj["message"] != "invalid parameter: limit" {
+		t.Fatalf("message = %v, want %q", errObj["message"], "invalid parameter: limit")
+	}
+}
+
 type stubAuthWithToken struct {
 	coretesting.StubAuthProvider
 }
