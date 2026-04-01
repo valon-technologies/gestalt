@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/managedparams"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
@@ -1085,7 +1084,7 @@ func mergedManifestProviderConfig(manifest *pluginmanifestv1.Manifest, plugin *c
 	cloned := *manifest
 	providerCopy := *manifest.Provider
 	providerCopy.Headers = headers
-	providerCopy.ManagedParameters = managedParametersToManifest(managedParameters)
+	providerCopy.ManagedParameters = managedParameters
 	cloned.Provider = &providerCopy
 	return &cloned
 }
@@ -1119,7 +1118,7 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 	}
 	for _, param := range params {
 		switch param.In {
-		case managedparams.InHeader:
+		case config.ManagedParameterInHeader:
 			if _, exists := def.Headers[param.Name]; exists {
 				return fmt.Errorf("managed parameter %q conflicts with configured header", param.Name)
 			}
@@ -1145,50 +1144,21 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 	return nil
 }
 
-func mergedManagedParameters(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) []managedparams.Parameter {
-	var manifestParams []managedparams.Parameter
+func mergedManagedParameters(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) []pluginmanifestv1.ManagedParameter {
+	var manifestParams []pluginmanifestv1.ManagedParameter
 	if manifestProvider != nil {
-		manifestParams = make([]managedparams.Parameter, len(manifestProvider.ManagedParameters))
-		for i, param := range manifestProvider.ManagedParameters {
-			manifestParams[i] = managedparams.Parameter{
-				In:    param.In,
-				Name:  param.Name,
-				Value: param.Value,
-			}
-		}
+		manifestParams = manifestProvider.ManagedParameters
 	}
 
-	var pluginParams []managedparams.Parameter
+	var pluginParams []pluginmanifestv1.ManagedParameter
 	if plugin != nil {
-		pluginParams = make([]managedparams.Parameter, len(plugin.ManagedParameters))
-		for i, param := range plugin.ManagedParameters {
-			pluginParams[i] = managedparams.Parameter{
-				In:    param.In,
-				Name:  param.Name,
-				Value: param.Value,
-			}
-		}
+		pluginParams = plugin.ManagedParameters
 	}
 
-	return managedparams.Merge(manifestParams, pluginParams)
+	return config.MergeManagedParameters(manifestParams, pluginParams)
 }
 
-func managedParametersToManifest(params []managedparams.Parameter) []pluginmanifestv1.ManagedParameter {
-	if len(params) == 0 {
-		return nil
-	}
-	out := make([]pluginmanifestv1.ManagedParameter, len(params))
-	for i, param := range params {
-		out[i] = pluginmanifestv1.ManagedParameter{
-			In:    param.In,
-			Name:  param.Name,
-			Value: param.Value,
-		}
-	}
-	return out
-}
-
-func isManagedOperationParameter(param provider.ParameterDef, managed []managedparams.Parameter) bool {
+func isManagedOperationParameter(param provider.ParameterDef, managed []pluginmanifestv1.ManagedParameter) bool {
 	location := strings.ToLower(param.Location)
 	if location == "" {
 		return false
@@ -1198,15 +1168,7 @@ func isManagedOperationParameter(param provider.ParameterDef, managed []managedp
 	if wireName == "" {
 		wireName = param.Name
 	}
-
-	normalized := managedparams.Normalize([]managedparams.Parameter{{
-		In:   location,
-		Name: wireName,
-	}})
-	if len(normalized) == 0 {
-		return false
-	}
-	target := normalized[0]
+	target := config.NormalizeManagedParameter(pluginmanifestv1.ManagedParameter{In: location, Name: wireName})
 
 	for _, managedParam := range managed {
 		if managedParam.In == target.In && managedParam.Name == target.Name {

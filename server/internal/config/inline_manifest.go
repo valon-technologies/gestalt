@@ -17,7 +17,7 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		Provider: &pluginmanifestv1.Provider{
 			BaseURL:           p.BaseURL,
 			Headers:           NormalizeHeaders(p.Headers),
-			ManagedParameters: managedParametersToManifest(p.ManagedParameters),
+			ManagedParameters: NormalizeManagedParameters(p.ManagedParameters),
 			MCP:               p.MCP,
 			OpenAPI:           p.OpenAPI,
 			GraphQLURL:        p.GraphQLURL,
@@ -129,19 +129,4 @@ func connectionAuthToManifest(auth *ConnectionAuthDef) *pluginmanifestv1.Provide
 		})
 	}
 	return pa
-}
-
-func managedParametersToManifest(params []ManagedParameterDef) []pluginmanifestv1.ManagedParameter {
-	if len(params) == 0 {
-		return nil
-	}
-	out := make([]pluginmanifestv1.ManagedParameter, len(params))
-	for i, param := range params {
-		out[i] = pluginmanifestv1.ManagedParameter{
-			In:    param.In,
-			Name:  param.Name,
-			Value: param.Value,
-		}
-	}
-	return out
 }
