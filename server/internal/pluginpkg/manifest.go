@@ -155,7 +155,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 
 	needsArtifacts := false
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && (!isManifestBackedProvider || manifest.IsHybridProvider())) {
+		if kind == pluginmanifestv1.KindProvider && (!isManifestBackedProvider || manifest.IsHybridProvider()) {
 			needsArtifacts = true
 			break
 		}
@@ -214,10 +214,6 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 					return err
 				}
-			}
-		case pluginmanifestv1.KindRuntime:
-			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths); err != nil {
-				return err
 			}
 		case pluginmanifestv1.KindWebUI:
 			if manifest.WebUI == nil {

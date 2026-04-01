@@ -1,185 +1,117 @@
 # HTTP API
 
-This page documents the server routes exposed by `gestaltd`.
+This page documents the HTTP surface exposed by `gestaltd`.
 
-## Authentication
+## Authentication Model
 
 Authenticated routes accept:
 
-- a platform session cookie
-- `Authorization: Bearer <gst_api_...>`
+- the `session_token` cookie
+- or `Authorization: Bearer <token>`
 
-Proxy bindings also accept:
+For proxy routes, Gestalt also understands:
 
 - `Proxy-Authorization: Bearer <token>`
 
-## Core Routes
+Valid bearer tokens are:
+
+- platform session tokens
+- Gestalt API tokens (`gst_api_...`)
+
+## Unauthenticated Routes
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Liveness check. |
-| `GET` | `/ready` | Readiness check. Returns `503` until providers and the datastore are ready. |
-| `POST` | `/mcp` | MCP endpoint when at least one integration exposes tools. |
+| `GET` | `/health` | Basic liveness check. |
+| `GET` | `/ready` | Readiness check. Returns `503` until providers and datastore are ready. |
+| `GET` | `/api/v1/auth/info` | Returns platform auth metadata. |
+| `POST` | `/api/v1/auth/login` | Starts platform login. |
+| `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
+| `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
+| `GET` | `/api/v1/auth/callback` | Completes integration OAuth. |
 
-## Platform Auth Routes
+## Authenticated User Routes
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/auth/info` | Return platform auth metadata. |
-| `POST` | `/api/v1/auth/login` | Start platform login. |
-| `GET` | `/api/v1/auth/login/callback` | Complete platform login. |
-| `POST` | `/api/v1/auth/logout` | Clear the current platform session. |
-| `GET` | `/api/v1/auth/callback` | Complete integration OAuth. |
-
-### Start Platform Login
-
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "state": "cli-login",
-  "callback_port": 37777
-}
-```
-
-### Platform Auth Info Response
-
-```json
-{
-  "provider": "oidc",
-  "display_name": "SSO"
-}
-```
-
-## Integration Discovery
+### Integrations
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/integrations` | List integrations, connection state, auth hints, and stored instances. |
-| `DELETE` | `/api/v1/integrations/{name}` | Disconnect a stored integration connection. |
-| `GET` | `/api/v1/integrations/{name}/operations` | Return the operation catalog for one integration. |
+| `GET` | `/api/v1/integrations` | List integrations, connection state, auth types, instances, icons, and connection parameter hints. |
+| `DELETE` | `/api/v1/integrations/{name}` | Disconnect an integration. Use `?instance=...` when more than one connection exists. |
+| `GET` | `/api/v1/integrations/{name}/operations` | List operations for one integration. |
+| `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke an integration operation. |
 
-`DELETE /api/v1/integrations/{name}` supports `?connection=...` and
-`?instance=...` when more than one stored connection exists.
-
-## Invocation
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/{integration}/{operation}` | Invoke an operation with query parameters. |
-| `POST` | `/api/v1/{integration}/{operation}` | Invoke an operation with a JSON body. |
-
-Special request parameters:
-
-- `_connection` selects a named connection
-- `_instance` selects a stored instance
-
-Example:
-
-```sh
-curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
-  -H "Authorization: Bearer gst_api_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "_connection": "plugin",
-    "_instance": "default",
-    "channel": "C123",
-    "text": "hello"
-  }'
-```
-
-## Integration Connection Routes
+### Integration Connection Flows
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. |
-| `POST` | `/api/v1/auth/connect-manual` | Store a manual integration credential. |
-| `GET` | `/api/v1/connections/staged/{id}` | Inspect a staged connection selection. |
-| `POST` | `/api/v1/connections/staged/{id}/select` | Finalize a staged connection. |
+| `POST` | `/api/v1/auth/connect-manual` | Submit manual integration credentials. |
+| `GET` | `/api/v1/connections/staged/{id}` | Inspect a staged connection. |
+| `POST` | `/api/v1/connections/staged/{id}/select` | Finalize a staged connection choice. |
 | `DELETE` | `/api/v1/connections/staged/{id}` | Cancel a staged connection. |
 
-### Start Integration OAuth
-
-```http
-POST /api/v1/auth/start-oauth
-Authorization: Bearer gst_api_...
-Content-Type: application/json
-
-{
-  "integration": "notion",
-  "connection": "MCP",
-  "instance": "workspace-a",
-  "connection_params": {
-    "tenant": "acme"
-  }
-}
-```
-
-### Connect Manual Credential
-
-```http
-POST /api/v1/auth/connect-manual
-Authorization: Bearer gst_api_...
-Content-Type: application/json
-
-{
-  "integration": "rippling",
-  "credential": "sk_live_...",
-  "instance": "default"
-}
-```
-
-## API Token Routes
+### API Tokens
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/tokens` | Create an API token. Plaintext is returned once. |
 | `GET` | `/api/v1/tokens` | List API tokens for the current user. |
+| `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 | `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
-| `DELETE` | `/api/v1/tokens/{id}` | Revoke one API token. |
 
-Create token request:
-
-```json
-{
-  "name": "automation",
-  "scopes": "slack notion"
-}
-```
-
-## Runtime And Binding Discovery
+### Binding Discovery
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/runtimes` | List configured runtimes. |
 | `GET` | `/api/v1/bindings` | List configured bindings. |
 
 ## Dynamic Binding Routes
 
-Bindings add routes under:
+Bindings may add routes under:
 
 ```text
 /api/v1/bindings/{binding-name}/...
 ```
 
-Examples:
-
-- webhook bindings add their configured incoming path
-- proxy bindings expose the configured path and any nested suffixes
-
-## Typical Errors
-
-| Status | Meaning |
-| --- | --- |
-| `401` | Not authenticated. |
-| `403` | Access denied by auth or policy. |
-| `404` | Integration, operation, or stored connection not found. |
-| `409` | More than one matching instance exists and the caller must disambiguate. |
-| `412` | No stored connection exists for a user-scoped integration. |
-| `502` | Upstream request failed. |
+The exact paths and auth behavior depend on the binding type and its config.
 
 ## MCP
 
-`/mcp` uses the same auth model as the rest of the authenticated API. Tool
-discovery is derived from the provider catalogs built from your integrations.
+If any integration is MCP-enabled, Gestalt also mounts:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` or `POST` | `/mcp` | Model Context Protocol endpoint. |
+
+`/mcp` is authenticated with the same session or bearer-token middleware as the rest of the authenticated API.
+
+## Invocation Semantics
+
+When you call:
+
+```text
+/api/v1/{integration}/{operation}
+```
+
+Gestalt:
+
+1. authenticates the caller
+2. resolves the target provider and operation
+3. resolves credentials based on the connection's `mode`
+4. auto-selects an instance when there is exactly one
+5. fails with an ambiguity error when there are multiple instances and none is specified
+6. refreshes OAuth tokens when needed
+7. executes the provider operation
+
+## Parameter Conventions
+
+- `GET` invocations read parameters from the query string
+- `POST` invocations read parameters from a JSON body
+- `_instance` can be supplied when an integration has more than one stored connection
+
+## Example
+
+```sh
+curl http://localhost:8080/api/v1/httpbin/get_headers
+```

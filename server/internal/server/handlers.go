@@ -366,14 +366,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cat.Operations)
 }
 
-func (s *Server) listRuntimes(w http.ResponseWriter, _ *http.Request) {
-	if s.runtimes == nil {
-		writeJSON(w, http.StatusOK, []string{})
-		return
-	}
-	writeJSON(w, http.StatusOK, s.runtimes.List())
-}
-
 func (s *Server) listBindings(w http.ResponseWriter, _ *http.Request) {
 	if s.bindings == nil {
 		writeJSON(w, http.StatusOK, []string{})
@@ -507,7 +499,7 @@ func safeOperationErrorMessage(err error) (string, bool) {
 	case codes.DeadlineExceeded:
 		return "operation timed out", true
 	case codes.Unavailable:
-		return "integration runtime unavailable", true
+		return "integration unavailable", true
 	default:
 		return "", false
 	}

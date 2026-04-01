@@ -360,9 +360,6 @@ func TestLockPluginKey(t *testing.T) {
 	if got := LockPluginKey("integration", "example"); got != "integration:example" {
 		t.Fatalf("LockPluginKey = %q", got)
 	}
-	if got := LockPluginKey("runtime", "worker"); got != "runtime:worker" {
-		t.Fatalf("LockPluginKey = %q", got)
-	}
 }
 
 func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
@@ -426,71 +423,5 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.Plugins["integration:example"].Package != want.Plugins["integration:example"].Package {
 		t.Fatal("plugin package mismatch")
-	}
-}
-
-func TestInitAtPath_RuntimePlugin(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	srcDir := filepath.Join(dir, "runtime-src")
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "runtime"))
-	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artifactRel))), 0755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactRel)), []byte("runtime-binary"), 0755); err != nil {
-		t.Fatalf("WriteFile artifact: %v", err)
-	}
-	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/testowner/plugins/runtime",
-		Version: "0.1.0",
-		Kinds:   []string{pluginmanifestv1.KindRuntime},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   artifactRel,
-				SHA256: sha256hex("runtime-binary"),
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Runtime: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
-		},
-	}
-	data, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `runtimes:
-  worker:
-    plugin:
-      package: ` + srcDir + `
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle(nil)
-	lock, err := lc.InitAtPath(cfgPath)
-	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
-	}
-
-	key := LockPluginKey("runtime", "worker")
-	entry, ok := lock.Plugins[key]
-	if !ok {
-		t.Fatalf("lockfile missing runtime plugin entry %q", key)
-	}
-	wantRuntimePkg := filepath.ToSlash(filepath.Base(srcDir))
-	if entry.Package != wantRuntimePkg {
-		t.Fatalf("entry.Package = %q, want %q", entry.Package, wantRuntimePkg)
-	}
-	if entry.Manifest == "" {
-		t.Fatal("entry.Manifest is empty")
 	}
 }

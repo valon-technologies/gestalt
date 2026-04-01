@@ -1,99 +1,123 @@
 # Platform Model
 
-Gestalt has a small set of primitives. Once those are clear, the rest of the
-system is mostly composition.
+Gestalt has a small number of primitives, but they compose into a full
+integration platform. The easiest way to understand `gestaltd` is to follow the
+startup path from configuration to invocation.
 
-## One Config, Many Surfaces
+## The Core Model
 
-The server starts from a single YAML config and turns it into:
+At the highest level, `gestaltd` loads a declarative config file, bootstraps the
+platform components that config names, builds providers from integrations, and
+exposes those providers through shared request surfaces.
 
-- a platform auth flow for users
-- a credential store for integration tokens and API tokens
-- a provider graph built from inline definitions or packaged plugins
-- optional runtimes and bindings
-- an HTTP API, embedded web UI, and optional `/mcp` endpoint
+## The Main Primitives
 
-## Runtime Primitives
-
-| Primitive | What it does |
+| Primitive | Purpose |
 | --- | --- |
-| `auth` | Authenticates the human caller of the platform. |
-| `datastore` | Stores users, integration tokens, API tokens, staged connections, and plugin runtime state. |
-| `secrets` | Resolves `secret://...` references and egress credential grants. |
-| `integrations` | Become providers that expose operations. |
-| `runtimes` | Long-lived background plugins that can call provider operations. |
-| `bindings` | Extra HTTP routes such as inbound webhooks or outbound proxy surfaces. |
-| `egress` | Governs what outbound HTTP calls bindings and upstreams can make. |
-| `ui.plugin` | Replaces the embedded web app with a packaged UI bundle. |
+| `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
+| `datastore` | Persists users, API tokens, integration tokens, staged connections, and some egress data. |
+| `secrets` | Resolves `secret://...` references during bootstrap. |
+| `integrations` | Define the provider graph users call. Each integration has one `plugin` block plus optional metadata. |
+| `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
+| `egress` | Policy and credential rules for outbound traffic. |
 
-## Startup Phases
+## Bootstrap Order
 
-### Load Config
+This is the actual shape of startup:
 
-Gestalt reads `config.yaml`, expands `${VAR}` placeholders, resolves relative
-paths from the config directory, and validates the structure.
+1. Load YAML from the resolved config path.
+2. Expand `${ENV_VAR}` placeholders.
+3. Apply defaults such as `server.port: 8080` and `secrets.provider: env`.
+4. Resolve connection auth and inherited parameters.
+5. Fill redirect URLs from `server.base_url` when possible.
+6. Resolve relative paths against the config file directory.
+7. Validate the config.
+8. Build the secret manager.
+9. Resolve `secret://...` references across the rest of the config.
+10. Build the platform auth provider.
+11. Build the datastore.
+12. Build providers from `integrations`.
+13. Build the shared invocation broker.
+14. Build bindings.
+15. Start the HTTP server, then start bindings once providers are ready.
 
-### Prepare Managed Artifacts
+## Integrations Become Providers
 
-`gestaltd init` prepares artifacts referenced by `plugin.package`,
-`plugin.source`, `runtimes.*.plugin`, and `ui.plugin`. It writes lock state next
-to the config so `serve --locked` can start without mutating local files.
+An integration is a declarative definition. A provider is the executable object
+built from it.
 
-### Bootstrap Providers
+That distinction matters:
 
-Every integration becomes a provider. A provider can come from:
+- you edit `integrations.<name>` in YAML
+- `gestaltd` turns that entry into a provider at startup
+- every request surface invokes the provider, not the raw YAML
 
-- inline declarative operations
-- an inline OpenAPI, GraphQL, or upstream MCP surface
-- a packaged plugin
-- a hybrid package plus one or more spec-backed surfaces
+Providers come from three sources:
 
-### Start Extensions
+| Source | How it works |
+| --- | --- |
+| Inline declarative provider | Built from `plugin.base_url` plus `plugin.operations`. |
+| Inline spec-backed provider | Built from `plugin.openapi`, `plugin.graphql_url`, or `plugin.mcp_url`. |
+| Packaged provider plugin | Spawned as a separate process and connected over the plugin protocol. |
 
-After providers are ready, Gestalt starts runtimes and bindings. Bindings mount
-extra routes under `/api/v1/bindings/...`.
+A packaged plugin can also layer in spec-backed surfaces, which is how hybrid
+providers work.
 
-### Serve HTTP And MCP
+## Connection Resolution
 
-The server exposes:
+Gestalt resolves credentials through either the implicit plugin connection or a
+set of named connections.
 
-- `/health`
-- `/ready`
-- `/api/v1/...`
-- `/mcp` when at least one integration exposes tools
-- the embedded UI or a packaged UI bundle
+- `plugin.auth` and `plugin.params` define the implicit `plugin` connection
+- `plugin.connections` defines named connections for inline providers
+- packaged providers define their own named connections in the manifest
+- `openapi_connection`, `graphql_connection`, `mcp_connection`, and
+  `default_connection` decide which connection each surface uses
 
-## Shared Provider Graph
+Each connection has one mode:
 
-Every surface reuses the same provider graph.
+| Mode | Meaning |
+| --- | --- |
+| `none` | No stored credential is needed. |
+| `user` | Use a user-scoped stored connection. |
+| `identity` | Use a shared service identity. |
+| `either` | Prefer user auth and fall back to the shared identity. |
 
-- The HTTP API calls provider operations directly.
-- The UI discovers integrations and operations through the same API.
-- `/mcp` turns provider catalogs into tool definitions.
-- Runtimes invoke providers through the same broker used by HTTP requests.
-- Bindings can forward into providers or proxy outbound HTTP with shared egress
-  policy.
+If an integration has more than one stored connection for the chosen subject,
+callers must specify an instance. If there is exactly one, Gestalt selects it
+automatically.
 
-That shared broker is where Gestalt resolves connection mode, stored tokens,
-refresh flows, instance selection, and audit metadata.
+## The Shared Invocation Broker
 
-## Connections And Instances
+Every execution path in Gestalt goes through the same invocation broker.
 
-Gestalt stores connection state by:
+The broker is responsible for:
 
-- subject
-- integration
-- connection name
-- instance name
+- locating the target provider and operation
+- resolving credentials based on connection mode
+- choosing an instance when multiple connections exist
+- refreshing expiring OAuth tokens
+- injecting connection metadata into execution context
+- returning normalized operation results
 
-The server auto-selects a connection instance when there is exactly one match.
-If multiple matches exist, callers must specify `_connection`, `_instance`, or
-both.
+Because this broker is shared, the same token and policy behavior applies
+whether the caller is the web UI, a direct HTTP client, an MCP client hitting
+`/mcp`, a webhook binding, or a proxy binding.
 
-## When To Reach For Each Primitive
+## Surfaces Built On Top
 
-- Use an inline integration when you only need a small API surface.
-- Use a packaged provider when the logic belongs in code.
-- Use a runtime when work starts from an external event or long-lived loop.
-- Use a binding when you need an inbound webhook or a controlled proxy route.
-- Use `/mcp` when the same provider graph should be available to MCP clients.
+Once providers exist, `gestaltd` projects them into several surfaces:
+
+| Surface | What it exposes |
+| --- | --- |
+| HTTP API | `/api/v1/...` for integration listing, auth flows, invocation, and token management. |
+| Embedded web UI | Served by the same server process and port as the API. |
+| MCP endpoint | `/mcp`, mounted when at least one integration exposes tools. |
+| Bindings | Additional routes and triggers declared under `bindings:`. |
+
+## What You Actually Program Against
+
+As a Gestalt operator, you compose top-level config blocks, integration
+definitions, plugin definitions, connection definitions, binding definitions,
+egress rules, and optional plugin manifests and packages. Everything else is a
+consequence of those inputs.

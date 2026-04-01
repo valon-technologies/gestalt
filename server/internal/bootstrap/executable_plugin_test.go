@@ -5,146 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
-
-type runtimeOutput struct {
-	Name            string         `json:"name"`
-	CapabilityCount int            `json:"capability_count"`
-	Capabilities    []string       `json:"capabilities"`
-	ProbeStatus     int            `json:"probe_status"`
-	ProbeBody       string         `json:"probe_body"`
-	Config          map[string]any `json:"config"`
-}
-
-func TestExecutableProviderAndRuntimePlugins(t *testing.T) {
-	t.Parallel()
-	bin := buildEchoPluginBinary(t)
-	outputFile := filepath.Join(t.TempDir(), "runtime-output.json")
-
-	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
-			"echoext": {
-				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"provider"},
-				},
-			},
-		},
-		Runtimes: map[string]config.RuntimeDef{
-			"echoextrt": {
-				Providers: []string{"echoext"},
-				Config: mustNode(t, map[string]any{
-					"output_file":     outputFile,
-					"probe_provider":  "echoext",
-					"probe_operation": "echo",
-					"probe_params": map[string]any{
-						"message": "from runtime",
-					},
-				}),
-				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"runtime"},
-				},
-			},
-		},
-	}
-
-	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	broker := invocation.NewBroker(providers, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
-	if err != nil {
-		t.Fatalf("buildRuntimes: %v", err)
-	}
-	defer func() { _ = StopRuntimes(context.Background(), runtimes, runtimes.List()) }()
-
-	rt, err := runtimes.Get("echoextrt")
-	if err != nil {
-		t.Fatalf("runtimes.Get: %v", err)
-	}
-	if err := rt.Start(context.Background()); err != nil {
-		t.Fatalf("runtime.Start: %v", err)
-	}
-
-	got := readRuntimeOutput(t, outputFile)
-
-	if got.Name != "echoextrt" {
-		t.Fatalf("runtime output name = %q", got.Name)
-	}
-	if got.CapabilityCount != 4 {
-		t.Fatalf("runtime output capability_count = %d", got.CapabilityCount)
-	}
-	if got.ProbeStatus != http.StatusOK {
-		t.Fatalf("runtime output probe_status = %d", got.ProbeStatus)
-	}
-	if got.ProbeBody != `{"message":"from runtime"}` {
-		t.Fatalf("runtime output probe_body = %q", got.ProbeBody)
-	}
-}
-
-func TestExecutableRuntimeReceivesPluginConfig(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	outputFile := filepath.Join(t.TempDir(), "runtime-output.json")
-
-	cfg := &config.Config{
-		Runtimes: map[string]config.RuntimeDef{
-			"echoextrt": {
-				Config: mustNode(t, map[string]any{
-					"output_file":  outputFile,
-					"plugin_only":  "from runtime config",
-					"runtime_only": "from runtime config",
-				}),
-				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"runtime"},
-				},
-			},
-		},
-	}
-
-	factories := NewFactoryRegistry()
-	broker := invocation.NewBroker(nil, nil)
-	runtimes, err := buildRuntimes(context.Background(), cfg, factories, broker, broker, core.AuditSink(invocation.NewSlogAuditSink(nil)), EgressDeps{})
-	if err != nil {
-		t.Fatalf("buildRuntimes: %v", err)
-	}
-	defer func() { _ = StopRuntimes(context.Background(), runtimes, runtimes.List()) }()
-
-	rt, err := runtimes.Get("echoextrt")
-	if err != nil {
-		t.Fatalf("runtimes.Get: %v", err)
-	}
-	if err := rt.Start(context.Background()); err != nil {
-		t.Fatalf("runtime.Start: %v", err)
-	}
-
-	got := readRuntimeOutput(t, outputFile)
-	if got.Config["runtime_only"] != "from runtime config" {
-		t.Fatalf("runtime config missing runtime_only: %+v", got.Config)
-	}
-	if got.Config["plugin_only"] != "from runtime config" {
-		t.Fatalf("runtime config missing plugin_only: %+v", got.Config)
-	}
-}
 
 func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	t.Parallel()
@@ -229,21 +98,6 @@ func mustNode(t *testing.T, value any) yaml.Node {
 		t.Fatalf("node.Encode: %v", err)
 	}
 	return node
-}
-
-func readRuntimeOutput(t *testing.T, path string) runtimeOutput {
-	t.Helper()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
-
-	var got runtimeOutput
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	return got
 }
 
 func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {

@@ -3,9 +3,13 @@ package pluginhost
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -64,7 +68,21 @@ type stubProviderPluginServer struct {
 	metadata *proto.ProviderMetadata
 }
 
+type flakyMetadataProviderPluginServer struct {
+	stubProviderPluginServer
+	failures int32
+	calls    int32
+}
+
 func (s *stubProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	return s.metadata, nil
+}
+
+func (s *flakyMetadataProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	atomic.AddInt32(&s.calls, 1)
+	if atomic.AddInt32(&s.failures, -1) >= 0 {
+		return nil, status.Error(codes.Unavailable, "transport: Error while dialing: dial unix /tmp/plugin.sock: connect: connection refused")
+	}
 	return s.metadata, nil
 }
 
@@ -147,5 +165,34 @@ func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
 	_, err := NewRemoteProvider(context.Background(), client, "test-plugin", nil)
 	if err == nil {
 		t.Fatal("expected nil config to fail validation against schema with required fields")
+	}
+}
+
+func TestNewRemoteProvider_RetriesTransientMetadataUnavailable(t *testing.T) {
+	t.Parallel()
+
+	stub := &flakyMetadataProviderPluginServer{
+		stubProviderPluginServer: stubProviderPluginServer{
+			metadata: &proto.ProviderMetadata{
+				Name:        "test-plugin",
+				DisplayName: "Test Plugin",
+			},
+		},
+		failures: 2,
+	}
+	client := newProviderPluginClient(t, stub)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	prov, err := NewRemoteProvider(ctx, client, "test-plugin", nil)
+	if err != nil {
+		t.Fatalf("expected transient startup failure to recover: %v", err)
+	}
+	if prov.Name() != "test-plugin" {
+		t.Fatalf("unexpected name: %q", prov.Name())
+	}
+	if got := atomic.LoadInt32(&stub.calls); got < 3 {
+		t.Fatalf("GetMetadata calls = %d, want at least 3", got)
 	}
 }

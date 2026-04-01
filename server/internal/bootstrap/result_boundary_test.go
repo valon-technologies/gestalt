@@ -48,104 +48,13 @@ func (s *closableSecretManager) Close() error {
 	return nil
 }
 
-func TestResultStart_StartsRuntimesBeforeBindings(t *testing.T) {
-	t.Parallel()
-
-	runtimeStarted := false
-	bindingSawRuntimeStarted := false
-
-	result := &bootstrap.Result{
-		Runtimes: registryWithRuntime(t, "echo", &coretesting.StubRuntime{
-			N: "echo",
-			StartFn: func(context.Context) error {
-				runtimeStarted = true
-				return nil
-			},
-		}),
-		Bindings: registryWithBinding(t, "hook", &coretesting.StubBinding{
-			N: "hook",
-			StartFn: func(context.Context) error {
-				bindingSawRuntimeStarted = runtimeStarted
-				return nil
-			},
-		}),
-	}
-
-	if err := result.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if !runtimeStarted {
-		t.Fatal("expected Start to start runtimes")
-	}
-	if !bindingSawRuntimeStarted {
-		t.Fatal("expected bindings to start after runtimes")
-	}
-}
-
-func TestResultStart_StopsStartedRuntimesWithoutStoppingFailedRuntime(t *testing.T) {
-	t.Parallel()
-
-	startedRuntimeStopped := 0
-	failedRuntimeStopped := 0
-
-	result := &bootstrap.Result{
-		Runtimes: registryWithRuntimes(t,
-			namedRuntime{
-				name: "alpha",
-				runtime: &coretesting.StubRuntime{
-					N: "alpha",
-					StopFn: func(context.Context) error {
-						startedRuntimeStopped++
-						return nil
-					},
-				},
-			},
-			namedRuntime{
-				name: "beta",
-				runtime: &coretesting.StubRuntime{
-					N: "beta",
-					StartFn: func(context.Context) error {
-						return errors.New("boom")
-					},
-					StopFn: func(context.Context) error {
-						failedRuntimeStopped++
-						return nil
-					},
-				},
-			},
-		),
-	}
-
-	err := result.Start(context.Background())
-	if err == nil {
-		t.Fatal("expected Start to fail")
-	}
-	if !strings.Contains(err.Error(), `starting runtime "beta"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if startedRuntimeStopped != 1 {
-		t.Fatalf("started runtime Stop count = %d, want 1", startedRuntimeStopped)
-	}
-	if failedRuntimeStopped != 0 {
-		t.Fatalf("failed runtime Stop count = %d, want 0", failedRuntimeStopped)
-	}
-}
-
 func TestResultStart_CleansUpStartedBindingsWithoutClosingFailedBinding(t *testing.T) {
 	t.Parallel()
 
-	runtimeStopped := 0
 	startedBindingClosed := 0
 	failedBindingClosed := 0
 
 	result := &bootstrap.Result{
-		Runtimes: registryWithRuntime(t, "echo", &coretesting.StubRuntime{
-			N: "echo",
-			StopFn: func(context.Context) error {
-				runtimeStopped++
-				return nil
-			},
-		}),
 		Bindings: registryWithBindings(t,
 			namedBinding{
 				name: "alpha",
@@ -186,26 +95,15 @@ func TestResultStart_CleansUpStartedBindingsWithoutClosingFailedBinding(t *testi
 	if failedBindingClosed != 0 {
 		t.Fatalf("failed binding Close count = %d, want 0", failedBindingClosed)
 	}
-	if runtimeStopped != 1 {
-		t.Fatalf("runtime Stop count = %d, want 1", runtimeStopped)
-	}
 }
 
 func TestResultCloseAfterFailedStartDoesNotDoubleCleanUpExtensions(t *testing.T) {
 	t.Parallel()
 
-	runtimeStopped := 0
 	bindingClosed := 0
 	providerClosed := 0
 
 	result := &bootstrap.Result{
-		Runtimes: registryWithRuntime(t, "echo", &coretesting.StubRuntime{
-			N: "echo",
-			StopFn: func(context.Context) error {
-				runtimeStopped++
-				return nil
-			},
-		}),
 		Bindings: registryWithBindings(t,
 			namedBinding{
 				name: "alpha",
@@ -242,9 +140,6 @@ func TestResultCloseAfterFailedStartDoesNotDoubleCleanUpExtensions(t *testing.T)
 	if err := result.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if runtimeStopped != 1 {
-		t.Fatalf("runtime Stop count = %d, want 1", runtimeStopped)
-	}
 	if bindingClosed != 1 {
 		t.Fatalf("binding Close count = %d, want 1", bindingClosed)
 	}
@@ -257,7 +152,6 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 	t.Parallel()
 
 	bindingClosed := false
-	runtimeStopped := false
 	providerClosed := false
 	datastoreClosed := false
 	secretManagerClosed := false
@@ -267,13 +161,6 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 			N: "hook",
 			CloseFn: func() error {
 				bindingClosed = true
-				return nil
-			},
-		}),
-		Runtimes: registryWithRuntime(t, "echo", &coretesting.StubRuntime{
-			N: "echo",
-			StopFn: func(context.Context) error {
-				runtimeStopped = true
 				return nil
 			},
 		}),
@@ -307,9 +194,6 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 	if !bindingClosed {
 		t.Fatal("expected Close to close bindings")
 	}
-	if !runtimeStopped {
-		t.Fatal("expected Close to stop runtimes")
-	}
 	if !providerClosed {
 		t.Fatal("expected Close to close providers")
 	}
@@ -329,16 +213,6 @@ func registryWithProvider(t *testing.T, name string, provider core.Provider) *re
 		t.Fatalf("Register provider %q: %v", name, err)
 	}
 	return &reg.Providers
-}
-
-func registryWithRuntime(t *testing.T, name string, runtime core.Runtime) *registry.PluginMap[core.Runtime] {
-	t.Helper()
-
-	runtimes := registry.NewRuntimeMap()
-	if err := runtimes.Register(name, runtime); err != nil {
-		t.Fatalf("Register runtime %q: %v", name, err)
-	}
-	return runtimes
 }
 
 func registryWithBinding(t *testing.T, name string, binding core.Binding) *registry.PluginMap[core.Binding] {
@@ -366,21 +240,4 @@ func registryWithBindings(t *testing.T, bindingsList ...namedBinding) *registry.
 		}
 	}
 	return bindings
-}
-
-type namedRuntime struct {
-	name    string
-	runtime core.Runtime
-}
-
-func registryWithRuntimes(t *testing.T, runtimesList ...namedRuntime) *registry.PluginMap[core.Runtime] {
-	t.Helper()
-
-	runtimes := registry.NewRuntimeMap()
-	for _, entry := range runtimesList {
-		if err := runtimes.Register(entry.name, entry.runtime); err != nil {
-			t.Fatalf("Register runtime %q: %v", entry.name, err)
-		}
-	}
-	return runtimes
 }

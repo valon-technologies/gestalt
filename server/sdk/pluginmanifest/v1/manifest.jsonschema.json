@@ -33,7 +33,6 @@
       "items": {
         "enum": [
           "provider",
-          "runtime",
           "webui"
         ]
       }
@@ -192,9 +191,6 @@
       "properties": {
         "provider": {
           "$ref": "#/$defs/entrypoint"
-        },
-        "runtime": {
-          "$ref": "#/$defs/entrypoint"
         }
       }
     }
@@ -279,29 +275,6 @@
             }
           }
         ]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "kinds": {
-            "contains": {
-              "const": "runtime"
-            }
-          }
-        }
-      },
-      "then": {
-        "required": [
-          "entrypoints"
-        ],
-        "properties": {
-          "entrypoints": {
-            "required": [
-              "runtime"
-            ]
-          }
-        }
       }
     },
     {

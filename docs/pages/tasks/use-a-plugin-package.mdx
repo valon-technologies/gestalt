@@ -1,52 +1,54 @@
-# Use A Plugin Package
+# Use a Plugin Package
 
-Gestalt can load plugin packages from a local directory, a local archive, an
-HTTPS archive, or a versioned source.
+Packaged plugins are the deployment-oriented way to run executable providers.
 
-## Local Directory
-
-```yaml
-integrations:
-  slack:
-    plugin:
-      package: ./dist/slack
-```
-
-## Local Archive
+## Reference The Package
 
 ```yaml
 integrations:
-  slack:
+  example:
     plugin:
-      package: ./dist/slack.tar.gz
+      package: ./dist/example-provider.tar.gz
+      config:
+        greeting: Hello from packaged plugin
 ```
 
-## Remote Archive
+`plugin.package` accepts:
 
-Remote package archives use the same field:
-`package: https://downloads.example.com/slack-0.1.0.tar.gz`
+- a local directory
+- a local `.tar.gz`
+- an HTTPS URL (`.tar.gz`)
 
-Only HTTPS archives are supported.
-
-## Versioned Source
-
-Published package sources use `source` plus `version`, for example:
-`source: github.com/acme/plugins/slack` and `version: 1.2.3`
-
-## Prepare And Serve
+## Init It
 
 ```sh
 gestaltd init --config ./config.yaml
+```
+
+This validates the manifest, selects the current platform artifact, installs the package in-place, and records the prepared result in `gestalt.lock.json`.
+
+## Validate The Prepared Config
+
+```sh
+gestaltd validate --config ./config.yaml
+```
+
+Validation uses the prepared plugin state instead of re-resolving the package every time.
+
+## Start From Locked State
+
+```sh
 gestaltd serve --locked --config ./config.yaml
 ```
 
-`init` extracts or resolves the package into `.gestalt/plugins/...` and records
-the prepared state in `gestalt.lock.json`.
+That is the normal production path for packaged plugins.
 
-## Package A Plugin Yourself
+## Refresh A Remote Package
+
+If `plugin.package` points at an HTTPS URL and the remote archive changes, rerun:
 
 ```sh
-gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
+gestaltd init --config ./config.yaml
 ```
 
-See [Plugin Manifests](/reference/plugin-manifests) for the package layout.
+Remote packages are intentionally refreshed during explicit `init`.

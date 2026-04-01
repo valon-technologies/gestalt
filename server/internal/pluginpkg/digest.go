@@ -52,15 +52,6 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		digests = append(digests, sum)
 	}
 
-	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(RuntimeConfigSchemaPath))
-	if _, err := os.Stat(runtimeSchema); err == nil {
-		sum, err := fileSHA256(runtimeSchema)
-		if err != nil {
-			return "", fmt.Errorf("digest runtime config schema: %w", err)
-		}
-		digests = append(digests, sum)
-	}
-
 	if manifest.WebUI != nil && manifest.WebUI.AssetRoot != "" {
 		assetDir := filepath.Join(dirPath, filepath.FromSlash(manifest.WebUI.AssetRoot))
 		if err := filepath.WalkDir(assetDir, func(path string, d os.DirEntry, err error) error {

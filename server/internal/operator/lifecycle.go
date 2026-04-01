@@ -133,11 +133,6 @@ func configHasPlugins(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for name := range cfg.Runtimes {
-		if cfg.Runtimes[name].Plugin.HasManagedArtifacts() {
-			return true
-		}
-	}
 	return cfg.UI.Plugin.HasManagedArtifacts()
 }
 
@@ -212,17 +207,6 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		entry, found := lock.Plugins[LockPluginKey("integration", name)]
 		configMap, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil || !pluginEntryMatches(paths, name, intg.Plugin, configMap, entry, found) {
-			return false
-		}
-	}
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if !rt.Plugin.HasManagedArtifacts() {
-			continue
-		}
-		entry, found := lock.Plugins[LockPluginKey("runtime", name)]
-		configMap, err := config.NodeToMap(rt.Config)
-		if err != nil || !pluginEntryMatches(paths, name, rt.Plugin, configMap, entry, found) {
 			return false
 		}
 	}
@@ -371,30 +355,6 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, cfg *config.Config
 		}
 		written[LockPluginKey("integration", name)] = entry
 	}
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if rt.Plugin == nil {
-			continue
-		}
-		configMap, err := config.NodeToMap(rt.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode runtime config for runtime %q: %w", name, err)
-		}
-		var entry LockPluginEntry
-		switch {
-		case rt.Plugin.Source != "":
-			entry, err = l.lockEntryForSource(ctx, paths, "runtime", name, rt.Plugin, configMap)
-		case rt.Plugin.Package != "":
-			entry, err = lockEntryForPackage(ctx, paths, "runtime", name, rt.Plugin, configMap)
-		default:
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		written[LockPluginKey("runtime", name)] = entry
-	}
-
 	if cfg.UI.Plugin.HasManagedArtifacts() {
 		entry, err := l.writeUIPluginArtifact(ctx, cfg, paths)
 		if err != nil {
@@ -675,20 +635,6 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 			cfg.Integrations[name] = intg
 		}
 	}
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if !rt.Plugin.HasManagedArtifacts() {
-			continue
-		}
-		configMap, err := config.NodeToMap(rt.Config)
-		if err != nil {
-			return fmt.Errorf("decode runtime config for runtime %q: %w", name, err)
-		}
-		if err := applyLockedPluginEntry(paths, lock, "runtime", name, rt.Plugin, configMap); err != nil {
-			return err
-		}
-	}
-
 	if cfg.UI.Plugin.HasManagedArtifacts() {
 		key := LockPluginKey("ui", "default")
 		entry, ok := lock.Plugins[key]
@@ -786,8 +732,6 @@ func entrypointArgs(kind string, manifest *pluginmanifestv1.Manifest) ([]string,
 	switch kind {
 	case "integration":
 		entry = manifest.Entrypoints.Provider
-	case "runtime":
-		entry = manifest.Entrypoints.Runtime
 	default:
 		return nil, fmt.Errorf("unknown plugin kind %q", kind)
 	}
@@ -801,8 +745,6 @@ func manifestKind(kind string) string {
 	switch kind {
 	case "integration":
 		return pluginmanifestv1.KindProvider
-	case "runtime":
-		return pluginmanifestv1.KindRuntime
 	default:
 		return ""
 	}

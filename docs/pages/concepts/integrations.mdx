@@ -94,6 +94,9 @@ integrations:
 
 Packaged providers carry their own manifest, auth model, and operation catalog.
 
+If a packaged provider needs named connections, declare them in the plugin
+manifest, not in `config.yaml`.
+
 ## Hybrid Providers
 
 A packaged plugin can also layer in spec-backed surfaces.
@@ -121,16 +124,11 @@ integrations:
 This is useful when a plugin provides custom code while the API or MCP surface
 still comes from a spec or upstream server.
 
-## Connections
-
-Connections control how Gestalt authenticates outbound requests for an
-integration.
-
-### The Implicit Plugin Connection
+## The Implicit Plugin Connection
 
 When you use top-level `plugin.auth` and `plugin.params`, Gestalt creates an
 implicit connection internally. In API responses and UI flows this connection is
- exposed as `plugin`.
+exposed as `plugin`.
 
 ```yaml
 plugin:
@@ -145,9 +143,10 @@ plugin:
       required: true
 ```
 
-### Named Connections
+## Named Connections
 
-Use `plugin.connections` when different surfaces need different auth flows.
+Use `plugin.connections` when different inline surfaces need different auth
+flows.
 
 These next blocks are `plugin:` fragments, not complete integration files.
 
