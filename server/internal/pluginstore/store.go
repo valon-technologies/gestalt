@@ -61,6 +61,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		if err != nil {
 			manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
 		}
+		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, "")
 		return installed, nil
 	}
@@ -89,6 +90,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	if manifestPath == "" {
 		manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
 	}
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
@@ -132,6 +134,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		if err := copyFile(manifestSrc, manifestDest); err != nil {
 			return nil, fmt.Errorf("copy manifest: %w", err)
 		}
+		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
 		for _, schemaRel := range configSchemaPaths(manifest, dirPath) {
 			schemaSrc := filepath.Join(dirPath, filepath.FromSlash(schemaRel))
 			schemaDest := filepath.Join(destDir, filepath.FromSlash(schemaRel))
@@ -177,6 +180,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 	if err := copyFile(manifestSrc, manifestDest); err != nil {
 		return nil, fmt.Errorf("copy manifest: %w", err)
 	}
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
 
 	artifactDest := filepath.Join(destDir, filepath.FromSlash(artifact.Path))
 	if err := os.MkdirAll(filepath.Dir(artifactDest), 0755); err != nil {

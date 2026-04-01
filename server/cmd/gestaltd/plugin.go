@@ -305,7 +305,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 		case pluginmanifestv1.KindRuntime:
 			return true
 		case pluginmanifestv1.KindProvider:
-			if manifest.Provider == nil || !manifest.Provider.IsDeclarative() {
+			if manifest.Provider == nil || !manifest.Provider.IsManifestBacked() {
 				return true
 			}
 		}
@@ -541,11 +541,27 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 		return nil
 	}
 
+	copyMaybeLocalPath := func(value string, optional bool) error {
+		if value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
+			return nil
+		}
+		return copyPath(value, optional)
+	}
+
 	if err := copyPath(manifest.IconFile, false); err != nil {
 		return err
 	}
 	if manifest.Provider != nil {
 		if err := copyPath(manifest.Provider.ConfigSchemaPath, false); err != nil {
+			return err
+		}
+		if err := copyMaybeLocalPath(manifest.Provider.OpenAPI, false); err != nil {
+			return err
+		}
+		if err := copyMaybeLocalPath(manifest.Provider.GraphQLURL, false); err != nil {
+			return err
+		}
+		if err := copyMaybeLocalPath(manifest.Provider.MCPURL, false); err != nil {
 			return err
 		}
 	}
