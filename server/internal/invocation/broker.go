@@ -164,15 +164,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
 
-	ops := prov.ListOperations()
-	found := false
-	for _, op := range ops {
-		if op.Name == operation {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !catalogHasOperation(providerCatalog(prov), operation) {
 		return fail(fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName))
 	}
 

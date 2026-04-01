@@ -86,20 +86,7 @@ func (r *Restricted) Description() string                 { return r.inner.Descr
 func (r *Restricted) ConnectionMode() core.ConnectionMode { return r.inner.ConnectionMode() }
 
 func (r *Restricted) ListOperations() []core.Operation {
-	all := r.inner.ListOperations()
-	filtered := make([]core.Operation, 0, len(r.allowed))
-	for _, op := range all {
-		if _, ok := r.allowedInner[op.Name]; ok {
-			if exposed, ok := r.reverseAlias[op.Name]; ok {
-				op.Name = exposed
-			}
-			if desc, ok := r.descriptions[op.Name]; ok {
-				op.Description = desc
-			}
-			filtered = append(filtered, op)
-		}
-	}
-	return filtered
+	return OperationsList(r.Catalog())
 }
 
 func (r *Restricted) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {

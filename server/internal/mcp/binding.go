@@ -71,11 +71,8 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		if cp, ok := prov.(core.CatalogProvider); ok {
 			if cat := cp.Catalog(); cat != nil {
 				addCatalogTools(srv, cfg, provName, cat, prov)
-				continue
 			}
 		}
-
-		addFlatTools(srv, cfg, provName, prov)
 	}
 
 	if len(dynamicProviders) > 0 {
