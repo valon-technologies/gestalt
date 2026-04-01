@@ -5,9 +5,8 @@ use crate::output::{self, Format};
 
 pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
-    let body = serde_json::json!({"name": token_name});
     let resp = client
-        .post("/api/v1/tokens", &body)
+        .create_api_token(token_name)
         .context("failed to create token")?;
 
     match format {
@@ -42,10 +41,11 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
                         item["name"].as_str().unwrap_or("-").to_string(),
                         item["scopes"].as_str().unwrap_or("-").to_string(),
                         item["created_at"].as_str().unwrap_or("-").to_string(),
+                        item["expires_at"].as_str().unwrap_or("never").to_string(),
                     ]
                 })
                 .collect();
-            output::print_table(&["ID", "Name", "Scopes", "Created"], &rows);
+            output::print_table(&["ID", "Name", "Scopes", "Created", "Expires"], &rows);
         }
     }
 
@@ -53,8 +53,9 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
 }
 
 pub fn revoke(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let path = format!("/api/v1/tokens/{}", id);
-    let resp = client.delete(&path).context("failed to revoke token")?;
+    let resp = client
+        .revoke_api_token(id)
+        .context("failed to revoke token")?;
 
     match format {
         Format::Json => output::print_json(&resp),
