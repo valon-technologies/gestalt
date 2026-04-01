@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/slack
-version: 0.0.1-alpha.5
+version: 0.0.1-alpha.7
 display_name: Slack
 description: Send messages, search conversations, and manage channels.
 icon_file: assets/icon.svg

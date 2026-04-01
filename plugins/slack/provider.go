@@ -72,7 +72,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "slack_get_message",
 				Description: "Fetch a single message by Slack URL or channel and timestamp",
 				Method:      http.MethodPost,
-				Path:        "/slack_get_message",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "url", Type: "string", Description: "Slack message URL"},
 					{Name: "channel", Type: "string", Description: "Channel ID"},
@@ -83,7 +82,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "slack_find_user_mentions",
 				Description: "Find Slack user mentions in channel messages",
 				Method:      http.MethodPost,
-				Path:        "/slack_find_user_mentions",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "channel", Type: "string", Required: true, Description: "Channel ID to scan"},
 					{Name: "user_id", Type: "string", Description: "Optional user ID to filter mentions to"},
@@ -97,7 +95,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				ID:          "slack_get_thread_participants",
 				Description: "Get unique participants in a Slack thread",
 				Method:      http.MethodPost,
-				Path:        "/slack_get_thread_participants",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "channel", Type: "string", Required: true, Description: "Channel ID containing the thread"},
 					{Name: "ts", Type: "string", Required: true, Description: "Parent message timestamp"},
