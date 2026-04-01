@@ -756,6 +756,45 @@ provider:
 	}
 }
 
+func TestDecodeManifestFormat_YAMLAllowedOperations(t *testing.T) {
+	t.Parallel()
+
+	yamlData := []byte(`
+source: github.com/acme/plugins/testapi
+version: "0.1.0"
+kinds:
+  - provider
+provider:
+  openapi: https://api.example.com/openapi.json
+  allowed_operations:
+    api.items.list:
+      alias: list_items
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: ` + sha256Hex("provider") + `
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
+`)
+
+	manifest, err := DecodeManifestFormat(yamlData, "yaml")
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if manifest.Provider == nil {
+		t.Fatal("expected provider")
+	}
+	override := manifest.Provider.AllowedOperations["api.items.list"]
+	if override == nil {
+		t.Fatal("expected allowed_operations entry")
+	}
+	if override.Alias != "list_items" {
+		t.Fatalf("unexpected alias %q", override.Alias)
+	}
+}
+
 func TestDecodeManifest_DeclarativeProviderJSON(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,45 @@
+source: github.com/valon-technologies/gestalt/gmail
+version: 0.0.1-alpha.2
+display_name: Gmail
+description: Read, send, and manage Gmail messages, threads, drafts, and labels.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
+provider:
+  config_schema_path: schemas/config.schema.json
+  auth:
+    type: oauth2
+    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/gmail.modify
+      - https://www.googleapis.com/auth/gmail.compose
+    authorization_params:
+      access_type: offline
+      prompt: consent
+  openapi: https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.json
+  allowed_operations:
+    gmail.users.messages.list:
+      alias: messages.list
+    gmail.users.messages.get:
+      alias: messages.get
+    gmail.users.messages.trash:
+      alias: messages.trash
+    gmail.users.messages.modify:
+      alias: messages.modify
+    gmail.users.labels.list:
+      alias: labels.list
+    gmail.users.labels.patch:
+      alias: labels.patch
+    gmail.users.threads.get:
+      alias: threads.get
+    gmail.users.getProfile:
+      alias: getProfile
