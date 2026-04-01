@@ -80,12 +80,16 @@ func (p *Provider) IsSpecLoaded() bool {
 	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
 }
 
+func (p *Provider) IsManifestBacked() bool {
+	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
+}
+
 func (m *Manifest) IsHybridProvider() bool {
 	return m != nil && m.Provider != nil && len(m.Provider.Operations) > 0 && m.Entrypoints.Provider != nil
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsDeclarative() && !m.IsHybridProvider() && !slices.Contains(m.Kinds, KindRuntime)
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && !m.IsHybridProvider() && !slices.Contains(m.Kinds, KindRuntime)
 }
 
 type ManifestOperationOverride struct {

@@ -66,7 +66,7 @@ jobs:
           fi
 
   build-declarative:
-    name: Package Declarative Plugin
+    name: Release Declarative Plugin
     needs: prepare
     if: needs.prepare.outputs.plugin-type == 'declarative'
     runs-on: ubuntu-latest
@@ -82,18 +82,14 @@ jobs:
           cache-dependency-path: server/go.sum
       - name: Build gestaltd
         run: cd server && go build -o ../gestaltd ./cmd/gestaltd
-      - name: Package
+      - name: Release plugin
         run: |
-          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}.tar.gz"
-          mkdir -p dist
-          ./gestaltd plugin package --input "plugins/${PLUGIN_NAME}" --output "dist/${ASSET}"
-          shasum -a 256 "dist/${ASSET}" > "dist/${ASSET}.sha256"
+          cd "plugins/${PLUGIN_NAME}"
+          ../../gestaltd plugin release --version "${PLUGIN_VERSION}"
       - uses: actions/upload-artifact@v4
         with:
           name: gestalt-plugin-${{ env.PLUGIN_NAME }}
-          path: |
-            dist/gestalt-plugin-*.tar.gz
-            dist/gestalt-plugin-*.sha256
+          path: plugins/${{ env.PLUGIN_NAME }}/dist/*
           if-no-files-found: error
 
   release-compiled:

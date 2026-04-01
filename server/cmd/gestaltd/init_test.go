@@ -320,6 +320,36 @@ func TestPrepareConfigAcceptsPluginPackageSurfaceConnectionAliases(t *testing.T)
 	}
 }
 
+func TestValidateConfigUsesPreparedManifestForSpecLoadedPluginPackage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packagePath := buildPreparedSpecLoadedPluginPackage(t, dir, "github.com/acme/plugins/spec-loaded", "0.1.0")
+	cfgPath := writePreparedPluginPackageConfig(t, dir, packagePath)
+
+	if err := initConfig(cfgPath); err != nil {
+		t.Fatalf("initConfig: %v", err)
+	}
+	if err := validateConfig(cfgPath); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+
+	_, cfg, err := loadConfigForExecution(cfgPath, true)
+	if err != nil {
+		t.Fatalf("loadConfigForExecution: %v", err)
+	}
+	plugin := cfg.Integrations["example"].Plugin
+	if plugin.ResolvedManifest == nil || plugin.ResolvedManifest.Provider == nil {
+		t.Fatal("expected resolved manifest provider to be set after prepare")
+	}
+	if !filepath.IsAbs(plugin.ResolvedManifest.Provider.OpenAPI) {
+		t.Fatalf("resolved openapi path = %q, want absolute path", plugin.ResolvedManifest.Provider.OpenAPI)
+	}
+	if _, err := os.Stat(plugin.ResolvedManifest.Provider.OpenAPI); err != nil {
+		t.Fatalf("resolved openapi path missing: %v", err)
+	}
+}
+
 func TestValidateConfigUsesPreparedManifestForRuntimePluginPackage(t *testing.T) {
 	t.Parallel()
 
@@ -495,6 +525,40 @@ func buildPreparedTestPluginPackageWithManifestProvider(t *testing.T, dir, sourc
 	}
 
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	return archivePath
+}
+
+func buildPreparedSpecLoadedPluginPackage(t *testing.T, dir, source, version string) string {
+	t.Helper()
+
+	srcDir := filepath.Join(dir, "spec-plugin-src")
+	if err := os.MkdirAll(filepath.Join(srcDir, "specs"), 0755); err != nil {
+		t.Fatalf("MkdirAll specs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "specs", "openapi.yaml"), []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644); err != nil {
+		t.Fatalf("WriteFile spec: %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: filepath.ToSlash(filepath.Join("specs", "openapi.yaml")),
+		},
+	}
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, "spec-plugin.tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
