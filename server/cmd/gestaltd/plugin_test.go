@@ -551,6 +551,36 @@ func TestRun_PluginReleasePreservesHybridProviderManifest(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseCompilesManifestBackedProviderWithoutSourceArtifacts(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newCompiledManifestBackedProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-source.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if manifest.IsDeclarativeOnlyProvider() {
+		t.Fatal("expected released manifest to remain executable for compiled manifest-backed provider")
+	}
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
+		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Provider)
+	}
+	if manifest.Provider == nil || manifest.Provider.BaseURL != releaseHybridBaseURL {
+		t.Fatalf("provider base_url = %#v, want %q", manifest.Provider, releaseHybridBaseURL)
+	}
+}
+
 func TestRun_PluginReleasePreservesPrebuiltHybridProvider(t *testing.T) {
 	t.Parallel()
 
@@ -1065,6 +1095,31 @@ func newHybridReleaseFixture(t *testing.T, dir string) string {
 			Provider: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: releaseSourceArtifactPath,
 				Args:         []string{releaseHybridArg},
+			},
+		},
+	})
+
+	return pluginDir
+}
+
+func newCompiledManifestBackedProviderReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := newCompiledReleaseFixture(t, dir)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		IconFile:    releaseTestIconPath,
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			BaseURL: releaseHybridBaseURL,
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:   releaseHybridOperationName,
+					Method: "GET",
+					Path:   "/items",
+				},
 			},
 		},
 	})
