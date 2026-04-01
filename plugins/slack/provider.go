@@ -69,7 +69,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 		Description: p.Description(),
 		Operations: []gestalt.CatalogOperation{
 			{
-				ID:          "slack_get_message",
+				ID:          "conversations.getMessage",
 				Description: "Fetch a single message by Slack URL or channel and timestamp",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -79,7 +79,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				},
 			},
 			{
-				ID:          "slack_find_user_mentions",
+				ID:          "conversations.findUserMentions",
 				Description: "Find Slack user mentions in channel messages",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -92,7 +92,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				},
 			},
 			{
-				ID:          "slack_get_thread_participants",
+				ID:          "conversations.getThreadParticipants",
 				Description: "Get unique participants in a Slack thread",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -112,11 +112,11 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 	}
 
 	switch operation {
-	case "slack_get_message":
+	case "conversations.getMessage":
 		return p.getMessage(ctx, params, token)
-	case "slack_find_user_mentions":
+	case "conversations.findUserMentions":
 		return p.findUserMentions(ctx, params, token)
-	case "slack_get_thread_participants":
+	case "conversations.getThreadParticipants":
 		return p.getThreadParticipants(ctx, params, token)
 	default:
 		return nil, fmt.Errorf("unknown operation: %s", operation)

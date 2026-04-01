@@ -29,7 +29,7 @@ func TestProviderMetadata(t *testing.T) {
 
 func TestExecuteRequiresToken(t *testing.T) {
 	p := NewProvider()
-	_, err := p.Execute(context.Background(), "slack_get_message", map[string]any{
+	_, err := p.Execute(context.Background(), "conversations.getMessage", map[string]any{
 		"channel": "C123", "ts": "1234567890.123456",
 	}, "")
 	if err == nil {
@@ -58,7 +58,7 @@ func TestGetMessageByURL(t *testing.T) {
 		}, nil
 	})
 
-	result, err := p.Execute(context.Background(), "slack_get_message", map[string]any{
+	result, err := p.Execute(context.Background(), "conversations.getMessage", map[string]any{
 		"url": "https://valon.slack.com/archives/C123ABC456/p1712161829000300",
 	}, "test-token")
 	if err != nil {
@@ -88,7 +88,7 @@ func TestFindUserMentionsSkipsBotsAndFiltersUser(t *testing.T) {
 		}, nil
 	})
 
-	result, err := p.Execute(context.Background(), "slack_find_user_mentions", map[string]any{
+	result, err := p.Execute(context.Background(), "conversations.findUserMentions", map[string]any{
 		"channel":      "C123",
 		"user_id":      "UKEEP123",
 		"include_bots": false,
@@ -152,7 +152,7 @@ func TestGetThreadParticipantsIncludesUserInfo(t *testing.T) {
 		}
 	})
 
-	result, err := p.Execute(context.Background(), "slack_get_thread_participants", map[string]any{
+	result, err := p.Execute(context.Background(), "conversations.getThreadParticipants", map[string]any{
 		"channel":           "C123",
 		"ts":                "1.0",
 		"include_user_info": true,
