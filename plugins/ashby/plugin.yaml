@@ -1,0 +1,21 @@
+source: github.com/valon-technologies/gestalt/ashby
+version: 0.0.1-alpha.1
+display_name: Ashby
+description: Candidates, applications, jobs, offers, and interviews.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  openapi: openapi.yaml
+  auth:
+    type: manual
+    credentials:
+      - name: api_key
+        label: API Key
+        description: Ashby API key
+        help_url: https://app.ashbyhq.com/admin/api/keys
+  response_mapping:
+    data_path: results
+    pagination:
+      has_more_path: moreDataAvailable
+      cursor_path: nextCursor
