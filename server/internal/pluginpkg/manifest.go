@@ -129,10 +129,6 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	return validateManifest(manifest, false)
 }
 
-func ValidateSourceManifest(manifest *pluginmanifestv1.Manifest) error {
-	return validateManifest(manifest, true)
-}
-
 func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactDigests bool) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is required")
