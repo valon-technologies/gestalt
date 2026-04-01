@@ -154,6 +154,15 @@ func mustGetProvider(t *testing.T, result *bootstrap.Result, name string) core.P
 	return prov
 }
 
+func bootstrapInlineProvider(t *testing.T, name string, plugin *config.PluginDef) core.Provider {
+	t.Helper()
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		name: {Plugin: plugin},
+	}
+	return mustGetProvider(t, mustBootstrapResult(t, cfg, nil), name)
+}
+
 func serveMCPToolServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -529,96 +538,67 @@ func TestBootstrapInvoke_ConnectionSelection(t *testing.T) {
 	}
 }
 
-func TestInlineResponseMapping_AppliedToOpenAPIProvider(t *testing.T) {
+func TestInlineResponseMapping(t *testing.T) {
 	t.Parallel()
 
 	specSrv := serveOpenAPISpec(t)
+	testCases := []struct {
+		name            string
+		integrationName string
+		responseMapping *config.ResponseMappingDef
+		wantOperationID string
+	}{
+		{
+			name:            "applied to openapi provider",
+			integrationName: "mapped",
+			responseMapping: &config.ResponseMappingDef{
+				DataPath: "results",
+				Pagination: &config.PaginationMapping{
+					HasMorePath: "moreDataAvailable",
+					CursorPath:  "nextCursor",
+				},
+			},
+			wantOperationID: "list_items",
+		},
+		{
+			name:            "data path only",
+			integrationName: "simple",
+			responseMapping: &config.ResponseMappingDef{
+				DataPath: "data.items",
+			},
+		},
+		{
+			name:            "nil does not break",
+			integrationName: "noop",
+		},
+	}
 
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"mapped": {
-			Plugin: &config.PluginDef{
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			prov := bootstrapInlineProvider(t, tc.integrationName, &config.PluginDef{
 				OpenAPI: specSrv.URL,
 				Auth: &config.ConnectionAuthDef{
 					Type: "none",
 				},
-				ResponseMapping: &config.ResponseMappingDef{
-					DataPath: "results",
-					Pagination: &config.PaginationMapping{
-						HasMorePath: "moreDataAvailable",
-						CursorPath:  "nextCursor",
-					},
-				},
-			},
-		},
-	}
-
-	result := mustBootstrapResult(t, cfg, nil)
-	prov := mustGetProvider(t, result, "mapped")
-	cat := prov.Catalog()
-	if cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation from the openapi spec")
-	}
-	found := false
-	for _, op := range cat.Operations {
-		if op.ID == "list_items" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("expected list_items operation to be present")
-	}
-}
-
-func TestInlineResponseMapping_DataPathOnly(t *testing.T) {
-	t.Parallel()
-
-	specSrv := serveOpenAPISpec(t)
-
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"simple": {
-			Plugin: &config.PluginDef{
-				OpenAPI: specSrv.URL,
-				Auth: &config.ConnectionAuthDef{
-					Type: "none",
-				},
-				ResponseMapping: &config.ResponseMappingDef{
-					DataPath: "data.items",
-				},
-			},
-		},
-	}
-
-	result := mustBootstrapResult(t, cfg, nil)
-	prov := mustGetProvider(t, result, "simple")
-	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation")
-	}
-}
-
-func TestInlineResponseMapping_NilDoesNotBreak(t *testing.T) {
-	t.Parallel()
-
-	specSrv := serveOpenAPISpec(t)
-
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"noop": {
-			Plugin: &config.PluginDef{
-				OpenAPI: specSrv.URL,
-				Auth: &config.ConnectionAuthDef{
-					Type: "none",
-				},
-			},
-		},
-	}
-
-	result := mustBootstrapResult(t, cfg, nil)
-	prov := mustGetProvider(t, result, "noop")
-	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation even without response_mapping")
+				ResponseMapping: tc.responseMapping,
+			})
+			cat := prov.Catalog()
+			if cat == nil || len(cat.Operations) == 0 {
+				t.Fatal("expected at least one operation")
+			}
+			if tc.wantOperationID == "" {
+				return
+			}
+			for _, op := range cat.Operations {
+				if op.ID == tc.wantOperationID {
+					return
+				}
+			}
+			t.Fatalf("expected %q operation to be present", tc.wantOperationID)
+		})
 	}
 }
 
