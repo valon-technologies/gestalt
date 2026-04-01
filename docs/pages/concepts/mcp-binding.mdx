@@ -1,78 +1,94 @@
-# MCP Binding
+# MCP
 
-Gestalt exposes MCP as an HTTP surface mounted at `/mcp`. It is not configured under `bindings:`; instead, it appears automatically when at least one integration exposes tools.
+Gestalt exposes one MCP endpoint at `/mcp`.
 
-## Automatic MCP Projection
+## When `/mcp` Exists
 
-All declarative API operations are automatically projected as MCP tools. If an integration has an `api` surface, its operations are available on `/mcp` without any additional configuration.
+The endpoint is mounted when at least one integration declares an MCP-capable
+surface. In practice that includes:
+
+- inline declarative operations
+- OpenAPI-backed integrations
+- GraphQL-backed integrations
+- integrations with `mcp_url`
+- packaged providers whose catalog should be available through MCP
+
+## How Tool Discovery Works
+
+Gestalt turns provider catalogs into MCP tools.
+
+- HTTP-backed operations become normal tools that route through the invocation
+  broker.
+- Upstream MCP tools can be passed through directly.
+- Hybrid providers expose both sets in one integration catalog.
+
+If a provider supports request-scoped catalogs, Gestalt refreshes those tools at
+ MCP list or call time so the tool surface reflects the caller's current
+ connection.
+
+## Tool Naming
+
+Tool names come from the provider operation IDs. Use `mcp_tool_prefix` on an
+integration to keep names stable across providers.
 
 ```yaml
 integrations:
-  github:
-    mcp_tool_prefix: github_
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: ${GITHUB_CLIENT_SECRET}
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
-      allowed_operations:
-        repos/list-for-authenticated-user:
-        issues/list-for-authenticated-user:
+  slack:
+    mcp_tool_prefix: slack_
 ```
 
-## Import Tools From An Upstream MCP Server
+## Authentication
 
-Adding an `mcp` surface connects Gestalt to an upstream MCP server and republishes its tools:
+`/mcp` uses the same auth middleware as the rest of the authenticated API.
+
+Callers can authenticate with:
+
+- a platform session cookie
+- `Authorization: Bearer <gst_api_...>`
+
+The endpoint does not have a separate auth model.
+
+## Connection Selection
+
+The same connection logic used by the HTTP API also applies to MCP:
+
+- the server resolves the integration's default connection
+- surface-specific connection names are honored
+- if there are multiple stored instances and no unique match, the call fails
+
+For hybrid providers this means the API-backed and MCP-backed parts of the same
+integration can use different named connections.
+
+## Example
+
+Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
 
 ```yaml
 integrations:
-  remote_tools:
-    connections:
-      default:
-        mode: user
-    mcp:
-      url: https://mcp.example.com
-      connection: default
+  notion:
+    mcp_tool_prefix: notion_
+    plugin:
+      openapi: ./openapi/notion.yaml
+      openapi_connection: REST
+      mcp_url: https://mcp.notion.com/mcp
+      mcp_connection: MCP
+      default_connection: REST
+      connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
+        MCP:
+          mode: user
+          auth:
+            type: mcp_oauth
 ```
 
-## Composition Rules
+With this config:
 
-An integration may combine one `api` surface (REST or GraphQL), one `mcp` surface, and a `plugin` block. All three can coexist in a single integration, giving you one provider namespace that contains generated HTTP operations (automatically projected as MCP tools), imported MCP tools, and plugin-provided operations.
-
-`mcp_tool_prefix` exists to avoid tool-name collisions when multiple integrations export similarly named operations.
-
-## What The MCP Client Sees
-
-The MCP client does not talk directly to your upstream APIs. It connects to `/mcp`, where Gestalt advertises tools from all integrations that expose operations. Tool invocations flow through the same invocation broker as HTTP requests, so the broker resolves credentials, instances, refresh, and connection metadata before Gestalt executes the underlying provider operation. MCP inherits the same auth and connection behavior as the rest of the platform.
-
-## Auth Behavior
-
-The `/mcp` endpoint is behind the same auth middleware as the rest of the authenticated API.
-
-That means callers authenticate with:
-
-- a browser session cookie
-- or `Authorization: Bearer ...` using a Gestalt API token
-
-Once the request is authenticated, the integration's connection mode determines which upstream credential is used.
-
-## When To Use MCP In Gestalt
-
-Use the built-in MCP surface when:
-
-- you already want Gestalt to own OAuth, token storage, and refresh
-- you want one MCP endpoint backed by many integrations
-- you want the same allowlists and connection rules to apply to both HTTP clients and MCP clients
-
-Use a direct `mcp` surface when:
-
-- the upstream system already exposes MCP-native tools
-- you want to republish those tools through Gestalt's auth and connection model
+- the HTTP API exposes the OpenAPI-backed operations
+- `/mcp` exposes the same REST operations plus the upstream Notion MCP tools
+- the upstream MCP tools authenticate through the `MCP` named connection

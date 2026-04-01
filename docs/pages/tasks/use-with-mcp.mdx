@@ -1,105 +1,91 @@
-# Use with MCP
+# Use With MCP
 
-Gestalt exposes integrations to any MCP client through `/mcp`.
+Gestalt exposes one MCP endpoint at `/mcp`.
 
-## Automatic MCP Projection
+## Expose OpenAPI Operations As MCP Tools
 
-All declarative API operations are automatically projected as MCP tools. There is no opt-in flag; if an integration has an `api` surface, its operations appear on `/mcp`.
+Assume you already have a local OpenAPI file such as `./openapi/httpbin.yaml`.
+
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+```
 
 ```yaml
 integrations:
-  github:
-    mcp_tool_prefix: github_
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: ${GITHUB_CLIENT_SECRET}
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
-      allowed_operations:
-        repos/list-for-authenticated-user:
-        issues/list-for-authenticated-user:
+  httpbin:
+    mcp_tool_prefix: httpbin_
+    plugin:
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
-`mcp_tool_prefix` controls tool naming so that tools from different integrations do not collide.
+Start the server and `/mcp` is mounted automatically.
 
-## Connect To A Native MCP Server
+## Add An Upstream MCP Surface
 
-Adding an `mcp` surface connects Gestalt to an upstream MCP server and republishes its tools:
+Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
 
 ```yaml
 integrations:
-  remote_tools:
-    connections:
-      default:
-        mode: user
-    mcp:
-      url: https://mcp.example.com
-      connection: default
+  notion:
+    mcp_tool_prefix: notion_
+    plugin:
+      openapi: ./openapi/notion.yaml
+      openapi_connection: REST
+      mcp_url: https://mcp.notion.com/mcp
+      mcp_connection: MCP
+      default_connection: REST
+      connections:
+        REST:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
+        MCP:
+          mode: user
+          auth:
+            type: mcp_oauth
 ```
 
-An integration can declare both `api` and `mcp` surfaces. The resulting provider namespace contains generated HTTP operations and imported MCP tools.
+This gives you:
 
-## Plugin-Only Integrations
+- REST-backed tools from the OpenAPI catalog
+- passthrough MCP tools from the upstream MCP server
 
-Plugin-only integrations are mounted on `/mcp` if the plugin exposes a catalog.
+## Authenticate MCP Clients
 
-## Start The Server
+Use the same credentials as the HTTP API:
 
-```sh
-gestaltd serve --locked --config ./config.yaml
-```
+- session cookie
+- `Authorization: Bearer gst_api_...`
 
-Gestalt mounts `/mcp` on the same HTTP server as the rest of the API.
+If `auth.provider` is `none`, no extra MCP client credential is required.
 
-## Create A Gestalt API Token
-
-Use the web UI or the HTTP API:
+## Verify The Endpoint
 
 ```sh
-curl -X POST http://localhost:8080/api/v1/tokens \
-  -H "Authorization: Bearer <session-or-api-token>" \
+curl http://localhost:8080/ready
+curl -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
-  -d '{"name":"mcp"}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
-
-The returned token is what the MCP client uses to authenticate to Gestalt.
-
-## Point Your MCP Client At Gestalt
-
-Example client config:
-
-```json
-{
-  "mcpServers": {
-    "gestalt": {
-      "url": "http://localhost:8080/mcp",
-      "headers": {
-        "Authorization": "Bearer gst_api_..."
-      }
-    }
-  }
-}
-```
-
-## Understand The Auth Layers
-
-The MCP client authenticates to Gestalt with the API token above.
-
-Then Gestalt resolves upstream credentials using the integration's connection mode. That means MCP inherits the same per-user, shared-identity, or no-auth behavior as the regular HTTP API.
-
-## Troubleshoot Missing Tools
-
-Check these in order:
-
-1. the integration has an `api` or `mcp` surface (or a plugin with a catalog)
-2. `/mcp` is mounted on the server
-3. the Gestalt API token is valid
-4. the token's owner has connected any required upstream credentials

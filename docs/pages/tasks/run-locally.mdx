@@ -1,54 +1,89 @@
-import { Callout } from 'nextra/components'
-
 # Run Locally
 
-There are three useful local workflows: zero-config startup, explicit config, and locked local startup.
-
-## Zero-Config Startup
+## Fastest Path
 
 ```sh
 gestaltd
 ```
 
-If no config exists, `gestaltd` generates `~/.gestalt/config.yaml` and starts a local environment with:
+This creates `~/.gestalt/config.yaml` when needed and starts a local server on
+port `8080`.
 
-- `none` auth
-- SQLite
-- `env` secrets
-- a generated `server.encryption_key`
+## Explicit Local Config
 
-The server and embedded UI are both available at `http://localhost:8080`.
+Save this as `openapi/httpbin.yaml`:
 
-## Explicit Config
-
-```sh
-gestaltd --config ./config.yaml
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
 ```
 
-Use this when you want to control:
+Save this as `config.yaml`:
 
-- auth provider
-- datastore path or DSN
-- integrations
-- runtimes
-- bindings
+```yaml
+server:
+  port: 8080
+  base_url: http://localhost:8080
+  encryption_key: dev-only-change-me
 
-## Locked Local Startup
+auth:
+  provider: none
 
-If your config includes remote REST or GraphQL upstreams, or packaged plugins, init and validate first:
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+
+integrations:
+  httpbin:
+    plugin:
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
+```
+
+Start it:
 
 ```sh
 gestaltd init --config ./config.yaml
-gestaltd validate --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 ```
 
-This is the closest local approximation to a production deployment.
+## Inspect The Server
 
-## Local Dev Features
+```sh
+curl http://localhost:8080/health
+curl http://localhost:8080/api/v1/httpbin/get_ip
+gestalt --url http://localhost:8080 integrations list
+```
 
-With `auth.provider: none`, Gestalt skips authentication entirely. All requests are handled as a single anonymous user, which is convenient for local development. The built-in `echo` provider and `echo` runtime are always available.
+## Local Packaged Plugin Development
 
-## The Frontend In Isolation
+When you are iterating on a provider or runtime plugin, use `command` first:
 
-If you are working on the web app itself rather than `gestaltd`, the repo also supports running the Next.js app separately. That is a frontend development workflow, not the normal runtime model.
+```yaml
+integrations:
+  example:
+    plugin:
+      command: ./bin/example-provider
+      config:
+        greeting: hello
+```
+
+That avoids repackaging on every change.

@@ -1,107 +1,24 @@
-import { Cards } from 'nextra/components'
-
 # Deploy
 
-`gestaltd` deploys as a single HTTP service. The API, embedded web UI, health endpoints, and optional `/mcp` endpoint all come from the same server process and normally the same port.
+The current deployment model is straightforward:
 
-## Deployment Checklist
+- use `gestaltd` directly for local development
+- use the published Docker image for container deployments
+- use the Helm chart for Kubernetes
 
-Every deployment needs the same inputs: a `gestaltd` binary or container image, a `config.yaml`, environment variables or secret-manager entries for sensitive values, a datastore choice that matches your scaling model, and a clear startup mode (mutable or locked).
+## Recommended Production Pattern
 
-## Choose A Startup Mode
+1. Prepare artifacts with `gestaltd init`.
+2. Start the server with `gestaltd serve --locked`.
+3. Persist the datastore appropriately for your chosen backend.
+4. Set `server.base_url` to the public HTTPS URL.
 
-| Mode | Command | When to use it |
-| --- | --- | --- |
-| Mutable | `gestaltd --config ...` or `gestaltd serve --config ...` | Local development or simple single-node deployments. |
-| Locked | `gestaltd init --config ...` then `gestaltd serve --locked --config ...` | Production deployments that should not fetch remote specs or mutate local state at boot. |
+## Deployment Options
 
-If your config depends on remote REST or GraphQL upstreams, or packaged plugins, the locked flow is the safer deployment model.
-
-## Bundled Deployment Paths
-
-The repository ships these deployment assets:
-
-| Path | What it gives you |
+| Path | Use it for |
 | --- | --- |
-| `gestaltd` with no config | True out-of-the-box local startup. |
-| `server/Dockerfile` | Single-container server image with `gestaltd` as the entrypoint. |
-| `server/deploy/helm/gestalt` | Helm chart for Kubernetes. |
+| [Docker](/deploy/gateway-only) | Single-container or container-platform deployments. |
+| [Kubernetes](/deploy/kubernetes) | Helm-based cluster deployments. |
 
-## Docker
-
-`server/Dockerfile` builds:
-
-- the frontend static export
-- the `gestaltd` binary
-- one final image that serves both API and UI
-
-The image defaults to:
-
-```sh
-/gestaltd serve --locked --config /etc/gestalt/config.yaml
-```
-
-That means the published image expects a config mounted or baked at `/etc/gestalt/config.yaml` and starts in locked mode by default.
-
-If your config is static and does not require prepared artifacts, that works directly.
-
-If your config depends on remote REST or GraphQL upstreams, or packaged plugins, run `gestaltd init` ahead of time and either:
-
-- bake the prepared state into a derived image
-- or prepare it in a separate init or release step and point `serve --locked` at that config
-
-To build and run from source:
-
-```sh
-docker build -f server/Dockerfile -t gestaltd .
-docker run -p 8080:8080 \
-  -v ./your-config.yaml:/etc/gestalt/config.yaml:ro \
-  -v gestalt-data:/data \
-  gestaltd
-```
-
-For a starting-point config and published-image examples, see `examples/deploy/`.
-
-## Bare Binary
-
-The bare-binary model is straightforward:
-
-```sh
-gestaltd init --config ./config.yaml
-gestaltd serve --locked --config ./config.yaml
-```
-
-That is often the cleanest way to run Gestalt on a VM, inside systemd, or in a custom container build.
-
-## Kubernetes
-
-The bundled Helm chart is the most complete production deployment path in the repo. It uses one Deployment for `gestaltd` and can optionally add an init container that runs `gestaltd init` before the main container starts.
-
-See [Kubernetes](/deploy/kubernetes) for the exact chart behavior.
-
-## Other Platforms
-
-Fly.io, Railway, Render, and Lambda are valid targets, but they are manual deployment patterns rather than separately maintained runtimes. The key idea is always the same:
-
-- run the same single `gestaltd` service
-- provide `config.yaml`
-- expose the public base URL
-- choose mutable or locked startup intentionally
-
-<Cards>
-  <Cards.Card title="Kubernetes" href="/deploy/kubernetes">
-    The bundled Helm chart. One Deployment, one Service, optional init container, and locked startup.
-  </Cards.Card>
-  <Cards.Card title="Fly.io" href="/deploy/fly-io">
-    Single-container deployment with either a Fly volume for SQLite or an external SQL datastore.
-  </Cards.Card>
-  <Cards.Card title="Railway" href="/deploy/railway">
-    Manual Docker deployment. Best with Postgres and either baked or pre-prepared lock state.
-  </Cards.Card>
-  <Cards.Card title="Render" href="/deploy/render">
-    Docker web service with either a persistent disk for SQLite or an external SQL datastore.
-  </Cards.Card>
-  <Cards.Card title="AWS Lambda" href="/deploy/aws-lambda">
-    Adapter-based deployment for a server that is fundamentally HTTP-first.
-  </Cards.Card>
-</Cards>
+If you deploy on another container platform, use the Docker path as the base
+model.

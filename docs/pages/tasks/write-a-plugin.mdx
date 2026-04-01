@@ -1,157 +1,122 @@
-# Write a Plugin
+# Write A Plugin
 
-This guide covers writing, packaging, and running a provider plugin from an external repository.
+This walkthrough uses the Go SDK because the repository ships working provider
+and runtime examples in Go.
 
-## Install the SDK
+## Implement A Provider
 
-```sh
-GOPRIVATE=github.com/valon-technologies/gestalt \
-  go get github.com/valon-technologies/gestalt/sdk/go@latest
-```
-
-## Implement the provider interface
-
-Create `main.go`:
+Start from a complete provider, not a fragment:
 
 ```go
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+    "os/signal"
 
-	pluginsdk "github.com/valon-technologies/gestalt/sdk/go"
+    gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
-type myProvider struct{}
-
-func (p *myProvider) Name() string                        { return "my-tool" }
-func (p *myProvider) DisplayName() string                 { return "My Tool" }
-func (p *myProvider) Description() string                 { return "A custom provider plugin" }
-func (p *myProvider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeNone }
-
-func (p *myProvider) Catalog() *pluginsdk.Catalog {
-	return &pluginsdk.Catalog{
-		Name:        p.Name(),
-		DisplayName: p.DisplayName(),
-		Description: p.Description(),
-		Operations: []pluginsdk.CatalogOperation{
-			{
-				ID:          "hello",
-				Description: "Return a greeting",
-				Method:      "GET",
-				Path:        "/hello",
-				Parameters: []pluginsdk.CatalogParameter{
-				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
-			},
-		},
-		},
-	}
+type exampleProvider struct {
+    greeting string
 }
 
-func (p *myProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*pluginsdk.OperationResult, error) {
-	switch operation {
-	case "hello":
-		name, _ := params["name"].(string)
-		if name == "" {
-			name = "World"
-		}
-		body, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("Hello, %s!", name)})
-		return &pluginsdk.OperationResult{Status: 200, Body: string(body)}, nil
-	default:
-		return &pluginsdk.OperationResult{Status: 404, Body: `{"error":"unknown operation"}`}, nil
-	}
+func (p *exampleProvider) Name() string        { return "example" }
+func (p *exampleProvider) DisplayName() string { return "Example Provider" }
+func (p *exampleProvider) Description() string { return "A minimal example provider" }
+func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
+    return gestalt.ConnectionModeNone
+}
+
+func (p *exampleProvider) Catalog() *gestalt.Catalog {
+    return &gestalt.Catalog{
+        Name: "example",
+        Operations: []gestalt.CatalogOperation{
+            {
+                ID:          "greet",
+                Method:      http.MethodGet,
+                Description: "Say hello",
+                Parameters: []gestalt.CatalogParameter{
+                    {Name: "name", Type: "string", Description: "Name to greet"},
+                },
+            },
+        },
+    }
+}
+
+func (p *exampleProvider) Execute(_ context.Context, _ string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
+    name, _ := params["name"].(string)
+    if name == "" {
+        name = "World"
+    }
+    greeting := p.greeting
+    if greeting == "" {
+        greeting = "Hello"
+    }
+    body, _ := json.Marshal(map[string]string{
+        "message": fmt.Sprintf("%s, %s!", greeting, name),
+    })
+    return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 }
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	if err := pluginsdk.ServeProvider(ctx, &myProvider{}); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+    defer cancel()
+    if err := gestalt.ServeProvider(ctx, &exampleProvider{}); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
 }
 ```
 
-## Build
+The repository examples live under:
+
+- `examples/plugins/provider-go`
+- `examples/plugins/runtime-go`
+
+## Add A YAML Manifest
+
+Add a `plugin.yaml` or `plugin.json` to the plugin root. For manifest fields
+and worked examples, use [Plugin Manifests](/reference/plugin-manifests).
+
+## Package It
+
+For a local package directory:
 
 ```sh
-go build -o ./my-tool .
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 ```
 
-## Release
-
-Release the plugin for all platforms:
+For a release build:
 
 ```sh
 gestaltd plugin release --version 0.1.0
 ```
 
-This cross-compiles for macOS and Linux (amd64 and arm64), creates per-platform archives, and generates a checksums file in `dist/`.
-
-Upload the release artifacts to GitHub:
-
-```sh
-gh release create plugin/my-tool/v0.1.0 dist/*
-```
-
-The GitHub release tag must match `plugin/<plugin>/v<version>`. Pass bare SemVer to `gestaltd plugin release --version`, for example `0.1.0`, not `v0.1.0`.
-
-For CI automation in this repository, push a plugin release tag to trigger `.github/workflows/release-plugin.yml`:
-
-```sh
-git tag plugin/my-tool/v0.1.0
-git push origin plugin/my-tool/v0.1.0
-```
-
-## Configure and run
-
-Plugin discovery is catalog-driven. `Catalog()` is the single source of truth for operation ids, parameter metadata, and descriptions.
-
-Reference the plugin in your Gestalt config:
+## Use It From `config.yaml`
 
 ```yaml
 integrations:
-  my-tool:
+  example:
     plugin:
-      source: github.com/myorg/my-repo/my-tool
-      version: 0.1.0
+      package: ./dist/my-plugin.tar.gz
 ```
 
-Then init and serve:
+Then:
 
 ```sh
-gestaltd init --config config.yaml
-gestaltd serve --locked --config config.yaml
+gestaltd init --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
 
-## Manual auth plugins
+## Add Runtime Or UI Variants
 
-Plugins that need operator-provided credentials (API keys, tokens) can opt into the manual auth flow by implementing `ManualAuthProvider`:
+- Add a `runtime` kind when the package should run as a long-lived background
+  worker.
+- Add a `webui` kind when the package should ship a replacement UI bundle.
 
-```go
-func (p *myProvider) SupportsManualAuth() bool { return true }
-```
-
-With this, operators can connect credentials through `gestalt auth connect-manual` or the web UI. The token is passed to `Execute` on each invocation. No-auth plugins (the default) do not need this interface.
-
-OAuth provider authoring is not yet part of the public SDK contract.
-
-## Optional interfaces
-
-The SDK supports several optional interfaces beyond the core `Provider`:
-
-| Interface | Purpose |
-|---|---|
-| `ProviderStarter` | Receive integration name and config at startup. |
-| `SessionCatalogProvider` | Return request-scoped catalog metadata after a user is connected. |
-| `ManualAuthProvider` | Opt into manual credential connection. |
-| `ConfigSchemaProvider` | Advertise a JSON Schema for the `plugin.config` block. |
-| `ConnectionParamProvider` | Define parameters required to connect (shown in the UI). |
-
-Implement any of these on your provider struct to opt in. See the [Plugin Protocol](/concepts/plugin-protocol) reference for details.
+See [Plugin Manifests](/reference/plugin-manifests) for the full manifest model.

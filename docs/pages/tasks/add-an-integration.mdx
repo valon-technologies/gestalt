@@ -1,113 +1,135 @@
-# Add an Integration
+# Add An Integration
 
-Most integrations are pure configuration. Start with a declarative integration and reach for a plugin only when the upstream behavior cannot be expressed declaratively.
+Choose the integration style that matches the upstream.
 
-## Pick the Surface Type
+## Inline Declarative YAML
 
-| Surface | When to use |
-| --- | --- |
-| `api` (REST) | You have an OpenAPI document. |
-| `api` (GraphQL) | You have a GraphQL endpoint. |
-| `mcp` | The upstream already exposes MCP tools. |
-| `plugin` | You need custom execution logic. Can compose with `api`, `mcp`, or both. |
-
-## Start with the Smallest Useful Definition
-
-Public REST example with no auth:
+Use this when the surface is small and custom.
 
 ```yaml
 integrations:
-  github:
-    display_name: GitHub
-    connections:
-      default:
-        mode: none
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
+  support:
+    display_name: Support
+    plugin:
+      auth:
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+      base_url: https://api.support.example.com
+      operations:
+        - name: list_tickets
+          method: GET
+          path: /tickets
 ```
 
-That is enough to build a provider and invoke the public API.
+## Inline OpenAPI
 
-## Add Auth
+Use this when the upstream already publishes a spec.
 
-OAuth-backed example:
+Assume you already have a local OpenAPI file such as `./openapi/httpbin.yaml`.
 
 ```yaml
 integrations:
-  github:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: secret://github-client-secret
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
+  httpbin:
+    display_name: HTTPBin
+    mcp_tool_prefix: httpbin_
+    plugin:
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
       allowed_operations:
-        repos/list-for-authenticated-user:
-        issues/list-for-authenticated-user:
+        get_ip:
+          alias: get_ip
+        get_headers:
+          alias: get_headers
 ```
 
-Auth lives inside the connection, not at the integration level.
+## Packaged Plugin
 
-## Add an MCP Surface
-
-Add `mcp` alongside `api`, or use it standalone:
+Use this when the logic belongs in code or should be versioned independently.
 
 ```yaml
 integrations:
-  example:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          authorization_url: https://auth.example.com/authorize
-          token_url: https://auth.example.com/token
-          client_id: ${CLIENT_ID}
-          client_secret: ${CLIENT_SECRET}
-    mcp:
-      url: https://mcp.example.com
-      connection: default
+  support:
+    display_name: Support
+    plugin:
+      package: ./dist/support-plugin.tar.gz
 ```
 
-Set `mcp_tool_prefix` at the integration level to avoid tool-name collisions across integrations.
-
-## Init and Validate
+Prepare it and start from locked state:
 
 ```sh
 gestaltd init --config ./config.yaml
-gestaltd validate --config ./config.yaml
-```
-
-This prepares remote provider artifacts and catches config errors.
-
-## Run
-
-```sh
 gestaltd serve --locked --config ./config.yaml
 ```
 
-Then:
+## Hybrid Provider
 
-- Connect the integration through the UI or API
-- List operations with `GET /api/v1/integrations/{name}/operations`
-- Invoke operations over HTTP or MCP
+Use this when you want packaged custom logic plus spec-backed operations.
 
-## Reach for a Plugin Only When Needed
+Assume you already have a local package such as `./dist/support-plugin.tar.gz`
+and a local OpenAPI file such as `./openapi/support.yaml`.
 
-Write a provider plugin when you need:
+```yaml
+integrations:
+  support:
+    display_name: Support
+    mcp_tool_prefix: support_
+    plugin:
+      package: ./dist/support-plugin.tar.gz
+      openapi: ./openapi/support.yaml
+      openapi_connection: plugin
+      mcp_url: https://mcp.support.example.com/mcp
+      mcp_connection: plugin
+      default_connection: plugin
+      allowed_operations:
+        tickets.list:
+          alias: list_tickets
+```
 
-- Request or response shaping that config cannot express
-- Nonstandard auth behavior
-- Multi-step execution
-- Custom operation semantics that do not come from an upstream spec
+## Named Connections
 
-Plugin integrations use the `plugin` block and can compose with `api`, `mcp`, or both. See [Integrations](/concepts/integrations) for the composition patterns.
+Use named connections when different surfaces need different auth flows.
+
+```yaml
+integrations:
+  workspace:
+    plugin:
+      openapi: ./openapi/workspace.yaml
+      mcp_url: https://mcp.example.com/mcp
+      openapi_connection: api
+      mcp_connection: mcp
+      default_connection: api
+      connections:
+        api:
+          mode: user
+          auth:
+            type: oauth2
+            authorization_url: https://accounts.example.com/oauth/authorize
+            token_url: https://accounts.example.com/oauth/token
+            client_id: ${CLIENT_ID}
+            client_secret: ${CLIENT_SECRET}
+        mcp:
+          mode: user
+          auth:
+            type: mcp_oauth
+```
+
+## Validate The Result
+
+```sh
+gestaltd validate --init --config ./config.yaml
+```
+
+That catches:
+
+- invalid YAML
+- undeclared named connections
+- invalid manifest references
+- stale packaged plugin state

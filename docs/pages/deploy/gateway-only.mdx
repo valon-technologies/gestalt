@@ -1,199 +1,31 @@
-import { Callout } from 'nextra/components'
+# Docker
 
-# Gateway-Only Deployment
+The published image is `valontechnologies/gestaltd`.
 
-A gateway-only deployment runs Gestalt as an HTTP proxy with centralized auth, egress policy, and credential injection. It does not load any providers, integrations, runtimes, or MCP surfaces.
+## What The Image Does
 
-This is useful when you want to mediate outbound API calls (injecting secrets, enforcing deny rules, and authenticating callers) without building a capability catalog.
+- exposes port `8080`
+- uses `/gestaltd` as the entrypoint
+- defaults to `serve --locked --config /etc/gestalt/config.yaml`
 
-## What You Get
+## Mount A Prepared Config Directory
 
-- Inbound auth via session tokens or API keys (`gst_api_`)
-- A proxy binding that forwards requests to arbitrary upstream hosts
-- Egress policy rules that deny or allow requests by host, path, method, or subject
-- Secret-backed credential injection via `secret_ref`
+If you already ran `gestaltd init`, mount the whole config directory at
+`/etc/gestalt`.
 
-## What You Do Not Get
+That directory should contain:
 
-- No capability catalog or operation discovery
-- No provider integrations, API/MCP surfaces, or MCP endpoints
-- No runtimes or background workers
+- `config.yaml`
+- `gestalt.lock.json`
+- `.gestalt/` when packaged plugins or UI bundles were prepared
 
-## Minimal Config
+## Mutable Local Startup In Docker
 
-```yaml
-server:
-  port: 8080
-  base_url: https://gateway.example.com
-  encryption_key: secret://gestalt-encryption-key
+For local development, override the default command and start the container with
+`serve --config /etc/gestalt/config.yaml`.
 
-auth:
-  provider: oidc
-  config:
-    issuer_url: https://login.example.com
-    client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
-    session_secret: secret://oidc-session-secret
+## Bake Prepared State Into A Derived Image
 
-datastore:
-  provider: sqlite
-  config:
-    path: /data/gestalt.db
-
-secrets:
-  provider: file
-  config:
-    dir: /etc/gestalt-secrets
-
-bindings:
-  proxy:
-    type: proxy
-    config:
-      path: /proxy
-
-egress:
-  default_action: deny
-  policies:
-    - action: allow
-      host: api.openai.com
-    - action: allow
-      host: api.anthropic.com
-  credentials:
-    - host: api.openai.com
-      secret_ref: openai-api-key
-      auth_style: bearer
-    - host: api.anthropic.com
-      secret_ref: anthropic-api-key
-      auth_style: bearer
-```
-
-Key points:
-
-- The `bindings.proxy` section declares zero providers. This is the providerless proxy mode.
-- `egress.default_action: deny` blocks all outbound traffic except hosts explicitly allowed.
-- Each credential grant uses `secret_ref` to pull a secret at request time and `auth_style: bearer` to inject it as a `Bearer` token.
-<Callout>
-  `secret_ref` values are resolved at request time through the configured secret manager, not during config loading. This means the proxy always fetches the current secret value.
-</Callout>
-
-## Secret-Backed Credentials
-
-The `secret_ref` and `auth_style` fields on credential grants control how secrets are resolved and injected.
-
-```yaml
-egress:
-  credentials:
-    - host: api.openai.com
-      secret_ref: openai-api-key
-      auth_style: bearer
-```
-
-When a proxied request matches this grant's host, Gestalt resolves `openai-api-key` through the secret manager and sets the `Authorization: Bearer <value>` header.
-
-Supported `auth_style` values:
-
-| Style | Header |
-| --- | --- |
-| `bearer` | `Authorization: Bearer <secret>` |
-| `basic` | `Authorization: Basic <secret>` |
-| `raw` | `Authorization: <secret>` |
-
-## Multi-Tenant Host Credentials
-
-When different hosts need different secrets, add one credential grant per host:
-
-```yaml
-egress:
-  credentials:
-    - host: shop-1.myshopify.com
-      secret_ref: shop-1-token
-      auth_style: bearer
-    - host: shop-2.myshopify.com
-      secret_ref: shop-2-token
-      auth_style: bearer
-```
-
-Host matching is exact. Each request resolves credentials from the first grant whose host matches.
-
-## Full Platform With Egress
-
-The same egress substrate works in a full-platform deployment alongside providers and integrations. The proxy uses secret-backed credential grants for outbound auth while integrations use their own OAuth connections:
-
-```yaml
-server:
-  port: 8080
-  base_url: https://gestalt.example.com
-  encryption_key: secret://gestalt-encryption-key
-
-auth:
-  provider: oidc
-  config:
-    issuer_url: https://login.example.com
-    client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
-    session_secret: secret://oidc-session-secret
-
-datastore:
-  provider: postgres
-  config:
-    dsn: ${DATABASE_URL}
-
-secrets:
-  provider: google_secret_manager
-  config:
-    project: my-project
-
-integrations:
-  github:
-    display_name: GitHub
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: secret://github-client-secret
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://api.github.com/openapi.json
-      connection: default
-
-bindings:
-  proxy:
-    type: proxy
-    providers:
-      - github
-    config:
-      path: /proxy
-
-egress:
-  default_action: deny
-  policies:
-    - action: allow
-      host: api.github.com
-    - action: allow
-      host: api.openai.com
-  credentials:
-    - host: api.openai.com
-      secret_ref: openai-api-key
-      auth_style: bearer
-```
-
-## Startup
-
-Gateway-only configs have no remote API specs to fetch, so locked startup works without `gestaltd init`:
-
-```sh
-gestaltd serve --config ./gateway.yaml
-```
-
-For production, you can still use the locked flow:
-
-```sh
-gestaltd init --config ./gateway.yaml
-gestaltd serve --locked --config ./gateway.yaml
-```
-
-See [Deploy Overview](/deploy) for Docker, Kubernetes, and other deployment targets.
+If you want an immutable runtime image, run `gestaltd init` in a build stage,
+copy the prepared config directory plus `.gestalt/` into the final image, and
+keep the runtime container on the default locked command.
