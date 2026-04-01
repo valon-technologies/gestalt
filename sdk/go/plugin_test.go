@@ -124,12 +124,11 @@ func TestProviderServerGetMetadata_StaticCatalog(t *testing.T) {
 		connMode: gestalt.ConnectionModeNone,
 		catalog: &gestalt.Catalog{
 			Name: "test-provider",
-			Operations: []gestalt.CatalogOperation{
+			Operations: []gestalt.Operation{
 				{
 					ID:          "list_items",
 					Description: "List all items",
 					Method:      http.MethodGet,
-					Path:        "/items",
 					Parameters: []gestalt.CatalogParameter{
 						{Name: "limit", Type: "integer", Description: "Max results", Default: 10},
 					},
@@ -160,6 +159,9 @@ func TestProviderServerGetMetadata_StaticCatalog(t *testing.T) {
 	if !ok || first["id"] != "list_items" {
 		t.Fatalf("unexpected first operation: %+v", ops[0])
 	}
+	if first["transport"] != "plugin" {
+		t.Fatalf("unexpected first operation transport: %+v", ops[0])
+	}
 }
 
 func TestProviderServerGetSessionCatalog(t *testing.T) {
@@ -171,15 +173,15 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			connMode: gestalt.ConnectionModeUser,
 			catalog: &gestalt.Catalog{
 				Name: "test-provider",
-				Operations: []gestalt.CatalogOperation{
-					{ID: "static_op", Method: http.MethodGet, Path: "/static"},
+				Operations: []gestalt.Operation{
+					{ID: "static_op", Method: http.MethodGet},
 				},
 			},
 		},
 		sessionCatalog: &gestalt.Catalog{
 			Name: "test-provider",
-			Operations: []gestalt.CatalogOperation{
-				{ID: "session_op", Method: http.MethodPost, Path: "/session"},
+			Operations: []gestalt.Operation{
+				{ID: "session_op", Method: http.MethodPost},
 			},
 		},
 	}

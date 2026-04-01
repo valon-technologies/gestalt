@@ -27,11 +27,10 @@
 //	func (p *MyProvider) Catalog() *gestalt.Catalog {
 //		return &gestalt.Catalog{
 //			Name: "my_provider",
-//			Operations: []gestalt.CatalogOperation{{
+//			Operations: []gestalt.Operation{{
 //				ID:          "hello",
 //				Description: "Says hello",
 //				Method:      "GET",
-//				Path:        "/hello",
 //			}},
 //		}
 //	}

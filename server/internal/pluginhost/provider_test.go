@@ -35,7 +35,7 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 		DisplayName: "Round Trip",
 		Description: "test provider",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, Path: "/echo", Transport: catalog.TransportREST},
+			{ID: "echo", Method: http.MethodPost},
 		},
 	}
 }
@@ -46,7 +46,7 @@ func (p *roundTripProvider) CatalogForRequest(_ context.Context, token string) (
 		DisplayName: token,
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, Path: "/echo", Transport: catalog.TransportREST},
+			{ID: "echo", Method: http.MethodPost},
 		},
 	}, nil
 }
@@ -79,12 +79,11 @@ func (p *manualOnlySDKProvider) Catalog() *sdkgestalt.Catalog {
 		Name:        "manual-only",
 		DisplayName: "Manual Only",
 		Description: "manual auth provider",
-		Operations: []sdkgestalt.CatalogOperation{
+		Operations: []sdkgestalt.Operation{
 			{
 				ID:          "echo",
 				Description: "Echo input",
 				Method:      http.MethodPost,
-				Path:        "/echo",
 				Parameters: []sdkgestalt.CatalogParameter{
 					{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
 				},

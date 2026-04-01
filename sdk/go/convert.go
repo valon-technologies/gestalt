@@ -157,7 +157,7 @@ func catalogToJSON(cat *Catalog) (string, error) {
 	if cat == nil {
 		return "", nil
 	}
-	data, err := json.Marshal(cat)
+	data, err := json.Marshal(bridgeCatalogFromPublic(cat))
 	if err != nil {
 		return "", fmt.Errorf("marshal catalog: %w", err)
 	}
