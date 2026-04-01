@@ -33,55 +33,64 @@ func (p *Provider) DisplayName() string                    { return "Gmail" }
 func (p *Provider) Description() string                    { return "Send, draft, reply to, and forward email messages." }
 func (p *Provider) ConnectionMode() gestalt.ConnectionMode { return gestalt.ConnectionModeUser }
 
-func (p *Provider) ListOperations() []gestalt.Operation {
-	return []gestalt.Operation{
-		{
-			Name:        "send_message",
-			Description: "Send an email message",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
-				{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
-				{Name: "body", Type: "string", Required: true, Description: "Plain text body"},
-				{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
-				{Name: "bcc", Type: "string", Description: "BCC recipients (comma-separated)"},
-				{Name: "html_body", Type: "string", Description: "HTML body (sent as alternative to plain text)"},
+func (p *Provider) Catalog() *gestalt.Catalog {
+	return &gestalt.Catalog{
+		Name:        p.Name(),
+		DisplayName: p.DisplayName(),
+		Description: p.Description(),
+		Operations: []gestalt.CatalogOperation{
+			{
+				ID:          "send_message",
+				Description: "Send an email message",
+				Method:      http.MethodPost,
+				Path:        "/send_message",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
+					{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
+					{Name: "body", Type: "string", Required: true, Description: "Plain text body"},
+					{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
+					{Name: "bcc", Type: "string", Description: "BCC recipients (comma-separated)"},
+					{Name: "html_body", Type: "string", Description: "HTML body (sent as alternative to plain text)"},
+				},
 			},
-		},
-		{
-			Name:        "create_draft",
-			Description: "Create an email draft",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
-				{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
-				{Name: "body", Type: "string", Required: true, Description: "Plain text body"},
-				{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
-				{Name: "bcc", Type: "string", Description: "BCC recipients (comma-separated)"},
-				{Name: "html_body", Type: "string", Description: "HTML body"},
+			{
+				ID:          "create_draft",
+				Description: "Create an email draft",
+				Method:      http.MethodPost,
+				Path:        "/create_draft",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "to", Type: "string", Required: true, Description: "Recipient email address"},
+					{Name: "subject", Type: "string", Required: true, Description: "Email subject"},
+					{Name: "body", Type: "string", Required: true, Description: "Plain text body"},
+					{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
+					{Name: "bcc", Type: "string", Description: "BCC recipients (comma-separated)"},
+					{Name: "html_body", Type: "string", Description: "HTML body"},
+				},
 			},
-		},
-		{
-			Name:        "reply_to_message",
-			Description: "Reply to an existing message",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: "message_id", Type: "string", Required: true, Description: "Original message ID"},
-				{Name: "body", Type: "string", Required: true, Description: "Reply body"},
-				{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
-				{Name: "reply_all", Type: "boolean", Description: "Reply to all recipients"},
-				{Name: "html_body", Type: "string", Description: "HTML body"},
+			{
+				ID:          "reply_to_message",
+				Description: "Reply to an existing message",
+				Method:      http.MethodPost,
+				Path:        "/reply_to_message",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "message_id", Type: "string", Required: true, Description: "Original message ID"},
+					{Name: "body", Type: "string", Required: true, Description: "Reply body"},
+					{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
+					{Name: "reply_all", Type: "boolean", Description: "Reply to all recipients"},
+					{Name: "html_body", Type: "string", Description: "HTML body"},
+				},
 			},
-		},
-		{
-			Name:        "forward_message",
-			Description: "Forward a message to new recipients",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: "message_id", Type: "string", Required: true, Description: "Message to forward"},
-				{Name: "to", Type: "string", Required: true, Description: "Forward recipient"},
-				{Name: "additional_text", Type: "string", Description: "Text to prepend to forwarded content"},
-				{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
+			{
+				ID:          "forward_message",
+				Description: "Forward a message to new recipients",
+				Method:      http.MethodPost,
+				Path:        "/forward_message",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "message_id", Type: "string", Required: true, Description: "Message to forward"},
+					{Name: "to", Type: "string", Required: true, Description: "Forward recipient"},
+					{Name: "additional_text", Type: "string", Description: "Text to prepend to forwarded content"},
+					{Name: "cc", Type: "string", Description: "CC recipients (comma-separated)"},
+				},
 			},
 		},
 	}

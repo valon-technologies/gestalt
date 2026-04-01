@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/gmail
-version: 0.0.1-alpha.1
+version: 0.0.1-alpha.2
 display_name: Gmail
 description: Read, send, and manage Gmail messages, threads, drafts, and labels.
 icon_file: assets/icon.svg

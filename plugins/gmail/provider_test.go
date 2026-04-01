@@ -18,9 +18,12 @@ func TestProviderMetadata(t *testing.T) {
 	if p.Name() != "gmail" {
 		t.Fatalf("Name() = %q, want %q", p.Name(), "gmail")
 	}
-	ops := p.ListOperations()
-	if len(ops) != 4 {
-		t.Fatalf("ListOperations() returned %d ops, want 4", len(ops))
+	catalog := p.Catalog()
+	if catalog == nil {
+		t.Fatal("Catalog() returned nil")
+	}
+	if len(catalog.Operations) != 4 {
+		t.Fatalf("Catalog().Operations returned %d ops, want 4", len(catalog.Operations))
 	}
 }
 
