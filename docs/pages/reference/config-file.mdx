@@ -254,105 +254,90 @@ Audit records are emitted as structured log entries with `log.type=audit`. Route
 
 ## `integrations`
 
-Each integration follows one of three patterns: declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `mcp`). See [Integrations](/concepts/integrations) for the conceptual model.
-
-### Declarative integration
+Every integration has one `plugin` block plus optional presentation metadata.
+That `plugin` block can define an inline provider, point at a packaged plugin,
+or combine a packaged plugin with spec-backed surfaces.
 
 ```yaml
 integrations:
   github:
     display_name: GitHub
-    description: GitHub REST API
-    mcp_tool_prefix: github_
+    description: Public GitHub operations
     icon_file: ./icons/github.svg
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-          client_id: ${GITHUB_CLIENT_ID}
-          client_secret: ${GITHUB_CLIENT_SECRET}
-          authorization_url: https://github.com/login/oauth/authorize
-          token_url: https://github.com/login/oauth/access_token
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/.../api.github.com.json
-      connection: default
+    mcp_tool_prefix: github_
+    plugin:
+      openapi: ./openapi/github.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
       allowed_operations:
-        repos/list-for-authenticated-user:
-        issues/list-for-authenticated-user:
+        repos.get:
+          alias: get_repo
 ```
+
+### Integration fields
 
 | Field | Purpose |
 | --- | --- |
-| `display_name`, `description` | Presentation metadata. |
-| `mcp_tool_prefix` | Prefix tool names on the MCP endpoint. |
-| `icon_file` | SVG path, resolved relative to the config file. |
-| `connections` | Named connections that own mode, auth, and params. |
-| `api` | REST or GraphQL surface. |
-| `mcp` | Upstream MCP surface. |
+| `display_name` | UI and API display name override. |
+| `description` | UI and API description override. |
+| `icon_file` | SVG icon path resolved from the config directory. |
+| `mcp_tool_prefix` | Prefix for tools exposed on `/mcp`. |
+| `plugin` | The actual provider definition. Required. |
 
-### `connections`
+### `integrations.*.plugin`
 
-```yaml
-connections:
-  default:
-    mode: user
-    params:
-      subdomain:
-        required: true
-    auth:
-      type: oauth2
-      authorization_url: https://accounts.example.com/oauth/authorize
-      token_url: https://accounts.example.com/oauth/token
-      client_id: ${CLIENT_ID}
-      client_secret: ${CLIENT_SECRET}
-```
+The same `plugin` block supports inline providers, packaged providers, and
+hybrid providers.
+
+#### External plugin source fields
 
 | Field | Purpose |
 | --- | --- |
-| `mode` | `user` (default), `identity`, `either`, or `none`. All connections in an integration must share the same mode. |
-| `params` | Named parameters callers supply when connecting. Used for URL template expansion. |
-| `auth` | Auth configuration for this connection. |
+| `command` | Execute a local binary directly. |
+| `package` | Load a local directory, local archive, or HTTPS archive. |
+| `source` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
+| `version` | Required with `source`. Invalid with `command` or `package`. |
+| `args` | Extra process arguments for `command`. |
+| `env` | Extra environment variables for external plugins. |
+| `config` | Provider-specific config passed into packaged providers. |
+| `allowed_hosts` | Optional network allowlist for sandboxed plugin processes. |
+| `allowed_operations` | Surface allowlist plus `alias` and `description` overrides. |
 
-### `api`
+`command`, `package`, and `source` are mutually exclusive.
 
-```yaml
-api:
-  type: rest
-  openapi: https://example.com/openapi.json
-  connection: default
-  allowed_operations:
-    listThings:
-```
-
-| Field | Purpose |
-| --- | --- |
-| `type` | `rest` or `graphql`. |
-| `openapi` | Required when `type: rest`. URL or local path to an OpenAPI document. |
-| `url` | Required when `type: graphql`. The GraphQL endpoint URL. |
-| `connection` | References a named connection in the same integration. |
-| `allowed_operations` | Narrows exposed operations. Bare key keeps the upstream description. Object with `alias` and/or `description` overrides it. |
-
-### `mcp`
-
-```yaml
-mcp:
-  url: https://mcp.example.com
-  connection: mcp_conn
-  allowed_operations:
-    search:
-```
+#### Inline provider fields
 
 | Field | Purpose |
 | --- | --- |
-| `url` | Required. The upstream MCP server URL. |
-| `connection` | References a named connection in the same integration. |
-| `allowed_operations` | Optional. Narrows exposed tools. Same override syntax as `api`. |
+| `auth` | Auth definition for the implicit plugin connection. |
+| `params` | Connection parameters for the implicit plugin connection. |
+| `connections` | Named connections for inline integrations. |
+| `openapi` | OpenAPI document URL or local file path. |
+| `graphql_url` | GraphQL endpoint. |
+| `mcp_url` | Upstream MCP endpoint. |
+| `base_url` | Base URL for declarative REST operations. |
+| `headers` | Static headers applied to spec-backed or declarative requests. |
+| `managed_parameters` | Fixed header or path values injected before exposure. |
+| `operations` | Inline declarative REST operations. |
+| `response_mapping` | Data and pagination mapping for spec-backed providers. |
+| `openapi_connection` | Named connection to use for OpenAPI. |
+| `graphql_connection` | Named connection to use for GraphQL. |
+| `mcp_connection` | Named connection to use for upstream MCP. |
+| `default_connection` | Default connection used when the caller does not specify one. |
+| `mcp` | Expose packaged provider operations on `/mcp`. |
 
-### `auth`
+Packaged providers can add `openapi`, `graphql_url`, or `mcp_url` in config,
+but inline `plugin.connections` only applies to inline providers. Packaged
+providers define named connections in their manifests.
 
-Auth configuration for a connection.
+### Auth shapes inside `plugin`
+
+Top-level `plugin.auth` and named connection auth blocks use the same shape:
 
 ```yaml
 auth:
@@ -398,45 +383,45 @@ auth:
 | `accept_header` | `Accept` header for the token endpoint. |
 | `token_metadata` | Fields to extract from the token response and store as connection metadata. |
 
-`mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates authorization URL and token URL resolution to the upstream MCP server.
+`mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates
+authorization URL and token URL resolution to the upstream MCP server.
 
 #### Manual auth with custom credential fields
 
-For manual-auth connections, you can customize the credential input form with `credentials`. Each entry defines a field the user must fill in, with an optional label, description, and help URL.
+For manual-auth connections, you can customize the credential input form with
+`credentials`. Each entry defines a field the user must fill in, with an
+optional label, description, and help URL.
 
 Single credential with a custom label:
 
 ```yaml
-connections:
-  default:
-    mode: user
-    auth:
-      type: manual
-      credentials:
-        - name: token
-          label: API Access Token
-          help_url: https://app.example.com/settings/tokens
+plugin:
+  auth:
+    type: manual
+    credentials:
+      - name: token
+        label: API Access Token
+        help_url: https://app.example.com/settings/tokens
 ```
 
-Multiple credentials (requires `auth_mapping` to map each field to an HTTP header):
+Multiple credentials require `auth_mapping` to map each field to an HTTP
+header:
 
 ```yaml
-connections:
-  default:
-    mode: user
-    auth:
-      type: manual
-      credentials:
-        - name: api_key
-          label: API Key
-          help_url: https://us5.datadoghq.com/organization-settings/api-keys
-        - name: app_key
-          label: Application Key
-          help_url: https://us5.datadoghq.com/organization-settings/application-keys
-      auth_mapping:
-        headers:
-          DD-API-KEY: api_key
-          DD-APPLICATION-KEY: app_key
+plugin:
+  auth:
+    type: manual
+    credentials:
+      - name: api_key
+        label: API Key
+        help_url: https://us5.datadoghq.com/organization-settings/api-keys
+      - name: app_key
+        label: Application Key
+        help_url: https://us5.datadoghq.com/organization-settings/application-keys
+    auth_mapping:
+      headers:
+        DD-API-KEY: api_key
+        DD-APPLICATION-KEY: app_key
 ```
 
 | Field | Notes |
@@ -449,53 +434,105 @@ connections:
 
 `credentials` is required when `auth.type` is `manual`.
 
-### `plugin`
-
-Plugin integrations delegate execution to an external binary. A plugin can compose with `api`, `mcp`, or both.
+### Named connections
 
 ```yaml
-integrations:
-  custom_tool:
-    plugin:
-      command: ./my-plugin
-```
-
-```yaml
-integrations:
-  custom_tool:
-    plugin:
-      source: github.com/your-org/your-repo/custom-tool
-      version: 1.0.0
-      config:
-        greeting: hello
-```
-
-| Field | Purpose |
-| --- | --- |
-| `command` | Local executable path. Mutually exclusive with `package` and `source`. |
-| `package` | Local directory, local archive, or HTTPS URL. Mutually exclusive with `command` and `source`. |
-| `source` | Managed plugin source address (`github.com/owner/repo/plugin`). Mutually exclusive with `command` and `package`. Requires `version`. |
-| `version` | Required with `source`. Must be valid SemVer. |
-| `args` | Command-line arguments. Only valid with `command`. |
-| `env` | Extra environment variables passed to the plugin process. |
-| `allowed_hosts` | Host allowlist for plugin network access. When set, the plugin is automatically sandboxed: filesystem access is restricted via Landlock (Linux) or sandbox-exec (macOS), and outbound HTTP is proxied through a local allowlist enforcer. Supports exact matches and wildcards (`*.example.com`). |
-| `config` | Arbitrary plugin config payload, validated against the plugin's config schema if one exists. |
-| `allowed_operations` | Narrows exposed operations. Same override syntax as `api.allowed_operations`. |
-
-### Hybrid integration (plugin + MCP)
-
-```yaml
-integrations:
-  slack:
-    plugin:
-      source: github.com/valon-technologies/gestalt/slack
-      version: 0.0.1-alpha.3
+plugin:
+  openapi: https://api.example.com/openapi.json
+  mcp_url: https://mcp.example.com/mcp
+  openapi_connection: api
+  mcp_connection: mcp
+  default_connection: api
+  connections:
+    api:
+      mode: user
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.example.com/oauth/authorize
+        token_url: https://accounts.example.com/oauth/token
+        client_id: ${CLIENT_ID}
+        client_secret: ${CLIENT_SECRET}
     mcp:
-      url: https://mcp.slack.com
-      connection: plugin
+      mode: user
+      auth:
+        type: mcp_oauth
 ```
 
-Setting `mcp.connection` to `plugin` reuses the plugin's OAuth token for the MCP surface. Declare explicit `connections` and reference one from `mcp.connection` for separate credentials.
+Connection modes:
+
+- `none`
+- `user`
+- `identity`
+- `either`
+
+### Declarative operations
+
+```yaml
+plugin:
+  auth:
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  base_url: https://api.support.example.com
+  operations:
+    - name: list_tickets
+      method: GET
+      path: /tickets
+    - name: get_ticket
+      method: GET
+      path: /tickets/{ticket_id}
+```
+
+Each operation accepts:
+
+- `name`
+- `description`
+- `method`
+- `path`
+- `parameters`
+
+Parameter locations can be `query`, `body`, or `path`.
+
+### Managed parameters
+
+```yaml
+plugin:
+  openapi: https://api.example.com/openapi.json
+  openapi_connection: public
+  default_connection: public
+  connections:
+    public:
+      mode: none
+      auth:
+        type: none
+  managed_parameters:
+    - in: header
+      name: X-API-Version
+      value: "2026-04-01"
+    - in: path
+      name: account_id
+      value: primary
+```
+
+Managed parameter locations can be `header` or `path`.
+
+### Response mapping
+
+```yaml
+plugin:
+  graphql_url: https://api.example.com/graphql
+  auth:
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  response_mapping:
+    data_path: data.items
+    pagination:
+      has_more_path: pageInfo.hasNextPage
+      cursor_path: pageInfo.endCursor
+```
 
 ## `bindings`
 
@@ -630,15 +667,16 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 ### Structural
 
-- Integrations are declarative (`connections` + `api`/`mcp`), plugin-only, or hybrid (plugin + `api`, `mcp`, or both)
+- Every integration requires a `plugin` block
 - Exactly one of `command`, `package`, or `source` per plugin
 - `plugin.version` is required with `source` and invalid with `command` or `package`
 - `plugin.args` are only valid with `command`
 - Plain `http://` package URLs are rejected
+- External plugins cannot use inline `operations`
+- External plugins cannot use inline `connections`; named connections belong in the plugin manifest
 - All connections in an integration must share the same mode
-- `api.connection` and `mcp.connection` must reference a declared connection
-- REST API surfaces require `api.openapi`; GraphQL surfaces require `api.url`
-- URL templates in surface URLs and auth URLs must reference required params
+- `openapi_connection`, `graphql_connection`, `mcp_connection`, and `default_connection` must reference a declared connection when named connections are used
+- URL templates in spec surfaces and auth URLs must reference required params
 - `egress.default_action` and policy `action` must be `allow` or `deny`
 - `ui.plugin` requires exactly one of `package` or `source`
 - `ui.plugin.version` is required with `source` and invalid with `package`

@@ -1,87 +1,42 @@
 # Write A Plugin
 
-This walkthrough uses the Go SDK because the repository ships working provider
-and runtime examples in Go.
+The repository ships a working Go provider example under
+`examples/plugins/provider-go`.
 
-## Implement A Provider
+Start there when you want a minimal executable provider that speaks the public
+plugin protocol.
 
-Start from a complete provider, not a fragment:
+## Build The Example Provider
 
-```go
-package main
+Run this from `examples/plugins/provider-go`:
 
-import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "os"
-    "os/signal"
-
-    gestalt "github.com/valon-technologies/gestalt/sdk/go"
-)
-
-type exampleProvider struct {
-    greeting string
-}
-
-func (p *exampleProvider) Name() string        { return "example" }
-func (p *exampleProvider) DisplayName() string { return "Example Provider" }
-func (p *exampleProvider) Description() string { return "A minimal example provider" }
-func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
-    return gestalt.ConnectionModeNone
-}
-
-func (p *exampleProvider) Catalog() *gestalt.Catalog {
-    return &gestalt.Catalog{
-        Name: "example",
-        Operations: []gestalt.CatalogOperation{
-            {
-                ID:          "greet",
-                Method:      http.MethodGet,
-                Description: "Say hello",
-                Parameters: []gestalt.CatalogParameter{
-                    {Name: "name", Type: "string", Description: "Name to greet"},
-                },
-            },
-        },
-    }
-}
-
-func (p *exampleProvider) Execute(_ context.Context, _ string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
-    name, _ := params["name"].(string)
-    if name == "" {
-        name = "World"
-    }
-    greeting := p.greeting
-    if greeting == "" {
-        greeting = "Hello"
-    }
-    body, _ := json.Marshal(map[string]string{
-        "message": fmt.Sprintf("%s, %s!", greeting, name),
-    })
-    return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-}
-
-func main() {
-    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-    defer cancel()
-    if err := gestalt.ServeProvider(ctx, &exampleProvider{}); err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-}
+```sh
+go build -o ./provider-go .
 ```
 
-The repository examples live under:
+## Add A Manifest
 
-- `examples/plugins/provider-go`
-- `examples/plugins/runtime-go`
+Add a `plugin.yaml` or `plugin.json` to the plugin root.
 
-## Add A YAML Manifest
+For a releasable provider package, start with:
 
-Add a `plugin.yaml` or `plugin.json` to the plugin root. For manifest fields
-and worked examples, use [Plugin Manifests](/reference/plugin-manifests).
+```yaml
+source: github.com/acme/plugins/example
+version: 0.1.0
+display_name: Example Provider
+description: Minimal example provider
+kinds:
+  - provider
+provider:
+  base_url: https://example.invalid
+  operations:
+    - name: greet
+      method: GET
+      path: /greet
+```
+
+See [Plugin Manifests](/reference/plugin-manifests) for the full manifest
+model.
 
 ## Package It
 
@@ -99,11 +54,26 @@ gestaltd plugin release --version 0.1.0
 
 ## Use It From `config.yaml`
 
+During local development, point at the binary directly:
+
+```yaml
+integrations:
+  example:
+    plugin:
+      command: ./provider-go
+      config:
+        greeting: Hello from example plugin
+```
+
+For prepared deployments, point at the packaged archive:
+
 ```yaml
 integrations:
   example:
     plugin:
       package: ./dist/my-plugin.tar.gz
+      config:
+        greeting: Hello from example plugin
 ```
 
 Then:
@@ -113,10 +83,8 @@ gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 ```
 
-## Add Runtime Or UI Variants
+## Ship A Web UI Instead
 
-- Add a `runtime` kind when the package should run as a long-lived background
-  worker.
-- Add a `webui` kind when the package should ship a replacement UI bundle.
-
-See [Plugin Manifests](/reference/plugin-manifests) for the full manifest model.
+If the package should replace the embedded frontend, add the `webui` kind and
+`webui.asset_root` to the manifest. The package can then be used from
+`ui.plugin`.
