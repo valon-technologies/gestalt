@@ -923,10 +923,15 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 func TestListOperations(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "test-int"},
-		ops: []core.Operation{
-			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		},
+		catalog: &catalog.Catalog{
+			Name: "test-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "do_thing", Description: "Do a thing", Method: http.MethodGet, Path: "/do-thing"},
+			},
 		},
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
