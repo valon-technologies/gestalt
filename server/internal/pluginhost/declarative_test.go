@@ -397,7 +397,7 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
 	}
 	if len(cat.Operations) != len(wantIDs) {
-		t.Fatalf("got %d operations after SetIconSVG, want %d", len(cat.Operations), len(wantIDs))
+		t.Fatalf("got %d operations after metadata overrides, want %d", len(cat.Operations), len(wantIDs))
 	}
 }
 
