@@ -97,11 +97,7 @@ func (u *Upstream) SupportsManualAuth() bool            { return true }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }
-func (u *Upstream) SetIconSVG(svg string) {
-	if u.cat != nil {
-		u.cat.IconSVG = svg
-	}
-}
+func (u *Upstream) SetIconSVG(svg string)   { u.iconSVG = svg }
 
 func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return nil, core.ErrMCPOnly

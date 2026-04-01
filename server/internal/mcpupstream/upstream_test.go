@@ -324,6 +324,25 @@ func TestUpstream_MetadataOverridesDecorateCatalogs(t *testing.T) {
 	}
 }
 
+func TestUpstream_SetIconSVGDecoratesCatalogWithoutStaticCatalog(t *testing.T) {
+	t.Parallel()
+
+	u, err := New(context.Background(), "clickhouse", "https://example.com/mcp", core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	u.SetIconSVG("<svg/>")
+
+	cat := u.Catalog()
+	if cat == nil {
+		t.Fatal("expected catalog")
+	}
+	if cat.IconSVG != "<svg/>" {
+		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
+	}
+}
+
 func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	t.Parallel()
 
