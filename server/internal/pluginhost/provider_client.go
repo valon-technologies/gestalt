@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -56,7 +57,7 @@ func (p *remoteProviderBase) Close() error {
 }
 
 func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
-	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+	meta, err := getMetadataWithRetry(ctx, client)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +92,27 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
 	}
 	return base, nil
+}
+
+func getMetadataWithRetry(ctx context.Context, client proto.ProviderPluginClient) (*proto.ProviderMetadata, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+		if err == nil {
+			return meta, nil
+		}
+		if status.Code(err) != codes.Unavailable {
+			return nil, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-ticker.C:
+		}
+	}
 }
 
 func (p *remoteProviderBase) Name() string { return p.metadata.GetName() }

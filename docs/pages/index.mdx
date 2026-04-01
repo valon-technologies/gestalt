@@ -2,59 +2,60 @@ import { Cards } from 'nextra/components'
 
 # Gestalt
 
-`gestaltd` is a self-hosted integration gateway. One YAML file defines how the
-server authenticates users, stores credentials, resolves secrets, loads
-integrations, and exposes them through a single HTTP API and optional `/mcp`
-endpoint.
+`gestaltd` is a self-hosted integration server. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with authentication, token storage, integration execution, an optional MCP endpoint, optional bindings, and an embedded web UI served from the same HTTP port.
 
-## What It Covers
+## What Actually Ships
 
-- One runtime for REST, GraphQL, MCP, packaged providers, runtimes, and HTTP
-  bindings.
-- One connection model for OAuth, manual credentials, bearer tokens, shared
-  identities, and no-auth integrations.
-- One packaging model for provider plugins, runtime plugins, and web UI
-  plugins.
-- One deployment workflow for local development and locked production startup.
-
-## The Main Building Blocks
-
-| Piece | Purpose |
+| Piece | What it does |
 | --- | --- |
-| `gestaltd` | The server binary. It loads config, starts the API and UI, and mounts `/mcp` when integrations expose tools. |
-| `config.yaml` | The control plane for auth, datastore, secrets, telemetry, integrations, runtimes, bindings, egress, and UI plugins. |
-| `gestalt.lock.json` and `.gestalt/` | Prepared state written by `gestaltd init` for packaged integrations, runtimes, and UI plugins. |
-| `plugin.yaml` | A plugin manifest for packaged providers, runtimes, or UI bundles. |
-| `gestalt` | The client CLI for login, discovery, invocation, and API token management. |
+| `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
+| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, integrations, bindings, and egress policy. |
+| `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd init`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
+| Deploy assets | `server/Dockerfile`, `client/Dockerfile`, and a Helm chart for production deployment paths. |
 
-## Common Workflows
+## The Four Foundations
 
-- Run `gestaltd` with no config for a local server with generated SQLite state.
-- Write an explicit `config.yaml` with inline integrations or packaged plugins.
-- Use `gestaltd init` to prepare plugin artifacts, then `gestaltd serve --locked`
-  for deterministic startup.
-- Connect integrations once and use the same provider graph from the HTTP API,
-  the embedded UI, or `/mcp`.
+### Configuration
+
+Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, integrations, bindings, and egress rules.
+
+### Prepared State
+
+If your config points at remote OpenAPI specs, GraphQL endpoints, or packaged plugins, `gestaltd init` resolves them and writes lock state next to the config. Production deployments normally start from that prepared state with `gestaltd serve --locked`.
+
+### Providers And Invocation
+
+Each integration becomes a provider. All request surfaces share the same invocation broker, so token lookup, refresh, connection mode, instance selection, and auditing work the same way everywhere.
+
+### Surfaces
+
+The same provider graph can be reached through the HTTP API, the embedded web UI, `/mcp`, webhook bindings, and proxy bindings.
+
+## Deployment Paths
+
+| Mode | Description |
+| --- | --- |
+| No config | Local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key. |
+| Docker | Single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`. |
+| Helm on Kubernetes | One Deployment for `gestaltd`, optional init container for locked startup. |
+| Bare binary | `gestaltd`, `gestaltd serve`, `gestaltd init`, and `gestaltd validate`. |
 
 ## Start Here
 
 <Cards>
   <Cards.Card title="Getting Started" href="/getting-started">
-    Install the binaries, start a local server, and move to an explicit config.
+    Run `gestaltd` out of the box, then move to an explicit config and locked startup.
+  </Cards.Card>
+  <Cards.Card title="Platform Model" href="/concepts/platform-model">
+    See how config, providers, the invocation broker, bindings, and MCP fit together.
+  </Cards.Card>
+  <Cards.Card title="Configuration" href="/concepts/configuration">
+    Learn the top-level primitives and the lifecycle of `init`, `validate`, and `serve --locked`.
+  </Cards.Card>
+  <Cards.Card title="Deploy" href="/deploy">
+    Use the shipped Docker and Helm paths, then adapt the same model to Fly.io, Railway, Render, or Lambda.
   </Cards.Card>
   <Cards.Card title="Config File" href="/reference/config-file">
-    See the current top-level YAML shape and the integration plugin model.
-  </Cards.Card>
-  <Cards.Card title="Integrations" href="/concepts/integrations">
-    Learn the difference between inline, packaged, and hybrid integrations.
-  </Cards.Card>
-  <Cards.Card title="Plugin Manifests" href="/reference/plugin-manifests">
-    Package providers, runtimes, and UI bundles with YAML manifests.
-  </Cards.Card>
-  <Cards.Card title="HTTP API" href="/reference/http-api">
-    Browse the server routes for auth, invocation, tokens, bindings, and MCP.
-  </Cards.Card>
-  <Cards.Card title="CLI" href="/reference/cli">
-    Use `gestaltd` for server lifecycle and `gestalt` for client access.
+    Full reference for every top-level block and the fields inside them.
   </Cards.Card>
 </Cards>

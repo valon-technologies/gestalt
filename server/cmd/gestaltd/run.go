@@ -145,7 +145,6 @@ func runServer(env *bootstrapEnv) error {
 		Auth:              result.Auth,
 		Datastore:         result.Datastore,
 		Providers:         result.Providers,
-		Runtimes:          result.Runtimes,
 		Bindings:          result.Bindings,
 		Invoker:           result.Invoker,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -359,11 +358,6 @@ func logConfigSummary(path string, cfg *config.Config) {
 		} else {
 			slog.Info("integration configured", "integration", name, "type", "plugin")
 		}
-	}
-
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		slog.Info("runtime configured", "runtime", name, "type", rt.Type, "providers", rt.Providers)
 	}
 
 	for name := range cfg.Bindings {

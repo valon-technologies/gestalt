@@ -1,15 +1,9 @@
-// Package gestalt provides a Go SDK for building Gestalt plugins.
+// Package gestalt provides a Go SDK for building Gestalt provider plugins.
 //
 // Gestalt plugins extend the platform with new integrations and automations.
-// There are two plugin types:
-//
-//   - A [Provider] exposes a set of named operations (e.g. "list_issues",
-//     "send_message") that callers can invoke. Providers are short-lived:
-//     they start, handle requests, and stop when the host is done.
-//
-//   - A [Runtime] is a long-lived sidecar that receives a set of available
-//     [Capability] values on startup and uses a [RuntimeHost] to invoke
-//     operations on other providers in response to external events.
+// A [Provider] exposes a set of named operations (e.g. "list_issues",
+// "send_message") that callers can invoke. Providers are short-lived: they
+// start, handle requests, and stop when the host is done.
 //
 // # Implementing a Provider
 //

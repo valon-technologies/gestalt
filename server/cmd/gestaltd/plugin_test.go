@@ -344,7 +344,6 @@ func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	for _, rel := range []string{
 		"branding/icon.svg",
 		"schemas/provider.schema.json",
-		"schemas/config.schema.json",
 		"gestalt-plugin-release-test",
 	} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
@@ -836,9 +835,6 @@ func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
 	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
 		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
 	}
-	if manifest.Entrypoints.Runtime == nil || manifest.Entrypoints.Runtime.ArtifactPath != binaryName {
-		t.Fatalf("runtime entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Runtime, binaryName)
-	}
 	if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
 		t.Fatalf("expected %s in archive: %v", binaryName, err)
 	}
@@ -964,7 +960,7 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindRuntime},
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			BaseURL:          releaseHybridBaseURL,
 			ConfigSchemaPath: releaseProviderSchemaPath,
@@ -985,12 +981,10 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
 			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: releaseSourceArtifactPath},
-			Runtime:  &pluginmanifestv1.Entrypoint{ArtifactPath: releaseSourceArtifactPath},
 		},
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeTestFile(t, pluginDir, releaseProviderSchemaPath, []byte(`{"type":"object"}`), 0644)
-	writeTestFile(t, pluginDir, "schemas/config.schema.json", []byte(`{"type":"object"}`), 0644)
 	return pluginDir
 }
 

@@ -256,13 +256,6 @@ integrations:
 `,
 		},
 		{
-			name: "runtime requires type or plugin",
-			yaml: `
-runtimes:
-  worker: {}
-`,
-		},
-		{
 			name: "egress default action must be allow or deny",
 			yaml: `
 egress:
@@ -367,15 +360,6 @@ integrations:
 `,
 		},
 		{
-			name: "runtime plugin package is valid",
-			yaml: `
-runtimes:
-  worker:
-    plugin:
-      package: https://example.com/dummy.tar.gz
-`,
-		},
-		{
 			name: "plugin package and command are mutually exclusive",
 			yaml: `
 integrations:
@@ -419,37 +403,6 @@ integrations:
       config:
         base_url: https://example.com
 `,
-		},
-		{
-			name: "runtime plugin config must be sibling config block",
-			yaml: `
-runtimes:
-  worker:
-    plugin:
-      command: /tmp/runtime
-      config:
-        poll_interval: 30s
-`,
-			wantErr: true,
-		},
-		{
-			name: "runtime requires type or plugin",
-			yaml: `
-runtimes:
-  worker: {}
-`,
-			wantErr: true,
-		},
-		{
-			name: "runtime plugin cannot also define type",
-			yaml: `
-runtimes:
-  worker:
-    type: echo
-    plugin:
-      command: /tmp/plugin
-`,
-			wantErr: true,
 		},
 		{
 			name: "plugin command or package is required for external",
@@ -629,15 +582,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "runtime plugin with type rejected",
-			cfg: &Config{
-				Runtimes: map[string]RuntimeDef{
-					"worker": {Type: "grpc", Plugin: &PluginDef{Command: "/usr/bin/runtime"}},
-				},
-			},
-			wantErr: "cannot set both plugin and type",
-		},
 	}
 
 	for _, tc := range cases {
@@ -689,10 +633,6 @@ integrations:
   service-c:
     plugin:
       package: https://example.com/dummy.tar.gz
-runtimes:
-  worker:
-    plugin:
-      command: ../bin/runtime
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -713,9 +653,6 @@ runtimes:
 	}
 	if got := cfg.Integrations["service-c"].Plugin.Package; got != "https://example.com/dummy.tar.gz" {
 		t.Fatalf("HTTPS plugin package should not be resolved = %q", got)
-	}
-	if got := cfg.Runtimes["worker"].Plugin.Command; got != filepath.Join(dir, "bin", "runtime") {
-		t.Fatalf("runtime plugin command = %q", got)
 	}
 }
 

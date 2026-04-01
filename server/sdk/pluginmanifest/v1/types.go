@@ -2,12 +2,10 @@ package pluginmanifestv1
 
 import (
 	_ "embed"
-	"slices"
 )
 
 const (
 	KindProvider = "provider"
-	KindRuntime  = "runtime"
 	KindWebUI    = "webui"
 )
 
@@ -91,7 +89,7 @@ func (m *Manifest) IsHybridProvider() bool {
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil && !slices.Contains(m.Kinds, KindRuntime)
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil
 }
 
 type ManifestOperationOverride struct {
@@ -171,7 +169,6 @@ type Artifact struct {
 
 type Entrypoints struct {
 	Provider *Entrypoint `json:"provider,omitempty"`
-	Runtime  *Entrypoint `json:"runtime,omitempty"`
 }
 
 type Entrypoint struct {

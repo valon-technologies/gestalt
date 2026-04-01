@@ -182,7 +182,6 @@ type FactoryRegistry struct {
 	Datastores map[string]DatastoreFactory
 	Secrets    map[string]SecretManagerFactory
 	Telemetry  map[string]TelemetryFactory
-	Runtimes   map[string]RuntimeFactory
 	Bindings   map[string]BindingFactory
 	Builtins   []core.Provider
 }
@@ -193,7 +192,6 @@ func NewFactoryRegistry() *FactoryRegistry {
 		Datastores: make(map[string]DatastoreFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
 		Telemetry:  make(map[string]TelemetryFactory),
-		Runtimes:   make(map[string]RuntimeFactory),
 		Bindings:   make(map[string]BindingFactory),
 	}
 }
@@ -204,7 +202,6 @@ type Result struct {
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
-	Runtimes         *registry.PluginMap[core.Runtime]
 	Bindings         *registry.PluginMap[core.Binding]
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
@@ -231,10 +228,7 @@ func (r *Result) Start(ctx context.Context) error {
 	if r.extensionsStarted {
 		return nil
 	}
-	if err := startRuntimes(ctx, r.Runtimes); err != nil {
-		return err
-	}
-	if err := startBindings(ctx, r.Bindings, r.Runtimes); err != nil {
+	if err := startBindings(ctx, r.Bindings); err != nil {
 		return err
 	}
 	r.extensionsStarted = true
@@ -254,7 +248,9 @@ func (r *Result) Close(ctx context.Context) error {
 
 	var errs []error
 	if r.extensionsStarted {
-		errs = append(errs, shutdownExtensions(ctx, r.Runtimes, r.Bindings))
+		errs = append(errs,
+			CloseBindings(r.Bindings, bindingNames(r.Bindings)),
+		)
 		r.extensionsStarted = false
 	}
 	errs = append(errs,
@@ -409,27 +405,26 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
-	runtimes, bindings, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
+	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
 	if err != nil {
 		return nil, err
 	}
-	closeExtensions := true
+	shutdownBindings := true
 	defer func() {
-		if closeExtensions {
-			_ = shutdownExtensions(context.Background(), runtimes, bindings)
+		if shutdownBindings {
+			_ = CloseBindings(bindings, bindingNames(bindings))
 		}
 	}()
 
 	closeProviders = false
-	closeExtensions = false
 	closeCore = false
+	shutdownBindings = false
 	return &Result{
 		Auth:             prepared.Auth,
 		Datastore:        prepared.Datastore,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		ConnectionAuth:   connAuthResolver,
-		Runtimes:         runtimes,
 		Bindings:         bindings,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,
@@ -464,33 +459,7 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 	return sm, nil
 }
 
-func startRuntimes(ctx context.Context, runtimes *registry.PluginMap[core.Runtime]) error {
-	if runtimes == nil {
-		return nil
-	}
-
-	var started []string
-	for _, name := range runtimeNames(runtimes) {
-		rt, err := runtimes.Get(name)
-		if err != nil {
-			return errors.Join(
-				fmt.Errorf("getting runtime %q: %w", name, err),
-				StopRuntimes(ctx, runtimes, started),
-			)
-		}
-		if err := rt.Start(ctx); err != nil {
-			return errors.Join(
-				fmt.Errorf("starting runtime %q: %w", name, err),
-				StopRuntimes(ctx, runtimes, started),
-			)
-		}
-		started = append(started, name)
-	}
-
-	return nil
-}
-
-func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Binding], runtimes *registry.PluginMap[core.Runtime]) error {
+func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Binding]) error {
 	if bindings == nil {
 		return nil
 	}
@@ -502,14 +471,12 @@ func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Bindin
 			return errors.Join(
 				fmt.Errorf("getting binding %q: %w", name, err),
 				CloseBindings(bindings, started),
-				StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
 			)
 		}
 		if err := binding.Start(ctx); err != nil {
 			return errors.Join(
 				fmt.Errorf("starting binding %q: %w", name, err),
 				CloseBindings(bindings, started),
-				StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
 			)
 		}
 		started = append(started, name)
@@ -592,21 +559,6 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	}
 	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {
 		return err
-	}
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if err := resolveStringFields(&rt, resolve); err != nil {
-			return err
-		}
-		if err := resolveYAMLNode(&rt.Config, resolve); err != nil {
-			return err
-		}
-		if rt.Plugin != nil {
-			if err := resolveYAMLNode(&rt.Plugin.Config, resolve); err != nil {
-				return err
-			}
-		}
-		cfg.Runtimes[name] = rt
 	}
 	for name := range cfg.Bindings {
 		b := cfg.Bindings[name]

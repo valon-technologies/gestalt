@@ -27,7 +27,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fv1/plugin.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"f\n\x0cUserIdentity\x12\x14\n\x05\x65mail\x18\x01 \x01(\tR\x05\x65mail\x12!\n\x0c\x64isplay_name\x18\x02 \x01(\tR\x0b\x64isplayName\x12\x1d\n\navatar_url\x18\x03 \x01(\tR\tavatarUrl\"\x9d\x01\n\tPrincipal\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12;\n\x08identity\x18\x02 \x01(\x0b\x32\x1f.gestalt.plugin.v1.UserIdentityR\x08identity\x12:\n\x06source\x18\x03 \x01(\x0e\x32\".gestalt.plugin.v1.PrincipalSourceR\x06source\"\xae\x01\n\tParameter\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\tR\x04type\x12 \n\x0b\x64\x65scription\x18\x03 \x01(\tR\x0b\x64\x65scription\x12\x1a\n\x08required\x18\x04 \x01(\x08R\x08required\x12;\n\rdefault_value\x18\x05 \x01(\x0b\x32\x16.google.protobuf.ValueR\x0c\x64\x65\x66\x61ultValue\"\xa6\x01\n\nCapability\x12\x1a\n\x08provider\x18\x01 \x01(\tR\x08provider\x12\x1c\n\toperation\x18\x02 \x01(\tR\toperation\x12 \n\x0b\x64\x65scription\x18\x03 \x01(\tR\x0b\x64\x65scription\x12<\n\nparameters\x18\x04 \x03(\x0b\x32\x1c.gestalt.plugin.v1.ParameterR\nparameters\"\xa1\x01\n\x12\x43onnectionParamDef\x12\x1a\n\x08required\x18\x01 \x01(\x08R\x08required\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\x12#\n\rdefault_value\x18\x03 \x01(\tR\x0c\x64\x65\x66\x61ultValue\x12\x12\n\x04\x66rom\x18\x04 \x01(\tR\x04\x66rom\x12\x14\n\x05\x66ield\x18\x05 \x01(\tR\x05\x66ield\"\xda\x05\n\x10ProviderMetadata\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12!\n\x0c\x64isplay_name\x18\x02 \x01(\tR\x0b\x64isplayName\x12 \n\x0b\x64\x65scription\x18\x03 \x01(\tR\x0b\x64\x65scription\x12J\n\x0f\x63onnection_mode\x18\x04 \x01(\x0e\x32!.gestalt.plugin.v1.ConnectionModeR\x0e\x63onnectionMode\x12\x1d\n\nauth_types\x18\x05 \x03(\tR\tauthTypes\x12\x66\n\x11\x63onnection_params\x18\x06 \x03(\x0b\x32\x39.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10\x63onnectionParams\x12.\n\x13static_catalog_json\x18\x07 \x01(\tR\x11staticCatalogJson\x12\x38\n\x18supports_session_catalog\x18\x08 \x01(\x08R\x16supportsSessionCatalog\x12\x32\n\x15supports_post_connect\x18\t \x01(\x08R\x13supportsPostConnect\x12,\n\x12\x63onfig_schema_json\x18\n \x01(\tR\x10\x63onfigSchemaJson\x12\x30\n\x14min_protocol_version\x18\x0b \x01(\x05R\x12minProtocolVersion\x12\x30\n\x14max_protocol_version\x18\x0c \x01(\x05R\x12maxProtocolVersion\x1aj\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12;\n\x05value\x18\x02 \x01(\x0b\x32%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x02\x38\x01\"=\n\x0fOperationResult\x12\x16\n\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n\x04\x62ody\x18\x02 \x01(\tR\x04\x62ody\"\xa7\x04\n\x10IntegrationToken\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n\x07user_id\x18\x02 \x01(\tR\x06userId\x12 \n\x0bintegration\x18\x03 \x01(\tR\x0bintegration\x12\x1a\n\x08instance\x18\x04 \x01(\tR\x08instance\x12!\n\x0c\x61\x63\x63\x65ss_token\x18\x05 \x01(\tR\x0b\x61\x63\x63\x65ssToken\x12#\n\rrefresh_token\x18\x06 \x01(\tR\x0crefreshToken\x12\x16\n\x06scopes\x18\x07 \x01(\tR\x06scopes\x12\x39\n\nexpires_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12\x46\n\x11last_refreshed_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x0flastRefreshedAt\x12.\n\x13refresh_error_count\x18\n \x01(\x05R\x11refreshErrorCount\x12#\n\rmetadata_json\x18\x0b \x01(\tR\x0cmetadataJson\x12\x39\n\ncreated_at\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x39\n\nupdated_at\x18\r \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc5\x02\n\x0e\x45xecuteRequest\x12\x1c\n\toperation\x18\x01 \x01(\tR\toperation\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06params\x12\x14\n\x05token\x18\x03 \x01(\tR\x05token\x12\x64\n\x11\x63onnection_params\x18\x04 \x03(\x0b\x32\x37.gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntryR\x10\x63onnectionParams\x12#\n\rinvocation_id\x18\x05 \x01(\tR\x0cinvocationId\x1a\x43\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\x8a\x02\n\x18GetSessionCatalogRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12n\n\x11\x63onnection_params\x18\x02 \x03(\x0b\x32\x41.gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10\x63onnectionParams\x12#\n\rinvocation_id\x18\x03 \x01(\tR\x0cinvocationId\x1a\x43\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\">\n\x19GetSessionCatalogResponse\x12!\n\x0c\x63\x61talog_json\x18\x01 \x01(\tR\x0b\x63\x61talogJson\"O\n\x12PostConnectRequest\x12\x39\n\x05token\x18\x01 \x01(\x0b\x32#.gestalt.plugin.v1.IntegrationTokenR\x05token\"\xa4\x01\n\x13PostConnectResponse\x12P\n\x08metadata\x18\x01 \x03(\x0b\x32\x34.gestalt.plugin.v1.PostConnectResponse.MetadataEntryR\x08metadata\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"]\n\x18ListCapabilitiesResponse\x12\x41\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0b\x32\x1d.gestalt.plugin.v1.CapabilityR\x0c\x63\x61pabilities\"\xd2\x01\n\rInvokeRequest\x12:\n\tprincipal\x18\x01 \x01(\x0b\x32\x1c.gestalt.plugin.v1.PrincipalR\tprincipal\x12\x1a\n\x08provider\x18\x02 \x01(\tR\x08provider\x12\x1a\n\x08instance\x18\x03 \x01(\tR\x08instance\x12\x1c\n\toperation\x18\x04 \x01(\tR\toperation\x12/\n\x06params\x18\x05 \x01(\x0b\x32\x17.google.protobuf.StructR\x06params\"\x86\x01\n\x14StartProviderRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06\x63onfig\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06\x63onfig\x12)\n\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n\x15StartProviderResponse\x12)\n\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"\xac\x01\n\x13StartRuntimeRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06\x63onfig\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06\x63onfig\x12P\n\x14initial_capabilities\x18\x03 \x03(\x0b\x32\x1d.gestalt.plugin.v1.CapabilityR\x13initialCapabilities*\x9f\x01\n\x0e\x43onnectionMode\x12\x1f\n\x1b\x43ONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n\x14\x43ONNECTION_MODE_NONE\x10\x01\x12\x18\n\x14\x43ONNECTION_MODE_USER\x10\x02\x12\x1c\n\x18\x43ONNECTION_MODE_IDENTITY\x10\x03\x12\x1a\n\x16\x43ONNECTION_MODE_EITHER\x10\x04*\x8b\x01\n\x0fPrincipalSource\x12 \n\x1cPRINCIPAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1c\n\x18PRINCIPAL_SOURCE_SESSION\x10\x01\x12\x1e\n\x1aPRINCIPAL_SOURCE_API_TOKEN\x10\x02\x12\x18\n\x14PRINCIPAL_SOURCE_ENV\x10\x03\x32\xe0\x03\n\x0eProviderPlugin\x12J\n\x0bGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12\x62\n\rStartProvider\x12\'.gestalt.plugin.v1.StartProviderRequest\x1a(.gestalt.plugin.v1.StartProviderResponse\x12P\n\x07\x45xecute\x12!.gestalt.plugin.v1.ExecuteRequest\x1a\".gestalt.plugin.v1.OperationResult\x12n\n\x11GetSessionCatalog\x12+.gestalt.plugin.v1.GetSessionCatalogRequest\x1a,.gestalt.plugin.v1.GetSessionCatalogResponse\x12\\\n\x0bPostConnect\x12%.gestalt.plugin.v1.PostConnectRequest\x1a&.gestalt.plugin.v1.PostConnectResponse2\x90\x01\n\rRuntimePlugin\x12G\n\x05Start\x12&.gestalt.plugin.v1.StartRuntimeRequest\x1a\x16.google.protobuf.Empty\x12\x36\n\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xb6\x01\n\x0bRuntimeHost\x12N\n\x06Invoke\x12 .gestalt.plugin.v1.InvokeRequest\x1a\".gestalt.plugin.v1.OperationResult\x12W\n\x10ListCapabilities\x12\x16.google.protobuf.Empty\x1a+.gestalt.plugin.v1.ListCapabilitiesResponseB\xc5\x01\n\x15\x63om.gestalt.plugin.v1B\x0bPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fv1/plugin.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa1\x01\n\x12\x43onnectionParamDef\x12\x1a\n\x08required\x18\x01 \x01(\x08R\x08required\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\x12#\n\rdefault_value\x18\x03 \x01(\tR\x0c\x64\x65\x66\x61ultValue\x12\x12\n\x04\x66rom\x18\x04 \x01(\tR\x04\x66rom\x12\x14\n\x05\x66ield\x18\x05 \x01(\tR\x05\x66ield\"\xda\x05\n\x10ProviderMetadata\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12!\n\x0c\x64isplay_name\x18\x02 \x01(\tR\x0b\x64isplayName\x12 \n\x0b\x64\x65scription\x18\x03 \x01(\tR\x0b\x64\x65scription\x12J\n\x0f\x63onnection_mode\x18\x04 \x01(\x0e\x32!.gestalt.plugin.v1.ConnectionModeR\x0e\x63onnectionMode\x12\x1d\n\nauth_types\x18\x05 \x03(\tR\tauthTypes\x12\x66\n\x11\x63onnection_params\x18\x06 \x03(\x0b\x32\x39.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10\x63onnectionParams\x12.\n\x13static_catalog_json\x18\x07 \x01(\tR\x11staticCatalogJson\x12\x38\n\x18supports_session_catalog\x18\x08 \x01(\x08R\x16supportsSessionCatalog\x12\x32\n\x15supports_post_connect\x18\t \x01(\x08R\x13supportsPostConnect\x12,\n\x12\x63onfig_schema_json\x18\n \x01(\tR\x10\x63onfigSchemaJson\x12\x30\n\x14min_protocol_version\x18\x0b \x01(\x05R\x12minProtocolVersion\x12\x30\n\x14max_protocol_version\x18\x0c \x01(\x05R\x12maxProtocolVersion\x1aj\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12;\n\x05value\x18\x02 \x01(\x0b\x32%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x02\x38\x01\"=\n\x0fOperationResult\x12\x16\n\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n\x04\x62ody\x18\x02 \x01(\tR\x04\x62ody\"\xa7\x04\n\x10IntegrationToken\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n\x07user_id\x18\x02 \x01(\tR\x06userId\x12 \n\x0bintegration\x18\x03 \x01(\tR\x0bintegration\x12\x1a\n\x08instance\x18\x04 \x01(\tR\x08instance\x12!\n\x0c\x61\x63\x63\x65ss_token\x18\x05 \x01(\tR\x0b\x61\x63\x63\x65ssToken\x12#\n\rrefresh_token\x18\x06 \x01(\tR\x0crefreshToken\x12\x16\n\x06scopes\x18\x07 \x01(\tR\x06scopes\x12\x39\n\nexpires_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12\x46\n\x11last_refreshed_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x0flastRefreshedAt\x12.\n\x13refresh_error_count\x18\n \x01(\x05R\x11refreshErrorCount\x12#\n\rmetadata_json\x18\x0b \x01(\tR\x0cmetadataJson\x12\x39\n\ncreated_at\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x39\n\nupdated_at\x18\r \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc5\x02\n\x0e\x45xecuteRequest\x12\x1c\n\toperation\x18\x01 \x01(\tR\toperation\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06params\x12\x14\n\x05token\x18\x03 \x01(\tR\x05token\x12\x64\n\x11\x63onnection_params\x18\x04 \x03(\x0b\x32\x37.gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntryR\x10\x63onnectionParams\x12#\n\rinvocation_id\x18\x05 \x01(\tR\x0cinvocationId\x1a\x43\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\x8a\x02\n\x18GetSessionCatalogRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12n\n\x11\x63onnection_params\x18\x02 \x03(\x0b\x32\x41.gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10\x63onnectionParams\x12#\n\rinvocation_id\x18\x03 \x01(\tR\x0cinvocationId\x1a\x43\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\">\n\x19GetSessionCatalogResponse\x12!\n\x0c\x63\x61talog_json\x18\x01 \x01(\tR\x0b\x63\x61talogJson\"O\n\x12PostConnectRequest\x12\x39\n\x05token\x18\x01 \x01(\x0b\x32#.gestalt.plugin.v1.IntegrationTokenR\x05token\"\xa4\x01\n\x13PostConnectResponse\x12P\n\x08metadata\x18\x01 \x03(\x0b\x32\x34.gestalt.plugin.v1.PostConnectResponse.MetadataEntryR\x08metadata\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\x86\x01\n\x14StartProviderRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06\x63onfig\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06\x63onfig\x12)\n\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n\x15StartProviderResponse\x12)\n\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\x9f\x01\n\x0e\x43onnectionMode\x12\x1f\n\x1b\x43ONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n\x14\x43ONNECTION_MODE_NONE\x10\x01\x12\x18\n\x14\x43ONNECTION_MODE_USER\x10\x02\x12\x1c\n\x18\x43ONNECTION_MODE_IDENTITY\x10\x03\x12\x1a\n\x16\x43ONNECTION_MODE_EITHER\x10\x04\x32\xe0\x03\n\x0eProviderPlugin\x12J\n\x0bGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12\x62\n\rStartProvider\x12\'.gestalt.plugin.v1.StartProviderRequest\x1a(.gestalt.plugin.v1.StartProviderResponse\x12P\n\x07\x45xecute\x12!.gestalt.plugin.v1.ExecuteRequest\x1a\".gestalt.plugin.v1.OperationResult\x12n\n\x11GetSessionCatalog\x12+.gestalt.plugin.v1.GetSessionCatalogRequest\x1a,.gestalt.plugin.v1.GetSessionCatalogResponse\x12\\\n\x0bPostConnect\x12%.gestalt.plugin.v1.PostConnectRequest\x1a&.gestalt.plugin.v1.PostConnectResponseB\xc5\x01\n\x15\x63om.gestalt.plugin.v1B\x0bPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,58 +43,38 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETSESSIONCATALOGREQUEST_CONNECTIONPARAMSENTRY']._serialized_options = b'8\001'
   _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._loaded_options = None
   _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_CONNECTIONMODE']._serialized_start=3852
-  _globals['_CONNECTIONMODE']._serialized_end=4011
-  _globals['_PRINCIPALSOURCE']._serialized_start=4014
-  _globals['_PRINCIPALSOURCE']._serialized_end=4153
-  _globals['_USERIDENTITY']._serialized_start=130
-  _globals['_USERIDENTITY']._serialized_end=232
-  _globals['_PRINCIPAL']._serialized_start=235
-  _globals['_PRINCIPAL']._serialized_end=392
-  _globals['_PARAMETER']._serialized_start=395
-  _globals['_PARAMETER']._serialized_end=569
-  _globals['_CAPABILITY']._serialized_start=572
-  _globals['_CAPABILITY']._serialized_end=738
-  _globals['_CONNECTIONPARAMDEF']._serialized_start=741
-  _globals['_CONNECTIONPARAMDEF']._serialized_end=902
-  _globals['_PROVIDERMETADATA']._serialized_start=905
-  _globals['_PROVIDERMETADATA']._serialized_end=1635
-  _globals['_PROVIDERMETADATA_CONNECTIONPARAMSENTRY']._serialized_start=1529
-  _globals['_PROVIDERMETADATA_CONNECTIONPARAMSENTRY']._serialized_end=1635
-  _globals['_OPERATIONRESULT']._serialized_start=1637
-  _globals['_OPERATIONRESULT']._serialized_end=1698
-  _globals['_INTEGRATIONTOKEN']._serialized_start=1701
-  _globals['_INTEGRATIONTOKEN']._serialized_end=2252
-  _globals['_EXECUTEREQUEST']._serialized_start=2255
-  _globals['_EXECUTEREQUEST']._serialized_end=2580
-  _globals['_EXECUTEREQUEST_CONNECTIONPARAMSENTRY']._serialized_start=2513
-  _globals['_EXECUTEREQUEST_CONNECTIONPARAMSENTRY']._serialized_end=2580
-  _globals['_GETSESSIONCATALOGREQUEST']._serialized_start=2583
-  _globals['_GETSESSIONCATALOGREQUEST']._serialized_end=2849
-  _globals['_GETSESSIONCATALOGREQUEST_CONNECTIONPARAMSENTRY']._serialized_start=2513
-  _globals['_GETSESSIONCATALOGREQUEST_CONNECTIONPARAMSENTRY']._serialized_end=2580
-  _globals['_GETSESSIONCATALOGRESPONSE']._serialized_start=2851
-  _globals['_GETSESSIONCATALOGRESPONSE']._serialized_end=2913
-  _globals['_POSTCONNECTREQUEST']._serialized_start=2915
-  _globals['_POSTCONNECTREQUEST']._serialized_end=2994
-  _globals['_POSTCONNECTRESPONSE']._serialized_start=2997
-  _globals['_POSTCONNECTRESPONSE']._serialized_end=3161
-  _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._serialized_start=3102
-  _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._serialized_end=3161
-  _globals['_LISTCAPABILITIESRESPONSE']._serialized_start=3163
-  _globals['_LISTCAPABILITIESRESPONSE']._serialized_end=3256
-  _globals['_INVOKEREQUEST']._serialized_start=3259
-  _globals['_INVOKEREQUEST']._serialized_end=3469
-  _globals['_STARTPROVIDERREQUEST']._serialized_start=3472
-  _globals['_STARTPROVIDERREQUEST']._serialized_end=3606
-  _globals['_STARTPROVIDERRESPONSE']._serialized_start=3608
-  _globals['_STARTPROVIDERRESPONSE']._serialized_end=3674
-  _globals['_STARTRUNTIMEREQUEST']._serialized_start=3677
-  _globals['_STARTRUNTIMEREQUEST']._serialized_end=3849
-  _globals['_PROVIDERPLUGIN']._serialized_start=4156
-  _globals['_PROVIDERPLUGIN']._serialized_end=4636
-  _globals['_RUNTIMEPLUGIN']._serialized_start=4639
-  _globals['_RUNTIMEPLUGIN']._serialized_end=4783
-  _globals['_RUNTIMEHOST']._serialized_start=4786
-  _globals['_RUNTIMEHOST']._serialized_end=4968
+  _globals['_CONNECTIONMODE']._serialized_start=2759
+  _globals['_CONNECTIONMODE']._serialized_end=2918
+  _globals['_CONNECTIONPARAMDEF']._serialized_start=131
+  _globals['_CONNECTIONPARAMDEF']._serialized_end=292
+  _globals['_PROVIDERMETADATA']._serialized_start=295
+  _globals['_PROVIDERMETADATA']._serialized_end=1025
+  _globals['_PROVIDERMETADATA_CONNECTIONPARAMSENTRY']._serialized_start=919
+  _globals['_PROVIDERMETADATA_CONNECTIONPARAMSENTRY']._serialized_end=1025
+  _globals['_OPERATIONRESULT']._serialized_start=1027
+  _globals['_OPERATIONRESULT']._serialized_end=1088
+  _globals['_INTEGRATIONTOKEN']._serialized_start=1091
+  _globals['_INTEGRATIONTOKEN']._serialized_end=1642
+  _globals['_EXECUTEREQUEST']._serialized_start=1645
+  _globals['_EXECUTEREQUEST']._serialized_end=1970
+  _globals['_EXECUTEREQUEST_CONNECTIONPARAMSENTRY']._serialized_start=1903
+  _globals['_EXECUTEREQUEST_CONNECTIONPARAMSENTRY']._serialized_end=1970
+  _globals['_GETSESSIONCATALOGREQUEST']._serialized_start=1973
+  _globals['_GETSESSIONCATALOGREQUEST']._serialized_end=2239
+  _globals['_GETSESSIONCATALOGREQUEST_CONNECTIONPARAMSENTRY']._serialized_start=1903
+  _globals['_GETSESSIONCATALOGREQUEST_CONNECTIONPARAMSENTRY']._serialized_end=1970
+  _globals['_GETSESSIONCATALOGRESPONSE']._serialized_start=2241
+  _globals['_GETSESSIONCATALOGRESPONSE']._serialized_end=2303
+  _globals['_POSTCONNECTREQUEST']._serialized_start=2305
+  _globals['_POSTCONNECTREQUEST']._serialized_end=2384
+  _globals['_POSTCONNECTRESPONSE']._serialized_start=2387
+  _globals['_POSTCONNECTRESPONSE']._serialized_end=2551
+  _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._serialized_start=2492
+  _globals['_POSTCONNECTRESPONSE_METADATAENTRY']._serialized_end=2551
+  _globals['_STARTPROVIDERREQUEST']._serialized_start=2554
+  _globals['_STARTPROVIDERREQUEST']._serialized_end=2688
+  _globals['_STARTPROVIDERRESPONSE']._serialized_start=2690
+  _globals['_STARTPROVIDERRESPONSE']._serialized_end=2756
+  _globals['_PROVIDERPLUGIN']._serialized_start=2921
+  _globals['_PROVIDERPLUGIN']._serialized_end=3401
 # @@protoc_insertion_point(module_scope)

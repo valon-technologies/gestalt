@@ -36,7 +36,6 @@ type Config struct {
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Integrations map[string]IntegrationDef `yaml:"integrations"`
-	Runtimes     map[string]RuntimeDef     `yaml:"runtimes"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
@@ -201,13 +200,6 @@ type ManagedParameterDef = pluginmanifestv1.ManagedParameter
 type PaginationMapping struct {
 	HasMorePath string `yaml:"has_more_path"`
 	CursorPath  string `yaml:"cursor_path"`
-}
-
-type RuntimeDef struct {
-	Type      string     `yaml:"type"`
-	Providers []string   `yaml:"providers"`
-	Config    yaml.Node  `yaml:"config"`
-	Plugin    *PluginDef `yaml:"plugin"`
 }
 
 type BindingDef struct {
@@ -582,15 +574,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		cfg.Integrations[name] = intg
 	}
 
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if rt.Plugin != nil {
-			rt.Plugin.Command = resolveExecutablePath(baseDir, rt.Plugin.Command)
-			rt.Plugin.Package = resolvePackagePath(baseDir, rt.Plugin.Package)
-		}
-		cfg.Runtimes[name] = rt
-	}
-
 	if cfg.UI.Plugin != nil {
 		cfg.UI.Plugin.Package = resolvePackagePath(baseDir, cfg.UI.Plugin.Package)
 	}
@@ -647,24 +630,6 @@ func ValidateStructure(cfg *Config) error {
 		intg := cfg.Integrations[name]
 		if err := validatePluginIntegration(name, intg); err != nil {
 			return err
-		}
-	}
-	for name := range cfg.Runtimes {
-		rt := cfg.Runtimes[name]
-		if err := validateExternalPlugin("runtime", name, rt.Plugin); err != nil {
-			return err
-		}
-		if rt.Plugin != nil {
-			if rt.Plugin.Config.Kind != 0 {
-				return fmt.Errorf("config validation: runtime %q must use config at runtimes.%s.config, not runtimes.%s.plugin.config", name, name, name)
-			}
-			if rt.Type != "" {
-				return fmt.Errorf("config validation: runtime %q cannot set both plugin and type", name)
-			}
-			continue
-		}
-		if rt.Type == "" {
-			return fmt.Errorf("config validation: runtime %q requires either type or plugin", name)
 		}
 	}
 	return nil

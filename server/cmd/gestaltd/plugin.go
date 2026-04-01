@@ -301,13 +301,8 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 		return false
 	}
 	for _, kind := range manifest.Kinds {
-		switch kind {
-		case pluginmanifestv1.KindRuntime:
+		if kind == pluginmanifestv1.KindProvider && (manifest.Provider == nil || !manifest.Provider.IsManifestBacked()) {
 			return true
-		case pluginmanifestv1.KindProvider:
-			if manifest.Provider == nil || !manifest.Provider.IsManifestBacked() {
-				return true
-			}
 		}
 	}
 	return false
@@ -396,17 +391,11 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	}
 
 	for _, kind := range manifest.Kinds {
-		switch kind {
-		case pluginmanifestv1.KindProvider:
+		if kind == pluginmanifestv1.KindProvider {
 			if manifest.Entrypoints.Provider == nil {
 				manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
 			}
 			manifest.Entrypoints.Provider.ArtifactPath = binaryName
-		case pluginmanifestv1.KindRuntime:
-			if manifest.Entrypoints.Runtime == nil {
-				manifest.Entrypoints.Runtime = &pluginmanifestv1.Entrypoint{}
-			}
-			manifest.Entrypoints.Runtime.ArtifactPath = binaryName
 		}
 	}
 
@@ -593,9 +582,6 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 				return err
 			}
 		}
-	}
-	if err := copyPath(pluginpkg.RuntimeConfigSchemaPath, true); err != nil {
-		return err
 	}
 	return nil
 }
