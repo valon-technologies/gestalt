@@ -360,6 +360,37 @@ integrations:
 }
 
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
+func TestE2EValidateRejectsMeaninglessPluginField(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: local
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(dir, "gestalt.db") + `
+server:
+  encryption_key: test-key
+integrations:
+  example:
+    plugin:
+      command: /tmp/provider
+      connection: default
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate to fail for meaningless plugin field, output: %s", out)
+	}
+	if !strings.Contains(string(out), "plugin.connection is not supported") {
+		t.Fatalf("expected output to mention unsupported plugin.connection, got: %s", out)
+	}
+}
+
+//nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
