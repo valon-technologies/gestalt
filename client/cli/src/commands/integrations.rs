@@ -1,7 +1,17 @@
 use anyhow::{Context, Result};
+use serde::Serialize;
 
 use crate::api::ApiClient;
 use crate::output::{self, Format};
+
+#[derive(Serialize)]
+struct StartOAuthRequest<'a> {
+    integration: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<&'a str>,
+}
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
@@ -33,8 +43,32 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     Ok(())
 }
 
-pub fn connect(client: &ApiClient, name: &str) -> Result<()> {
-    let body = serde_json::json!({"integration": name});
+pub fn connect(
+    client: &ApiClient,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    connect_with_browser_opener(client, name, connection, instance, |url| {
+        open::that(url).map(|_| ()).map_err(Into::into)
+    })
+}
+
+pub fn connect_with_browser_opener<F>(
+    client: &ApiClient,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    let body = serde_json::to_value(StartOAuthRequest {
+        integration: name,
+        connection,
+        instance,
+    })?;
     let resp = client
         .post("/api/v1/auth/start-oauth", &body)
         .context("failed to start OAuth flow")?;
@@ -46,7 +80,7 @@ pub fn connect(client: &ApiClient, name: &str) -> Result<()> {
     eprintln!("Opening browser to connect {}...", name);
     eprintln!("If the browser doesn't open, visit: {}", url);
 
-    if open::that(url).is_err() {
+    if open_browser(url).is_err() {
         eprintln!("Could not open browser automatically.");
     }
 

@@ -119,6 +119,7 @@ type PluginDef struct {
 	OpenAPIConnection string `yaml:"openapi_connection"`
 	GraphQLConnection string `yaml:"graphql_connection"`
 	MCPConnection     string `yaml:"mcp_connection"`
+	DefaultConnection string `yaml:"default_connection"`
 
 	ConnectionParams  map[string]ConnectionParamDef `yaml:"params"`
 	MCP               bool                          `yaml:"mcp"`
@@ -298,6 +299,149 @@ func ResolveConnectionAlias(name string) string {
 		return PluginConnectionName
 	}
 	return name
+}
+
+func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
+	if dst == nil {
+		return
+	}
+	if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
+		*dst = ConnectionAuthDef{}
+	}
+	setString := func(dst *string, src string) {
+		if src != "" {
+			*dst = src
+		}
+	}
+	setString(&dst.Type, src.Type)
+	setString(&dst.AuthorizationURL, src.AuthorizationURL)
+	setString(&dst.TokenURL, src.TokenURL)
+	setString(&dst.ClientID, src.ClientID)
+	setString(&dst.ClientSecret, src.ClientSecret)
+	setString(&dst.RedirectURL, src.RedirectURL)
+	setString(&dst.ClientAuth, src.ClientAuth)
+	setString(&dst.TokenExchange, src.TokenExchange)
+	if src.Scopes != nil {
+		dst.Scopes = src.Scopes
+	}
+	setString(&dst.ScopeParam, src.ScopeParam)
+	setString(&dst.ScopeSeparator, src.ScopeSeparator)
+	if src.PKCE {
+		dst.PKCE = true
+	}
+	if src.AuthorizationParams != nil {
+		dst.AuthorizationParams = src.AuthorizationParams
+	}
+	if src.TokenParams != nil {
+		dst.TokenParams = src.TokenParams
+	}
+	if src.RefreshParams != nil {
+		dst.RefreshParams = src.RefreshParams
+	}
+	setString(&dst.AcceptHeader, src.AcceptHeader)
+	setString(&dst.AccessTokenPath, src.AccessTokenPath)
+	if src.TokenMetadata != nil {
+		dst.TokenMetadata = src.TokenMetadata
+	}
+	if len(src.Credentials) > 0 {
+		dst.Credentials = src.Credentials
+	}
+	if src.AuthMapping != nil {
+		dst.AuthMapping = src.AuthMapping
+	}
+}
+
+func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
+	if dst == nil || src == nil {
+		return
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	MergeConnectionAuth(&dst.Auth, src.Auth)
+	if len(src.Params) > 0 {
+		dst.Params = src.Params
+	}
+}
+
+func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) ConnectionAuthDef {
+	if auth == nil {
+		return ConnectionAuthDef{}
+	}
+	out := ConnectionAuthDef{
+		Type:                auth.Type,
+		AuthorizationURL:    auth.AuthorizationURL,
+		TokenURL:            auth.TokenURL,
+		ClientID:            auth.ClientID,
+		ClientSecret:        auth.ClientSecret,
+		ClientAuth:          auth.ClientAuth,
+		TokenExchange:       auth.TokenExchange,
+		Scopes:              auth.Scopes,
+		ScopeParam:          auth.ScopeParam,
+		ScopeSeparator:      auth.ScopeSeparator,
+		PKCE:                auth.PKCE,
+		AuthorizationParams: auth.AuthorizationParams,
+		TokenParams:         auth.TokenParams,
+		RefreshParams:       auth.RefreshParams,
+		AcceptHeader:        auth.AcceptHeader,
+		AccessTokenPath:     auth.AccessTokenPath,
+		TokenMetadata:       auth.TokenMetadata,
+	}
+	if len(auth.Credentials) > 0 {
+		out.Credentials = make([]CredentialFieldDef, len(auth.Credentials))
+		for i, field := range auth.Credentials {
+			out.Credentials[i] = CredentialFieldDef{
+				Name:        field.Name,
+				Label:       field.Label,
+				Description: field.Description,
+				HelpURL:     field.HelpURL,
+			}
+		}
+	}
+	return out
+}
+
+func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginmanifestv1.Provider) ConnectionDef {
+	conn := ConnectionDef{}
+	if manifestProvider != nil && manifestProvider.Auth != nil {
+		MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestProvider.Auth))
+	}
+	if plugin != nil {
+		override := &ConnectionDef{Params: plugin.ConnectionParams}
+		if plugin.Auth != nil {
+			override.Auth = *plugin.Auth
+		}
+		MergeConnectionDef(&conn, override)
+	}
+	return conn
+}
+
+func EffectiveNamedConnectionDef(plugin *PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) (ConnectionDef, bool) {
+	conn := ConnectionDef{}
+	found := false
+
+	if manifestProvider != nil && manifestProvider.Connections != nil {
+		if def, ok := manifestProvider.Connections[name]; ok && def != nil {
+			found = true
+			if def.Mode != "" {
+				conn.Mode = def.Mode
+			}
+			if def.Auth != nil {
+				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
+			}
+		}
+	}
+	if plugin != nil {
+		if def, ok := plugin.Connections[name]; ok {
+			found = true
+			MergeConnectionDef(&conn, def)
+		}
+	}
+
+	if found {
+		return conn, true
+	}
+	return ConnectionDef{}, false
 }
 
 // OperationOverride holds optional alias and description for an allowed operation.
@@ -570,6 +714,96 @@ func validateInlinePlugin(name string, p *PluginDef) error {
 		}
 		if op.Path == "" {
 			return fmt.Errorf("config validation: integration %q operations[%d].path is required", name, i)
+		}
+	}
+	if err := validateInlineConnectionReferences(name, p); err != nil {
+		return err
+	}
+	if err := validateInlineConnectionDefaults(name, p); err != nil {
+		return err
+	}
+	return nil
+}
+
+type inlineConnectionReference struct {
+	field    string
+	name     string
+	required bool
+	context  string
+}
+
+func inlineConnectionReferences(p *PluginDef) []inlineConnectionReference {
+	if p == nil {
+		return nil
+	}
+
+	var refs []inlineConnectionReference
+	if p.DefaultConnection != "" || len(p.Operations) > 0 {
+		refs = append(refs, inlineConnectionReference{
+			field:    "plugin.default_connection",
+			name:     p.DefaultConnection,
+			required: len(p.Operations) > 0,
+			context:  "using inline operations with named connections",
+		})
+	}
+	if p.Auth != nil {
+		return refs
+	}
+	for _, surface := range OrderedSpecSurfaces {
+		if p.SurfaceURL(surface) == "" {
+			continue
+		}
+		refs = append(refs, inlineConnectionReference{
+			field:    "plugin." + surface.ConnectionField(),
+			name:     p.SurfaceConnectionName(surface),
+			required: true,
+			context:  surface.NamedConnectionRequirementContext(),
+		})
+	}
+	return refs
+}
+
+func validateInlineConnectionReferences(name string, p *PluginDef) error {
+	if p == nil {
+		return nil
+	}
+	declared := make(map[string]struct{}, len(p.Connections))
+	for rawName := range p.Connections {
+		resolved := ResolveConnectionAlias(rawName)
+		if resolved == "" {
+			continue
+		}
+		declared[resolved] = struct{}{}
+	}
+
+	checkReference := func(field, rawName string) error {
+		if rawName == "" {
+			return nil
+		}
+		resolved := ResolveConnectionAlias(rawName)
+		if resolved == PluginConnectionName {
+			return nil
+		}
+		if _, ok := declared[resolved]; ok {
+			return nil
+		}
+		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, field, rawName)
+	}
+	for _, ref := range inlineConnectionReferences(p) {
+		if err := checkReference(ref.field, ref.name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInlineConnectionDefaults(name string, p *PluginDef) error {
+	if p == nil || len(p.Connections) == 0 {
+		return nil
+	}
+	for _, ref := range inlineConnectionReferences(p) {
+		if ref.required && ref.name == "" {
+			return fmt.Errorf("config validation: inline integration %q %s is required when %s", name, ref.field, ref.context)
 		}
 	}
 	return nil

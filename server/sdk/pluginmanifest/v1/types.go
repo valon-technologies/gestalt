@@ -46,6 +46,7 @@ type Provider struct {
 	OpenAPIConnection string                                `json:"openapi_connection,omitempty"`
 	GraphQLConnection string                                `json:"graphql_connection,omitempty"`
 	MCPConnection     string                                `json:"mcp_connection,omitempty"`
+	DefaultConnection string                                `json:"default_connection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty"`
 }

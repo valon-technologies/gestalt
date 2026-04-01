@@ -349,7 +349,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	connMap := BuildConnectionMap(cfg)
+	connMap, err := BuildConnectionMap(cfg)
+	if err != nil {
+		return nil, err
+	}
 	sharedInvoker := invocation.NewBroker(providers, ds,
 		invocation.WithConnectionMapper(connMap),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
@@ -859,7 +862,11 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 		allowedOperations = resolvedAllowedOperations
 	}
-	plan := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	if err != nil {
+		closeIfPossible(pluginProv)
+		return nil, fmt.Errorf("build external plugin provider %q: %w", name, err)
+	}
 	resolved, hasSpecSurface := plan.configuredSpecSurface()
 
 	if !hasSpecSurface {
@@ -900,14 +907,6 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	return newProviderBuildResult(name, intg, manifest, pluginConfig, merged, deps, regStore)
 }
 
-type specSurface string
-
-const (
-	specSurfaceOpenAPI specSurface = "openapi"
-	specSurfaceGraphQL specSurface = "graphql"
-	specSurfaceMCP     specSurface = "mcp"
-)
-
 type specProviderConfig struct {
 	plugin               *config.PluginDef
 	manifestProvider     *pluginmanifestv1.Provider
@@ -924,7 +923,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 	}
 
 	switch resolved.surface {
-	case specSurfaceOpenAPI, specSurfaceGraphQL:
+	case config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL:
 		def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
 		if err != nil {
 			return nil, fmt.Errorf("load %s definition: %w", resolved.surface, err)
@@ -946,7 +945,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 		}
 		return prov, nil
 
-	case specSurfaceMCP:
+	case config.SpecSurfaceMCP:
 		connMode := core.ConnectionMode(resolved.connection.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
@@ -978,9 +977,9 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 
 func loadSpecDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*provider.Definition, error) {
 	switch resolved.surface {
-	case specSurfaceOpenAPI:
+	case config.SpecSurfaceOpenAPI:
 		return openapi.LoadDefinition(ctx, name, resolved.url, allowedOperations)
-	case specSurfaceGraphQL:
+	case config.SpecSurfaceGraphQL:
 		return graphqlupstream.LoadDefinition(ctx, name, resolved.url, allowedOperations)
 	default:
 		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.surface)
@@ -1008,9 +1007,12 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
-	plan := buildPluginConnectionPlan(intg.Plugin, mp)
+	plan, err := buildPluginConnectionPlan(intg.Plugin, mp)
+	if err != nil {
+		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+	}
 	apiResolved, hasAPI := plan.configuredAPISurface()
-	mcpResolved, hasMCP := plan.resolvedSurface(specSurfaceMCP)
+	mcpResolved, hasMCP := plan.resolvedSurface(config.SpecSurfaceMCP)
 	if !hasAPI && !hasMCP {
 		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
 	}
@@ -1228,85 +1230,6 @@ func matchingAllowedOperations(allowed map[string]*config.OperationOverride, cat
 	return filtered
 }
 
-func pluginSurfaceConnectionName(plugin *config.PluginDef, surface specSurface) string {
-	if plugin == nil {
-		return ""
-	}
-	switch surface {
-	case specSurfaceOpenAPI:
-		return plugin.OpenAPIConnection
-	case specSurfaceGraphQL:
-		return plugin.GraphQLConnection
-	case specSurfaceMCP:
-		return plugin.MCPConnection
-	default:
-		return ""
-	}
-}
-
-func mergeConnectionDef(dst *config.ConnectionDef, src *config.ConnectionDef) {
-	if dst == nil || src == nil {
-		return
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
-	mergeConnectionAuth(&dst.Auth, src.Auth)
-	if len(src.Params) > 0 {
-		dst.Params = src.Params
-	}
-}
-
-func mergeConnectionAuth(dst *config.ConnectionAuthDef, src config.ConnectionAuthDef) {
-	if dst == nil {
-		return
-	}
-	if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
-		*dst = config.ConnectionAuthDef{}
-	}
-	setString := func(dst *string, src string) {
-		if src != "" {
-			*dst = src
-		}
-	}
-	setString(&dst.Type, src.Type)
-	setString(&dst.AuthorizationURL, src.AuthorizationURL)
-	setString(&dst.TokenURL, src.TokenURL)
-	setString(&dst.ClientID, src.ClientID)
-	setString(&dst.ClientSecret, src.ClientSecret)
-	setString(&dst.RedirectURL, src.RedirectURL)
-	setString(&dst.ClientAuth, src.ClientAuth)
-	setString(&dst.TokenExchange, src.TokenExchange)
-	if src.Scopes != nil {
-		dst.Scopes = src.Scopes
-	}
-	setString(&dst.ScopeParam, src.ScopeParam)
-	setString(&dst.ScopeSeparator, src.ScopeSeparator)
-	if src.PKCE {
-		dst.PKCE = true
-	}
-	if src.AuthorizationParams != nil {
-		dst.AuthorizationParams = src.AuthorizationParams
-	}
-	if src.TokenParams != nil {
-		dst.TokenParams = src.TokenParams
-	}
-	if src.RefreshParams != nil {
-		dst.RefreshParams = src.RefreshParams
-	}
-	setString(&dst.AcceptHeader, src.AcceptHeader)
-	setString(&dst.AccessTokenPath, src.AccessTokenPath)
-	if src.TokenMetadata != nil {
-		dst.TokenMetadata = src.TokenMetadata
-	}
-	if len(src.Credentials) > 0 {
-		dst.Credentials = src.Credentials
-	}
-	if src.AuthMapping != nil {
-		dst.AuthMapping = src.AuthMapping
-	}
-}
-
 func applyAllowedOperations(name string, allowedOperations map[string]*config.OperationOverride, pluginProv core.Provider) (core.Provider, error) {
 	policy, err := operationexposure.New(allowedOperations)
 	if err != nil {
@@ -1428,8 +1351,12 @@ func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1
 	def.ResponseMapping = rm
 }
 
-func BuildConnectionMap(cfg *config.Config) invocation.ConnectionMap {
-	return invocation.ConnectionMap(BuildConnectionMaps(cfg).DefaultConnection)
+func BuildConnectionMap(cfg *config.Config) (invocation.ConnectionMap, error) {
+	maps, err := BuildConnectionMaps(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return invocation.ConnectionMap(maps.APIConnection), nil
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {

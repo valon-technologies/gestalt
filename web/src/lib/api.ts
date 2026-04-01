@@ -21,7 +21,7 @@ export interface InstanceInfo {
 
 export interface ConnectionDefInfo {
   name: string;
-  auth_type: "oauth" | "manual";
+  auth_types: ("oauth" | "manual")[];
   credential_fields?: CredentialFieldDef[];
 }
 
@@ -179,9 +179,13 @@ export async function connectManualIntegration(
 export async function disconnectIntegration(
   name: string,
   instance?: string,
+  connection?: string,
 ): Promise<void> {
-  const params = instance ? `?instance=${encodeURIComponent(instance)}` : "";
-  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}${params}`, {
+  const query = new URLSearchParams();
+  if (instance) query.set("instance", instance);
+  if (connection) query.set("connection", connection);
+  const params = query.toString();
+  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}${params ? `?${params}` : ""}`, {
     method: "DELETE",
   });
 }

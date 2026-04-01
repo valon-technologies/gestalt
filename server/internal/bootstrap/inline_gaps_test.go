@@ -370,7 +370,10 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 		t.Fatalf("search transport = %q, want %q", op.Transport, catalog.TransportMCPPassthrough)
 	}
 
-	maps := bootstrap.BuildConnectionMaps(cfg)
+	maps, err := bootstrap.BuildConnectionMaps(cfg)
+	if err != nil {
+		t.Fatalf("BuildConnectionMaps: %v", err)
+	}
 	if got := maps.APIConnection["hybrid"]; got != config.PluginConnectionName {
 		t.Fatalf("api connection = %q, want %q", got, config.PluginConnectionName)
 	}
@@ -399,10 +402,14 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 				OpenAPI:           specSrv.URL,
 				OpenAPIConnection: testOpenAPIConnectionName,
 				Config:            pluginConfig,
-				Auth: &config.ConnectionAuthDef{
-					Type:             pluginmanifestv1.AuthTypeOAuth2,
-					AuthorizationURL: "https://example.com/authorize",
-					TokenURL:         "https://example.com/token",
+				Connections: map[string]*config.ConnectionDef{
+					testOpenAPIConnectionName: {
+						Auth: config.ConnectionAuthDef{
+							Type:             pluginmanifestv1.AuthTypeOAuth2,
+							AuthorizationURL: "https://example.com/authorize",
+							TokenURL:         "https://example.com/token",
+						},
+					},
 				},
 			},
 		},
@@ -482,18 +489,21 @@ func TestBootstrapInvoke_ConnectionSelection(t *testing.T) {
 				return &config.PluginDef{
 					OpenAPI:           apiBase + "/openapi.json",
 					OpenAPIConnection: testOpenAPIConnectionName,
-					Auth: &config.ConnectionAuthDef{
-						Type: pluginmanifestv1.AuthTypeManual,
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+						},
 					},
 				}
 			},
 		},
 		{
-			name:           "falls back to sole named connection without base auth",
+			name:           "uses explicit default named connection without base auth",
 			wantConnection: testOpenAPIConnectionName,
 			buildPlugin: func(apiBase string) *config.PluginDef {
 				return &config.PluginDef{
-					BaseURL: apiBase,
+					BaseURL:           apiBase,
+					DefaultConnection: testOpenAPIConnectionName,
 					Connections: map[string]*config.ConnectionDef{
 						testOpenAPIConnectionName: {
 							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
@@ -506,32 +516,15 @@ func TestBootstrapInvoke_ConnectionSelection(t *testing.T) {
 			},
 		},
 		{
-			name:           "does not fall back to sole named connection with base auth",
+			name:           "uses explicit plugin default when plugin and named connections both exist",
 			wantConnection: config.PluginConnectionName,
 			buildPlugin: func(apiBase string) *config.PluginDef {
 				return &config.PluginDef{
-					BaseURL: apiBase,
+					BaseURL:           apiBase,
+					DefaultConnection: config.PluginConnectionAlias,
 					Auth: &config.ConnectionAuthDef{
 						Type: pluginmanifestv1.AuthTypeManual,
 					},
-					Connections: map[string]*config.ConnectionDef{
-						testOpenAPIConnectionName: {
-							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
-						},
-					},
-					Operations: []config.InlineOperationDef{
-						{Name: "list_items", Method: http.MethodGet, Path: "/items"},
-					},
-				}
-			},
-		},
-		{
-			name:           "does not treat plugin surface alias as absent",
-			wantConnection: config.PluginConnectionName,
-			buildPlugin: func(apiBase string) *config.PluginDef {
-				return &config.PluginDef{
-					BaseURL:       apiBase,
-					MCPConnection: config.PluginConnectionAlias,
 					Connections: map[string]*config.ConnectionDef{
 						testOpenAPIConnectionName: {
 							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
