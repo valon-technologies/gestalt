@@ -1385,6 +1385,83 @@ func TestLoginCallback(t *testing.T) {
 	}
 }
 
+func TestLoginCallbackForCLI(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.APIToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+				if code == "good-code" {
+					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreAPITokenFn: func(_ context.Context, token *core.APIToken) error {
+				stored = token
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["email"] != "user@example.com" {
+		t.Fatalf("unexpected email: %v", result["email"])
+	}
+	if result["api_token_id"] == "" {
+		t.Fatal("expected api_token_id in CLI login response")
+	}
+	if result["api_token"] == "" {
+		t.Fatal("expected api_token in CLI login response")
+	}
+
+	if stored == nil {
+		t.Fatal("expected API token to be stored")
+	}
+	if stored.Name != "cli-token" {
+		t.Fatalf("expected cli token name, got %q", stored.Name)
+	}
+	if stored.ExpiresAt != nil {
+		t.Fatalf("expected non-expiring CLI token, got %v", stored.ExpiresAt)
+	}
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_token" {
+			t.Fatalf("did not expect session cookie for CLI login, got %q", cookie.Value)
+		}
+	}
+}
+
 func TestLoginCallbackStateMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -1898,125 +1975,6 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 	expected := fixedNow.Add(customTTL).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
 		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
-	}
-}
-
-func TestCreateAPIToken_NeverExpires(t *testing.T) {
-	t.Parallel()
-
-	var stored *core.APIToken
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			StoreAPITokenFn: func(_ context.Context, token *core.APIToken) error {
-				stored = token
-				return nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"name":"never-expire","expires_in":"never"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
-	}
-	if stored == nil {
-		t.Fatal("expected API token to be stored")
-	}
-	if stored.ExpiresAt != nil {
-		t.Fatalf("expected stored token to have no expiry, got %v", stored.ExpiresAt)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if _, ok := result["expires_at"]; ok {
-		t.Fatalf("expected expires_at to be omitted, got %v", result["expires_at"])
-	}
-}
-
-func TestCreateAPIToken_RequestTTLOverride(t *testing.T) {
-	t.Parallel()
-
-	fixedNow := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Now = func() time.Time { return fixedNow }
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"name":"short-lived","expires_in":"48h"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	expiresAtStr, ok := result["expires_at"].(string)
-	if !ok {
-		t.Fatalf("expected expires_at string, got %T", result["expires_at"])
-	}
-	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
-	if err != nil {
-		t.Fatalf("parsing expires_at: %v", err)
-	}
-	expected := fixedNow.Add(48 * time.Hour).UTC().Truncate(time.Second)
-	if !expiresAt.Equal(expected) {
-		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
-	}
-}
-
-func TestCreateAPIToken_InvalidExpiryHint(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"name":"bad-expiry","expires_in":"later"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, respBody)
 	}
 }
 

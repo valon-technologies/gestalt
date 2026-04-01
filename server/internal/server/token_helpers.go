@@ -1,17 +1,16 @@
 package server
 
 import (
-	"fmt"
-	"strings"
+	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const defaultIssuedTokenExpiry = 30 * 24 * time.Hour
-const neverExpiresHint = "never"
+const cliLoginTokenName = "cli-token"
 
 type issuedToken struct {
 	Plaintext string
@@ -26,20 +25,20 @@ func (s *Server) nowUTCSecond() time.Time {
 }
 
 func (s *Server) issueToken() (*issuedToken, error) {
-	return s.issueTokenWithTypeAndExpiryHint(principal.TokenTypeAPI, "")
+	return s.issueTokenWithType(principal.TokenTypeAPI, s.defaultTokenExpiry(s.nowUTCSecond()))
 }
 
-func (s *Server) issueTokenWithTypeAndExpiryHint(typ principal.TokenType, expiryHint string) (*issuedToken, error) {
+func (s *Server) issueNonExpiringToken() (*issuedToken, error) {
+	return s.issueTokenWithType(principal.TokenTypeAPI, nil)
+}
+
+func (s *Server) issueTokenWithType(typ principal.TokenType, expiresAt *time.Time) (*issuedToken, error) {
 	plaintext, hashed, err := principal.GenerateToken(typ)
 	if err != nil {
 		return nil, err
 	}
 
 	now := s.nowUTCSecond()
-	expiresAt, err := s.tokenExpiryForHint(now, expiryHint)
-	if err != nil {
-		return nil, err
-	}
 	return &issuedToken{
 		Plaintext: plaintext,
 		Hashed:    hashed,
@@ -49,26 +48,42 @@ func (s *Server) issueTokenWithTypeAndExpiryHint(typ principal.TokenType, expiry
 	}, nil
 }
 
-func (s *Server) tokenExpiryForHint(now time.Time, expiryHint string) (*time.Time, error) {
-	hint := strings.TrimSpace(expiryHint)
-	switch {
-	case hint == "":
-		ttl := s.apiTokenTTL
-		if ttl == 0 {
-			ttl = defaultIssuedTokenExpiry
-		}
-		expiry := now.Add(ttl)
-		return &expiry, nil
-	case strings.EqualFold(hint, neverExpiresHint):
-		return nil, nil
-	default:
-		ttl, err := config.ParseDuration(hint)
-		if err != nil {
-			return nil, fmt.Errorf("invalid expires_in: %w", err)
-		}
-		expiry := now.Add(ttl)
-		return &expiry, nil
+func (s *Server) defaultTokenExpiry(now time.Time) *time.Time {
+	ttl := s.apiTokenTTL
+	if ttl == 0 {
+		ttl = defaultIssuedTokenExpiry
 	}
+	expiry := now.Add(ttl)
+	return &expiry
+}
+
+func (s *Server) storeAPIToken(ctx context.Context, userID, name, scopes string, issued *issuedToken) (*core.APIToken, error) {
+	apiToken := &core.APIToken{
+		ID:          uuid.NewString(),
+		UserID:      userID,
+		Name:        name,
+		HashedToken: issued.Hashed,
+		Scopes:      scopes,
+		ExpiresAt:   issued.ExpiresAt,
+		CreatedAt:   issued.CreatedAt,
+		UpdatedAt:   issued.UpdatedAt,
+	}
+	if err := s.datastore.StoreAPIToken(ctx, apiToken); err != nil {
+		return nil, err
+	}
+	return apiToken, nil
+}
+
+func (s *Server) issueCLILoginToken(ctx context.Context, userID string) (*core.APIToken, *issuedToken, error) {
+	issued, err := s.issueNonExpiringToken()
+	if err != nil {
+		return nil, nil, err
+	}
+	apiToken, err := s.storeAPIToken(ctx, userID, cliLoginTokenName, "", issued)
+	if err != nil {
+		return nil, nil, err
+	}
+	return apiToken, issued, nil
 }
 
 func apiTokenInfoFromCore(token *core.APIToken) apiTokenInfo {

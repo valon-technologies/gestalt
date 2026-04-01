@@ -134,7 +134,6 @@ POST /api/v1/tokens
 - Plaintext is returned exactly once at creation time
 - Only the SHA-256 hash is stored. Tokens cannot be recovered from the datastore
 - Default TTL: 30 days (configurable via `server.api_token_ttl`)
-- Individual tokens may request a different lifetime, including no expiry
 - Revocable individually (`DELETE /api/v1/tokens/{id}`) or in bulk (`DELETE /api/v1/tokens`)
 
 ### Integration Tokens (OAuth)

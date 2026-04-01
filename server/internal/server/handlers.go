@@ -22,7 +22,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -472,6 +471,13 @@ type loginRequest struct {
 	CallbackPort int    `json:"callback_port,omitempty"`
 }
 
+type cliLoginResponse struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	APIToken    string `json:"api_token"`
+	APITokenID  string `json:"api_token_id"`
+}
+
 type authInfoResponse struct {
 	Provider    string `json:"provider"`
 	DisplayName string `json:"display_name"`
@@ -609,6 +615,26 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.encryptor != nil {
 		s.clearLoginStateCookie(w)
+	}
+
+	if r.URL.Query().Get("cli") == "1" {
+		dbUser, dbErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
+		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		apiToken, issued, issueErr := s.issueCLILoginToken(r.Context(), dbUser.ID)
+		if issueErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
+			return
+		}
+		writeJSON(w, http.StatusOK, cliLoginResponse{
+			Email:       identity.Email,
+			DisplayName: identity.DisplayName,
+			APIToken:    issued.Plaintext,
+			APITokenID:  apiToken.ID,
+		})
+		return
 	}
 
 	resp := map[string]any{
@@ -975,9 +1001,8 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 }
 
 type createTokenRequest struct {
-	Name      string `json:"name"`
-	Scopes    string `json:"scopes"`
-	ExpiresIn string `json:"expires_in"`
+	Name   string `json:"name"`
+	Scopes string `json:"scopes"`
 }
 
 type createTokenResponse struct {
@@ -1013,28 +1038,14 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	issued, err := s.issueTokenWithTypeAndExpiryHint(principal.TokenTypeAPI, req.ExpiresIn)
+	issued, err := s.issueToken()
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "invalid expires_in:") {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
 
-	apiToken := &core.APIToken{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		Name:        req.Name,
-		HashedToken: issued.Hashed,
-		Scopes:      req.Scopes,
-		ExpiresAt:   issued.ExpiresAt,
-		CreatedAt:   issued.CreatedAt,
-		UpdatedAt:   issued.UpdatedAt,
-	}
-
-	if err := s.datastore.StoreAPIToken(r.Context(), apiToken); err != nil {
+	apiToken, err := s.storeAPIToken(r.Context(), userID, req.Name, req.Scopes, issued)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to store API token")
 		return
 	}

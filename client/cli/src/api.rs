@@ -154,6 +154,14 @@ impl ApiClient {
         self.handle_response(resp)
     }
 
+    pub fn create_api_token(&self, name: &str) -> Result<serde_json::Value> {
+        self.post("/api/v1/tokens", &serde_json::json!({ "name": name }))
+    }
+
+    pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {
+        self.delete(&format!("/api/v1/tokens/{id}"))
+    }
+
     fn handle_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {
         let status = resp.status();
 

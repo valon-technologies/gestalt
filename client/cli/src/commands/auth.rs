@@ -6,14 +6,10 @@ use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
-const SESSION_COOKIE_PREFIX: &str = "session_token=";
-const CLI_TOKEN_NAME: &str = "cli-token";
-const NON_EXPIRING_TOKEN_HINT: &str = "never";
-
 #[derive(Debug, serde::Deserialize)]
-struct CreatedAPIToken {
-    id: String,
-    token: String,
+struct LoginCallbackResponse {
+    api_token: String,
+    api_token_id: String,
 }
 
 pub fn login(url_override: Option<&str>) -> Result<()> {
@@ -115,7 +111,8 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     callback_url
         .query_pairs_mut()
         .append_pair("code", &code)
-        .append_pair("state", &state);
+        .append_pair("state", &state)
+        .append_pair("cli", "1");
 
     let callback_resp = client
         .get(callback_url.as_str())
@@ -133,25 +130,15 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         );
     }
 
-    let token = callback_resp
-        .headers()
-        .get_all("set-cookie")
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .find_map(|v| {
-            v.strip_prefix(SESSION_COOKIE_PREFIX)
-                .map(|rest| rest.split(';').next().unwrap_or(rest).to_string())
-        })
-        .context("callback response missing session cookie")?;
-
-    let session_client = ApiClient::new(&base_url, &token)?;
-    let cli_token = create_cli_api_token(&session_client)?;
+    let login_result: LoginCallbackResponse = callback_resp
+        .json()
+        .context("callback response missing CLI API token")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: base_url,
-        api_token: cli_token.token,
-        api_token_id: cli_token.id,
+        api_token: login_result.api_token,
+        api_token_id: login_result.api_token_id,
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
@@ -170,7 +157,7 @@ pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
     if let Some(creds) = store.load()? {
         let client = ApiClient::new(&creds.api_url, &creds.api_token)?;
-        if let Err(err) = revoke_api_token(&client, &creds.api_token_id) {
+        if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
             output::print_warning(&format!(
                 "Failed to revoke stored CLI token {}: {}",
                 creds.api_token_id, err
@@ -182,13 +169,10 @@ pub fn logout() -> Result<()> {
     Ok(())
 }
 
-pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
+pub fn status(_url_override: Option<&str>, format: Format) -> Result<()> {
     let has_env_key = api::env_api_key_is_set();
-    let authenticated = ApiClient::from_env(url_override).is_ok();
-    let has_stored_credentials = CredentialStore::new()
-        .and_then(|s| s.load())
-        .map(|creds| creds.is_some())
-        .unwrap_or(false);
+    let has_stored_credentials = CredentialStore::new()?.load()?.is_some();
+    let configured = has_env_key || has_stored_credentials;
 
     match format {
         Format::Json => {
@@ -200,76 +184,32 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
                 "none"
             };
             output::print_json(&serde_json::json!({
-                "authenticated": authenticated,
+                "authenticated": configured,
                 "source": source,
                 "env_var_set": has_env_key,
                 "stored_credentials": has_stored_credentials,
             }));
         }
         Format::Table => {
-            if authenticated {
-                if has_env_key {
-                    eprintln!(
-                        "Authenticated via {} environment variable.",
-                        api::ENV_API_KEY
-                    );
-                    if has_stored_credentials {
-                        output::print_warning(&format!(
-                            "Stored CLI API token also exists but is being ignored. \
-                             Unset {} to use it.",
-                            api::ENV_API_KEY,
-                        ));
-                    }
-                } else {
-                    eprintln!("Authenticated via stored CLI API token.");
-                }
-            } else {
+            if has_env_key {
+                eprintln!("Configured via {} environment variable.", api::ENV_API_KEY);
                 if has_stored_credentials {
-                    eprintln!(
-                        "Stored CLI API token is not valid. Run 'gestalt auth login' to mint a new one, or set {}.",
+                    output::print_warning(&format!(
+                        "Stored CLI API token also exists but is being ignored. \
+                         Unset {} to use it.",
                         api::ENV_API_KEY,
-                    );
-                } else {
-                    eprintln!(
-                        "Not authenticated. Run 'gestalt auth login' or set {}.",
-                        api::ENV_API_KEY,
-                    );
+                    ));
                 }
+            } else if has_stored_credentials {
+                eprintln!("Configured via stored CLI API token.");
+            } else {
+                eprintln!(
+                    "Not configured. Run 'gestalt auth login' or set {}.",
+                    api::ENV_API_KEY,
+                );
             }
         }
     }
-    Ok(())
-}
-
-fn create_cli_api_token(client: &ApiClient) -> Result<CreatedAPIToken> {
-    let resp = client
-        .post(
-            "/api/v1/tokens",
-            &serde_json::json!({
-                "name": CLI_TOKEN_NAME,
-                "expires_in": NON_EXPIRING_TOKEN_HINT,
-            }),
-        )
-        .context("failed to create CLI API token")?;
-
-    let id = resp["id"]
-        .as_str()
-        .context("token creation response missing 'id' field")?;
-    let token = resp["token"]
-        .as_str()
-        .context("token creation response missing 'token' field")?;
-
-    Ok(CreatedAPIToken {
-        id: id.to_string(),
-        token: token.to_string(),
-    })
-}
-
-fn revoke_api_token(client: &ApiClient, id: &str) -> Result<()> {
-    let path = format!("/api/v1/tokens/{}", id);
-    client
-        .delete(&path)
-        .with_context(|| format!("failed to revoke token {}", id))?;
     Ok(())
 }
 

@@ -71,29 +71,6 @@ fn test_create_token() {
 }
 
 #[test]
-fn test_create_token_with_expiry_override() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/tokens")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"expires_in":"never","name":"cli-token"}"#.to_string(),
-        ))
-        .with_status(201)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"id":"2","name":"cli-token","token":"plaintext-secret"}"#)
-        .create();
-
-    let client = create_client(&server);
-    let body = serde_json::json!({"name": "cli-token", "expires_in": "never"});
-    let resp = client.post("/api/v1/tokens", &body).unwrap();
-
-    mock.assert();
-    assert_eq!(resp["token"], "plaintext-secret");
-}
-
-#[test]
 fn test_revoke_token() {
     let mut server = Server::new();
     let mock = server

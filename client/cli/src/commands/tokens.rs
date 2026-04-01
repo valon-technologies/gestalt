@@ -3,19 +3,10 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(
-    client: &ApiClient,
-    name: Option<&str>,
-    expires_in: Option<&str>,
-    format: Format,
-) -> Result<()> {
+pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
-    let mut body = serde_json::json!({"name": token_name});
-    if let Some(expires_in) = expires_in {
-        body["expires_in"] = serde_json::Value::String(expires_in.to_string());
-    }
     let resp = client
-        .post("/api/v1/tokens", &body)
+        .create_api_token(token_name)
         .context("failed to create token")?;
 
     match format {
@@ -62,8 +53,9 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
 }
 
 pub fn revoke(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let path = format!("/api/v1/tokens/{}", id);
-    let resp = client.delete(&path).context("failed to revoke token")?;
+    let resp = client
+        .revoke_api_token(id)
+        .context("failed to revoke token")?;
 
     match format {
         Format::Json => output::print_json(&resp),

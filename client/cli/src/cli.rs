@@ -130,10 +130,6 @@ pub enum TokenCommands {
         /// Display name for the token
         #[arg(long)]
         name: Option<String>,
-
-        /// Token lifetime (for example 24h, 30d, or never)
-        #[arg(long)]
-        expires_in: Option<String>,
     },
     /// List all API tokens
     List,
