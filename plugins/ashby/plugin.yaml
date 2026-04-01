@@ -1,7 +1,7 @@
 source: github.com/valon-technologies/gestalt/ashby
-version: 0.0.1-alpha.1
+version: 0.0.1-alpha.2
 display_name: Ashby
-description: Candidates, applications, jobs, offers, and interviews.
+description: Candidates, applications, jobs, offers, interviews, departments, locations, and users.
 icon_file: assets/icon.svg
 kinds:
   - provider
@@ -12,8 +12,7 @@ provider:
     credentials:
       - name: api_key
         label: API Key
-        description: Ashby API key
-        help_url: https://app.ashbyhq.com/admin/api/keys
+        description: "Create a key in [Ashby API Keys](https://app.ashbyhq.com/admin/api/keys)."
   response_mapping:
     data_path: results
     pagination:

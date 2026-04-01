@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/extend
-version: 0.0.1-alpha.1
+version: 0.0.1-alpha.2
 display_name: Extend
 description: Document processing and extraction with Extend.
 icon_file: assets/icon.svg
@@ -14,5 +14,4 @@ provider:
     credentials:
       - name: token
         label: API Key
-        description: Extend developer API key
-        help_url: https://dashboard.extend.ai/developers
+        description: "Create one in [Extend Developer Settings](https://dashboard.extend.ai/developers)."

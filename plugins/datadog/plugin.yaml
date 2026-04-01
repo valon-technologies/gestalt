@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/datadog
-version: 0.0.1-alpha.1
+version: 0.0.1-alpha.2
 display_name: Datadog
 description: Manage dashboards, monitors, incidents, logs, and RUM.
 icon_file: assets/icon.svg
@@ -12,9 +12,7 @@ provider:
     credentials:
       - name: api_key
         label: API Key
-        description: Datadog organization API key
-        help_url: https://docs.datadoghq.com/account_management/api-app-keys/
+        description: "Create one in [Datadog API Keys](https://docs.datadoghq.com/account_management/api-app-keys/)."
       - name: app_key
         label: Application Key
-        description: Datadog application key with the permissions you need
-        help_url: https://docs.datadoghq.com/account_management/api-app-keys/
+        description: "Create one in [Datadog Application Keys](https://docs.datadoghq.com/account_management/api-app-keys/)."
