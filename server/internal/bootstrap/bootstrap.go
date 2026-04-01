@@ -1129,7 +1129,8 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 		}
 	}
 
-	for opName, op := range def.Operations {
+	for opName := range def.Operations {
+		op := def.Operations[opName]
 		filtered := op.Parameters[:0]
 		for _, param := range op.Parameters {
 			if isManagedOperationParameter(param, params) {
