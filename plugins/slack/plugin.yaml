@@ -1,10 +1,18 @@
 source: github.com/valon-technologies/gestalt/slack
-version: 0.0.1-alpha.4
+version: 0.0.1-alpha.5
 display_name: Slack
 description: Send messages, search conversations, and manage channels.
 icon_file: assets/icon.svg
 kinds:
   - provider
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
 provider:
   mcp: true
   base_url: https://slack.com
@@ -43,6 +51,9 @@ provider:
         - name: cursor
           type: string
           in: query
+        - name: types
+          type: string
+          in: query
     - name: slack_send_message
       description: Send a message to a channel
       method: POST
@@ -56,6 +67,15 @@ provider:
           type: string
           in: body
           required: true
+        - name: thread_ts
+          type: string
+          in: body
+        - name: unfurl_links
+          type: bool
+          in: body
+        - name: unfurl_media
+          type: bool
+          in: body
     - name: slack_list_users
       description: List workspace users
       method: GET
@@ -82,6 +102,15 @@ provider:
         - name: cursor
           type: string
           in: query
+        - name: oldest
+          type: string
+          in: query
+        - name: latest
+          type: string
+          in: query
+        - name: inclusive
+          type: bool
+          in: query
     - name: slack_search_messages
       description: Search messages across the workspace
       method: GET
@@ -94,3 +123,138 @@ provider:
         - name: count
           type: int
           in: query
+        - name: page
+          type: int
+          in: query
+    - name: slack_get_user_info
+      description: Get profile information for a Slack user
+      method: GET
+      path: /api/users.info
+      parameters:
+        - name: user
+          type: string
+          in: query
+          required: true
+    - name: slack_get_thread_replies
+      description: Read replies for a thread
+      method: GET
+      path: /api/conversations.replies
+      parameters:
+        - name: channel
+          type: string
+          in: query
+          required: true
+        - name: ts
+          type: string
+          in: query
+          required: true
+        - name: limit
+          type: int
+          in: query
+        - name: cursor
+          type: string
+          in: query
+        - name: oldest
+          type: string
+          in: query
+        - name: latest
+          type: string
+          in: query
+        - name: inclusive
+          type: bool
+          in: query
+    - name: slack_schedule_message
+      description: Schedule a message to be sent later
+      method: POST
+      path: /api/chat.scheduleMessage
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: text
+          type: string
+          in: body
+          required: true
+        - name: post_at
+          type: string
+          in: body
+          required: true
+        - name: thread_ts
+          type: string
+          in: body
+    - name: slack_add_reaction
+      description: Add an emoji reaction to a message
+      method: POST
+      path: /api/reactions.add
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: timestamp
+          type: string
+          in: body
+          required: true
+        - name: name
+          type: string
+          in: body
+          required: true
+    - name: slack_set_channel_topic
+      description: Set a channel topic
+      method: POST
+      path: /api/conversations.setTopic
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: topic
+          type: string
+          in: body
+          required: true
+    - name: slack_create_channel
+      description: Create a new Slack channel
+      method: POST
+      path: /api/conversations.create
+      parameters:
+        - name: name
+          type: string
+          in: body
+          required: true
+        - name: is_private
+          type: bool
+          in: body
+    - name: slack_invite_to_channel
+      description: Invite users to a channel
+      method: POST
+      path: /api/conversations.invite
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: users
+          type: string
+          in: body
+          required: true
+    - name: slack_send_message_draft
+      description: Send an ephemeral message visible only to a specific user
+      method: POST
+      path: /api/chat.postEphemeral
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: text
+          type: string
+          in: body
+          required: true
+        - name: user
+          type: string
+          in: body
+          required: true
+        - name: thread_ts
+          type: string
+          in: body
