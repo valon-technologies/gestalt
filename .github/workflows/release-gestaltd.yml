@@ -3,7 +3,7 @@ name: Release Gestaltd
 on:
   push:
     tags:
-      - 'v*'
+      - 'gestaltd/v*'
 
 permissions:
   contents: write
@@ -65,7 +65,7 @@ jobs:
           path: server/internal/webui/out/
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
       - name: Build
         env:
           CGO_ENABLED: '0'
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
       - name: Compute image metadata
         id: meta
         run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -178,7 +178,7 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }}
       - name: Extract version
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
       - name: Download SHA256 files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -198,6 +198,7 @@ jobs:
       - name: Update formula
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
           SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos-arm64 }}
           SHA_MACOS_X86: ${{ steps.checksums.outputs.macos-x86_64 }}
           SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
@@ -206,7 +207,7 @@ jobs:
           FORMULA="Formula/gestaltd.rb"
           OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
           sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
-          sed -i "s|/download/v${OLD_VERSION}/|/download/v${VERSION}/|g" "$FORMULA"
+          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-x86_64.tar.gz}g' "$FORMULA"
           awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
               -v sha_macos_x86="$SHA_MACOS_X86" \
               -v sha_linux_arm64="$SHA_LINUX_ARM64" \

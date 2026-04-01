@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "cgi"
 require "download_strategy"
 
 # Custom download strategy for private GitHub releases.
@@ -12,12 +13,17 @@ class GitHubPrivateRepositoryReleaseDownloadStrategy < CurlDownloadStrategy
   end
 
   def parse_url_pattern
-    url_pattern = %r{https://github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/(.+)}
+    url_pattern = %r{\Ahttps://github\.com/([^/]+)/([^/]+)/releases/download/(.+)\z}
     unless @url =~ url_pattern
       raise CurlDownloadStrategyError, "URL pattern not supported for private GitHub releases"
     end
 
-    @owner, @repo, @tag, @filename = Regexp.last_match.captures
+    @owner, @repo, release_path = Regexp.last_match.captures
+    @tag, separator, @filename = release_path.rpartition("/")
+
+    if separator.empty? || @tag.empty? || @filename.empty?
+      raise CurlDownloadStrategyError, "URL pattern not supported for private GitHub releases"
+    end
   end
 
   def set_github_token
@@ -58,7 +64,7 @@ class GitHubPrivateRepositoryReleaseDownloadStrategy < CurlDownloadStrategy
   private
 
   def resolve_asset_id
-    release_url = "https://api.github.com/repos/#{@owner}/#{@repo}/releases/tags/#{@tag}"
+    release_url = "https://api.github.com/repos/#{@owner}/#{@repo}/releases/tags/#{CGI.escape(@tag)}"
 
     output, _, status = curl_output(
       "--header", "Authorization: token #{@github_token}",

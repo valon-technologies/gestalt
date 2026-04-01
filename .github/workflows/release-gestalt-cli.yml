@@ -3,7 +3,7 @@ name: Release Gestalt CLI
 on:
   push:
     tags:
-      - 'v*'
+      - 'gestalt/v*'
 
 permissions:
   contents: write
@@ -66,7 +66,7 @@ jobs:
           merge-multiple: true
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#gestalt/v}" >> "$GITHUB_OUTPUT"
       - name: Compute image metadata
         id: meta
         run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -129,7 +129,7 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#gestalt/v}" >> "$GITHUB_OUTPUT"
 
       - name: Download SHA256 files from release
         env:
@@ -152,6 +152,7 @@ jobs:
       - name: Update formula
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
           SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos-arm64 }}
           SHA_MACOS_X86: ${{ steps.checksums.outputs.macos-x86_64 }}
           SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
@@ -160,11 +161,8 @@ jobs:
           FORMULA="Formula/gestalt.rb"
           OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
 
-          # Update version
           sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
-
-          # Update download URLs (version appears in the URL path)
-          sed -i "s|/download/v${OLD_VERSION}/|/download/v${VERSION}/|g" "$FORMULA"
+          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64.tar.gz}g' "$FORMULA"
 
           # Update SHA256 for each platform by matching the URL above it
           awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
