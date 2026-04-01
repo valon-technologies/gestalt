@@ -48,28 +48,20 @@ type ProviderStarter interface {
 	Start(ctx context.Context, name string, config map[string]any) error
 }
 
-const (
-	TransportMCPPassthrough = "mcp-passthrough"
-	TransportREST           = "rest"
-	TransportPlugin         = "plugin"
-)
-
 type Catalog struct {
 	Name        string             `json:"name"`
 	DisplayName string             `json:"displayName"`
 	Description string             `json:"description"`
 	IconSVG     string             `json:"iconSvg,omitempty"`
-	BaseURL     string             `json:"baseUrl,omitempty"`
-	AuthStyle   string             `json:"authStyle,omitempty"`
-	Headers     map[string]string  `json:"headers,omitempty"`
 	Operations  []CatalogOperation `json:"operations"`
 }
 
+// CatalogOperation describes a single executable operation exposed by a provider
+// plugin. Operations are invoked by ID; executable plugins do not declare
+// HTTP routes.
 type CatalogOperation struct {
 	ID             string               `json:"id"`
-	ProviderID     string               `json:"providerId,omitempty"`
 	Method         string               `json:"method"`
-	Path           string               `json:"path"`
 	Title          string               `json:"title,omitempty"`
 	Description    string               `json:"description,omitempty"`
 	InputSchema    json.RawMessage      `json:"inputSchema,omitempty"`
@@ -80,8 +72,6 @@ type CatalogOperation struct {
 	Tags           []string             `json:"tags,omitempty"`
 	ReadOnly       bool                 `json:"readOnly,omitempty"`
 	Visible        *bool                `json:"visible,omitempty"`
-	Transport      string               `json:"transport,omitempty"`
-	Query          string               `json:"query,omitempty"`
 }
 
 type OperationAnnotations struct {
@@ -93,9 +83,7 @@ type OperationAnnotations struct {
 
 type CatalogParameter struct {
 	Name        string `json:"name"`
-	WireName    string `json:"wireName,omitempty"`
 	Type        string `json:"type"`
-	Location    string `json:"location,omitempty"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Default     any    `json:"default,omitempty"`

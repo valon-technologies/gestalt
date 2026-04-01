@@ -36,7 +36,6 @@ func (p *exampleProvider) Catalog() *gestalt.Catalog {
 				ID:          "greet",
 				Description: "Return a greeting message",
 				Method:      http.MethodGet,
-				Path:        "/greet",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "name", Type: "string", Description: "Name to greet", Required: true},
 				},
@@ -45,7 +44,6 @@ func (p *exampleProvider) Catalog() *gestalt.Catalog {
 				ID:          "echo",
 				Description: "Echo back the input",
 				Method:      http.MethodPost,
-				Path:        "/echo",
 				Parameters: []gestalt.CatalogParameter{
 					{Name: "message", Type: "string", Description: "Message to echo", Required: true},
 				},
@@ -54,7 +52,6 @@ func (p *exampleProvider) Catalog() *gestalt.Catalog {
 				ID:          "status",
 				Description: "Return provider startup state",
 				Method:      http.MethodGet,
-				Path:        "/status",
 			},
 		},
 	}
