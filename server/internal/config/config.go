@@ -123,10 +123,11 @@ type PluginDef struct {
 	MCP               bool                          `yaml:"mcp"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
-	ResolvedManifest *pluginmanifestv1.Manifest `yaml:"-"`
-	ResolvedIconFile string                     `yaml:"-"`
-	IsDeclarative    bool                       `yaml:"-"`
-	HostBinary       string                     `yaml:"-"`
+	ResolvedManifestPath string                     `yaml:"-"`
+	ResolvedManifest     *pluginmanifestv1.Manifest `yaml:"-"`
+	ResolvedIconFile     string                     `yaml:"-"`
+	IsDeclarative        bool                       `yaml:"-"`
+	HostBinary           string                     `yaml:"-"`
 }
 
 func (p *PluginDef) IsInline() bool {

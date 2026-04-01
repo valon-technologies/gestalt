@@ -108,6 +108,32 @@ func TestEncodeManifest_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncodeManifest_SpecLoadedProviderDoesNotRequireEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/notion",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "openapi.yaml",
+			MCPURL:  "https://mcp.example.com/mcp",
+		},
+	}
+
+	data, err := EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	got, err := DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest: %v", err)
+	}
+	if got.Provider == nil || got.Provider.OpenAPI != "openapi.yaml" {
+		t.Fatalf("unexpected provider after round trip: %#v", got.Provider)
+	}
+}
+
 func validV2JSON() []byte {
 	return []byte(`{
   "source": "github.com/acme/plugins/echo",

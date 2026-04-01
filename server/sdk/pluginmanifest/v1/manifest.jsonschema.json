@@ -223,6 +223,29 @@
             }
           },
           {
+            "properties": {
+              "provider": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "openapi"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "graphql_url"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "mcp_url"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
             "required": [
               "artifacts",
               "entrypoints"

@@ -60,6 +60,22 @@ func TestLoadManifestFromPath_DirectoryManifestFileAndArchive(t *testing.T) {
 	}
 }
 
+func TestCreatePackageFromDirRejectsOutputInsideSource(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sourceDir, _ := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	archivePath := filepath.Join(sourceDir, "provider.tar.gz")
+
+	err := CreatePackageFromDir(sourceDir, archivePath)
+	if err == nil {
+		t.Fatal("expected output-inside-source error")
+	}
+	if !strings.Contains(err.Error(), "must not be inside source directory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidatePackageDirRejectsMissingProviderSchema(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -92,7 +94,17 @@ func soleNamedConnection(plugin *config.PluginDef, manifestProvider *pluginmanif
 }
 
 func resolveConfiguredSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) (resolvedSpecSurface, bool) {
-	for _, surface := range []specSurface{specSurfaceOpenAPI, specSurfaceGraphQL, specSurfaceMCP} {
+	if resolved, ok := resolveConfiguredAPISurface(plugin, manifestProvider); ok {
+		return resolved, true
+	}
+	if resolved, ok := resolveSpecSurface(plugin, manifestProvider, specSurfaceMCP); ok {
+		return resolved, true
+	}
+	return resolvedSpecSurface{}, false
+}
+
+func resolveConfiguredAPISurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) (resolvedSpecSurface, bool) {
+	for _, surface := range []specSurface{specSurfaceOpenAPI, specSurfaceGraphQL} {
 		if resolved, ok := resolveSpecSurface(plugin, manifestProvider, surface); ok {
 			return resolved, true
 		}
@@ -102,6 +114,7 @@ func resolveConfiguredSpecSurface(plugin *config.PluginDef, manifestProvider *pl
 
 func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface specSurface) (resolvedSpecSurface, bool) {
 	var url string
+	fromManifest := false
 	if plugin != nil {
 		switch surface {
 		case specSurfaceOpenAPI:
@@ -127,9 +140,13 @@ func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanife
 		case specSurfaceMCP:
 			url = manifestProvider.MCPURL
 		}
+		fromManifest = url != ""
 	}
 	if url == "" {
 		return resolvedSpecSurface{}, false
+	}
+	if fromManifest {
+		url = resolveManifestRelativeSpecURL(plugin, url)
 	}
 	name := config.ResolveConnectionAlias(pluginSurfaceConnectionName(plugin, surface))
 	if name == "" {
@@ -151,6 +168,22 @@ func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanife
 	return resolved, true
 }
 
+func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string {
+	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
+		return raw
+	}
+	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if strings.HasPrefix(raw, "file://") {
+		path := strings.TrimPrefix(raw, "file://")
+		if filepath.IsAbs(path) {
+			return raw
+		}
+		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), path))
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
+}
 func manifestSurfaceConnectionName(provider *pluginmanifestv1.Provider, surface specSurface) string {
 	if provider == nil {
 		return ""
