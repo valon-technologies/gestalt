@@ -40,7 +40,7 @@ provider:
       - groups:write
       - canvases:write
   operations:
-    - name: slack_list_channels
+    - name: conversations.list
       description: List conversations/channels
       method: GET
       path: /api/conversations.list
@@ -54,7 +54,7 @@ provider:
         - name: types
           type: string
           in: query
-    - name: slack_send_message
+    - name: chat.postMessage
       description: Send a message to a channel
       method: POST
       path: /api/chat.postMessage
@@ -76,7 +76,7 @@ provider:
         - name: unfurl_media
           type: bool
           in: body
-    - name: slack_list_users
+    - name: users.list
       description: List workspace users
       method: GET
       path: /api/users.list
@@ -87,7 +87,7 @@ provider:
         - name: cursor
           type: string
           in: query
-    - name: slack_read_history
+    - name: conversations.history
       description: Read message history for a channel
       method: GET
       path: /api/conversations.history
@@ -111,7 +111,7 @@ provider:
         - name: inclusive
           type: bool
           in: query
-    - name: slack_search_messages
+    - name: search.messages
       description: Search messages across the workspace
       method: GET
       path: /api/search.messages
@@ -126,7 +126,7 @@ provider:
         - name: page
           type: int
           in: query
-    - name: slack_get_user_info
+    - name: users.info
       description: Get profile information for a Slack user
       method: GET
       path: /api/users.info
@@ -135,7 +135,7 @@ provider:
           type: string
           in: query
           required: true
-    - name: slack_get_thread_replies
+    - name: conversations.replies
       description: Read replies for a thread
       method: GET
       path: /api/conversations.replies
@@ -163,7 +163,7 @@ provider:
         - name: inclusive
           type: bool
           in: query
-    - name: slack_schedule_message
+    - name: chat.scheduleMessage
       description: Schedule a message to be sent later
       method: POST
       path: /api/chat.scheduleMessage
@@ -183,7 +183,7 @@ provider:
         - name: thread_ts
           type: string
           in: body
-    - name: slack_add_reaction
+    - name: reactions.add
       description: Add an emoji reaction to a message
       method: POST
       path: /api/reactions.add
@@ -200,7 +200,7 @@ provider:
           type: string
           in: body
           required: true
-    - name: slack_set_channel_topic
+    - name: conversations.setTopic
       description: Set a channel topic
       method: POST
       path: /api/conversations.setTopic
@@ -213,7 +213,7 @@ provider:
           type: string
           in: body
           required: true
-    - name: slack_create_channel
+    - name: conversations.create
       description: Create a new Slack channel
       method: POST
       path: /api/conversations.create
@@ -225,7 +225,7 @@ provider:
         - name: is_private
           type: bool
           in: body
-    - name: slack_invite_to_channel
+    - name: conversations.invite
       description: Invite users to a channel
       method: POST
       path: /api/conversations.invite
@@ -238,7 +238,7 @@ provider:
           type: string
           in: body
           required: true
-    - name: slack_send_ephemeral_message
+    - name: chat.postEphemeral
       description: Send an ephemeral message visible only to a specific user
       method: POST
       path: /api/chat.postEphemeral
@@ -258,7 +258,7 @@ provider:
         - name: thread_ts
           type: string
           in: body
-    - name: slack_create_canvas
+    - name: canvases.create
       description: Create a Slack canvas
       method: POST
       path: /api/canvases.create
