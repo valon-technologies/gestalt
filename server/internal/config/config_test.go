@@ -3,9 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -843,5 +845,63 @@ func TestExternalPluginAllowsSpecURL(t *testing.T) {
 	}
 	if err := ValidateStructure(cfg); err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
+
+func TestMergeConnectionAuth_MergesCredentialFieldsByName(t *testing.T) {
+	t.Parallel()
+
+	dst := ConnectionAuthDef{
+		Credentials: []CredentialFieldDef{
+			{Name: "api_key", Label: "API Key", Description: "Package API key"},
+			{Name: "app_key", Label: "Application Key", Description: "Package app key"},
+		},
+	}
+	src := ConnectionAuthDef{
+		Credentials: []CredentialFieldDef{
+			{Name: "api_key", Description: "Local API key copy"},
+			{Name: "new_key", Label: "New Key", Description: "Local-only credential"},
+		},
+	}
+
+	MergeConnectionAuth(&dst, src)
+
+	want := []CredentialFieldDef{
+		{Name: "api_key", Label: "API Key", Description: "Local API key copy"},
+		{Name: "app_key", Label: "Application Key", Description: "Package app key"},
+		{Name: "new_key", Label: "New Key", Description: "Local-only credential"},
+	}
+	if !reflect.DeepEqual(dst.Credentials, want) {
+		t.Fatalf("Credentials = %#v, want %#v", dst.Credentials, want)
+	}
+}
+
+func TestEffectivePluginConnectionDef_MergesManifestCredentialFieldOverrides(t *testing.T) {
+	t.Parallel()
+
+	plugin := &PluginDef{
+		Auth: &ConnectionAuthDef{
+			Credentials: []CredentialFieldDef{
+				{Name: "api_key", Description: "Local API key copy"},
+			},
+		},
+	}
+	manifestProvider := &pluginmanifestv1.Provider{
+		Auth: &pluginmanifestv1.ProviderAuth{
+			Type: pluginmanifestv1.AuthTypeManual,
+			Credentials: []pluginmanifestv1.CredentialField{
+				{Name: "api_key", Label: "API Key", Description: "Package API key"},
+				{Name: "app_key", Label: "Application Key", Description: "Package app key"},
+			},
+		},
+	}
+
+	got := EffectivePluginConnectionDef(plugin, manifestProvider)
+	want := []CredentialFieldDef{
+		{Name: "api_key", Label: "API Key", Description: "Local API key copy"},
+		{Name: "app_key", Label: "Application Key", Description: "Package app key"},
+	}
+	if !reflect.DeepEqual(got.Auth.Credentials, want) {
+		t.Fatalf("Credentials = %#v, want %#v", got.Auth.Credentials, want)
 	}
 }

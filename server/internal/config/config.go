@@ -336,10 +336,55 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 		dst.TokenMetadata = src.TokenMetadata
 	}
 	if len(src.Credentials) > 0 {
-		dst.Credentials = src.Credentials
+		dst.Credentials = mergeCredentialFields(dst.Credentials, src.Credentials)
 	}
 	if src.AuthMapping != nil {
 		dst.AuthMapping = src.AuthMapping
+	}
+}
+
+func mergeCredentialFields(base, override []CredentialFieldDef) []CredentialFieldDef {
+	if len(base) == 0 {
+		return append([]CredentialFieldDef(nil), override...)
+	}
+
+	merged := append([]CredentialFieldDef(nil), base...)
+	indexByName := make(map[string]int, len(merged))
+	for i, field := range merged {
+		if field.Name != "" {
+			indexByName[field.Name] = i
+		}
+	}
+
+	for _, field := range override {
+		if idx, ok := indexByName[field.Name]; ok {
+			mergeCredentialField(&merged[idx], field)
+			continue
+		}
+		merged = append(merged, field)
+		if field.Name != "" {
+			indexByName[field.Name] = len(merged) - 1
+		}
+	}
+
+	return merged
+}
+
+func mergeCredentialField(dst *CredentialFieldDef, src CredentialFieldDef) {
+	if dst == nil {
+		return
+	}
+	if dst.Name == "" {
+		dst.Name = src.Name
+	}
+	if src.Label != "" {
+		dst.Label = src.Label
+	}
+	if src.Description != "" {
+		dst.Description = src.Description
+	}
+	if src.HelpURL != "" {
+		dst.HelpURL = src.HelpURL
 	}
 }
 
