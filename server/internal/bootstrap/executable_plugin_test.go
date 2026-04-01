@@ -739,3 +739,151 @@ func TestHybridPluginUsesManifestManagedParametersForSpecSurface(t *testing.T) {
 		t.Fatal("timed out waiting for upstream request")
 	}
 }
+
+func TestHybridPluginUsesManifestManagedPathParametersForSpecSurface(t *testing.T) {
+	t.Parallel()
+
+	const managedAccountID = "acct-managed"
+
+	bin := buildEchoPluginBinary(t)
+
+	gotPath := make(chan string, 1)
+	gotPageSize := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- r.URL.Path
+		gotPageSize <- r.URL.Query().Get("page_size")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Hybrid Managed Path Parameters Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/accounts/{account_id}/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+						"parameters": []any{
+							map[string]any{
+								"name":     "account_id",
+								"in":       "path",
+								"required": true,
+								"schema":   map[string]any{"type": "string"},
+							},
+							map[string]any{
+								"name":   "page_size",
+								"in":     "query",
+								"schema": map[string]any{"type": "integer"},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/hybrid",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: specSrv.URL,
+			ManagedParameters: []pluginmanifestv1.ManagedParameter{
+				{
+					In:    "path",
+					Name:  "account_id",
+					Value: managedAccountID,
+				},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+				SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+			},
+		},
+	}
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"hybrid": {
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	foundListItems := false
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == "list_items" {
+			foundListItems = true
+			if got := cat.Operations[i].Path; got != "/accounts/acct-managed/items" {
+				t.Fatalf("catalog path = %q, want %q", got, "/accounts/acct-managed/items")
+			}
+			if got := cat.Operations[i].Parameters; len(got) != 1 || got[0].Name != "page_size" {
+				t.Fatalf("catalog params = %+v, want only page_size", got)
+			}
+			break
+		}
+	}
+	if !foundListItems {
+		t.Fatalf("expected list_items operation in catalog: %+v", cat.Operations)
+	}
+
+	result, err := prov.Execute(context.Background(), "list_items", map[string]any{"page_size": 25}, "")
+	if err != nil {
+		t.Fatalf("Execute(list_items): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotPath:
+		if got != "/accounts/acct-managed/items" {
+			t.Fatalf("path = %q, want %q", got, "/accounts/acct-managed/items")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
+	}
+
+	select {
+	case got := <-gotPageSize:
+		if got != "25" {
+			t.Fatalf("page_size = %q, want %q", got, "25")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream query param")
+	}
+}

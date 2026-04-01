@@ -155,7 +155,7 @@ func TestValidateRejectsInvalidManagedParameters(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid managed parameters")
 	}
-	if !strings.Contains(err.Error(), `managed_parameters[0].in "query" must be "header"`) {
+	if !strings.Contains(err.Error(), `managed_parameters[0].in "query" must be "header" or "path"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
