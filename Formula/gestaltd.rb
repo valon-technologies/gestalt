@@ -5,34 +5,34 @@ require_relative "lib/private_strategy"
 class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.22"
+  version "0.0.1-alpha.23"
   license "Proprietary"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.22/gestaltd-macos-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.23/gestaltd-macos-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "66f959dbbe7cc1eba282d7b2b1cdd14f3ceb23f07c4c180f892e410fbe55f3a6"
+      sha256 "020c37faa7412fcb4722ad5f3375eca6a291d1457792774b6fb9c4df723cb765"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.22/gestaltd-macos-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.23/gestaltd-macos-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "f857977750f1faa8498a3dee5d118f96993f0fbfe41fd28dbc320ad3b36277b7"
+      sha256 "4ee66af1085fb3c3d737585c088dafd2a252ff908e85f11ac80c435b0f1f9dba"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.22/gestaltd-linux-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.23/gestaltd-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "9cacdd379730b0fbb3d80e56c172ccee7751541263db95e610a8b352546af0b0"
+      sha256 "dcff78d3bdb4cd8330e21a7745561bdb4a4e0d3cf14dc55f5f627d7691926282"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.22/gestaltd-linux-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/v0.0.1-alpha.23/gestaltd-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "2f3b3c48f2d922ec84120d7636e61ec800224fa56bdd4f003cba701ce305a84b"
+      sha256 "5744c7d7f34002cbaac59794b04cbe63bdf7b3c3b2acd148915c4836bcd32fc9"
     end
   end
 
