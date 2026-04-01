@@ -9,7 +9,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -19,45 +18,18 @@ import (
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
-	sm, err := buildSecretManager(cfg, factories)
+	prepared, err := prepareCore(ctx, cfg, factories, false)
 	if err != nil {
 		return nil, err
 	}
-	defer closeSecretManager(sm)
-
-	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
-		return nil, err
-	}
-
-	tp, err := buildTelemetry(cfg, factories)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tp.Shutdown(context.Background()) }()
-
-	deps := Deps{
-		EncryptionKey: crypto.DeriveKey(cfg.Server.EncryptionKey),
-		BaseURL:       cfg.Server.BaseURL,
-		SecretManager: sm,
-	}
-
-	if _, err := buildAuth(cfg, factories, deps); err != nil {
-		return nil, err
-	}
-
-	ds, err := buildDatastore(cfg, factories, deps)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = ds.Close() }()
-	deps.Egress = newEgressDeps(cfg, sm)
+	defer func() { _ = prepared.Close(context.Background()) }()
 
 	var warnings []string
-	if w, ok := ds.(interface{ Warnings() []string }); ok {
+	if w, ok := prepared.Datastore.(interface{ Warnings() []string }); ok {
 		warnings = w.Warnings()
 	}
 
-	providers, _, err := buildProvidersStrict(ctx, cfg, factories, deps)
+	providers, _, err := buildProvidersStrict(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return warnings, err
 	}
@@ -67,17 +39,17 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return warnings, err
 	}
 
-	sharedInvoker := invocation.NewBroker(providers, ds)
+	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
-	extensions, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)
+	runtimes, bindings, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress, buildRuntimeForValidation)
 	if err != nil {
 		return warnings, err
 	}
-	if extensions != nil {
+	if runtimes != nil || bindings != nil {
 		// Validation does not start runtimes, but extension factories may still
 		// allocate resources that need to be released after construction.
-		defer func() { _ = extensions.Shutdown(context.Background()) }()
+		defer func() { _ = shutdownExtensions(context.Background(), runtimes, bindings) }()
 	}
 
 	return warnings, nil
@@ -223,10 +195,4 @@ func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
 		}
 	}
 	return core.ConnectionModeUser
-}
-
-func closeSecretManager(sm core.SecretManager) {
-	if closer, ok := sm.(interface{ Close() error }); ok {
-		_ = closer.Close()
-	}
 }

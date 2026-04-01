@@ -10,33 +10,23 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
-// ExtensionBoundary owns runtime and binding assembly once provider
-// construction has produced the shared invoker/capability surface.
-type ExtensionBoundary struct {
-	Runtimes *registry.PluginMap[core.Runtime]
-	Bindings *registry.PluginMap[core.Binding]
-}
-
-func buildExtensions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*ExtensionBoundary, error) {
+func buildExtensions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps) (*registry.PluginMap[core.Runtime], *registry.PluginMap[core.Binding], error) {
 	return buildExtensionsWith(ctx, cfg, factories, invoker, lister, audit, egressDeps, buildRuntime)
 }
 
-func buildExtensionsWith(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps, buildRuntimeFn runtimeBuilder) (*ExtensionBoundary, error) {
+func buildExtensionsWith(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, invoker invocation.Invoker, lister invocation.CapabilityLister, audit core.AuditSink, egressDeps EgressDeps, buildRuntimeFn runtimeBuilder) (*registry.PluginMap[core.Runtime], *registry.PluginMap[core.Binding], error) {
 	runtimes, err := buildRuntimesWith(ctx, cfg, factories, invoker, lister, audit, egressDeps, buildRuntimeFn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	bindings, err := buildBindings(ctx, cfg, factories, invoker, lister, audit, egressDeps)
 	if err != nil {
 		_ = StopRuntimes(context.Background(), runtimes, runtimeNames(runtimes))
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &ExtensionBoundary{
-		Runtimes: runtimes,
-		Bindings: bindings,
-	}, nil
+	return runtimes, bindings, nil
 }
 
 func newGuardedInvoker(kind, name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) *invocation.GuardedInvoker {
@@ -51,12 +41,9 @@ func newGuardedInvoker(kind, name string, invoker invocation.Invoker, lister inv
 	return invocation.NewGuarded(invoker, lister, kind+":"+name, audit, opts...)
 }
 
-func (b *ExtensionBoundary) Shutdown(ctx context.Context) error {
-	if b == nil {
-		return nil
-	}
+func shutdownExtensions(ctx context.Context, runtimes *registry.PluginMap[core.Runtime], bindings *registry.PluginMap[core.Binding]) error {
 	return errors.Join(
-		CloseBindings(b.Bindings, bindingNames(b.Bindings)),
-		StopRuntimes(ctx, b.Runtimes, runtimeNames(b.Runtimes)),
+		CloseBindings(bindings, bindingNames(bindings)),
+		StopRuntimes(ctx, runtimes, runtimeNames(runtimes)),
 	)
 }
