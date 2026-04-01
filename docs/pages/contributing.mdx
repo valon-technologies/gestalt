@@ -38,6 +38,17 @@ npm run typecheck
 npm run build
 ```
 
+## Release Tags
+
+Release workflows use scoped tags:
+
+- CLI: `gestalt/v<version>`
+- Server: `gestaltd/v<version>`
+- Go SDK: `sdk/go/v<version>`
+- Plugins: `plugin/<plugin>/v<version>`
+
+Keep the bare semantic version aligned across artifacts when they are meant to ship together.
+
 ## Adding New Built-Ins
 
 If you add a new built-in auth provider, datastore, secret manager, binding, runtime, or named provider:
