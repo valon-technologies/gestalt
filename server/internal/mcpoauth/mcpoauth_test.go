@@ -242,6 +242,84 @@ func TestMCPOAuthFlow(t *testing.T) {
 		}
 	})
 
+	t.Run("EphemeralDCRWithoutStore", func(t *testing.T) {
+		t.Parallel()
+
+		var dcrCount int
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+
+		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"resource":              baseURL + "/mcp",
+				"authorization_servers": []string{baseURL},
+				"scopes_supported":      []string{"read"},
+			})
+		})
+
+		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"issuer":                                baseURL,
+				"authorization_endpoint":                baseURL + "/oauth/authorize",
+				"token_endpoint":                        baseURL + "/oauth/token",
+				"registration_endpoint":                 baseURL + "/oauth/register",
+				"scopes_supported":                      []string{"read"},
+				"code_challenge_methods_supported":      []string{"S256"},
+				"token_endpoint_auth_methods_supported": []string{"none"},
+			})
+		})
+
+		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, r *http.Request) {
+			dcrCount++
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"client_id": "ephemeral-client-001",
+			})
+		})
+
+		srv := httptest.NewServer(mux)
+		testutil.CloseOnCleanup(t, srv)
+
+		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+			MCPURL:      srv.URL + "/mcp",
+			RedirectURL: "http://localhost:9999/callback",
+		})
+
+		authURL, verifier := handler.StartOAuth("test-state", nil)
+		if authURL == "" {
+			t.Fatal("expected non-empty auth URL")
+		}
+		if verifier == "" {
+			t.Fatal("expected non-empty verifier")
+		}
+		if dcrCount != 1 {
+			t.Fatalf("DCR calls = %d, want 1", dcrCount)
+		}
+
+		parsed, err := url.Parse(authURL)
+		if err != nil {
+			t.Fatalf("parsing auth URL: %v", err)
+		}
+		if parsed.Query().Get("client_id") != "ephemeral-client-001" {
+			t.Errorf("client_id = %q, want ephemeral-client-001", parsed.Query().Get("client_id"))
+		}
+
+		authURL, verifier = handler.StartOAuth("test-state-2", nil)
+		if authURL == "" || verifier == "" {
+			t.Fatal("expected cached upstream for repeated StartOAuth")
+		}
+		if dcrCount != 1 {
+			t.Fatalf("DCR calls after cache reuse = %d, want 1", dcrCount)
+		}
+	})
+
 	t.Run("ClearRegistration", func(t *testing.T) {
 		t.Parallel()
 
