@@ -7,8 +7,6 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
-// ResolveManifestLocalReferences rewrites local spec references so extracted
-// plugin manifests can be used directly at runtime.
 func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifestPath string) *pluginmanifestv1.Manifest {
 	if manifest == nil || manifest.Provider == nil || manifestPath == "" {
 		return manifest
