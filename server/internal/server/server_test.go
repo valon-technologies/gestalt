@@ -4620,10 +4620,7 @@ func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 		StubIntegration: coretesting.StubIntegration{
 			N: "test-int",
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return nil, &apiexec.UserMessageError{
-					Message: "upstream service timed out",
-					Cause:   fmt.Errorf("request failed: %s", sensitiveMsg),
-				}
+				return nil, fmt.Errorf("%w: request failed: %s", apiexec.ErrUpstreamTimedOut, sensitiveMsg)
 			},
 		},
 		ops: []core.Operation{

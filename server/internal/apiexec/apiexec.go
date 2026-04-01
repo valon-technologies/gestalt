@@ -35,15 +35,18 @@ var retryableStatusCodes = map[int]bool{
 
 var pathParamRe = regexp.MustCompile(`\{([^}]+)\}`)
 
+var (
+	ErrUpstreamUnavailable     = errors.New("failed to reach upstream service")
+	ErrUpstreamTimedOut        = errors.New("upstream service timed out")
+	ErrUpstreamResponseRead    = errors.New("failed to read upstream response")
+	ErrUpstreamInvalidResponse = errors.New("upstream service returned an invalid response")
+	ErrUpstreamOperation       = errors.New("upstream operation failed")
+)
+
 type UpstreamHTTPError struct {
 	Status  int
 	Headers http.Header
 	Body    string
-	Cause   error
-}
-
-type UserMessageError struct {
-	Message string
 	Cause   error
 }
 
@@ -62,27 +65,6 @@ func (e *UpstreamHTTPError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
-}
-
-func (e *UserMessageError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.Cause != nil {
-		return e.Cause.Error()
-	}
-	return e.Message
-}
-
-func (e *UserMessageError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
-
-func userMessageError(message string, cause error) error {
-	return &UserMessageError{Message: message, Cause: cause}
 }
 
 // ResponseChecker validates a response body beyond the default HTTP status check.
@@ -250,25 +232,21 @@ func doOnce(
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		message := "failed to reach upstream service"
 		if errors.Is(err, context.DeadlineExceeded) {
-			message = "upstream service timed out"
+			return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
 		}
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) && urlErr.Timeout() {
-			message = "upstream service timed out"
+			return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
 		}
-		return nil, 0, "", false, userMessageError(message, fmt.Errorf("executing request: %w", err))
+		return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamUnavailable, err)
 	}
 
 	retryAfter := resp.Header.Get("Retry-After")
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	_ = resp.Body.Close()
 	if err != nil {
-		return nil, 0, "", false, userMessageError(
-			"failed to read upstream response",
-			fmt.Errorf("reading response: %w", err),
-		)
+		return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamResponseRead, err)
 	}
 
 	if req.CheckResponse != nil {
@@ -365,16 +343,20 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("executing graphql request: %w", err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
+		}
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) && urlErr.Timeout() {
+			return nil, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
+		}
+		return nil, fmt.Errorf("%w: %w", ErrUpstreamUnavailable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
-		return nil, userMessageError(
-			"failed to read upstream response",
-			fmt.Errorf("reading graphql response: %w", err),
-		)
+		return nil, fmt.Errorf("%w: %w", ErrUpstreamResponseRead, err)
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
@@ -387,10 +369,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, userMessageError(
-			"upstream service returned an invalid response",
-			fmt.Errorf("parsing graphql response: %w", err),
-		)
+		return nil, fmt.Errorf("%w: %w", ErrUpstreamInvalidResponse, err)
 	}
 
 	if raw, ok := parsed[graphqlRespKeyErrors]; ok {
@@ -400,10 +379,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 			for i, e := range gqlErrs {
 				msgs[i] = e.Message
 			}
-			return nil, userMessageError(
-				strings.Join(msgs, "; "),
-				fmt.Errorf("graphql: %s", strings.Join(msgs, "; ")),
-			)
+			return nil, fmt.Errorf("%w: %s", ErrUpstreamOperation, strings.Join(msgs, "; "))
 		}
 	}
 

@@ -425,9 +425,27 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {
-	var userErr *apiexec.UserMessageError
-	if errors.As(err, &userErr) && userErr.Message != "" {
-		return userErr.Message, true
+	if errors.Is(err, apiexec.ErrUpstreamTimedOut) {
+		return "upstream service timed out", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamUnavailable) {
+		return "failed to reach upstream service", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamResponseRead) {
+		return "failed to read upstream response", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamInvalidResponse) {
+		return "upstream service returned an invalid response", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamOperation) {
+		message := strings.TrimPrefix(err.Error(), apiexec.ErrUpstreamOperation.Error()+": ")
+		if message != "" {
+			return message, true
+		}
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {

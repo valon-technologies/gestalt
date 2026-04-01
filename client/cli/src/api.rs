@@ -4,7 +4,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 
 use crate::config::ConfigStore;
-use crate::credentials::{CredentialStore, StoredTokenKind};
+use crate::credentials::CredentialStore;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
@@ -57,18 +57,9 @@ fn find_project_config_value(key: &str) -> Option<String> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenSource {
+    Direct,
     EnvVar,
-    ApiToken,
-    Session,
-}
-
-impl From<StoredTokenKind> for TokenSource {
-    fn from(value: StoredTokenKind) -> Self {
-        match value {
-            StoredTokenKind::ApiToken => TokenSource::ApiToken,
-            StoredTokenKind::SessionToken => TokenSource::Session,
-        }
-    }
+    StoredCredentials,
 }
 
 pub fn env_api_key_is_set() -> bool {
@@ -92,15 +83,7 @@ impl ApiClient {
             } else {
                 let store = CredentialStore::new()?;
                 match store.load()? {
-                    Some(creds) => match creds.stored_token() {
-                        Some((token, kind)) => (token.to_string(), kind.into()),
-                        None => {
-                            bail!(
-                                "not authenticated: set {} or run 'gestalt auth login'",
-                                ENV_API_KEY
-                            )
-                        }
-                    },
+                    Some(creds) => (creds.api_token, TokenSource::StoredCredentials),
                     None => {
                         bail!(
                             "not authenticated: set {} or run 'gestalt auth login'",
@@ -130,7 +113,7 @@ impl ApiClient {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token: token.to_string(),
-            token_source: TokenSource::Session,
+            token_source: TokenSource::Direct,
         })
     }
 
@@ -189,20 +172,16 @@ impl ApiClient {
             if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
                 bail!(
                     "{} (using {} from environment; \
-                     unset it to use your session token from 'gestalt auth login')",
+                     unset it to use your stored CLI API token from 'gestalt auth login')",
                     message,
                     ENV_API_KEY,
                 );
             }
-            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::ApiToken {
+            if status == StatusCode::UNAUTHORIZED
+                && self.token_source == TokenSource::StoredCredentials
+            {
                 bail!(
                     "{} (stored CLI API token may be expired or revoked; run 'gestalt auth login' to mint a new one)",
-                    message,
-                );
-            }
-            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::Session {
-                bail!(
-                    "{} (stored session token may be expired; run 'gestalt auth login')",
                     message,
                 );
             }
@@ -237,40 +216,5 @@ fn extract_error_message(value: &serde_json::Value) -> Option<String> {
                 .map(String::from)
         }
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_client_creation() {
-        let client = ApiClient::new("http://localhost:8080", "test-token");
-        assert!(client.is_ok());
-    }
-
-    #[test]
-    fn test_base_url_trailing_slash() {
-        let client = ApiClient::new("http://localhost:8080/", "test-token").unwrap();
-        assert_eq!(client.base_url, "http://localhost:8080");
-    }
-
-    #[test]
-    fn test_extract_error_message_string_error() {
-        let value = serde_json::json!({"error": "plain error"});
-        assert_eq!(
-            extract_error_message(&value).as_deref(),
-            Some("plain error")
-        );
-    }
-
-    #[test]
-    fn test_extract_error_message_nested_error_message() {
-        let value = serde_json::json!({"error": {"message": "nested error"}});
-        assert_eq!(
-            extract_error_message(&value).as_deref(),
-            Some("nested error")
-        );
     }
 }

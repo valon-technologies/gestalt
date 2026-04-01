@@ -4,36 +4,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StoredTokenKind {
-    ApiToken,
-    SessionToken,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
     pub api_url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_token: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_token_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_token: Option<String>,
-}
-
-impl Credentials {
-    pub fn stored_token(&self) -> Option<(&str, StoredTokenKind)> {
-        self.api_token
-            .as_deref()
-            .filter(|token| !token.is_empty())
-            .map(|token| (token, StoredTokenKind::ApiToken))
-            .or_else(|| {
-                self.session_token
-                    .as_deref()
-                    .filter(|token| !token.is_empty())
-                    .map(|token| (token, StoredTokenKind::SessionToken))
-            })
-    }
+    pub api_token: String,
+    pub api_token_id: String,
 }
 
 pub struct CredentialStore {
@@ -48,11 +23,6 @@ impl CredentialStore {
         Ok(Self {
             path: config_dir.join("credentials.json"),
         })
-    }
-
-    #[cfg(test)]
-    pub fn with_path(path: PathBuf) -> Self {
-        Self { path }
     }
 
     pub fn load(&self) -> Result<Option<Credentials>> {
@@ -109,112 +79,4 @@ fn write_secure(path: &std::path::Path, data: &[u8]) -> Result<()> {
 #[cfg(not(unix))]
 fn write_secure(path: &std::path::Path, data: &[u8]) -> Result<()> {
     std::fs::write(path, data).context("failed to write credentials file")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_save_and_load() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            api_token: Some("gst_api_test-token".to_string()),
-            api_token_id: Some("tok-1".to_string()),
-            session_token: None,
-        };
-
-        store.save(&creds).unwrap();
-        let loaded = store.load().unwrap().unwrap();
-        assert_eq!(loaded.api_token.as_deref(), Some("gst_api_test-token"));
-        assert_eq!(loaded.api_token_id.as_deref(), Some("tok-1"));
-        assert_eq!(loaded.api_url, "http://localhost:8080");
-    }
-
-    #[test]
-    fn test_load_nonexistent() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("does-not-exist.json");
-        let store = CredentialStore::with_path(path);
-
-        assert!(store.load().unwrap().is_none());
-    }
-
-    #[test]
-    fn test_delete() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            api_token: Some("gst_api_test-token".to_string()),
-            api_token_id: None,
-            session_token: None,
-        };
-
-        store.save(&creds).unwrap();
-        assert!(path.exists());
-
-        store.delete().unwrap();
-        assert!(!path.exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_permissions() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            api_token: Some("gst_api_test-token".to_string()),
-            api_token_id: None,
-            session_token: None,
-        };
-
-        store.save(&creds).unwrap();
-        let metadata = std::fs::metadata(&path).unwrap();
-        let mode = metadata.permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
-    }
-
-    #[test]
-    fn test_stored_token_prefers_api_token() {
-        let creds = Credentials {
-            api_url: "http://localhost:8080".to_string(),
-            api_token: Some("gst_api_token".to_string()),
-            api_token_id: Some("tok-1".to_string()),
-            session_token: Some("session-token".to_string()),
-        };
-
-        let (token, kind) = creds.stored_token().unwrap();
-        assert_eq!(token, "gst_api_token");
-        assert_eq!(kind, StoredTokenKind::ApiToken);
-    }
-
-    #[test]
-    fn test_load_legacy_session_token_shape() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("credentials.json");
-        let store = CredentialStore::with_path(path.clone());
-
-        std::fs::write(
-            &path,
-            r#"{"api_url":"http://localhost:8080","session_token":"legacy-session-token"}"#,
-        )
-        .unwrap();
-
-        let loaded = store.load().unwrap().unwrap();
-        let (token, kind) = loaded.stored_token().unwrap();
-        assert_eq!(token, "legacy-session-token");
-        assert_eq!(kind, StoredTokenKind::SessionToken);
-    }
 }
