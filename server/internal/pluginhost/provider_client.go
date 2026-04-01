@@ -35,6 +35,20 @@ func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
 }
 
+func WithMetadataOverrides(displayName, description, iconSVG string) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		if displayName != "" {
+			b.displayOver = displayName
+		}
+		if description != "" {
+			b.descOver = description
+		}
+		if iconSVG != "" {
+			b.iconSVG = iconSVG
+		}
+	}
+}
+
 func (p *remoteProviderBase) Close() error {
 	if p.closer != nil {
 		return p.closer.Close()
@@ -101,9 +115,6 @@ func (p *remoteProviderBase) Description() string {
 	return p.metadata.GetDescription()
 }
 
-func (p *remoteProviderBase) SetDisplayName(s string) { p.displayOver = s }
-func (p *remoteProviderBase) SetDescription(s string) { p.descOver = s }
-
 func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 	return protoConnectionModeToCore(p.metadata.GetConnectionMode())
 }
@@ -136,31 +147,14 @@ func (p *remoteProviderBase) SupportsManualAuth() bool {
 	return slices.Contains(p.metadata.GetAuthTypes(), "manual")
 }
 
-func (p *remoteProviderBase) SetIconSVG(svg string) { p.iconSVG = svg }
-
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 	if p.catalog == nil {
 		if p.iconSVG == "" {
 			return nil
 		}
-		return &catalog.Catalog{
-			Name:        p.metadata.GetName(),
-			DisplayName: p.DisplayName(),
-			Description: p.Description(),
-			IconSVG:     p.iconSVG,
-		}
+		return p.decorateCatalog(&catalog.Catalog{Name: p.metadata.GetName()})
 	}
-	cat := p.catalog.Clone()
-	if p.displayOver != "" {
-		cat.DisplayName = p.displayOver
-	}
-	if p.descOver != "" {
-		cat.Description = p.descOver
-	}
-	if cat.IconSVG == "" && p.iconSVG != "" {
-		cat.IconSVG = p.iconSVG
-	}
-	return cat
+	return p.decorateCatalog(p.catalog)
 }
 
 func (p *remoteProviderBase) ConnectionParamDefs() map[string]core.ConnectionParamDef {
@@ -179,7 +173,11 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	return catalogFromJSON(resp.GetCatalogJson())
+	cat, err := catalogFromJSON(resp.GetCatalogJson())
+	if err != nil {
+		return nil, err
+	}
+	return p.decorateCatalog(cat), nil
 }
 
 type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
@@ -300,6 +298,23 @@ func catalogParametersFromCore(params []core.Parameter) []catalog.CatalogParamet
 		})
 	}
 	return out
+}
+
+func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
+	if cat == nil {
+		return nil
+	}
+	decorated := cat.Clone()
+	if decorated.DisplayName == "" || p.displayOver != "" {
+		decorated.DisplayName = p.DisplayName()
+	}
+	if decorated.Description == "" || p.descOver != "" {
+		decorated.Description = p.Description()
+	}
+	if p.iconSVG != "" {
+		decorated.IconSVG = p.iconSVG
+	}
+	return decorated
 }
 
 func callStartProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any) error {

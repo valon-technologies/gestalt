@@ -119,26 +119,6 @@ func (b *Base) Name() string        { return b.IntegrationName }
 func (b *Base) DisplayName() string { return b.IntegrationDisplay }
 func (b *Base) Description() string { return b.IntegrationDesc }
 
-func (b *Base) SetDisplayName(s string) {
-	b.IntegrationDisplay = s
-	if b.catalog != nil {
-		b.catalog.DisplayName = s
-	}
-}
-
-func (b *Base) SetDescription(s string) {
-	b.IntegrationDesc = s
-	if b.catalog != nil {
-		b.catalog.Description = s
-	}
-}
-
-func (b *Base) SetIconSVG(svg string) {
-	if b.catalog != nil {
-		b.catalog.IconSVG = svg
-	}
-}
-
 func (b *Base) ConnectionMode() core.ConnectionMode {
 	if b.ConnMode == "" {
 		return core.ConnectionModeUser

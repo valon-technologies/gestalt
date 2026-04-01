@@ -354,7 +354,7 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 		t.Fatalf("DisplayName = %q, want Test API", cat.DisplayName)
 	}
 	if cat.IconSVG != "" {
-		t.Fatalf("IconSVG = %q, want empty before SetIconSVG", cat.IconSVG)
+		t.Fatalf("IconSVG = %q, want empty", cat.IconSVG)
 	}
 
 	wantIDs := []string{"list_items", "create_item", "get_item", "update_item"}
@@ -377,14 +377,27 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 	}
 
 	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>`
-	p.SetIconSVG(testSVG)
+	p, err = NewDeclarativeProvider(
+		testManifest("http://example.com"),
+		nil,
+		WithDeclarativeMetadataOverrides("Override", "Override description", testSVG),
+	)
+	if err != nil {
+		t.Fatalf("NewDeclarativeProvider with overrides: %v", err)
+	}
 
 	cat = p.Catalog()
+	if cat.DisplayName != "Override" {
+		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Override")
+	}
+	if cat.Description != "Override description" {
+		t.Fatalf("Description = %q, want %q", cat.Description, "Override description")
+	}
 	if cat.IconSVG != testSVG {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
 	}
 	if len(cat.Operations) != len(wantIDs) {
-		t.Fatalf("got %d operations after SetIconSVG, want %d", len(cat.Operations), len(wantIDs))
+		t.Fatalf("got %d operations after metadata overrides, want %d", len(cat.Operations), len(wantIDs))
 	}
 }
 

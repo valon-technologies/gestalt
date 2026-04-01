@@ -32,6 +32,7 @@ type Upstream struct {
 	name     string
 	display  string
 	desc     string
+	iconSVG  string
 	url      string
 	connMode core.ConnectionMode
 	headers  map[string]string
@@ -41,12 +42,28 @@ type Upstream struct {
 	resolver *egress.Resolver
 }
 
-func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver) (*Upstream, error) {
+type Option func(*Upstream)
+
+func WithMetadataOverrides(displayName, description, iconSVG string) Option {
+	return func(u *Upstream) {
+		if displayName != "" {
+			u.display = displayName
+		}
+		if description != "" {
+			u.desc = description
+		}
+		if iconSVG != "" {
+			u.iconSVG = iconSVG
+		}
+	}
+}
+
+func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver, opts ...Option) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
 
-	return &Upstream{
+	u := &Upstream{
 		name:     name,
 		display:  name,
 		desc:     fmt.Sprintf("MCP upstream: %s", url),
@@ -54,7 +71,11 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		connMode: connMode,
 		headers:  config.NormalizeHeaders(headers),
 		resolver: resolver,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(u)
+	}
+	return u, nil
 }
 
 func newFromClient(name string, client mcpclient.MCPClient, connMode core.ConnectionMode, tools []mcpgo.Tool) *Upstream {
@@ -74,32 +95,15 @@ func (u *Upstream) DisplayName() string                 { return u.display }
 func (u *Upstream) Description() string                 { return u.desc }
 func (u *Upstream) ConnectionMode() core.ConnectionMode { return u.connMode }
 func (u *Upstream) ListOperations() []core.Operation    { return integration.OperationsList(u.cat) }
-func (u *Upstream) Catalog() *catalog.Catalog {
-	if u.cat == nil {
-		return nil
-	}
-	return u.cat.Clone()
-}
-func (u *Upstream) SupportsManualAuth() bool { return true }
-
-func (u *Upstream) SetDisplayName(s string) { u.display = s }
-func (u *Upstream) SetDescription(s string) { u.desc = s }
-func (u *Upstream) SetIconSVG(svg string) {
-	if u.cat != nil {
-		u.cat.IconSVG = svg
-	}
-}
+func (u *Upstream) Catalog() *catalog.Catalog           { return u.decorateCatalog(u.cat) }
+func (u *Upstream) SupportsManualAuth() bool            { return true }
 
 func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return nil, core.ErrMCPOnly
 }
 
 func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, err := u.discover(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-	return cat, nil
+	return u.discover(ctx, token)
 }
 
 func (u *Upstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
@@ -194,7 +198,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if u.client != nil && u.cat != nil {
-		return u.cat.Clone(), nil
+		return u.decorateCatalog(u.cat), nil
 	}
 
 	client, err := u.connect(ctx, token)
@@ -209,12 +213,10 @@ func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog
 	}
 
 	cat := buildCatalog(u.name, toolsResult.Tools)
-	ops := integration.OperationsList(cat)
-	if err := u.exposure.Validate(ops); err != nil {
+	if err := u.exposure.Validate(integration.OperationsList(cat)); err != nil {
 		return nil, err
 	}
-	cat = u.exposure.ApplyCatalog(cat)
-	return cat, nil
+	return u.decorateCatalog(u.exposure.ApplyCatalog(cat)), nil
 }
 
 func (u *Upstream) resolveInnerName(name string) (string, bool) {
@@ -253,4 +255,25 @@ func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 	}
 
 	return cat
+}
+
+func (u *Upstream) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
+	if cat == nil {
+		if u.iconSVG == "" {
+			return nil
+		}
+		return &catalog.Catalog{
+			Name:        u.name,
+			DisplayName: u.display,
+			Description: u.desc,
+			IconSVG:     u.iconSVG,
+		}
+	}
+	decorated := cat.Clone()
+	decorated.DisplayName = u.display
+	decorated.Description = u.desc
+	if u.iconSVG != "" {
+		decorated.IconSVG = u.iconSVG
+	}
+	return decorated
 }

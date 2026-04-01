@@ -214,21 +214,19 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		}
 	})
 
-	t.Run("SetIconSVG injects icon when no static catalog", func(t *testing.T) {
+	t.Run("metadata override injects icon when no static catalog", func(t *testing.T) {
 		t.Parallel()
 
 		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
+		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil, WithMetadataOverrides("", "", testSVG))
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
-		base := prov.(*remoteProviderBase)
-		base.SetIconSVG(testSVG)
 
 		cp := prov.(core.CatalogProvider)
 		cat := cp.Catalog()
 		if cat == nil {
-			t.Fatal("expected non-nil catalog after SetIconSVG")
+			t.Fatal("expected non-nil catalog after metadata override")
 		}
 		if cat.IconSVG != testSVG {
 			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
@@ -239,12 +237,10 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		t.Parallel()
 
 		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&opsOnlySDKProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
-		base := prov.(*remoteProviderBase)
-		base.SetIconSVG(testSVG)
 
 		cp := prov.(core.CatalogProvider)
 		cat := cp.Catalog()
@@ -268,47 +264,68 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		}
 	})
 
-	t.Run("SetIconSVG fills empty icon on existing catalog", func(t *testing.T) {
+	t.Run("metadata override fills empty icon on existing catalog", func(t *testing.T) {
 		t.Parallel()
 
 		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
-		cp := prov.(core.CatalogProvider)
-		if cp.Catalog().IconSVG != "" {
-			t.Fatal("expected empty icon before SetIconSVG")
-		}
-
-		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
-		base.SetIconSVG(testSVG)
-
-		cat := cp.Catalog()
+		cat := prov.(core.CatalogProvider).Catalog()
 		if cat.IconSVG != testSVG {
 			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
 		}
 	})
 
-	t.Run("existing catalog icon is preserved", func(t *testing.T) {
+	t.Run("metadata override replaces existing catalog icon", func(t *testing.T) {
 		t.Parallel()
 
 		const existingIcon = `<svg><circle/></svg>`
 		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
 		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
 		base.catalog.IconSVG = existingIcon
-		base.SetIconSVG(testSVG)
 
 		cp := prov.(core.CatalogProvider)
 		cat := cp.Catalog()
-		if cat.IconSVG != existingIcon {
-			t.Fatalf("IconSVG = %q, want preserved %q", cat.IconSVG, existingIcon)
+		if cat.IconSVG != testSVG {
+			t.Fatalf("IconSVG = %q, want override %q", cat.IconSVG, testSVG)
 		}
 	})
+}
+
+func TestRemoteProviderMetadataOverridesApplyToSessionCatalog(t *testing.T) {
+	t.Parallel()
+
+	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+	prov, err := NewRemoteProvider(
+		context.Background(),
+		client,
+		"roundtrip",
+		nil,
+		WithMetadataOverrides("Override", "Override description", "<svg/>"),
+	)
+	if err != nil {
+		t.Fatalf("NewRemoteProvider: %v", err)
+	}
+
+	cat, err := prov.(core.SessionCatalogProvider).CatalogForRequest(context.Background(), "token-123")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if cat.DisplayName != "Override" {
+		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Override")
+	}
+	if cat.Description != "Override description" {
+		t.Fatalf("Description = %q, want %q", cat.Description, "Override description")
+	}
+	if cat.IconSVG != "<svg/>" {
+		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
+	}
 }
 
 func TestRemoteProviderManualAuthOnly(t *testing.T) {

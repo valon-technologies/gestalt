@@ -770,6 +770,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 		"hybrid",
 		"Hybrid",
 		"Hybrid provider",
+		"",
 		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
 		composite.BoundProvider{Provider: apiProv, Connection: testAPIConnectionName},
 	)

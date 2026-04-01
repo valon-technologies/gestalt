@@ -60,15 +60,12 @@ func TestBuildMCPSurfaceIncludesManifestDeclaredProviders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			pluginDir := t.TempDir()
-			writeReleaseTestManifest(t, pluginDir, tc.manifest)
-
 			cfg := &config.Config{
 				Integrations: map[string]config.IntegrationDef{
 					"example": {
 						Plugin: &config.PluginDef{
-							Source:               "github.com/testowner/plugins/example",
-							ResolvedManifestPath: pluginDir + "/plugin.json",
+							Source:           "github.com/testowner/plugins/example",
+							ResolvedManifest: tc.manifest,
 						},
 					},
 				},
@@ -88,5 +85,29 @@ func TestBuildMCPSurfaceIncludesManifestDeclaredProviders(t *testing.T) {
 				t.Fatalf("mcp connection = %q, want %q", got, config.PluginConnectionName)
 			}
 		})
+	}
+}
+
+func TestBuildMCPSurfaceExcludesResolvedManifestWithoutProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				Plugin: &config.PluginDef{
+					Source: "github.com/testowner/plugins/example",
+					ResolvedManifest: &pluginmanifestv1.Manifest{
+						Source:  "github.com/testowner/plugins/example",
+						Version: "0.0.1",
+						Kinds:   []string{pluginmanifestv1.KindProvider},
+					},
+				},
+			},
+		},
+	}
+
+	surface := buildMCPSurface(cfg, bootstrap.BuildConnectionMaps(cfg))
+	if len(surface.providers) != 0 {
+		t.Fatalf("providers = %v, want none", surface.providers)
 	}
 }

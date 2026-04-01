@@ -35,7 +35,7 @@ func (p *fakeProvider) Close() error { p.closed = true; return nil }
 func TestNewMergedRejectsOperationCollision(t *testing.T) {
 	t.Parallel()
 
-	_, err := composite.NewMerged("test", "Test", "desc",
+	_, err := composite.NewMerged("test", "Test", "desc", "",
 		&fakeProvider{name: "api", ops: []core.Operation{{Name: "search"}}},
 		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "search"}}},
 	)
@@ -53,7 +53,7 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 
 	apiHit := false
 	pluginHit := false
-	merged, err := composite.NewMerged("test", "Test", "desc",
+	merged, err := composite.NewMerged("test", "Test", "desc", "",
 		&fakeProvider{
 			name: "api",
 			ops:  []core.Operation{{Name: "list_items"}},
@@ -97,7 +97,7 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 func TestNewMergedConnectionModeNone(t *testing.T) {
 	t.Parallel()
 
-	merged, err := composite.NewMerged("test", "Test", "desc",
+	merged, err := composite.NewMerged("test", "Test", "desc", "",
 		&fakeProvider{name: "a", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "a"}}},
 		&fakeProvider{name: "b", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "b"}}},
 	)
@@ -115,7 +115,7 @@ func TestMergedDisownProvider(t *testing.T) {
 	api := &fakeProvider{name: "api", ops: []core.Operation{{Name: "a"}}}
 	plugin := &fakeProvider{name: "plugin", ops: []core.Operation{{Name: "b"}}}
 
-	merged, err := composite.NewMerged("test", "Test", "desc", api, plugin)
+	merged, err := composite.NewMerged("test", "Test", "desc", "", api, plugin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,20 +131,16 @@ func TestMergedDisownProvider(t *testing.T) {
 	}
 }
 
-func TestMergedSettersUpdateCatalogMetadata(t *testing.T) {
+func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	t.Parallel()
 
-	merged, err := composite.NewMerged("test", "Test", "desc",
+	merged, err := composite.NewMerged("test", "Override", "Override description", "<svg/>",
 		&fakeProvider{name: "api", ops: []core.Operation{{Name: "list_items"}}},
 		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "query"}}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	merged.SetDisplayName("Override")
-	merged.SetDescription("Override description")
-	merged.SetIconSVG("<svg/>")
 
 	cat := merged.Catalog()
 	if cat == nil {

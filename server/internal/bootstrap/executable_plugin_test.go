@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -271,15 +270,6 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
 		},
 	}
-	manifestData, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
-	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoauth": {
@@ -290,7 +280,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 						"client_id":     "test-client-id",
 						"client_secret": "test-client-secret",
 					}),
-					ResolvedManifestPath: manifestPath,
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -347,22 +337,13 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
 		},
 	}
-	manifestData, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
-	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echonoauth": {
 				Plugin: &config.PluginDef{
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifestPath: manifestPath,
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -582,22 +563,13 @@ func TestHybridPluginUsesManifestStaticHeadersForSpecSurface(t *testing.T) {
 			},
 		},
 	}
-	manifestData, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
-	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifestPath: manifestPath,
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
 				},
 			},
 		},

@@ -708,7 +708,6 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 			return fmt.Errorf("prepared asset root for ui plugin not found at %s", assetRootPath)
 		}
 		cfg.UI.Plugin.ResolvedAssetRoot = assetRootPath
-		cfg.UI.Plugin.ResolvedManifestPath = manifestPath
 	}
 
 	return nil
@@ -747,7 +746,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 
 	resolvePluginIcon(manifest, manifestPath, plugin)
 
-	plugin.ResolvedManifestPath = manifestPath
+	plugin.ResolvedManifest = manifest
 	if kind == "integration" && manifest.IsDeclarativeOnlyProvider() {
 		plugin.IsDeclarative = true
 		return nil
@@ -765,7 +764,6 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
-	plugin.ResolvedManifestPath = manifestPath
 	return nil
 }
 
