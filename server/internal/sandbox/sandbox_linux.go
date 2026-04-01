@@ -5,6 +5,7 @@ package sandbox
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
@@ -100,7 +101,7 @@ func RunSubcommand(args []string) error {
 
 	if proxyPort > 0 {
 		if err := landlock.V4.RestrictNet(landlock.ConnectTCP(uint16(proxyPort))); err != nil {
-			fmt.Fprintf(os.Stderr, "sandbox: landlock network restriction unavailable: %v\n", err)
+			slog.Warn("sandbox: landlock network restriction unavailable", "error", err)
 		}
 	}
 

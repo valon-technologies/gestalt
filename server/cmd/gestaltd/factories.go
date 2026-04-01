@@ -42,6 +42,8 @@ type bootstrapEnv struct {
 	Stop   context.CancelFunc
 	Config *config.Config
 	Result *bootstrap.Result
+
+	prevLogger *slog.Logger
 }
 
 func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
@@ -59,22 +61,33 @@ func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
 		stop()
 		return nil, fmt.Errorf("bootstrap: %v", err)
 	}
+	prevLogger := slog.Default()
+	if logger := result.Telemetry.Logger(); logger != nil {
+		slog.SetDefault(logger)
+	}
+	restoreLoggerOnError := true
+	defer func() {
+		if restoreLoggerOnError {
+			slog.SetDefault(prevLogger)
+		}
+	}()
 	logDatastoreWarnings(result.Datastore)
 
 	if err := result.Datastore.Migrate(ctx); err != nil {
-		_ = result.Datastore.Close()
-		if closer, ok := result.SecretManager.(interface{ Close() error }); ok {
-			_ = closer.Close()
-		}
 		stop()
+		closeCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+		defer cancel()
+		_ = result.Close(closeCtx)
 		return nil, fmt.Errorf("running datastore migrations: %v", err)
 	}
+	restoreLoggerOnError = false
 
 	return &bootstrapEnv{
-		Ctx:    ctx,
-		Stop:   stop,
-		Config: cfg,
-		Result: result,
+		Ctx:        ctx,
+		Stop:       stop,
+		Config:     cfg,
+		Result:     result,
+		prevLogger: prevLogger,
 	}, nil
 }
 
@@ -83,6 +96,9 @@ func (e *bootstrapEnv) Close() {
 	ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 	defer cancel()
 	_ = e.Result.Close(ctx)
+	if e.prevLogger != nil {
+		slog.SetDefault(e.prevLogger)
+	}
 }
 
 func buildFactories() *bootstrap.FactoryRegistry {

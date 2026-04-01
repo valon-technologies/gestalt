@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -14,6 +14,7 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		log.Fatal(err)
+		slog.Error("gestaltd exited", "error", err)
+		os.Exit(1)
 	}
 }
