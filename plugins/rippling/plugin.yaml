@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/rippling
-version: 0.0.1-alpha.1
+version: 0.0.1-alpha.2
 display_name: Rippling
 description: Access employees, departments, work locations, current company, and leave data.
 icon_file: assets/icon.svg
@@ -113,11 +113,11 @@ provider:
           in: query
           description: End of overlapping date-range filter
         - name: limit
-          type: string
+          type: int
           in: query
           description: Maximum number of leave requests to return
         - name: offset
-          type: string
+          type: int
           in: query
           description: Pagination offset
     - name: list_leave_balances
