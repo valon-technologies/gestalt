@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -509,6 +510,86 @@ func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 	waitForReady(t, baseURL, 30*time.Second)
 }
 
+func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupHybridSpecLoadedPluginDir(t, dir)
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+
+	out, err := exec.Command(gestaltdBin, "plugin", "package", "--input", pluginDir, "--output", archivePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd plugin package: %v\n%s", err, out)
+	}
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+
+	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	lockPath := filepath.Join(dir, initLockfileName)
+	lock, err := readLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("readLockfile: %v", err)
+	}
+	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	if !ok {
+		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
+	}
+	if entry.Executable == "" {
+		t.Fatal("expected packaged hybrid plugin executable to be preserved in lockfile")
+	}
+
+	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start serve: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(os.Interrupt)
+		_ = cmd.Wait()
+	})
+
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	waitForReady(t, baseURL, 30*time.Second)
+
+	resp, err := http.Get(baseURL + "/api/v1/integrations/example/operations")
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list operations returned %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decode operations: %v", err)
+	}
+
+	ids := make([]string, 0, len(ops))
+	for _, op := range ops {
+		ids = append(ids, op.ID)
+	}
+	sort.Strings(ids)
+	if !containsString(ids, "echo") {
+		t.Fatalf("operation ids = %v, want echo from the packaged executable", ids)
+	}
+	if !containsString(ids, "messages.list") || !containsString(ids, "getProfile") {
+		t.Fatalf("operation ids = %v, want aliased spec operations", ids)
+	}
+	if containsString(ids, "gmail.users.labels.list") {
+		t.Fatalf("operation ids = %v, did not expect disallowed raw spec operation", ids)
+	}
+}
+
 func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef string, port int) string {
 	t.Helper()
 
@@ -533,4 +614,102 @@ integrations:
 		t.Fatalf("write config: %v", err)
 	}
 	return cfgPath
+}
+
+func setupHybridSpecLoadedPluginDir(t *testing.T, baseDir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(baseDir, "hybrid-plugin-src")
+	artifactRel := pluginArtifactRel()
+	artifactAbs := filepath.Join(pluginDir, filepath.FromSlash(artifactRel))
+	specRel := filepath.ToSlash(filepath.Join("specs", "openapi.yaml"))
+
+	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0o755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "specs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll specs dir: %v", err)
+	}
+	if err := copyFile(pluginBin, artifactAbs); err != nil {
+		t.Fatalf("copy plugin binary: %v", err)
+	}
+
+	spec := `openapi: 3.0.0
+info:
+  title: Hybrid Allowed Ops API
+  version: 1.0.0
+servers:
+  - url: https://api.hybrid.example/v1
+paths:
+  /messages:
+    get:
+      operationId: gmail.users.messages.list
+      responses:
+        "200":
+          description: ok
+  /profile:
+    get:
+      operationId: gmail.users.getProfile
+      responses:
+        "200":
+          description: ok
+  /labels:
+    get:
+      operationId: gmail.users.labels.list
+      responses:
+        "200":
+          description: ok
+`
+	if err := os.WriteFile(filepath.Join(pluginDir, filepath.FromSlash(specRel)), []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	digest, err := fileSHA256(artifactAbs)
+	if err != nil {
+		t.Fatalf("compute artifact digest: %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/test/plugins/hybrid-spec-loaded",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: specRel,
+			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
+				"gmail.users.messages.list": {Alias: "messages.list"},
+				"gmail.users.getProfile":    {Alias: "getProfile"},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   artifactRel,
+				SHA256: digest,
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: artifactRel,
+			},
+		},
+	}
+	data, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	return pluginDir
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
