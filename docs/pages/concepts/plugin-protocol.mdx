@@ -31,8 +31,9 @@ The public Go SDK in `sdk/go` handles this for you.
 A provider plugin is expected to:
 
 - report provider metadata such as name, display name, description, and connection mode
-- list operations
+- expose its discovery catalog
 - execute operations
+- optionally expose a request-scoped catalog
 - optionally expose a config schema
 - optionally run startup logic when the host sends `StartProvider`
 
