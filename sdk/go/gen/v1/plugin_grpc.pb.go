@@ -22,7 +22,6 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ProviderPlugin_GetMetadata_FullMethodName       = "/gestalt.plugin.v1.ProviderPlugin/GetMetadata"
 	ProviderPlugin_StartProvider_FullMethodName     = "/gestalt.plugin.v1.ProviderPlugin/StartProvider"
-	ProviderPlugin_ListOperations_FullMethodName    = "/gestalt.plugin.v1.ProviderPlugin/ListOperations"
 	ProviderPlugin_Execute_FullMethodName           = "/gestalt.plugin.v1.ProviderPlugin/Execute"
 	ProviderPlugin_GetSessionCatalog_FullMethodName = "/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog"
 	ProviderPlugin_PostConnect_FullMethodName       = "/gestalt.plugin.v1.ProviderPlugin/PostConnect"
@@ -34,7 +33,6 @@ const (
 type ProviderPluginClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error)
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
-	ListOperations(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListOperationsResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error)
 	PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error)
@@ -62,16 +60,6 @@ func (c *providerPluginClient) StartProvider(ctx context.Context, in *StartProvi
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartProviderResponse)
 	err := c.cc.Invoke(ctx, ProviderPlugin_StartProvider_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *providerPluginClient) ListOperations(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListOperationsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListOperationsResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_ListOperations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +102,6 @@ func (c *providerPluginClient) PostConnect(ctx context.Context, in *PostConnectR
 type ProviderPluginServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error)
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)
-	ListOperations(context.Context, *emptypb.Empty) (*ListOperationsResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
 	PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error)
@@ -133,9 +120,6 @@ func (UnimplementedProviderPluginServer) GetMetadata(context.Context, *emptypb.E
 }
 func (UnimplementedProviderPluginServer) StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartProvider not implemented")
-}
-func (UnimplementedProviderPluginServer) ListOperations(context.Context, *emptypb.Empty) (*ListOperationsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListOperations not implemented")
 }
 func (UnimplementedProviderPluginServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
@@ -199,24 +183,6 @@ func _ProviderPlugin_StartProvider_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ProviderPluginServer).StartProvider(ctx, req.(*StartProviderRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProviderPlugin_ListOperations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProviderPluginServer).ListOperations(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProviderPlugin_ListOperations_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).ListOperations(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -289,10 +255,6 @@ var ProviderPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartProvider",
 			Handler:    _ProviderPlugin_StartProvider_Handler,
-		},
-		{
-			MethodName: "ListOperations",
-			Handler:    _ProviderPlugin_ListOperations_Handler,
 		},
 		{
 			MethodName: "Execute",

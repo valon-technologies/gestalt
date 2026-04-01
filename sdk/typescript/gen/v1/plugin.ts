@@ -75,27 +75,6 @@ export interface Parameter {
     defaultValue?: Value;
 }
 /**
- * @generated from protobuf message gestalt.plugin.v1.Operation
- */
-export interface Operation {
-    /**
-     * @generated from protobuf field: string name = 1
-     */
-    name: string;
-    /**
-     * @generated from protobuf field: string description = 2
-     */
-    description: string;
-    /**
-     * @generated from protobuf field: string method = 3
-     */
-    method: string;
-    /**
-     * @generated from protobuf field: repeated gestalt.plugin.v1.Parameter parameters = 4
-     */
-    parameters: Parameter[];
-}
-/**
  * @generated from protobuf message gestalt.plugin.v1.Capability
  */
 export interface Capability {
@@ -265,15 +244,6 @@ export interface IntegrationToken {
      * @generated from protobuf field: google.protobuf.Timestamp updated_at = 13
      */
     updatedAt?: Timestamp;
-}
-/**
- * @generated from protobuf message gestalt.plugin.v1.ListOperationsResponse
- */
-export interface ListOperationsResponse {
-    /**
-     * @generated from protobuf field: repeated gestalt.plugin.v1.Operation operations = 1
-     */
-    operations: Operation[];
 }
 /**
  * @generated from protobuf message gestalt.plugin.v1.ExecuteRequest
@@ -676,77 +646,6 @@ class Parameter$Type extends MessageType<Parameter> {
  * @generated MessageType for protobuf message gestalt.plugin.v1.Parameter
  */
 export const Parameter = new Parameter$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class Operation$Type extends MessageType<Operation> {
-    constructor() {
-        super("gestalt.plugin.v1.Operation", [
-            { no: 1, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "description", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "method", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 4, name: "parameters", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => Parameter }
-        ]);
-    }
-    create(value?: PartialMessage<Operation>): Operation {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.name = "";
-        message.description = "";
-        message.method = "";
-        message.parameters = [];
-        if (value !== undefined)
-            reflectionMergePartial<Operation>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: Operation): Operation {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* string name */ 1:
-                    message.name = reader.string();
-                    break;
-                case /* string description */ 2:
-                    message.description = reader.string();
-                    break;
-                case /* string method */ 3:
-                    message.method = reader.string();
-                    break;
-                case /* repeated gestalt.plugin.v1.Parameter parameters */ 4:
-                    message.parameters.push(Parameter.internalBinaryRead(reader, reader.uint32(), options));
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: Operation, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* string name = 1; */
-        if (message.name !== "")
-            writer.tag(1, WireType.LengthDelimited).string(message.name);
-        /* string description = 2; */
-        if (message.description !== "")
-            writer.tag(2, WireType.LengthDelimited).string(message.description);
-        /* string method = 3; */
-        if (message.method !== "")
-            writer.tag(3, WireType.LengthDelimited).string(message.method);
-        /* repeated gestalt.plugin.v1.Parameter parameters = 4; */
-        for (let i = 0; i < message.parameters.length; i++)
-            Parameter.internalBinaryWrite(message.parameters[i], writer.tag(4, WireType.LengthDelimited).fork(), options).join();
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.Operation
- */
-export const Operation = new Operation$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class Capability$Type extends MessageType<Capability> {
     constructor() {
@@ -1246,53 +1145,6 @@ class IntegrationToken$Type extends MessageType<IntegrationToken> {
  * @generated MessageType for protobuf message gestalt.plugin.v1.IntegrationToken
  */
 export const IntegrationToken = new IntegrationToken$Type();
-// @generated message type with reflection information, may provide speed optimized methods
-class ListOperationsResponse$Type extends MessageType<ListOperationsResponse> {
-    constructor() {
-        super("gestalt.plugin.v1.ListOperationsResponse", [
-            { no: 1, name: "operations", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => Operation }
-        ]);
-    }
-    create(value?: PartialMessage<ListOperationsResponse>): ListOperationsResponse {
-        const message = globalThis.Object.create((this.messagePrototype!));
-        message.operations = [];
-        if (value !== undefined)
-            reflectionMergePartial<ListOperationsResponse>(this, message, value);
-        return message;
-    }
-    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ListOperationsResponse): ListOperationsResponse {
-        let message = target ?? this.create(), end = reader.pos + length;
-        while (reader.pos < end) {
-            let [fieldNo, wireType] = reader.tag();
-            switch (fieldNo) {
-                case /* repeated gestalt.plugin.v1.Operation operations */ 1:
-                    message.operations.push(Operation.internalBinaryRead(reader, reader.uint32(), options));
-                    break;
-                default:
-                    let u = options.readUnknownField;
-                    if (u === "throw")
-                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
-                    let d = reader.skip(wireType);
-                    if (u !== false)
-                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
-            }
-        }
-        return message;
-    }
-    internalBinaryWrite(message: ListOperationsResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
-        /* repeated gestalt.plugin.v1.Operation operations = 1; */
-        for (let i = 0; i < message.operations.length; i++)
-            Operation.internalBinaryWrite(message.operations[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
-        let u = options.writeUnknownFields;
-        if (u !== false)
-            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-        return writer;
-    }
-}
-/**
- * @generated MessageType for protobuf message gestalt.plugin.v1.ListOperationsResponse
- */
-export const ListOperationsResponse = new ListOperationsResponse$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class ExecuteRequest$Type extends MessageType<ExecuteRequest> {
     constructor() {
@@ -1923,7 +1775,6 @@ export const StartRuntimeRequest = new StartRuntimeRequest$Type();
 export const ProviderPlugin = new ServiceType("gestalt.plugin.v1.ProviderPlugin", [
     { name: "GetMetadata", options: {}, I: Empty, O: ProviderMetadata },
     { name: "StartProvider", options: {}, I: StartProviderRequest, O: StartProviderResponse },
-    { name: "ListOperations", options: {}, I: Empty, O: ListOperationsResponse },
     { name: "Execute", options: {}, I: ExecuteRequest, O: OperationResult },
     { name: "GetSessionCatalog", options: {}, I: GetSessionCatalogRequest, O: GetSessionCatalogResponse },
     { name: "PostConnect", options: {}, I: PostConnectRequest, O: PostConnectResponse }

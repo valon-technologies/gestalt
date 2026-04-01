@@ -43,13 +43,6 @@ message Parameter {
   google.protobuf.Value default_value = 5;
 }
 
-message Operation {
-  string name = 1;
-  string description = 2;
-  string method = 3;
-  repeated Parameter parameters = 4;
-}
-
 message Capability {
   string provider = 1;
   string operation = 2;
@@ -100,10 +93,6 @@ message IntegrationToken {
   string metadata_json = 11;
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
-}
-
-message ListOperationsResponse {
-  repeated Operation operations = 1;
 }
 
 message ExecuteRequest {
@@ -164,7 +153,6 @@ message StartRuntimeRequest {
 service ProviderPlugin {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
-  rpc ListOperations(google.protobuf.Empty) returns (ListOperationsResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);

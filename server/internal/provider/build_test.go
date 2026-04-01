@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -50,8 +52,8 @@ func TestBuild(t *testing.T) {
 	if intg.Name() != "example" {
 		t.Errorf("Name() = %q", intg.Name())
 	}
-	if len(intg.ListOperations()) != 2 {
-		t.Errorf("got %d operations, want 2", len(intg.ListOperations()))
+	if cat := intg.Catalog(); cat == nil || len(cat.Operations) != 2 {
+		t.Errorf("got %+v, want 2 operations", cat)
 	}
 }
 
@@ -125,7 +127,7 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 	}
 }
 
-func TestBuildSatisfiesCatalogProvider(t *testing.T) {
+func TestBuildExposesCatalog(t *testing.T) {
 	t.Parallel()
 
 	def := &Definition{
@@ -161,12 +163,7 @@ func TestBuildSatisfiesCatalogProvider(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	cp, ok := provider.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("Build result should satisfy CatalogProvider")
-	}
-
-	cat := cp.Catalog()
+	cat := provider.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() should return *catalog.Catalog")
 	}
@@ -282,6 +279,68 @@ func TestBuildExecuteRoutesQueryParamsUsingCatalogMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildAppliesIconFile(t *testing.T) {
+	t.Parallel()
+
+	const svg = `<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>`
+	iconPath := filepath.Join(t.TempDir(), "test.svg")
+	if err := os.WriteFile(iconPath, []byte(svg+"\n"), 0644); err != nil {
+		t.Fatalf("writing icon file: %v", err)
+	}
+
+	def := &Definition{
+		Provider:    "fileicon",
+		DisplayName: "File Icon Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
+		},
+	}
+
+	iconSVG, err := ReadIconFile(iconPath)
+	if err != nil {
+		t.Fatalf("ReadIconFile: %v", err)
+	}
+	def.IconSVG = iconSVG
+	prov, err := Build(def, config.ConnectionDef{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil Catalog")
+	}
+	if cat.IconSVG != svg {
+		t.Fatalf("expected icon from file, got %q", cat.IconSVG)
+	}
+}
+
+func TestBuildIconFileMissing(t *testing.T) {
+	t.Parallel()
+
+	def := &Definition{
+		Provider:    "badicon",
+		DisplayName: "Bad Icon Test",
+		BaseURL:     "https://api.example.com",
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
+		},
+	}
+
+	if _, err := ReadIconFile("/nonexistent/icon.svg"); err == nil {
+		t.Fatal("expected ReadIconFile to fail for missing icon")
+	}
+	prov, err := Build(def, config.ConnectionDef{})
+	if err != nil {
+		t.Fatalf("Build should succeed with missing icon: %v", err)
+	}
+	if cat := prov.Catalog(); cat != nil && cat.IconSVG != "" {
+		t.Errorf("expected empty IconSVG, got %q", cat.IconSVG)
+	}
+}
 func TestBuildAuthHeader(t *testing.T) {
 	t.Parallel()
 

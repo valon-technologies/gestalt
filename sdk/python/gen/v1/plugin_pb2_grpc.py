@@ -25,11 +25,6 @@ class ProviderPluginStub(object):
                 request_serializer=v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.StartProviderResponse.FromString,
                 _registered_method=True)
-        self.ListOperations = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/ListOperations',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_plugin__pb2.ListOperationsResponse.FromString,
-                _registered_method=True)
         self.Execute = channel.unary_unary(
                 '/gestalt.plugin.v1.ProviderPlugin/Execute',
                 request_serializer=v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
@@ -57,12 +52,6 @@ class ProviderPluginServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def StartProvider(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ListOperations(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -98,11 +87,6 @@ def add_ProviderPluginServicer_to_server(servicer, server):
                     servicer.StartProvider,
                     request_deserializer=v1_dot_plugin__pb2.StartProviderRequest.FromString,
                     response_serializer=v1_dot_plugin__pb2.StartProviderResponse.SerializeToString,
-            ),
-            'ListOperations': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListOperations,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_plugin__pb2.ListOperationsResponse.SerializeToString,
             ),
             'Execute': grpc.unary_unary_rpc_method_handler(
                     servicer.Execute,
@@ -174,33 +158,6 @@ class ProviderPlugin(object):
             '/gestalt.plugin.v1.ProviderPlugin/StartProvider',
             v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
             v1_dot_plugin__pb2.StartProviderResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ListOperations(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.plugin.v1.ProviderPlugin/ListOperations',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_plugin__pb2.ListOperationsResponse.FromString,
             options,
             channel_credentials,
             insecure,

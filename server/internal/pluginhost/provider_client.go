@@ -10,7 +10,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/integration"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -74,20 +73,15 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 	if err := callStartProvider(ctx, client, name, config); err != nil {
 		return nil, err
 	}
-	opsResp, err := client.ListOperations(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, err
-	}
 	staticCatalog, err := catalogFromJSON(meta.GetStaticCatalogJson())
 	if err != nil {
 		return nil, err
 	}
-	ops := operationsFromProto(opsResp.GetOperations())
 
 	base := &remoteProviderBase{
 		client:   client,
 		metadata: meta,
-		catalog:  buildRemoteCatalog(meta, staticCatalog, ops),
+		catalog:  buildRemoteCatalog(meta, staticCatalog),
 	}
 	for _, opt := range opts {
 		opt(base)
@@ -119,10 +113,6 @@ func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 	return protoConnectionModeToCore(p.metadata.GetConnectionMode())
 }
 
-func (p *remoteProviderBase) ListOperations() []core.Operation {
-	return integration.OperationsList(p.catalog)
-}
-
 func (p *remoteProviderBase) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	msg, err := structFromMap(params)
 	if err != nil {
@@ -149,10 +139,7 @@ func (p *remoteProviderBase) SupportsManualAuth() bool {
 
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 	if p.catalog == nil {
-		if p.iconSVG == "" {
-			return nil
-		}
-		return p.decorateCatalog(&catalog.Catalog{Name: p.metadata.GetName()})
+		return nil
 	}
 	return p.decorateCatalog(p.catalog)
 }
@@ -186,22 +173,12 @@ func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context
 	return p.sessionCatalog(ctx, token)
 }
 
-func buildRemoteCatalog(meta *proto.ProviderMetadata, staticCatalog *catalog.Catalog, ops []core.Operation) *catalog.Catalog {
-	if staticCatalog == nil && len(ops) == 0 {
+func buildRemoteCatalog(meta *proto.ProviderMetadata, staticCatalog *catalog.Catalog) *catalog.Catalog {
+	if staticCatalog == nil {
 		return nil
 	}
 
-	var cat *catalog.Catalog
-	if staticCatalog != nil {
-		cat = staticCatalog.Clone()
-	} else {
-		cat = &catalog.Catalog{
-			Name:        meta.GetName(),
-			DisplayName: meta.GetDisplayName(),
-			Description: meta.GetDescription(),
-			Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
-		}
-	}
+	cat := staticCatalog.Clone()
 	if cat.Name == "" {
 		cat.Name = meta.GetName()
 	}
@@ -211,93 +188,12 @@ func buildRemoteCatalog(meta *proto.ProviderMetadata, staticCatalog *catalog.Cat
 	if cat.Description == "" {
 		cat.Description = meta.GetDescription()
 	}
-
-	for _, op := range ops {
-		catOp := ensureCatalogOperation(cat, op)
-		if catOp.Description == "" {
-			catOp.Description = op.Description
-		}
-		if catOp.Method == "" {
-			catOp.Method = op.Method
-		}
-		if catOp.Transport == "" {
-			catOp.Transport = catalog.TransportPlugin
-		}
-		catOp.Parameters = mergeCatalogParameters(catOp.Parameters, op.Parameters)
-	}
-
-	integration.CompileSchemas(cat)
-	return cat
-}
-
-func ensureCatalogOperation(cat *catalog.Catalog, op core.Operation) *catalog.CatalogOperation {
 	for i := range cat.Operations {
-		if cat.Operations[i].ID == op.Name {
-			return &cat.Operations[i]
+		if cat.Operations[i].Transport == "" {
+			cat.Operations[i].Transport = catalog.TransportPlugin
 		}
 	}
-	cat.Operations = append(cat.Operations, catalog.CatalogOperation{
-		ID:          op.Name,
-		Method:      op.Method,
-		Description: op.Description,
-		Transport:   catalog.TransportPlugin,
-	})
-	return &cat.Operations[len(cat.Operations)-1]
-}
-
-func mergeCatalogParameters(existing []catalog.CatalogParameter, params []core.Parameter) []catalog.CatalogParameter {
-	if len(params) == 0 {
-		return existing
-	}
-	if len(existing) == 0 {
-		return catalogParametersFromCore(params)
-	}
-
-	indexByName := make(map[string]int, len(existing))
-	for i := range existing {
-		indexByName[existing[i].Name] = i
-	}
-
-	for _, param := range params {
-		if idx, ok := indexByName[param.Name]; ok {
-			if existing[idx].Type == "" {
-				existing[idx].Type = param.Type
-			}
-			if existing[idx].Description == "" {
-				existing[idx].Description = param.Description
-			}
-			if !existing[idx].Required {
-				existing[idx].Required = param.Required
-			}
-			if existing[idx].Default == nil && param.Default != nil {
-				existing[idx].Default = param.Default
-			}
-			continue
-		}
-		existing = append(existing, catalog.CatalogParameter{
-			Name:        param.Name,
-			Type:        param.Type,
-			Description: param.Description,
-			Required:    param.Required,
-			Default:     param.Default,
-		})
-	}
-
-	return existing
-}
-
-func catalogParametersFromCore(params []core.Parameter) []catalog.CatalogParameter {
-	out := make([]catalog.CatalogParameter, 0, len(params))
-	for _, param := range params {
-		out = append(out, catalog.CatalogParameter{
-			Name:        param.Name,
-			Type:        param.Type,
-			Description: param.Description,
-			Required:    param.Required,
-			Default:     param.Default,
-		})
-	}
-	return out
+	return cat
 }
 
 func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {

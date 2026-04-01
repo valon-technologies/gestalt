@@ -24,7 +24,7 @@ func (s *stubProvider) Name() string                        { return s.name }
 func (s *stubProvider) DisplayName() string                 { return s.displayName }
 func (s *stubProvider) Description() string                 { return s.description }
 func (s *stubProvider) ConnectionMode() core.ConnectionMode { return s.connMode }
-func (s *stubProvider) ListOperations() []core.Operation    { return s.ops }
+func (s *stubProvider) Catalog() *catalog.Catalog           { return nil }
 func (s *stubProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, nil
 }

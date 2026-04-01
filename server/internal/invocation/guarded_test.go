@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -18,8 +20,32 @@ type stubProviderWithOps struct {
 	ops []core.Operation
 }
 
-func (s *stubProviderWithOps) ListOperations() []core.Operation {
-	return s.ops
+func (s *stubProviderWithOps) Catalog() *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       s.N,
+		Operations: make([]catalog.CatalogOperation, 0, len(s.ops)),
+	}
+	for _, op := range s.ops {
+		params := make([]catalog.CatalogParameter, 0, len(op.Parameters))
+		for _, param := range op.Parameters {
+			params = append(params, catalog.CatalogParameter{
+				Name:        param.Name,
+				Type:        param.Type,
+				Description: param.Description,
+				Required:    param.Required,
+				Default:     param.Default,
+			})
+		}
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+			ID:          op.Name,
+			Method:      op.Method,
+			Path:        "/" + op.Name,
+			Description: op.Description,
+			Parameters:  params,
+		})
+	}
+	coreintegration.CompileSchemas(cat)
+	return cat
 }
 
 type capturingSink struct {

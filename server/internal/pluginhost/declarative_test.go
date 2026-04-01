@@ -285,12 +285,12 @@ func TestDeclarativeProvider_Metadata(t *testing.T) {
 		t.Errorf("ConnectionMode = %s, want user", p.ConnectionMode())
 	}
 
-	ops := p.ListOperations()
-	if len(ops) != 4 {
-		t.Fatalf("ListOperations returned %d ops, want 4", len(ops))
+	cat := p.Catalog()
+	if len(cat.Operations) != 4 {
+		t.Fatalf("Catalog returned %d ops, want 4", len(cat.Operations))
 	}
-	if ops[0].Name != "list_items" {
-		t.Errorf("ops[0].Name = %s, want list_items", ops[0].Name)
+	if cat.Operations[0].ID != "list_items" {
+		t.Errorf("ops[0].ID = %s, want list_items", cat.Operations[0].ID)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 		t.Fatalf("NewDeclarativeProvider: %v", err)
 	}
 
-	var _ core.CatalogProvider = p
+	var _ core.Provider = p
 
 	cat := p.Catalog()
 	if cat == nil {

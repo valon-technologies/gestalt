@@ -115,10 +115,6 @@ func (p *DeclarativeProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeUser
 }
 
-func (p *DeclarativeProvider) ListOperations() []core.Operation {
-	return integration.OperationsList(p.catalog)
-}
-
 func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	op, ok := p.opsByName[operation]
 	if !ok {

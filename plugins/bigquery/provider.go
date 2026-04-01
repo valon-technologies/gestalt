@@ -25,23 +25,29 @@ func NewProvider() *Provider {
 	return &Provider{runner: sdkQueryRunner{}}
 }
 
-func (p *Provider) Name() string                            { return providerName }
-func (p *Provider) DisplayName() string                     { return providerDisplayName }
-func (p *Provider) Description() string                     { return providerDescription }
+func (p *Provider) Name() string                           { return providerName }
+func (p *Provider) DisplayName() string                    { return providerDisplayName }
+func (p *Provider) Description() string                    { return providerDescription }
 func (p *Provider) ConnectionMode() gestalt.ConnectionMode { return gestalt.ConnectionModeUser }
 
-func (p *Provider) ListOperations() []gestalt.Operation {
-	return []gestalt.Operation{
-		{
-			Name:        queryOperationName,
-			Description: "Execute a BigQuery SQL query",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: queryParamProjectID, Type: "string", Required: true, Description: "GCP project ID"},
-				{Name: queryParamSQL, Type: "string", Required: true, Description: "SQL query to execute"},
-				{Name: queryParamMaxResults, Type: "integer", Description: "Maximum number of rows to return", Default: defaultQueryMaxResults},
-				{Name: queryParamTimeoutMs, Type: "integer", Description: "Query timeout in milliseconds", Default: defaultQueryTimeoutMs},
-				{Name: queryParamUseLegacySQL, Type: "boolean", Description: "Use legacy SQL syntax", Default: defaultQueryUseLegacySQL},
+func (p *Provider) Catalog() *gestalt.Catalog {
+	return &gestalt.Catalog{
+		Name:        providerName,
+		DisplayName: providerDisplayName,
+		Description: providerDescription,
+		Operations: []gestalt.CatalogOperation{
+			{
+				ID:          queryOperationName,
+				Description: "Execute a BigQuery SQL query",
+				Method:      http.MethodPost,
+				Path:        "/query",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: queryParamProjectID, Type: "string", Required: true, Description: "GCP project ID"},
+					{Name: queryParamSQL, Type: "string", Required: true, Description: "SQL query to execute"},
+					{Name: queryParamMaxResults, Type: "integer", Description: "Maximum number of rows to return", Default: defaultQueryMaxResults},
+					{Name: queryParamTimeoutMs, Type: "integer", Description: "Query timeout in milliseconds", Default: defaultQueryTimeoutMs},
+					{Name: queryParamUseLegacySQL, Type: "boolean", Description: "Use legacy SQL syntax", Default: defaultQueryUseLegacySQL},
+				},
 			},
 		},
 	}

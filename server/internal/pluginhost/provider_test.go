@@ -20,19 +20,6 @@ func (p *roundTripProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeEither
 }
 
-func (p *roundTripProvider) ListOperations() []core.Operation {
-	return []core.Operation{
-		{
-			Name:        "echo",
-			Description: "Echo input",
-			Method:      http.MethodPost,
-			Parameters: []core.Parameter{
-				{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
-			},
-		},
-	}
-}
-
 func (p *roundTripProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return &core.OperationResult{
 		Status: 201,
@@ -87,42 +74,30 @@ func (p *manualOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
 	return sdkgestalt.ConnectionModeIdentity
 }
 
-func (p *manualOnlySDKProvider) ListOperations() []sdkgestalt.Operation { return nil }
+func (p *manualOnlySDKProvider) Catalog() *sdkgestalt.Catalog {
+	return &sdkgestalt.Catalog{
+		Name:        "manual-only",
+		DisplayName: "Manual Only",
+		Description: "manual auth provider",
+		Operations: []sdkgestalt.CatalogOperation{
+			{
+				ID:          "echo",
+				Description: "Echo input",
+				Method:      http.MethodPost,
+				Path:        "/echo",
+				Parameters: []sdkgestalt.CatalogParameter{
+					{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
+				},
+			},
+		},
+	}
+}
 
 func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
 	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
 }
 
 func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
-
-type opsOnlySDKProvider struct{}
-
-func (p *opsOnlySDKProvider) Name() string { return "ops-only" }
-
-func (p *opsOnlySDKProvider) DisplayName() string { return "Ops Only" }
-
-func (p *opsOnlySDKProvider) Description() string { return "ops-only provider" }
-
-func (p *opsOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
-	return sdkgestalt.ConnectionModeUser
-}
-
-func (p *opsOnlySDKProvider) ListOperations() []sdkgestalt.Operation {
-	return []sdkgestalt.Operation{
-		{
-			Name:        "echo",
-			Description: "Echo input",
-			Method:      http.MethodPost,
-			Parameters: []sdkgestalt.Parameter{
-				{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
-			},
-		},
-	}
-}
-
-func (p *opsOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
-	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
-}
 
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -146,9 +121,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if _, ok := prov.(core.ManualProvider); !ok {
 		t.Fatal("expected remote provider to implement ManualProvider")
 	}
-	if _, ok := prov.(core.CatalogProvider); !ok {
-		t.Fatal("expected remote provider to implement CatalogProvider")
-	}
 	if _, ok := prov.(core.SessionCatalogProvider); !ok {
 		t.Fatal("expected remote provider to implement SessionCatalogProvider")
 	}
@@ -158,8 +130,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if _, ok := prov.(core.AuthTypeLister); !ok {
 		t.Fatal("expected remote provider to implement AuthTypeLister")
 	}
-	if ops := prov.ListOperations(); len(ops) != 1 || len(ops[0].Parameters) != 1 || ops[0].Parameters[0].Name != "message" {
-		t.Fatalf("unexpected ListOperations result: %+v", ops)
+	if cat := prov.Catalog(); cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "echo" {
+		t.Fatalf("unexpected Catalog result: %+v", cat)
 	}
 
 	ctx := core.WithConnectionParams(context.Background(), map[string]string{"tenant": "acme"})
@@ -171,8 +143,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected execute result: %+v", result)
 	}
 
-	cp := prov.(core.CatalogProvider)
-	if cat := cp.Catalog(); cat == nil || cat.Name != "roundtrip" {
+	if cat := prov.Catalog(); cat == nil || cat.Name != "roundtrip" {
 		t.Fatalf("unexpected static catalog: %+v", cat)
 	}
 
@@ -197,73 +168,6 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 
 	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>`
 
-	t.Run("no icon no catalog no ops returns nil", func(t *testing.T) {
-		t.Parallel()
-
-		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
-		if err != nil {
-			t.Fatalf("NewRemoteProvider: %v", err)
-		}
-		cp, ok := prov.(core.CatalogProvider)
-		if !ok {
-			t.Fatal("expected provider to implement CatalogProvider")
-		}
-		if cat := cp.Catalog(); cat != nil {
-			t.Fatalf("expected nil catalog, got %+v", cat)
-		}
-	})
-
-	t.Run("metadata override injects icon when no static catalog", func(t *testing.T) {
-		t.Parallel()
-
-		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil, WithMetadataOverrides("", "", testSVG))
-		if err != nil {
-			t.Fatalf("NewRemoteProvider: %v", err)
-		}
-
-		cp := prov.(core.CatalogProvider)
-		cat := cp.Catalog()
-		if cat == nil {
-			t.Fatal("expected non-nil catalog after metadata override")
-		}
-		if cat.IconSVG != testSVG {
-			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
-		}
-	})
-
-	t.Run("ops included in catalog when no static catalog", func(t *testing.T) {
-		t.Parallel()
-
-		client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&opsOnlySDKProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
-		if err != nil {
-			t.Fatalf("NewRemoteProvider: %v", err)
-		}
-
-		cp := prov.(core.CatalogProvider)
-		cat := cp.Catalog()
-		if cat == nil {
-			t.Fatal("expected non-nil catalog")
-		}
-		if cat.IconSVG != testSVG {
-			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
-		}
-		if len(cat.Operations) != 1 {
-			t.Fatalf("expected 1 operation, got %d", len(cat.Operations))
-		}
-		if cat.Operations[0].ID != "echo" {
-			t.Fatalf("Operations[0].ID = %q, want echo", cat.Operations[0].ID)
-		}
-		if cat.Operations[0].Transport != catalog.TransportPlugin {
-			t.Fatalf("Transport = %q, want %q", cat.Operations[0].Transport, catalog.TransportPlugin)
-		}
-		if len(cat.Operations[0].Parameters) != 1 || cat.Operations[0].Parameters[0].Name != "message" {
-			t.Fatalf("unexpected synthesized parameters: %+v", cat.Operations[0].Parameters)
-		}
-	})
-
 	t.Run("metadata override fills empty icon on existing catalog", func(t *testing.T) {
 		t.Parallel()
 
@@ -272,7 +176,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewRemoteProvider: %v", err)
 		}
-		cat := prov.(core.CatalogProvider).Catalog()
+		cat := prov.Catalog()
 		if cat.IconSVG != testSVG {
 			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
 		}
@@ -290,8 +194,7 @@ func TestRemoteProviderIconSVG(t *testing.T) {
 		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
 		base.catalog.IconSVG = existingIcon
 
-		cp := prov.(core.CatalogProvider)
-		cat := cp.Catalog()
+		cat := prov.Catalog()
 		if cat.IconSVG != testSVG {
 			t.Fatalf("IconSVG = %q, want override %q", cat.IconSVG, testSVG)
 		}
@@ -344,5 +247,11 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	if !mp.SupportsManualAuth() {
 		t.Fatal("expected SupportsManualAuth() == true")
 	}
-
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) != 1 {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	if cat.Operations[0].Transport != catalog.TransportPlugin {
+		t.Fatalf("Transport = %q, want %q", cat.Operations[0].Transport, catalog.TransportPlugin)
+	}
 }

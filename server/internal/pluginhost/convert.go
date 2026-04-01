@@ -94,13 +94,6 @@ func valueToProto(v any) (*structpb.Value, error) {
 	return structpb.NewValue(v)
 }
 
-func valueFromProto(v *structpb.Value) any {
-	if v == nil {
-		return nil
-	}
-	return v.AsInterface()
-}
-
 func parameterToProto(p core.Parameter) (*proto.Parameter, error) {
 	def, err := valueToProto(p.Default)
 	if err != nil {
@@ -115,19 +108,6 @@ func parameterToProto(p core.Parameter) (*proto.Parameter, error) {
 	}, nil
 }
 
-func parameterFromProto(msg *proto.Parameter) core.Parameter {
-	if msg == nil {
-		return core.Parameter{}
-	}
-	return core.Parameter{
-		Name:        msg.GetName(),
-		Type:        msg.GetType(),
-		Description: msg.GetDescription(),
-		Required:    msg.GetRequired(),
-		Default:     valueFromProto(msg.GetDefaultValue()),
-	}
-}
-
 func parametersToProto(params []core.Parameter) ([]*proto.Parameter, error) {
 	out := make([]*proto.Parameter, 0, len(params))
 	for _, p := range params {
@@ -138,59 +118,6 @@ func parametersToProto(params []core.Parameter) ([]*proto.Parameter, error) {
 		out = append(out, msg)
 	}
 	return out, nil
-}
-
-func parametersFromProto(params []*proto.Parameter) []core.Parameter {
-	out := make([]core.Parameter, 0, len(params))
-	for _, p := range params {
-		out = append(out, parameterFromProto(p))
-	}
-	return out
-}
-
-func operationToProto(op core.Operation) (*proto.Operation, error) {
-	params, err := parametersToProto(op.Parameters)
-	if err != nil {
-		return nil, fmt.Errorf("operation %q: %w", op.Name, err)
-	}
-	return &proto.Operation{
-		Name:        op.Name,
-		Description: op.Description,
-		Method:      op.Method,
-		Parameters:  params,
-	}, nil
-}
-
-func operationFromProto(msg *proto.Operation) core.Operation {
-	if msg == nil {
-		return core.Operation{}
-	}
-	return core.Operation{
-		Name:        msg.GetName(),
-		Description: msg.GetDescription(),
-		Method:      msg.GetMethod(),
-		Parameters:  parametersFromProto(msg.GetParameters()),
-	}
-}
-
-func operationsToProto(ops []core.Operation) ([]*proto.Operation, error) {
-	out := make([]*proto.Operation, 0, len(ops))
-	for _, op := range ops {
-		msg, err := operationToProto(op)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, msg)
-	}
-	return out, nil
-}
-
-func operationsFromProto(ops []*proto.Operation) []core.Operation {
-	out := make([]core.Operation, 0, len(ops))
-	for _, op := range ops {
-		out = append(out, operationFromProto(op))
-	}
-	return out
 }
 
 func capabilityToProto(cap *core.Capability) (*proto.Capability, error) {
