@@ -132,6 +132,37 @@ func serveOpenAPIBackend(t *testing.T, wantToken string) *httptest.Server {
 	return srv
 }
 
+func mustBootstrapResult(t *testing.T, cfg *config.Config, factories *bootstrap.FactoryRegistry) *bootstrap.Result {
+	t.Helper()
+	if factories == nil {
+		factories = validFactories()
+	}
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+	return result
+}
+
+func mustGetProvider(t *testing.T, result *bootstrap.Result, name string) core.Provider {
+	t.Helper()
+	prov, err := result.Providers.Get(name)
+	if err != nil {
+		t.Fatalf("Get %s provider: %v", name, err)
+	}
+	return prov
+}
+
+func bootstrapInlineProvider(t *testing.T, name string, plugin *config.PluginDef) core.Provider {
+	t.Helper()
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		name: {Plugin: plugin},
+	}
+	return mustGetProvider(t, mustBootstrapResult(t, cfg, nil), name)
+}
+
 func serveMCPToolServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -154,7 +185,6 @@ func serveMCPToolServer(t *testing.T) *httptest.Server {
 
 func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	mcpSrv := serveMCPOAuthEndpoints(t)
 
@@ -176,11 +206,7 @@ func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
+	result := mustBootstrapResult(t, cfg, nil)
 
 	connAuth := result.ConnectionAuth()
 	alphaAuth, ok := connAuth["alpha"]
@@ -203,7 +229,6 @@ func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 
 func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	mcpSrv := serveMCPOAuthEndpoints(t)
 	specSrv := serveOpenAPISpec(t)
@@ -223,16 +248,8 @@ func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("vendor")
-	if err != nil {
-		t.Fatalf("Get vendor provider: %v", err)
-	}
+	result := mustBootstrapResult(t, cfg, nil)
+	prov := mustGetProvider(t, result, "vendor")
 	cat := prov.Catalog()
 	if cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation from the openapi spec")
@@ -313,16 +330,8 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("hybrid")
-	if err != nil {
-		t.Fatalf("Providers.Get: %v", err)
-	}
+	result := mustBootstrapResult(t, cfg, nil)
+	prov := mustGetProvider(t, result, "hybrid")
 	cat := prov.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
@@ -373,7 +382,6 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	specSrv := serveOpenAPISpec(t)
 	var pluginConfig yaml.Node
 	if err := pluginConfig.Encode(map[string]any{
@@ -400,11 +408,7 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
+	result := mustBootstrapResult(t, cfg, nil)
 
 	connAuth := result.ConnectionAuth()
 	vendorAuth, ok := connAuth["vendor"]
@@ -423,23 +427,15 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 	}
 }
 
-func TestBootstrapInvoke_UsesNamedOpenAPIConnection(t *testing.T) {
-	t.Parallel()
+func invokeListItemsConnection(t *testing.T, buildPlugin func(apiBase string) *config.PluginDef) string {
+	t.Helper()
 
 	ctx := context.Background()
 	apiSrv := serveOpenAPIBackend(t, testOpenAPIAccessToken)
 
 	cfg := validConfig()
 	cfg.Integrations = map[string]config.IntegrationDef{
-		"vendor": {
-			Plugin: &config.PluginDef{
-				OpenAPI:           apiSrv.URL + "/openapi.json",
-				OpenAPIConnection: testOpenAPIConnectionName,
-				Auth: &config.ConnectionAuthDef{
-					Type: pluginmanifestv1.AuthTypeManual,
-				},
-			},
-		},
+		"vendor": {Plugin: buildPlugin(apiSrv.URL)},
 	}
 
 	var gotConnection string
@@ -459,11 +455,7 @@ func TestBootstrapInvoke_UsesNamedOpenAPIConnection(t *testing.T) {
 		}, nil
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
+	result := mustBootstrapResult(t, cfg, factories)
 
 	resp, err := result.Invoker.Invoke(ctx, &principal.Principal{UserID: "u1"}, "vendor", "", "list_items", nil)
 	if err != nil {
@@ -472,128 +464,159 @@ func TestBootstrapInvoke_UsesNamedOpenAPIConnection(t *testing.T) {
 	if resp.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.Status, http.StatusOK)
 	}
-	if gotConnection != testOpenAPIConnectionName {
-		t.Fatalf("connection = %q, want %q", gotConnection, testOpenAPIConnectionName)
-	}
+	return gotConnection
 }
 
-func TestInlineResponseMapping_AppliedToOpenAPIProvider(t *testing.T) {
+func TestBootstrapInvoke_ConnectionSelection(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	specSrv := serveOpenAPISpec(t)
-
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"mapped": {
-			Plugin: &config.PluginDef{
-				OpenAPI: specSrv.URL,
-				Auth: &config.ConnectionAuthDef{
-					Type: "none",
-				},
-				ResponseMapping: &config.ResponseMappingDef{
-					DataPath: "results",
-					Pagination: &config.PaginationMapping{
-						HasMorePath: "moreDataAvailable",
-						CursorPath:  "nextCursor",
+	testCases := []struct {
+		name           string
+		wantConnection string
+		buildPlugin    func(apiBase string) *config.PluginDef
+	}{
+		{
+			name:           "uses named openapi connection",
+			wantConnection: testOpenAPIConnectionName,
+			buildPlugin: func(apiBase string) *config.PluginDef {
+				return &config.PluginDef{
+					OpenAPI:           apiBase + "/openapi.json",
+					OpenAPIConnection: testOpenAPIConnectionName,
+					Auth: &config.ConnectionAuthDef{
+						Type: pluginmanifestv1.AuthTypeManual,
 					},
-				},
+				}
+			},
+		},
+		{
+			name:           "falls back to sole named connection without base auth",
+			wantConnection: testOpenAPIConnectionName,
+			buildPlugin: func(apiBase string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL: apiBase,
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+						},
+					},
+					Operations: []config.InlineOperationDef{
+						{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+					},
+				}
+			},
+		},
+		{
+			name:           "does not fall back to sole named connection with base auth",
+			wantConnection: config.PluginConnectionName,
+			buildPlugin: func(apiBase string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL: apiBase,
+					Auth: &config.ConnectionAuthDef{
+						Type: pluginmanifestv1.AuthTypeManual,
+					},
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+						},
+					},
+					Operations: []config.InlineOperationDef{
+						{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+					},
+				}
+			},
+		},
+		{
+			name:           "does not treat plugin surface alias as absent",
+			wantConnection: config.PluginConnectionName,
+			buildPlugin: func(apiBase string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL:       apiBase,
+					MCPConnection: config.PluginConnectionAlias,
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+						},
+					},
+					Operations: []config.InlineOperationDef{
+						{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+					},
+				}
 			},
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("mapped")
-	if err != nil {
-		t.Fatalf("Get mapped provider: %v", err)
-	}
-	cat := prov.Catalog()
-	if cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation from the openapi spec")
-	}
-	found := false
-	for _, op := range cat.Operations {
-		if op.ID == "list_items" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("expected list_items operation to be present")
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := invokeListItemsConnection(t, tc.buildPlugin); got != tc.wantConnection {
+				t.Fatalf("connection = %q, want %q", got, tc.wantConnection)
+			}
+		})
 	}
 }
 
-func TestInlineResponseMapping_DataPathOnly(t *testing.T) {
+func TestInlineResponseMapping(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	specSrv := serveOpenAPISpec(t)
+	testCases := []struct {
+		name            string
+		integrationName string
+		responseMapping *config.ResponseMappingDef
+		wantOperationID string
+	}{
+		{
+			name:            "applied to openapi provider",
+			integrationName: "mapped",
+			responseMapping: &config.ResponseMappingDef{
+				DataPath: "results",
+				Pagination: &config.PaginationMapping{
+					HasMorePath: "moreDataAvailable",
+					CursorPath:  "nextCursor",
+				},
+			},
+			wantOperationID: "list_items",
+		},
+		{
+			name:            "data path only",
+			integrationName: "simple",
+			responseMapping: &config.ResponseMappingDef{
+				DataPath: "data.items",
+			},
+		},
+		{
+			name:            "nil does not break",
+			integrationName: "noop",
+		},
+	}
 
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"simple": {
-			Plugin: &config.PluginDef{
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			prov := bootstrapInlineProvider(t, tc.integrationName, &config.PluginDef{
 				OpenAPI: specSrv.URL,
 				Auth: &config.ConnectionAuthDef{
 					Type: "none",
 				},
-				ResponseMapping: &config.ResponseMappingDef{
-					DataPath: "data.items",
-				},
-			},
-		},
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("simple")
-	if err != nil {
-		t.Fatalf("Get simple provider: %v", err)
-	}
-	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation")
-	}
-}
-
-func TestInlineResponseMapping_NilDoesNotBreak(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	specSrv := serveOpenAPISpec(t)
-
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"noop": {
-			Plugin: &config.PluginDef{
-				OpenAPI: specSrv.URL,
-				Auth: &config.ConnectionAuthDef{
-					Type: "none",
-				},
-			},
-		},
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("noop")
-	if err != nil {
-		t.Fatalf("Get noop provider: %v", err)
-	}
-	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
-		t.Fatal("expected at least one operation even without response_mapping")
+				ResponseMapping: tc.responseMapping,
+			})
+			cat := prov.Catalog()
+			if cat == nil || len(cat.Operations) == 0 {
+				t.Fatal("expected at least one operation")
+			}
+			if tc.wantOperationID == "" {
+				return
+			}
+			for _, op := range cat.Operations {
+				if op.ID == tc.wantOperationID {
+					return
+				}
+			}
+			t.Fatalf("expected %q operation to be present", tc.wantOperationID)
+		})
 	}
 }
 
@@ -650,16 +673,8 @@ func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("datadog")
-	if err != nil {
-		t.Fatalf("Get provider: %v", err)
-	}
+	result := mustBootstrapResult(t, cfg, nil)
+	prov := mustGetProvider(t, result, "datadog")
 
 	token := `{"api_key":"k1","app_key":"k2"}`
 	opResult, err := prov.Execute(ctx, "list_items", nil, token)
@@ -681,7 +696,6 @@ func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 
 func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	const iconSVG = `<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>`
 	iconPath := filepath.Join(t.TempDir(), "icon.svg")
@@ -707,16 +721,8 @@ func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *test
 		},
 	}
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	prov, err := result.Providers.Get("alpha")
-	if err != nil {
-		t.Fatalf("Get provider: %v", err)
-	}
+	result := mustBootstrapResult(t, cfg, nil)
+	prov := mustGetProvider(t, result, "alpha")
 	if prov.DisplayName() != "Alpha Display" {
 		t.Fatalf("DisplayName = %q, want %q", prov.DisplayName(), "Alpha Display")
 	}

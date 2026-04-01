@@ -269,6 +269,14 @@ func (r *Result) Close(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+func closeIfPossible(values ...any) {
+	for _, value := range values {
+		if c, ok := value.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
+}
+
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
 	sm, err := buildSecretManager(cfg, factories)
 	if err != nil {
@@ -277,9 +285,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeSM := true
 	defer func() {
 		if closeSM {
-			if c, ok := sm.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(sm)
 		}
 	}()
 
@@ -746,9 +752,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 				return
 			}
 			if err := reg.Providers.Register(name, result.Provider); err != nil {
-				if c, ok := result.Provider.(interface{ Close() error }); ok {
-					_ = c.Close()
-				}
+				closeIfPossible(result.Provider)
 				slog.Warn("registering provider failed", "provider", name, "error", err)
 				return
 			}
@@ -826,16 +830,14 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	}
 	manifest := intg.Plugin.ResolvedManifest
 	manifestProvider := intg.Plugin.ManifestProvider()
-
-	resolved, hasSpecSurface := resolveConfiguredSpecSurface(intg.Plugin, manifestProvider)
+	plan := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	resolved, hasSpecSurface := plan.configuredSpecSurface()
 
 	var finalProv core.Provider
 	if !hasSpecSurface {
 		restricted, err := applyAllowedOperations(name, intg, pluginProv)
 		if err != nil {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(pluginProv)
 			return nil, err
 		}
 		finalProv = restricted
@@ -850,9 +852,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 			},
 		}, deps)
 		if err != nil {
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
 		}
 		merged, err := composite.NewMergedWithConnections(
@@ -864,12 +864,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 			composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
 		)
 		if err != nil {
-			if c, ok := specProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
-			if c, ok := pluginProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(specProv, pluginProv)
 			return nil, err
 		}
 		finalProv = merged
@@ -967,9 +962,7 @@ func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *p
 	var err error
 	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
 	if err != nil {
-		if c, ok := prov.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
+		closeIfPossible(prov)
 		return nil, err
 	}
 	return result, nil
@@ -1008,8 +1001,9 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 }
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
-	apiResolved, hasAPI := resolveConfiguredAPISurface(intg.Plugin, mp)
-	mcpResolved, hasMCP := resolveSpecSurface(intg.Plugin, mp, specSurfaceMCP)
+	plan := buildPluginConnectionPlan(intg.Plugin, mp)
+	apiResolved, hasAPI := plan.configuredAPISurface()
+	mcpResolved, hasMCP := plan.resolvedSurface(specSurfaceMCP)
 	if !hasAPI && !hasMCP {
 		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
 	}
@@ -1040,19 +1034,12 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 
 		mcpProv, err := buildSpec(mcpResolved, nil)
 		if err != nil {
-			if c, ok := apiProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(apiProv)
 			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 		}
 		mcpUp, ok := mcpProv.(composite.MCPUpstream)
 		if !ok {
-			if c, ok := mcpProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
-			if c, ok := apiProv.(interface{ Close() error }); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(mcpProv, apiProv)
 			return nil, fmt.Errorf("build spec-loaded provider %q: unexpected mcp provider type %T", name, mcpProv)
 		}
 		type operationFilter interface {
@@ -1061,17 +1048,11 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if filtered := matchingAllowedOperations(allowedOperations, mcpProv.Catalog()); len(filtered) > 0 {
 			filterable, ok := mcpProv.(operationFilter)
 			if !ok {
-				_ = mcpUp.Close()
-				if c, ok := apiProv.(interface{ Close() error }); ok {
-					_ = c.Close()
-				}
+				closeIfPossible(mcpUp, apiProv)
 				return nil, fmt.Errorf("build spec-loaded provider %q: unexpected non-filterable mcp provider type %T", name, mcpProv)
 			}
 			if err := filterable.FilterOperations(filtered); err != nil {
-				_ = mcpUp.Close()
-				if c, ok := apiProv.(interface{ Close() error }); ok {
-					_ = c.Close()
-				}
+				closeIfPossible(mcpUp, apiProv)
 				return nil, fmt.Errorf("build spec-loaded provider %q: filter mcp operations: %w", name, err)
 			}
 		}
