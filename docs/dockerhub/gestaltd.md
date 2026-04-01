@@ -20,7 +20,8 @@
 
 - Default config path: `/etc/gestalt/config.yaml`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config uses packaged integrations, runtimes, or a packaged UI, run `init` first.
+- Locked startup is the default. If your config uses `plugin.package`,
+  `plugin.source`, or a packaged UI, run `init` first.
 
 ## Supported tags
 
@@ -68,7 +69,8 @@ integrations: {}
 
 ## Run a prepared production image
 
-If your config uses packaged integrations, runtimes, or a packaged UI, prepare it during the image build:
+If your config uses `plugin.package`, `plugin.source`, or a packaged UI,
+prepare it during the image build:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest AS init

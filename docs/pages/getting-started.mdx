@@ -2,73 +2,81 @@ import { Callout } from 'nextra/components'
 
 # Getting Started
 
-This guide starts with the true out-of-the-box flow, then moves to an explicit config and a production-style startup path.
+This guide starts with the zero-config local path and then switches to an
+explicit `config.yaml`.
 
 ## Install
 
-**Homebrew** (macOS and Linux)
+**Homebrew**
 
 ```sh
 brew install valon-technologies/gestalt/gestaltd
-```
-
-The `gestalt` client CLI provides `auth`, `invoke`, and `tokens` commands for interacting with a running server:
-
-```sh
 brew install valon-technologies/gestalt/gestalt
 ```
 
-**Binary download**
+**Binary releases**
 
-Download the latest release for your platform from the [Releases page](https://github.com/valon-technologies/gestalt/releases), extract it, and place the `gestaltd` binary on your `PATH`.
+Download the latest binaries from the
+[GitHub releases page](https://github.com/valon-technologies/gestalt/releases)
+and place them on your `PATH`.
 
 **Docker**
 
-The `valontechnologies/gestaltd` image ships `gestaltd` and supports both `amd64` and `arm64` (Apple Silicon).
+The published image is `valontechnologies/gestaltd`. It expects
+`/etc/gestalt/config.yaml` and defaults to
+`serve --locked --config /etc/gestalt/config.yaml`.
+See [Docker](/deploy/gateway-only) for the container layout and mount
+expectations.
 
-Quick start (mutable mode, fetches remote specs on startup):
-
-```sh
-docker run -p 8080:8080 -v ./config.yaml:/etc/gestalt/config.yaml valontechnologies/gestaltd:latest gestaltd
-```
-
-The trailing `gestaltd` overrides the default CMD (`serve --locked`) so the server auto-prepares missing state on startup.
-
-For production, init first and use the default locked mode:
-
-```sh
-docker run -p 8080:8080 -v ./config:/etc/gestalt valontechnologies/gestaltd:latest
-```
-
-## Run `gestaltd` With No Config
+## Run A Local Server With No Config
 
 ```sh
 gestaltd
 ```
 
-If no config file exists and you did not pass `--config`, `gestaltd` creates `~/.gestalt/config.yaml` for you and starts immediately.
+If you do not pass `--config` and no local config exists, Gestalt writes a new
+file at `~/.gestalt/config.yaml` and starts immediately.
 
-The generated local config uses `auth.provider: none`, SQLite as the datastore at `~/.gestalt/gestalt.db`, `env` for secrets, and a generated `server.encryption_key`.
+The generated local config uses:
 
-The server listens on `http://localhost:8080`. The web UI is served from that same port.
+- `auth.provider: none`
+- `datastore.provider: sqlite`
+- `secrets.provider: env`
+- `telemetry.provider: stdout`
+- `server.port: 8080`
+
+The generated SQLite database lives at `~/.gestalt/gestalt.db`.
 
 <Callout>
-  The default command `gestaltd` is intentionally local-friendly. It can auto-generate config and auto-prepare remote artifacts. Production deployments should usually use `gestaltd init` followed by `gestaltd serve --locked`.
+  `gestaltd` is intentionally local-friendly. Production deployments should
+  usually use `gestaltd init` followed by `gestaltd serve --locked`.
 </Callout>
 
-## Open The UI
+## Write An Explicit Config
 
-Visit `http://localhost:8080`. The generated config uses `auth.provider: none`, so no sign-in is required. Add an integration to start building.
+Save this as `openapi/httpbin.yaml`:
 
-## Or: Generate A Config With `gestalt init`
-
-Instead of writing `config.yaml` by hand, run `gestalt init` for an interactive setup wizard that walks you through creating one.
-
-```sh
-gestalt init
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+  /headers:
+    get:
+      operationId: get_headers
+      responses:
+        "200":
+          description: OK
 ```
-
-## Switch To An Explicit Config
 
 Save this as `config.yaml`:
 
@@ -76,7 +84,7 @@ Save this as `config.yaml`:
 server:
   port: 8080
   base_url: http://localhost:8080
-  encryption_key: change-me
+  encryption_key: dev-only-change-me
 
 auth:
   provider: none
@@ -87,51 +95,63 @@ datastore:
     path: ./gestalt.db
 
 integrations:
-  github:
-    display_name: GitHub REST API
-    description: Public GitHub REST surface
-    connections:
-      default:
-        mode: none
-    api:
-      type: rest
-      openapi: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-      connection: default
+  httpbin:
+    display_name: HTTPBin
+    description: Public request and response inspection API
+    mcp_tool_prefix: httpbin_
+    plugin:
+      openapi: ./openapi/httpbin.yaml
+      openapi_connection: public
+      default_connection: public
+      connections:
+        public:
+          mode: none
+          auth:
+            type: none
 ```
 
-This is the smallest useful production-shaped config: explicit `server`, `auth`, and `datastore` blocks, one named integration, one connection with `mode: none`, and one REST API surface pointing at an OpenAPI spec.
+This is the smallest useful Gestalt config:
 
-## Init And Validate It
+- one explicit server block
+- no platform auth
+- SQLite storage
+- one inline OpenAPI integration
+
+## Validate And Start It
 
 ```sh
 gestaltd init --config ./config.yaml
 gestaltd validate --config ./config.yaml
-```
-
-`init` resolves remote provider inputs in-place. For the config above, init creates:
-
-- `gestalt.lock.json`
-- `.gestalt/providers/github.json`
-
-## Start From Locked State
-
-```sh
 gestaltd serve --locked --config ./config.yaml
 ```
 
-This is the deployment path to model in Docker, Kubernetes, or any other production target. Startup becomes deterministic because `gestaltd` no longer needs to mutate local state or fetch remote specs.
+`init` writes `gestalt.lock.json`. With this inline config there are no packaged
+artifacts to fetch, but the same workflow scales to packaged providers and UI
+plugins.
 
-## What To Learn Next
+## Call The Integration
 
-- [Platform Model](/concepts/platform-model): how config turns into providers, bindings, and MCP.
-- [Configuration](/concepts/configuration): config discovery, defaults, secret resolution, and lock state.
-- [Add an Integration](/tasks/add-an-integration): build a real integration from REST, GraphQL, MCP, or plugins.
-- [Deploy](/deploy): move the same config into Docker or Kubernetes.
-
-## Explore Operations With `gestalt describe`
-
-Once the server is running, use `gestalt describe` to inspect what operations an integration exposes and what parameters they accept:
+**HTTP API**
 
 ```sh
-gestalt describe github repos/list-for-authenticated-user
+curl http://localhost:8080/api/v1/httpbin/get_ip
 ```
+
+**Client CLI**
+
+```sh
+gestalt --url http://localhost:8080 integrations list
+gestalt --url http://localhost:8080 invoke httpbin get_headers
+```
+
+Because `auth.provider` is `none`, no login step is required.
+
+## Next Steps
+
+- [Configuration](/concepts/configuration) explains config discovery, defaults,
+  environment expansion, and locked startup.
+- [Integrations](/concepts/integrations) covers inline, packaged, and hybrid
+  providers.
+- [Plugin Manifests](/reference/plugin-manifests) shows how YAML manifests work
+  for packaged plugins.
+- [Run Locally](/tasks/run-locally) walks through local development patterns.

@@ -3,7 +3,6 @@
 Gestalt uses one package format for:
 
 - provider plugins
-- runtime plugins
 - web UI bundles
 
 Each package is described by a manifest file named one of:
@@ -37,16 +36,16 @@ Load a local directory, local archive, or HTTPS archive.
 
 ```yaml
 integrations:
-  slack:
+  example:
     plugin:
-      package: ./dist/slack
+      package: ./dist/example-provider.tar.gz
 ```
 
 ### `source`
 
 Resolve a versioned plugin source during `init`.
 
-In config, that looks like `source: github.com/acme/plugins/gmail` plus
+In config, that looks like `source: github.com/acme/plugins/example` plus
 `version: 1.2.3`.
 
 This is the cleanest path for reusable, versioned packages.
@@ -55,10 +54,10 @@ This is the cleanest path for reusable, versioned packages.
 
 `gestaltd init` resolves and prepares:
 
-- `plugin.source`
 - `plugin.package`
-- runtime plugins
-- UI plugins
+- `plugin.source`
+- `ui.plugin.package`
+- `ui.plugin.source`
 
 It writes lock state and extracts the prepared artifacts under `.gestalt/`.
 
@@ -76,8 +75,8 @@ gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 gestaltd plugin release --version 0.1.0
 ```
 
-Run `plugin release` from the plugin source directory. It cross-compiles the
-plugin, produces per-platform archives, and writes a checksums file.
+Run `plugin release` from the plugin source directory. It compiles the plugin,
+produces release archives, and writes a checksums file.
 
 ## Declarative-Only Packages
 
@@ -89,6 +88,12 @@ That is useful when you want to ship:
 - a reusable declarative REST provider
 - a reusable OpenAPI-backed integration
 - a reusable web UI bundle
+
+## Executable Packages
+
+Executable provider packages add `artifacts` plus
+`entrypoints.provider.artifact_path` to the manifest. `gestaltd plugin release`
+builds that structure for you.
 
 ## Package Layout
 
