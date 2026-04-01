@@ -692,7 +692,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		Auth: &config.ConnectionAuthDef{
 			Type: pluginmanifestv1.AuthTypeManual,
 			Credentials: []config.CredentialFieldDef{
-				{Name: "plugin_config_token", Label: "Plugin Config Token"},
+				{Name: "plugin_token", Description: "Plugin Config Description"},
+				{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
 			},
 		},
 		Connections: map[string]*config.ConnectionDef{
@@ -700,7 +701,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				Auth: config.ConnectionAuthDef{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
-						{Name: "workspace_config_token", Label: "Workspace Config Token"},
+						{Name: "workspace_token", Label: "Workspace Config Token"},
+						{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
 					},
 				},
 			},
@@ -710,7 +712,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				Auth: &pluginmanifestv1.ProviderAuth{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []pluginmanifestv1.CredentialField{
-						{Name: "plugin_manifest_token", Label: "Plugin Manifest Token"},
+						{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
+						{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
 					},
 				},
 				Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
@@ -718,7 +721,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 						Auth: &pluginmanifestv1.ProviderAuth{
 							Type: pluginmanifestv1.AuthTypeManual,
 							Credentials: []pluginmanifestv1.CredentialField{
-								{Name: "workspace_manifest_token", Label: "Workspace Manifest Token"},
+								{Name: "workspace_token", Label: "Workspace Manifest Token", Description: "Workspace Manifest Description"},
+								{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
 							},
 						},
 					},
@@ -751,16 +755,20 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var integrations []struct {
+	type credentialField struct {
 		Name        string `json:"name"`
-		Connections []struct {
-			Name             string   `json:"name"`
-			AuthTypes        []string `json:"auth_types"`
-			CredentialFields []struct {
-				Name  string `json:"name"`
-				Label string `json:"label"`
-			} `json:"credential_fields"`
-		} `json:"connections"`
+		Label       string `json:"label"`
+		Description string `json:"description"`
+	}
+	type connectionInfo struct {
+		Name             string            `json:"name"`
+		AuthTypes        []string          `json:"auth_types"`
+		CredentialFields []credentialField `json:"credential_fields"`
+	}
+
+	var integrations []struct {
+		Name        string           `json:"name"`
+		Connections []connectionInfo `json:"connections"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -769,33 +777,23 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
 
-	got := make(map[string]struct {
-		authTypes []string
-		field     string
-		label     string
-	}, len(integrations[0].Connections))
+	got := make(map[string]connectionInfo, len(integrations[0].Connections))
 	for _, conn := range integrations[0].Connections {
-		fieldName := ""
-		fieldLabel := ""
-		if len(conn.CredentialFields) > 0 {
-			fieldName = conn.CredentialFields[0].Name
-			fieldLabel = conn.CredentialFields[0].Label
-		}
-		got[conn.Name] = struct {
-			authTypes []string
-			field     string
-			label     string
-		}{
-			authTypes: conn.AuthTypes,
-			field:     fieldName,
-			label:     fieldLabel,
-		}
+		got[conn.Name] = conn
 	}
 
-	if len(got[config.PluginConnectionAlias].authTypes) != 1 || got[config.PluginConnectionAlias].authTypes[0] != "manual" || got[config.PluginConnectionAlias].field != "plugin_config_token" || got[config.PluginConnectionAlias].label != "Plugin Config Token" {
+	if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
+		{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Config Description"},
+		{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+		{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+	}) {
 		t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
 	}
-	if len(got["workspace"].authTypes) != 1 || got["workspace"].authTypes[0] != "manual" || got["workspace"].field != "workspace_config_token" || got["workspace"].label != "Workspace Config Token" {
+	if !reflect.DeepEqual(got["workspace"].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got["workspace"].CredentialFields, []credentialField{
+		{Name: "workspace_token", Label: "Workspace Config Token", Description: "Workspace Manifest Description"},
+		{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
+		{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
+	}) {
 		t.Fatalf("workspace connection info = %+v", got["workspace"])
 	}
 }
