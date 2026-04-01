@@ -96,6 +96,8 @@ Properties:
 - Default lifetime: 30 days, configurable via `server.api_token_ttl`
 - Authenticate to the same HTTP API as browser sessions
 
+The CLI uses a dedicated non-expiring API token for stored credentials after `gestalt auth login`. That avoids browser-style 24-hour session expiry for CLI usage while keeping the token revocable.
+
 ## Integration Tokens
 
 Integration tokens are the credentials Gestalt stores for upstream providers. They are separate from platform sessions and API tokens.

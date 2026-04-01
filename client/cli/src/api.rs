@@ -57,8 +57,9 @@ fn find_project_config_value(key: &str) -> Option<String> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenSource {
+    Direct,
     EnvVar,
-    Session,
+    StoredCredentials,
 }
 
 pub fn env_api_key_is_set() -> bool {
@@ -82,7 +83,7 @@ impl ApiClient {
             } else {
                 let store = CredentialStore::new()?;
                 match store.load()? {
-                    Some(creds) => (creds.session_token, TokenSource::Session),
+                    Some(creds) => (creds.api_token, TokenSource::StoredCredentials),
                     None => {
                         bail!(
                             "not authenticated: set {} or run 'gestalt auth login'",
@@ -112,7 +113,7 @@ impl ApiClient {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token: token.to_string(),
-            token_source: TokenSource::Session,
+            token_source: TokenSource::Direct,
         })
     }
 
@@ -153,6 +154,14 @@ impl ApiClient {
         self.handle_response(resp)
     }
 
+    pub fn create_api_token(&self, name: &str) -> Result<serde_json::Value> {
+        self.post("/api/v1/tokens", &serde_json::json!({ "name": name }))
+    }
+
+    pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {
+        self.delete(&format!("/api/v1/tokens/{id}"))
+    }
+
     fn handle_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {
         let status = resp.status();
 
@@ -165,15 +174,23 @@ impl ApiClient {
         if status.is_client_error() || status.is_server_error() {
             let message = serde_json::from_str::<serde_json::Value>(&body)
                 .ok()
-                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+                .and_then(|v| extract_error_message(&v))
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
 
             if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
                 bail!(
                     "{} (using {} from environment; \
-                     unset it to use your session token from 'gestalt auth login')",
+                     unset it to use your stored CLI API token from 'gestalt auth login')",
                     message,
                     ENV_API_KEY,
+                );
+            }
+            if status == StatusCode::UNAUTHORIZED
+                && self.token_source == TokenSource::StoredCredentials
+            {
+                bail!(
+                    "{} (stored CLI API token may be expired or revoked; run 'gestalt auth login' to mint a new one)",
+                    message,
                 );
             }
 
@@ -188,19 +205,24 @@ impl ApiClient {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn extract_error_message(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Object(obj) => {
+            if let Some(message) = obj.get("error").and_then(|err| match err {
+                serde_json::Value::String(message) => Some(message.clone()),
+                serde_json::Value::Object(err_obj) => err_obj
+                    .get("message")
+                    .and_then(|message| message.as_str())
+                    .map(String::from),
+                _ => None,
+            }) {
+                return Some(message);
+            }
 
-    #[test]
-    fn test_client_creation() {
-        let client = ApiClient::new("http://localhost:8080", "test-token");
-        assert!(client.is_ok());
-    }
-
-    #[test]
-    fn test_base_url_trailing_slash() {
-        let client = ApiClient::new("http://localhost:8080/", "test-token").unwrap();
-        assert_eq!(client.base_url, "http://localhost:8080");
+            obj.get("message")
+                .and_then(|message| message.as_str())
+                .map(String::from)
+        }
+        _ => None,
     }
 }

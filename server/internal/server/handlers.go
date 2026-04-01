@@ -22,6 +22,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const defaultTokenInstance = "default"
@@ -398,6 +400,20 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 				Body:    upstreamErr.Body,
 			})
 		default:
+			if message, ok := safeOperationErrorMessage(err); ok {
+				slog.WarnContext(
+					r.Context(),
+					"operation failed with user-facing error",
+					"provider",
+					providerName,
+					"operation",
+					operationName,
+					"error",
+					err,
+				)
+				writeError(w, http.StatusBadGateway, message)
+				return
+			}
 			slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 			writeError(w, http.StatusBadGateway, "operation failed")
 		}
@@ -405,6 +421,47 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOperationResult(w, result)
+}
+
+func safeOperationErrorMessage(err error) (string, bool) {
+	if errors.Is(err, apiexec.ErrUpstreamTimedOut) {
+		return "upstream service timed out", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamUnavailable) {
+		return "failed to reach upstream service", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamResponseRead) {
+		return "failed to read upstream response", true
+	}
+
+	if errors.Is(err, apiexec.ErrUpstreamInvalidResponse) {
+		return "upstream service returned an invalid response", true
+	}
+
+	var operationErr *apiexec.UpstreamOperationError
+	if errors.As(err, &operationErr) {
+		return operationErr.Error(), true
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "operation timed out", true
+	}
+
+	status, ok := grpcstatus.FromError(err)
+	if !ok {
+		return "", false
+	}
+
+	switch status.Code() {
+	case codes.DeadlineExceeded:
+		return "operation timed out", true
+	case codes.Unavailable:
+		return "integration runtime unavailable", true
+	default:
+		return "", false
+	}
 }
 
 type loginRequest struct {
@@ -549,6 +606,26 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.encryptor != nil {
 		s.clearLoginStateCookie(w)
+	}
+
+	if r.URL.Query().Get("cli") == "1" {
+		dbUser, dbErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
+		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
+		if issueErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
+			return
+		}
+		writeJSON(w, http.StatusOK, createTokenResponse{
+			ID:        apiToken.ID,
+			Name:      apiToken.Name,
+			Token:     plaintext,
+			ExpiresAt: apiToken.ExpiresAt,
+		})
+		return
 	}
 
 	resp := map[string]any{
@@ -952,32 +1029,16 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	issued, err := s.issueToken()
+	apiToken, plaintext, err := s.issueAPIToken(r.Context(), userID, req.Name, req.Scopes, false)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-
-	apiToken := &core.APIToken{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		Name:        req.Name,
-		HashedToken: issued.Hashed,
-		Scopes:      req.Scopes,
-		ExpiresAt:   issued.ExpiresAt,
-		CreatedAt:   issued.CreatedAt,
-		UpdatedAt:   issued.UpdatedAt,
-	}
-
-	if err := s.datastore.StoreAPIToken(r.Context(), apiToken); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store API token")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, createTokenResponse{
 		ID:        apiToken.ID,
 		Name:      apiToken.Name,
-		Token:     issued.Plaintext,
+		Token:     plaintext,
 		ExpiresAt: apiToken.ExpiresAt,
 	})
 }

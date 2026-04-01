@@ -150,6 +150,25 @@ fn test_error_response() {
 }
 
 #[test]
+fn test_error_response_nested_message() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("GET", "/api/v1/tokens")
+        .with_status(400)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"error":{"message":"invalid parameter: limit"}}"#)
+        .create();
+
+    let client = create_client(&server);
+    let result = client.get("/api/v1/tokens");
+
+    mock.assert();
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("invalid parameter: limit"));
+}
+
+#[test]
 fn test_list_operations_formats_parameters() {
     let mut server = Server::new();
     let mock = server
