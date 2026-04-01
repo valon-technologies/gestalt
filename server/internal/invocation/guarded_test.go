@@ -22,7 +22,7 @@ type stubProviderWithOps struct {
 
 func (s *stubProviderWithOps) Catalog() *catalog.Catalog {
 	cat := &catalog.Catalog{
-		Name:       s.StubIntegration.N,
+		Name:       s.N,
 		Operations: make([]catalog.CatalogOperation, 0, len(s.ops)),
 	}
 	for _, op := range s.ops {

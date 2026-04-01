@@ -53,7 +53,7 @@ func (p *flatProvider) Catalog() *catalog.Catalog {
 	if p.catalog != nil {
 		return p.catalog
 	}
-	return testCatalogFromOperations(p.StubIntegration.N, p.ops)
+	return testCatalogFromOperations(p.N, p.ops)
 }
 
 func testCatalogFromOperations(name string, ops []core.Operation) *catalog.Catalog {

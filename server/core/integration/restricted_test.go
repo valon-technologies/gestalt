@@ -17,7 +17,7 @@ type stubWithOps struct {
 }
 
 func (s *stubWithOps) Catalog() *catalog.Catalog {
-	return restrictedTestCatalog(s.StubIntegration.N, s.ops)
+	return restrictedTestCatalog(s.N, s.ops)
 }
 
 func sampleOps() []core.Operation {

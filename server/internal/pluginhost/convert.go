@@ -94,13 +94,6 @@ func valueToProto(v any) (*structpb.Value, error) {
 	return structpb.NewValue(v)
 }
 
-func valueFromProto(v *structpb.Value) any {
-	if v == nil {
-		return nil
-	}
-	return v.AsInterface()
-}
-
 func parameterToProto(p core.Parameter) (*proto.Parameter, error) {
 	def, err := valueToProto(p.Default)
 	if err != nil {

@@ -65,12 +65,13 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 		if cat == nil {
 			continue
 		}
-		for _, op := range cat.Operations {
+		for j := range cat.Operations {
+			op := &cat.Operations[j]
 			if owner, exists := m.route[op.ID]; exists {
 				return nil, fmt.Errorf("operation %q provided by both %q and %q", op.ID, owner.Name(), p.Name())
 			}
 			m.route[op.ID] = p
-			m.catalog.Operations = append(m.catalog.Operations, op)
+			m.catalog.Operations = append(m.catalog.Operations, *op)
 			if bound.Connection != "" {
 				m.opConn[op.ID] = bound.Connection
 			}
