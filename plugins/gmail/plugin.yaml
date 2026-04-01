@@ -26,6 +26,10 @@ provider:
       access_type: offline
       prompt: consent
   openapi: https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.json
+  managed_parameters:
+    - in: path
+      name: userId
+      value: me
   allowed_operations:
     gmail.users.messages.list:
       alias: messages.list
