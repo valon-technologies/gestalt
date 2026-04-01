@@ -13,15 +13,12 @@ YAML is the easiest format to author by hand.
 Supported manifest kinds are:
 
 - `provider`
-- `runtime`
 - `webui`
 
 A package can contain:
 
 - a provider only
-- a runtime only
 - a UI bundle only
-- a combined provider and runtime
 
 ## Common Fields
 
@@ -36,7 +33,7 @@ A package can contain:
 | `provider` | Provider metadata and optional declarative surfaces. |
 | `webui` | UI metadata for `webui` packages. |
 | `artifacts` | Packaged executable artifacts keyed by platform. |
-| `entrypoints` | Which artifact should be started for the provider or runtime. |
+| `entrypoints` | Which packaged executable should be started for the provider. |
 
 ## Basic YAML Manifest
 
@@ -76,10 +73,9 @@ Use this style when:
 
 ## Advanced YAML Manifest
 
-This example shows a hybrid packaged provider with:
+This example shows a provider package with:
 
 - a config schema
-- a packaged executable
 - OpenAPI and upstream MCP surfaces
 - multiple named connections
 - managed parameters
@@ -95,7 +91,7 @@ kinds:
   - provider
 provider:
   config_schema_path: schemas/config.schema.json
-  openapi: https://api.support.example.com/openapi.json
+  openapi: openapi.yaml
   mcp_url: https://mcp.support.example.com/mcp
   openapi_connection: api
   mcp_connection: mcp
@@ -127,46 +123,13 @@ provider:
       alias: list_tickets
     tickets.get:
       alias: get_ticket
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/provider
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-entrypoints:
-  provider:
-    artifact_path: artifacts/linux/amd64/provider
 ```
 
 Use this style when:
 
-- the provider includes executable logic
-- a reusable package should ship its own auth and connection model
-- you want packaged custom code plus spec-backed operations
-
-## Runtime Manifest Example
-
-```yaml
-source: github.com/acme/plugins/notifier-runtime
-version: 0.4.0
-display_name: Notifier Runtime
-kinds:
-  - runtime
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/runtime
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-entrypoints:
-  runtime:
-    artifact_path: artifacts/linux/amd64/runtime
-```
-
-If you include `schemas/config.schema.json` in the package root, Gestalt uses it
-to validate `runtimes.*.config`.
+- the provider should ship its own auth and connection model
+- you want a reusable package with spec-backed operations
+- you want manifest-level config validation
 
 ## Web UI Manifest Example
 
@@ -186,12 +149,10 @@ webui:
 - `source` and `version` are required.
 - Declarative-only provider packages do not require `artifacts` or
   `entrypoints`.
-- Provider or runtime packages that include executable code do require artifacts
-  and entrypoints.
-- `sha256` must match the artifact bytes. Replace the example values with the
-  hash from your own build.
+- Executable provider packages do require `artifacts` plus
+  `entrypoints.provider`.
 - `config_schema_path` validates `integrations.*.plugin.config`.
-- `schemas/config.schema.json` validates `runtimes.*.config`.
+- Connection parameters discovered after auth live under `provider.connection`.
 
 ## Packaging And Release
 
@@ -201,7 +162,7 @@ Package a local plugin directory:
 gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 ```
 
-Build a multi-platform release from a plugin source directory:
+Build a release from a plugin source directory:
 
 ```sh
 gestaltd plugin release --version 1.2.3

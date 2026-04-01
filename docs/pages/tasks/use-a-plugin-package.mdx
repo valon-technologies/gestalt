@@ -6,16 +6,17 @@ Packaged plugins are the deployment-oriented way to run executable providers.
 
 ```yaml
 integrations:
-  acme:
+  example:
     plugin:
-      package: ./plugins/acme-provider
+      package: ./dist/example-provider.tar.gz
       config:
-        endpoint: https://api.example.com
+        greeting: Hello from packaged plugin
 ```
 
 `plugin.package` accepts:
 
 - a local directory
+- a local `.tar.gz`
 - an HTTPS URL (`.tar.gz`)
 
 ## Init It

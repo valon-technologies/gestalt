@@ -1,10 +1,14 @@
 # Platform Model
 
-Gestalt has a small number of primitives, but they compose into a full integration platform. The easiest way to understand `gestaltd` is to follow the startup path from configuration to invocation.
+Gestalt has a small number of primitives, but they compose into a full
+integration platform. The easiest way to understand `gestaltd` is to follow the
+startup path from configuration to invocation.
 
 ## The Core Model
 
-At the highest level, `gestaltd` loads and validates a declarative config file, bootstraps the platform components that config names, builds providers from integrations, and exposes those providers through shared request surfaces.
+At the highest level, `gestaltd` loads a declarative config file, bootstraps the
+platform components that config names, builds providers from integrations, and
+exposes those providers through shared request surfaces.
 
 ## The Main Primitives
 
@@ -13,7 +17,7 @@ At the highest level, `gestaltd` loads and validates a declarative config file, 
 | `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
 | `datastore` | Persists users, API tokens, integration tokens, staged connections, and some egress data. |
 | `secrets` | Resolves `secret://...` references during bootstrap. |
-| `integrations` | Define the user-facing provider graph: connections, API/MCP surfaces, plugins, and metadata. |
+| `integrations` | Define the provider graph users call. Each integration has one `plugin` block plus optional metadata. |
 | `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
 | `egress` | Policy and credential rules for outbound traffic. |
 
@@ -39,7 +43,8 @@ This is the actual shape of startup:
 
 ## Integrations Become Providers
 
-An integration is a declarative definition. A provider is the executable object built from it.
+An integration is a declarative definition. A provider is the executable object
+built from it.
 
 That distinction matters:
 
@@ -47,36 +52,44 @@ That distinction matters:
 - `gestaltd` turns that entry into a provider at startup
 - every request surface invokes the provider, not the raw YAML
 
-Providers can come from three sources:
+Providers come from three sources:
 
 | Source | How it works |
 | --- | --- |
-| Built-in named provider | A registered provider name such as `bigquery` or `jira`. |
-| Surface-defined provider | Built from a REST, GraphQL, or MCP surface in config. |
-| Executable plugin | Spawned as a separate process and connected over the plugin protocol. |
+| Inline declarative provider | Built from `plugin.base_url` plus `plugin.operations`. |
+| Inline spec-backed provider | Built from `plugin.openapi`, `plugin.graphql_url`, or `plugin.mcp_url`. |
+| Packaged provider plugin | Spawned as a separate process and connected over the plugin protocol. |
 
-## Composition Rules
+A packaged plugin can also layer in spec-backed surfaces, which is how hybrid
+providers work.
 
-The composition rules are intentionally narrow:
+## Connection Resolution
 
-- an integration may have at most one `api` surface (REST or GraphQL)
-- an integration may have at most one `mcp` surface
-- one `api` surface plus one `mcp` surface is valid
-- a `plugin` block may compose with `mcp` (hybrid) but not with `api`
+Gestalt resolves credentials through either the implicit plugin connection or a
+set of named connections.
 
-That gives you a predictable composition model:
+- `plugin.auth` and `plugin.params` define the implicit `plugin` connection
+- `plugin.connections` defines named connections for inline providers
+- packaged providers define their own named connections in the manifest
+- `openapi_connection`, `graphql_connection`, `mcp_connection`, and
+  `default_connection` decide which connection each surface uses
 
-- REST only
-- GraphQL only
-- MCP only
-- REST plus MCP
-- GraphQL plus MCP
-- plugin only
-- plugin plus MCP (hybrid)
+Each connection has one mode:
+
+| Mode | Meaning |
+| --- | --- |
+| `none` | No stored credential is needed. |
+| `user` | Use a user-scoped stored connection. |
+| `identity` | Use a shared service identity. |
+| `either` | Prefer user auth and fall back to the shared identity. |
+
+If an integration has more than one stored connection for the chosen subject,
+callers must specify an instance. If there is exactly one, Gestalt selects it
+automatically.
 
 ## The Shared Invocation Broker
 
-Every execution path in Gestalt goes through the same invocation broker. That is the mechanism that makes the platform feel uniform.
+Every execution path in Gestalt goes through the same invocation broker.
 
 The broker is responsible for:
 
@@ -87,20 +100,9 @@ The broker is responsible for:
 - injecting connection metadata into execution context
 - returning normalized operation results
 
-Because this broker is shared, the same token and policy behavior applies whether the caller is the web UI, a direct HTTP client, an MCP client hitting `/mcp`, a webhook binding, or a proxy binding.
-
-## Connection Modes
-
-Each integration declares how credentials are resolved:
-
-| Mode | Meaning |
-| --- | --- |
-| `user` | Use the authenticated caller's token. This is the default. |
-| `identity` | Use a shared platform-level token. |
-| `either` | Try the user's token first, then fall back to the identity token. |
-| `none` | Invoke with no credential at all. |
-
-If an integration has more than one stored connection for the chosen subject, callers must specify an instance. If there is exactly one, Gestalt selects it automatically.
+Because this broker is shared, the same token and policy behavior applies
+whether the caller is the web UI, a direct HTTP client, an MCP client hitting
+`/mcp`, a webhook binding, or a proxy binding.
 
 ## Surfaces Built On Top
 
@@ -113,6 +115,9 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 | MCP endpoint | `/mcp`, mounted when at least one integration exposes tools. |
 | Bindings | Additional routes and triggers declared under `bindings:`. |
 
-## What The User Actually Programs Against
+## What You Actually Program Against
 
-As a Gestalt operator, you compose top-level config blocks, integration definitions, connection definitions, API and MCP surface definitions, binding definitions, egress rules, and optional plugin manifests and packages. Everything else is a consequence of those inputs.
+As a Gestalt operator, you compose top-level config blocks, integration
+definitions, plugin definitions, connection definitions, binding definitions,
+egress rules, and optional plugin manifests and packages. Everything else is a
+consequence of those inputs.
