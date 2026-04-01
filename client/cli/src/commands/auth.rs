@@ -15,7 +15,7 @@ struct LoginCallbackResponse {
 pub fn login(url_override: Option<&str>) -> Result<()> {
     if api::env_api_key_is_set() {
         bail!(
-            "{} is set in your environment and takes priority over session tokens. \
+            "{} is set in your environment and takes priority over stored CLI credentials. \
              Unset it before logging in, or use the API key directly.",
             api::ENV_API_KEY,
         );
@@ -155,14 +155,21 @@ fn send_browser_response(stream: &std::net::TcpStream, message: &str) -> std::io
 
 pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
-    if let Some(creds) = store.load()? {
-        let client = ApiClient::new(&creds.api_url, &creds.api_token)?;
-        if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
-            output::print_warning(&format!(
-                "Failed to revoke stored CLI token {}: {}",
-                creds.api_token_id, err
-            ));
+    match store.load() {
+        Ok(Some(creds)) => {
+            let client = ApiClient::new(&creds.api_url, &creds.api_token)?;
+            if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
+                output::print_warning(&format!(
+                    "Failed to revoke stored CLI token {}: {}",
+                    creds.api_token_id, err
+                ));
+            }
         }
+        Ok(None) => {}
+        Err(err) => output::print_warning(&format!(
+            "Stored credentials could not be read; removing them locally without remote revoke: {}",
+            err
+        )),
     }
     store.delete()?;
     output::print_success("Logged out. Credentials removed.");
@@ -171,7 +178,7 @@ pub fn logout() -> Result<()> {
 
 pub fn status(_url_override: Option<&str>, format: Format) -> Result<()> {
     let has_env_key = api::env_api_key_is_set();
-    let has_stored_credentials = CredentialStore::new()?.load()?.is_some();
+    let has_stored_credentials = CredentialStore::new()?.exists()?;
     let configured = has_env_key || has_stored_credentials;
 
     match format {
@@ -195,13 +202,13 @@ pub fn status(_url_override: Option<&str>, format: Format) -> Result<()> {
                 eprintln!("Configured via {} environment variable.", api::ENV_API_KEY);
                 if has_stored_credentials {
                     output::print_warning(&format!(
-                        "Stored CLI API token also exists but is being ignored. \
+                        "Stored CLI credentials also exist but are being ignored. \
                          Unset {} to use it.",
                         api::ENV_API_KEY,
                     ));
                 }
             } else if has_stored_credentials {
-                eprintln!("Configured via stored CLI API token.");
+                eprintln!("Stored CLI credentials are present.");
             } else {
                 eprintln!(
                     "Not configured. Run 'gestalt auth login' or set {}.",

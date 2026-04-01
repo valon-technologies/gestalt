@@ -37,6 +37,14 @@ impl CredentialStore {
         }
     }
 
+    pub fn exists(&self) -> Result<bool> {
+        match fs::metadata(&self.path) {
+            Ok(_) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(anyhow::anyhow!(e).context("failed to stat credentials file")),
+        }
+    }
+
     pub fn save(&self, credentials: &Credentials) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).context("failed to create config directory")?;

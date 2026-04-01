@@ -1435,9 +1435,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["email"] != "user@example.com" {
-		t.Fatalf("unexpected email: %v", result["email"])
-	}
 	if result["api_token_id"] == "" {
 		t.Fatal("expected api_token_id in CLI login response")
 	}
@@ -4617,6 +4614,59 @@ func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	}
 	if errResp["error"] != "upstream service timed out" {
 		t.Fatalf("expected user-facing message, got %q", errResp["error"])
+	}
+}
+
+func TestExecuteOperation_WrappedOperationErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	sensitiveContext := "postgres://user:secret@example.internal/db"
+	publicMessage := "invalid parameter: limit"
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test-int",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return nil, fmt.Errorf("graphql request failed against %s: %w", sensitiveContext, &apiexec.UpstreamOperationError{
+					Message: publicMessage,
+				})
+			},
+		},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: "tok"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), sensitiveContext) {
+		t.Fatalf("response body contains sensitive error details: %s", body)
+	}
+
+	var errResp map[string]string
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp["error"] != publicMessage {
+		t.Fatalf("expected wrapped operation message, got %q", errResp["error"])
 	}
 }
 

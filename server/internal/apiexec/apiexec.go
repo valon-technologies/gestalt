@@ -40,7 +40,6 @@ var (
 	ErrUpstreamTimedOut        = errors.New("upstream service timed out")
 	ErrUpstreamResponseRead    = errors.New("failed to read upstream response")
 	ErrUpstreamInvalidResponse = errors.New("upstream service returned an invalid response")
-	ErrUpstreamOperation       = errors.New("upstream operation failed")
 )
 
 type UpstreamHTTPError struct {
@@ -65,6 +64,17 @@ func (e *UpstreamHTTPError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+type UpstreamOperationError struct {
+	Message string
+}
+
+func (e *UpstreamOperationError) Error() string {
+	if e == nil || e.Message == "" {
+		return "upstream operation failed"
+	}
+	return e.Message
 }
 
 // ResponseChecker validates a response body beyond the default HTTP status check.
@@ -379,7 +389,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 			for i, e := range gqlErrs {
 				msgs[i] = e.Message
 			}
-			return nil, fmt.Errorf("%w: %s", ErrUpstreamOperation, strings.Join(msgs, "; "))
+			return nil, &UpstreamOperationError{Message: strings.Join(msgs, "; ")}
 		}
 	}
 

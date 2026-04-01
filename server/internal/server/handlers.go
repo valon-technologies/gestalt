@@ -440,11 +440,9 @@ func safeOperationErrorMessage(err error) (string, bool) {
 		return "upstream service returned an invalid response", true
 	}
 
-	if errors.Is(err, apiexec.ErrUpstreamOperation) {
-		message := strings.TrimPrefix(err.Error(), apiexec.ErrUpstreamOperation.Error()+": ")
-		if message != "" {
-			return message, true
-		}
+	var operationErr *apiexec.UpstreamOperationError
+	if errors.As(err, &operationErr) {
+		return operationErr.Error(), true
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -472,10 +470,8 @@ type loginRequest struct {
 }
 
 type cliLoginResponse struct {
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	APIToken    string `json:"api_token"`
-	APITokenID  string `json:"api_token_id"`
+	APIToken   string `json:"api_token"`
+	APITokenID string `json:"api_token_id"`
 }
 
 type authInfoResponse struct {
@@ -623,16 +619,14 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
-		apiToken, issued, issueErr := s.issueCLILoginToken(r.Context(), dbUser.ID)
+		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
 		if issueErr != nil {
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
 			return
 		}
 		writeJSON(w, http.StatusOK, cliLoginResponse{
-			Email:       identity.Email,
-			DisplayName: identity.DisplayName,
-			APIToken:    issued.Plaintext,
-			APITokenID:  apiToken.ID,
+			APIToken:   plaintext,
+			APITokenID: apiToken.ID,
 		})
 		return
 	}
@@ -1038,22 +1032,16 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	issued, err := s.issueToken()
+	apiToken, plaintext, err := s.issueAPIToken(r.Context(), userID, req.Name, req.Scopes, false)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-
-	apiToken, err := s.storeAPIToken(r.Context(), userID, req.Name, req.Scopes, issued)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store API token")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, createTokenResponse{
 		ID:        apiToken.ID,
 		Name:      apiToken.Name,
-		Token:     issued.Plaintext,
+		Token:     plaintext,
 		ExpiresAt: apiToken.ExpiresAt,
 	})
 }
