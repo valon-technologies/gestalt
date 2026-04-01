@@ -399,12 +399,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	connMap, err := BuildConnectionMap(cfg)
+	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
 		return nil, err
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore,
-		invocation.WithConnectionMapper(connMap),
+		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
@@ -1397,14 +1397,6 @@ func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1
 		}
 	}
 	def.ResponseMapping = rm
-}
-
-func BuildConnectionMap(cfg *config.Config) (invocation.ConnectionMap, error) {
-	maps, err := BuildConnectionMaps(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return invocation.ConnectionMap(maps.APIConnection), nil
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {
