@@ -25,11 +25,22 @@ func TestProviderMetadata(t *testing.T) {
 	if len(catalog.Operations) != 4 {
 		t.Fatalf("Catalog().Operations returned %d ops, want 4", len(catalog.Operations))
 	}
+	wantIDs := []string{
+		"messages.send",
+		"messages.createDraft",
+		"messages.reply",
+		"messages.forward",
+	}
+	for i, want := range wantIDs {
+		if got := catalog.Operations[i].ID; got != want {
+			t.Fatalf("Catalog().Operations[%d].ID = %q, want %q", i, got, want)
+		}
+	}
 }
 
 func TestExecuteRequiresToken(t *testing.T) {
 	p := NewProvider()
-	_, err := p.Execute(context.Background(), "send_message", map[string]any{
+	_, err := p.Execute(context.Background(), "messages.send", map[string]any{
 		"to": "a@b.com", "subject": "Hi", "body": "Hi",
 	}, "")
 	if err == nil {
@@ -68,7 +79,7 @@ func TestSendMessage(t *testing.T) {
 		}, nil
 	})
 
-	result, err := p.Execute(context.Background(), "send_message", map[string]any{
+	result, err := p.Execute(context.Background(), "messages.send", map[string]any{
 		"to":      "bob@example.com",
 		"subject": "Hello",
 		"body":    "Hi Bob",
@@ -100,7 +111,7 @@ func TestSendMessageWithHTML(t *testing.T) {
 		}, nil
 	})
 
-	_, err := p.Execute(context.Background(), "send_message", map[string]any{
+	_, err := p.Execute(context.Background(), "messages.send", map[string]any{
 		"to":        "bob@example.com",
 		"subject":   "Hello",
 		"body":      "Hi Bob",
@@ -129,7 +140,7 @@ func TestCreateDraft(t *testing.T) {
 		}, nil
 	})
 
-	result, err := p.Execute(context.Background(), "create_draft", map[string]any{
+	result, err := p.Execute(context.Background(), "messages.createDraft", map[string]any{
 		"to":      "bob@example.com",
 		"subject": "Draft",
 		"body":    "Draft body",
@@ -190,7 +201,7 @@ func TestReplyToMessage(t *testing.T) {
 		}, nil
 	})
 
-	_, err := p.Execute(context.Background(), "reply_to_message", map[string]any{
+	_, err := p.Execute(context.Background(), "messages.reply", map[string]any{
 		"message_id": "orig-1",
 		"body":       "Thanks!",
 	}, "test-token")

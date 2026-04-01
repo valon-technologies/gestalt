@@ -40,7 +40,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 		Description: p.Description(),
 		Operations: []gestalt.CatalogOperation{
 			{
-				ID:          "send_message",
+				ID:          "messages.send",
 				Description: "Send an email message",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -53,7 +53,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				},
 			},
 			{
-				ID:          "create_draft",
+				ID:          "messages.createDraft",
 				Description: "Create an email draft",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -66,7 +66,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				},
 			},
 			{
-				ID:          "reply_to_message",
+				ID:          "messages.reply",
 				Description: "Reply to an existing message",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -78,7 +78,7 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 				},
 			},
 			{
-				ID:          "forward_message",
+				ID:          "messages.forward",
 				Description: "Forward a message to new recipients",
 				Method:      http.MethodPost,
 				Parameters: []gestalt.CatalogParameter{
@@ -98,13 +98,13 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 	}
 
 	switch operation {
-	case "send_message":
+	case "messages.send":
 		return p.sendMessage(ctx, params, token)
-	case "create_draft":
+	case "messages.createDraft":
 		return p.createDraft(ctx, params, token)
-	case "reply_to_message":
+	case "messages.reply":
 		return p.replyToMessage(ctx, params, token)
-	case "forward_message":
+	case "messages.forward":
 		return p.forwardMessage(ctx, params, token)
 	default:
 		return nil, fmt.Errorf("unknown operation: %s", operation)
