@@ -2104,7 +2104,7 @@ type stubIntegrationWithOps struct {
 }
 
 func (s *stubIntegrationWithOps) Catalog() *catalog.Catalog {
-	return serverTestCatalogFromOperations(s.StubIntegration.N, s.ops)
+	return serverTestCatalogFromOperations(s.N, s.ops)
 }
 
 type stubIntegrationWithSessionCatalog struct {
