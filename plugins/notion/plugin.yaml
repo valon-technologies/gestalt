@@ -1,0 +1,18 @@
+source: github.com/valon-technologies/gestalt/notion
+version: 0.0.1-alpha.1
+display_name: Notion
+description: Current Notion REST operations plus the official Notion MCP tool surface.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  openapi: openapi.yaml
+  mcp_url: https://mcp.notion.com/mcp
+  mcp_connection: MCP
+  headers:
+    Notion-Version: "2026-03-11"
+  connections:
+    MCP:
+      mode: user
+      auth:
+        type: mcp_oauth

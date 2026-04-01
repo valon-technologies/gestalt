@@ -136,6 +136,9 @@ func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
 	if _, err := os.Stat(manifestPath); err != nil {
 		t.Fatalf("expected manifest in output directory: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(outPath, "openapi.yaml")); err != nil {
+		t.Fatalf("expected support file in output directory: %v", err)
+	}
 	artifactPath := filepath.Join(outPath, "artifacts", runtime.GOOS, runtime.GOARCH, "provider")
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -159,6 +162,22 @@ func TestRun_PluginPackageRejectsOutputInsideInput(t *testing.T) {
 	err := run([]string{"plugin", "package", "--input", src, "--output", outPath})
 	if err == nil {
 		t.Fatal("expected error when output is inside input")
+	}
+	if !strings.Contains(err.Error(), "must not be inside source") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_PluginPackageRejectsArchiveOutputInsideInput(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	src := newPluginPackageFixture(t, dir)
+	outPath := filepath.Join(src, "testowner-provider-0.1.0.tar.gz")
+
+	err := run([]string{"plugin", "package", "--input", src, "--output", outPath})
+	if err == nil {
+		t.Fatal("expected error when archive output is inside input")
 	}
 	if !strings.Contains(err.Error(), "must not be inside source") {
 		t.Fatalf("unexpected error: %v", err)
@@ -789,6 +808,9 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	}
 	if err := os.WriteFile(filepath.Join(src, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0644); err != nil {
 		t.Fatalf("WriteFile(schema): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "openapi.yaml"), []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
 	}
 
 	manifest := `{
