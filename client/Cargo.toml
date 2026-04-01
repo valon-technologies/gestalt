@@ -3,5 +3,5 @@ resolver = "2"
 members = ["cli", "xtask"]
 
 [workspace.package]
-version = "0.0.1-alpha.32"
+version = "0.0.1-alpha.33"
 edition = "2024"
