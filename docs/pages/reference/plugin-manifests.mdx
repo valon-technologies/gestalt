@@ -27,7 +27,7 @@ A package can contain:
 
 | Field | Purpose |
 | --- | --- |
-| `source` | Canonical plugin source identifier. Required. |
+| `source` | Canonical plugin source identifier. Required. Use `github.com/<org>/<repo>/<plugin>`. |
 | `version` | Plugin version. Required. |
 | `display_name` | Human-readable label. |
 | `description` | Human-readable description. |
@@ -43,7 +43,7 @@ A package can contain:
 This example is a declarative-only provider package. It does not need a binary.
 
 ```yaml
-source: github.com/acme/httpbin
+source: github.com/acme/plugins/httpbin
 version: 0.1.0
 display_name: HTTPBin
 description: Small public HTTP inspection API
@@ -83,7 +83,7 @@ This example shows a hybrid packaged provider with:
 - allowed operation aliases
 
 ```yaml
-source: github.com/acme/support
+source: github.com/acme/plugins/support
 version: 1.2.3
 display_name: Support
 description: Tickets, knowledge base, and MCP workspace tools
@@ -147,7 +147,7 @@ Use this style when:
 ## Runtime Manifest Example
 
 ```yaml
-source: github.com/acme/notifier-runtime
+source: github.com/acme/plugins/notifier-runtime
 version: 0.4.0
 display_name: Notifier Runtime
 kinds:
@@ -168,7 +168,7 @@ to validate `runtimes.*.config`.
 ## Web UI Manifest Example
 
 ```yaml
-source: github.com/acme/gestalt-ui
+source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 display_name: Custom UI
 kinds:

@@ -260,7 +260,7 @@ hybrid providers.
 | --- | --- |
 | `command` | Execute a local binary directly. |
 | `package` | Load a local directory, local archive, or HTTPS archive. |
-| `source` | Resolve a versioned plugin source during `init`. |
+| `source` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
 | `version` | Required with `source`. Invalid with `command` or `package`. |
 | `args` | Extra process arguments for `command`. |
 | `env` | Extra environment variables for external plugins. |
@@ -520,7 +520,7 @@ Use `ui.plugin` to replace the embedded web UI.
 ```yaml
 ui:
   plugin:
-    source: github.com/acme/gestalt-ui
+    source: github.com/acme/plugins/gestalt-ui
     version: 1.2.0
 ```
 
