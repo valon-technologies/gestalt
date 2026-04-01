@@ -475,7 +475,7 @@
       "properties": {
         "in": {
           "type": "string",
-          "enum": ["header"]
+          "enum": ["header", "path"]
         },
         "name": {
           "type": "string",
