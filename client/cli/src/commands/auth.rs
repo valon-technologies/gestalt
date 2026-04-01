@@ -6,12 +6,6 @@ use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
-#[derive(Debug, serde::Deserialize)]
-struct LoginCallbackResponse {
-    api_token: String,
-    api_token_id: String,
-}
-
 pub fn login(url_override: Option<&str>) -> Result<()> {
     if api::env_api_key_is_set() {
         bail!(
@@ -130,15 +124,21 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         );
     }
 
-    let login_result: LoginCallbackResponse = callback_resp
+    let login_result: serde_json::Value = callback_resp
         .json()
-        .context("callback response missing CLI API token")?;
+        .context("callback response missing token response")?;
+    let api_token = login_result["token"]
+        .as_str()
+        .context("callback response missing token field")?;
+    let api_token_id = login_result["id"]
+        .as_str()
+        .context("callback response missing id field")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: base_url,
-        api_token: login_result.api_token,
-        api_token_id: login_result.api_token_id,
+        api_token: api_token.to_string(),
+        api_token_id: api_token_id.to_string(),
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
@@ -178,7 +178,11 @@ pub fn logout() -> Result<()> {
 
 pub fn status(_url_override: Option<&str>, format: Format) -> Result<()> {
     let has_env_key = api::env_api_key_is_set();
-    let has_stored_credentials = CredentialStore::new()?.exists()?;
+    let (has_stored_credentials, stored_credentials_error) = match CredentialStore::new()?.load() {
+        Ok(Some(_)) => (true, None),
+        Ok(None) => (false, None),
+        Err(err) => (false, Some(err.to_string())),
+    };
     let configured = has_env_key || has_stored_credentials;
 
     match format {
@@ -207,8 +211,23 @@ pub fn status(_url_override: Option<&str>, format: Format) -> Result<()> {
                         api::ENV_API_KEY,
                     ));
                 }
+                if let Some(err) = &stored_credentials_error {
+                    output::print_warning(&format!(
+                        "Stored CLI credentials could not be read: {}",
+                        err
+                    ));
+                }
             } else if has_stored_credentials {
                 eprintln!("Stored CLI credentials are present.");
+            } else if let Some(err) = &stored_credentials_error {
+                output::print_warning(&format!(
+                    "Stored CLI credentials could not be read: {}",
+                    err
+                ));
+                eprintln!(
+                    "Not configured. Run 'gestalt auth login' or set {}.",
+                    api::ENV_API_KEY
+                );
             } else {
                 eprintln!(
                     "Not configured. Run 'gestalt auth login' or set {}.",

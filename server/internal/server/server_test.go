@@ -1435,11 +1435,14 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["api_token_id"] == "" {
-		t.Fatal("expected api_token_id in CLI login response")
+	if result["id"] == "" {
+		t.Fatal("expected id in CLI login response")
 	}
-	if result["api_token"] == "" {
-		t.Fatal("expected api_token in CLI login response")
+	if result["token"] == "" {
+		t.Fatal("expected token in CLI login response")
+	}
+	if result["name"] != "cli-token" {
+		t.Fatalf("expected cli-token name in CLI login response, got %v", result["name"])
 	}
 
 	if stored == nil {

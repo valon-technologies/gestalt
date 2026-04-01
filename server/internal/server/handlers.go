@@ -469,11 +469,6 @@ type loginRequest struct {
 	CallbackPort int    `json:"callback_port,omitempty"`
 }
 
-type cliLoginResponse struct {
-	APIToken   string `json:"api_token"`
-	APITokenID string `json:"api_token_id"`
-}
-
 type authInfoResponse struct {
 	Provider    string `json:"provider"`
 	DisplayName string `json:"display_name"`
@@ -624,9 +619,11 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
 			return
 		}
-		writeJSON(w, http.StatusOK, cliLoginResponse{
-			APIToken:   plaintext,
-			APITokenID: apiToken.ID,
+		writeJSON(w, http.StatusOK, createTokenResponse{
+			ID:        apiToken.ID,
+			Name:      apiToken.Name,
+			Token:     plaintext,
+			ExpiresAt: apiToken.ExpiresAt,
 		})
 		return
 	}
