@@ -417,6 +417,38 @@ func TestRun_PluginReleaseTreatsGoModWithoutCmdAsDeclarative(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseTreatsDeclarativePluginWithHelperMainAsSource(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-helper.1"
+
+	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/declarative-provider\n\ngo 1.22\n"), 0644)
+	writeTestFile(t, pluginDir, "cmd/helper/main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-declarative-provider_v" + testVersion + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 0 {
+		t.Fatalf("expected declarative release to omit artifacts, got %+v", manifest.Artifacts)
+	}
+	if manifest.Entrypoints.Provider != nil {
+		t.Fatalf("expected declarative release to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)
+	}
+
+	compiledArchiveName := "gestalt-plugin-declarative-provider_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
+		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
+	}
+}
+
 func TestRun_PluginReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	t.Parallel()
 
@@ -584,6 +616,83 @@ func TestRun_PluginReleasePackagesRootMainBuildTarget(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleasePrefersCmdBuildTargetOverRootMain(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newNestedCmdReleaseFixture(t, t.TempDir())
+	writeTestFile(t, pluginDir, "main.go", []byte("package main\n\nfunc main() { missingSymbol() }\n"), 0644)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.7-rc.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+}
+
+func TestRun_PluginReleaseBuildsNestedCmdMainPackage(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newNestedCmdReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.7-alpha.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+}
+
+func TestRun_PluginReleaseDetectsPlatformTaggedMainPackage(t *testing.T) {
+	t.Parallel()
+
+	targetOS := "linux"
+	switch runtime.GOOS {
+	case "linux":
+		targetOS = "darwin"
+	case "darwin":
+		targetOS = "linux"
+	default:
+		t.Skipf("platform-tagged release test expects darwin or linux host, got %s", runtime.GOOS)
+	}
+
+	pluginDir := newRootMainReleaseFixture(t, t.TempDir())
+	writeTestFile(t, pluginDir, "main.go", []byte("//go:build "+targetOS+"\n\npackage main\n\nfunc main() {}\n"), 0644)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.7-beta.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", targetOS+"/amd64",
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + targetOS + "_amd64.tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].OS != targetOS || manifest.Artifacts[0].Arch != "amd64" {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+}
+
 func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 	t.Parallel()
 
@@ -635,6 +744,32 @@ func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
 		t.Fatalf("expected %s in archive: %v", binaryName, err)
+	}
+}
+
+func TestRun_PluginReleaseCopiesDeclarativeProviderSupportFiles(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.10-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-declarative-provider_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if len(manifest.Artifacts) != 0 {
+		t.Fatalf("expected declarative release to omit artifacts, got %+v", manifest.Artifacts)
+	}
+	for _, rel := range []string{releaseTestIconPath, releaseProviderSchemaPath} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
 	}
 }
 
@@ -728,6 +863,32 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
+func newDeclarativeProviderReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, "declarative-provider")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/declarative-provider",
+		Version:     "0.0.1",
+		DisplayName: "Declarative Provider",
+		IconFile:    releaseTestIconPath,
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			BaseURL:          releaseHybridBaseURL,
+			ConfigSchemaPath: releaseProviderSchemaPath,
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{Name: releaseHybridOperationName, Method: "GET", Path: "/items"},
+			},
+		},
+	})
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, releaseProviderSchemaPath, []byte(`{"type":"object"}`), 0644)
+	return pluginDir
+}
+
 func newRootMainReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -736,6 +897,17 @@ func newRootMainReleaseFixture(t *testing.T, dir string) string {
 		t.Fatalf("RemoveAll(cmd): %v", err)
 	}
 	writeTestFile(t, pluginDir, "main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
+	return pluginDir
+}
+
+func newNestedCmdReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := newCompiledReleaseFixture(t, dir)
+	if err := os.Remove(filepath.Join(pluginDir, "cmd", "main.go")); err != nil {
+		t.Fatalf("Remove(cmd/main.go): %v", err)
+	}
+	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join("cmd", releaseTestPluginName, "main.go")), []byte("package main\n\nfunc main() {}\n"), 0644)
 	return pluginDir
 }
 
