@@ -36,6 +36,7 @@ jobs:
         with:
           version: v2.11.3
           working-directory: server
+          verify: false
 
   test:
     name: Go Tests
