@@ -740,6 +740,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 	}
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, manifestKind(kind), configMap); err != nil {
 		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}

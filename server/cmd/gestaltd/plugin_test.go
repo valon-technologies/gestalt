@@ -792,6 +792,38 @@ func TestRun_PluginReleaseCopiesDeclarativeProviderSupportFiles(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseCopiesSpecLoadedProviderSupportFiles(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSpecLoadedProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.11-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-spec-loaded-provider_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	if manifest.Version != testVersion {
+		t.Fatalf("manifest version = %q, want %q", manifest.Version, testVersion)
+	}
+	if len(manifest.Artifacts) != 0 {
+		t.Fatalf("expected spec-loaded release to omit artifacts, got %+v", manifest.Artifacts)
+	}
+	if manifest.Provider == nil || manifest.Provider.OpenAPI != "specs/openapi.yaml" {
+		t.Fatalf("provider openapi = %#v, want specs/openapi.yaml", manifest.Provider)
+	}
+	for _, rel := range []string{releaseTestIconPath, "specs/openapi.yaml"} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
+	}
+}
+
 func newPluginPackageFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -908,6 +940,28 @@ func newDeclarativeProviderReleaseFixture(t *testing.T, dir string) string {
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeTestFile(t, pluginDir, releaseProviderSchemaPath, []byte(`{"type":"object"}`), 0644)
+	return pluginDir
+}
+
+func newSpecLoadedProviderReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, "spec-loaded-provider")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/spec-loaded-provider",
+		Version:     "0.0.1",
+		DisplayName: "Spec Loaded Provider",
+		IconFile:    releaseTestIconPath,
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "specs/openapi.yaml",
+		},
+	})
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, "specs/openapi.yaml", []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644)
 	return pluginDir
 }
 
