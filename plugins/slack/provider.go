@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -59,7 +58,7 @@ func NewProvider() *Provider {
 func (p *Provider) Name() string        { return "slack" }
 func (p *Provider) DisplayName() string { return "Slack" }
 func (p *Provider) Description() string {
-	return "Slack helper operations for message lookup, mention scans, thread participants, and canvases."
+	return "Slack helper operations for message lookup, mention scans, and thread participants."
 }
 func (p *Provider) ConnectionMode() gestalt.ConnectionMode { return gestalt.ConnectionModeUser }
 
@@ -106,16 +105,6 @@ func (p *Provider) Catalog() *gestalt.Catalog {
 					{Name: "include_bots", Type: "bool", Description: "Include bot users in the participant list"},
 				},
 			},
-			{
-				ID:          "slack_create_canvas",
-				Description: "Create a Slack canvas with a title and optional markdown body",
-				Method:      http.MethodPost,
-				Path:        "/slack_create_canvas",
-				Parameters: []gestalt.CatalogParameter{
-					{Name: "title", Type: "string", Required: true, Description: "Canvas title"},
-					{Name: "document_content", Type: "string", Description: "Optional markdown body"},
-				},
-			},
 		},
 	}
 }
@@ -132,8 +121,6 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 		return p.findUserMentions(ctx, params, token)
 	case "slack_get_thread_participants":
 		return p.getThreadParticipants(ctx, params, token)
-	case "slack_create_canvas":
-		return p.createCanvas(ctx, params, token)
 	default:
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
@@ -337,38 +324,8 @@ func (p *Provider) getThreadParticipants(ctx context.Context, params map[string]
 	})
 }
 
-func (p *Provider) createCanvas(ctx context.Context, params map[string]any, token string) (*gestalt.OperationResult, error) {
-	title := stringParam(params, "title")
-	if title == "" {
-		return nil, fmt.Errorf("title is required")
-	}
-
-	payload := map[string]any{"title": title}
-	if documentContent := stringParam(params, "document_content"); documentContent != "" {
-		payload["document_content"] = map[string]any{
-			"type":     "markdown",
-			"markdown": documentContent,
-		}
-	}
-
-	data, err := p.slackPOST(ctx, "/canvases.create", payload, token)
-	if err != nil {
-		return nil, err
-	}
-
-	return jsonResult(map[string]any{
-		"data": map[string]any{
-			"canvas": data,
-		},
-	})
-}
-
 func (p *Provider) slackGET(ctx context.Context, endpoint string, query neturl.Values, token string) (map[string]any, error) {
 	return p.slackRequest(ctx, http.MethodGet, endpoint, query, nil, token)
-}
-
-func (p *Provider) slackPOST(ctx context.Context, endpoint string, payload any, token string) (map[string]any, error) {
-	return p.slackRequest(ctx, http.MethodPost, endpoint, nil, payload, token)
 }
 
 func (p *Provider) slackRequest(ctx context.Context, method, endpoint string, query neturl.Values, payload any, token string) (map[string]any, error) {
@@ -412,7 +369,7 @@ func (p *Provider) slackRequest(ctx context.Context, method, endpoint string, qu
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("slack API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		return nil, fmt.Errorf("slack API error (status %d): %s", resp.StatusCode, string(responseBody))
 	}
 	if ok, exists := boolField(data, "ok"); exists && !ok {
 		if slackErr := stringField(data, "error"); slackErr != "" {

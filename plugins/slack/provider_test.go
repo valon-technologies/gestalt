@@ -22,8 +22,8 @@ func TestProviderMetadata(t *testing.T) {
 	if catalog == nil {
 		t.Fatal("Catalog() returned nil")
 	}
-	if len(catalog.Operations) != 4 {
-		t.Fatalf("Catalog().Operations returned %d ops, want 4", len(catalog.Operations))
+	if len(catalog.Operations) != 3 {
+		t.Fatalf("Catalog().Operations returned %d ops, want 3", len(catalog.Operations))
 	}
 }
 
@@ -181,40 +181,5 @@ func TestGetThreadParticipantsIncludesUserInfo(t *testing.T) {
 	}
 	if second["display_name"].(string) != "bob" {
 		t.Fatalf("display_name = %q", second["display_name"].(string))
-	}
-}
-
-func TestCreateCanvasWrapsMarkdownPayload(t *testing.T) {
-	p := NewProvider()
-	p.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/api/canvases.create" {
-			t.Fatalf("path = %s", r.URL.Path)
-		}
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		doc, ok := body["document_content"].(map[string]any)
-		if !ok {
-			t.Fatal("expected document_content object")
-		}
-		if doc["type"] != "markdown" || doc["markdown"] != "# Title" {
-			t.Fatalf("unexpected document_content = %#v", doc)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(`{"ok": true, "canvas_id": "F123"}`)),
-		}, nil
-	})
-
-	result, err := p.Execute(context.Background(), "slack_create_canvas", map[string]any{
-		"title":            "Test canvas",
-		"document_content": "# Title",
-	}, "test-token")
-	if err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	if !strings.Contains(result.Body, `"canvas"`) {
-		t.Fatalf("expected canvas in body: %s", result.Body)
 	}
 }

@@ -258,3 +258,15 @@ provider:
         - name: thread_ts
           type: string
           in: body
+    - name: slack_create_canvas
+      description: Create a Slack canvas
+      method: POST
+      path: /api/canvases.create
+      parameters:
+        - name: title
+          type: string
+          in: body
+          required: true
+        - name: document_content
+          type: object
+          in: body
