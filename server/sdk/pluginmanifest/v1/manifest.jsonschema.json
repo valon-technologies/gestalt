@@ -217,7 +217,6 @@
         "anyOf": [
           {
             "required": [
-              "artifacts",
               "entrypoints"
             ],
             "properties": {
@@ -263,7 +262,6 @@
           },
           {
             "required": [
-              "artifacts",
               "entrypoints"
             ],
             "properties": {
@@ -295,7 +293,6 @@
       },
       "then": {
         "required": [
-          "artifacts",
           "entrypoints"
         ],
         "properties": {
@@ -522,8 +519,7 @@
       "required": [
         "os",
         "arch",
-        "path",
-        "sha256"
+        "path"
       ],
       "properties": {
         "os": {

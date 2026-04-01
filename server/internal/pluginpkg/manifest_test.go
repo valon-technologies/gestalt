@@ -73,6 +73,71 @@ func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 	}
 }
 
+func TestDecodeManifest_RejectsMissingArtifactSHA256(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "source": "github.com/acme/plugins/provider",
+  "version": "0.1.0",
+  "kinds": ["provider"],
+  "provider": {},
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), "sha256 is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDecodeSourceManifest_AllowsMissingArtifactSHA256(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "source": "github.com/acme/plugins/provider",
+  "version": "0.1.0",
+  "kinds": ["provider"],
+  "provider": {},
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	manifest, err := DecodeSourceManifestFormat(data, "json")
+	if err != nil {
+		t.Fatalf("DecodeSourceManifestFormat: %v", err)
+	}
+	if len(manifest.Artifacts) != 1 {
+		t.Fatalf("artifacts = %+v", manifest.Artifacts)
+	}
+	if manifest.Artifacts[0].SHA256 != "" {
+		t.Fatalf("sha256 = %q, want empty", manifest.Artifacts[0].SHA256)
+	}
+}
+
 func TestEncodeManifest_RoundTrip(t *testing.T) {
 	t.Parallel()
 
