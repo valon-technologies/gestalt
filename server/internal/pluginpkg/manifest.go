@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -173,6 +174,12 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 			}
 			if err := validateProviderAuth(manifest.Provider.Auth); err != nil {
 				return err
+			}
+			if err := config.ValidateManagedParameters(manifest.Provider.ManagedParameters); err != nil {
+				return fmt.Errorf("provider %w", err)
+			}
+			if err := config.ValidateManagedParameterHeaderConflicts(manifest.Provider.Headers, manifest.Provider.ManagedParameters); err != nil {
+				return fmt.Errorf("provider %w", err)
 			}
 			if manifest.Provider.ConfigSchemaPath != "" {
 				if err := validateRelativePackagePath(manifest.Provider.ConfigSchemaPath, "provider config schema path"); err != nil {

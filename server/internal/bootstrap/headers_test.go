@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -87,5 +88,117 @@ func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for upstream request")
+	}
+}
+
+func TestBootstrap_ManagedParametersInjectHeadersAndHideOpenAPIParams(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const (
+		headerName  = "Intercom-Version"
+		headerValue = "2.11"
+	)
+
+	gotHeader := make(chan string, 1)
+	gotPageSize := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader <- r.Header.Get(headerName)
+		gotPageSize <- r.URL.Query().Get("page_size")
+		writeTestJSON(w, map[string]any{"items": []any{}})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Managed Parameters Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+						"parameters": []any{
+							map[string]any{
+								"name":     headerName,
+								"in":       "header",
+								"required": true,
+								"schema":   map[string]any{"type": "string"},
+							},
+							map[string]any{
+								"name":   "page_size",
+								"in":     "query",
+								"schema": map[string]any{"type": "integer"},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				OpenAPI: specSrv.URL,
+				ManagedParameters: []config.ManagedParameterDef{
+					{
+						In:    "header",
+						Name:  "intercom-version",
+						Value: headerValue,
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) != 1 {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	params := cat.Operations[0].Parameters
+	if len(params) != 1 || params[0].Name != "page_size" {
+		t.Fatalf("catalog params = %+v, want only page_size", params)
+	}
+
+	execResult, err := prov.Execute(ctx, "list_items", map[string]any{"page_size": 25}, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if execResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", execResult.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotHeader:
+		if got != headerValue {
+			t.Fatalf("%s = %q, want %q", headerName, got, headerValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream header")
+	}
+
+	select {
+	case got := <-gotPageSize:
+		if got != "25" {
+			t.Fatalf("page_size = %q, want %q", got, "25")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream query param")
 	}
 }
