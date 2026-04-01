@@ -177,7 +177,7 @@ provider:
           in: body
           required: true
         - name: post_at
-          type: string
+          type: int
           in: body
           required: true
         - name: thread_ts
@@ -238,7 +238,7 @@ provider:
           type: string
           in: body
           required: true
-    - name: slack_send_message_draft
+    - name: slack_send_ephemeral_message
       description: Send an ephemeral message visible only to a specific user
       method: POST
       path: /api/chat.postEphemeral
