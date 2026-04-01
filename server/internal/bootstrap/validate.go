@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"slices"
 
@@ -121,15 +120,13 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		intgDef := cfg.Integrations[name]
-		result, err := buildProviderForValidation(ctx, name, intgDef, factories, deps, regStore)
+		result, err := buildProviderForValidation(ctx, name, intgDef, deps, regStore)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
 		}
 		if err := reg.Providers.Register(name, result.Provider); err != nil {
-			if c, ok := result.Provider.(io.Closer); ok {
-				_ = c.Close()
-			}
+			closeIfPossible(result.Provider)
 			errs = append(errs, fmt.Errorf("bootstrap: registering provider %q: %w", name, err))
 		}
 		if len(result.ConnectionAuth) > 0 {
@@ -145,9 +142,9 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || intg.Plugin.Package == "" || !intg.Plugin.HasResolvedManifest() {
-		return buildProvider(ctx, name, intg, factories, deps, regStore)
+		return buildProvider(ctx, name, intg, deps, regStore)
 	}
 	prov, err := newPreparedProviderStub(name, intg)
 	if err != nil {
