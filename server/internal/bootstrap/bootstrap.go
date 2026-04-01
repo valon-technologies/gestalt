@@ -22,7 +22,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -801,14 +800,8 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := readResolvedManifest(intg.Plugin)
-	if err != nil {
-		if c, ok := pluginProv.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-		return nil, fmt.Errorf("read manifest for external provider %q: %w", name, err)
-	}
-	manifestProvider := providerFromManifest(manifest)
+	manifest := intg.Plugin.ResolvedManifest
+	manifestProvider := intg.Plugin.ManifestProvider()
 
 	resolved, hasSpecSurface := resolveConfiguredSpecSurface(intg.Plugin, manifestProvider)
 
@@ -1077,28 +1070,6 @@ func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.P
 	return config.MergeHeaders(manifestHeaders, pluginHeaders)
 }
 
-func readManifest(path string) (*pluginmanifestv1.Manifest, error) {
-	if path == "" {
-		return nil, nil
-	}
-	_, manifest, err := pluginpkg.ReadManifestFile(path)
-	return manifest, err
-}
-
-func readResolvedManifest(plugin *config.PluginDef) (*pluginmanifestv1.Manifest, error) {
-	if plugin == nil {
-		return nil, nil
-	}
-	return readManifest(plugin.ResolvedManifestPath)
-}
-
-func providerFromManifest(manifest *pluginmanifestv1.Manifest) *pluginmanifestv1.Provider {
-	if manifest == nil {
-		return nil
-	}
-	return manifest.Provider
-}
-
 func firstProviderIconSVG(providers ...core.Provider) string {
 	for _, prov := range providers {
 		cp, ok := prov.(core.CatalogProvider)
@@ -1211,13 +1182,10 @@ func mergeConnectionAuth(dst *config.ConnectionAuthDef, src config.ConnectionAut
 }
 
 func buildDeclarativeProvider(ctx context.Context, name string, intg config.IntegrationDef, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	if intg.Plugin == nil || intg.Plugin.ResolvedManifestPath == "" {
-		return nil, fmt.Errorf("declarative provider %q has no resolved manifest path", name)
+	if intg.Plugin == nil || !intg.Plugin.HasResolvedManifest() {
+		return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
 	}
-	manifest, err := readResolvedManifest(intg.Plugin)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest for declarative provider %q: %w", name, err)
-	}
+	manifest := intg.Plugin.ResolvedManifest
 	manifest = mergedManifestHeaders(manifest, intg.Plugin)
 	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
 	if err != nil {

@@ -149,10 +149,10 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	if intg.Plugin == nil || intg.Plugin.Package == "" || intg.Plugin.ResolvedManifestPath == "" {
+	if intg.Plugin == nil || intg.Plugin.Package == "" || !intg.Plugin.HasResolvedManifest() {
 		return buildProvider(ctx, name, intg, factories, deps, regStore)
 	}
-	prov, err := newPreparedProviderStub(name, intg, intg.Plugin.ResolvedManifestPath)
+	prov, err := newPreparedProviderStub(name, intg)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func buildProviderForValidation(ctx context.Context, name string, intg config.In
 }
 
 func buildRuntimeForValidation(ctx context.Context, name string, cfg config.RuntimeDef, factories *FactoryRegistry, deps RuntimeDeps) (core.Runtime, error) {
-	if cfg.Plugin != nil && cfg.Plugin.Package != "" && cfg.Plugin.ResolvedManifestPath != "" {
+	if cfg.Plugin != nil && cfg.Plugin.Package != "" && cfg.Plugin.HasResolvedManifest() {
 		return &preparedRuntimeStub{name: name}, nil
 	}
 	return buildRuntime(ctx, name, cfg, factories, deps)
@@ -173,11 +173,11 @@ type preparedProviderStub struct {
 	connectionMode core.ConnectionMode
 }
 
-func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPath string) (core.Provider, error) {
-	manifest, err := readManifest(manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read prepared manifest: %w", err)
+func newPreparedProviderStub(name string, intg config.IntegrationDef) (core.Provider, error) {
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
+		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
+	manifest := intg.Plugin.ResolvedManifest
 	displayName := manifest.DisplayName
 	if displayName == "" {
 		displayName = name

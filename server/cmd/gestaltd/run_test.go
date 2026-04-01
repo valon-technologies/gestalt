@@ -60,15 +60,12 @@ func TestBuildMCPSurfaceIncludesManifestDeclaredProviders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			pluginDir := t.TempDir()
-			writeReleaseTestManifest(t, pluginDir, tc.manifest)
-
 			cfg := &config.Config{
 				Integrations: map[string]config.IntegrationDef{
 					"example": {
 						Plugin: &config.PluginDef{
-							Source:               "github.com/testowner/plugins/example",
-							ResolvedManifestPath: pluginDir + "/plugin.json",
+							Source:           "github.com/testowner/plugins/example",
+							ResolvedManifest: tc.manifest,
 						},
 					},
 				},

@@ -315,8 +315,8 @@ func TestPrepareConfigAcceptsPluginPackageSurfaceConnectionAliases(t *testing.T)
 		t.Fatalf("loadConfigForExecution: %v", err)
 	}
 	plugin := cfg.Integrations["example"].Plugin
-	if plugin.ResolvedManifestPath == "" {
-		t.Fatal("expected ResolvedManifestPath to be set after prepare")
+	if plugin.ResolvedManifest == nil {
+		t.Fatal("expected ResolvedManifest to be set after prepare")
 	}
 }
 
