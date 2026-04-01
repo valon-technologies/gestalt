@@ -1,10 +1,18 @@
 source: github.com/valon-technologies/gestalt/slack
-version: 0.0.1-alpha.4
+version: 0.0.1-alpha.7
 display_name: Slack
 description: Send messages, search conversations, and manage channels.
 icon_file: assets/icon.svg
 kinds:
   - provider
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
 provider:
   mcp: true
   base_url: https://slack.com
@@ -32,7 +40,7 @@ provider:
       - groups:write
       - canvases:write
   operations:
-    - name: slack_list_channels
+    - name: conversations.list
       description: List conversations/channels
       method: GET
       path: /api/conversations.list
@@ -43,7 +51,10 @@ provider:
         - name: cursor
           type: string
           in: query
-    - name: slack_send_message
+        - name: types
+          type: string
+          in: query
+    - name: chat.postMessage
       description: Send a message to a channel
       method: POST
       path: /api/chat.postMessage
@@ -56,7 +67,16 @@ provider:
           type: string
           in: body
           required: true
-    - name: slack_list_users
+        - name: thread_ts
+          type: string
+          in: body
+        - name: unfurl_links
+          type: bool
+          in: body
+        - name: unfurl_media
+          type: bool
+          in: body
+    - name: users.list
       description: List workspace users
       method: GET
       path: /api/users.list
@@ -67,7 +87,7 @@ provider:
         - name: cursor
           type: string
           in: query
-    - name: slack_read_history
+    - name: conversations.history
       description: Read message history for a channel
       method: GET
       path: /api/conversations.history
@@ -82,7 +102,16 @@ provider:
         - name: cursor
           type: string
           in: query
-    - name: slack_search_messages
+        - name: oldest
+          type: string
+          in: query
+        - name: latest
+          type: string
+          in: query
+        - name: inclusive
+          type: bool
+          in: query
+    - name: search.messages
       description: Search messages across the workspace
       method: GET
       path: /api/search.messages
@@ -94,3 +123,150 @@ provider:
         - name: count
           type: int
           in: query
+        - name: page
+          type: int
+          in: query
+    - name: users.info
+      description: Get profile information for a Slack user
+      method: GET
+      path: /api/users.info
+      parameters:
+        - name: user
+          type: string
+          in: query
+          required: true
+    - name: conversations.replies
+      description: Read replies for a thread
+      method: GET
+      path: /api/conversations.replies
+      parameters:
+        - name: channel
+          type: string
+          in: query
+          required: true
+        - name: ts
+          type: string
+          in: query
+          required: true
+        - name: limit
+          type: int
+          in: query
+        - name: cursor
+          type: string
+          in: query
+        - name: oldest
+          type: string
+          in: query
+        - name: latest
+          type: string
+          in: query
+        - name: inclusive
+          type: bool
+          in: query
+    - name: chat.scheduleMessage
+      description: Schedule a message to be sent later
+      method: POST
+      path: /api/chat.scheduleMessage
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: text
+          type: string
+          in: body
+          required: true
+        - name: post_at
+          type: int
+          in: body
+          required: true
+        - name: thread_ts
+          type: string
+          in: body
+    - name: reactions.add
+      description: Add an emoji reaction to a message
+      method: POST
+      path: /api/reactions.add
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: timestamp
+          type: string
+          in: body
+          required: true
+        - name: name
+          type: string
+          in: body
+          required: true
+    - name: conversations.setTopic
+      description: Set a channel topic
+      method: POST
+      path: /api/conversations.setTopic
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: topic
+          type: string
+          in: body
+          required: true
+    - name: conversations.create
+      description: Create a new Slack channel
+      method: POST
+      path: /api/conversations.create
+      parameters:
+        - name: name
+          type: string
+          in: body
+          required: true
+        - name: is_private
+          type: bool
+          in: body
+    - name: conversations.invite
+      description: Invite users to a channel
+      method: POST
+      path: /api/conversations.invite
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: users
+          type: string
+          in: body
+          required: true
+    - name: chat.postEphemeral
+      description: Send an ephemeral message visible only to a specific user
+      method: POST
+      path: /api/chat.postEphemeral
+      parameters:
+        - name: channel
+          type: string
+          in: body
+          required: true
+        - name: text
+          type: string
+          in: body
+          required: true
+        - name: user
+          type: string
+          in: body
+          required: true
+        - name: thread_ts
+          type: string
+          in: body
+    - name: canvases.create
+      description: Create a Slack canvas
+      method: POST
+      path: /api/canvases.create
+      parameters:
+        - name: title
+          type: string
+          in: body
+          required: true
+        - name: document_content
+          type: object
+          in: body
