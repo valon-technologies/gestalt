@@ -5,8 +5,8 @@
 | Path | Purpose |
 | --- | --- |
 | `server/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
-| `server/core` | Public interfaces for auth, datastore, secrets, providers, runtimes, and bindings. |
-| `server/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other runtime internals. |
+| `server/core` | Public interfaces for auth, datastore, secrets, providers, and bindings. |
+| `server/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other server internals. |
 | `plugins` | External plugin packages (declarative and compiled). |
 | `sdk` | Public SDKs and plugin manifest definitions. |
 | `web` | Frontend that is embedded into the server build. |
@@ -18,7 +18,7 @@
 When you update docs, keep them aligned with:
 
 - config structs in `server/internal/config`
-- runtime wiring in `server/cmd/gestaltd` and `server/internal/bootstrap`
+- bootstrap wiring in `server/cmd/gestaltd` and `server/internal/bootstrap`
 - HTTP routes in `server/internal/server`
 - deployment assets in `server/Dockerfile` and `server/deploy/helm`
 
@@ -51,7 +51,7 @@ Keep the bare semantic version aligned across artifacts when they are meant to s
 
 ## Adding New Built-Ins
 
-If you add a new built-in auth provider, datastore, secret manager, binding, runtime, or named provider:
+If you add a new built-in auth provider, datastore, secret manager, binding, or named provider:
 
 1. register it in the relevant `server/cmd/gestaltd` file
 2. add or update tests

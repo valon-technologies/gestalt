@@ -3465,66 +3465,6 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 }
 
-func TestListRuntimes_NoRuntimes(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var names []string
-	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if len(names) != 0 {
-		t.Fatalf("expected empty list, got %v", names)
-	}
-}
-
-func TestListRuntimes_WithRuntimes(t *testing.T) {
-	t.Parallel()
-
-	runtimes := registry.NewRuntimeMap()
-	if err := runtimes.Register("echo-1", &coretesting.StubRuntime{N: "echo-1"}); err != nil {
-		t.Fatal(err)
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Runtimes = runtimes
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runtimes", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var names []string
-	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if len(names) != 1 || names[0] != "echo-1" {
-		t.Fatalf("expected [echo-1], got %v", names)
-	}
-}
-
 type stubManualProvider struct {
 	coretesting.StubIntegration
 }
@@ -4972,8 +4912,8 @@ func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decoding error response: %v", err)
 	}
-	if errResp["error"] != "integration runtime unavailable" {
-		t.Fatalf("expected runtime unavailable message, got %q", errResp["error"])
+	if errResp["error"] != "integration unavailable" {
+		t.Fatalf("expected integration unavailable message, got %q", errResp["error"])
 	}
 }
 

@@ -242,8 +242,6 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		switch kind {
 		case pluginmanifestv1.KindProvider:
 			entry = manifest.Entrypoints.Provider
-		case pluginmanifestv1.KindRuntime:
-			entry = manifest.Entrypoints.Runtime
 		default:
 			continue
 		}
@@ -264,10 +262,6 @@ func configSchemaPaths(manifest *pluginmanifestv1.Manifest, dirPath string) []st
 	var paths []string
 	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
 		paths = append(paths, manifest.Provider.ConfigSchemaPath)
-	}
-	runtimeSchema := filepath.Join(dirPath, filepath.FromSlash(pluginpkg.RuntimeConfigSchemaPath))
-	if _, err := os.Stat(runtimeSchema); err == nil {
-		paths = append(paths, pluginpkg.RuntimeConfigSchemaPath)
 	}
 	return paths
 }

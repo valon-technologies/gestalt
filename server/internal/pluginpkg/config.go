@@ -10,8 +10,6 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
-const RuntimeConfigSchemaPath = "schemas/config.schema.json"
-
 func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string, config map[string]any) error {
 	schemaPath, schemaName, ok, err := configSchemaForManifest(manifestPath, manifest, kind)
 	if err != nil {
@@ -59,14 +57,6 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 			return "", "", false, nil
 		}
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Provider.ConfigSchemaPath)), manifest.Provider.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindRuntime:
-		schemaPath := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(RuntimeConfigSchemaPath))
-		if _, statErr := os.Stat(schemaPath); statErr == nil {
-			return schemaPath, RuntimeConfigSchemaPath, true, nil
-		} else if !os.IsNotExist(statErr) {
-			return "", "", false, fmt.Errorf("stat runtime config schema %q: %w", RuntimeConfigSchemaPath, statErr)
-		}
-		return "", "", false, nil
 	default:
 		return "", "", false, fmt.Errorf("unsupported manifest config kind %q", kind)
 	}

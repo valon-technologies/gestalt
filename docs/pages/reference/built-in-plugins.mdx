@@ -1,70 +1,59 @@
 # Built-in Plugins
 
-This page lists the built-in drivers wired into `gestaltd`.
+Components registered by the `gestaltd` binary at startup.
 
 ## Auth Providers
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `none` | Disables platform auth. |
-| `local` | Local single-user login. Supports `config.email`. |
-| `google` | Google OAuth login. Supports `client_id`, `client_secret`, `redirect_url`, and `allowed_domains`. |
-| `oidc` | Generic OpenID Connect. Supports issuer, client credentials, redirect URL, scopes, PKCE, allowed domains, and display name. |
+| `none` | Disables platform authentication. Every request is treated as anonymous. |
+| `local` | Single-user auth for local development. No external identity provider required. |
+| `google` | Google OAuth 2.0 platform login. Supports `allowed_domains` restriction. |
+| `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ## Datastores
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `sqlite` | Uses `config.path`. Best for local or single-node deployments. |
-| `postgres` | Uses `config.dsn`. |
-| `mysql` | Uses `config.dsn`. |
-| `dynamodb` | Uses `table`, `region`, and optional `endpoint`. |
-| `mongodb` | Uses `uri` and optional `database`. |
-| `oracle` | Uses `config.dsn`. |
+| `sqlite` | File-backed. Best for local or single-node deployments. |
+| `postgres` | Recommended production datastore. |
+| `mysql` | SQL-backed production datastore. |
+| `dynamodb` | DynamoDB-backed datastore. |
+| `mongodb` | MongoDB-backed datastore. |
+| `oracle` | Oracle-backed datastore. |
 | `firestore` | Firestore-backed datastore. |
-| `sqlserver` | Uses `config.dsn`. |
+| `sqlserver` | SQL Server-backed datastore. |
 
-## Secret Providers
+## Secret Managers
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `env` | Reads from environment variables. Optional `prefix`. |
-| `file` | Reads secret files from a configured directory. |
-| `google_secret_manager` | Google Cloud Secret Manager. |
-| `aws_secrets_manager` | AWS Secrets Manager. |
-| `vault` | HashiCorp Vault. |
-| `azure_key_vault` | Azure Key Vault. |
+| `env` | Resolves secrets from environment variables. Default when `secrets` is omitted. |
+| `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
+| `google_secret_manager` | Resolves secrets from Google Cloud Secret Manager. |
+| `aws_secrets_manager` | Resolves secrets from AWS Secrets Manager. |
+| `vault` | Resolves secrets from HashiCorp Vault (KV v2). |
+| `azure_key_vault` | Resolves secrets from Azure Key Vault. |
 
 ## Telemetry Providers
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `stdout` | Structured logs to stdout. Default when omitted. |
-| `otlp` | OpenTelemetry logs, metrics, and traces. |
-| `noop` | Disable telemetry export. |
+| `stdout` | Outputs structured logs to standard output. Traces and metrics use noop providers. Default when `telemetry` is omitted. |
+| `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
+| `noop` | Disables all telemetry collection. |
 
-## Binding Types
+## Bindings
 
-| Name | Notes |
+| Name | Purpose |
 | --- | --- |
-| `webhook` | Public or authenticated inbound webhook routes with optional provider forwarding. |
-| `proxy` | Authenticated outbound proxy routes with egress policy enforcement. |
+| `webhook` | Inbound HTTP endpoint with optional HMAC signature verification and provider forwarding. |
+| `proxy` | HTTP proxy surface with egress policy enforcement and credential injection. |
 
-## Runtime Types
+## Named Providers
 
-Gestalt does not register built-in runtime types. Use packaged runtime plugins
-under `runtimes.*.plugin`.
+No named providers are currently built into the binary. BigQuery, Jira, and Slack are available as external plugins under `plugins/`.
 
-## External Packaged Integrations In This Repository
+## Scope
 
-The repository currently ships packaged integration manifests for:
-
-- BigQuery
-- Gmail
-- Jira
-- Notion
-- Rippling
-- Slack
-
-These are not compiled into the `gestaltd` binary. They are normal packaged
-plugins that you reference from `config.yaml`.
+This page lists only components wired into `cmd/gestaltd`. Test fixtures, examples, and external plugins (`plugins/`) ship in the repository but are not compiled into the binary.

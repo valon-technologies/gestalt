@@ -20,41 +20,39 @@ func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
 		policy = staticEnforcer
 	}
 
-	deps := EgressDeps{
-		Resolver: &egress.Resolver{
-			Subjects: egress.ContextSubjectResolver{},
-			Policy:   policy,
-		},
-	}
-
-	if len(cfg.Egress.Credentials) == 0 {
-		return deps
-	}
-
-	grants := make([]egress.CredentialGrant, len(cfg.Egress.Credentials))
-	for i := range cfg.Egress.Credentials {
-		g := &cfg.Egress.Credentials[i]
-		grants[i] = egress.CredentialGrant{
-			SecretRef: g.SecretRef,
-			AuthStyle: egress.AuthStyle(g.AuthStyle),
-			MatchCriteria: egress.MatchCriteria{
-				SubjectKind: egress.SubjectKind(g.SubjectKind),
-				SubjectID:   g.SubjectID,
-				Operation:   g.Operation,
-				Method:      g.Method,
-				Host:        g.Host,
-				PathPrefix:  g.PathPrefix,
+	var credentials egress.CredentialResolver
+	if len(cfg.Egress.Credentials) > 0 {
+		grants := make([]egress.CredentialGrant, len(cfg.Egress.Credentials))
+		for i := range cfg.Egress.Credentials {
+			g := &cfg.Egress.Credentials[i]
+			grants[i] = egress.CredentialGrant{
+				SecretRef: g.SecretRef,
+				AuthStyle: egress.AuthStyle(g.AuthStyle),
+				MatchCriteria: egress.MatchCriteria{
+					SubjectKind: egress.SubjectKind(g.SubjectKind),
+					SubjectID:   g.SubjectID,
+					Operation:   g.Operation,
+					Method:      g.Method,
+					Host:        g.Host,
+					PathPrefix:  g.PathPrefix,
+				},
+			}
+		}
+		credentials = &egress.CredentialGrantResolver{
+			Loaders: []egress.CredentialGrantLoader{
+				&egress.StaticCredentialGrantLoader{Grants: grants},
 			},
+			SecretResolver: sm,
 		}
 	}
-	deps.Resolver.Credentials = &egress.CredentialGrantResolver{
-		Loaders: []egress.CredentialGrantLoader{
-			&egress.StaticCredentialGrantLoader{Grants: grants},
-		},
-		SecretResolver: sm,
-	}
 
-	return deps
+	return EgressDeps{
+		Resolver: &egress.Resolver{
+			Subjects:    egress.ContextSubjectResolver{},
+			Policy:      policy,
+			Credentials: credentials,
+		},
+	}
 }
 
 func buildStaticPolicyEnforcer(cfg config.EgressConfig) egress.StaticPolicyEnforcer {

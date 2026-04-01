@@ -27,7 +27,6 @@ type Server struct {
 	auth               core.AuthProvider
 	datastore          core.Datastore
 	providers          *registry.PluginMap[core.Provider]
-	runtimes           *registry.PluginMap[core.Runtime]
 	bindings           *registry.PluginMap[core.Binding]
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
@@ -51,7 +50,6 @@ type Config struct {
 	Auth              core.AuthProvider
 	Datastore         core.Datastore
 	Providers         *registry.PluginMap[core.Provider]
-	Runtimes          *registry.PluginMap[core.Runtime]
 	Bindings          *registry.PluginMap[core.Binding]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
@@ -102,7 +100,6 @@ func New(cfg Config) (*Server, error) {
 		auth:              cfg.Auth,
 		datastore:         cfg.Datastore,
 		providers:         cfg.Providers,
-		runtimes:          cfg.Runtimes,
 		bindings:          cfg.Bindings,
 		resolver:          resolver,
 		invoker:           cfg.Invoker,
