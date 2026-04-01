@@ -35,6 +35,30 @@ var retryableStatusCodes = map[int]bool{
 
 var pathParamRe = regexp.MustCompile(`\{([^}]+)\}`)
 
+type UpstreamHTTPError struct {
+	Status  int
+	Headers http.Header
+	Body    string
+	Cause   error
+}
+
+func (e *UpstreamHTTPError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.Status, e.Body)
+}
+
+func (e *UpstreamHTTPError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
 // ResponseChecker validates a response body beyond the default HTTP status check.
 // If it returns a non-nil error, Do treats the response as a failure.
 type ResponseChecker func(status int, body []byte) error
@@ -212,11 +236,23 @@ func doOnce(
 
 	if req.CheckResponse != nil {
 		if err := req.CheckResponse(resp.StatusCode, respBody); err != nil {
+			if resp.StatusCode >= http.StatusBadRequest {
+				return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], &UpstreamHTTPError{
+					Status:  resp.StatusCode,
+					Headers: resp.Header.Clone(),
+					Body:    string(respBody),
+					Cause:   err,
+				}
+			}
 			return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], err
 		}
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		retryable := retryableStatusCodes[resp.StatusCode]
-		return nil, resp.StatusCode, retryAfter, retryable, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
+		return nil, resp.StatusCode, retryAfter, retryable, &UpstreamHTTPError{
+			Status:  resp.StatusCode,
+			Headers: resp.Header.Clone(),
+			Body:    string(respBody),
+		}
 	}
 
 	return &core.OperationResult{

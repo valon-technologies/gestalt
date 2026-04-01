@@ -16,3 +16,21 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
+
+func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
+	if result == nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	contentType := core.ContentTypeJSON
+	if result.Headers != nil {
+		if ct := result.Headers.Get("Content-Type"); ct != "" {
+			contentType = ct
+		}
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(result.Status)
+	_, _ = w.Write([]byte(result.Body))
+}
