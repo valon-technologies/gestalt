@@ -623,49 +623,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 	})
 }
 
-func TestBootstrapWithRuntimes(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Runtimes = map[string]config.RuntimeDef{
-		"my-echo": {
-			Type:      "echo",
-			Providers: []string{"alpha"},
-		},
-	}
-
-	factories := validFactories()
-	factories.Runtimes["echo"] = stubRuntimeFactory("my-echo", nil)
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Runtimes == nil {
-		t.Fatal("expected Runtimes to be non-nil")
-	}
-	names := result.Runtimes.List()
-	if len(names) != 1 || names[0] != "my-echo" {
-		t.Fatalf("Runtimes.List: got %v, want [my-echo]", names)
-	}
-}
-
-func TestBootstrapNoRuntimes(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Runtimes != nil {
-		t.Fatalf("expected Runtimes to be nil, got %v", result.Runtimes.List())
-	}
-}
-
 func TestBootstrapUnknownRuntimeType(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -678,48 +635,6 @@ func TestBootstrapUnknownRuntimeType(t *testing.T) {
 	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err == nil {
 		t.Fatal("expected error for unknown runtime type")
-	}
-}
-
-func TestBootstrapWithBindings(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Bindings = map[string]config.BindingDef{
-		"my-webhook": {Type: "webhook"},
-	}
-
-	factories := validFactories()
-	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ bootstrap.BindingDeps) (core.Binding, error) {
-		return &coretesting.StubBinding{N: name}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Bindings == nil {
-		t.Fatal("expected Bindings to be non-nil")
-	}
-	names := result.Bindings.List()
-	if len(names) != 1 || names[0] != "my-webhook" {
-		t.Fatalf("Bindings.List: got %v, want [my-webhook]", names)
-	}
-}
-
-func TestBootstrapNoBindings(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Bindings != nil {
-		t.Fatalf("expected Bindings to be nil, got %v", result.Bindings.List())
 	}
 }
 

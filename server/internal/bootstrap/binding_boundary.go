@@ -33,7 +33,10 @@ func buildBindings(ctx context.Context, cfg *config.Config, factories *FactoryRe
 			return nil, fmt.Errorf("bootstrap: unknown binding type %q for binding %q", def.Type, name)
 		}
 
-		deps := bindingDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
+		deps := BindingDeps{
+			Invoker: newGuardedInvoker("binding", name, invoker, lister, def.Providers, audit),
+			Egress:  egressDeps,
+		}
 		binding, err := factory(ctx, name, def, deps)
 		if err != nil {
 			_ = CloseBindings(bindings, bindingNames(bindings))

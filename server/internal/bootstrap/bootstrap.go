@@ -169,6 +169,9 @@ type Deps struct {
 	Egress        EgressDeps
 }
 
+type sqlDBAccessor interface{ RawDB() any }
+type sqlDialectAccessor interface{ RawDialect() any }
+
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
@@ -251,16 +254,13 @@ func (r *Result) Close(ctx context.Context) error {
 
 	var errs []error
 	if r.extensionsStarted {
-		errs = append(errs,
-			CloseBindings(r.Bindings, bindingNames(r.Bindings)),
-			StopRuntimes(ctx, r.Runtimes, runtimeNames(r.Runtimes)),
-		)
+		errs = append(errs, shutdownExtensions(ctx, r.Runtimes, r.Bindings))
 		r.extensionsStarted = false
 	}
 	errs = append(errs,
 		CloseProviders(r.Providers),
 		closeDatastore(r.Datastore),
-		closeResultSecretManager(r.SecretManager),
+		closeSecretManager(r.SecretManager),
 	)
 	if r.Telemetry != nil {
 		errs = append(errs, r.Telemetry.Shutdown(ctx))
@@ -277,7 +277,15 @@ func closeIfPossible(values ...any) {
 	}
 }
 
-func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
+type preparedCore struct {
+	Auth          core.AuthProvider
+	Datastore     core.Datastore
+	SecretManager core.SecretManager
+	Telemetry     core.TelemetryProvider
+	Deps          Deps
+}
+
+func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
 	sm, err := buildSecretManager(cfg, factories)
 	if err != nil {
 		return nil, err
@@ -285,7 +293,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeSM := true
 	defer func() {
 		if closeSM {
-			closeIfPossible(sm)
+			_ = closeSecretManager(sm)
 		}
 	}()
 
@@ -305,7 +313,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	encKey := crypto.DeriveKey(cfg.Server.EncryptionKey)
-	if encKey == nil && cfg.Auth.Provider != "none" {
+	if requireEncryptionKey && encKey == nil && cfg.Auth.Provider != "none" {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required when auth is enabled")
 	}
 
@@ -324,12 +332,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	deps.Egress = newEgressDeps(cfg)
+	closeDS := true
+	defer func() {
+		if closeDS {
+			_ = ds.Close()
+		}
+	}()
 
-	// Expose the underlying *sql.DB and dialect for optional use by
-	// provider factories (e.g. MCP OAuth registration storage).
-	type sqlDBAccessor interface{ RawDB() any }
-	type sqlDialectAccessor interface{ RawDialect() any }
+	deps.Egress = newEgressDeps(cfg, sm)
 	if acc, ok := ds.(sqlDBAccessor); ok {
 		deps.SQLDB = acc.RawDB()
 	}
@@ -337,7 +347,47 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		deps.SQLDialect = acc.RawDialect()
 	}
 
-	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, deps)
+	closeSM = false
+	shutdownTelemetry = false
+	closeDS = false
+	return &preparedCore{
+		Auth:          auth,
+		Datastore:     ds,
+		SecretManager: sm,
+		Telemetry:     tp,
+		Deps:          deps,
+	}, nil
+}
+
+func (p *preparedCore) Close(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+
+	var errs []error
+	errs = append(errs,
+		closeDatastore(p.Datastore),
+		closeSecretManager(p.SecretManager),
+	)
+	if p.Telemetry != nil {
+		errs = append(errs, p.Telemetry.Shutdown(ctx))
+	}
+	return errors.Join(errs...)
+}
+
+func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
+	prepared, err := prepareCore(ctx, cfg, factories, true)
+	if err != nil {
+		return nil, err
+	}
+	closeCore := true
+	defer func() {
+		if closeCore {
+			_ = prepared.Close(context.Background())
+		}
+	}()
+
+	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
 	}
@@ -349,46 +399,44 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	connMap, err := BuildConnectionMap(cfg)
+	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
 		return nil, err
 	}
-	sharedInvoker := invocation.NewBroker(providers, ds,
-		invocation.WithConnectionMapper(connMap),
+	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
-	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
-	extensions, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress)
+	runtimes, bindings, err := buildExtensions(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
 	if err != nil {
 		return nil, err
 	}
-	shutdownExtensions := true
+	closeExtensions := true
 	defer func() {
-		if shutdownExtensions {
-			_ = extensions.Shutdown(context.Background())
+		if closeExtensions {
+			_ = shutdownExtensions(context.Background(), runtimes, bindings)
 		}
 	}()
 
 	closeProviders = false
-	shutdownExtensions = false
-	closeSM = false
-	shutdownTelemetry = false
+	closeExtensions = false
+	closeCore = false
 	return &Result{
-		Auth:             auth,
-		Datastore:        ds,
+		Auth:             prepared.Auth,
+		Datastore:        prepared.Datastore,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		ConnectionAuth:   connAuthResolver,
-		Runtimes:         extensions.Runtimes,
-		Bindings:         extensions.Bindings,
+		Runtimes:         runtimes,
+		Bindings:         bindings,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,
 		AuditSink:        audit,
-		SecretManager:    sm,
-		Telemetry:        tp,
-		Egress:           deps.Egress,
+		SecretManager:    prepared.SecretManager,
+		Telemetry:        prepared.Telemetry,
+		Egress:           prepared.Deps.Egress,
 	}, nil
 }
 
@@ -477,7 +525,7 @@ func closeDatastore(ds core.Datastore) error {
 	return ds.Close()
 }
 
-func closeResultSecretManager(sm core.SecretManager) error {
+func closeSecretManager(sm core.SecretManager) error {
 	closer, ok := sm.(interface{ Close() error })
 	if !ok {
 		return nil
@@ -1349,14 +1397,6 @@ func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1
 		}
 	}
 	def.ResponseMapping = rm
-}
-
-func BuildConnectionMap(cfg *config.Config) (invocation.ConnectionMap, error) {
-	maps, err := BuildConnectionMaps(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return invocation.ConnectionMap(maps.APIConnection), nil
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {

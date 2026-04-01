@@ -39,7 +39,7 @@ func TestBuildExtensions_ShutsDownRuntimesWhenBindingConstructionFails(t *testin
 		return nil, errors.New("boom")
 	}
 
-	_, err := buildExtensions(context.Background(), cfg, factories, nil, nil, nil, EgressDeps{})
+	_, _, err := buildExtensions(context.Background(), cfg, factories, nil, nil, nil, EgressDeps{})
 	if err == nil {
 		t.Fatal("expected buildExtensions to fail")
 	}
@@ -51,37 +51,35 @@ func TestBuildExtensions_ShutsDownRuntimesWhenBindingConstructionFails(t *testin
 	}
 }
 
-func TestExtensionBoundaryShutdown_ClosesBindingsAndRuntimes(t *testing.T) {
+func TestShutdownExtensions_ClosesBindingsAndRuntimes(t *testing.T) {
 	t.Parallel()
 
 	bindingClosed := false
 	runtimeStopped := false
 
-	extensions := &ExtensionBoundary{
-		Runtimes: registryWithRuntime(t, "echo", &coretesting.StubRuntime{
-			N: "echo",
-			StopFn: func(context.Context) error {
-				runtimeStopped = true
-				return nil
-			},
-		}),
-		Bindings: registryWithBinding(t, "hook", &coretesting.StubBinding{
-			N: "hook",
-			CloseFn: func() error {
-				bindingClosed = true
-				return nil
-			},
-		}),
-	}
+	runtimes := registryWithRuntime(t, "echo", &coretesting.StubRuntime{
+		N: "echo",
+		StopFn: func(context.Context) error {
+			runtimeStopped = true
+			return nil
+		},
+	})
+	bindings := registryWithBinding(t, "hook", &coretesting.StubBinding{
+		N: "hook",
+		CloseFn: func() error {
+			bindingClosed = true
+			return nil
+		},
+	})
 
-	if err := extensions.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown: %v", err)
+	if err := shutdownExtensions(context.Background(), runtimes, bindings); err != nil {
+		t.Fatalf("shutdownExtensions: %v", err)
 	}
 	if !bindingClosed {
-		t.Fatal("expected Shutdown to close bindings")
+		t.Fatal("expected shutdownExtensions to close bindings")
 	}
 	if !runtimeStopped {
-		t.Fatal("expected Shutdown to stop runtimes")
+		t.Fatal("expected shutdownExtensions to stop runtimes")
 	}
 }
 

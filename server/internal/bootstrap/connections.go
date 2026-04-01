@@ -126,32 +126,24 @@ func (plan pluginConnectionPlan) resolvedSurface(surface config.SpecSurface) (re
 }
 
 func (plan pluginConnectionPlan) authDefaultConnection() string {
-	if plan.defaultConnection != "" {
-		return plan.defaultConnection
-	}
-	if len(plan.namedConnections) == 0 {
-		return config.PluginConnectionName
-	}
-	return ""
+	return plan.fallbackConnection()
 }
 
 func (plan pluginConnectionPlan) apiConnection() string {
 	if resolved, ok := plan.configuredAPISurface(); ok {
 		return resolved.connectionName
 	}
-	if plan.defaultConnection != "" {
-		return plan.defaultConnection
-	}
-	if len(plan.namedConnections) == 0 {
-		return config.PluginConnectionName
-	}
-	return ""
+	return plan.fallbackConnection()
 }
 
 func (plan pluginConnectionPlan) mcpConnection() string {
 	if resolved, ok := plan.resolvedSurface(config.SpecSurfaceMCP); ok {
 		return resolved.connectionName
 	}
+	return plan.fallbackConnection()
+}
+
+func (plan pluginConnectionPlan) fallbackConnection() string {
 	if plan.defaultConnection != "" {
 		return plan.defaultConnection
 	}

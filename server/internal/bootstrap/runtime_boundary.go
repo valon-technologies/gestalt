@@ -35,7 +35,12 @@ func buildRuntimesWith(ctx context.Context, cfg *config.Config, factories *Facto
 
 	for name := range cfg.Runtimes {
 		def := cfg.Runtimes[name]
-		deps := runtimeDepsForProviders(name, invoker, lister, def.Providers, audit, egressDeps)
+		guarded := newGuardedInvoker("runtime", name, invoker, lister, def.Providers, audit)
+		deps := RuntimeDeps{
+			Invoker:          guarded,
+			CapabilityLister: guarded,
+			Egress:           egressDeps,
+		}
 		rt, err := buildRuntimeFn(ctx, name, def, factories, deps)
 		if err != nil {
 			_ = StopRuntimes(context.Background(), runtimes, runtimeNames(runtimes))
