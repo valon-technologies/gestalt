@@ -1,18 +1,18 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { loginCallback } from "@/lib/api";
 import { setUserEmail } from "@/lib/auth";
 
-function CallbackHandler() {
+export default function AuthCallbackPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get("code");
-    const returnedState = searchParams.get("state");
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
     const savedState = sessionStorage.getItem("oauth_state");
 
     if (!code) {
@@ -53,7 +53,7 @@ function CallbackHandler() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Login failed");
       });
-  }, [router, searchParams]);
+  }, [router]);
 
   if (error) {
     return (
@@ -72,13 +72,5 @@ function CallbackHandler() {
     <div className="flex min-h-screen items-center justify-center">
       <p className="text-sm text-stone-400 dark:text-stone-500">Completing login...</p>
     </div>
-  );
-}
-
-export default function AuthCallbackPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p className="text-sm text-stone-400 dark:text-stone-500">Loading...</p></div>}>
-      <CallbackHandler />
-    </Suspense>
   );
 }

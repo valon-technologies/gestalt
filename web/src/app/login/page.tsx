@@ -14,10 +14,8 @@ export default function LoginPage() {
   useEffect(() => {
     if (isAuthenticated()) {
       window.location.replace("/");
+      return;
     }
-  }, []);
-
-  useEffect(() => {
     getAuthInfo()
       .then((info) => {
         if (info.provider === NONE_PROVIDER) {
