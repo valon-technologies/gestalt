@@ -22,6 +22,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const defaultTokenInstance = "default"
@@ -398,6 +401,20 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 				Body:    upstreamErr.Body,
 			})
 		default:
+			if message, ok := safeOperationErrorMessage(err); ok {
+				slog.WarnContext(
+					r.Context(),
+					"operation failed with user-facing error",
+					"provider",
+					providerName,
+					"operation",
+					operationName,
+					"error",
+					err,
+				)
+				writeError(w, http.StatusBadGateway, message)
+				return
+			}
 			slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 			writeError(w, http.StatusBadGateway, "operation failed")
 		}
@@ -405,6 +422,31 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOperationResult(w, result)
+}
+
+func safeOperationErrorMessage(err error) (string, bool) {
+	var userErr *apiexec.UserMessageError
+	if errors.As(err, &userErr) && userErr.Message != "" {
+		return userErr.Message, true
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "operation timed out", true
+	}
+
+	status, ok := grpcstatus.FromError(err)
+	if !ok {
+		return "", false
+	}
+
+	switch status.Code() {
+	case codes.DeadlineExceeded:
+		return "operation timed out", true
+	case codes.Unavailable:
+		return "integration runtime unavailable", true
+	default:
+		return "", false
+	}
 }
 
 type loginRequest struct {
@@ -915,8 +957,9 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 }
 
 type createTokenRequest struct {
-	Name   string `json:"name"`
-	Scopes string `json:"scopes"`
+	Name      string `json:"name"`
+	Scopes    string `json:"scopes"`
+	ExpiresIn string `json:"expires_in"`
 }
 
 type createTokenResponse struct {
@@ -952,8 +995,12 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	issued, err := s.issueToken()
+	issued, err := s.issueTokenWithTypeAndExpiryHint(principal.TokenTypeAPI, req.ExpiresIn)
 	if err != nil {
+		if strings.HasPrefix(err.Error(), "invalid expires_in:") {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}

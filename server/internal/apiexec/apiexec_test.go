@@ -281,6 +281,14 @@ func TestDoGraphQLErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "Not found") {
 		t.Fatalf("error = %v, want to contain 'Not found'", err)
 	}
+
+	var userErr *UserMessageError
+	if !errors.As(err, &userErr) {
+		t.Fatalf("expected UserMessageError, got %T", err)
+	}
+	if userErr.Message != "Not found" {
+		t.Fatalf("message = %q, want %q", userErr.Message, "Not found")
+	}
 }
 
 func TestDoGraphQLPartialErrors(t *testing.T) {
@@ -301,6 +309,36 @@ func TestDoGraphQLPartialErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Forbidden field") {
 		t.Fatalf("error = %v, want to contain 'Forbidden field'", err)
+	}
+}
+
+func TestDoGraphQLHTTPErrorReturnsUpstreamHTTPError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"bad token"}`))
+	}))
+	testutil.CloseOnCleanup(t, srv)
+
+	_, err := DoGraphQL(context.Background(), srv.Client(), GraphQLRequest{
+		URL:   srv.URL,
+		Query: "{ viewer { login } }",
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var upstreamErr *UpstreamHTTPError
+	if !errors.As(err, &upstreamErr) {
+		t.Fatalf("expected UpstreamHTTPError, got %T", err)
+	}
+	if upstreamErr.Status != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", upstreamErr.Status, http.StatusUnauthorized)
+	}
+	if upstreamErr.Body != `{"error":"bad token"}` {
+		t.Fatalf("body = %q", upstreamErr.Body)
 	}
 }
 

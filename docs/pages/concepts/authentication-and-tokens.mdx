@@ -94,7 +94,10 @@ Properties:
 - Stored as a SHA-256 hash, not in plaintext
 - Resolve back to the owning user at request time
 - Default lifetime: 30 days, configurable via `server.api_token_ttl`
+- Token creation may override the lifetime per token, including `expires_in: "never"` for non-expiring tokens
 - Authenticate to the same HTTP API as browser sessions
+
+The CLI uses a dedicated API token for stored credentials after `gestalt auth login`. That avoids browser-style 24-hour session expiry for CLI usage while keeping the token revocable.
 
 ## Integration Tokens
 

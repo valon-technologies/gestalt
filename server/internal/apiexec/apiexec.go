@@ -42,6 +42,11 @@ type UpstreamHTTPError struct {
 	Cause   error
 }
 
+type UserMessageError struct {
+	Message string
+	Cause   error
+}
+
 func (e *UpstreamHTTPError) Error() string {
 	if e == nil {
 		return ""
@@ -57,6 +62,27 @@ func (e *UpstreamHTTPError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+func (e *UserMessageError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	return e.Message
+}
+
+func (e *UserMessageError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+func userMessageError(message string, cause error) error {
+	return &UserMessageError{Message: message, Cause: cause}
 }
 
 // ResponseChecker validates a response body beyond the default HTTP status check.
@@ -224,14 +250,25 @@ func doOnce(
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, 0, "", false, fmt.Errorf("executing request: %w", err)
+		message := "failed to reach upstream service"
+		if errors.Is(err, context.DeadlineExceeded) {
+			message = "upstream service timed out"
+		}
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) && urlErr.Timeout() {
+			message = "upstream service timed out"
+		}
+		return nil, 0, "", false, userMessageError(message, fmt.Errorf("executing request: %w", err))
 	}
 
 	retryAfter := resp.Header.Get("Retry-After")
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	_ = resp.Body.Close()
 	if err != nil {
-		return nil, 0, "", false, fmt.Errorf("reading response: %w", err)
+		return nil, 0, "", false, userMessageError(
+			"failed to read upstream response",
+			fmt.Errorf("reading response: %w", err),
+		)
 	}
 
 	if req.CheckResponse != nil {
@@ -334,16 +371,26 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
-		return nil, fmt.Errorf("reading graphql response: %w", err)
+		return nil, userMessageError(
+			"failed to read upstream response",
+			fmt.Errorf("reading graphql response: %w", err),
+		)
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
+		return nil, &UpstreamHTTPError{
+			Status:  resp.StatusCode,
+			Headers: resp.Header.Clone(),
+			Body:    string(respBody),
+		}
 	}
 
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, fmt.Errorf("parsing graphql response: %w", err)
+		return nil, userMessageError(
+			"upstream service returned an invalid response",
+			fmt.Errorf("parsing graphql response: %w", err),
+		)
 	}
 
 	if raw, ok := parsed[graphqlRespKeyErrors]; ok {
@@ -353,7 +400,10 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 			for i, e := range gqlErrs {
 				msgs[i] = e.Message
 			}
-			return nil, fmt.Errorf("graphql: %s", strings.Join(msgs, "; "))
+			return nil, userMessageError(
+				strings.Join(msgs, "; "),
+				fmt.Errorf("graphql: %s", strings.Join(msgs, "; ")),
+			)
 		}
 	}
 

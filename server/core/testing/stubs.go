@@ -32,7 +32,9 @@ type StubDatastore struct {
 	ListTokensForIntegrationFn func(context.Context, string, string) ([]*core.IntegrationToken, error)
 	ListTokensForConnectionFn  func(context.Context, string, string, string) ([]*core.IntegrationToken, error)
 	DeleteTokenFn              func(context.Context, string) error
+	StoreAPITokenFn            func(context.Context, *core.APIToken) error
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
+	ListAPITokensFn            func(context.Context, string) ([]*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
 	RevokeAllAPITokensFn       func(context.Context, string) (int64, error)
 	StoreStagedConnectionFn    func(context.Context, *core.StagedConnection) error
@@ -122,14 +124,22 @@ func (s *StubDatastore) DeleteToken(ctx context.Context, id string) error {
 	}
 	return nil
 }
-func (s *StubDatastore) StoreAPIToken(context.Context, *core.APIToken) error { return nil }
+func (s *StubDatastore) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
+	if s.StoreAPITokenFn != nil {
+		return s.StoreAPITokenFn(ctx, token)
+	}
+	return nil
+}
 func (s *StubDatastore) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	if s.ValidateAPITokenFn != nil {
 		return s.ValidateAPITokenFn(ctx, hashedToken)
 	}
 	return nil, nil
 }
-func (s *StubDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken, error) {
+func (s *StubDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
+	if s.ListAPITokensFn != nil {
+		return s.ListAPITokensFn(ctx, userID)
+	}
 	return nil, nil
 }
 func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {

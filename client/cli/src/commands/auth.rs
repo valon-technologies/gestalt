@@ -3,10 +3,18 @@ use std::io::Write;
 use anyhow::{Context, Result, bail};
 
 use crate::api::{self, ApiClient};
-use crate::credentials::{CredentialStore, Credentials};
+use crate::credentials::{CredentialStore, Credentials, StoredTokenKind};
 use crate::output::{self, Format};
 
 const SESSION_COOKIE_PREFIX: &str = "session_token=";
+const CLI_TOKEN_NAME: &str = "cli-token";
+const NON_EXPIRING_TOKEN_HINT: &str = "never";
+
+#[derive(Debug, serde::Deserialize)]
+struct CreatedAPIToken {
+    id: String,
+    token: String,
+}
 
 pub fn login(url_override: Option<&str>) -> Result<()> {
     if api::env_api_key_is_set() {
@@ -137,13 +145,32 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         .context("callback response missing session cookie")?;
 
     let store = CredentialStore::new()?;
+    let existing = store.load()?;
+
+    let session_client = ApiClient::new(&base_url, &token)?;
+    let cli_token = create_cli_api_token(&session_client)?;
+
+    if let Some(existing_id) = existing
+        .as_ref()
+        .and_then(|creds| creds.api_token_id.as_deref())
+    {
+        if let Err(err) = revoke_api_token(&session_client, existing_id) {
+            output::print_warning(&format!(
+                "Failed to revoke previous CLI token {}: {}",
+                existing_id, err
+            ));
+        }
+    }
+
     store.save(&Credentials {
         api_url: base_url,
-        session_token: token,
+        api_token: Some(cli_token.token),
+        api_token_id: Some(cli_token.id),
+        session_token: None,
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
-    output::print_success("Logged in successfully.");
+    output::print_success("Logged in successfully. Stored CLI API token.");
     Ok(())
 }
 
@@ -156,6 +183,19 @@ fn send_browser_response(stream: &std::net::TcpStream, message: &str) -> std::io
 
 pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
+    if let Some(creds) = store.load()? {
+        if let (Some(token_id), Some((token, StoredTokenKind::ApiToken))) =
+            (creds.api_token_id.as_deref(), creds.stored_token())
+        {
+            let client = ApiClient::new(&creds.api_url, token)?;
+            if let Err(err) = revoke_api_token(&client, token_id) {
+                output::print_warning(&format!(
+                    "Failed to revoke stored CLI token {}: {}",
+                    token_id, err
+                ));
+            }
+        }
+    }
     store.delete()?;
     output::print_success("Logged out. Credentials removed.");
     Ok(())
@@ -164,31 +204,29 @@ pub fn logout() -> Result<()> {
 pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
     let has_env_key = api::env_api_key_is_set();
     let authenticated = ApiClient::from_env(url_override).is_ok();
-    // Only probe the credential store when the env key is active, since
-    // from_env already loaded it otherwise (authenticated implies has_session).
-    let has_session = if has_env_key {
-        CredentialStore::new()
-            .and_then(|s| s.load())
-            .map(|c| c.is_some())
-            .unwrap_or(false)
-    } else {
-        authenticated
+    let stored_creds = CredentialStore::new().and_then(|s| s.load()).ok().flatten();
+    let stored_source = stored_creds
+        .as_ref()
+        .and_then(|creds| creds.stored_token().map(|(_, kind)| kind));
+    let stored_source_name = match stored_source {
+        Some(StoredTokenKind::ApiToken) => "api_token",
+        Some(StoredTokenKind::SessionToken) => "session",
+        None => "none",
     };
 
     match format {
         Format::Json => {
             let source = if has_env_key {
                 "env"
-            } else if has_session {
-                "session"
             } else {
-                "none"
+                stored_source_name
             };
             output::print_json(&serde_json::json!({
                 "authenticated": authenticated,
                 "source": source,
                 "env_var_set": has_env_key,
-                "session_stored": has_session,
+                "stored_source": stored_source_name,
+                "stored_credentials": stored_source.is_some(),
             }));
         }
         Format::Table => {
@@ -198,24 +236,78 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
                         "Authenticated via {} environment variable.",
                         api::ENV_API_KEY
                     );
-                    if has_session {
+                    if stored_source.is_some() {
                         output::print_warning(&format!(
-                            "A session token from 'gestalt auth login' also exists but is being ignored. \
-                             Unset {} to use it.",
+                            "Stored {} credentials also exist but are being ignored. \
+                             Unset {} to use them.",
+                            stored_source_label(stored_source),
                             api::ENV_API_KEY,
                         ));
                     }
                 } else {
-                    eprintln!("Authenticated via session token.");
+                    eprintln!(
+                        "Authenticated via stored {}.",
+                        stored_source_label(stored_source)
+                    );
                 }
             } else {
-                eprintln!(
-                    "Not authenticated. Run 'gestalt auth login' or set {}.",
-                    api::ENV_API_KEY
-                );
+                match stored_source {
+                    Some(StoredTokenKind::ApiToken) => eprintln!(
+                        "Stored CLI API token is not valid. Run 'gestalt auth login' to mint a new one, or set {}.",
+                        api::ENV_API_KEY,
+                    ),
+                    Some(StoredTokenKind::SessionToken) => eprintln!(
+                        "Stored session token is not valid. Run 'gestalt auth login' or set {}.",
+                        api::ENV_API_KEY,
+                    ),
+                    None => eprintln!(
+                        "Not authenticated. Run 'gestalt auth login' or set {}.",
+                        api::ENV_API_KEY,
+                    ),
+                }
             }
         }
     }
+    Ok(())
+}
+
+fn stored_source_label(source: Option<StoredTokenKind>) -> &'static str {
+    match source {
+        Some(StoredTokenKind::ApiToken) => "CLI API token",
+        Some(StoredTokenKind::SessionToken) => "session token",
+        None => "credentials",
+    }
+}
+
+fn create_cli_api_token(client: &ApiClient) -> Result<CreatedAPIToken> {
+    let resp = client
+        .post(
+            "/api/v1/tokens",
+            &serde_json::json!({
+                "name": CLI_TOKEN_NAME,
+                "expires_in": NON_EXPIRING_TOKEN_HINT,
+            }),
+        )
+        .context("failed to create CLI API token")?;
+
+    let id = resp["id"]
+        .as_str()
+        .context("token creation response missing 'id' field")?;
+    let token = resp["token"]
+        .as_str()
+        .context("token creation response missing 'token' field")?;
+
+    Ok(CreatedAPIToken {
+        id: id.to_string(),
+        token: token.to_string(),
+    })
+}
+
+fn revoke_api_token(client: &ApiClient, id: &str) -> Result<()> {
+    let path = format!("/api/v1/tokens/{}", id);
+    client
+        .delete(&path)
+        .with_context(|| format!("failed to revoke token {}", id))?;
     Ok(())
 }
 
@@ -223,4 +315,33 @@ fn random_hex_string() -> String {
     let mut buf = [0u8; 16];
     getrandom::fill(&mut buf).expect("failed to generate random bytes");
     buf.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::{Matcher, Server};
+
+    #[test]
+    fn test_create_cli_api_token_requests_non_expiring_token() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/api/v1/tokens")
+            .match_header("Authorization", "Bearer session-token")
+            .match_header("Content-Type", "application/json")
+            .match_body(Matcher::JsonString(
+                r#"{"expires_in":"never","name":"cli-token"}"#.to_string(),
+            ))
+            .with_status(201)
+            .with_header("Content-Type", "application/json")
+            .with_body(r#"{"id":"tok-1","token":"gst_api_secret"}"#)
+            .create();
+
+        let client = ApiClient::new(&server.url(), "session-token").unwrap();
+        let created = create_cli_api_token(&client).unwrap();
+
+        mock.assert();
+        assert_eq!(created.id, "tok-1");
+        assert_eq!(created.token, "gst_api_secret");
+    }
 }

@@ -4,7 +4,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 
 use crate::config::ConfigStore;
-use crate::credentials::CredentialStore;
+use crate::credentials::{CredentialStore, StoredTokenKind};
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
@@ -58,7 +58,17 @@ fn find_project_config_value(key: &str) -> Option<String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenSource {
     EnvVar,
+    ApiToken,
     Session,
+}
+
+impl From<StoredTokenKind> for TokenSource {
+    fn from(value: StoredTokenKind) -> Self {
+        match value {
+            StoredTokenKind::ApiToken => TokenSource::ApiToken,
+            StoredTokenKind::SessionToken => TokenSource::Session,
+        }
+    }
 }
 
 pub fn env_api_key_is_set() -> bool {
@@ -82,7 +92,15 @@ impl ApiClient {
             } else {
                 let store = CredentialStore::new()?;
                 match store.load()? {
-                    Some(creds) => (creds.session_token, TokenSource::Session),
+                    Some(creds) => match creds.stored_token() {
+                        Some((token, kind)) => (token.to_string(), kind.into()),
+                        None => {
+                            bail!(
+                                "not authenticated: set {} or run 'gestalt auth login'",
+                                ENV_API_KEY
+                            )
+                        }
+                    },
                     None => {
                         bail!(
                             "not authenticated: set {} or run 'gestalt auth login'",
@@ -165,7 +183,7 @@ impl ApiClient {
         if status.is_client_error() || status.is_server_error() {
             let message = serde_json::from_str::<serde_json::Value>(&body)
                 .ok()
-                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+                .and_then(|v| extract_error_message(&v))
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
 
             if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
@@ -174,6 +192,18 @@ impl ApiClient {
                      unset it to use your session token from 'gestalt auth login')",
                     message,
                     ENV_API_KEY,
+                );
+            }
+            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::ApiToken {
+                bail!(
+                    "{} (stored CLI API token may be expired or revoked; run 'gestalt auth login' to mint a new one)",
+                    message,
+                );
+            }
+            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::Session {
+                bail!(
+                    "{} (stored session token may be expired; run 'gestalt auth login')",
+                    message,
                 );
             }
 
@@ -185,6 +215,28 @@ impl ApiClient {
         }
 
         serde_json::from_str(&body).context("failed to parse response JSON")
+    }
+}
+
+fn extract_error_message(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Object(obj) => {
+            if let Some(message) = obj.get("error").and_then(|err| match err {
+                serde_json::Value::String(message) => Some(message.clone()),
+                serde_json::Value::Object(err_obj) => err_obj
+                    .get("message")
+                    .and_then(|message| message.as_str())
+                    .map(String::from),
+                _ => None,
+            }) {
+                return Some(message);
+            }
+
+            obj.get("message")
+                .and_then(|message| message.as_str())
+                .map(String::from)
+        }
+        _ => None,
     }
 }
 
@@ -202,5 +254,23 @@ mod tests {
     fn test_base_url_trailing_slash() {
         let client = ApiClient::new("http://localhost:8080/", "test-token").unwrap();
         assert_eq!(client.base_url, "http://localhost:8080");
+    }
+
+    #[test]
+    fn test_extract_error_message_string_error() {
+        let value = serde_json::json!({"error": "plain error"});
+        assert_eq!(
+            extract_error_message(&value).as_deref(),
+            Some("plain error")
+        );
+    }
+
+    #[test]
+    fn test_extract_error_message_nested_error_message() {
+        let value = serde_json::json!({"error": {"message": "nested error"}});
+        assert_eq!(
+            extract_error_message(&value).as_deref(),
+            Some("nested error")
+        );
     }
 }

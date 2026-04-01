@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/bindings/proxy"
@@ -34,6 +35,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1895,6 +1898,125 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 	expected := fixedNow.Add(customTTL).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
 		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+	}
+}
+
+func TestCreateAPIToken_NeverExpires(t *testing.T) {
+	t.Parallel()
+
+	var stored *core.APIToken
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreAPITokenFn: func(_ context.Context, token *core.APIToken) error {
+				stored = token
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"never-expire","expires_in":"never"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+	if stored == nil {
+		t.Fatal("expected API token to be stored")
+	}
+	if stored.ExpiresAt != nil {
+		t.Fatalf("expected stored token to have no expiry, got %v", stored.ExpiresAt)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if _, ok := result["expires_at"]; ok {
+		t.Fatalf("expected expires_at to be omitted, got %v", result["expires_at"])
+	}
+}
+
+func TestCreateAPIToken_RequestTTLOverride(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Now = func() time.Time { return fixedNow }
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"short-lived","expires_in":"48h"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	expiresAtStr, ok := result["expires_at"].(string)
+	if !ok {
+		t.Fatalf("expected expires_at string, got %T", result["expires_at"])
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
+	if err != nil {
+		t.Fatalf("parsing expires_at: %v", err)
+	}
+	expected := fixedNow.Add(48 * time.Hour).UTC().Truncate(time.Second)
+	if !expiresAt.Equal(expected) {
+		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+	}
+}
+
+func TestCreateAPIToken_InvalidExpiryHint(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"bad-expiry","expires_in":"later"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, respBody)
 	}
 }
 
@@ -4487,6 +4609,103 @@ func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
 	}
 	if errObj["message"] != "invalid parameter: limit" {
 		t.Fatalf("message = %v, want %q", errObj["message"], "invalid parameter: limit")
+	}
+}
+
+func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	sensitiveMsg := "postgres://user:secret@example.internal/db"
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test-int",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return nil, &apiexec.UserMessageError{
+					Message: "upstream service timed out",
+					Cause:   fmt.Errorf("request failed: %s", sensitiveMsg),
+				}
+			},
+		},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: "tok"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), sensitiveMsg) {
+		t.Fatalf("response body contains sensitive error details: %s", body)
+	}
+
+	var errResp map[string]string
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp["error"] != "upstream service timed out" {
+		t.Fatalf("expected user-facing message, got %q", errResp["error"])
+	}
+}
+
+func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
+	t.Parallel()
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test-int",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return nil, grpcstatus.Error(codes.Unavailable, "dial tcp 10.0.0.15: connection refused")
+			},
+		},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
+				return &core.IntegrationToken{AccessToken: "tok"}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var errResp map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp["error"] != "integration runtime unavailable" {
+		t.Fatalf("expected runtime unavailable message, got %q", errResp["error"])
 	}
 }
 

@@ -3,9 +3,17 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
+pub fn create(
+    client: &ApiClient,
+    name: Option<&str>,
+    expires_in: Option<&str>,
+    format: Format,
+) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
-    let body = serde_json::json!({"name": token_name});
+    let mut body = serde_json::json!({"name": token_name});
+    if let Some(expires_in) = expires_in {
+        body["expires_in"] = serde_json::Value::String(expires_in.to_string());
+    }
     let resp = client
         .post("/api/v1/tokens", &body)
         .context("failed to create token")?;
@@ -42,10 +50,11 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
                         item["name"].as_str().unwrap_or("-").to_string(),
                         item["scopes"].as_str().unwrap_or("-").to_string(),
                         item["created_at"].as_str().unwrap_or("-").to_string(),
+                        item["expires_at"].as_str().unwrap_or("never").to_string(),
                     ]
                 })
                 .collect();
-            output::print_table(&["ID", "Name", "Scopes", "Created"], &rows);
+            output::print_table(&["ID", "Name", "Scopes", "Created", "Expires"], &rows);
         }
     }
 
