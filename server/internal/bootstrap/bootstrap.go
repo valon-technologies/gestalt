@@ -788,32 +788,31 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
 
-	if intg.Plugin.IsInline() || intg.Plugin.IsDeclarative {
-		manifest, allowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
-		if err != nil {
-			return nil, err
-		}
+	if !intg.Plugin.IsInline() && !intg.Plugin.IsDeclarative {
+		return buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
+	}
 
-		if !manifest.Provider.IsSpecLoaded() {
-			declarative, err := pluginhost.NewDeclarativeProvider(
-				manifest,
-				nil,
-				pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("create provider %q: %w", name, err)
-			}
-			prov, err := applyAllowedOperations(name, intg, declarative)
-			if err != nil {
-				return nil, err
-			}
-			return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
-		}
-
+	manifest, allowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Provider.IsSpecLoaded() {
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, allowedOperations)
 	}
 
-	return buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
+	declarative, err := pluginhost.NewDeclarativeProvider(
+		manifest,
+		nil,
+		pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create provider %q: %w", name, err)
+	}
+	prov, err := applyAllowedOperations(name, intg, declarative)
+	if err != nil {
+		return nil, err
+	}
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
 }
 
 func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*pluginmanifestv1.Manifest, map[string]*config.OperationOverride, error) {
@@ -850,44 +849,42 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	plan := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
 	resolved, hasSpecSurface := plan.configuredSpecSurface()
 
-	var finalProv core.Provider
 	if !hasSpecSurface {
 		restricted, err := applyAllowedOperations(name, intg, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, err
 		}
-		finalProv = restricted
-	} else {
-		specProv, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-			plugin:            intg.Plugin,
-			manifestProvider:  manifestProvider,
-			allowedOperations: intg.Plugin.AllowedOperations,
-			baseURL:           intg.Plugin.BaseURL,
-			providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
-				return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
-			},
-		}, deps)
-		if err != nil {
-			closeIfPossible(pluginProv)
-			return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
-		}
-		merged, err := composite.NewMergedWithConnections(
-			name,
-			meta.displayNameOr(pluginProv.DisplayName()),
-			meta.descriptionOr(pluginProv.Description()),
-			meta.iconSVGOr(firstProviderIconSVG(pluginProv, specProv)),
-			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
-			composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
-		)
-		if err != nil {
-			closeIfPossible(specProv, pluginProv)
-			return nil, err
-		}
-		finalProv = merged
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, restricted, deps, regStore)
 	}
 
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, finalProv, deps, regStore)
+	specProv, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
+		plugin:            intg.Plugin,
+		manifestProvider:  manifestProvider,
+		allowedOperations: intg.Plugin.AllowedOperations,
+		baseURL:           intg.Plugin.BaseURL,
+		providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
+			return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
+		},
+	}, deps)
+	if err != nil {
+		closeIfPossible(pluginProv)
+		return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
+	}
+	merged, err := composite.NewMergedWithConnections(
+		name,
+		meta.displayNameOr(pluginProv.DisplayName()),
+		meta.descriptionOr(pluginProv.Description()),
+		meta.iconSVGOr(firstProviderIconSVG(pluginProv, specProv)),
+		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+		composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
+	)
+	if err != nil {
+		closeIfPossible(specProv, pluginProv)
+		return nil, err
+	}
+
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, merged, deps, regStore)
 }
 
 type specSurface string
