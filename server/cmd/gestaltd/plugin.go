@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -121,7 +123,7 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, srcManifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	_, srcManifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("decode %s: %w", manifestPath, err)
 	}
@@ -337,11 +339,10 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	manifest, err := cloneManifest(srcManifest)
+	manifest, err := buildSourceReleaseManifest(srcManifest, version, ".")
 	if err != nil {
-		return "", fmt.Errorf("clone manifest: %w", err)
+		return "", err
 	}
-	manifest.Version = version
 
 	data, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
@@ -351,10 +352,7 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		return "", err
 	}
 
-	if err := validateReleaseArtifactDigests(srcManifest, "."); err != nil {
-		return "", err
-	}
-	if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, true); err != nil {
+	if err := copyReleasePackageFiles(manifest, ".", stagingDir, true); err != nil {
 		return "", err
 	}
 
@@ -366,6 +364,46 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 
 	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
 	return archivePath, nil
+}
+
+func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {
+	manifest, err := cloneManifest(srcManifest)
+	if err != nil {
+		return nil, fmt.Errorf("clone manifest: %w", err)
+	}
+	manifest.Version = version
+
+	if len(srcManifest.Artifacts) > 0 {
+		if err := validateReleaseArtifactDigests(srcManifest, sourceDir); err != nil {
+			return nil, err
+		}
+		return manifest, nil
+	}
+
+	artifactPaths, err := sourceReleaseArtifactPaths(srcManifest)
+	if err != nil {
+		return nil, err
+	}
+	if len(artifactPaths) == 0 {
+		manifest.Artifacts = nil
+		return manifest, nil
+	}
+
+	manifest.Artifacts = make([]pluginmanifestv1.Artifact, 0, len(artifactPaths))
+	for _, rel := range artifactPaths {
+		digest, err := fileSHA256Hex(filepath.Join(sourceDir, filepath.FromSlash(rel)))
+		if err != nil {
+			return nil, fmt.Errorf("hash artifact %s: %w", rel, err)
+		}
+		manifest.Artifacts = append(manifest.Artifacts, pluginmanifestv1.Artifact{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   rel,
+			SHA256: digest,
+		})
+	}
+
+	return manifest, nil
 }
 
 func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
@@ -394,6 +432,94 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	}
 
 	return manifest, nil
+}
+
+func sourceReleaseArtifactPaths(manifest *pluginmanifestv1.Manifest) ([]string, error) {
+	if manifest == nil {
+		return nil, nil
+	}
+
+	if len(manifest.Artifacts) > 0 {
+		paths := make([]string, 0, len(manifest.Artifacts))
+		for _, artifact := range manifest.Artifacts {
+			cleanPath, err := normalizeReleasePath(artifact.Path)
+			if err != nil {
+				return nil, err
+			}
+			paths = append(paths, cleanPath)
+		}
+		return paths, nil
+	}
+
+	if !sourceManifestNeedsExecutableArtifact(manifest) {
+		return nil, nil
+	}
+
+	paths := make(map[string]struct{})
+	addPath := func(kind, artifactPath string) error {
+		if artifactPath == "" {
+			return fmt.Errorf("%s entrypoint artifact_path is required for source release archives without a build target", kind)
+		}
+		cleanPath, err := normalizeReleasePath(artifactPath)
+		if err != nil {
+			return err
+		}
+		paths[cleanPath] = struct{}{}
+		return nil
+	}
+
+	for _, kind := range manifest.Kinds {
+		switch kind {
+		case pluginmanifestv1.KindRuntime:
+			if manifest.Entrypoints.Runtime == nil {
+				return nil, fmt.Errorf("runtime entrypoint is required")
+			}
+			if err := addPath("runtime", manifest.Entrypoints.Runtime.ArtifactPath); err != nil {
+				return nil, err
+			}
+		case pluginmanifestv1.KindProvider:
+			if manifest.Provider == nil {
+				return nil, fmt.Errorf("provider metadata is required when kind %q is present", pluginmanifestv1.KindProvider)
+			}
+			if manifest.Provider.IsManifestBacked() && !manifest.IsHybridProvider() {
+				continue
+			}
+			if manifest.Entrypoints.Provider == nil {
+				return nil, fmt.Errorf("provider entrypoint is required")
+			}
+			if err := addPath("provider", manifest.Entrypoints.Provider.ArtifactPath); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if len(paths) > 1 {
+		return nil, fmt.Errorf("source release archives without explicit artifacts require a single shared artifact_path")
+	}
+
+	out := make([]string, 0, len(paths))
+	for rel := range paths {
+		out = append(out, rel)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+func sourceManifestNeedsExecutableArtifact(manifest *pluginmanifestv1.Manifest) bool {
+	if manifest == nil {
+		return false
+	}
+	for _, kind := range manifest.Kinds {
+		switch kind {
+		case pluginmanifestv1.KindRuntime:
+			return true
+		case pluginmanifestv1.KindProvider:
+			if manifest.Provider == nil || !manifest.Provider.IsManifestBacked() || manifest.IsHybridProvider() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func releaseBinaryName(pluginName, goos string) string {

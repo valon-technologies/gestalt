@@ -174,7 +174,7 @@ type Entrypoints struct {
 }
 
 type Entrypoint struct {
-	ArtifactPath string   `json:"artifact_path"`
+	ArtifactPath string   `json:"artifact_path,omitempty"`
 	Args         []string `json:"args,omitempty"`
 }
 

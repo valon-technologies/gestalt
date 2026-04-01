@@ -69,6 +69,18 @@ func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
 	return DecodeManifestFormat(data, "json")
 }
 
+func DecodeSourceManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
+	jsonData := data
+	if format == "yaml" {
+		var err error
+		jsonData, err = yamlToJSON(data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return decodeManifestJSON(jsonData, true)
+}
+
 func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
 	jsonData := data
 	if format == "yaml" {
@@ -78,10 +90,10 @@ func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifes
 			return nil, err
 		}
 	}
-	return decodeManifestJSON(jsonData)
+	return decodeManifestJSON(jsonData, false)
 }
 
-func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
+func decodeManifestJSON(data []byte, allowUnresolvedArtifacts bool) (*pluginmanifestv1.Manifest, error) {
 	var doc any
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parse manifest JSON: %w", err)
@@ -107,13 +119,21 @@ func decodeManifestJSON(data []byte) (*pluginmanifestv1.Manifest, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("decode manifest: %w", err)
 	}
-	if err := ValidateManifest(&manifest); err != nil {
+	if err := validateManifest(&manifest, allowUnresolvedArtifacts); err != nil {
 		return nil, err
 	}
 	return &manifest, nil
 }
 
 func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
+	return validateManifest(manifest, false)
+}
+
+func ValidateSourceManifest(manifest *pluginmanifestv1.Manifest) error {
+	return validateManifest(manifest, true)
+}
+
+func validateManifest(manifest *pluginmanifestv1.Manifest, allowUnresolvedArtifacts bool) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is required")
 	}
@@ -192,12 +212,12 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 				}
 			}
 			if !isManifestBackedProvider || manifest.IsHybridProvider() {
-				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
+				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths, allowUnresolvedArtifacts); err != nil {
 					return err
 				}
 			}
 		case pluginmanifestv1.KindRuntime:
-			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths); err != nil {
+			if err := validateEntrypoint(kind, manifest.Entrypoints.Runtime, artifactPaths, allowUnresolvedArtifacts); err != nil {
 				return err
 			}
 		case pluginmanifestv1.KindWebUI:
@@ -233,12 +253,24 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
 }
 
-func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifactPaths map[string]struct{}) error {
+func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifactPaths map[string]struct{}, allowUnresolvedArtifacts bool) error {
 	if entry == nil {
 		return fmt.Errorf("%s entrypoint is required", kind)
 	}
+	if entry.ArtifactPath == "" {
+		if allowUnresolvedArtifacts {
+			return nil
+		}
+		return fmt.Errorf("%s entrypoint artifact path is required", kind)
+	}
 	if err := validateRelativePackagePath(entry.ArtifactPath, kind+" entrypoint artifact path"); err != nil {
 		return err
+	}
+	if len(artifactPaths) == 0 {
+		if allowUnresolvedArtifacts {
+			return nil
+		}
+		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
 	}
 	if _, ok := artifactPaths[entry.ArtifactPath]; !ok {
 		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
@@ -342,6 +374,17 @@ func EncodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 	if err := ValidateManifest(manifest); err != nil {
 		return nil, err
 	}
+	return encodeManifest(manifest)
+}
+
+func EncodeSourceManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
+	if err := ValidateSourceManifest(manifest); err != nil {
+		return nil, err
+	}
+	return encodeManifest(manifest)
+}
+
+func encodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal manifest: %w", err)

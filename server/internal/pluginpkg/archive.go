@@ -57,6 +57,22 @@ func ReadManifestFile(p string) ([]byte, *pluginmanifestv1.Manifest, error) {
 	return data, manifest, nil
 }
 
+func ReadSourceManifestFile(p string) ([]byte, *pluginmanifestv1.Manifest, error) {
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
+	}
+	format := "json"
+	if isYAMLFile(p) {
+		format = "yaml"
+	}
+	manifest, err := DecodeSourceManifestFormat(data, format)
+	if err != nil {
+		return nil, nil, err
+	}
+	return data, manifest, nil
+}
+
 func LoadManifestFromPath(inputPath string) ([]byte, *pluginmanifestv1.Manifest, string, error) {
 	info, err := os.Stat(inputPath)
 	if err != nil {

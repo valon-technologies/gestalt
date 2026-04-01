@@ -5,14 +5,8 @@ description: Read, send, and manage Gmail messages, threads, drafts, and labels.
 icon_file: assets/icon.svg
 kinds:
   - provider
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 entrypoints:
-  provider:
-    artifact_path: artifacts/darwin/arm64/provider
+  provider: {}
 provider:
   config_schema_path: schemas/config.schema.json
   auth:

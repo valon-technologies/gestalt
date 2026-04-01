@@ -213,7 +213,6 @@
         "anyOf": [
           {
             "required": [
-              "artifacts",
               "entrypoints"
             ],
             "properties": {
@@ -259,7 +258,6 @@
           },
           {
             "required": [
-              "artifacts",
               "entrypoints"
             ],
             "properties": {
@@ -291,7 +289,6 @@
       },
       "then": {
         "required": [
-          "artifacts",
           "entrypoints"
         ],
         "properties": {
@@ -543,9 +540,6 @@
     "entrypoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "artifact_path"
-      ],
       "properties": {
         "artifact_path": {
           "type": "string",

@@ -29,7 +29,6 @@ const (
 	releaseHybridArg           = "--serve-provider"
 	releaseHybridBaseURL       = "https://api.example.com"
 	releaseHybridOperationName = "list_items"
-	releaseSourceArtifactPath  = "artifacts/source-plugin"
 	webUITestPluginName        = "webui-test"
 	webUITestSource            = "github.com/testowner/plugins/webui-test"
 	webUITestAssetRoot         = "out"
@@ -758,11 +757,18 @@ func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 
 	pluginDir := newPrebuiltHybridReleaseFixture(t, t.TempDir())
 
-	_, manifest, err := pluginpkg.ReadManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
+	_, manifest, err := pluginpkg.ReadSourceManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
 	if err != nil {
-		t.Fatalf("ReadManifestFile(plugin.json): %v", err)
+		t.Fatalf("ReadSourceManifestFile(plugin.json): %v", err)
 	}
-	manifest.Artifacts[0].SHA256 = sha256HexForTest("different-content")
+	manifest.Artifacts = []pluginmanifestv1.Artifact{
+		{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   prebuiltHybridArtifactPath,
+			SHA256: sha256HexForTest("different-content"),
+		},
+	}
 	writeReleaseTestManifest(t, pluginDir, manifest)
 
 	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.8-test")
@@ -939,17 +945,9 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 				},
 			},
 		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   releaseSourceArtifactPath,
-				SHA256: sha256HexForTest("source-plugin"),
-			},
-		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: releaseSourceArtifactPath},
-			Runtime:  &pluginmanifestv1.Entrypoint{ArtifactPath: releaseSourceArtifactPath},
+			Provider: &pluginmanifestv1.Entrypoint{},
+			Runtime:  &pluginmanifestv1.Entrypoint{},
 		},
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
@@ -1048,18 +1046,9 @@ func newHybridReleaseFixture(t *testing.T, dir string) string {
 				},
 			},
 		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   releaseSourceArtifactPath,
-				SHA256: sha256HexForTest("source-plugin"),
-			},
-		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
 			Provider: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: releaseSourceArtifactPath,
-				Args:         []string{releaseHybridArg},
+				Args: []string{releaseHybridArg},
 			},
 		},
 	})
@@ -1114,14 +1103,6 @@ func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
 				},
 			},
 		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   prebuiltHybridArtifactPath,
-				SHA256: sha256HexForTest("prebuilt-provider"),
-			},
-		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
 			Provider: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: prebuiltHybridArtifactPath,
@@ -1152,14 +1133,6 @@ func newSpecLoadedHybridReleaseFixture(t *testing.T, dir string) string {
 			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
 				"gmail.users.messages.list": {Alias: "messages.list"},
 				"gmail.users.getProfile":    {Alias: "getProfile"},
-			},
-		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   prebuiltHybridArtifactPath,
-				SHA256: sha256HexForTest("spec-loaded-hybrid-provider"),
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
