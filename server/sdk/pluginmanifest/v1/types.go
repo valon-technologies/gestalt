@@ -86,11 +86,11 @@ func (p *Provider) IsManifestBacked() bool {
 }
 
 func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Provider != nil && len(m.Provider.Operations) > 0 && m.Entrypoints.Provider != nil
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider != nil
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && !m.IsHybridProvider() && !slices.Contains(m.Kinds, KindRuntime)
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil && !slices.Contains(m.Kinds, KindRuntime)
 }
 
 type ManifestOperationOverride struct {
