@@ -23,12 +23,26 @@ type stubMCPUpstream struct {
 	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
+func (u *stubMCPUpstream) Name() string {
+	if u.cat != nil {
+		return u.cat.Name
+	}
+	return "stub-mcp"
+}
+func (u *stubMCPUpstream) DisplayName() string { return u.Name() }
+func (u *stubMCPUpstream) Description() string { return "" }
+func (u *stubMCPUpstream) ConnectionMode() core.ConnectionMode {
+	return core.ConnectionModeNone
+}
 func (u *stubMCPUpstream) Catalog() *catalog.Catalog { return u.cat }
 func (u *stubMCPUpstream) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
 	return u.cat, nil
 }
 func (u *stubMCPUpstream) SupportsManualAuth() bool { return true }
 func (u *stubMCPUpstream) Close() error             { return nil }
+func (u *stubMCPUpstream) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+	return nil, core.ErrMCPOnly
+}
 
 func (u *stubMCPUpstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if u.callFn != nil {

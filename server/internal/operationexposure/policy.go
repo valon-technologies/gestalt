@@ -78,6 +78,13 @@ func (p *Policy) Validate(ops []core.Operation) error {
 	return nil
 }
 
+func (p *Policy) ValidateCatalog(cat *catalog.Catalog) error {
+	if cat == nil {
+		return nil
+	}
+	return p.Validate(coreintegration.OperationsList(cat))
+}
+
 func (p *Policy) Resolve(name string) (string, bool) {
 	if p == nil {
 		return name, true

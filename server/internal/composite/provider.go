@@ -11,7 +11,7 @@ import (
 )
 
 type MCPUpstream interface {
-	core.CatalogProvider
+	core.Provider
 	core.SessionCatalogProvider
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 	SupportsManualAuth() bool
@@ -28,7 +28,6 @@ type Provider struct {
 
 var (
 	_ core.Provider               = (*Provider)(nil)
-	_ core.CatalogProvider        = (*Provider)(nil)
 	_ core.SessionCatalogProvider = (*Provider)(nil)
 	_ core.AuthTypeLister         = (*Provider)(nil)
 )
@@ -75,8 +74,7 @@ func stricterConnectionMode(a, b core.ConnectionMode) core.ConnectionMode {
 	return a
 }
 
-func (p *Provider) ListOperations() []core.Operation { return p.api.ListOperations() }
-func (p *Provider) Catalog() *catalog.Catalog        { return p.buildCatalog() }
+func (p *Provider) Catalog() *catalog.Catalog { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.api.Execute(ctx, operation, params, token)
@@ -134,10 +132,7 @@ type oauthProvider struct {
 func (p *Provider) buildCatalog() *catalog.Catalog {
 	mcpCat := p.mcp.Catalog()
 
-	var apiCat *catalog.Catalog
-	if cp, ok := p.api.(core.CatalogProvider); ok {
-		apiCat = cp.Catalog()
-	}
+	apiCat := p.api.Catalog()
 	if mcpCat == nil && apiCat == nil {
 		return nil
 	}

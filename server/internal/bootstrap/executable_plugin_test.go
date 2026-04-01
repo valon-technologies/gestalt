@@ -300,7 +300,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providers.Get(echoauth): %v", err)
 	}
-	if len(prov.ListOperations()) == 0 {
+	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation from the echo provider")
 	}
 
@@ -478,10 +478,13 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 		t.Fatalf("providers.Get(hybrid): %v", err)
 	}
 
-	ops := prov.ListOperations()
-	opNames := make(map[string]bool, len(ops))
-	for _, op := range ops {
-		opNames[op.Name] = true
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected hybrid provider catalog")
+	}
+	opNames := make(map[string]bool, len(cat.Operations))
+	for _, op := range cat.Operations {
+		opNames[op.ID] = true
 	}
 
 	if !opNames["echo"] {

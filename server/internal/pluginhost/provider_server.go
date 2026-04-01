@@ -44,14 +44,6 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	}, nil
 }
 
-func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*proto.ListOperationsResponse, error) {
-	ops, err := operationsToProto(s.provider.ListOperations())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode operations: %v", err)
-	}
-	return &proto.ListOperationsResponse{Operations: ops}, nil
-}
-
 func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -108,12 +100,7 @@ func authTypesForProvider(prov core.Provider) []string {
 }
 
 func staticCatalogForProvider(prov core.Provider) *catalog.Catalog {
-	if cp, ok := prov.(core.CatalogProvider); ok {
-		if cat := cp.Catalog(); cat != nil {
-			return cat
-		}
-	}
-	return nil
+	return prov.Catalog()
 }
 
 func supportsSessionCatalog(prov core.Provider) bool {

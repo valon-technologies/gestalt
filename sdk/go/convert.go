@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"encoding/json"
 	"fmt"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -58,23 +59,6 @@ func parametersToProto(params []Parameter) ([]*proto.Parameter, error) {
 			return nil, err
 		}
 		out = append(out, msg)
-	}
-	return out, nil
-}
-
-func operationsToProto(ops []Operation) ([]*proto.Operation, error) {
-	out := make([]*proto.Operation, 0, len(ops))
-	for _, op := range ops {
-		params, err := parametersToProto(op.Parameters)
-		if err != nil {
-			return nil, fmt.Errorf("operation %q: %w", op.Name, err)
-		}
-		out = append(out, &proto.Operation{
-			Name:        op.Name,
-			Description: op.Description,
-			Method:      op.Method,
-			Parameters:  params,
-		})
 	}
 	return out, nil
 }
@@ -169,3 +153,13 @@ func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*
 	return out
 }
 
+func catalogToJSON(cat *Catalog) (string, error) {
+	if cat == nil {
+		return "", nil
+	}
+	data, err := json.Marshal(cat)
+	if err != nil {
+		return "", fmt.Errorf("marshal catalog: %w", err)
+	}
+	return string(data), nil
+}

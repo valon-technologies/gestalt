@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
 type proxyProvider struct {
@@ -23,34 +24,44 @@ func (p *proxyProvider) Name() string                        { return p.inner.Na
 func (p *proxyProvider) DisplayName() string                 { return p.inner.DisplayName() }
 func (p *proxyProvider) Description() string                 { return p.inner.Description() }
 func (p *proxyProvider) ConnectionMode() core.ConnectionMode { return p.inner.ConnectionMode() }
-
-func (p *proxyProvider) ListOperations() []core.Operation {
-	inner := p.inner.ListOperations()
-	ops := make([]core.Operation, len(inner), len(inner)+3)
-	copy(ops, inner)
-	return append(ops,
-		core.Operation{
-			Name:   "read_env",
-			Method: http.MethodGet,
-			Parameters: []core.Parameter{
+func (p *proxyProvider) Catalog() *catalog.Catalog {
+	var cat *catalog.Catalog
+	if inner := p.inner.Catalog(); inner != nil {
+		cat = inner.Clone()
+	} else {
+		cat = &catalog.Catalog{
+			Name:        p.Name(),
+			DisplayName: p.DisplayName(),
+			Description: p.Description(),
+		}
+	}
+	cat.Operations = append(cat.Operations,
+		catalog.CatalogOperation{
+			ID:        "read_env",
+			Method:    http.MethodGet,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
 				{Name: "name", Type: "string", Required: true},
 			},
 		},
-		core.Operation{
-			Name:   "read_file",
-			Method: http.MethodGet,
-			Parameters: []core.Parameter{
+		catalog.CatalogOperation{
+			ID:        "read_file",
+			Method:    http.MethodGet,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
 				{Name: "path", Type: "string", Required: true},
 			},
 		},
-		core.Operation{
-			Name:   "make_http_request",
-			Method: http.MethodGet,
-			Parameters: []core.Parameter{
+		catalog.CatalogOperation{
+			ID:        "make_http_request",
+			Method:    http.MethodGet,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
 				{Name: "url", Type: "string", Required: true},
 			},
 		},
 	)
+	return cat
 }
 
 func (p *proxyProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {

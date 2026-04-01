@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 )
 
@@ -21,7 +22,21 @@ func (p *fakeProvider) Name() string                        { return p.name }
 func (p *fakeProvider) DisplayName() string                 { return p.name }
 func (p *fakeProvider) Description() string                 { return "" }
 func (p *fakeProvider) ConnectionMode() core.ConnectionMode { return p.connMode }
-func (p *fakeProvider) ListOperations() []core.Operation    { return p.ops }
+func (p *fakeProvider) Catalog() *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       p.name,
+		Operations: make([]catalog.CatalogOperation, 0, len(p.ops)),
+	}
+	for _, op := range p.ops {
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+			ID:          op.Name,
+			Method:      op.Method,
+			Path:        "/" + op.Name,
+			Description: op.Description,
+		})
+	}
+	return cat
+}
 
 func (p *fakeProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	if p.execFn != nil {

@@ -26,28 +26,36 @@ func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
 	return gestalt.ConnectionModeNone
 }
 
-func (p *exampleProvider) ListOperations() []gestalt.Operation {
-	return []gestalt.Operation{
-		{
-			Name:        "greet",
-			Description: "Return a greeting message",
-			Method:      http.MethodGet,
-			Parameters: []gestalt.Parameter{
-				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
+func (p *exampleProvider) Catalog() *gestalt.Catalog {
+	return &gestalt.Catalog{
+		Name:        p.Name(),
+		DisplayName: p.DisplayName(),
+		Description: p.Description(),
+		Operations: []gestalt.CatalogOperation{
+			{
+				ID:          "greet",
+				Description: "Return a greeting message",
+				Method:      http.MethodGet,
+				Path:        "/greet",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "name", Type: "string", Description: "Name to greet", Required: true},
+				},
 			},
-		},
-		{
-			Name:        "echo",
-			Description: "Echo back the input",
-			Method:      http.MethodPost,
-			Parameters: []gestalt.Parameter{
-				{Name: "message", Type: "string", Description: "Message to echo", Required: true},
+			{
+				ID:          "echo",
+				Description: "Echo back the input",
+				Method:      http.MethodPost,
+				Path:        "/echo",
+				Parameters: []gestalt.CatalogParameter{
+					{Name: "message", Type: "string", Description: "Message to echo", Required: true},
+				},
 			},
-		},
-		{
-			Name:        "status",
-			Description: "Return provider startup state",
-			Method:      http.MethodGet,
+			{
+				ID:          "status",
+				Description: "Return provider startup state",
+				Method:      http.MethodGet,
+				Path:        "/status",
+			},
 		},
 	}
 }

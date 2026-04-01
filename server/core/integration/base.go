@@ -18,7 +18,6 @@ import (
 var (
 	_ core.OAuthProvider           = (*Base)(nil)
 	_ core.ManualProvider          = (*Base)(nil)
-	_ core.CatalogProvider         = (*Base)(nil)
 	_ core.ConnectionParamProvider = (*Base)(nil)
 	_ core.DiscoveryConfigProvider = (*Base)(nil)
 )
@@ -223,8 +222,6 @@ func (b *Base) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL s
 	}
 	return b.Auth.RefreshToken(ctx, refreshToken)
 }
-
-func (b *Base) ListOperations() []core.Operation { return OperationsList(b.catalog) }
 
 func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
 	baseURL := b.BaseURL

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -724,7 +725,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		} else if err != nil {
 			return nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
-		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", len(builtin.ListOperations()))
+		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
 
 	ready := make(chan struct{})
@@ -756,7 +757,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 				connAuth[name] = result.ConnectionAuth
 				connMu.Unlock()
 			}
-			slog.Info("loaded provider", "provider", name, "operations", len(result.Provider.ListOperations()))
+			slog.Info("loaded provider", "provider", name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}()
 	}
 
@@ -778,15 +779,16 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 
 	meta := resolveProviderMetadata(intg)
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
 
 	var result *ProviderBuildResult
+	var err error
 
 	switch {
 	case intg.Plugin.IsInline():
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
 		manifest, err := config.InlineToManifest(name, intg.Plugin)
 		if err != nil {
 			return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
@@ -796,6 +798,10 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, err
 		}
 	case intg.Plugin.IsDeclarative:
+		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		}
 		if !intg.Plugin.HasResolvedManifest() {
 			return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
 		}
@@ -805,7 +811,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 			return nil, err
 		}
 	default:
-		result, err = buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
+		result, err = buildExternalPluginProvider(ctx, name, intg, meta, deps, regStore)
 		if err != nil {
 			return nil, err
 		}
@@ -813,8 +819,8 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	return result, nil
 }
 
-func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	pluginProv, err := buildPluginProvider(ctx, name, intg, pluginConfig, meta)
+func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -1128,11 +1134,7 @@ func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.P
 
 func firstProviderIconSVG(providers ...core.Provider) string {
 	for _, prov := range providers {
-		cp, ok := prov.(core.CatalogProvider)
-		if !ok {
-			continue
-		}
-		cat := cp.Catalog()
+		cat := prov.Catalog()
 		if cat != nil && cat.IconSVG != "" {
 			return cat.IconSVG
 		}
@@ -1265,13 +1267,24 @@ func applyAllowedOperations(name string, intg config.IntegrationDef, pluginProv 
 	if policy == nil {
 		return pluginProv, nil
 	}
-	if err := policy.Validate(pluginProv.ListOperations()); err != nil {
+	if err := policy.ValidateCatalog(pluginProv.Catalog()); err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
 	return policy.Wrap(pluginProv), nil
 }
 
-func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata) (core.Provider, error) {
+func catalogOperationCount(cat *catalog.Catalog) int {
+	if cat == nil {
+		return 0
+	}
+	return len(cat.Operations)
+}
+
+func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, meta providerMetadata) (core.Provider, map[string]any, error) {
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+	}
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
 		Command:      intg.Plugin.Command,
 		Args:         intg.Plugin.Args,
@@ -1285,9 +1298,9 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 		HostBinary:   intg.Plugin.HostBinary,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return prov, nil
+	return prov, pluginConfig, nil
 }
 
 func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {

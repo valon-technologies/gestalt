@@ -74,10 +74,6 @@ func (s *stubProviderPluginServer) StartProvider(_ context.Context, req *proto.S
 	}, nil
 }
 
-func (s *stubProviderPluginServer) ListOperations(context.Context, *emptypb.Empty) (*proto.ListOperationsResponse, error) {
-	return &proto.ListOperationsResponse{}, nil
-}
-
 func TestNewRemoteProvider_NoSchema(t *testing.T) {
 	t.Parallel()
 
