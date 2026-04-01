@@ -163,7 +163,10 @@ impl ApiClient {
         let body = resp.text().context("failed to read response body")?;
 
         if status.is_client_error() || status.is_server_error() {
-            let message = format_error_message(status, &body);
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+                .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
 
             if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
                 bail!(
@@ -185,27 +188,6 @@ impl ApiClient {
     }
 }
 
-fn format_error_message(status: StatusCode, body: &str) -> String {
-    if body.trim().is_empty() {
-        return format!("HTTP {}", status.as_u16());
-    }
-
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
-        if let Some(message) = value
-            .get("error")
-            .and_then(|error| error.as_str())
-            .map(String::from)
-        {
-            return message;
-        }
-
-        let pretty = serde_json::to_string_pretty(&value).unwrap_or_else(|_| body.to_string());
-        return format!("HTTP {}:\n{}", status.as_u16(), pretty);
-    }
-
-    format!("HTTP {}: {}", status.as_u16(), body)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,35 +202,5 @@ mod tests {
     fn test_base_url_trailing_slash() {
         let client = ApiClient::new("http://localhost:8080/", "test-token").unwrap();
         assert_eq!(client.base_url, "http://localhost:8080");
-    }
-
-    #[test]
-    fn test_format_error_message_prefers_top_level_error_string() {
-        let message = format_error_message(
-            StatusCode::BAD_REQUEST,
-            r#"{"error":"channel_not_found","details":{"channel":"abc"}}"#,
-        );
-
-        assert_eq!(message, "channel_not_found");
-    }
-
-    #[test]
-    fn test_format_error_message_pretty_prints_json_body() {
-        let message = format_error_message(
-            StatusCode::BAD_REQUEST,
-            r#"{"error":{"message":"invalid parameter: limit"}}"#,
-        );
-
-        assert_eq!(
-            message,
-            "HTTP 400:\n{\n  \"error\": {\n    \"message\": \"invalid parameter: limit\"\n  }\n}"
-        );
-    }
-
-    #[test]
-    fn test_format_error_message_handles_empty_body() {
-        let message = format_error_message(StatusCode::BAD_GATEWAY, "");
-
-        assert_eq!(message, "HTTP 502");
     }
 }

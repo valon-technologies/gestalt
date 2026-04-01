@@ -35,8 +35,6 @@ var retryableStatusCodes = map[int]bool{
 
 var pathParamRe = regexp.MustCompile(`\{([^}]+)\}`)
 
-// UpstreamHTTPError preserves the upstream HTTP response for callers that want
-// to surface the real status/body while still treating the request as failed.
 type UpstreamHTTPError struct {
 	Status  int
 	Headers http.Header
