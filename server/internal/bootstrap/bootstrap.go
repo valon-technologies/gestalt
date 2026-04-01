@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/managedparams"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
@@ -831,7 +832,7 @@ func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*plugin
 		return nil, nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
 	}
 
-	manifest := mergedManifestHeaders(plugin.ResolvedManifest, plugin)
+	manifest := mergedManifestProviderConfig(plugin.ResolvedManifest, plugin)
 	if manifest == nil || manifest.Provider == nil {
 		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
 	}
@@ -920,6 +921,9 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			def.BaseURL = cfg.baseURL
 		}
 		applyPluginHeaders(def, cfg.plugin, cfg.manifestProvider)
+		if err := applyManagedParameters(def, cfg.plugin, cfg.manifestProvider); err != nil {
+			return nil, err
+		}
 		if cfg.applyResponseMapping {
 			applyManifestResponseMapping(def, cfg.manifestProvider)
 		}
@@ -1069,17 +1073,19 @@ func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, mani
 	def.Headers = headers
 }
 
-func mergedManifestHeaders(manifest *pluginmanifestv1.Manifest, plugin *config.PluginDef) *pluginmanifestv1.Manifest {
+func mergedManifestProviderConfig(manifest *pluginmanifestv1.Manifest, plugin *config.PluginDef) *pluginmanifestv1.Manifest {
 	if manifest == nil || manifest.Provider == nil {
 		return manifest
 	}
 	headers := mergedHeaders(manifest.Provider, plugin)
-	if len(headers) == 0 {
+	managedParameters := mergedManagedParameters(manifest.Provider, plugin)
+	if len(headers) == 0 && len(managedParameters) == 0 {
 		return manifest
 	}
 	cloned := *manifest
 	providerCopy := *manifest.Provider
 	providerCopy.Headers = headers
+	providerCopy.ManagedParameters = managedParametersToManifest(managedParameters)
 	cloned.Provider = &providerCopy
 	return &cloned
 }
@@ -1096,6 +1102,117 @@ func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.P
 	}
 
 	return config.MergeHeaders(manifestHeaders, pluginHeaders)
+}
+
+func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) error {
+	if def == nil {
+		return nil
+	}
+
+	params := mergedManagedParameters(manifestProvider, plugin)
+	if len(params) == 0 {
+		return nil
+	}
+
+	if def.Headers == nil {
+		def.Headers = make(map[string]string, len(params))
+	}
+	for _, param := range params {
+		switch param.In {
+		case managedparams.InHeader:
+			if _, exists := def.Headers[param.Name]; exists {
+				return fmt.Errorf("managed parameter %q conflicts with configured header", param.Name)
+			}
+			def.Headers[param.Name] = param.Value
+		default:
+			return fmt.Errorf("unsupported managed parameter location %q", param.In)
+		}
+	}
+
+	for opName, op := range def.Operations {
+		filtered := op.Parameters[:0]
+		for _, param := range op.Parameters {
+			if isManagedOperationParameter(param, params) {
+				continue
+			}
+			filtered = append(filtered, param)
+		}
+		op.Parameters = filtered
+		def.Operations[opName] = op
+	}
+
+	return nil
+}
+
+func mergedManagedParameters(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) []managedparams.Parameter {
+	var manifestParams []managedparams.Parameter
+	if manifestProvider != nil {
+		manifestParams = make([]managedparams.Parameter, len(manifestProvider.ManagedParameters))
+		for i, param := range manifestProvider.ManagedParameters {
+			manifestParams[i] = managedparams.Parameter{
+				In:    param.In,
+				Name:  param.Name,
+				Value: param.Value,
+			}
+		}
+	}
+
+	var pluginParams []managedparams.Parameter
+	if plugin != nil {
+		pluginParams = make([]managedparams.Parameter, len(plugin.ManagedParameters))
+		for i, param := range plugin.ManagedParameters {
+			pluginParams[i] = managedparams.Parameter{
+				In:    param.In,
+				Name:  param.Name,
+				Value: param.Value,
+			}
+		}
+	}
+
+	return managedparams.Merge(manifestParams, pluginParams)
+}
+
+func managedParametersToManifest(params []managedparams.Parameter) []pluginmanifestv1.ManagedParameter {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]pluginmanifestv1.ManagedParameter, len(params))
+	for i, param := range params {
+		out[i] = pluginmanifestv1.ManagedParameter{
+			In:    param.In,
+			Name:  param.Name,
+			Value: param.Value,
+		}
+	}
+	return out
+}
+
+func isManagedOperationParameter(param provider.ParameterDef, managed []managedparams.Parameter) bool {
+	location := strings.ToLower(param.Location)
+	if location == "" {
+		return false
+	}
+
+	wireName := param.WireName
+	if wireName == "" {
+		wireName = param.Name
+	}
+
+	normalized := managedparams.Normalize([]managedparams.Parameter{{
+		In:   location,
+		Name: wireName,
+	}})
+	if len(normalized) == 0 {
+		return false
+	}
+	target := normalized[0]
+
+	for _, managedParam := range managed {
+		if managedParam.In == target.In && managedParam.Name == target.Name {
+			return true
+		}
+	}
+	return false
 }
 
 func firstProviderIconSVG(providers ...core.Provider) string {

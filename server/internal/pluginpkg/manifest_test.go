@@ -3,6 +3,7 @@ package pluginpkg
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -873,6 +874,89 @@ func TestDecodeManifest_DeclarativeRejectsDuplicateOpNames(t *testing.T) {
 	_, err := DecodeManifest(data)
 	if err == nil {
 		t.Fatal("expected error for duplicate operation names")
+	}
+}
+
+func TestDecodeManifestFormat_YAMLManagedParameters(t *testing.T) {
+	t.Parallel()
+
+	yamlData := []byte(`
+source: github.com/acme/plugins/testapi
+version: "0.1.0"
+kinds:
+  - provider
+provider:
+  openapi: https://api.example.com/openapi.json
+  managed_parameters:
+    - in: header
+      name: intercom-version
+      value: "2.11"
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: ` + sha256Hex("provider") + `
+entrypoints:
+  provider:
+    artifact_path: artifacts/darwin/arm64/provider
+`)
+
+	manifest, err := DecodeManifestFormat(yamlData, "yaml")
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if manifest.Provider == nil {
+		t.Fatal("expected provider")
+	}
+	if len(manifest.Provider.ManagedParameters) != 1 {
+		t.Fatalf("expected 1 managed parameter, got %d", len(manifest.Provider.ManagedParameters))
+	}
+	if got := manifest.Provider.ManagedParameters[0].Name; got != "intercom-version" {
+		t.Fatalf("unexpected managed parameter name %q", got)
+	}
+}
+
+func TestDecodeManifest_RejectsManagedParameterHeaderConflict(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "source": "github.com/acme/plugins/myapi",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "openapi": "https://api.example.com/openapi.json",
+    "headers": {
+      "Intercom-Version": "2.15"
+    },
+    "managed_parameters": [
+      {
+        "in": "header",
+        "name": "intercom-version",
+        "value": "2.11"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "artifacts/darwin/arm64/provider",
+      "sha256": "` + sha256Hex("provider") + `"
+    }
+  ],
+  "entrypoints": {
+    "provider": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  }
+}`)
+
+	_, err := DecodeManifest(data)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), "conflicts with configured header") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

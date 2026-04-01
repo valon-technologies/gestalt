@@ -34,6 +34,7 @@ type Provider struct {
 	MCP                  bool                               `json:"mcp,omitempty"`
 	BaseURL              string                             `json:"base_url,omitempty"`
 	Headers              map[string]string                  `json:"headers,omitempty"`
+	ManagedParameters    []ManagedParameter                 `json:"managed_parameters,omitempty"`
 	Operations           []ProviderOperation                `json:"operations,omitempty"`
 	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty"`
 	Connection           map[string]ProviderConnectionParam `json:"connection,omitempty"`
@@ -116,6 +117,12 @@ type ProviderParameter struct {
 	In          string `json:"in"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required,omitempty"`
+}
+
+type ManagedParameter struct {
+	In    string `json:"in"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 const (

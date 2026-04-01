@@ -131,6 +131,35 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidManagedParameters(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Integrations["alpha"] = config.IntegrationDef{
+		Plugin: &config.PluginDef{
+			BaseURL: "https://api.example.test",
+			Operations: []config.InlineOperationDef{
+				{Name: "list_items", Method: "GET", Path: "/items"},
+			},
+			ManagedParameters: []config.ManagedParameterDef{
+				{
+					In:    "query",
+					Name:  "api_version",
+					Value: "2026-04-01",
+				},
+			},
+		},
+	}
+
+	err := config.ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("expected invalid managed parameters")
+	}
+	if !strings.Contains(err.Error(), `managed_parameters[0].in "query" must be "header"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateStopsConstructedRuntimes(t *testing.T) {
 	t.Parallel()
 

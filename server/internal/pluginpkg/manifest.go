@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/valon-technologies/gestalt/server/internal/managedparams"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -174,6 +175,9 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 			if err := validateProviderAuth(manifest.Provider.Auth); err != nil {
 				return err
 			}
+			if err := validateManagedParameters(manifest.Provider.Headers, manifest.Provider.ManagedParameters); err != nil {
+				return err
+			}
 			if manifest.Provider.ConfigSchemaPath != "" {
 				if err := validateRelativePackagePath(manifest.Provider.ConfigSchemaPath, "provider config schema path"); err != nil {
 					return err
@@ -235,6 +239,27 @@ func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifac
 	}
 	if _, ok := artifactPaths[entry.ArtifactPath]; !ok {
 		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
+	}
+	return nil
+}
+
+func validateManagedParameters(headers map[string]string, params []pluginmanifestv1.ManagedParameter) error {
+	if len(params) == 0 {
+		return nil
+	}
+	normalized := make([]managedparams.Parameter, len(params))
+	for i, param := range params {
+		normalized[i] = managedparams.Parameter{
+			In:    param.In,
+			Name:  param.Name,
+			Value: param.Value,
+		}
+	}
+	if err := managedparams.Validate(normalized); err != nil {
+		return fmt.Errorf("provider %w", err)
+	}
+	if err := managedparams.ValidateHeaderConflicts(headers, normalized); err != nil {
+		return fmt.Errorf("provider %w", err)
 	}
 	return nil
 }
