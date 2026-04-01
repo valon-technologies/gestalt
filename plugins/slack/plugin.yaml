@@ -5,13 +5,6 @@ description: Send messages, search conversations, and manage channels.
 icon_file: assets/icon.svg
 kinds:
   - provider
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-entrypoints:
-  provider:
-    artifact_path: artifacts/darwin/arm64/provider
 provider:
   mcp: true
   base_url: https://slack.com
