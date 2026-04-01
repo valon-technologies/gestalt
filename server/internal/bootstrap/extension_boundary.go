@@ -39,6 +39,18 @@ func buildExtensionsWith(ctx context.Context, cfg *config.Config, factories *Fac
 	}, nil
 }
 
+func newGuardedInvoker(kind, name string, invoker invocation.Invoker, lister invocation.CapabilityLister, providers []string, audit core.AuditSink) *invocation.GuardedInvoker {
+	if invoker == nil {
+		return nil
+	}
+
+	var opts []invocation.GuardedOption
+	if len(providers) > 0 {
+		opts = append(opts, invocation.WithAllowedProviders(providers))
+	}
+	return invocation.NewGuarded(invoker, lister, kind+":"+name, audit, opts...)
+}
+
 func (b *ExtensionBoundary) Shutdown(ctx context.Context) error {
 	if b == nil {
 		return nil

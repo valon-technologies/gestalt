@@ -50,7 +50,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return nil, err
 	}
 	defer func() { _ = ds.Close() }()
-	deps.Egress = newEgressDeps(cfg)
+	deps.Egress = newEgressDeps(cfg, sm)
 
 	var warnings []string
 	if w, ok := ds.(interface{ Warnings() []string }); ok {
@@ -68,7 +68,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 
 	sharedInvoker := invocation.NewBroker(providers, ds)
-	wireCredentialResolver(&deps.Egress, sm)
 	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
 
 	extensions, err := buildExtensionsWith(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, deps.Egress, buildRuntimeForValidation)
