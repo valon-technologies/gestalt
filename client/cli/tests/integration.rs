@@ -258,6 +258,62 @@ fn test_start_oauth() {
     assert_eq!(resp["state"], "abc123");
 }
 
+#[test]
+fn test_connect_includes_connection_and_instance() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("POST", "/api/v1/auth/start-oauth")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection":"workspace","instance":"team-a","integration":"github"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+        .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::integrations::connect_with_browser_opener(
+        &client,
+        "github",
+        Some("workspace"),
+        Some("team-a"),
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_connect_omits_null_connection_and_instance() {
+    let mut server = Server::new();
+    let mock = server
+        .mock("POST", "/api/v1/auth/start-oauth")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"integration":"github"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+        .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::integrations::connect_with_browser_opener(
+        &client,
+        "github",
+        None,
+        None,
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
 fn catalog_body() -> &'static str {
     r#"[{
         "id": "do_thing",
@@ -311,8 +367,52 @@ fn test_invoke_typed_params() {
         "test_svc",
         "do_thing",
         &params,
-        None,
-        None,
+        gestalt::commands::invoke::InvokeOptions::default(),
+        Format::Json,
+    );
+
+    invoke_mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_invoke_with_connection_and_instance() {
+    let mut server = Server::new();
+
+    let _catalog_mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(catalog_body())
+        .create();
+
+    let invoke_mock = server
+        .mock("POST", "/api/v1/test_svc/do_thing")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"_connection":"workspace","_instance":"team-a","name":"test"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"ok": true}"#)
+        .create();
+
+    let params = vec![gestalt::params::ParamEntry {
+        key: "name".to_string(),
+        value: gestalt::params::ParamValue::StringVal("test".to_string()),
+    }];
+
+    let client = create_client(&server);
+    let result = gestalt::commands::invoke::invoke(
+        &client,
+        "test_svc",
+        "do_thing",
+        &params,
+        gestalt::commands::invoke::InvokeOptions {
+            connection: Some("workspace"),
+            instance: Some("team-a"),
+            ..Default::default()
+        },
         Format::Json,
     );
 

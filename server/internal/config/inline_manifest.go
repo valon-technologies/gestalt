@@ -25,6 +25,7 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 			OpenAPIConnection: p.OpenAPIConnection,
 			GraphQLConnection: p.GraphQLConnection,
 			MCPConnection:     p.MCPConnection,
+			DefaultConnection: p.DefaultConnection,
 		},
 	}
 

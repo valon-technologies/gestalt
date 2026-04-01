@@ -5,21 +5,41 @@ use crate::catalog;
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
+#[derive(Default)]
+pub struct InvokeOptions<'a> {
+    pub connection: Option<&'a str>,
+    pub instance: Option<&'a str>,
+    pub select: Option<&'a str>,
+    pub input_file: Option<&'a str>,
+}
+
 pub fn invoke(
     client: &ApiClient,
     integration: &str,
     operation: &str,
     params: &[ParamEntry],
-    select: Option<&str>,
-    input_file: Option<&str>,
+    options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
     let cat = catalog::fetch_catalog(client, integration)?;
     let mut param_map = params::assemble_params(params, Some(&cat), operation)?;
 
-    if let Some(file_path) = input_file {
+    if let Some(file_path) = options.input_file {
         let file_map = params::load_input_file(file_path)?;
         param_map = params::merge_params(file_map, param_map);
+    }
+
+    if let Some(connection) = options.connection {
+        param_map.insert(
+            "_connection".to_string(),
+            serde_json::Value::String(connection.to_string()),
+        );
+    }
+    if let Some(instance) = options.instance {
+        param_map.insert(
+            "_instance".to_string(),
+            serde_json::Value::String(instance.to_string()),
+        );
     }
 
     let path = format!("/api/v1/{}/{}", integration, operation);
@@ -33,7 +53,7 @@ pub fn invoke(
             .with_context(|| format!("failed to invoke {}.{}", integration, operation))?
     };
 
-    let output_value = match select {
+    let output_value = match options.select {
         Some(sel_path) => output::select_path(&resp, sel_path)?,
         None => resp,
     };

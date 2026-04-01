@@ -109,7 +109,10 @@ func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 
 	result := env.Result
-	connMaps := bootstrap.BuildConnectionMaps(env.Config)
+	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
+	if err != nil {
+		return err
+	}
 
 	mcpSurface := buildMCPSurface(env.Config, connMaps)
 

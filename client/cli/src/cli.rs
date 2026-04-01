@@ -55,6 +55,14 @@ pub enum Commands {
         #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
         params: Vec<params::ParamEntry>,
 
+        /// Select a named connection for this invocation
+        #[arg(long)]
+        connection: Option<String>,
+
+        /// Select a stored connection instance
+        #[arg(long)]
+        instance: Option<String>,
+
         /// Select a sub-path from the response (e.g., "data.items")
         #[arg(long = "select")]
         select: Option<String>,
@@ -120,6 +128,14 @@ pub enum IntegrationCommands {
     Connect {
         /// Integration name (e.g., github, slack)
         name: String,
+
+        /// Named connection to connect
+        #[arg(long)]
+        connection: Option<String>,
+
+        /// Instance name to create or refresh
+        #[arg(long)]
+        instance: Option<String>,
     },
 }
 

@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
@@ -679,6 +681,205 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 	if len(authTypes["oauth-svc"]) != 1 || authTypes["oauth-svc"][0] != "oauth" {
 		t.Fatalf("expected oauth-svc auth_types=[oauth], got %v", authTypes["oauth-svc"])
+	}
+}
+
+func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
+	plugin := &config.PluginDef{
+		Auth: &config.ConnectionAuthDef{
+			Type: pluginmanifestv1.AuthTypeManual,
+			Credentials: []config.CredentialFieldDef{
+				{Name: "plugin_config_token", Label: "Plugin Config Token"},
+			},
+		},
+		Connections: map[string]*config.ConnectionDef{
+			"workspace": {
+				Auth: config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+					Credentials: []config.CredentialFieldDef{
+						{Name: "workspace_config_token", Label: "Workspace Config Token"},
+					},
+				},
+			},
+		},
+		ResolvedManifest: &pluginmanifestv1.Manifest{
+			Provider: &pluginmanifestv1.Provider{
+				Auth: &pluginmanifestv1.ProviderAuth{
+					Type: pluginmanifestv1.AuthTypeManual,
+					Credentials: []pluginmanifestv1.CredentialField{
+						{Name: "plugin_manifest_token", Label: "Plugin Manifest Token"},
+					},
+				},
+				Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+					"workspace": {
+						Auth: &pluginmanifestv1.ProviderAuth{
+							Type: pluginmanifestv1.AuthTypeManual,
+							Credentials: []pluginmanifestv1.CredentialField{
+								{Name: "workspace_manifest_token", Label: "Workspace Manifest Token"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.IntegrationDefs = map[string]config.IntegrationDef{
+			"example": {Plugin: plugin},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name             string   `json:"name"`
+			AuthTypes        []string `json:"auth_types"`
+			CredentialFields []struct {
+				Name  string `json:"name"`
+				Label string `json:"label"`
+			} `json:"credential_fields"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+
+	got := make(map[string]struct {
+		authTypes []string
+		field     string
+		label     string
+	}, len(integrations[0].Connections))
+	for _, conn := range integrations[0].Connections {
+		fieldName := ""
+		fieldLabel := ""
+		if len(conn.CredentialFields) > 0 {
+			fieldName = conn.CredentialFields[0].Name
+			fieldLabel = conn.CredentialFields[0].Label
+		}
+		got[conn.Name] = struct {
+			authTypes []string
+			field     string
+			label     string
+		}{
+			authTypes: conn.AuthTypes,
+			field:     fieldName,
+			label:     fieldLabel,
+		}
+	}
+
+	if len(got[config.PluginConnectionAlias].authTypes) != 1 || got[config.PluginConnectionAlias].authTypes[0] != "manual" || got[config.PluginConnectionAlias].field != "plugin_config_token" || got[config.PluginConnectionAlias].label != "Plugin Config Token" {
+		t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
+	}
+	if len(got["workspace"].authTypes) != 1 || got["workspace"].authTypes[0] != "manual" || got["workspace"].field != "workspace_config_token" || got["workspace"].label != "Workspace Config Token" {
+		t.Fatalf("workspace connection info = %+v", got["workspace"])
+	}
+}
+
+func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		authType string
+	}{
+		{name: "explicit oauth2 auth", authType: pluginmanifestv1.AuthTypeOAuth2},
+		{name: "empty auth type still exposes oauth", authType: ""},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stub := &stubDualAuthProvider{
+				StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
+			}
+			plugin := &config.PluginDef{
+				Auth: &config.ConnectionAuthDef{
+					Type:             tc.authType,
+					AuthorizationURL: "https://example.com/oauth/authorize",
+					TokenURL:         "https://example.com/oauth/token",
+				},
+			}
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.IntegrationDefs = map[string]config.IntegrationDef{
+					"example": {Plugin: plugin},
+				}
+				cfg.Datastore = &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+				}
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+
+			var integrations []struct {
+				Name        string `json:"name"`
+				Connections []struct {
+					Name             string   `json:"name"`
+					AuthTypes        []string `json:"auth_types"`
+					CredentialFields []struct {
+						Name  string `json:"name"`
+						Label string `json:"label"`
+					} `json:"credential_fields"`
+				} `json:"connections"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+				t.Fatalf("decoding: %v", err)
+			}
+			if len(integrations) != 1 || len(integrations[0].Connections) != 1 {
+				t.Fatalf("unexpected integrations response: %+v", integrations)
+			}
+
+			conn := integrations[0].Connections[0]
+			if conn.Name != config.PluginConnectionAlias {
+				t.Fatalf("expected plugin connection, got %+v", conn)
+			}
+			if !reflect.DeepEqual(conn.AuthTypes, []string{"oauth", "manual"}) {
+				t.Fatalf("expected dual auth types, got %+v", conn.AuthTypes)
+			}
+			if len(conn.CredentialFields) != 1 || conn.CredentialFields[0].Name != "api_token" || conn.CredentialFields[0].Label != "API Token" {
+				t.Fatalf("unexpected credential fields: %+v", conn.CredentialFields)
+			}
+		})
 	}
 }
 
@@ -3330,6 +3531,16 @@ type stubManualProvider struct {
 
 func (s *stubManualProvider) SupportsManualAuth() bool { return true }
 
+type stubDualAuthProvider struct {
+	coretesting.StubIntegration
+}
+
+func (s *stubDualAuthProvider) SupportsManualAuth() bool { return true }
+func (s *stubDualAuthProvider) AuthTypes() []string      { return []string{"oauth", "manual"} }
+func (s *stubDualAuthProvider) CredentialFields() []core.CredentialFieldDef {
+	return []core.CredentialFieldDef{{Name: "api_token", Label: "API Token"}}
+}
+
 func TestConnectManual(t *testing.T) {
 	t.Parallel()
 
@@ -3338,6 +3549,7 @@ func TestConnectManual(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 		})
+		cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -3534,6 +3746,54 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 	}
 	if !strings.Contains(result["url"], "provider.example/oauth/b") {
 		t.Fatalf("expected conn-b auth URL, got %q", result["url"])
+	}
+}
+
+func TestStartOAuth_MultiConnectionWithoutDefaultRequiresExplicitConnection(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "multi"},
+		authURL:         "https://provider.example/oauth/a",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"multi": {
+					"conn-a": &testOAuthHandler{authorizationBaseURLVal: "https://provider.example/oauth/a"},
+					"conn-b": &testOAuthHandler{authorizationBaseURLVal: "https://provider.example/oauth/b"},
+				},
+			}
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"multi"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if !strings.Contains(result["error"], "requires an explicit connection") {
+		t.Fatalf("expected explicit-connection error, got %q", result["error"])
 	}
 }
 
@@ -5223,6 +5483,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "multi-key-svc"},
 		})
+		cfg.DefaultConnection = map[string]string{"multi-key-svc": config.PluginConnectionName}
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil

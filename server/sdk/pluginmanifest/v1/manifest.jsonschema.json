@@ -105,6 +105,10 @@
           "type": "string",
           "minLength": 1
         },
+        "default_connection": {
+          "type": "string",
+          "minLength": 1
+        },
         "connections": {
           "type": "object",
           "additionalProperties": {
