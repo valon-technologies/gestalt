@@ -1,37 +1,35 @@
 # Configuration
 
-The Gestalt config file is the platform's control plane. `gestaltd` does not have a large imperative setup process; instead, it reads one YAML document and derives the runtime from it.
+Gestalt is configured with one YAML file. The file is small at the top level
+and pushes most detail into `integrations.*.plugin`.
 
 ## Config Discovery
 
-When you do not pass `--config`, `gestaltd` resolves the config path in this order:
+When you do not pass `--config`, Gestalt searches in this order:
 
-1. `GESTALT_CONFIG`
+1. the `GESTALT_CONFIG` environment variable
 2. `./config.yaml`
 3. `~/.gestalt/config.yaml`
 4. `/etc/gestalt/config.yaml`
 
-The default command `gestaltd` has one extra behavior: if no config exists anywhere in that search path, it generates `~/.gestalt/config.yaml` and starts with a local-only configuration that uses `auth.provider: none` and SQLite.
+If you run bare `gestaltd` and no config exists, Gestalt writes a new local file
+to `~/.gestalt/config.yaml`.
 
-## What Happens During Load
+## YAML Rules
 
-Loading a config is more than YAML parsing:
+- `${VAR}` expansion happens before YAML decoding.
+- `${VAR_FILE}` is also supported. The file contents replace the placeholder
+  with trailing newlines trimmed.
+- Unknown fields are rejected.
+- Relative paths are resolved from the directory that contains the config file.
+- `server.port` defaults to `8080`.
+- `secrets.provider` defaults to `env`.
+- `telemetry.provider` defaults to `stdout`.
 
-1. `${ENV_VAR}` placeholders are expanded first.
-2. YAML is decoded with known-field checking.
-3. Defaults are applied.
-4. Connection auth is validated against surface references.
-5. Relative paths are resolved against the directory that contains the config file.
-6. Validation runs.
-7. During bootstrap, `secret://...` values are resolved through the configured secret manager.
-
-`secret://...` resolution is intentionally later than basic config parsing. That keeps the config loader simple and lets the secret manager itself be configured normally.
-
-## The Top-Level Feature Sets
-
-This is the complete top-level shape of the config:
+## Top-Level Shape
 
 ```yaml
+server: {}
 auth: {}
 datastore: {}
 secrets: {}
@@ -39,111 +37,89 @@ telemetry: {}
 integrations: {}
 runtimes: {}
 bindings: {}
-server: {}
 egress: {}
 ui: {}
 ```
 
-Each block controls a distinct part of the runtime:
+The full field reference lives at [Config File](/reference/config-file).
 
-| Block | What it defines |
-| --- | --- |
-| `server` | Port, base URL, encryption key, and API token TTL. |
-| `auth` | How users authenticate to Gestalt itself. |
-| `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
-| `secrets` | How `secret://...` values are resolved. |
-| `telemetry` | Observability: traces, metrics, and structured logs. |
-| `integrations` | The provider graph users call. |
-| `runtimes` | Background workers. |
-| `bindings` | Additional inbound surfaces. |
-| `egress` | Outbound allow or deny policy plus credential grants. |
-| `ui` | Optional custom web UI plugin. |
+## Local And Locked Startup
 
-## Defaults And Required Fields
+Gestalt supports two operating modes.
 
-The loader applies a small number of defaults:
+### Mutable Local Startup
 
-- `server.port` defaults to `8080`
-- `secrets.provider` defaults to `env`
-- `telemetry.provider` defaults to `stdout`
+```sh
+gestaltd --config ./config.yaml
+```
 
-Some fields are effectively mandatory:
+This path is best for local development. If packaged plugins are stale or
+missing, Gestalt can prepare them before serving.
 
-- `auth.provider`
-- `datastore.provider`
-- `server.encryption_key`
-
-`server.encryption_key` is the root secret for the deployment. Gestalt derives other cryptographic material from it, including session-related secrets for some auth providers.
-
-## Prepared State: `init`, `validate`, And `serve --locked`
-
-Gestalt supports both mutable startup and deterministic startup.
-
-### Mutable Startup
-
-`gestaltd` or `gestaltd serve` without `--locked` may mutate local state at startup:
-
-- remote REST or GraphQL API sources can be fetched and compiled
-- packaged plugins can be prepared locally
-- missing or stale lock state can be regenerated
-
-This is convenient for development.
-
-### Deterministic Startup
-
-`gestaltd init --config PATH` resolves remote dependencies and writes lock state next to the config:
-
-- `gestalt.lock.json`
-- `.gestalt/providers/*.json`
-- `.gestalt/plugins/...`
-
-After that, `gestaltd serve --locked --config PATH` starts only if the prepared state exactly matches the config.
-
-### Validation
-
-`gestaltd validate --config PATH` is non-mutating and expects existing lock state. Init first, then validate:
+### Locked Startup
 
 ```sh
 gestaltd init --config ./config.yaml
-gestaltd validate --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
 ```
+
+This path is best for CI and production. `serve --locked` refuses to continue
+when prepared artifacts are missing or stale.
+
+## What `init` Actually Writes
+
+`gestaltd init` prepares managed artifacts for:
+
+- `integrations.*.plugin.package`
+- `integrations.*.plugin.source`
+- `runtimes.*.plugin.package`
+- `runtimes.*.plugin.source`
+- `ui.plugin.package`
+- `ui.plugin.source`
+
+It writes:
+
+- `gestalt.lock.json`
+- `.gestalt/plugins/...` for prepared packages
+
+Inline integrations do not need packaged artifacts, so `init` is usually a
+cheap no-op apart from writing the lockfile.
 
 ## Relative Paths
 
-Paths in config are resolved relative to the config file directory, not the process working directory. This matters for:
+These values are resolved from the config directory:
 
-- `integrations.<name>.icon_file`
-- `plugin.command`
-- local `plugin.package` paths
+- `icon_file`
+- `plugin.command` when it is a relative executable path
+- `plugin.package`
+- `plugin.openapi` when it points at a local file
+- `plugin.graphql_url` and `plugin.mcp_url` when they are local file paths
 
-That makes configs portable across local runs, Docker mounts, and Kubernetes volumes.
+## Secrets And Environment
 
-## Secret References
+There are two separate mechanisms:
 
-Any string value outside `secrets.config` may use the `secret://` scheme:
+- `${VAR}` and `${VAR_FILE}` for config-time interpolation
+- `secrets.provider` plus `secret://name` references for runtime secret lookup
 
-```yaml
-auth:
-  provider: oidc
-  config:
-    client_secret: secret://oidc-client-secret
-```
+Use config interpolation for deployment-specific values like `DATABASE_URL`.
+Use `secret://...` when a feature expects a secret reference at runtime, such as
+egress credential grants.
 
-The secret manager resolves the part after `secret://`:
+## Base URL
 
-- `env` reads it from an environment variable name
-- `file` reads it from a file inside a configured directory
-- `google_secret_manager` reads it from Google Cloud Secret Manager
-- `aws_secrets_manager` reads it from AWS Secrets Manager
-- `vault` reads it from HashiCorp Vault
-- `azure_key_vault` reads it from Azure Key Vault
+`server.base_url` is optional but important whenever the server needs to emit
+absolute callback URLs or set secure cookies correctly. When it is set:
 
-## The Smallest Explicit Config
+- platform login callbacks use it
+- integration OAuth callbacks use it
+- cookies are marked secure for `https://...` base URLs
+
+## The Smallest Useful Config
 
 ```yaml
 server:
   port: 8080
-  base_url: http://localhost:8080
   encryption_key: change-me
 
 auth:
@@ -154,7 +130,17 @@ datastore:
   config:
     path: ./gestalt.db
 
-integrations: {}
+integrations:
+  example:
+    plugin:
+      auth:
+        type: none
+      base_url: https://httpbin.org
+      operations:
+        - name: get_ip
+          method: GET
+          path: /ip
 ```
 
-That is enough to boot a real server. Everything else is additive.
+That is enough to boot a local server, expose an operation over HTTP, and make
+the same operation available as an MCP tool.

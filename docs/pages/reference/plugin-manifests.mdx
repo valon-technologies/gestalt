@@ -1,0 +1,203 @@
+# Plugin Manifests
+
+Gestalt plugin packages are described by a manifest file named one of:
+
+- `plugin.yaml`
+- `plugin.yml`
+- `plugin.json`
+
+YAML is the easiest format to author by hand.
+
+## Manifest Kinds
+
+Supported manifest kinds are:
+
+- `provider`
+- `runtime`
+- `webui`
+
+A package can contain:
+
+- a provider only
+- a runtime only
+- a UI bundle only
+- a combined provider and runtime
+
+## Common Fields
+
+| Field | Purpose |
+| --- | --- |
+| `source` | Canonical plugin source identifier. Required. |
+| `version` | Plugin version. Required. |
+| `display_name` | Human-readable label. |
+| `description` | Human-readable description. |
+| `icon_file` | Relative path to an SVG icon bundled with the package. |
+| `kinds` | The plugin kinds contained in the package. |
+| `provider` | Provider metadata and optional declarative surfaces. |
+| `webui` | UI metadata for `webui` packages. |
+| `artifacts` | Packaged executable artifacts keyed by platform. |
+| `entrypoints` | Which artifact should be started for the provider or runtime. |
+
+## Basic YAML Manifest
+
+This example is a declarative-only provider package. It does not need a binary.
+
+```yaml
+source: github.com/acme/httpbin
+version: 0.1.0
+display_name: HTTPBin
+description: Small public HTTP inspection API
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  base_url: https://httpbin.org
+  auth:
+    type: none
+  operations:
+    - name: get_ip
+      description: Return caller IP information
+      method: GET
+      path: /ip
+    - name: get_headers
+      description: Return inbound request headers
+      method: GET
+      path: /headers
+```
+
+Use this style when:
+
+- the provider can be described entirely in YAML
+- you do not need custom code
+- you want a reusable package that several configs can import
+
+## Advanced YAML Manifest
+
+This example shows a hybrid packaged provider with:
+
+- a config schema
+- a packaged executable
+- OpenAPI and upstream MCP surfaces
+- multiple named connections
+- managed parameters
+- allowed operation aliases
+
+```yaml
+source: github.com/acme/support
+version: 1.2.3
+display_name: Support
+description: Tickets, knowledge base, and MCP workspace tools
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  config_schema_path: schemas/config.schema.json
+  openapi: https://api.support.example.com/openapi.json
+  mcp_url: https://mcp.support.example.com/mcp
+  openapi_connection: api
+  mcp_connection: mcp
+  default_connection: api
+  headers:
+    X-App-Version: "2026-04-01"
+  managed_parameters:
+    - in: path
+      name: workspace_id
+      value: primary
+  connections:
+    api:
+      mode: user
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.support.example.com/oauth/authorize
+        token_url: https://accounts.support.example.com/oauth/token
+        client_id: ${SUPPORT_CLIENT_ID}
+        client_secret: ${SUPPORT_CLIENT_SECRET}
+        scopes:
+          - tickets.read
+          - tickets.write
+    mcp:
+      mode: user
+      auth:
+        type: mcp_oauth
+  allowed_operations:
+    tickets.list:
+      alias: list_tickets
+    tickets.get:
+      alias: get_ticket
+artifacts:
+  - os: darwin
+    arch: arm64
+    path: artifacts/darwin/arm64/provider
+    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/provider
+    sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+entrypoints:
+  provider:
+    artifact_path: artifacts/linux/amd64/provider
+```
+
+Use this style when:
+
+- the provider includes executable logic
+- a reusable package should ship its own auth and connection model
+- you want packaged custom code plus spec-backed operations
+
+## Runtime Manifest Example
+
+```yaml
+source: github.com/acme/notifier-runtime
+version: 0.4.0
+display_name: Notifier Runtime
+kinds:
+  - runtime
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/runtime
+    sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+entrypoints:
+  runtime:
+    artifact_path: artifacts/linux/amd64/runtime
+```
+
+If you include `schemas/config.schema.json` in the package root, Gestalt uses it
+to validate `runtimes.*.config`.
+
+## Web UI Manifest Example
+
+```yaml
+source: github.com/acme/gestalt-ui
+version: 1.0.0
+display_name: Custom UI
+kinds:
+  - webui
+webui:
+  asset_root: ui/out
+```
+
+## Authoring Notes
+
+- Manifest paths must stay inside the package.
+- `source` and `version` are required.
+- Declarative-only provider packages do not require `artifacts` or
+  `entrypoints`.
+- Provider or runtime packages that include executable code do require artifacts
+  and entrypoints.
+- `config_schema_path` validates `integrations.*.plugin.config`.
+- `schemas/config.schema.json` validates `runtimes.*.config`.
+
+## Packaging And Release
+
+Package a local plugin directory:
+
+```sh
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
+```
+
+Build a multi-platform release from a plugin source directory:
+
+```sh
+gestaltd plugin release --version 1.2.3
+```

@@ -1,360 +1,80 @@
-# Security Model
+# Security
 
-Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, enforces egress policy, and isolates plugin processes. This page describes the trust boundaries, cryptographic primitives, and security-relevant configuration.
+Gestalt's security model is mostly about separation of concerns:
 
-## Trust Boundaries
+- platform auth secures the server itself
+- integration auth secures outbound calls to upstream systems
+- egress policy constrains where bindings and upstream clients can talk
+- secrets providers keep runtime secrets out of static config where possible
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      INTERNET                           │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                    ┌────▼────┐
-                    │ Platform │  session_token cookie
-                    │   Auth   │  or Authorization: Bearer
-                    └────┬────┘
-                         │
-           ┌─────────────▼─────────────┐
-           │         gestaltd          │
-           │                           │
-           │  ┌─────────┐ ┌─────────┐  │
-           │  │ Invoker │ │  MCP    │  │
-           │  │ (Broker)│ │ Server  │  │
-           │  └────┬────┘ └────┬────┘  │
-           │       │           │       │
-           │  ┌────▼───────────▼────┐  │
-           │  │   Egress Policy     │  │
-           │  │   Enforcement       │  │
-           │  └────┬───────────┬────┘  │
-           └───────┼───────────┼───────┘
-                   │           │
-         ┌─────────▼──┐  ┌────▼──────────┐
-         │  Upstream   │  │   Plugin      │
-         │  APIs       │  │   Processes   │
-         │ (REST/GQL/  │  │  (gRPC over   │
-         │  MCP)       │  │  Unix socket) │
-         └────────────┘  └───────────────┘
-```
+## Server-Side Controls
 
-Four trust boundaries:
+### Platform Auth
 
-| Boundary | What crosses it | Protection |
-| --- | --- | --- |
-| Internet → Gestalt | User requests | Platform auth (session or API token) |
-| Gestalt → upstream APIs | OAuth tokens, API keys | Egress policy, credential encryption, TLS |
-| Gestalt → plugins | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
-| Operator → Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
+Use `google` or `oidc` for normal multi-user deployments. `none` is appropriate
+for local development and tightly controlled environments.
 
-## Encryption at Rest
+### Encryption Key
 
-All integration tokens (OAuth access tokens, refresh tokens) are encrypted before storage using AES-256-GCM.
-
-```
-server.encryption_key
-        │
-        ▼
-   ┌─────────┐
-   │ Argon2id │  (3 iterations, 64 MiB, 4 threads)
-   │  or hex  │  (64-char hex string used directly)
-   └────┬────┘
-        │
-        ▼
-  32-byte AES key
-        │
-        ▼
-   ┌─────────┐
-   │ AES-256 │  random 12-byte nonce per encryption
-   │   GCM   │  authenticated encryption (AEAD)
-   └─────────┘
-```
-
-The `server.encryption_key` is the root deployment secret. Gestalt derives all cryptographic material from it:
-
-- **AES-256-GCM key** for encrypting integration tokens and staged connections
-- **State secret** for encrypting OAuth state parameters and PKCE verifiers
-
-If the encryption key is a 64-character hex string, it is decoded directly as a 32-byte key. Otherwise, Argon2id derives a 32-byte key from the string.
-
-Every encryption operation generates a fresh random nonce using `crypto/rand`. Ciphertexts are base64-encoded for storage. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
-
-### What is encrypted
-
-| Data | Storage |
-| --- | --- |
-| OAuth access tokens | AES-256-GCM encrypted |
-| OAuth refresh tokens | AES-256-GCM encrypted |
-| Staged connection tokens | AES-256-GCM encrypted |
-| OAuth state parameters | AES-256-GCM encrypted (URL-safe encoding, 10-minute TTL) |
-| API tokens | SHA-256 hashed (one-way, not reversible) |
-| User emails, display names | Plaintext |
-| Token metadata JSON | Plaintext |
-
-## Token Lifecycle
-
-### Platform Sessions
-
-```
-Browser ──POST /auth/login──▶ Gestalt ──redirect──▶ Identity Provider
-                                                          │
-Browser ◀──set session_token cookie──── Gestalt ◀──callback──┘
-```
-
-1. User initiates login via `POST /api/v1/auth/login`
-2. Gestalt redirects to the identity provider (Google, OIDC)
-3. Identity provider redirects back to `/api/v1/auth/login/callback`
-4. Gestalt validates the callback, checks `email_verified`, and issues a session token
-5. Session token is set as an HTTP cookie (`session_token`)
-
-Session tokens are validated by the platform auth provider on every request.
-
-Cookie properties:
-
-| Property | Value |
-| --- | --- |
-| `HttpOnly` | `true` (prevents JavaScript access) |
-| `Secure` | `true` when `server.base_url` starts with `https://`, `false` otherwise |
-| `SameSite` | `Lax` (prevents cross-site form submission, allows top-level navigation) |
-| `Path` | `/` |
-| `MaxAge` | 24 hours (configurable per auth provider) |
+`server.encryption_key` is required whenever platform auth is enabled. It is
+used to derive keys for state encryption and secure token handling.
 
 ### API Tokens
 
-```
-POST /api/v1/tokens
-        │
-        ▼
-  Generate 32 random bytes (crypto/rand)
-  Prefix with gst_api_
-        │
-        ├──▶ Return plaintext to caller (once, never stored)
-        │
-        └──▶ SHA-256 hash → store in datastore
-```
+API tokens are bearer credentials to Gestalt itself. Use scopes to limit the
+integrations they can call, and set `server.api_token_ttl` when you want
+automatic expiration.
 
-- Plaintext is returned exactly once at creation time
-- Only the SHA-256 hash is stored. Tokens cannot be recovered from the datastore
-- Default TTL: 30 days (configurable via `server.api_token_ttl`)
-- Revocable individually (`DELETE /api/v1/tokens/{id}`) or in bulk (`DELETE /api/v1/tokens`)
+## Integration Credentials
 
-### Integration Tokens (OAuth)
+Integration credentials are stored separately from platform auth:
 
-```
-POST /auth/start-oauth
-        │
-        ▼
-  Build OAuth state (user ID, integration, connection, PKCE verifier)
-  Encrypt state with AES-256-GCM (10-minute TTL)
-        │
-        ▼
-  Gestalt ──redirect with encrypted state──▶ Upstream OAuth Provider
-                                                    │
-  Gestalt ◀──callback with code + encrypted state────┘
-        │
-        ▼
-  Decrypt and validate state (TTL, user ID, integration match)
-  Exchange authorization code for tokens (+ PKCE verifier if applicable)
-        │
-        ▼
-  Encrypt access + refresh tokens separately (AES-256-GCM)
-        │
-        ▼
-  Store encrypted tokens in datastore
-```
+- OAuth tokens are stored after a successful connect flow.
+- Manual credentials are stored through `connect-manual`.
+- Connection params are validated before the connection is created.
 
-- OAuth state is encrypted and time-limited (10-minute expiry) to prevent state injection attacks
-- Access and refresh tokens are encrypted separately before storage
-- Automatic refresh when the access token expires within 5 minutes
-- Refresh errors are tracked; repeated failures do not retry indefinitely
-- Tokens are keyed by `(user_id, integration, connection, instance)`
-- Plaintext tokens are held in memory only during credential resolution
+## Egress Policy
 
-## Request Authentication Flow
-
-```
-Request arrives
-      │
-      ├─ Check session_token cookie
-      │      │
-      │      ├─ Valid session? ──▶ Authenticated (SourceSession)
-      │      └─ Invalid/missing
-      │
-      ├─ Check Authorization: Bearer header
-      │      │
-      │      ├─ gst_api_ prefix? ──▶ SHA-256 hash → lookup in datastore
-      │      │                              │
-      │      │                     ──▶ Authenticated (SourceAPIToken)
-      │      │
-      │      └─ Other token? ──▶ Validate with auth provider
-      │                                │
-      │                       ──▶ Authenticated (SourceSession)
-      │
-      └─ No credentials ──▶ 401 Unauthorized
-```
-
-For proxy bindings, `Proxy-Authorization: Bearer` is checked first, then `Authorization: Bearer`. A `407 Proxy Authentication Required` is returned instead of `401`.
-
-## Egress Policy Enforcement
-
-Egress policies control what outbound requests Gestalt makes on behalf of callers. Policy evaluation happens **before** credential resolution. Denied requests never trigger secret fetches or token decryption.
-
-```
-Invocation request
-        │
-        ▼
-  Build PolicyInput:
-    subject (user/identity/system)
-    target  (provider, operation, method, host, path)
-        │
-        ▼
-  Evaluate rules (first match wins)
-        │
-        ├─ Rule matches with action: allow ──▶ Resolve credentials ──▶ Execute
-        ├─ Rule matches with action: deny  ──▶ Block (no credential fetch)
-        └─ No rule matches ──▶ Apply default_action
-```
-
-Policy rules match on any combination of:
-
-| Field | Matches against |
-| --- | --- |
-| `subject_kind` | `user`, `identity`, or `system` |
-| `subject_id` | Specific user email or token ID |
-| `provider` | Integration provider name |
-| `operation` | Operation name |
-| `method` | HTTP method |
-| `host` | Outbound hostname |
-| `path_prefix` | Outbound URL path prefix |
-
-Empty fields are wildcards. The first matching rule wins. If no rule matches, `egress.default_action` applies (default: `allow`).
-
-### Credential Injection
-
-Egress credential grants inject secrets into outbound requests. Credentials are resolved from the secret manager at request time, not at config load time.
-
-| `auth_style` | Behavior |
-| --- | --- |
-| `bearer` | Sets `Authorization: Bearer <secret>` |
-| `basic` | Sets `Authorization: Basic <secret>` |
-| `raw` | Sets `Authorization: <secret>` |
-
-## Security Headers
-
-Gestalt sets the following headers on every response:
-
-| Header | Value |
-| --- | --- |
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
-| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains` (HTTPS only) |
-
-## Plugin Isolation
-
-Plugins run as separate OS processes. Communication happens over temporary Unix sockets using gRPC.
-
-```
-gestaltd process
-      │
-      ├── creates /tmp/gestalt-*.sock
-      ├── sets GESTALT_PLUGIN_SOCKET env var
-      ├── launches plugin binary as child process
-      │
-      ▼
- Plugin process
-      │
-      ├── connects to socket
-      ├── receives name + config via gRPC
-      └── serves ProviderPlugin or RuntimePlugin service
-```
-
-Isolation properties:
-
-- **No shared memory**: communication is message-passing over a socket
-- **No direct datastore access**: plugins cannot query the datastore or access other users' credentials
-- **Sanitized environment**: only safe variables are passed to plugin processes (`PATH`, `HOME`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_*`, plus user-configured `env`)
-- **Scoped capabilities**: runtime plugins can only invoke providers listed in `runtimes.<name>.providers`
-- **Token passthrough**: the host resolves the caller's access token and passes it directly to the plugin in the gRPC request. Plugins receive only the token for the current invocation, not the full credential store.
-- **Process lifecycle**: plugins are terminated when `gestaltd` shuts down (SIGTERM, then SIGKILL after timeout)
-
-### OS-level sandbox
-
-Plugins are automatically sandboxed when `allowed_hosts` is configured. No additional configuration is needed:
+Bindings and upstream HTTP clients can be restricted under `egress`.
 
 ```yaml
-integrations:
-  my-plugin:
-    plugin:
-      source: github.com/acme/plugins/my-plugin
-      version: 1.0.0
-      allowed_hosts:
-        - "api.example.com"
-        - "*.slack.com"
+egress:
+  default_action: deny
+  policies:
+    - action: allow
+      subject_kind: system
+      subject_id: support-proxy
+      host: api.example.com
+      path_prefix: /v1
 ```
 
-Without `allowed_hosts`, the plugin runs unrestricted:
+You can also inject outbound credentials with `egress.credentials` and
+`secret://...` references.
 
-```yaml
-integrations:
-  trusted-plugin:
-    plugin:
-      command: ./my-trusted-plugin
-```
+## Secrets Providers
 
-**Filesystem restrictions:**
+Built-in secret managers include:
 
-On Linux, the sandbox uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) to restrict file access. Plugins can only read system libraries, SSL certificates, and DNS configuration. Writes are limited to the plugin's socket directory and its isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec` with a generated Seatbelt profile.
+- `env`
+- `file`
+- `google_secret_manager`
+- `aws_secrets_manager`
+- `vault`
+- `azure_key_vault`
 
-**Network restrictions:**
+Use them when runtime features need secret references instead of plain config
+values.
 
-When `allowed_hosts` is configured, `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the plugin's environment. Plugins use standard HTTP libraries unchanged. The proxy checks each request's target hostname against the allowlist before forwarding. Wildcards are supported (`*.example.com` matches `api.example.com`). On Linux, Landlock additionally restricts TCP connections to only the proxy port.
+## Cookies And TLS
 
-**Process group isolation:**
+Gestalt marks session cookies `Secure` when `server.base_url` uses `https://`.
+In practice, production deployments should terminate TLS in front of Gestalt and
+set `server.base_url` to the public HTTPS URL.
 
-Sandboxed plugins run in their own process group. On shutdown, `gestaltd` signals the entire group, ensuring child processes spawned by the plugin are also cleaned up.
+## Proxy And Webhook Bindings
 
-## Webhook Signature Verification
-
-Webhook bindings with `auth_mode: signed` verify request authenticity using HMAC-SHA256:
-
-```
-expected = HMAC-SHA256(signing_secret, request_body)
-provided = hex-decode(signature_header)
-
-Verification: constant-time comparison (hmac.Equal)
-```
-
-Constant-time comparison prevents timing side-channel attacks.
-
-## Proxy Header Sanitization
-
-The proxy binding strips the following headers before forwarding requests upstream:
-
-- `Authorization` (replaced by egress credential injection)
-- `Cookie`
-- `Host`
-- `Proxy-Authorization`
-- `X-Forwarded-*` headers
-- Hop-by-hop headers (`TE`, `Trailer`, `Transfer-Encoding`, `Upgrade`)
-
-Request bodies are limited to 1 MB through the proxy.
-
-## Operator Responsibilities
-
-These configuration choices directly affect the security posture of a deployment:
-
-| Setting | Impact |
-| --- | --- |
-| `server.encryption_key` | Protect this value. If compromised, all stored integration tokens can be decrypted. Use a strong random string or a 64-character hex key. Must be the same across all instances in a cluster. |
-| `auth.provider` | `none` disables all authentication. Never use in production. |
-| `server.base_url` | Must match the public URL exactly. OAuth callback URLs are derived from it. A mismatch can break auth flows or create open-redirect risks. |
-| `egress.default_action` | Set to `deny` in production and explicitly allow required paths. |
-| TLS termination | Gestalt does not terminate TLS itself. Deploy behind a reverse proxy (Nginx, Envoy, cloud load balancer) that handles TLS. |
-| `secrets.provider` | Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`) or `file` in production. `env` is acceptable but secrets may appear in process listings. |
-| `datastore.provider` | Use Postgres or another SQL datastore in production. SQLite is single-writer and not suitable for multi-replica deployments. |
-
-## Known Limitations
-
-- **No built-in key rotation**: changing `server.encryption_key` requires re-encrypting all stored tokens. There is no automated migration.
-- **No session revocation**: platform sessions cannot be explicitly invalidated. They expire based on the auth provider's TTL (default 24 hours).
-- **No built-in rate limiting**: configure rate limiting at the load balancer or reverse proxy layer.
-- **No CORS configuration**: Gestalt does not set CORS headers. Configure CORS at the reverse proxy if cross-origin browser access is needed.
-- **Database encryption is application-level**: Gestalt encrypts tokens before storage, but the database itself may store metadata in plaintext. Ensure the database has appropriate access controls and encrypted backups.
+- Proxy bindings require auth unless the binding itself is explicitly public.
+- Proxy routes use egress policy and can add outbound credentials through egress
+  grants.
+- Webhook bindings support `public`, `signed`, and `trusted_user_header`
+  authentication modes.

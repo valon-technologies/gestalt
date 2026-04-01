@@ -1,51 +1,14 @@
-# Authentication and Tokens
+# Authentication And Tokens
 
-Gestalt has two separate auth layers. **Platform auth** controls who is allowed to use Gestalt. **Integration auth** controls which upstream credentials Gestalt uses on behalf of that subject.
+Gestalt has three separate credential layers:
 
-## Platform Auth Providers
+- platform auth for the human caller of the server
+- integration auth for outbound calls to upstream systems
+- API tokens for programmatic access to Gestalt itself
 
-| Provider | When to use |
-| --- | --- |
-| `none` | Local development, demos, or single-user deployments with no sign-in. |
-| `local` | Local development without an external identity provider. |
-| `google` | Google Workspace or Google account login. |
-| `oidc` | Any OIDC-compatible provider: Okta, Auth0, Azure AD, Keycloak, Firebase. |
+## Platform Auth
 
-### `none`
-
-```yaml
-auth:
-  provider: none
-```
-
-All requests are treated as coming from a single anonymous user.
-
-### `local`
-
-```yaml
-auth:
-  provider: local
-  config:
-    email: you@example.com
-```
-
-`email` is optional. Defaults to `local@gestalt.local`.
-
-### `google`
-
-```yaml
-auth:
-  provider: google
-  config:
-    client_id: ${GOOGLE_CLIENT_ID}
-    client_secret: secret://google-client-secret
-    allowed_domains:
-      - example.com
-```
-
-If `redirect_url` is omitted and `server.base_url` is set, Gestalt derives the login callback automatically. Google checks `email_verified` on every login and rejects unverified accounts.
-
-### `oidc`
+Platform auth is configured under `auth`.
 
 ```yaml
 auth:
@@ -53,89 +16,91 @@ auth:
   config:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
-    session_secret: secret://oidc-session-secret
-    allowed_domains:
-      - example.com
-    scopes:
-      - openid
-      - email
-      - profile
-    pkce: true
-    display_name: Company SSO
+    client_secret: ${OIDC_CLIENT_SECRET}
 ```
 
-OIDC checks `email_verified` when the claim is present and rejects unverified accounts.
+Built-in platform auth providers are:
 
-## Session Tokens
+- `none`
+- `local`
+- `google`
+- `oidc`
 
-Successful platform login produces a session token:
+The platform auth provider controls login to the UI, authenticated HTTP routes,
+and `/mcp`.
 
-- Stored in the `session_token` cookie for browser flows
-- Validated by the platform auth provider on each request
-- Used by the API when no bearer token is provided
+## Integration Auth
 
-The auth middleware checks the session cookie first, then the `Authorization: Bearer ...` header.
+Integration auth lives inside `integrations.*.plugin`.
+
+Examples:
+
+- `type: none` for public APIs
+- `type: oauth2` for user-scoped or shared OAuth flows
+- `type: manual` or `type: bearer` for manually entered credentials
+- `type: mcp_oauth` for upstream MCP servers that implement MCP OAuth
+
+OAuth connections are started through `POST /api/v1/auth/start-oauth` and
+completed by `GET /api/v1/auth/callback`.
+
+Manual connections are created through `POST /api/v1/auth/connect-manual`.
+
+## Stored Connections
+
+Gestalt stores integration credentials by:
+
+- user
+- integration
+- connection name
+- instance
+
+This lets one user keep multiple instances of the same integration, such as:
+
+- separate Jira sites
+- different tenant parameters
+- multiple named auth flows on one integration
 
 ## API Tokens
 
-Users mint long-lived API tokens for programmatic access.
+API tokens authenticate callers to Gestalt itself.
 
+Create them with:
+
+```sh
+gestalt tokens create --name automation
 ```
-POST /api/v1/tokens     Create a token. Plaintext is returned once.
-GET  /api/v1/tokens      List tokens for the current user.
-DELETE /api/v1/tokens/{id}  Revoke a single token.
-DELETE /api/v1/tokens       Revoke all tokens for the current user.
+
+Or through the HTTP API:
+
+```http
+POST /api/v1/tokens
+Authorization: Bearer <session-or-api-token>
+Content-Type: application/json
 ```
 
-Properties:
+They can be scoped to specific integrations and are accepted through:
 
-- Prefixed with `gst_api_`
-- Stored as a SHA-256 hash, not in plaintext
-- Resolve back to the owning user at request time
-- Default lifetime: 30 days, configurable via `server.api_token_ttl`
-- Authenticate to the same HTTP API as browser sessions
+- `Authorization: Bearer gst_api_...`
+- the `gestalt` client CLI
+- authenticated calls to `/mcp`
 
-The CLI uses a dedicated non-expiring API token for stored credentials after `gestalt auth login`. That avoids browser-style 24-hour session expiry for CLI usage while keeping the token revocable.
+`server.api_token_ttl` controls the token lifetime.
 
-## Integration Tokens
+## Session Cookies
 
-Integration tokens are the credentials Gestalt stores for upstream providers. They are separate from platform sessions and API tokens.
+When platform auth is enabled, the browser session is stored in a
+`session_token` cookie.
 
-Keyed by:
+- Cookies are `HttpOnly`.
+- Cookies use `SameSite=Lax`.
+- Cookies are marked `Secure` when `server.base_url` uses `https://`.
 
-- Subject (user or identity)
-- Integration name
-- Instance
+## Choosing An Auth Strategy
 
-The invocation broker resolves them based on the connection's `mode`:
-
-| Mode | Token lookup |
-| --- | --- |
-| `user` | Find the calling user's token. |
-| `identity` | Find the shared identity token. |
-| `either` | Try user first, then fall back to identity. |
-| `none` | No token lookup. |
-
-If an OAuth access token is near expiry and a refresh token exists, Gestalt refreshes it automatically and persists the new token.
-
-## Manual Auth
-
-Not every integration uses OAuth. Gestalt supports manual connection flows where a user provides a token or key directly.
-
-At the config layer:
-
-- Auth type `manual` on the connection
-- Or a plugin that implements `ManualAuthProvider`
-
-Manual auth still produces a stored integration token. The difference is how the token enters the system.
-
-## Instances and Ambiguity
-
-If there is exactly one stored connection for an integration, Gestalt uses it automatically.
-
-If there are multiple stored instances and the caller does not specify which one to use, invocation fails with an ambiguity error. Gestalt does not guess when more than one upstream account could apply.
-
-## No-Auth Mode
-
-When `auth.provider: none`, Gestalt skips authentication entirely. All requests are treated as coming from a single anonymous user.
+- Use `auth.provider: none` for local development and trusted internal
+  environments.
+- Use `local` for a single-user dev server that still exercises login flows.
+- Use `google` or `oidc` for normal multi-user deployments.
+- Use OAuth integration auth when each user should bring their own account.
+- Use `identity` mode when the server should call upstreams with one shared
+  service credential.

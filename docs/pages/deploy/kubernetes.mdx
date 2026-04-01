@@ -1,51 +1,27 @@
-import { Callout } from 'nextra/components'
+# Kubernetes
 
-# Deploy to Kubernetes
+The repository includes a Helm chart under `server/deploy/helm/gestalt`.
 
-The repo ships a Helm chart at `server/deploy/helm/gestalt`. It runs `gestaltd` as a single Deployment and exposes it through one Kubernetes Service.
-
-## What The Chart Actually Creates
-
-The chart creates:
-
-- one `Deployment`
-- one `Service`
-- an optional `Ingress`
-- an optional persistent volume claim for `/data`
-- an optional init container for `gestaltd init`
-
-There is no separate web Deployment. The web UI is served by the same `gestaltd` container as the API.
-
-## Important Runtime Detail
-
-The main container always starts with:
+## Install The Chart
 
 ```sh
-gestaltd serve --locked --config /etc/gestalt/config.yaml
+helm upgrade --install gestalt ./server/deploy/helm/gestalt \
+  --set image.tag=<version>
 ```
 
-That means locked startup is the normal Kubernetes path.
+## Important Chart Values
 
-## `pluginInit.enabled`
+| Value | Purpose |
+| --- | --- |
+| `config` | Rendered as `/etc/gestalt/config.yaml`. |
+| `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
+| `persistence` | PVC settings for SQLite or other local state. |
+| `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. |
+| `ingress` | Standard ingress settings. |
 
-The chart supports an init container behind `pluginInit.enabled`.
-
-When enabled, the init container:
-
-1. copies the config into a writable volume and runs `gestaltd init --config /etc/gestalt/config.yaml`
-2. leaves the config, `gestalt.lock.json`, and `.gestalt/` in a shared volume
-
-The main container then reads from that prepared state.
-
-When disabled, the main container still uses `serve --locked`, so your config must not require preparation unless you have already baked the lock state into the image or mounted it yourself.
-
-## Recommended Values Shape
-
-For production, prefer a SQL datastore and an explicit base URL.
+## Example Values
 
 ```yaml
-replicaCount: 2
-
 config:
   server:
     port: 8080
@@ -57,98 +33,33 @@ config:
       issuer_url: "${OIDC_ISSUER_URL}"
       client_id: "${OIDC_CLIENT_ID}"
       client_secret: "${OIDC_CLIENT_SECRET}"
-      session_secret: "${OIDC_SESSION_SECRET}"
-      display_name: "Company SSO"
+      redirect_url: "${OIDC_REDIRECT_URL}"
   datastore:
     provider: postgres
     config:
       dsn: "${DATABASE_URL}"
-  integrations: {}
 
 extraEnv:
   - name: GESTALT_BASE_URL
     value: "https://gestalt.example.com"
-  - name: GESTALT_ENCRYPTION_KEY
-    valueFrom:
-      secretKeyRef:
-        name: gestalt-secrets
-        key: encryption-key
-  - name: OIDC_ISSUER_URL
-    value: "https://login.example.com"
-  - name: OIDC_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: gestalt-secrets
-        key: oidc-client-id
-  - name: OIDC_CLIENT_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: gestalt-secrets
-        key: oidc-client-secret
-  - name: OIDC_SESSION_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: gestalt-secrets
-        key: oidc-session-secret
-  - name: DATABASE_URL
-    valueFrom:
-      secretKeyRef:
-        name: gestalt-secrets
-        key: database-url
 
 pluginInit:
   enabled: true
 ```
 
-<Callout>
-  The `file` secret provider works with Kubernetes volume-mounted secrets. Mount a Secret object as a volume and set `secrets.provider: file` with `config.dir` pointing at the mount path. Each key in the Secret becomes a file that `secret://key-name` resolves.
-</Callout>
+## When To Enable `pluginInit`
 
-## Install
+Enable the init container when your config uses:
 
-From the OCI registry (recommended):
+- `plugin.package`
+- `plugin.source`
+- runtime plugins
+- UI plugins
 
-```sh
-helm upgrade --install gestalt oci://ghcr.io/valon-technologies/charts/gestalt \
-  --version 0.0.1-alpha.16 \
-  -f values.yaml
-```
-
-Or from a local checkout of the repo:
+The init container copies the rendered config and runs:
 
 ```sh
-helm upgrade --install gestalt ./server/deploy/helm/gestalt -f values.yaml
+/gestaltd init --config /etc/gestalt/config.yaml
 ```
 
-The GHCR registry inherits the visibility of the GitHub repository. Authenticate with `helm registry login ghcr.io` if the repo is private.
-
-If you use ingress, make sure `config.server.base_url` matches the public URL exactly. That is what Gestalt uses for callback derivation.
-
-## SQLite Versus SQL
-
-The chart defaults to SQLite plus a persistent volume. That is acceptable for:
-
-- local clusters
-- demos
-- single-replica deployments
-
-It is not the right default for horizontal scaling. If you want more than one replica, move to Postgres or MySQL.
-
-## Health And Readiness
-
-The chart probes:
-
-- `/health` for liveness
-- `/ready` for readiness
-
-`/ready` stays non-ready until providers finish loading and the datastore is reachable.
-
-## When To Enable The Init Container
-
-Enable `pluginInit.enabled` when any of these are true:
-
-- an integration uses a remote OpenAPI spec
-- an integration uses a remote GraphQL schema
-- an integration or runtime uses `plugin.package` or `plugin.source`
-
-If none of those apply, you can keep it off and still use locked startup.
+The main container then starts in locked mode against the prepared state.
