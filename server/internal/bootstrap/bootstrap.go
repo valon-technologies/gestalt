@@ -837,22 +837,7 @@ func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*plugin
 		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
 	}
 
-	var allowedOperations map[string]*config.OperationOverride
-	if manifest.Provider.AllowedOperations != nil {
-		allowedOperations = make(map[string]*config.OperationOverride, len(manifest.Provider.AllowedOperations))
-		for name, override := range manifest.Provider.AllowedOperations {
-			if override == nil {
-				allowedOperations[name] = nil
-				continue
-			}
-			allowedOperations[name] = &config.OperationOverride{
-				Alias:       override.Alias,
-				Description: override.Description,
-			}
-		}
-	}
-
-	return manifest, allowedOperations, nil
+	return manifest, config.OperationOverridesFromManifest(manifest.Provider.AllowedOperations), nil
 }
 
 func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
@@ -1007,6 +992,7 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider,
 	handler := buildMCPOAuthHandler(conn, mp.MCPURL, regStore.get(), deps)
 	return []provider.BuildOption{provider.WithAuthHandler(handler)}
 }
+
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Provider
 	plan := buildPluginConnectionPlan(intg.Plugin, mp)
@@ -1029,58 +1015,52 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}, deps)
 	}
 
-	var (
-		prov core.Provider
-		err  error
-	)
-	switch {
-	case hasAPI && hasMCP:
-		apiProv, err := buildSpec(apiResolved, allowedOperations)
+	if !hasAPI {
+		prov, err := buildSpec(mcpResolved, allowedOperations)
 		if err != nil {
 			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 		}
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+	}
 
-		mcpProv, err := buildSpec(mcpResolved, nil)
-		if err != nil {
-			closeIfPossible(apiProv)
-			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
-		}
-		mcpUp, ok := mcpProv.(composite.MCPUpstream)
-		if !ok {
-			closeIfPossible(mcpProv, apiProv)
-			return nil, fmt.Errorf("build spec-loaded provider %q: unexpected mcp provider type %T", name, mcpProv)
-		}
-		type operationFilter interface {
+	apiProv, err := buildSpec(apiResolved, allowedOperations)
+	if err != nil {
+		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+	}
+
+	if !hasMCP {
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, apiProv, deps, regStore)
+	}
+
+	mcpProv, err := buildSpec(mcpResolved, nil)
+	if err != nil {
+		closeIfPossible(apiProv)
+		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+	}
+	mcpUp, ok := mcpProv.(composite.MCPUpstream)
+	if !ok {
+		closeIfPossible(mcpProv, apiProv)
+		return nil, fmt.Errorf("build spec-loaded provider %q: unexpected mcp provider type %T", name, mcpProv)
+	}
+
+	filtered := matchingAllowedOperations(allowedOperations, mcpUp.Catalog())
+	if len(filtered) > 0 {
+		filterable, ok := any(mcpUp).(interface {
 			FilterOperations(map[string]*config.OperationOverride) error
+		})
+		if !ok {
+			closeIfPossible(mcpUp, apiProv)
+			return nil, fmt.Errorf("build spec-loaded provider %q: unexpected non-filterable mcp provider type %T", name, mcpProv)
 		}
-		if filtered := matchingAllowedOperations(allowedOperations, mcpProv.Catalog()); len(filtered) > 0 {
-			filterable, ok := mcpProv.(operationFilter)
-			if !ok {
-				closeIfPossible(mcpUp, apiProv)
-				return nil, fmt.Errorf("build spec-loaded provider %q: unexpected non-filterable mcp provider type %T", name, mcpProv)
-			}
-			if err := filterable.FilterOperations(filtered); err != nil {
-				closeIfPossible(mcpUp, apiProv)
-				return nil, fmt.Errorf("build spec-loaded provider %q: filter mcp operations: %w", name, err)
-			}
-		}
-		prov = composite.New(name, apiProv, mcpUp)
-
-	case hasAPI:
-		prov, err = buildSpec(apiResolved, allowedOperations)
-		if err != nil {
-			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
-		}
-
-	case hasMCP:
-		prov, err = buildSpec(mcpResolved, allowedOperations)
-		if err != nil {
-			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+		if err := filterable.FilterOperations(filtered); err != nil {
+			closeIfPossible(mcpUp, apiProv)
+			return nil, fmt.Errorf("build spec-loaded provider %q: filter mcp operations: %w", name, err)
 		}
 	}
 
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), deps, regStore)
 }
+
 func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) {
 	if def == nil {
 		return
