@@ -525,6 +525,24 @@ func TestBootstrapInvoke_ConnectionSelection(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:           "does not treat plugin surface alias as absent",
+			wantConnection: config.PluginConnectionName,
+			buildPlugin: func(apiBase string) *config.PluginDef {
+				return &config.PluginDef{
+					BaseURL:       apiBase,
+					MCPConnection: config.PluginConnectionAlias,
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+						},
+					},
+					Operations: []config.InlineOperationDef{
+						{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+					},
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {

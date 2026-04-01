@@ -62,18 +62,21 @@ type resolvedSpecSurface struct {
 
 type pluginConnectionPlan struct {
 	pluginConnection config.ConnectionDef
+	connectionNames  map[string]struct{}
 	namedConnections map[string]config.ConnectionDef
 	surfaces         map[specSurface]resolvedSpecSurface
 }
 
 func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) pluginConnectionPlan {
+	connectionNames := namedConnectionNames(plugin, manifestProvider)
 	plan := pluginConnectionPlan{
 		pluginConnection: basePluginConnectionDef(plugin, manifestProvider),
+		connectionNames:  connectionNames,
 		namedConnections: make(map[string]config.ConnectionDef),
 		surfaces:         make(map[specSurface]resolvedSpecSurface),
 	}
 
-	for name := range namedConnectionNames(plugin, manifestProvider) {
+	for name := range connectionNames {
 		if name == "" || name == config.PluginConnectionName {
 			continue
 		}
@@ -123,10 +126,10 @@ func (plan pluginConnectionPlan) resolvedSurface(surface specSurface) (resolvedS
 }
 
 func (plan pluginConnectionPlan) soleNamedConnection() (string, bool) {
-	if len(plan.namedConnections) != 1 {
+	if len(plan.connectionNames) != 1 {
 		return "", false
 	}
-	for name := range plan.namedConnections {
+	for name := range plan.connectionNames {
 		if name == "" || name == config.PluginConnectionName {
 			return "", false
 		}
