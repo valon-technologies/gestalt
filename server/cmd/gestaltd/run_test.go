@@ -87,3 +87,27 @@ func TestBuildMCPSurfaceIncludesManifestDeclaredProviders(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildMCPSurfaceExcludesResolvedManifestWithoutProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				Plugin: &config.PluginDef{
+					Source: "github.com/testowner/plugins/example",
+					ResolvedManifest: &pluginmanifestv1.Manifest{
+						Source:  "github.com/testowner/plugins/example",
+						Version: "0.0.1",
+						Kinds:   []string{pluginmanifestv1.KindProvider},
+					},
+				},
+			},
+		},
+	}
+
+	surface := buildMCPSurface(cfg, bootstrap.BuildConnectionMaps(cfg))
+	if len(surface.providers) != 0 {
+		t.Fatalf("providers = %v, want none", surface.providers)
+	}
+}

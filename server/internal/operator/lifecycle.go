@@ -764,7 +764,6 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
-	plugin.ResolvedManifest = manifest
 	return nil
 }
 

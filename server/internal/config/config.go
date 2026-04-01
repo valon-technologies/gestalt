@@ -162,9 +162,12 @@ func (p *PluginDef) DeclaresMCP() bool {
 	if p.MCP || p.MCPURL != "" || p.OpenAPI != "" || p.GraphQLURL != "" || len(p.Operations) > 0 {
 		return true
 	}
+	if !p.HasResolvedManifest() {
+		return true
+	}
 	provider := p.ManifestProvider()
 	if provider == nil {
-		return true
+		return false
 	}
 	return provider.MCP || provider.IsSpecLoaded() || len(provider.Operations) > 0
 }
