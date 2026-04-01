@@ -23,19 +23,34 @@ func BuildConnectionMaps(cfg *config.Config) ConnectionMaps {
 	}
 
 	for name, intg := range cfg.Integrations {
-		meta := describeIntegrationConnections(intg)
-		maps.DefaultConnection[name] = meta.defaultConnection
-		maps.APIConnection[name] = meta.apiConnection
-		maps.MCPConnection[name] = meta.mcpConnection
+		defaultConnection := config.PluginConnectionName
+		apiConnection := config.PluginConnectionName
+		mcpConnection := config.PluginConnectionName
+
+		if intg.Plugin != nil {
+			plan := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestProvider())
+			if resolved, ok := plan.configuredSpecSurface(); ok {
+				defaultConnection = resolved.connectionName
+				apiConnection = resolved.connectionName
+			} else if plan.pluginConnection.Auth.Type == "" {
+				if name, ok := plan.soleNamedConnection(); ok {
+					defaultConnection = name
+					apiConnection = name
+				}
+			}
+			if resolved, ok := plan.resolvedSurface(specSurfaceMCP); ok {
+				mcpConnection = resolved.connectionName
+			} else {
+				mcpConnection = defaultConnection
+			}
+		}
+
+		maps.DefaultConnection[name] = defaultConnection
+		maps.APIConnection[name] = apiConnection
+		maps.MCPConnection[name] = mcpConnection
 	}
 
 	return maps
-}
-
-type integrationConnectionMeta struct {
-	defaultConnection string
-	apiConnection     string
-	mcpConnection     string
 }
 
 type resolvedSpecSurface struct {
@@ -118,42 +133,6 @@ func (plan pluginConnectionPlan) soleNamedConnection() (string, bool) {
 		return name, true
 	}
 	return "", false
-}
-
-func describeIntegrationConnections(intg config.IntegrationDef) integrationConnectionMeta {
-	meta := integrationConnectionMeta{
-		defaultConnection: config.PluginConnectionName,
-		apiConnection:     config.PluginConnectionName,
-		mcpConnection:     config.PluginConnectionName,
-	}
-
-	if intg.Plugin == nil {
-		return meta
-	}
-
-	plan := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestProvider())
-	if resolved, ok := plan.configuredSpecSurface(); ok {
-		meta.defaultConnection = resolved.connectionName
-		meta.apiConnection = resolved.connectionName
-	} else if plan.pluginConnection.Auth.Type == "" {
-		if name, ok := plan.soleNamedConnection(); ok {
-			meta.defaultConnection = name
-			meta.apiConnection = name
-		}
-	}
-
-	if resolved, ok := plan.resolvedSurface(specSurfaceMCP); ok {
-		meta.mcpConnection = resolved.connectionName
-	} else {
-		meta.mcpConnection = meta.defaultConnection
-	}
-	if meta.apiConnection == "" {
-		meta.apiConnection = meta.defaultConnection
-	}
-	if meta.mcpConnection == "" {
-		meta.mcpConnection = meta.defaultConnection
-	}
-	return meta
 }
 
 func surfaceURL(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface specSurface) string {
@@ -243,27 +222,24 @@ func basePluginConnectionDef(plugin *config.PluginDef, manifestProvider *pluginm
 		conn.Params = plugin.ConnectionParams
 	}
 	if manifestProvider != nil && manifestProvider.Auth != nil {
-		mergeConnectionDef(&conn, manifestTopLevelConnectionDef(manifestProvider))
+		mergeConnectionAuth(&conn.Auth, manifestAuthToConfig(manifestProvider.Auth))
 	}
 	return conn
 }
 
 func resolvedNamedConnectionDef(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) config.ConnectionDef {
-	conn, ok := explicitNamedConnectionDef(plugin, manifestProvider, name)
-	if ok {
-		return conn
-	}
-	return basePluginConnectionDef(plugin, manifestProvider)
-}
-
-func explicitNamedConnectionDef(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) (config.ConnectionDef, bool) {
 	conn := config.ConnectionDef{}
 	found := false
 
-	if manifestProvider != nil {
-		if _, ok := manifestProvider.Connections[name]; ok {
+	if manifestProvider != nil && manifestProvider.Connections != nil {
+		if def, ok := manifestProvider.Connections[name]; ok && def != nil {
 			found = true
-			mergeConnectionDef(&conn, manifestNamedConnectionDef(manifestProvider, name))
+			if def.Mode != "" {
+				conn.Mode = def.Mode
+			}
+			if def.Auth != nil {
+				mergeConnectionAuth(&conn.Auth, manifestAuthToConfig(def.Auth))
+			}
 		}
 	}
 	if plugin != nil {
@@ -273,29 +249,10 @@ func explicitNamedConnectionDef(plugin *config.PluginDef, manifestProvider *plug
 		}
 	}
 
-	return conn, found
-}
-
-func manifestTopLevelConnectionDef(provider *pluginmanifestv1.Provider) *config.ConnectionDef {
-	if provider == nil || provider.Auth == nil {
-		return nil
+	if found {
+		return conn
 	}
-	return &config.ConnectionDef{Auth: manifestAuthToConfig(provider.Auth)}
-}
-
-func manifestNamedConnectionDef(provider *pluginmanifestv1.Provider, name string) *config.ConnectionDef {
-	if provider == nil || provider.Connections == nil {
-		return nil
-	}
-	def, ok := provider.Connections[name]
-	if !ok || def == nil {
-		return nil
-	}
-	out := &config.ConnectionDef{Mode: def.Mode}
-	if def.Auth != nil {
-		out.Auth = manifestAuthToConfig(def.Auth)
-	}
-	return out
+	return basePluginConnectionDef(plugin, manifestProvider)
 }
 
 func manifestAuthToConfig(auth *pluginmanifestv1.ProviderAuth) config.ConnectionAuthDef {
