@@ -6,7 +6,7 @@ import { clearSession, getUserEmail } from "@/lib/auth";
 import { logout } from "@/lib/api";
 import { LOGIN_PATH } from "@/lib/constants";
 import { useTheme } from "@/hooks/use-theme";
-import { SunIcon, MoonIcon, SunMoonIcon } from "./icons";
+import { MoonIcon, SunIcon, SunMoonIcon } from "./icons";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -19,7 +19,6 @@ export default function Nav() {
   const pathname = usePathname();
   const email = getUserEmail();
   const { theme, setTheme } = useTheme();
-
   const ThemeIcon = theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : SunMoonIcon;
 
   async function handleLogout() {
@@ -66,6 +65,7 @@ export default function Nav() {
             }}
             className="flex h-8 w-8 items-center justify-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
             title={theme === "light" ? "Light mode" : theme === "dark" ? "Dark mode" : "System preference"}
+            aria-label="Toggle theme"
           >
             <ThemeIcon className="h-5 w-5" />
           </button>

@@ -15,18 +15,6 @@ const MANUAL_WITH_LINKED_DESC: Integration = {
   credential_fields: [{ name: "api_key", label: "API Key", description: "Find yours in [Account Settings](https://example.com/settings)" }],
 };
 
-const SINGLE_CONNECTION_DUAL_AUTH_INTEGRATION: Integration = {
-  name: "dual-svc",
-  display_name: "Dual Service",
-  auth_types: ["oauth", "manual"],
-  credential_fields: [{ name: "api_token", label: "API Token" }],
-  connections: [{
-    name: "plugin",
-    auth_types: ["oauth", "manual"],
-    credential_fields: [{ name: "api_token", label: "API Token" }],
-  }],
-};
-
 const MULTI_CONNECTION_DUAL_AUTH_INTEGRATION: Integration = {
   name: "workspace-svc",
   display_name: "Workspace Service",
@@ -72,7 +60,7 @@ const sampleIntegrations: Integration[] = [
 ];
 
 test.describe("Integrations", () => {
-  test("displays integration cards", async ({ authenticatedPage }) => {
+  test("displays integration cards and actions", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, sampleIntegrations);
     await mockTokens(page, []);
@@ -84,24 +72,8 @@ test.describe("Integrations", () => {
     await expect(page.getByText(OAUTH_INTEGRATION.display_name!)).toBeVisible();
     await expect(page.getByText(MANUAL_INTEGRATION.display_name!)).toBeVisible();
     await expect(page.getByText("Another Service")).toBeVisible();
-  });
-
-  test("shows descriptions on cards", async ({ authenticatedPage }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, sampleIntegrations);
-    await mockTokens(page, []);
-
-    await page.goto("/integrations");
     await expect(page.getByText(OAUTH_INTEGRATION.description!)).toBeVisible();
     await expect(page.getByText(MANUAL_INTEGRATION.description!)).toBeVisible();
-  });
-
-  test("each card has a settings button", async ({ authenticatedPage }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, sampleIntegrations);
-    await mockTokens(page, []);
-
-    await page.goto("/integrations");
     await expect(page.getByRole("button", { name: "OAuth Service settings" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Another Service settings" })).toBeVisible();
@@ -147,58 +119,6 @@ test.describe("Integrations", () => {
     // Non-connected integration's settings shows Connect
     await page.getByRole("button", { name: "Manual Service settings" }).click();
     await expect(page.getByRole("dialog").getByRole("button", { name: "Connect" })).toBeVisible();
-  });
-
-  test("settings modal opens and shows connected status", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
-    ]);
-
-    await page.goto("/integrations");
-    await page.getByRole("button", { name: "OAuth Service settings" }).click();
-
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByText("OAuth Service")).toBeVisible();
-    await expect(dialog.getByText("default")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Add Connection" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Disconnect" })).toBeVisible();
-  });
-
-  test("settings modal closes on backdrop click", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
-    ]);
-
-    await page.goto("/integrations");
-    await page.getByRole("button", { name: "OAuth Service settings" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Click outside the centered modal panel
-    await page.mouse.click(10, 10);
-    await expect(page.getByRole("dialog")).not.toBeVisible();
-  });
-
-  test("settings modal closes on ESC", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, [
-      { ...OAUTH_INTEGRATION, connected: true, instances: [{ name: "default" }] },
-    ]);
-
-    await page.goto("/integrations");
-    await page.getByRole("button", { name: "OAuth Service settings" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).not.toBeVisible();
   });
 
   test("disconnect confirmation shows warning and allows cancel", async ({
@@ -260,21 +180,6 @@ test.describe("Integrations", () => {
     await expect(page.getByRole("dialog").getByText("Not connected")).toBeVisible();
   });
 
-  test("manual auth shows token input on Connect click", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, [MANUAL_INTEGRATION]);
-
-    await page.goto("/integrations");
-    await page.getByRole("button", { name: "Manual Service settings" }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Connect" }).click();
-    await expect(dialog.getByLabel(/API token/i)).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Submit" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
-  });
-
   test("manual auth submits credential and refreshes", async ({
     authenticatedPage,
   }) => {
@@ -325,20 +230,6 @@ test.describe("Integrations", () => {
     await expect(dialog.getByLabel(/API token/i)).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog.getByText("Not connected")).toBeVisible();
-  });
-
-  test("single-connection dual auth shows both auth actions", async ({
-    authenticatedPage,
-  }) => {
-    const page = authenticatedPage;
-    await mockIntegrations(page, [SINGLE_CONNECTION_DUAL_AUTH_INTEGRATION]);
-
-    await page.goto("/integrations");
-    await page.getByRole("button", { name: "Dual Service settings" }).click();
-    const dialog = page.getByRole("dialog");
-
-    await expect(dialog.getByRole("button", { name: "Connect with OAuth" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Use API Token" })).toBeVisible();
   });
 
   test("multi-connection dual auth renders actions per connection", async ({

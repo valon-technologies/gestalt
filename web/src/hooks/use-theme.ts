@@ -1,43 +1,52 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
-function getStoredTheme(): Theme {
+function readTheme(): Theme {
   if (typeof window === "undefined") return "system";
   const stored = localStorage.getItem("theme");
-  if (stored === "light" || stored === "dark" || stored === "system") {
-    return stored;
-  }
-  return "system";
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : "system";
 }
 
-function subscribe(callback: () => void) {
-  window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
+function applyTheme(theme: Theme) {
+  if (typeof window === "undefined") return;
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.classList.toggle(
+    "dark",
+    theme === "dark" || (theme === "system" && prefersDark),
+  );
 }
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, getStoredTheme, () => "system");
+  const [theme, setThemeState] = useState<Theme>("system");
 
-  const setTheme = (newTheme: Theme) => {
-    localStorage.setItem("theme", newTheme);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncTheme = () => {
+      const current = readTheme();
+      setThemeState(current);
+      applyTheme(current);
+    };
+
+    syncTheme();
+    window.addEventListener("storage", syncTheme);
+    media.addEventListener("change", syncTheme);
+    return () => {
+      window.removeEventListener("storage", syncTheme);
+      media.removeEventListener("change", syncTheme);
+    };
+  }, []);
+
+  function setTheme(nextTheme: Theme) {
+    localStorage.setItem("theme", nextTheme);
+    setThemeState(nextTheme);
+    applyTheme(nextTheme);
     window.dispatchEvent(new Event("storage"));
-
-    if (newTheme === "system") {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (prefersDark) {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    } else if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  };
+  }
 
   return { theme, setTheme };
 }

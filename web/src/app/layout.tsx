@@ -27,21 +27,20 @@ export const metadata: Metadata = {
 
 const themeScript = `
   (function() {
-    const stored = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const getTheme = function() {
+      const stored = localStorage.getItem('theme');
+      return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+    };
+    const applyTheme = function(theme) {
+      const useDark = theme === 'dark' || (theme === 'system' && media.matches);
+      document.documentElement.classList.toggle('dark', useDark);
+    };
 
-    if (stored === 'dark' || (stored !== 'light' && prefersDark)) {
-      document.documentElement.classList.add('dark');
-    }
-
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      const current = localStorage.getItem('theme');
-      if (!current || current === 'system') {
-        if (e.matches) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
+    applyTheme(getTheme());
+    media.addEventListener('change', function() {
+      if (getTheme() === 'system') {
+        applyTheme('system');
       }
     });
   })();
