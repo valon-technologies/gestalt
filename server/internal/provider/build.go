@@ -3,7 +3,6 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -35,9 +34,7 @@ func WithEgressResolver(r *egress.Resolver) BuildOption {
 }
 
 // Build constructs a provider from a spec Definition and a ConnectionDef that
-// owns auth configuration. Display metadata (display_name, description, icon)
-// should be applied to the Definition before calling Build via
-// ApplyDisplayOverrides.
+// owns auth configuration.
 func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
@@ -204,21 +201,6 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	base.SetCatalog(cat)
 	return base, nil
-}
-
-// ApplyDisplayOverrides merges display metadata from an IntegrationDef into a
-// provider Definition. Call this before Build to set display_name, description,
-// and icon from the integration config.
-func ApplyDisplayOverrides(def *Definition, intg config.IntegrationDef) {
-	setStr(&def.DisplayName, intg.DisplayName)
-	setStr(&def.Description, intg.Description)
-	if intg.IconFile != "" {
-		if svg, err := ReadIconFile(intg.IconFile); err != nil {
-			slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
-		} else {
-			def.IconSVG = svg
-		}
-	}
 }
 
 func ReadIconFile(path string) (string, error) {

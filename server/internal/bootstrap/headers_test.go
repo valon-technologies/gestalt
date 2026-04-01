@@ -4,14 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -51,21 +48,12 @@ func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
 			},
 		},
 	}
-	manifestData, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	manifestPath := filepath.Join(t.TempDir(), "plugin.json")
-	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
 	cfg := validConfig()
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
-				IsDeclarative:        true,
-				ResolvedManifestPath: manifestPath,
+				IsDeclarative:    true,
+				ResolvedManifest: manifest,
 				Headers: map[string]string{
 					headerName: configValue,
 				},

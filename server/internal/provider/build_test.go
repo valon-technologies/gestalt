@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -281,71 +279,6 @@ func TestBuildExecuteRoutesQueryParamsUsingCatalogMetadata(t *testing.T) {
 	}
 	if _, ok := body["page_size"]; ok {
 		t.Fatalf("body should not contain page_size when parameter is routed to query")
-	}
-}
-
-func TestBuildAppliesIconFile(t *testing.T) {
-	t.Parallel()
-
-	const svg = `<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>`
-	iconPath := filepath.Join(t.TempDir(), "test.svg")
-	if err := os.WriteFile(iconPath, []byte(svg+"\n"), 0644); err != nil {
-		t.Fatalf("writing icon file: %v", err)
-	}
-
-	def := &Definition{
-		Provider:    "fileicon",
-		DisplayName: "File Icon Test",
-		BaseURL:     "https://api.example.com",
-		Auth:        AuthDef{Type: "manual"},
-		Operations: map[string]OperationDef{
-			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
-		},
-	}
-
-	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: iconPath})
-	prov, err := Build(def, config.ConnectionDef{})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	cp, ok := prov.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("expected CatalogProvider")
-	}
-	cat := cp.Catalog()
-	if cat == nil {
-		t.Fatal("expected non-nil Catalog")
-	}
-	if cat.IconSVG != svg {
-		t.Fatalf("expected icon from file, got %q", cat.IconSVG)
-	}
-}
-
-func TestBuildIconFileMissing(t *testing.T) {
-	t.Parallel()
-
-	def := &Definition{
-		Provider:    "badicon",
-		DisplayName: "Bad Icon Test",
-		BaseURL:     "https://api.example.com",
-		Auth:        AuthDef{Type: "manual"},
-		Operations: map[string]OperationDef{
-			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
-		},
-	}
-
-	ApplyDisplayOverrides(def, config.IntegrationDef{IconFile: "/nonexistent/icon.svg"})
-	prov, err := Build(def, config.ConnectionDef{})
-	if err != nil {
-		t.Fatalf("Build should succeed with missing icon: %v", err)
-	}
-	cp, ok := prov.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("expected CatalogProvider")
-	}
-	if cat := cp.Catalog(); cat != nil && cat.IconSVG != "" {
-		t.Errorf("expected empty IconSVG, got %q", cat.IconSVG)
 	}
 }
 

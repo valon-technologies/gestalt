@@ -19,7 +19,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -247,7 +246,7 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 		if intg.Plugin == nil {
 			continue
 		}
-		if !pluginDeclaresMCP(intg.Plugin) {
+		if !intg.Plugin.DeclaresMCP() {
 			continue
 		}
 		surface.providers = append(surface.providers, name)
@@ -264,24 +263,6 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 	}
 
 	return surface
-}
-
-func pluginDeclaresMCP(plugin *config.PluginDef) bool {
-	if plugin == nil {
-		return false
-	}
-	if plugin.MCP || plugin.MCPURL != "" || plugin.OpenAPI != "" || plugin.GraphQLURL != "" || len(plugin.Operations) > 0 {
-		return true
-	}
-	if plugin.ResolvedManifestPath == "" {
-		return true
-	}
-	_, manifest, err := pluginpkg.ReadManifestFile(plugin.ResolvedManifestPath)
-	if err != nil {
-		slog.Warn("reading plugin manifest", "path", plugin.ResolvedManifestPath, "error", err)
-		return true
-	}
-	return manifest.Provider != nil && (manifest.Provider.MCP || manifest.Provider.IsSpecLoaded() || len(manifest.Provider.Operations) > 0)
 }
 
 func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {

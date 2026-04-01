@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -56,8 +57,7 @@ type UIPluginDef struct {
 	Source  string `yaml:"source"`
 	Version string `yaml:"version"`
 
-	ResolvedAssetRoot    string `yaml:"-"`
-	ResolvedManifestPath string `yaml:"-"`
+	ResolvedAssetRoot string `yaml:"-"`
 }
 
 func (p *UIPluginDef) HasManagedArtifacts() bool {
@@ -123,10 +123,10 @@ type PluginDef struct {
 	MCP               bool                          `yaml:"mcp"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
-	ResolvedManifestPath string `yaml:"-"`
-	ResolvedIconFile     string `yaml:"-"`
-	IsDeclarative        bool   `yaml:"-"`
-	HostBinary           string `yaml:"-"`
+	ResolvedManifest *pluginmanifestv1.Manifest `yaml:"-"`
+	ResolvedIconFile string                     `yaml:"-"`
+	IsDeclarative    bool                       `yaml:"-"`
+	HostBinary       string                     `yaml:"-"`
 }
 
 func (p *PluginDef) IsInline() bool {
@@ -142,6 +142,34 @@ func (p *PluginDef) IsInline() bool {
 
 func (p *PluginDef) HasManagedArtifacts() bool {
 	return p != nil && (p.Package != "" || p.Source != "")
+}
+
+func (p *PluginDef) HasResolvedManifest() bool {
+	return p != nil && p.ResolvedManifest != nil
+}
+
+func (p *PluginDef) ManifestProvider() *pluginmanifestv1.Provider {
+	if p == nil || p.ResolvedManifest == nil {
+		return nil
+	}
+	return p.ResolvedManifest.Provider
+}
+
+func (p *PluginDef) DeclaresMCP() bool {
+	if p == nil {
+		return false
+	}
+	if p.MCP || p.MCPURL != "" || p.OpenAPI != "" || p.GraphQLURL != "" || len(p.Operations) > 0 {
+		return true
+	}
+	if !p.HasResolvedManifest() {
+		return true
+	}
+	provider := p.ManifestProvider()
+	if provider == nil {
+		return false
+	}
+	return provider.MCP || provider.IsSpecLoaded() || len(provider.Operations) > 0
 }
 
 type InlineOperationDef struct {

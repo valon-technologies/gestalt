@@ -2,10 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
-	"log/slog"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -55,7 +53,7 @@ func describeIntegrationConnections(intg config.IntegrationDef) integrationConne
 		return meta
 	}
 
-	manifestProvider := resolvedManifestProvider(intg.Plugin)
+	manifestProvider := intg.Plugin.ManifestProvider()
 	if resolved, ok := resolveConfiguredSpecSurface(intg.Plugin, manifestProvider); ok {
 		meta.defaultConnection = resolved.connectionName
 		meta.apiConnection = resolved.connectionName
@@ -151,21 +149,6 @@ func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanife
 		resolved.connection = resolvedNamedConnectionDef(plugin, manifestProvider, name)
 	}
 	return resolved, true
-}
-
-func resolvedManifestProvider(plugin *config.PluginDef) *pluginmanifestv1.Provider {
-	if plugin == nil || plugin.ResolvedManifestPath == "" {
-		return nil
-	}
-	_, manifest, err := pluginpkg.ReadManifestFile(plugin.ResolvedManifestPath)
-	if err != nil {
-		slog.Warn("reading plugin manifest for connection metadata", "path", plugin.ResolvedManifestPath, "error", err)
-		return nil
-	}
-	if manifest == nil {
-		return nil
-	}
-	return manifest.Provider
 }
 
 func manifestSurfaceConnectionName(provider *pluginmanifestv1.Provider, surface specSurface) string {
