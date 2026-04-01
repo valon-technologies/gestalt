@@ -17,6 +17,22 @@ import (
 
 const declarativeHTTPTimeout = 30 * time.Second
 
+type DeclarativeProviderOption func(*DeclarativeProvider)
+
+func WithDeclarativeMetadataOverrides(displayName, description, iconSVG string) DeclarativeProviderOption {
+	return func(p *DeclarativeProvider) {
+		if displayName != "" {
+			p.catalog.DisplayName = displayName
+		}
+		if description != "" {
+			p.catalog.Description = description
+		}
+		if iconSVG != "" {
+			p.catalog.IconSVG = iconSVG
+		}
+	}
+}
+
 type DeclarativeProvider struct {
 	catalog              *catalog.Catalog
 	opsByName            map[string]*catalog.CatalogOperation
@@ -27,7 +43,7 @@ type DeclarativeProvider struct {
 	connectionDefs       map[string]pluginmanifestv1.ProviderConnectionParam
 }
 
-func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *http.Client) (*DeclarativeProvider, error) {
+func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
@@ -82,6 +98,9 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		op := &p.catalog.Operations[i]
 		p.opsByName[op.ID] = op
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
 
 	return p, nil
 }
@@ -89,10 +108,6 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 func (p *DeclarativeProvider) Name() string        { return p.catalog.Name }
 func (p *DeclarativeProvider) DisplayName() string { return p.catalog.DisplayName }
 func (p *DeclarativeProvider) Description() string { return p.catalog.Description }
-
-func (p *DeclarativeProvider) SetDisplayName(s string) { p.catalog.DisplayName = s }
-func (p *DeclarativeProvider) SetDescription(s string) { p.catalog.Description = s }
-func (p *DeclarativeProvider) SetIconSVG(svg string)   { p.catalog.IconSVG = svg }
 
 func (p *DeclarativeProvider) Catalog() *catalog.Catalog { return p.catalog.Clone() }
 
@@ -218,14 +233,16 @@ func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*c
 	if p.auth == nil || p.auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
-	return nil, fmt.Errorf("declarative OAuth code exchange not yet implemented")
+
+	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
 }
 
 func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
 	if p.auth == nil || p.auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
-	return nil, fmt.Errorf("declarative OAuth token refresh not yet implemented")
+
+	return nil, fmt.Errorf("declarative provider OAuth refresh not implemented")
 }
 
 func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
@@ -233,11 +250,11 @@ func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionPa
 		return nil
 	}
 	defs := make(map[string]core.ConnectionParamDef, len(p.connectionDefs))
-	for name, def := range p.connectionDefs {
+	for name, cp := range p.connectionDefs {
 		defs[name] = core.ConnectionParamDef{
-			Required:    def.Required,
-			Description: def.Description,
-			From:        def.From,
+			Required:    cp.Required,
+			Description: cp.Description,
+			From:        cp.From,
 		}
 	}
 	return defs

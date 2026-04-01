@@ -32,6 +32,9 @@ type ExecConfig struct {
 	Args         []string
 	Env          map[string]string
 	Name         string
+	DisplayName  string
+	Description  string
+	IconSVG      string
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
@@ -83,7 +86,14 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 	}
 
 	client := proto.NewProviderPluginClient(proc.conn)
-	prov, err := NewRemoteProvider(ctx, client, cfg.Name, cfg.Config, WithCloser(proc))
+	prov, err := NewRemoteProvider(
+		ctx,
+		client,
+		cfg.Name,
+		cfg.Config,
+		WithCloser(proc),
+		WithMetadataOverrides(cfg.DisplayName, cfg.Description, cfg.IconSVG),
+	)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err

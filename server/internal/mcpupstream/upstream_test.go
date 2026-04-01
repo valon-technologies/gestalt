@@ -297,6 +297,54 @@ func TestUpstream_ProviderMetadata(t *testing.T) {
 	}
 }
 
+func TestUpstream_MetadataOverridesDecorateCatalogs(t *testing.T) {
+	t.Parallel()
+
+	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
+	t.Cleanup(ts.Close)
+
+	u, err := New(
+		context.Background(),
+		"clickhouse",
+		ts.URL,
+		core.ConnectionModeUser,
+		nil,
+		nil,
+		WithMetadataOverrides("Override", "Override description", "<svg/>"),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	staticCat := u.Catalog()
+	if staticCat == nil {
+		t.Fatal("expected static catalog")
+	}
+	if staticCat.DisplayName != "Override" {
+		t.Fatalf("DisplayName = %q, want %q", staticCat.DisplayName, "Override")
+	}
+	if staticCat.Description != "Override description" {
+		t.Fatalf("Description = %q, want %q", staticCat.Description, "Override description")
+	}
+	if staticCat.IconSVG != "<svg/>" {
+		t.Fatalf("IconSVG = %q, want %q", staticCat.IconSVG, "<svg/>")
+	}
+
+	sessionCat, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if sessionCat.DisplayName != "Override" {
+		t.Fatalf("session DisplayName = %q, want %q", sessionCat.DisplayName, "Override")
+	}
+	if sessionCat.Description != "Override description" {
+		t.Fatalf("session Description = %q, want %q", sessionCat.Description, "Override description")
+	}
+	if sessionCat.IconSVG != "<svg/>" {
+		t.Fatalf("session IconSVG = %q, want %q", sessionCat.IconSVG, "<svg/>")
+	}
+}
+
 func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	t.Parallel()
 

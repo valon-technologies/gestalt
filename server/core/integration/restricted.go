@@ -85,24 +85,6 @@ func (r *Restricted) DisplayName() string                 { return r.inner.Displ
 func (r *Restricted) Description() string                 { return r.inner.Description() }
 func (r *Restricted) ConnectionMode() core.ConnectionMode { return r.inner.ConnectionMode() }
 
-func (r *Restricted) SetDisplayName(s string) {
-	if v, ok := r.inner.(interface{ SetDisplayName(string) }); ok {
-		v.SetDisplayName(s)
-	}
-}
-
-func (r *Restricted) SetDescription(s string) {
-	if v, ok := r.inner.(interface{ SetDescription(string) }); ok {
-		v.SetDescription(s)
-	}
-}
-
-func (r *Restricted) SetIconSVG(s string) {
-	if v, ok := r.inner.(interface{ SetIconSVG(string) }); ok {
-		v.SetIconSVG(s)
-	}
-}
-
 func (r *Restricted) ListOperations() []core.Operation {
 	all := r.inner.ListOperations()
 	filtered := make([]core.Operation, 0, len(r.allowed))

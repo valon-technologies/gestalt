@@ -12,7 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
@@ -175,7 +174,7 @@ type preparedProviderStub struct {
 }
 
 func newPreparedProviderStub(name string, intg config.IntegrationDef, manifestPath string) (core.Provider, error) {
-	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	manifest, err := readManifest(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read prepared manifest: %w", err)
 	}

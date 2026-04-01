@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -154,18 +153,12 @@ func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanife
 }
 
 func resolvedManifestProvider(plugin *config.PluginDef) *pluginmanifestv1.Provider {
-	if plugin == nil || plugin.ResolvedManifestPath == "" {
-		return nil
-	}
-	_, manifest, err := pluginpkg.ReadManifestFile(plugin.ResolvedManifestPath)
+	manifest, err := readResolvedManifest(plugin)
 	if err != nil {
 		slog.Warn("reading plugin manifest for connection metadata", "path", plugin.ResolvedManifestPath, "error", err)
 		return nil
 	}
-	if manifest == nil {
-		return nil
-	}
-	return manifest.Provider
+	return providerFromManifest(manifest)
 }
 
 func manifestSurfaceConnectionName(provider *pluginmanifestv1.Provider, surface specSurface) string {

@@ -30,15 +30,15 @@ var (
 	_ core.OperationConnectionProvider = (*MergedProvider)(nil)
 )
 
-func NewMerged(name, displayName, desc string, providers ...core.Provider) (*MergedProvider, error) {
+func NewMerged(name, displayName, desc, iconSVG string, providers ...core.Provider) (*MergedProvider, error) {
 	bound := make([]BoundProvider, len(providers))
 	for i, p := range providers {
 		bound[i] = BoundProvider{Provider: p}
 	}
-	return NewMergedWithConnections(name, displayName, desc, bound...)
+	return NewMergedWithConnections(name, displayName, desc, iconSVG, bound...)
 }
 
-func NewMergedWithConnections(name, displayName, desc string, providers ...BoundProvider) (*MergedProvider, error) {
+func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers ...BoundProvider) (*MergedProvider, error) {
 	owned := make([]core.Provider, len(providers))
 	for i, p := range providers {
 		owned[i] = p.Provider
@@ -48,6 +48,7 @@ func NewMergedWithConnections(name, displayName, desc string, providers ...Bound
 			Name:        name,
 			DisplayName: displayName,
 			Description: desc,
+			IconSVG:     iconSVG,
 			Operations:  make([]catalog.CatalogOperation, 0),
 		},
 		opConn: make(map[string]string),
@@ -86,10 +87,6 @@ func (m *MergedProvider) ListOperations() []core.Operation {
 func (m *MergedProvider) ConnectionForOperation(op string) string {
 	return m.opConn[op]
 }
-
-func (m *MergedProvider) SetDisplayName(s string) { m.catalog.DisplayName = s }
-func (m *MergedProvider) SetDescription(s string) { m.catalog.Description = s }
-func (m *MergedProvider) SetIconSVG(svg string)   { m.catalog.IconSVG = svg }
 
 func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }
 
