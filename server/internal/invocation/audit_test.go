@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -262,30 +263,42 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 	}
 }
 
-func TestSlogAuditSink_UsesDefaultLoggerWhenWriterNil(t *testing.T) { //nolint:paralleltest // mutates slog.Default
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) { //nolint:paralleltest // swaps os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = orig
+		_ = r.Close()
+	})
 
 	sink := invocation.NewSlogAuditSink(nil)
 	sink.Log(context.Background(), core.AuditEntry{
 		Timestamp: time.Now(),
-		RequestID: "req-default",
+		RequestID: "req-stderr",
 		Source:    "binding:test-hook",
-		UserID:    "user-default",
+		UserID:    "user-stderr",
 		Provider:  "theta",
 		Operation: "read",
 		Allowed:   true,
 	})
+	_ = w.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("io.ReadAll: %v", err)
+	}
 
 	var record map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+	if err := json.Unmarshal(data, &record); err != nil {
 		t.Fatalf("failed to parse JSON log output: %v", err)
 	}
 
-	if record["request_id"] != "req-default" {
-		t.Errorf("expected request_id=req-default, got %v", record["request_id"])
+	if record["request_id"] != "req-stderr" {
+		t.Errorf("expected request_id=req-stderr, got %v", record["request_id"])
 	}
 	if record["log.type"] != "audit" {
 		t.Errorf("expected log.type=audit, got %v", record["log.type"])
