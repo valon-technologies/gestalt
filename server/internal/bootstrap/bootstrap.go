@@ -1136,6 +1136,7 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 				return fmt.Errorf("managed parameter %q conflicts with configured header", param.Name)
 			}
 			def.Headers[param.Name] = param.Value
+		case config.ManagedParameterInPath:
 		default:
 			return fmt.Errorf("unsupported managed parameter location %q", param.In)
 		}
@@ -1143,6 +1144,12 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 
 	for opName := range def.Operations {
 		op := def.Operations[opName]
+		for _, param := range params {
+			if param.In != config.ManagedParameterInPath {
+				continue
+			}
+			op.Path = strings.ReplaceAll(op.Path, "{"+param.Name+"}", param.Value)
+		}
 		filtered := op.Parameters[:0]
 		for _, param := range op.Parameters {
 			if isManagedOperationParameter(param, params) {

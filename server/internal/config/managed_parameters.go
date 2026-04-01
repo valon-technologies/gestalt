@@ -6,7 +6,10 @@ import (
 	"strings"
 )
 
-const ManagedParameterInHeader = "header"
+const (
+	ManagedParameterInHeader = "header"
+	ManagedParameterInPath   = "path"
+)
 
 func NormalizeManagedParameter(param ManagedParameterDef) ManagedParameterDef {
 	param.In = strings.ToLower(strings.TrimSpace(param.In))
@@ -60,8 +63,8 @@ func ValidateManagedParameters(params []ManagedParameterDef) error {
 		if param.In == "" {
 			return fmt.Errorf("managed_parameters[%d].in is required", i)
 		}
-		if param.In != ManagedParameterInHeader {
-			return fmt.Errorf("managed_parameters[%d].in %q must be %q", i, param.In, ManagedParameterInHeader)
+		if param.In != ManagedParameterInHeader && param.In != ManagedParameterInPath {
+			return fmt.Errorf("managed_parameters[%d].in %q must be %q or %q", i, param.In, ManagedParameterInHeader, ManagedParameterInPath)
 		}
 		if param.Name == "" {
 			return fmt.Errorf("managed_parameters[%d].name is required", i)

@@ -202,3 +202,115 @@ func TestBootstrap_ManagedParametersInjectHeadersAndHideOpenAPIParams(t *testing
 		t.Fatal("timed out waiting for upstream query param")
 	}
 }
+
+func TestBootstrap_ManagedParametersRewritePathParamsAndHideOpenAPIParams(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const managedAccountID = "acct-managed"
+
+	gotPath := make(chan string, 1)
+	gotPageSize := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- r.URL.Path
+		gotPageSize <- r.URL.Query().Get("page_size")
+		writeTestJSON(w, map[string]any{"messages": []any{}})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]string{"title": "Managed Path Parameters Test API"},
+			"servers": []any{map[string]string{"url": apiSrv.URL}},
+			"paths": map[string]any{
+				"/accounts/{account_id}/items": map[string]any{
+					"get": map[string]any{
+						"operationId": "list_items",
+						"summary":     "List items",
+						"parameters": []any{
+							map[string]any{
+								"name":     "account_id",
+								"in":       "path",
+								"required": true,
+								"schema":   map[string]any{"type": "string"},
+							},
+							map[string]any{
+								"name":   "page_size",
+								"in":     "query",
+								"schema": map[string]any{"type": "integer"},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	testutil.CloseOnCleanup(t, specSrv)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				OpenAPI: specSrv.URL,
+				ManagedParameters: []config.ManagedParameterDef{
+					{
+						In:    "path",
+						Name:  "account_id",
+						Value: managedAccountID,
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) != 1 {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	if got := cat.Operations[0].Path; got != "/accounts/acct-managed/items" {
+		t.Fatalf("catalog path = %q, want %q", got, "/accounts/acct-managed/items")
+	}
+	params := cat.Operations[0].Parameters
+	if len(params) != 1 || params[0].Name != "page_size" {
+		t.Fatalf("catalog params = %+v, want only page_size", params)
+	}
+
+	execResult, err := prov.Execute(ctx, "list_items", map[string]any{"page_size": 25}, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if execResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", execResult.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotPath:
+		if got != "/accounts/acct-managed/items" {
+			t.Fatalf("path = %q, want %q", got, "/accounts/acct-managed/items")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream path")
+	}
+
+	select {
+	case got := <-gotPageSize:
+		if got != "25" {
+			t.Fatalf("page_size = %q, want %q", got, "25")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream query param")
+	}
+}
