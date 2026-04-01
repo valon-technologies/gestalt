@@ -746,7 +746,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, err := buildProvider(ctx, name, intgDef, factories, deps, regStore)
+			result, err := buildProvider(ctx, name, intgDef, deps, regStore)
 			if err != nil {
 				slog.Warn("skipping provider", "provider", name, "error", err)
 				return
@@ -777,54 +777,86 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, ready, resolver, nil
 }
 
-func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, factories *FactoryRegistry, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil {
 		return nil, fmt.Errorf("integration %q has no plugin defined", name)
 	}
 
 	meta := resolveProviderMetadata(intg)
-
-	var result *ProviderBuildResult
-	var err error
-
-	switch {
-	case intg.Plugin.IsInline():
-		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-		}
-		manifest, err := config.InlineToManifest(name, intg.Plugin)
-		if err != nil {
-			return nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
-		}
-		result, err = buildManifestProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, intg.Plugin.AllowedOperations)
-		if err != nil {
-			return nil, err
-		}
-	case intg.Plugin.IsDeclarative:
-		pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-		}
-		if !intg.Plugin.HasResolvedManifest() {
-			return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
-		}
-		manifest := mergedManifestHeaders(intg.Plugin.ResolvedManifest, intg.Plugin)
-		result, err = buildManifestProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, manifestAllowedOperations(manifest.Provider))
-		if err != nil {
-			return nil, err
-		}
-	default:
-		result, err = buildExternalPluginProvider(ctx, name, intg, meta, deps, regStore)
-		if err != nil {
-			return nil, err
-		}
+	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
 	}
-	return result, nil
+
+	if intg.Plugin.IsInline() || intg.Plugin.IsDeclarative {
+		manifest, allowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
+		if err != nil {
+			return nil, err
+		}
+
+		if !manifest.Provider.IsSpecLoaded() {
+			declarative, err := pluginhost.NewDeclarativeProvider(
+				manifest,
+				nil,
+				pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("create provider %q: %w", name, err)
+			}
+			prov, err := applyAllowedOperations(name, intg, declarative)
+			if err != nil {
+				return nil, err
+			}
+			return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+		}
+
+		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, allowedOperations)
+	}
+
+	return buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
 }
 
-func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	pluginProv, pluginConfig, err := buildPluginProvider(ctx, name, intg, meta)
+func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*pluginmanifestv1.Manifest, map[string]*config.OperationOverride, error) {
+	if plugin.IsInline() {
+		manifest, err := config.InlineToManifest(name, plugin)
+		if err != nil {
+			return nil, nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
+		}
+		if manifest == nil || manifest.Provider == nil {
+			return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
+		}
+		return manifest, plugin.AllowedOperations, nil
+	}
+
+	if !plugin.HasResolvedManifest() {
+		return nil, nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
+	}
+
+	manifest := mergedManifestHeaders(plugin.ResolvedManifest, plugin)
+	if manifest == nil || manifest.Provider == nil {
+		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
+	}
+
+	var allowedOperations map[string]*config.OperationOverride
+	if manifest.Provider.AllowedOperations != nil {
+		allowedOperations = make(map[string]*config.OperationOverride, len(manifest.Provider.AllowedOperations))
+		for name, override := range manifest.Provider.AllowedOperations {
+			if override == nil {
+				allowedOperations[name] = nil
+				continue
+			}
+			allowedOperations[name] = &config.OperationOverride{
+				Alias:       override.Alias,
+				Description: override.Description,
+			}
+		}
+	}
+
+	return manifest, allowedOperations, nil
+}
+
+func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+	pluginProv, err := buildPluginProvider(ctx, name, intg, pluginConfig, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -968,30 +1000,6 @@ func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *p
 	return result, nil
 }
 
-func buildManifestProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
-	if manifest == nil || manifest.Provider == nil {
-		return nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
-	}
-
-	if !manifest.Provider.IsSpecLoaded() {
-		declarative, err := pluginhost.NewDeclarativeProvider(
-			manifest,
-			nil,
-			pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create provider %q: %w", name, err)
-		}
-		prov, err := applyAllowedOperations(name, intg, declarative)
-		if err != nil {
-			return nil, err
-		}
-		return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
-	}
-
-	return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, allowedOperations)
-}
-
 func mcpOAuthBuildOpts(conn config.ConnectionDef, mp *pluginmanifestv1.Provider, regStore *lazyRegStore, deps Deps) []provider.BuildOption {
 	if conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || mp.MCPURL == "" {
 		return nil
@@ -1123,24 +1131,6 @@ func firstProviderIconSVG(providers ...core.Provider) string {
 	return ""
 }
 
-func manifestAllowedOperations(provider *pluginmanifestv1.Provider) map[string]*config.OperationOverride {
-	if provider == nil || provider.AllowedOperations == nil {
-		return nil
-	}
-	result := make(map[string]*config.OperationOverride, len(provider.AllowedOperations))
-	for k, v := range provider.AllowedOperations {
-		if v == nil {
-			result[k] = nil
-			continue
-		}
-		result[k] = &config.OperationOverride{
-			Alias:       v.Alias,
-			Description: v.Description,
-		}
-	}
-	return result
-}
-
 func matchingAllowedOperations(allowed map[string]*config.OperationOverride, cat *catalog.Catalog) map[string]*config.OperationOverride {
 	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
 		return nil
@@ -1261,11 +1251,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, meta providerMetadata) (core.Provider, map[string]any, error) {
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
+func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata) (core.Provider, error) {
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
 		Command:      intg.Plugin.Command,
 		Args:         intg.Plugin.Args,
@@ -1279,9 +1265,9 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 		HostBinary:   intg.Plugin.HostBinary,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return prov, pluginConfig, nil
+	return prov, nil
 }
 
 func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
