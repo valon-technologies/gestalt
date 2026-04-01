@@ -41,8 +41,11 @@ func newTestStore(t *testing.T) *Store {
 	t.Cleanup(func() {
 		deleteAllDocs(t, store.client, datastore.UsersCollection)
 		deleteAllDocs(t, store.client, usersByEmailCollection)
+		deleteAllDocs(t, store.client, integrationTokenKeysCollection)
 		deleteAllDocs(t, store.client, datastore.IntegrationTokensCollection)
+		deleteAllDocs(t, store.client, apiTokensByHashCollection)
 		deleteAllDocs(t, store.client, datastore.APITokensCollection)
+		deleteAllDocs(t, store.client, datastore.StagedConnectionsCollection)
 		_ = store.Close()
 	})
 
