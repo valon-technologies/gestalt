@@ -166,7 +166,7 @@ type Artifact struct {
 	OS     string `json:"os"`
 	Arch   string `json:"arch"`
 	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 type Entrypoints struct {

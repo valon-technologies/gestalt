@@ -121,7 +121,7 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, srcManifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	_, srcManifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("decode %s: %w", manifestPath, err)
 	}
@@ -337,11 +337,10 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	manifest, err := cloneManifest(srcManifest)
+	manifest, err := buildSourceReleaseManifest(srcManifest, version, ".")
 	if err != nil {
-		return "", fmt.Errorf("clone manifest: %w", err)
+		return "", err
 	}
-	manifest.Version = version
 
 	data, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
@@ -351,10 +350,7 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		return "", err
 	}
 
-	if err := validateReleaseArtifactDigests(srcManifest, "."); err != nil {
-		return "", err
-	}
-	if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, true); err != nil {
+	if err := copyReleasePackageFiles(manifest, ".", stagingDir, true); err != nil {
 		return "", err
 	}
 
@@ -366,6 +362,27 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 
 	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
 	return archivePath, nil
+}
+
+func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {
+	manifest, err := cloneManifest(srcManifest)
+	if err != nil {
+		return nil, fmt.Errorf("clone manifest: %w", err)
+	}
+	manifest.Version = version
+
+	for i, artifact := range srcManifest.Artifacts {
+		digest, err := fileSHA256Hex(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
+		if err != nil {
+			return nil, fmt.Errorf("hash artifact %s: %w", artifact.Path, err)
+		}
+		if artifact.SHA256 != "" && artifact.SHA256 != digest {
+			return nil, fmt.Errorf("artifact %s sha256 mismatch: manifest=%s actual=%s", artifact.Path, artifact.SHA256, digest)
+		}
+		manifest.Artifacts[i].SHA256 = digest
+	}
+
+	return manifest, nil
 }
 
 func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
@@ -580,29 +597,6 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 	if err := copyPath(pluginpkg.RuntimeConfigSchemaPath, true); err != nil {
 		return err
 	}
-	return nil
-}
-
-func validateReleaseArtifactDigests(manifest *pluginmanifestv1.Manifest, sourceDir string) error {
-	if manifest == nil {
-		return nil
-	}
-
-	for _, artifact := range manifest.Artifacts {
-		cleanPath, err := normalizeReleasePath(artifact.Path)
-		if err != nil {
-			return err
-		}
-
-		digest, err := fileSHA256Hex(filepath.Join(sourceDir, filepath.FromSlash(cleanPath)))
-		if err != nil {
-			return fmt.Errorf("hash artifact %s: %w", artifact.Path, err)
-		}
-		if digest != artifact.SHA256 {
-			return fmt.Errorf("artifact %s sha256 mismatch: manifest=%s actual=%s", artifact.Path, artifact.SHA256, digest)
-		}
-	}
-
 	return nil
 }
 

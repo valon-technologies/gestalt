@@ -758,11 +758,18 @@ func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 
 	pluginDir := newPrebuiltHybridReleaseFixture(t, t.TempDir())
 
-	_, manifest, err := pluginpkg.ReadManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
+	_, manifest, err := pluginpkg.ReadSourceManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
 	if err != nil {
-		t.Fatalf("ReadManifestFile(plugin.json): %v", err)
+		t.Fatalf("ReadSourceManifestFile(plugin.json): %v", err)
 	}
-	manifest.Artifacts[0].SHA256 = sha256HexForTest("different-content")
+	manifest.Artifacts = []pluginmanifestv1.Artifact{
+		{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   prebuiltHybridArtifactPath,
+			SHA256: sha256HexForTest("different-content"),
+		},
+	}
 	writeReleaseTestManifest(t, pluginDir, manifest)
 
 	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.8-test")
@@ -941,10 +948,9 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   releaseSourceArtifactPath,
-				SHA256: sha256HexForTest("source-plugin"),
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: releaseSourceArtifactPath,
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
@@ -1050,10 +1056,9 @@ func newHybridReleaseFixture(t *testing.T, dir string) string {
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   releaseSourceArtifactPath,
-				SHA256: sha256HexForTest("source-plugin"),
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: releaseSourceArtifactPath,
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
@@ -1116,10 +1121,9 @@ func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   prebuiltHybridArtifactPath,
-				SHA256: sha256HexForTest("prebuilt-provider"),
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: prebuiltHybridArtifactPath,
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
@@ -1156,10 +1160,9 @@ func newSpecLoadedHybridReleaseFixture(t *testing.T, dir string) string {
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   prebuiltHybridArtifactPath,
-				SHA256: sha256HexForTest("spec-loaded-hybrid-provider"),
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: prebuiltHybridArtifactPath,
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{

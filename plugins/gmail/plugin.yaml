@@ -9,7 +9,6 @@ artifacts:
   - os: darwin
     arch: arm64
     path: artifacts/darwin/arm64/provider
-    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 entrypoints:
   provider:
     artifact_path: artifacts/darwin/arm64/provider
