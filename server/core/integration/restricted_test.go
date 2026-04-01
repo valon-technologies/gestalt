@@ -20,12 +20,33 @@ func (s *stubWithOps) ListOperations() []core.Operation {
 	return s.ops
 }
 
+func (s *stubWithOps) Catalog() *catalog.Catalog {
+	return restrictedTestCatalog(s.StubIntegration.N, s.ops)
+}
+
 func sampleOps() []core.Operation {
 	return []core.Operation{
 		{Name: "list_channels", Description: "List channels"},
 		{Name: "send_message", Description: "Send a message"},
 		{Name: "delete_message", Description: "Delete a message"},
 	}
+}
+
+func restrictedTestCatalog(name string, ops []core.Operation) *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       name,
+		Operations: make([]catalog.CatalogOperation, 0, len(ops)),
+	}
+	for _, op := range ops {
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+			ID:          op.Name,
+			Method:      op.Method,
+			Path:        "/" + op.Name,
+			Description: op.Description,
+		})
+	}
+	coreintegration.CompileSchemas(cat)
+	return cat
 }
 
 func TestListOperationsFilters(t *testing.T) {

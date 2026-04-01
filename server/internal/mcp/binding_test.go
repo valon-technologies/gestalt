@@ -37,8 +37,13 @@ type catalogProvider struct {
 	catalog *catalog.Catalog
 }
 
-func (p *catalogProvider) ListOperations() []core.Operation { return p.ops }
-func (p *catalogProvider) Catalog() *catalog.Catalog        { return p.catalog }
+func (p *catalogProvider) ListOperations() []core.Operation {
+	if p.ops != nil {
+		return p.ops
+	}
+	return coreintegration.OperationsList(p.catalog)
+}
+func (p *catalogProvider) Catalog() *catalog.Catalog { return p.catalog }
 
 type flatProvider struct {
 	coretesting.StubIntegration
@@ -46,6 +51,43 @@ type flatProvider struct {
 }
 
 func (p *flatProvider) ListOperations() []core.Operation { return p.ops }
+
+func testCatalogFromOperations(name string, ops []core.Operation) *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       name,
+		Operations: make([]catalog.CatalogOperation, 0, len(ops)),
+	}
+	for _, op := range ops {
+		params := make([]catalog.CatalogParameter, 0, len(op.Parameters))
+		for _, param := range op.Parameters {
+			params = append(params, catalog.CatalogParameter{
+				Name:        param.Name,
+				Type:        param.Type,
+				Description: param.Description,
+				Required:    param.Required,
+				Default:     param.Default,
+			})
+		}
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+			ID:          op.Name,
+			Method:      op.Method,
+			Path:        "/" + op.Name,
+			Title:       op.Name,
+			Description: op.Description,
+			Parameters:  params,
+			Transport:   catalog.TransportREST,
+		})
+	}
+	coreintegration.CompileSchemas(cat)
+	return cat
+}
+
+func newCatalogBackedProvider(stub coretesting.StubIntegration, ops []core.Operation) *catalogProvider {
+	return &catalogProvider{
+		StubIntegration: stub,
+		catalog:         testCatalogFromOperations(stub.N, ops),
+	}
+}
 
 func stubDatastoreWithToken() *coretesting.StubDatastore {
 	return &coretesting.StubDatastore{
@@ -255,7 +297,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	}
 }
 
-func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
+func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 	t.Parallel()
 
 	prov := &flatProvider{
@@ -278,34 +320,18 @@ func TestNewServer_ListsToolsFromFlatProvider(t *testing.T) {
 	})
 
 	tools := srv.ListTools()
-	if len(tools) != 2 {
-		t.Fatalf("expected 2 tools, got %d", len(tools))
-	}
-
-	listTool := tools["github_list_repos"]
-	if listTool == nil {
-		t.Fatal("expected github_list_repos tool")
-	}
-	if listTool.Tool.Annotations.ReadOnlyHint == nil || !*listTool.Tool.Annotations.ReadOnlyHint {
-		t.Fatal("expected ReadOnlyHint for GET method")
-	}
-
-	deleteTool := tools["github_delete_repo"]
-	if deleteTool == nil {
-		t.Fatal("expected github_delete_repo tool")
-	}
-	if deleteTool.Tool.Annotations.DestructiveHint == nil || !*deleteTool.Tool.Annotations.DestructiveHint {
-		t.Fatal("expected DestructiveHint for DELETE method")
+	if len(tools) != 0 {
+		t.Fatalf("expected 0 tools for flat-only provider, got %d", len(tools))
 	}
 }
 
 func TestNewServer_ToolNameConvention(t *testing.T) {
 	t.Parallel()
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
-		ops:             []core.Operation{{Name: "send_message", Method: http.MethodPost}},
-	}
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{N: "slack"},
+		[]core.Operation{{Name: "send_message", Method: http.MethodPost}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
@@ -333,8 +359,8 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	var invokedOp string
 	var invokedParams map[string]any
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{
 			N: "test",
 			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
 				invokedOp = op
@@ -345,8 +371,8 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 				}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "do_thing", Method: http.MethodPost}},
-	}
+		[]core.Operation{{Name: "do_thing", Method: http.MethodPost}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
@@ -390,10 +416,10 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 	var gotOperation string
 	var gotParams map[string]any
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             []core.Operation{{Name: "op", Method: http.MethodGet}},
-	}
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{N: "test"},
+		[]core.Operation{{Name: "op", Method: http.MethodGet}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -446,8 +472,8 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	t.Parallel()
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{
 			N: "test",
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return &core.OperationResult{
@@ -456,8 +482,8 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 				}, nil
 			},
 		},
-		ops: []core.Operation{{Name: "forbidden_op", Method: http.MethodGet}},
-	}
+		[]core.Operation{{Name: "forbidden_op", Method: http.MethodGet}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
@@ -485,15 +511,15 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	t.Parallel()
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{
 			N: "test",
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return nil, fmt.Errorf("connection timeout")
 			},
 		},
-		ops: []core.Operation{{Name: "flaky_op", Method: http.MethodGet}},
-	}
+		[]core.Operation{{Name: "flaky_op", Method: http.MethodGet}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
@@ -521,10 +547,10 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 	t.Parallel()
 
-	prov := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{N: "test"},
-		ops:             []core.Operation{{Name: "op", Method: http.MethodGet}},
-	}
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{N: "test"},
+		[]core.Operation{{Name: "op", Method: http.MethodGet}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := stubDatastoreWithToken()
@@ -551,14 +577,14 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 	t.Parallel()
 
-	prov1 := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{N: "allowed"},
-		ops:             []core.Operation{{Name: "op1", Method: http.MethodGet}},
-	}
-	prov2 := &flatProvider{
-		StubIntegration: coretesting.StubIntegration{N: "excluded"},
-		ops:             []core.Operation{{Name: "op2", Method: http.MethodGet}},
-	}
+	prov1 := newCatalogBackedProvider(
+		coretesting.StubIntegration{N: "allowed"},
+		[]core.Operation{{Name: "op1", Method: http.MethodGet}},
+	)
+	prov2 := newCatalogBackedProvider(
+		coretesting.StubIntegration{N: "excluded"},
+		[]core.Operation{{Name: "op2", Method: http.MethodGet}},
+	)
 
 	providers := testutil.NewProviderRegistry(t, prov1, prov2)
 	ds := stubDatastoreWithToken()
@@ -623,8 +649,13 @@ type directCallerProvider struct {
 	callFn           func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
-func (p *directCallerProvider) ListOperations() []core.Operation { return p.ops }
-func (p *directCallerProvider) Catalog() *catalog.Catalog        { return p.cat }
+func (p *directCallerProvider) ListOperations() []core.Operation {
+	if p.ops != nil {
+		return p.ops
+	}
+	return coreintegration.OperationsList(p.cat)
+}
+func (p *directCallerProvider) Catalog() *catalog.Catalog { return p.cat }
 func (p *directCallerProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if p.sessionCatalogFn != nil {
 		return p.sessionCatalogFn(ctx, token)

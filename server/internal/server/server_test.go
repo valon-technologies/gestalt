@@ -19,6 +19,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -2106,6 +2107,10 @@ func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
 	return s.ops
 }
 
+func (s *stubIntegrationWithOps) Catalog() *catalog.Catalog {
+	return serverTestCatalogFromOperations(s.StubIntegration.N, s.ops)
+}
+
 type stubIntegrationWithSessionCatalog struct {
 	stubIntegrationWithOps
 	catalog             *catalog.Catalog
@@ -2293,11 +2298,43 @@ func (s *stubNonOAuthProvider) DisplayName() string                 { return s.n
 func (s *stubNonOAuthProvider) Description() string                 { return "" }
 func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
 func (s *stubNonOAuthProvider) ListOperations() []core.Operation    { return s.ops }
+func (s *stubNonOAuthProvider) Catalog() *catalog.Catalog {
+	return serverTestCatalogFromOperations(s.name, s.ops)
+}
 func (s *stubNonOAuthProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	if s.execFn != nil {
 		return s.execFn(ctx, op, params, token)
 	}
 	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+}
+
+func serverTestCatalogFromOperations(name string, ops []core.Operation) *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       name,
+		Operations: make([]catalog.CatalogOperation, 0, len(ops)),
+	}
+	for _, op := range ops {
+		params := make([]catalog.CatalogParameter, 0, len(op.Parameters))
+		for _, param := range op.Parameters {
+			params = append(params, catalog.CatalogParameter{
+				Name:        param.Name,
+				Type:        param.Type,
+				Description: param.Description,
+				Required:    param.Required,
+				Default:     param.Default,
+			})
+		}
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+			ID:          op.Name,
+			Method:      op.Method,
+			Path:        "/" + op.Name,
+			Description: op.Description,
+			Parameters:  params,
+			Transport:   catalog.TransportREST,
+		})
+	}
+	coreintegration.CompileSchemas(cat)
+	return cat
 }
 
 func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {

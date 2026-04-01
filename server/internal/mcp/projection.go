@@ -5,7 +5,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -15,25 +14,6 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 	m := buildToolMap(cfg, provName, prov, cat)
 	for name := range m {
 		srv.AddTool(m[name].Tool, m[name].Handler)
-	}
-}
-
-func addFlatTools(srv *mcpserver.MCPServer, cfg Config, provName string, prov core.Provider) {
-	for _, op := range prov.ListOperations() {
-		name := toolName(cfg.ToolPrefixes, provName, op.Name)
-
-		opts := []mcpgo.ToolOption{mcpgo.WithDescription(op.Description)}
-		annot := mapAnnotations(coreintegration.AnnotationsFromMethod(op.Method))
-		annot.Title = op.Name
-		opts = append(opts, mcpgo.WithToolAnnotation(annot))
-
-		for _, param := range op.Parameters {
-			opts = append(opts, paramToOption(param))
-		}
-
-		tool := mcpgo.NewTool(name, opts...)
-		handler := makeHandler(cfg.Invoker, provName, op.Name, "")
-		srv.AddTool(tool, handler)
 	}
 }
 
@@ -129,28 +109,5 @@ func mapAnnotations(a catalog.OperationAnnotations) mcpgo.ToolAnnotation {
 		DestructiveHint: a.DestructiveHint,
 		IdempotentHint:  a.IdempotentHint,
 		OpenWorldHint:   a.OpenWorldHint,
-	}
-}
-
-func buildPropertyOpts(param core.Parameter) []mcpgo.PropertyOption {
-	opts := []mcpgo.PropertyOption{mcpgo.Description(param.Description)}
-	if param.Required {
-		opts = append(opts, mcpgo.Required())
-	}
-	return opts
-}
-
-func paramToOption(param core.Parameter) mcpgo.ToolOption {
-	switch coreintegration.NormalizeType(param.Type) {
-	case "integer", "number":
-		return mcpgo.WithNumber(param.Name, buildPropertyOpts(param)...)
-	case "boolean":
-		return mcpgo.WithBoolean(param.Name, buildPropertyOpts(param)...)
-	case "array":
-		return mcpgo.WithArray(param.Name, buildPropertyOpts(param)...)
-	case "object":
-		return mcpgo.WithObject(param.Name, buildPropertyOpts(param)...)
-	default:
-		return mcpgo.WithString(param.Name, buildPropertyOpts(param)...)
 	}
 }

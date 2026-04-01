@@ -9,12 +9,10 @@ import (
 )
 
 func capabilitiesForProvider(name string, prov core.Provider) []core.Capability {
-	if cp, ok := prov.(core.CatalogProvider); ok {
-		if cat := cp.Catalog(); cat != nil {
-			return capabilitiesFromCatalog(name, cat)
-		}
+	if cat := providerCatalog(prov); cat != nil {
+		return capabilitiesFromCatalog(name, cat)
 	}
-	return capabilitiesFromOperations(name, prov.ListOperations())
+	return nil
 }
 
 func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capability {
@@ -62,27 +60,22 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 	return caps
 }
 
-func capabilitiesFromOperations(name string, ops []core.Operation) []core.Capability {
-	caps := make([]core.Capability, 0, len(ops))
-	for _, op := range ops {
-		if strings.TrimSpace(op.Name) == "" {
-			continue
-		}
-
-		method := strings.ToUpper(strings.TrimSpace(op.Method))
-		transport := ""
-		if method != "" {
-			transport = catalog.TransportREST
-		}
-
-		caps = append(caps, core.Capability{
-			Provider:    name,
-			Operation:   op.Name,
-			Description: op.Description,
-			Parameters:  op.Parameters,
-			Method:      method,
-			Transport:   transport,
-		})
+func providerCatalog(prov core.Provider) *catalog.Catalog {
+	cp, ok := prov.(core.CatalogProvider)
+	if !ok {
+		return nil
 	}
-	return caps
+	return cp.Catalog()
+}
+
+func catalogHasOperation(cat *catalog.Catalog, operation string) bool {
+	if cat == nil || strings.TrimSpace(operation) == "" {
+		return false
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == operation {
+			return true
+		}
+	}
+	return false
 }
