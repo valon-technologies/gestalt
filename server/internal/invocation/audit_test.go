@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -259,5 +260,47 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 	}
 	if second["request_id"] != "req-denied" {
 		t.Errorf("expected second entry request_id=req-denied, got %v", second["request_id"])
+	}
+}
+
+func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) { //nolint:paralleltest // swaps os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = orig
+		_ = r.Close()
+	})
+
+	sink := invocation.NewSlogAuditSink(nil)
+	sink.Log(context.Background(), core.AuditEntry{
+		Timestamp: time.Now(),
+		RequestID: "req-stderr",
+		Source:    "binding:test-hook",
+		UserID:    "user-stderr",
+		Provider:  "theta",
+		Operation: "read",
+		Allowed:   true,
+	})
+	_ = w.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("io.ReadAll: %v", err)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatalf("failed to parse JSON log output: %v", err)
+	}
+
+	if record["request_id"] != "req-stderr" {
+		t.Errorf("expected request_id=req-stderr, got %v", record["request_id"])
+	}
+	if record["log.type"] != "audit" {
+		t.Errorf("expected log.type=audit, got %v", record["log.type"])
 	}
 }

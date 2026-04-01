@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		slog.Error("bigquery provider failed", "error", err)
 		os.Exit(1)
 	}
 }
