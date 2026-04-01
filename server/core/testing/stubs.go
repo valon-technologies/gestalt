@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
 type StubSecretManager struct {
@@ -232,6 +233,7 @@ type StubIntegration struct {
 	DN             string
 	Desc           string
 	ConnMode       core.ConnectionMode
+	CatalogVal     *catalog.Catalog
 	ExchangeCodeFn func(context.Context, string) (*core.TokenResponse, error)
 	ExecuteFn      func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
@@ -256,7 +258,7 @@ func (s *StubIntegration) ExchangeCode(ctx context.Context, code string) (*core.
 func (s *StubIntegration) RefreshToken(context.Context, string) (*core.TokenResponse, error) {
 	return nil, nil
 }
-func (s *StubIntegration) ListOperations() []core.Operation { return nil }
+func (s *StubIntegration) Catalog() *catalog.Catalog { return s.CatalogVal }
 func (s *StubIntegration) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	if s.ExecuteFn != nil {
 		return s.ExecuteFn(ctx, op, params, token)

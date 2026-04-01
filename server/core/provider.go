@@ -20,7 +20,7 @@ type Provider interface {
 	DisplayName() string
 	Description() string
 	ConnectionMode() ConnectionMode
-	ListOperations() []Operation
+	Catalog() *catalog.Catalog
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
@@ -34,12 +34,6 @@ type OAuthProvider interface {
 type ManualProvider interface {
 	Provider
 	SupportsManualAuth() bool
-}
-
-// CatalogProvider is an optional interface that providers can implement to
-// expose rich MCP-facing metadata beyond the flat Operation list.
-type CatalogProvider interface {
-	Catalog() *catalog.Catalog
 }
 
 // SessionCatalogProvider is an optional interface for providers whose MCP tool

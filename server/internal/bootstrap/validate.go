@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -90,11 +91,7 @@ func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
 		if err != nil {
 			continue
 		}
-		cp, ok := prov.(core.CatalogProvider)
-		if !ok {
-			continue
-		}
-		cat := cp.Catalog()
+		cat := prov.Catalog()
 		if cat == nil {
 			continue
 		}
@@ -198,7 +195,13 @@ func (p *preparedProviderStub) Name() string                        { return p.n
 func (p *preparedProviderStub) DisplayName() string                 { return p.displayName }
 func (p *preparedProviderStub) Description() string                 { return p.description }
 func (p *preparedProviderStub) ConnectionMode() core.ConnectionMode { return p.connectionMode }
-func (p *preparedProviderStub) ListOperations() []core.Operation    { return nil }
+func (p *preparedProviderStub) Catalog() *catalog.Catalog {
+	return &catalog.Catalog{
+		Name:        p.name,
+		DisplayName: p.displayName,
+		Description: p.description,
+	}
+}
 func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
 }

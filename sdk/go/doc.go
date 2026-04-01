@@ -24,12 +24,16 @@
 //		return gestalt.ConnectionModeNone
 //	}
 //
-//	func (p *MyProvider) ListOperations() []gestalt.Operation {
-//		return []gestalt.Operation{{
-//			Name:        "hello",
-//			Description: "Says hello",
-//			Method:      "GET",
-//		}}
+//	func (p *MyProvider) Catalog() *gestalt.Catalog {
+//		return &gestalt.Catalog{
+//			Name: "my_provider",
+//			Operations: []gestalt.CatalogOperation{{
+//				ID:          "hello",
+//				Description: "Says hello",
+//				Method:      "GET",
+//				Path:        "/hello",
+//			}},
+//		}
 //	}
 //
 //	func (p *MyProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*gestalt.OperationResult, error) {

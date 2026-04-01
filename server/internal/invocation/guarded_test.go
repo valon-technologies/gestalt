@@ -20,10 +20,6 @@ type stubProviderWithOps struct {
 	ops []core.Operation
 }
 
-func (s *stubProviderWithOps) ListOperations() []core.Operation {
-	return s.ops
-}
-
 func (s *stubProviderWithOps) Catalog() *catalog.Catalog {
 	cat := &catalog.Catalog{
 		Name:       s.StubIntegration.N,

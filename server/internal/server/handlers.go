@@ -132,10 +132,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			Instances:   instances,
 			AuthTypes:   authTypes,
 		}
-		if cp, ok := prov.(core.CatalogProvider); ok {
-			if cat := cp.Catalog(); cat != nil {
-				info.IconSVG = cat.IconSVG
-			}
+		if cat := prov.Catalog(); cat != nil {
+			info.IconSVG = cat.IconSVG
 		}
 		if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 			defs := cpp.ConnectionParamDefs()

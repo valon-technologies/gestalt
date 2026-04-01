@@ -208,8 +208,8 @@ func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get vendor provider: %v", err)
 	}
-	ops := prov.ListOperations()
-	if len(ops) == 0 {
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation from the openapi spec")
 	}
 
@@ -370,13 +370,13 @@ func TestInlineResponseMapping_AppliedToOpenAPIProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get mapped provider: %v", err)
 	}
-	ops := prov.ListOperations()
-	if len(ops) == 0 {
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation from the openapi spec")
 	}
 	found := false
-	for _, op := range ops {
-		if op.Name == "list_items" {
+	for _, op := range cat.Operations {
+		if op.ID == "list_items" {
 			found = true
 			break
 		}
@@ -417,7 +417,7 @@ func TestInlineResponseMapping_DataPathOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get simple provider: %v", err)
 	}
-	if len(prov.ListOperations()) == 0 {
+	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation")
 	}
 }
@@ -450,7 +450,7 @@ func TestInlineResponseMapping_NilDoesNotBreak(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get noop provider: %v", err)
 	}
-	if len(prov.ListOperations()) == 0 {
+	if cat := prov.Catalog(); cat == nil || len(cat.Operations) == 0 {
 		t.Fatal("expected at least one operation even without response_mapping")
 	}
 }
@@ -582,11 +582,7 @@ func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *test
 		t.Fatalf("Description = %q, want %q", prov.Description(), "Alpha Description")
 	}
 
-	cp, ok := prov.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("expected provider to implement core.CatalogProvider")
-	}
-	cat := cp.Catalog()
+	cat := prov.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
 	}

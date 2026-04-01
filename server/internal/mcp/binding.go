@@ -68,10 +68,8 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 			dynamicProviders = append(dynamicProviders, provName)
 		}
 
-		if cp, ok := prov.(core.CatalogProvider); ok {
-			if cat := cp.Catalog(); cat != nil {
-				addCatalogTools(srv, cfg, provName, cat, prov)
-			}
+		if cat := prov.Catalog(); cat != nil {
+			addCatalogTools(srv, cfg, provName, cat, prov)
 		}
 	}
 

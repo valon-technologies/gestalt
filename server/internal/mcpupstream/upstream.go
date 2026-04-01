@@ -9,7 +9,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
@@ -23,7 +22,6 @@ const httpTimeout = 30 * time.Second
 
 var (
 	_ core.Provider               = (*Upstream)(nil)
-	_ core.CatalogProvider        = (*Upstream)(nil)
 	_ core.SessionCatalogProvider = (*Upstream)(nil)
 	_ core.ManualProvider         = (*Upstream)(nil)
 )
@@ -94,9 +92,16 @@ func (u *Upstream) Name() string                        { return u.name }
 func (u *Upstream) DisplayName() string                 { return u.display }
 func (u *Upstream) Description() string                 { return u.desc }
 func (u *Upstream) ConnectionMode() core.ConnectionMode { return u.connMode }
-func (u *Upstream) ListOperations() []core.Operation    { return integration.OperationsList(u.cat) }
 func (u *Upstream) Catalog() *catalog.Catalog           { return u.decorateCatalog(u.cat) }
 func (u *Upstream) SupportsManualAuth() bool            { return true }
+
+func (u *Upstream) SetDisplayName(s string) { u.display = s }
+func (u *Upstream) SetDescription(s string) { u.desc = s }
+func (u *Upstream) SetIconSVG(svg string) {
+	if u.cat != nil {
+		u.cat.IconSVG = svg
+	}
+}
 
 func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return nil, core.ErrMCPOnly
@@ -142,7 +147,7 @@ func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride
 		return err
 	}
 	if u.cat != nil {
-		if err := policy.Validate(integration.OperationsList(u.cat)); err != nil {
+		if err := policy.ValidateCatalog(u.cat); err != nil {
 			return err
 		}
 	}
@@ -213,7 +218,7 @@ func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog
 	}
 
 	cat := buildCatalog(u.name, toolsResult.Tools)
-	if err := u.exposure.Validate(integration.OperationsList(cat)); err != nil {
+	if err := u.exposure.ValidateCatalog(cat); err != nil {
 		return nil, err
 	}
 	return u.decorateCatalog(u.exposure.ApplyCatalog(cat)), nil

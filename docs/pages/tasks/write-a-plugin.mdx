@@ -34,15 +34,21 @@ func (p *myProvider) DisplayName() string                 { return "My Tool" }
 func (p *myProvider) Description() string                 { return "A custom provider plugin" }
 func (p *myProvider) ConnectionMode() pluginsdk.ConnectionMode { return pluginsdk.ConnectionModeNone }
 
-func (p *myProvider) ListOperations() []pluginsdk.Operation {
-	return []pluginsdk.Operation{
-		{
-			Name:        "hello",
-			Description: "Return a greeting",
-			Method:      "GET",
-			Parameters: []pluginsdk.Parameter{
+func (p *myProvider) Catalog() *pluginsdk.Catalog {
+	return &pluginsdk.Catalog{
+		Name:        p.Name(),
+		DisplayName: p.DisplayName(),
+		Description: p.Description(),
+		Operations: []pluginsdk.CatalogOperation{
+			{
+				ID:          "hello",
+				Description: "Return a greeting",
+				Method:      "GET",
+				Path:        "/hello",
+				Parameters: []pluginsdk.CatalogParameter{
 				{Name: "name", Type: "string", Description: "Name to greet", Required: true},
 			},
+		},
 		},
 	}
 }
@@ -105,6 +111,8 @@ git push origin plugin/my-tool/v0.1.0
 
 ## Configure and run
 
+Plugin discovery is catalog-driven. `Catalog()` is the single source of truth for operation ids, parameter metadata, and descriptions.
+
 Reference the plugin in your Gestalt config:
 
 ```yaml
@@ -141,6 +149,7 @@ The SDK supports several optional interfaces beyond the core `Provider`:
 | Interface | Purpose |
 |---|---|
 | `ProviderStarter` | Receive integration name and config at startup. |
+| `SessionCatalogProvider` | Return request-scoped catalog metadata after a user is connected. |
 | `ManualAuthProvider` | Opt into manual credential connection. |
 | `ConfigSchemaProvider` | Advertise a JSON Schema for the `plugin.config` block. |
 | `ConnectionParamProvider` | Define parameters required to connect (shown in the UI). |

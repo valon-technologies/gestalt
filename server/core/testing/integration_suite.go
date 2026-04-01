@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
 // RunIntegrationTests validates an Integration implementation against the
@@ -96,14 +97,17 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 	})
 
-	t.Run("ListOperations", func(t *testing.T) {
-		ops := integration.ListOperations()
-		if len(ops) == 0 {
-			t.Fatal("ListOperations returned empty list")
+	t.Run("Catalog", func(t *testing.T) {
+		cat := integration.Catalog()
+		if cat == nil {
+			t.Fatal("Catalog returned nil")
 		}
-		for i, op := range ops {
-			if op.Name == "" {
-				t.Errorf("operation[%d].Name is empty", i)
+		if len(cat.Operations) == 0 {
+			t.Fatal("Catalog returned empty operations")
+		}
+		for i, op := range cat.Operations {
+			if op.ID == "" {
+				t.Errorf("operation[%d].ID is empty", i)
 			}
 			if op.Method == "" {
 				t.Errorf("operation[%d].Method is empty", i)
@@ -113,14 +117,18 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 
 	t.Run("Execute", func(t *testing.T) {
 		ctx := context.Background()
-		ops := integration.ListOperations()
-		if len(ops) == 0 {
+		cat := integration.Catalog()
+		if cat == nil || len(cat.Operations) == 0 {
 			t.Skip("no operations to execute")
 		}
+		firstOp := firstExecutableOperation(cat)
+		if firstOp == nil {
+			t.Skip("no executable operations in catalog")
+		}
 
-		result, err := integration.Execute(ctx, ops[0].Name, map[string]any{}, "valid-bearer-token")
+		result, err := integration.Execute(ctx, firstOp.ID, map[string]any{}, "valid-bearer-token")
 		if err != nil {
-			t.Fatalf("Execute(%q): %v", ops[0].Name, err)
+			t.Fatalf("Execute(%q): %v", firstOp.ID, err)
 		}
 		if result == nil {
 			t.Fatal("Execute returned nil")
@@ -134,4 +142,16 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 			t.Error("Execute(nonexistent-operation): expected error, got nil")
 		}
 	})
+}
+
+func firstExecutableOperation(cat *catalog.Catalog) *catalog.CatalogOperation {
+	if cat == nil {
+		return nil
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID != "" {
+			return &cat.Operations[i]
+		}
+	}
+	return nil
 }

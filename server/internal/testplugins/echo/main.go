@@ -13,6 +13,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -54,10 +55,19 @@ func (p *echoProvider) Name() string                        { return "echo" }
 func (p *echoProvider) DisplayName() string                 { return "Echo" }
 func (p *echoProvider) Description() string                 { return "Echoes back the input parameters" }
 func (p *echoProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeNone }
-
-func (p *echoProvider) ListOperations() []core.Operation {
-	return []core.Operation{
-		{Name: "echo", Description: "Echo back input params as JSON", Method: http.MethodPost},
+func (p *echoProvider) Catalog() *catalog.Catalog {
+	return &catalog.Catalog{
+		Name:        p.Name(),
+		DisplayName: p.DisplayName(),
+		Description: p.Description(),
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "echo",
+				Description: "Echo back input params as JSON",
+				Method:      http.MethodPost,
+				Transport:   catalog.TransportPlugin,
+			},
+		},
 	}
 }
 

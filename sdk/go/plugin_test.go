@@ -2,6 +2,7 @@ package gestalt_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -17,14 +18,14 @@ type stubProvider struct {
 	displayName string
 	description string
 	connMode    gestalt.ConnectionMode
-	ops         []gestalt.Operation
+	catalog     *gestalt.Catalog
 }
 
 func (p *stubProvider) Name() string                           { return p.name }
 func (p *stubProvider) DisplayName() string                    { return p.displayName }
 func (p *stubProvider) Description() string                    { return p.description }
 func (p *stubProvider) ConnectionMode() gestalt.ConnectionMode { return p.connMode }
-func (p *stubProvider) ListOperations() []gestalt.Operation    { return p.ops }
+func (p *stubProvider) Catalog() *gestalt.Catalog              { return p.catalog }
 
 func (p *stubProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
 	return &gestalt.OperationResult{
@@ -57,6 +58,15 @@ type manualAuthStubProvider struct {
 }
 
 func (p *manualAuthStubProvider) SupportsManualAuth() bool { return true }
+
+type sessionCatalogStubProvider struct {
+	stubProvider
+	sessionCatalog *gestalt.Catalog
+}
+
+func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ string) (*gestalt.Catalog, error) {
+	return p.sessionCatalog, nil
+}
 
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
@@ -106,27 +116,23 @@ func TestProviderServerGetMetadata_ManualAuth(t *testing.T) {
 	}
 }
 
-func TestProviderServerListOperations(t *testing.T) {
+func TestProviderServerGetMetadata_StaticCatalog(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubProvider{
 		name:     "test-provider",
 		connMode: gestalt.ConnectionModeNone,
-		ops: []gestalt.Operation{
-			{
-				Name:        "list_items",
-				Description: "List all items",
-				Method:      http.MethodGet,
-				Parameters: []gestalt.Parameter{
-					{Name: "limit", Type: "integer", Description: "Max results", Required: false, Default: 10},
-				},
-			},
-			{
-				Name:        "create_item",
-				Description: "Create a new item",
-				Method:      http.MethodPost,
-				Parameters: []gestalt.Parameter{
-					{Name: "name", Type: "string", Description: "Item name", Required: true},
+		catalog: &gestalt.Catalog{
+			Name: "test-provider",
+			Operations: []gestalt.CatalogOperation{
+				{
+					ID:          "list_items",
+					Description: "List all items",
+					Method:      http.MethodGet,
+					Path:        "/items",
+					Parameters: []gestalt.CatalogParameter{
+						{Name: "limit", Type: "integer", Description: "Max results", Default: 10},
+					},
 				},
 			},
 		},
@@ -135,27 +141,56 @@ func TestProviderServerListOperations(t *testing.T) {
 	client := newProviderPluginClient(t, prov)
 	ctx := context.Background()
 
-	resp, err := client.ListOperations(ctx, &emptypb.Empty{})
+	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
-		t.Fatalf("ListOperations: %v", err)
+		t.Fatalf("GetMetadata: %v", err)
 	}
-	if len(resp.GetOperations()) != 2 {
-		t.Fatalf("len(Operations) = %d, want 2", len(resp.GetOperations()))
+	if meta.GetStaticCatalogJson() == "" {
+		t.Fatal("expected static catalog json")
+	}
+	var cat map[string]any
+	if err := json.Unmarshal([]byte(meta.GetStaticCatalogJson()), &cat); err != nil {
+		t.Fatalf("unmarshal static catalog: %v", err)
+	}
+	ops, ok := cat["operations"].([]any)
+	if !ok || len(ops) != 1 {
+		t.Fatalf("unexpected operations payload: %+v", cat["operations"])
+	}
+	first, ok := ops[0].(map[string]any)
+	if !ok || first["id"] != "list_items" {
+		t.Fatalf("unexpected first operation: %+v", ops[0])
+	}
+}
+
+func TestProviderServerGetSessionCatalog(t *testing.T) {
+	t.Parallel()
+
+	prov := &sessionCatalogStubProvider{
+		stubProvider: stubProvider{
+			name:     "test-provider",
+			connMode: gestalt.ConnectionModeUser,
+			catalog: &gestalt.Catalog{
+				Name: "test-provider",
+				Operations: []gestalt.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet, Path: "/static"},
+				},
+			},
+		},
+		sessionCatalog: &gestalt.Catalog{
+			Name: "test-provider",
+			Operations: []gestalt.CatalogOperation{
+				{ID: "session_op", Method: http.MethodPost, Path: "/session"},
+			},
+		},
 	}
 
-	op := resp.GetOperations()[0]
-	if op.GetName() != "list_items" {
-		t.Errorf("Operations[0].Name = %q, want %q", op.GetName(), "list_items")
+	client := newProviderPluginClient(t, prov)
+	resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
+	if err != nil {
+		t.Fatalf("GetSessionCatalog: %v", err)
 	}
-	if len(op.GetParameters()) != 1 {
-		t.Fatalf("len(Operations[0].Parameters) = %d, want 1", len(op.GetParameters()))
-	}
-	param := op.GetParameters()[0]
-	if param.GetName() != "limit" {
-		t.Errorf("param.Name = %q, want %q", param.GetName(), "limit")
-	}
-	if param.GetRequired() {
-		t.Errorf("param.Required = true, want false")
+	if resp.GetCatalogJson() == "" {
+		t.Fatal("expected session catalog json")
 	}
 }
 

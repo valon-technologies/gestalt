@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // ConnectionMode controls how a provider authenticates with its upstream
@@ -22,7 +23,7 @@ const (
 )
 
 // Provider is the core interface that every provider plugin must implement.
-// It declares metadata about the provider, lists the operations it supports,
+// It declares metadata about the provider, provides the discovery catalog,
 // and executes individual operations when called by the host.
 //
 // The token argument to Execute is a user OAuth token supplied by the host
@@ -32,8 +33,12 @@ type Provider interface {
 	DisplayName() string
 	Description() string
 	ConnectionMode() ConnectionMode
-	ListOperations() []Operation
+	Catalog() *Catalog
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
+}
+
+type SessionCatalogProvider interface {
+	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
 }
 
 // ProviderStarter is an optional interface that a [Provider] can implement
@@ -43,16 +48,60 @@ type ProviderStarter interface {
 	Start(ctx context.Context, name string, config map[string]any) error
 }
 
-// Operation describes a single invocable action exposed by a [Provider].
-// Method is an HTTP-like verb (GET, POST, etc.) used for categorization.
-type Operation struct {
-	Name        string
-	Description string
-	Method      string
-	Parameters  []Parameter
+const (
+	TransportMCPPassthrough = "mcp-passthrough"
+	TransportREST           = "rest"
+	TransportPlugin         = "plugin"
+)
+
+type Catalog struct {
+	Name        string             `json:"name"`
+	DisplayName string             `json:"displayName"`
+	Description string             `json:"description"`
+	IconSVG     string             `json:"iconSvg,omitempty"`
+	BaseURL     string             `json:"baseUrl,omitempty"`
+	AuthStyle   string             `json:"authStyle,omitempty"`
+	Headers     map[string]string  `json:"headers,omitempty"`
+	Operations  []CatalogOperation `json:"operations"`
 }
 
-// Parameter describes a single input to an [Operation].
+type CatalogOperation struct {
+	ID             string               `json:"id"`
+	ProviderID     string               `json:"providerId,omitempty"`
+	Method         string               `json:"method"`
+	Path           string               `json:"path"`
+	Title          string               `json:"title,omitempty"`
+	Description    string               `json:"description,omitempty"`
+	InputSchema    json.RawMessage      `json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage      `json:"outputSchema,omitempty"`
+	Annotations    OperationAnnotations `json:"annotations,omitempty"`
+	Parameters     []CatalogParameter   `json:"parameters,omitempty"`
+	RequiredScopes []string             `json:"requiredScopes,omitempty"`
+	Tags           []string             `json:"tags,omitempty"`
+	ReadOnly       bool                 `json:"readOnly,omitempty"`
+	Visible        *bool                `json:"visible,omitempty"`
+	Transport      string               `json:"transport,omitempty"`
+	Query          string               `json:"query,omitempty"`
+}
+
+type OperationAnnotations struct {
+	ReadOnlyHint    *bool `json:"readOnlyHint,omitempty"`
+	IdempotentHint  *bool `json:"idempotentHint,omitempty"`
+	DestructiveHint *bool `json:"destructiveHint,omitempty"`
+	OpenWorldHint   *bool `json:"openWorldHint,omitempty"`
+}
+
+type CatalogParameter struct {
+	Name        string `json:"name"`
+	WireName    string `json:"wireName,omitempty"`
+	Type        string `json:"type"`
+	Location    string `json:"location,omitempty"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	Default     any    `json:"default,omitempty"`
+}
+
+// Parameter describes a single input to a runtime [Capability].
 type Parameter struct {
 	Name        string
 	Type        string

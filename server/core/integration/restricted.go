@@ -30,12 +30,11 @@ func WithDescriptions(descs map[string]string) RestrictedOption {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider        = (*Restricted)(nil)
-	_ core.ManualProvider  = (*Restricted)(nil)
-	_ core.CatalogProvider = (*Restricted)(nil)
-	_ core.AuthTypeLister  = (*Restricted)(nil)
-	_ core.OAuthProvider   = (*restrictedOAuth)(nil)
-	_ core.ManualProvider  = (*restrictedOAuth)(nil)
+	_ core.Provider       = (*Restricted)(nil)
+	_ core.ManualProvider = (*Restricted)(nil)
+	_ core.AuthTypeLister = (*Restricted)(nil)
+	_ core.OAuthProvider  = (*restrictedOAuth)(nil)
+	_ core.ManualProvider = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -85,8 +84,22 @@ func (r *Restricted) DisplayName() string                 { return r.inner.Displ
 func (r *Restricted) Description() string                 { return r.inner.Description() }
 func (r *Restricted) ConnectionMode() core.ConnectionMode { return r.inner.ConnectionMode() }
 
-func (r *Restricted) ListOperations() []core.Operation {
-	return OperationsList(r.Catalog())
+func (r *Restricted) SetDisplayName(s string) {
+	if v, ok := r.inner.(interface{ SetDisplayName(string) }); ok {
+		v.SetDisplayName(s)
+	}
+}
+
+func (r *Restricted) SetDescription(s string) {
+	if v, ok := r.inner.(interface{ SetDescription(string) }); ok {
+		v.SetDescription(s)
+	}
+}
+
+func (r *Restricted) SetIconSVG(s string) {
+	if v, ok := r.inner.(interface{ SetIconSVG(string) }); ok {
+		v.SetIconSVG(s)
+	}
 }
 
 func (r *Restricted) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
@@ -108,11 +121,7 @@ func (r *Restricted) SupportsManualAuth() bool {
 }
 
 func (r *Restricted) Catalog() *catalog.Catalog {
-	cp, ok := r.inner.(core.CatalogProvider)
-	if !ok {
-		return nil
-	}
-	cat := cp.Catalog()
+	cat := r.inner.Catalog()
 	if cat == nil {
 		return nil
 	}

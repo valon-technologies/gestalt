@@ -16,10 +16,6 @@ type stubWithOps struct {
 	ops []core.Operation
 }
 
-func (s *stubWithOps) ListOperations() []core.Operation {
-	return s.ops
-}
-
 func (s *stubWithOps) Catalog() *catalog.Catalog {
 	return restrictedTestCatalog(s.StubIntegration.N, s.ops)
 }
@@ -49,7 +45,7 @@ func restrictedTestCatalog(name string, ops []core.Operation) *catalog.Catalog {
 	return cat
 }
 
-func TestListOperationsFilters(t *testing.T) {
+func TestCatalogFilters(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
@@ -58,10 +54,10 @@ func TestListOperationsFilters(t *testing.T) {
 	}
 
 	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": "", "send_message": ""})
-	ops := r.ListOperations()
+	ops := coreintegration.OperationsList(r.Catalog())
 
 	if len(ops) != 2 {
-		t.Fatalf("ListOperations: got %d ops, want 2", len(ops))
+		t.Fatalf("OperationsList: got %d ops, want 2", len(ops))
 	}
 	if ops[0].Name != "list_channels" {
 		t.Errorf("ops[0].Name: got %q, want %q", ops[0].Name, "list_channels")
@@ -71,7 +67,7 @@ func TestListOperationsFilters(t *testing.T) {
 	}
 }
 
-func TestListOperationsPreservesOrder(t *testing.T) {
+func TestCatalogPreservesOrder(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
@@ -80,10 +76,10 @@ func TestListOperationsPreservesOrder(t *testing.T) {
 	}
 
 	r := coreintegration.NewRestricted(inner, map[string]string{"delete_message": "", "list_channels": ""})
-	ops := r.ListOperations()
+	ops := coreintegration.OperationsList(r.Catalog())
 
 	if len(ops) != 2 {
-		t.Fatalf("ListOperations: got %d ops, want 2", len(ops))
+		t.Fatalf("OperationsList: got %d ops, want 2", len(ops))
 	}
 	if ops[0].Name != "list_channels" {
 		t.Errorf("ops[0].Name: got %q, want %q", ops[0].Name, "list_channels")
@@ -152,9 +148,9 @@ func TestRestrictedWithAliases(t *testing.T) {
 		"send":        "send_message",
 	})
 
-	ops := r.ListOperations()
+	ops := coreintegration.OperationsList(r.Catalog())
 	if len(ops) != 2 {
-		t.Fatalf("ListOperations: got %d ops, want 2", len(ops))
+		t.Fatalf("OperationsList: got %d ops, want 2", len(ops))
 	}
 
 	names := make(map[string]bool)
@@ -270,11 +266,7 @@ func TestCatalogFiltersOperations(t *testing.T) {
 		"op_gamma": "",
 	})
 
-	cp, ok := r.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("restricted provider does not implement CatalogProvider")
-	}
-	cat := cp.Catalog()
+	cat := r.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() returned nil")
 	}
@@ -321,11 +313,7 @@ func TestCatalogRenamesAliasedOperations(t *testing.T) {
 		"renamed_alpha": "op_alpha",
 	})
 
-	cp, ok := r.(core.CatalogProvider)
-	if !ok {
-		t.Fatal("restricted provider does not implement CatalogProvider")
-	}
-	cat := cp.Catalog()
+	cat := r.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() returned nil")
 	}

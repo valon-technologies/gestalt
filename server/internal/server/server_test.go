@@ -2103,10 +2103,6 @@ type stubIntegrationWithOps struct {
 	ops []core.Operation
 }
 
-func (s *stubIntegrationWithOps) ListOperations() []core.Operation {
-	return s.ops
-}
-
 func (s *stubIntegrationWithOps) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(s.StubIntegration.N, s.ops)
 }
@@ -2297,7 +2293,6 @@ func (s *stubNonOAuthProvider) Name() string                        { return s.n
 func (s *stubNonOAuthProvider) DisplayName() string                 { return s.name }
 func (s *stubNonOAuthProvider) Description() string                 { return "" }
 func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
-func (s *stubNonOAuthProvider) ListOperations() []core.Operation    { return s.ops }
 func (s *stubNonOAuthProvider) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(s.name, s.ops)
 }
@@ -4200,9 +4195,8 @@ type mcpPassthroughProvider struct {
 	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
-func (p *mcpPassthroughProvider) ListOperations() []core.Operation { return p.ops }
-func (p *mcpPassthroughProvider) Catalog() *catalog.Catalog        { return p.catVal }
-func (p *mcpPassthroughProvider) SupportsManualAuth() bool         { return true }
+func (p *mcpPassthroughProvider) Catalog() *catalog.Catalog { return p.catVal }
+func (p *mcpPassthroughProvider) SupportsManualAuth() bool  { return true }
 func (p *mcpPassthroughProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if p.callFn != nil {
 		return p.callFn(ctx, name, args)

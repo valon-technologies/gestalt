@@ -50,27 +50,25 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	if cpp, ok := s.provider.(ConnectionParamProvider); ok {
 		connParams = connectionParamDefsToProto(cpp.ConnectionParamDefs())
 	}
+	staticCatalog, err := catalogToJSON(s.provider.Catalog())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
+	}
 	var configSchema string
 	if csp, ok := s.provider.(ConfigSchemaProvider); ok {
 		configSchema = csp.ConfigSchemaJSON()
 	}
 	return &proto.ProviderMetadata{
-		Name:             s.provider.Name(),
-		DisplayName:      s.provider.DisplayName(),
-		Description:      s.provider.Description(),
-		ConnectionMode:   coreConnectionModeToProto(s.provider.ConnectionMode()),
-		ConnectionParams: connParams,
-		ConfigSchemaJson: configSchema,
-		AuthTypes:        authTypes(s.provider),
+		Name:                   s.provider.Name(),
+		DisplayName:            s.provider.DisplayName(),
+		Description:            s.provider.Description(),
+		ConnectionMode:         coreConnectionModeToProto(s.provider.ConnectionMode()),
+		ConnectionParams:       connParams,
+		StaticCatalogJson:      staticCatalog,
+		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
+		ConfigSchemaJson:       configSchema,
+		AuthTypes:              authTypes(s.provider),
 	}, nil
-}
-
-func (s *ProviderServer) ListOperations(_ context.Context, _ *emptypb.Empty) (*proto.ListOperationsResponse, error) {
-	ops, err := operationsToProto(s.provider.ListOperations())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode operations: %v", err)
-	}
-	return &proto.ListOperationsResponse{Operations: ops}, nil
 }
 
 func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
@@ -93,6 +91,25 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	}, nil
 }
 
+func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
+	scp, ok := s.provider.(SessionCatalogProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
+	}
+	if len(req.GetConnectionParams()) > 0 {
+		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
+	}
+	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
+	if err != nil {
+		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
+	}
+	raw, err := catalogToJSON(cat)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
+	}
+	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
+}
+
 func authTypes(p Provider) []string {
 	if atl, ok := p.(AuthTypeLister); ok {
 		return slices.Clone(atl.AuthTypes())
@@ -101,4 +118,9 @@ func authTypes(p Provider) []string {
 		return []string{"manual"}
 	}
 	return nil
+}
+
+func supportsSessionCatalog(p Provider) bool {
+	_, ok := p.(SessionCatalogProvider)
+	return ok
 }

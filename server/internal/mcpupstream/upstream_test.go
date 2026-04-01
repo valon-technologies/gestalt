@@ -101,19 +101,6 @@ func TestUpstream_DiscoverTools(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	ops := u.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(ops))
-	}
-
-	opNames := make(map[string]bool)
-	for _, op := range ops {
-		opNames[op.Name] = true
-	}
-	if !opNames["run_query"] || !opNames["list_databases"] {
-		t.Fatalf("unexpected operations: %v", ops)
-	}
-
 	cat := u.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
@@ -178,23 +165,15 @@ func TestUpstream_FilterOperations(t *testing.T) {
 		t.Fatalf("FilterOperations: %v", err)
 	}
 
-	ops := u.ListOperations()
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 operation, got %d", len(ops))
-	}
-	if ops[0].Name != "run_query" {
-		t.Fatalf("expected run_query, got %q", ops[0].Name)
-	}
-	if ops[0].Description != "Execute a SQL query" {
-		t.Fatalf("expected spec description, got %q", ops[0].Description)
-	}
-
 	cat := u.Catalog()
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 catalog operation, got %d", len(cat.Operations))
 	}
 	if cat.Operations[0].ID != "run_query" {
 		t.Fatalf("expected run_query in catalog, got %q", cat.Operations[0].ID)
+	}
+	if cat.Operations[0].Description != "Execute a SQL query" {
+		t.Fatalf("expected spec description, got %q", cat.Operations[0].Description)
 	}
 }
 
@@ -212,13 +191,13 @@ func TestUpstream_FilterOperationsWithOverride(t *testing.T) {
 		t.Fatalf("FilterOperations: %v", err)
 	}
 
-	ops := u.ListOperations()
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(ops))
+	cat := u.Catalog()
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
 	}
 
-	for _, op := range ops {
-		switch op.Name {
+	for _, op := range cat.Operations {
+		switch op.ID {
 		case "run_query":
 			if op.Description != "Custom query description" {
 				t.Errorf("run_query description: got %q, want override", op.Description)

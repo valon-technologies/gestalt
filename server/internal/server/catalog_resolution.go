@@ -16,10 +16,7 @@ type tokenResolver interface {
 }
 
 func resolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver tokenResolver, p *principal.Principal, defaultConnection string) (*catalog.Catalog, error) {
-	var staticCat *catalog.Catalog
-	if cp, ok := prov.(core.CatalogProvider); ok {
-		staticCat = cp.Catalog()
-	}
+	staticCat := prov.Catalog()
 
 	var sessionCat *catalog.Catalog
 	if scp, ok := prov.(core.SessionCatalogProvider); ok {
@@ -41,7 +38,7 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 	var merged *catalog.Catalog
 	switch {
 	case staticCat == nil && sessionCat == nil:
-		// fall through to synthesis
+		return nil, fmt.Errorf("provider %q does not expose a catalog", provName)
 	case staticCat != nil && sessionCat == nil:
 		merged = staticCat.Clone()
 	case staticCat == nil && sessionCat != nil:
@@ -57,10 +54,6 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 				merged.Operations = append(merged.Operations, sessionCat.Operations[i])
 			}
 		}
-	}
-
-	if merged == nil {
-		return nil, fmt.Errorf("provider %q does not expose a catalog", provName)
 	}
 
 	integration.CompileSchemas(merged)

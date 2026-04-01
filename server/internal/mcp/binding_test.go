@@ -37,20 +37,24 @@ type catalogProvider struct {
 	catalog *catalog.Catalog
 }
 
-func (p *catalogProvider) ListOperations() []core.Operation {
-	if p.ops != nil {
-		return p.ops
-	}
-	return coreintegration.OperationsList(p.catalog)
-}
 func (p *catalogProvider) Catalog() *catalog.Catalog { return p.catalog }
 
 type flatProvider struct {
 	coretesting.StubIntegration
-	ops []core.Operation
+	ops            []core.Operation
+	catalog        *catalog.Catalog
+	disableCatalog bool
 }
 
-func (p *flatProvider) ListOperations() []core.Operation { return p.ops }
+func (p *flatProvider) Catalog() *catalog.Catalog {
+	if p.disableCatalog {
+		return nil
+	}
+	if p.catalog != nil {
+		return p.catalog
+	}
+	return testCatalogFromOperations(p.StubIntegration.N, p.ops)
+}
 
 func testCatalogFromOperations(name string, ops []core.Operation) *catalog.Catalog {
 	cat := &catalog.Catalog{
@@ -302,6 +306,7 @@ func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 
 	prov := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{N: "github"},
+		disableCatalog:  true,
 		ops: []core.Operation{
 			{Name: "list_repos", Description: "List repositories", Method: http.MethodGet, Parameters: []core.Parameter{
 				{Name: "org", Type: "string", Description: "Organization name", Required: true},
@@ -649,12 +654,6 @@ type directCallerProvider struct {
 	callFn           func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
-func (p *directCallerProvider) ListOperations() []core.Operation {
-	if p.ops != nil {
-		return p.ops
-	}
-	return coreintegration.OperationsList(p.cat)
-}
 func (p *directCallerProvider) Catalog() *catalog.Catalog { return p.cat }
 func (p *directCallerProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if p.sessionCatalogFn != nil {

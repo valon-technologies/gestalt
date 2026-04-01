@@ -15,7 +15,6 @@ import type { GetSessionCatalogResponse } from "./plugin";
 import type { GetSessionCatalogRequest } from "./plugin";
 import type { OperationResult } from "./plugin";
 import type { ExecuteRequest } from "./plugin";
-import type { ListOperationsResponse } from "./plugin";
 import type { StartProviderResponse } from "./plugin";
 import type { StartProviderRequest } from "./plugin";
 import { stackIntercept } from "@protobuf-ts/runtime-rpc";
@@ -35,10 +34,6 @@ export interface IProviderPluginClient {
      * @generated from protobuf rpc: StartProvider
      */
     startProvider(input: StartProviderRequest, options?: RpcOptions): UnaryCall<StartProviderRequest, StartProviderResponse>;
-    /**
-     * @generated from protobuf rpc: ListOperations
-     */
-    listOperations(input: Empty, options?: RpcOptions): UnaryCall<Empty, ListOperationsResponse>;
     /**
      * @generated from protobuf rpc: Execute
      */
@@ -76,31 +71,24 @@ export class ProviderPluginClient implements IProviderPluginClient, ServiceInfo 
         return stackIntercept<StartProviderRequest, StartProviderResponse>("unary", this._transport, method, opt, input);
     }
     /**
-     * @generated from protobuf rpc: ListOperations
-     */
-    listOperations(input: Empty, options?: RpcOptions): UnaryCall<Empty, ListOperationsResponse> {
-        const method = this.methods[2], opt = this._transport.mergeOptions(options);
-        return stackIntercept<Empty, ListOperationsResponse>("unary", this._transport, method, opt, input);
-    }
-    /**
      * @generated from protobuf rpc: Execute
      */
     execute(input: ExecuteRequest, options?: RpcOptions): UnaryCall<ExecuteRequest, OperationResult> {
-        const method = this.methods[3], opt = this._transport.mergeOptions(options);
+        const method = this.methods[2], opt = this._transport.mergeOptions(options);
         return stackIntercept<ExecuteRequest, OperationResult>("unary", this._transport, method, opt, input);
     }
     /**
      * @generated from protobuf rpc: GetSessionCatalog
      */
     getSessionCatalog(input: GetSessionCatalogRequest, options?: RpcOptions): UnaryCall<GetSessionCatalogRequest, GetSessionCatalogResponse> {
-        const method = this.methods[4], opt = this._transport.mergeOptions(options);
+        const method = this.methods[3], opt = this._transport.mergeOptions(options);
         return stackIntercept<GetSessionCatalogRequest, GetSessionCatalogResponse>("unary", this._transport, method, opt, input);
     }
     /**
      * @generated from protobuf rpc: PostConnect
      */
     postConnect(input: PostConnectRequest, options?: RpcOptions): UnaryCall<PostConnectRequest, PostConnectResponse> {
-        const method = this.methods[5], opt = this._transport.mergeOptions(options);
+        const method = this.methods[4], opt = this._transport.mergeOptions(options);
         return stackIntercept<PostConnectRequest, PostConnectResponse>("unary", this._transport, method, opt, input);
     }
 }

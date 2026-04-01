@@ -61,11 +61,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 }
 
 func providerCatalog(prov core.Provider) *catalog.Catalog {
-	cp, ok := prov.(core.CatalogProvider)
-	if !ok {
-		return nil
-	}
-	return cp.Catalog()
+	return prov.Catalog()
 }
 
 func catalogHasOperation(cat *catalog.Catalog, operation string) bool {
