@@ -114,7 +114,6 @@ func TestResolvedNamedConnectionDefMergesNamedDefsWithoutTopLevelInheritance(t *
 		t.Fatalf("client_id = %q, want empty", got.Auth.ClientID)
 	}
 }
-
 func TestResolveSpecSurfaceResolvesManifestRelativeSpecPath(t *testing.T) {
 	t.Parallel()
 
@@ -133,81 +132,5 @@ func TestResolveSpecSurfaceResolvesManifestRelativeSpecPath(t *testing.T) {
 	want := filepath.Join("/tmp", "plugins", "notion", "openapi.yaml")
 	if resolved.url != want {
 		t.Fatalf("url = %q, want %q", resolved.url, want)
-	}
-}
-
-func TestBuildConnectionMaps(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name              string
-		plugin            *config.PluginDef
-		wantDefault       string
-		wantAPIConnection string
-		wantMCPConnection string
-	}{
-		{
-			name: "uses primary and mcp surface connections",
-			plugin: &config.PluginDef{
-				OpenAPI:           "https://example.com/openapi.json",
-				OpenAPIConnection: "api",
-				MCPURL:            "https://example.com/mcp",
-				MCPConnection:     "mcp",
-				Connections: map[string]*config.ConnectionDef{
-					"api": {},
-					"mcp": {},
-				},
-			},
-			wantDefault:       "api",
-			wantAPIConnection: "api",
-			wantMCPConnection: "mcp",
-		},
-		{
-			name: "falls back to sole named connection without base auth",
-			plugin: &config.PluginDef{
-				Connections: map[string]*config.ConnectionDef{
-					"api": {},
-				},
-			},
-			wantDefault:       "api",
-			wantAPIConnection: "api",
-			wantMCPConnection: "api",
-		},
-		{
-			name: "does not fall back to sole named connection with base auth",
-			plugin: &config.PluginDef{
-				Auth: &config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeOAuth2},
-				Connections: map[string]*config.ConnectionDef{
-					"api": {},
-				},
-			},
-			wantDefault:       config.PluginConnectionName,
-			wantAPIConnection: config.PluginConnectionName,
-			wantMCPConnection: config.PluginConnectionName,
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := &config.Config{
-				Integrations: map[string]config.IntegrationDef{
-					"example": {Plugin: tc.plugin},
-				},
-			}
-
-			maps := BuildConnectionMaps(cfg)
-			if got := maps.DefaultConnection["example"]; got != tc.wantDefault {
-				t.Fatalf("default connection = %q, want %q", got, tc.wantDefault)
-			}
-			if got := maps.APIConnection["example"]; got != tc.wantAPIConnection {
-				t.Fatalf("api connection = %q, want %q", got, tc.wantAPIConnection)
-			}
-			if got := maps.MCPConnection["example"]; got != tc.wantMCPConnection {
-				t.Fatalf("mcp connection = %q, want %q", got, tc.wantMCPConnection)
-			}
-		})
 	}
 }

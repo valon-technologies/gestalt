@@ -477,6 +477,125 @@ func TestBootstrapInvoke_UsesNamedOpenAPIConnection(t *testing.T) {
 	}
 }
 
+func TestBootstrapInvoke_FallsBackToSoleNamedConnectionWithoutBaseAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	apiSrv := serveOpenAPIBackend(t, testOpenAPIAccessToken)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"vendor": {
+			Plugin: &config.PluginDef{
+				BaseURL: apiSrv.URL,
+				Connections: map[string]*config.ConnectionDef{
+					testOpenAPIConnectionName: {
+						Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+					},
+				},
+				Operations: []config.InlineOperationDef{
+					{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+				},
+			},
+		},
+	}
+
+	var gotConnection string
+	factories := validFactories()
+	factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			TokenFn: func(_ context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+				gotConnection = connection
+				return &core.IntegrationToken{
+					UserID:      userID,
+					Integration: integration,
+					Connection:  connection,
+					Instance:    instance,
+					AccessToken: testOpenAPIAccessToken,
+				}, nil
+			},
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	resp, err := result.Invoker.Invoke(ctx, &principal.Principal{UserID: "u1"}, "vendor", "", "list_items", nil)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.Status, http.StatusOK)
+	}
+	if gotConnection != testOpenAPIConnectionName {
+		t.Fatalf("connection = %q, want %q", gotConnection, testOpenAPIConnectionName)
+	}
+}
+
+func TestBootstrapInvoke_DoesNotFallBackToSoleNamedConnectionWithBaseAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	apiSrv := serveOpenAPIBackend(t, testOpenAPIAccessToken)
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"vendor": {
+			Plugin: &config.PluginDef{
+				BaseURL: apiSrv.URL,
+				Auth: &config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+				},
+				Connections: map[string]*config.ConnectionDef{
+					testOpenAPIConnectionName: {
+						Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+					},
+				},
+				Operations: []config.InlineOperationDef{
+					{Name: "list_items", Method: http.MethodGet, Path: "/items"},
+				},
+			},
+		},
+	}
+
+	var gotConnection string
+	factories := validFactories()
+	factories.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+		return &coretesting.StubDatastore{
+			TokenFn: func(_ context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+				gotConnection = connection
+				return &core.IntegrationToken{
+					UserID:      userID,
+					Integration: integration,
+					Connection:  connection,
+					Instance:    instance,
+					AccessToken: testOpenAPIAccessToken,
+				}, nil
+			},
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	resp, err := result.Invoker.Invoke(ctx, &principal.Principal{UserID: "u1"}, "vendor", "", "list_items", nil)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.Status, http.StatusOK)
+	}
+	if gotConnection != config.PluginConnectionName {
+		t.Fatalf("connection = %q, want %q", gotConnection, config.PluginConnectionName)
+	}
+}
+
 func TestInlineResponseMapping_AppliedToOpenAPIProvider(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
