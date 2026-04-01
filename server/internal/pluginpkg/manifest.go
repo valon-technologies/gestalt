@@ -133,10 +133,12 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	}
 
 	isDeclarative := manifest.Provider.IsDeclarative()
+	isSpecLoaded := manifest.Provider.IsSpecLoaded()
+	isManifestBackedProvider := isDeclarative || isSpecLoaded
 
 	needsArtifacts := false
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && (!isDeclarative || manifest.IsHybridProvider())) {
+		if kind == pluginmanifestv1.KindRuntime || (kind == pluginmanifestv1.KindProvider && (!isManifestBackedProvider || manifest.IsHybridProvider())) {
 			needsArtifacts = true
 			break
 		}
@@ -182,7 +184,7 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 					return err
 				}
 			}
-			if !isDeclarative || manifest.IsHybridProvider() {
+			if !isManifestBackedProvider || manifest.IsHybridProvider() {
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 					return err
 				}

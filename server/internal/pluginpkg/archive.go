@@ -85,7 +85,7 @@ func CopyPackageDir(sourceDir, destDir string) error {
 		return err
 	}
 	destDir = filepath.Clean(destDir)
-	if rel, err := filepath.Rel(sourceDir, destDir); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if isPathWithinDir(sourceDir, destDir) {
 		return fmt.Errorf("output directory %q must not be inside source directory %q", destDir, sourceDir)
 	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
@@ -128,6 +128,10 @@ func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 	sourceDir = filepath.Clean(sourceDir)
 	if _, err := ValidatePackageDir(sourceDir); err != nil {
 		return err
+	}
+	outputPath = filepath.Clean(outputPath)
+	if isPathWithinDir(sourceDir, outputPath) {
+		return fmt.Errorf("output archive %q must not be inside source directory %q", outputPath, sourceDir)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
@@ -193,6 +197,14 @@ func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 	}
 
 	return nil
+}
+
+func isPathWithinDir(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func ExtractPackage(packagePath, destDir string) (err error) {

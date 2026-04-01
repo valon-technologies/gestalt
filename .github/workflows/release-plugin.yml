@@ -76,22 +76,24 @@ jobs:
       PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin-version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Build gestaltd
+        run: cd server && go build -o ../gestaltd ./cmd/gestaltd
       - name: Package
         run: |
-          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}"
-          cd "plugins/${PLUGIN_NAME}"
-          TAR_ARGS=(plugin.yaml)
-          if [ -d assets ]; then
-            TAR_ARGS+=(assets/)
-          fi
-          tar -czvf "${ASSET}.tar.gz" "${TAR_ARGS[@]}"
-          shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256"
+          ASSET="gestalt-plugin-${PLUGIN_NAME}_v${PLUGIN_VERSION}.tar.gz"
+          mkdir -p dist
+          ./gestaltd plugin package --input "plugins/${PLUGIN_NAME}" --output "dist/${ASSET}"
+          shasum -a 256 "dist/${ASSET}" > "dist/${ASSET}.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: gestalt-plugin-${{ env.PLUGIN_NAME }}
           path: |
-            plugins/${{ env.PLUGIN_NAME }}/gestalt-plugin-*.tar.gz
-            plugins/${{ env.PLUGIN_NAME }}/gestalt-plugin-*.sha256
+            dist/gestalt-plugin-*.tar.gz
+            dist/gestalt-plugin-*.sha256
           if-no-files-found: error
 
   release-compiled:

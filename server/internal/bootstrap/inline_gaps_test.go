@@ -11,12 +11,17 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"gopkg.in/yaml.v3"
 )
 
@@ -127,6 +132,26 @@ func serveOpenAPIBackend(t *testing.T, wantToken string) *httptest.Server {
 	return srv
 }
 
+func serveMCPToolServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	srv := mcpserver.NewMCPServer("test-remote", "1.0.0")
+	srv.AddTool(
+		mcpgo.NewTool("search", mcpgo.WithDescription("Search workspace")),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	)
+
+	httpSrv := mcpserver.NewStreamableHTTPServer(
+		srv,
+		mcpserver.WithStateLess(true),
+	)
+	ts := httptest.NewServer(httpSrv)
+	testutil.CloseOnCleanup(t, ts)
+	return ts
+}
+
 func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -225,6 +250,127 @@ func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 	authURL, _ := handler.StartOAuth("s1", nil)
 	if authURL == "" {
 		t.Fatal("expected non-empty authorization URL from mcp_oauth handler for spec-loaded provider")
+	}
+}
+
+func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mcpSrv := serveMCPToolServer(t)
+
+	pluginDir := t.TempDir()
+	openapiPath := filepath.Join(pluginDir, "openapi.json")
+	if err := os.WriteFile(openapiPath, []byte(`{
+  "openapi": "3.0.0",
+  "info": { "title": "Hybrid Test API" },
+  "servers": [{ "url": "https://api.test.example" }],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "api_list_items",
+        "summary": "List items"
+      }
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.json): %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:      "github.com/acme/plugins/hybrid",
+		Version:     "0.1.0",
+		DisplayName: "Hybrid",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI:       "openapi.json",
+			MCPURL:        mcpSrv.URL,
+			MCPConnection: "MCP",
+			Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+				"MCP": {
+					Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth},
+				},
+			},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.json): %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"hybrid": {
+			Plugin: &config.PluginDef{
+				IsDeclarative:        true,
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest:     manifest,
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+	cp, ok := prov.(core.CatalogProvider)
+	if !ok {
+		t.Fatalf("provider does not implement CatalogProvider: %T", prov)
+	}
+	cat := cp.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+
+	staticOps := make(map[string]catalog.CatalogOperation, len(cat.Operations))
+	staticIDs := make([]string, 0, len(cat.Operations))
+	for _, op := range cat.Operations {
+		staticOps[op.ID] = op
+		staticIDs = append(staticIDs, fmt.Sprintf("%s:%s", op.ID, op.Transport))
+	}
+	if _, ok := staticOps["api_list_items"]; !ok {
+		t.Fatalf("expected REST operation from packaged openapi spec, got %v", staticIDs)
+	}
+
+	scp, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatalf("provider does not implement SessionCatalogProvider: %T", prov)
+	}
+	sessionCat, err := scp.CatalogForRequest(ctx, "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if sessionCat == nil {
+		t.Fatal("expected non-nil session catalog")
+	}
+	sessionOps := make(map[string]catalog.CatalogOperation, len(sessionCat.Operations))
+	sessionIDs := make([]string, 0, len(sessionCat.Operations))
+	for _, op := range sessionCat.Operations {
+		sessionOps[op.ID] = op
+		sessionIDs = append(sessionIDs, fmt.Sprintf("%s:%s", op.ID, op.Transport))
+	}
+	if op, ok := sessionOps["search"]; !ok {
+		t.Fatalf("expected MCP operation from upstream mcp server, got %v", sessionIDs)
+	} else if op.Transport != catalog.TransportMCPPassthrough {
+		t.Fatalf("search transport = %q, want %q", op.Transport, catalog.TransportMCPPassthrough)
+	}
+
+	maps := bootstrap.BuildConnectionMaps(cfg)
+	if got := maps.APIConnection["hybrid"]; got != config.PluginConnectionName {
+		t.Fatalf("api connection = %q, want %q", got, config.PluginConnectionName)
+	}
+	if got := maps.MCPConnection["hybrid"]; got != "MCP" {
+		t.Fatalf("mcp connection = %q, want %q", got, "MCP")
 	}
 }
 

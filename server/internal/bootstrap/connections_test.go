@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -111,5 +112,26 @@ func TestResolvedNamedConnectionDefMergesNamedDefsWithoutTopLevelInheritance(t *
 	}
 	if got.Auth.ClientID != "" {
 		t.Fatalf("client_id = %q, want empty", got.Auth.ClientID)
+	}
+}
+
+func TestResolveSpecSurfaceResolvesManifestRelativeSpecPath(t *testing.T) {
+	t.Parallel()
+
+	plugin := &config.PluginDef{
+		ResolvedManifestPath: filepath.Join("/tmp", "plugins", "notion", "plugin.yaml"),
+	}
+	manifestProvider := &pluginmanifestv1.Provider{
+		OpenAPI: "openapi.yaml",
+	}
+
+	resolved, ok := resolveSpecSurface(plugin, manifestProvider, specSurfaceOpenAPI)
+	if !ok {
+		t.Fatal("expected openapi surface to resolve")
+	}
+
+	want := filepath.Join("/tmp", "plugins", "notion", "openapi.yaml")
+	if resolved.url != want {
+		t.Fatalf("url = %q, want %q", resolved.url, want)
 	}
 }
