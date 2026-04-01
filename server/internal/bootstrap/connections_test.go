@@ -124,7 +124,7 @@ func TestResolveSpecSurfaceResolvesManifestRelativeSpecPath(t *testing.T) {
 		OpenAPI: "openapi.yaml",
 	}
 
-	resolved, ok := resolveSpecSurface(plugin, manifestProvider, specSurfaceOpenAPI)
+	resolved, ok := buildPluginConnectionPlan(plugin, manifestProvider).resolvedSurface(specSurfaceOpenAPI)
 	if !ok {
 		t.Fatal("expected openapi surface to resolve")
 	}

@@ -156,21 +156,6 @@ func describeIntegrationConnections(intg config.IntegrationDef) integrationConne
 	return meta
 }
 
-func resolveConfiguredSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) (resolvedSpecSurface, bool) {
-	plan := buildPluginConnectionPlan(plugin, manifestProvider)
-	return plan.configuredSpecSurface()
-}
-
-func resolveConfiguredAPISurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) (resolvedSpecSurface, bool) {
-	plan := buildPluginConnectionPlan(plugin, manifestProvider)
-	return plan.configuredAPISurface()
-}
-
-func resolveSpecSurface(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface specSurface) (resolvedSpecSurface, bool) {
-	plan := buildPluginConnectionPlan(plugin, manifestProvider)
-	return plan.resolvedSurface(surface)
-}
-
 func surfaceURL(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface specSurface) string {
 	if plugin != nil {
 		switch surface {
