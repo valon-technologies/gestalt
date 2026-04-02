@@ -1,0 +1,14 @@
+source: github.com/valon-technologies/gestalt/ashby
+version: 0.0.1-alpha.5
+display_name: Ashby
+description: Candidates, applications, jobs, offers, interviews, departments, locations, and users.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  openapi: openapi.yaml
+  response_mapping:
+    data_path: results
+    pagination:
+      has_more_path: moreDataAvailable
+      cursor_path: nextCursor

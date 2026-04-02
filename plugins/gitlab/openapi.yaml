@@ -1,0 +1,838 @@
+openapi: "3.2.0"
+info:
+  title: GitLab
+  description: Repository, issue, merge request, and pipeline operations
+servers:
+  - url: https://gitlab.com/api/v4
+security:
+  - gitlab_oauth: [api]
+
+components:
+  securitySchemes:
+    gitlab_oauth:
+      type: oauth2
+      oauth2MetadataUrl: https://gitlab.com/.well-known/oauth-authorization-server
+      flows:
+        authorizationCode:
+          authorizationUrl: https://gitlab.com/oauth/authorize
+          tokenUrl: https://gitlab.com/oauth/token
+          scopes:
+            api: Full GitLab API access
+
+paths:
+  /projects:
+    get:
+      operationId: list_projects
+      summary: List projects
+      description: List projects for the authenticated user.
+      parameters:
+        - name: membership
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Limit to projects the user is a member of.
+        - name: visibility
+          in: query
+          schema:
+            type: string
+            enum: [public, internal, private]
+          description: Filter by visibility.
+        - name: owned
+          in: query
+          schema:
+            type: boolean
+          description: Limit to projects owned by the user.
+        - name: starred
+          in: query
+          schema:
+            type: boolean
+          description: Limit to starred projects.
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search projects by name.
+        - name: order_by
+          in: query
+          schema:
+            type: string
+            enum: [id, name, path, created_at, updated_at, last_activity_at]
+          description: Sort field.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort direction.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}:
+    get:
+      operationId: get_project
+      summary: Get project
+      description: Get a specific project by ID or URL-encoded path.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/merge_requests:
+    get:
+      operationId: list_merge_requests
+      summary: List merge requests
+      description: List merge requests for a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [opened, closed, merged, all]
+            default: opened
+          description: Filter by state.
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [created_by_me, assigned_to_me, all]
+          description: Filter by scope.
+        - name: target_branch
+          in: query
+          schema:
+            type: string
+          description: Filter by target branch.
+        - name: source_branch
+          in: query
+          schema:
+            type: string
+          description: Filter by source branch.
+        - name: labels
+          in: query
+          schema:
+            type: string
+          description: Filter by labels.
+        - name: order_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at]
+          description: Sort field.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort direction.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+    post:
+      operationId: create_merge_request
+      summary: Create merge request
+      description: Create a merge request in a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_branch, target_branch, title]
+              properties:
+                source_branch:
+                  type: string
+                target_branch:
+                  type: string
+                title:
+                  type: string
+                description:
+                  type: string
+                labels:
+                  type: string
+                  description: Comma-separated labels.
+                assignee_id:
+                  type: integer
+                reviewer_ids:
+                  type: array
+                  items:
+                    type: integer
+                remove_source_branch:
+                  type: boolean
+      responses:
+        "201":
+          description: Created.
+
+  /projects/{project_id}/merge_requests/{merge_request_iid}:
+    get:
+      operationId: get_merge_request
+      summary: Get merge request
+      description: Get a specific merge request.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: merge_request_iid
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Merge request IID.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/issues:
+    get:
+      operationId: list_issues
+      summary: List issues
+      description: List issues for a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [opened, closed, all]
+            default: opened
+          description: Filter by state.
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [created_by_me, assigned_to_me, all]
+          description: Filter by scope.
+        - name: labels
+          in: query
+          schema:
+            type: string
+          description: Filter by labels.
+        - name: milestone
+          in: query
+          schema:
+            type: string
+          description: Filter by milestone.
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search issues.
+        - name: order_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at, priority]
+          description: Sort field.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort direction.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+    post:
+      operationId: create_issue
+      summary: Create issue
+      description: Create an issue in a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                labels:
+                  type: string
+                  description: Comma-separated labels.
+                assignee_ids:
+                  type: array
+                  items:
+                    type: integer
+                milestone_id:
+                  type: integer
+                due_date:
+                  type: string
+                  format: date
+      responses:
+        "201":
+          description: Created.
+
+  /projects/{project_id}/issues/{issue_iid}:
+    get:
+      operationId: get_issue
+      summary: Get issue
+      description: Get a single issue in a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: issue_iid
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Issue IID.
+      responses:
+        "200":
+          description: Successful response.
+    put:
+      operationId: update_issue
+      summary: Update issue
+      description: Update an issue in a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: issue_iid
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Issue IID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                state_event:
+                  type: string
+                  enum: [close, reopen]
+                labels:
+                  type: string
+                  description: Comma-separated labels.
+                assignee_ids:
+                  type: array
+                  items:
+                    type: integer
+                milestone_id:
+                  type: integer
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/pipelines:
+    get:
+      operationId: list_pipelines
+      summary: List pipelines
+      description: List pipelines for a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Filter by scope.
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by status.
+        - name: ref
+          in: query
+          schema:
+            type: string
+          description: Filter by ref.
+        - name: sha
+          in: query
+          schema:
+            type: string
+          description: Filter by commit SHA.
+        - name: order_by
+          in: query
+          schema:
+            type: string
+            enum: [id, status, ref, updated_at, user_id]
+          description: Sort field.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort direction.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/pipelines/{pipeline_id}:
+    get:
+      operationId: get_pipeline
+      summary: Get pipeline
+      description: Get a specific pipeline.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Pipeline ID.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/pipelines/{pipeline_id}/jobs:
+    get:
+      operationId: list_jobs
+      summary: List jobs
+      description: List jobs for a pipeline.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Pipeline ID.
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Filter by scope.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/issues/{issue_iid}/notes:
+    post:
+      operationId: create_issue_note
+      summary: Create issue note
+      description: Create a comment on an issue.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: issue_iid
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Issue IID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+      responses:
+        "201":
+          description: Created.
+
+  /projects/{project_id}/merge_requests/{merge_request_iid}/notes:
+    post:
+      operationId: create_mr_note
+      summary: Create merge request note
+      description: Create a comment on a merge request.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: merge_request_iid
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Merge request IID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+      responses:
+        "201":
+          description: Created.
+
+  /projects/{project_id}/repository/files/{file_path}:
+    get:
+      operationId: get_repository_file
+      summary: Get repository file
+      description: Get file metadata and decoded content from a repository.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: URL-encoded file path.
+        - name: ref
+          in: query
+          schema:
+            type: string
+            default: HEAD
+          description: Branch, tag, or commit SHA.
+      responses:
+        "200":
+          description: Successful response.
+    post:
+      operationId: create_file
+      summary: Create file
+      description: Create a file in a repository.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: URL-encoded file path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branch, commit_message, content]
+              properties:
+                branch:
+                  type: string
+                commit_message:
+                  type: string
+                content:
+                  type: string
+                author_email:
+                  type: string
+                author_name:
+                  type: string
+                encoding:
+                  type: string
+                  enum: [text, base64]
+                  default: text
+                execute_filemode:
+                  type: boolean
+                start_branch:
+                  type: string
+      responses:
+        "201":
+          description: Created.
+    put:
+      operationId: update_file
+      summary: Update file
+      description: Update a file in a repository.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: URL-encoded file path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branch, commit_message, content]
+              properties:
+                branch:
+                  type: string
+                commit_message:
+                  type: string
+                content:
+                  type: string
+                author_email:
+                  type: string
+                author_name:
+                  type: string
+                encoding:
+                  type: string
+                  enum: [text, base64]
+                  default: text
+                execute_filemode:
+                  type: boolean
+                last_commit_id:
+                  type: string
+                start_branch:
+                  type: string
+      responses:
+        "200":
+          description: Successful response.
+    delete:
+      operationId: delete_file
+      summary: Delete file
+      description: Delete a file from a repository.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: URL-encoded file path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branch, commit_message]
+              properties:
+                branch:
+                  type: string
+                commit_message:
+                  type: string
+                author_email:
+                  type: string
+                author_name:
+                  type: string
+                last_commit_id:
+                  type: string
+                start_branch:
+                  type: string
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/repository/tree:
+    get:
+      operationId: list_repository_tree
+      summary: List repository tree
+      description: List the contents of a repository path.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: path
+          in: query
+          schema:
+            type: string
+          description: Path inside the repository.
+        - name: ref
+          in: query
+          schema:
+            type: string
+          description: Branch, tag, or commit SHA.
+        - name: recursive
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Whether to recurse into subdirectories.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.
+
+  /projects/{project_id}/search:
+    get:
+      operationId: search_code
+      summary: Search code
+      description: Search for code blobs in a project.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID or URL-encoded path.
+        - name: search
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query string.
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [blobs]
+            default: blobs
+          description: GitLab search scope.
+        - name: ref
+          in: query
+          schema:
+            type: string
+          description: Branch or tag to search in.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Results per page.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number.
+      responses:
+        "200":
+          description: Successful response.

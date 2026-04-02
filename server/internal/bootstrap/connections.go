@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -217,7 +218,7 @@ func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string
 	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
 }
 
-func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore) (map[string]OAuthHandler, error) {
+func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps, regStore *lazyRegStore) (map[string]OAuthHandler, error) {
 	manifestProvider := (*pluginmanifestv1.Provider)(nil)
 	if manifest != nil {
 		manifestProvider = manifest.Provider
@@ -231,8 +232,15 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 		mcpURL = resolved.url
 	}
 
+	specAuthForConnection := func(connectionName string) *provider.Definition {
+		if authFallback == nil || authFallback.definition == nil || authFallback.connectionName != connectionName {
+			return nil
+		}
+		return authFallback.definition
+	}
+
 	handlers := make(map[string]OAuthHandler)
-	if handler, err := buildConnectionHandler(plan.pluginConnection, mcpURL, pluginConfig, deps, regStore); err != nil {
+	if handler, err := buildConnectionHandler(plan.pluginConnection, mcpURL, pluginConfig, specAuthForConnection(config.PluginConnectionName), deps, regStore); err != nil {
 		return nil, fmt.Errorf("build plugin connection auth for %q: %w", name, err)
 	} else if handler != nil {
 		handlers[config.PluginConnectionName] = handler
@@ -240,7 +248,7 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 
 	for resolvedName := range plan.namedConnections {
 		conn := plan.namedConnections[resolvedName]
-		handler, err := buildConnectionHandler(conn, mcpURL, pluginConfig, deps, regStore)
+		handler, err := buildConnectionHandler(conn, mcpURL, pluginConfig, specAuthForConnection(resolvedName), deps, regStore)
 		if err != nil {
 			return nil, fmt.Errorf("build named connection auth for %q/%q: %w", name, resolvedName, err)
 		}
@@ -276,10 +284,14 @@ func namedConnectionNames(plugin *config.PluginDef, manifestProvider *pluginmani
 	return names
 }
 
-func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, deps Deps, regStore *lazyRegStore) (OAuthHandler, error) {
+func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *provider.Definition, deps Deps, regStore *lazyRegStore) (OAuthHandler, error) {
 	switch conn.Auth.Type {
 	case "", pluginmanifestv1.AuthTypeOAuth2:
-		return buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
+		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
+		if err != nil || handler != nil || conn.Auth.Type == pluginmanifestv1.AuthTypeOAuth2 {
+			return handler, err
+		}
+		return buildOAuthHandlerFromDefinition(specDef, conn, pluginConfig, deps)
 	case pluginmanifestv1.AuthTypeMCPOAuth:
 		if mcpURL == "" {
 			return nil, fmt.Errorf("mcp_oauth auth requires mcp_url")
