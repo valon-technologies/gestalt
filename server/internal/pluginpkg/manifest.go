@@ -22,6 +22,11 @@ const ManifestFile = "plugin.json"
 
 var ManifestFiles = []string{"plugin.json", "plugin.yaml", "plugin.yml"}
 
+const (
+	ManifestFormatJSON = "json"
+	ManifestFormatYAML = "yaml"
+)
+
 func FindManifestFile(dir string) (string, error) {
 	for _, name := range ManifestFiles {
 		p := filepath.Join(dir, name)
@@ -30,6 +35,18 @@ func FindManifestFile(dir string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no manifest file found in %s (tried %s)", dir, strings.Join(ManifestFiles, ", "))
+}
+
+func IsManifestFile(path string) bool {
+	base := filepath.Base(path)
+	return slices.Contains(ManifestFiles, base)
+}
+
+func ManifestFormatFromPath(path string) string {
+	if isYAMLFile(path) {
+		return ManifestFormatYAML
+	}
+	return ManifestFormatJSON
 }
 
 func isYAMLFile(path string) bool {
@@ -66,12 +83,12 @@ func normalizeYAML(v any) any {
 }
 
 func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
-	return DecodeManifestFormat(data, "json")
+	return DecodeManifestFormat(data, ManifestFormatJSON)
 }
 
 func DecodeSourceManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
 	jsonData := data
-	if format == "yaml" {
+	if format == ManifestFormatYAML {
 		var err error
 		jsonData, err = yamlToJSON(data)
 		if err != nil {
@@ -83,7 +100,7 @@ func DecodeSourceManifestFormat(data []byte, format string) (*pluginmanifestv1.M
 
 func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
 	jsonData := data
-	if format == "yaml" {
+	if format == ManifestFormatYAML {
 		var err error
 		jsonData, err = yamlToJSON(data)
 		if err != nil {
@@ -360,18 +377,37 @@ func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
 }
 
 func EncodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
+	return EncodeManifestFormat(manifest, ManifestFormatJSON)
+}
+
+func EncodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
 	if err := ValidateManifest(manifest); err != nil {
 		return nil, err
 	}
-	return encodeManifest(manifest)
+	switch format {
+	case ManifestFormatJSON:
+		return encodeManifestJSON(manifest)
+	case ManifestFormatYAML:
+		return encodeManifestYAML(manifest)
+	default:
+		return nil, fmt.Errorf("unsupported manifest format %q", format)
+	}
 }
 
-func encodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
+func encodeManifestJSON(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
 	return append(data, '\n'), nil
+}
+
+func encodeManifestYAML(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
+	data, err := yaml.Marshal(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal manifest YAML: %w", err)
+	}
+	return data, nil
 }
 
 func Kinds(manifest *pluginmanifestv1.Manifest) []string {

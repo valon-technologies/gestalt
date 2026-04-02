@@ -25,7 +25,7 @@ provider:
     name_path: name
     metadata_mapping:
       cloud_id: id
-  connection:
+  connection_params:
     cloud_id:
       required: true
       description: Jira Cloud site identifier (discovered automatically)

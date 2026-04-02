@@ -63,8 +63,8 @@ func packageFromDir(input, output string) error {
 	if info, err := os.Stat(input); err != nil {
 		return err
 	} else if !info.IsDir() {
-		if filepath.Base(input) != pluginpkg.ManifestFile {
-			return fmt.Errorf("plugin package input must be a directory or %s, got %q", pluginpkg.ManifestFile, input)
+		if !pluginpkg.IsManifestFile(input) {
+			return fmt.Errorf("plugin package input must be a directory or one of %s, got %q", strings.Join(pluginpkg.ManifestFiles, ", "), input)
 		}
 		sourceDir = filepath.Dir(input)
 	}
@@ -125,6 +125,8 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return fmt.Errorf("decode %s: %w", manifestPath, err)
 	}
+	manifestFormat := pluginpkg.ManifestFormatFromPath(manifestPath)
+	manifestFile := filepath.Base(manifestPath)
 
 	src, err := pluginsource.Parse(srcManifest.Source)
 	if err != nil {
@@ -164,14 +166,14 @@ func runPluginRelease(args []string) error {
 			if err != nil {
 				return fmt.Errorf("detect build target for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 			}
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget, plat, *outputDir)
+			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget, plat, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
 				return fmt.Errorf("build %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
 	} else {
-		archivePath, err := buildSourceArchive(srcManifest, pluginName, *version, *outputDir)
+		archivePath, err := buildSourceArchive(srcManifest, pluginName, *version, *outputDir, manifestFile, manifestFormat)
 		if err != nil {
 			return err
 		}
@@ -185,7 +187,7 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildTarget string, plat releasePlatform, outputDir string) (string, error) {
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildTarget string, plat releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
@@ -214,11 +216,11 @@ func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, ve
 		return "", err
 	}
 
-	data, err := pluginpkg.EncodeManifest(manifest)
+	data, err := pluginpkg.EncodeManifestFormat(manifest, manifestFormat)
 	if err != nil {
 		return "", fmt.Errorf("encode manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644); err != nil {
 		return "", err
 	}
 
@@ -325,7 +327,7 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 	return platforms, nil
 }
 
-func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir string) (string, error) {
+func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
@@ -337,11 +339,11 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		return "", err
 	}
 
-	data, err := pluginpkg.EncodeManifest(manifest)
+	data, err := pluginpkg.EncodeManifestFormat(manifest, manifestFormat)
 	if err != nil {
 		return "", fmt.Errorf("encode manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644); err != nil {
 		return "", err
 	}
 
