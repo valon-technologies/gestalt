@@ -795,9 +795,12 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 		return buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
 	}
 
-	manifest, allowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
+	manifest, allowedOperations, err := config.EffectiveManifestBackedInputs(name, intg.Plugin)
 	if err != nil {
 		return nil, err
+	}
+	if manifest == nil {
+		return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
 	}
 	if manifest.Provider.IsSpecLoaded() {
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, allowedOperations)
@@ -818,30 +821,6 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, nil, deps, regStore)
 }
 
-func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*pluginmanifestv1.Manifest, map[string]*config.OperationOverride, error) {
-	if plugin.IsInline() {
-		manifest, err := config.InlineToManifest(name, plugin)
-		if err != nil {
-			return nil, nil, fmt.Errorf("convert inline plugin %q to manifest: %w", name, err)
-		}
-		if manifest == nil || manifest.Provider == nil {
-			return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
-		}
-		return manifest, plugin.AllowedOperations, nil
-	}
-
-	if !plugin.HasResolvedManifest() {
-		return nil, nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
-	}
-
-	manifest := mergedManifestProviderConfig(plugin.ResolvedManifest, plugin)
-	if manifest == nil || manifest.Provider == nil {
-		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
-	}
-
-	return manifest, config.OperationOverridesFromManifest(manifest.Provider.AllowedOperations), nil
-}
-
 func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	pluginProv, err := buildPluginProvider(ctx, name, intg, pluginConfig, meta)
 	if err != nil {
@@ -850,8 +829,9 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	manifest := intg.Plugin.ResolvedManifest
 	manifestProvider := intg.Plugin.ManifestProvider()
 	allowedOperations := intg.Plugin.AllowedOperations
+	specPlugin := intg.Plugin
 	if intg.Plugin.HasResolvedManifest() {
-		resolvedManifest, resolvedAllowedOperations, err := resolveManifestBackedInputs(name, intg.Plugin)
+		resolvedManifest, resolvedAllowedOperations, err := config.EffectiveManifestBackedInputs(name, intg.Plugin)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, err
@@ -861,6 +841,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 			manifestProvider = manifest.Provider
 		}
 		allowedOperations = resolvedAllowedOperations
+		specPlugin = nil
 	}
 	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
 	if err != nil {
@@ -879,7 +860,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	}
 
 	specProv, _, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-		plugin:            intg.Plugin,
+		plugin:            specPlugin,
 		manifestProvider:  manifestProvider,
 		allowedOperations: allowedOperations,
 		baseURL:           intg.Plugin.BaseURL,
@@ -963,7 +944,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			name,
 			resolved.url,
 			connMode,
-			mergedHeaders(cfg.manifestProvider, cfg.plugin),
+			config.MergedProviderHeaders(cfg.manifestProvider, cfg.plugin),
 			deps.Egress.Resolver,
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
@@ -1032,7 +1013,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 
 	buildSpec := func(resolved resolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, error) {
 		prov, _, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-			plugin:               intg.Plugin,
+			plugin:               nil,
 			manifestProvider:     mp,
 			allowedOperations:    allowed,
 			baseURL:              mp.BaseURL,
@@ -1053,7 +1034,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	}
 
 	apiProv, apiDef, err := buildConfiguredSpecProvider(ctx, name, apiResolved, meta, specProviderConfig{
-		plugin:               intg.Plugin,
+		plugin:               nil,
 		manifestProvider:     mp,
 		allowedOperations:    allowedOperations,
 		baseURL:              mp.BaseURL,
@@ -1107,47 +1088,11 @@ func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, mani
 	if def == nil {
 		return
 	}
-	headers := mergedHeaders(manifestProvider, plugin)
+	headers := config.MergedProviderHeaders(manifestProvider, plugin)
 	if len(headers) == 0 {
 		return
 	}
 	def.Headers = headers
-}
-
-func mergedManifestProviderConfig(manifest *pluginmanifestv1.Manifest, plugin *config.PluginDef) *pluginmanifestv1.Manifest {
-	if manifest == nil || manifest.Provider == nil {
-		return manifest
-	}
-	headers := mergedHeaders(manifest.Provider, plugin)
-	managedParameters := mergedManagedParameters(manifest.Provider, plugin)
-	baseURL := manifest.Provider.BaseURL
-	if plugin != nil && plugin.BaseURL != "" {
-		baseURL = plugin.BaseURL
-	}
-	if len(headers) == 0 && len(managedParameters) == 0 && baseURL == manifest.Provider.BaseURL {
-		return manifest
-	}
-	cloned := *manifest
-	providerCopy := *manifest.Provider
-	providerCopy.BaseURL = baseURL
-	providerCopy.Headers = headers
-	providerCopy.ManagedParameters = managedParameters
-	cloned.Provider = &providerCopy
-	return &cloned
-}
-
-func mergedHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) map[string]string {
-	var manifestHeaders map[string]string
-	if manifestProvider != nil {
-		manifestHeaders = manifestProvider.Headers
-	}
-
-	var pluginHeaders map[string]string
-	if plugin != nil {
-		pluginHeaders = plugin.Headers
-	}
-
-	return config.MergeHeaders(manifestHeaders, pluginHeaders)
 }
 
 func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) error {
@@ -1155,7 +1100,7 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 		return nil
 	}
 
-	params := mergedManagedParameters(manifestProvider, plugin)
+	params := config.MergedProviderManagedParameters(manifestProvider, plugin)
 	if len(params) == 0 {
 		return nil
 	}
@@ -1196,20 +1141,6 @@ func applyManagedParameters(def *provider.Definition, plugin *config.PluginDef, 
 	}
 
 	return nil
-}
-
-func mergedManagedParameters(manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) []pluginmanifestv1.ManagedParameter {
-	var manifestParams []pluginmanifestv1.ManagedParameter
-	if manifestProvider != nil {
-		manifestParams = manifestProvider.ManagedParameters
-	}
-
-	var pluginParams []pluginmanifestv1.ManagedParameter
-	if plugin != nil {
-		pluginParams = plugin.ManagedParameters
-	}
-
-	return config.MergeManagedParameters(manifestParams, pluginParams)
 }
 
 func isManagedOperationParameter(param provider.ParameterDef, managed []pluginmanifestv1.ManagedParameter) bool {

@@ -921,34 +921,38 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		return nil
 	}
 
-	hasOpenAPI := effectivePluginSurfaceURL(plugin, SpecSurfaceOpenAPI) != ""
-	hasGraphQL := effectivePluginSurfaceURL(plugin, SpecSurfaceGraphQL) != ""
-	hasMCP := effectivePluginSurfaceURL(plugin, SpecSurfaceMCP) != ""
+	effectiveManifest, _, err := EffectiveManifestBackedInputs(name, plugin)
+	if err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+	effectiveProvider := plugin.ManifestProvider()
+	if effectiveManifest != nil {
+		effectiveProvider = effectiveManifest.Provider
+	}
+
+	hasDirectOpenAPI := plugin.OpenAPI != ""
+	hasDirectGraphQL := plugin.GraphQLURL != ""
+	hasDirectMCP := plugin.MCPURL != ""
+	hasOpenAPI := hasDirectOpenAPI || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceOpenAPI) != ""
+	hasGraphQL := hasDirectGraphQL || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceGraphQL) != ""
+	hasMCP := hasDirectMCP || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceMCP) != ""
 	hasAPISurface := hasOpenAPI || hasGraphQL
 	hasSpecSurface := hasAPISurface || hasMCP
 	hasExecutableProcess := !plugin.IsInline() && !plugin.IsDeclarative
 	hasInlineOperations := plugin.IsInline() && len(plugin.Operations) > 0
-	hasResolvedDeclarativeOps := plugin.ManifestProvider() != nil && plugin.ManifestProvider().IsDeclarative()
+	hasDeclarativeRuntime := hasInlineOperations || (!hasExecutableProcess && effectiveProvider != nil && effectiveProvider.IsDeclarative())
 
-	supportsBaseURL := false
+	supportsBaseURL := hasDeclarativeRuntime || hasDirectOpenAPI || hasDirectGraphQL || (!plugin.IsInline() && hasAPISurface)
 	supportsHeaders := false
 	switch {
-	case hasExecutableProcess:
-		supportsBaseURL = hasAPISurface
-		supportsHeaders = hasSpecSurface
 	case plugin.IsInline():
-		if hasSpecSurface {
-			supportsBaseURL = hasAPISurface
-			supportsHeaders = hasSpecSurface
-			break
-		}
-		supportsBaseURL = hasInlineOperations
-		supportsHeaders = hasInlineOperations
-	case hasResolvedDeclarativeOps:
-		supportsHeaders = true
-	default:
+		supportsHeaders = hasInlineOperations || hasSpecSurface
+	case hasExecutableProcess:
 		supportsHeaders = hasSpecSurface
+	default:
+		supportsHeaders = effectiveProvider != nil && effectiveProvider.IsManifestBacked()
 	}
+	supportsResponseMapping := plugin.IsInline() && (hasDirectOpenAPI || hasDirectGraphQL)
 
 	checks := []struct {
 		field     string
@@ -996,7 +1000,7 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			field:     "plugin.base_url",
 			present:   plugin.BaseURL != "",
 			supported: supportsBaseURL,
-			reason:    "is only valid with inline operations or openapi/graphql surfaces defined directly in config",
+			reason:    "is only valid when the resolved provider actually uses a base URL",
 		},
 		{
 			field:     "plugin.headers",
@@ -1013,7 +1017,7 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		{
 			field:     "plugin.response_mapping",
 			present:   plugin.ResponseMapping != nil,
-			supported: plugin.IsInline() && hasAPISurface,
+			supported: supportsResponseMapping,
 			reason:    "is only valid for inline openapi/graphql integrations",
 		},
 	}
@@ -1023,16 +1027,6 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		}
 	}
 	return nil
-}
-
-func effectivePluginSurfaceURL(plugin *PluginDef, surface SpecSurface) string {
-	if plugin == nil {
-		return ""
-	}
-	if url := plugin.SurfaceURL(surface); url != "" {
-		return url
-	}
-	return ManifestProviderSurfaceURL(plugin.ManifestProvider(), surface)
 }
 
 func validateManagedParameterConfig(prefix string, headers map[string]string, params []ManagedParameterDef) error {

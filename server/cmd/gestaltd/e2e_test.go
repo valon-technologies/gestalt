@@ -482,21 +482,6 @@ func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
   x-test: value`,
 			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
 		},
-		{
-			name: "config base_url unsupported for spec-loaded package plugin without executable",
-			setup: func(t *testing.T, dir string) string {
-				return setupManifestOnlyPluginDir(t, dir, &pluginmanifestv1.Manifest{
-					Source:  "github.com/test/plugins/provider",
-					Version: "0.1.0",
-					Kinds:   []string{pluginmanifestv1.KindProvider},
-					Provider: &pluginmanifestv1.Provider{
-						OpenAPI: "https://api.example.test/openapi.json",
-					},
-				})
-			},
-			pluginYAML: `base_url: https://api.example.test`,
-			wantError:  "plugin.base_url is only valid with inline operations or openapi/graphql surfaces defined directly in config",
-		},
 	}
 
 	for _, tc := range cases {
@@ -604,17 +589,6 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	}
 
 	writeManifest(t, pluginDir, version)
-	return pluginDir
-}
-
-func setupManifestOnlyPluginDir(t *testing.T, baseDir string, manifest *pluginmanifestv1.Manifest) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(baseDir, "plugin-src")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
 }
 
