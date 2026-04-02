@@ -439,6 +439,17 @@ providers:
 `,
 		},
 		{
+			name: "plugin source with base_url override is valid",
+			yaml: `
+providers:
+  external:
+    from:
+      source: github.com/acme-corp/tools/widget
+      version: 1.2.3
+    base_url: https://api.example.com
+`,
+		},
+		{
 			name: "plugin source without version is rejected",
 			yaml: `
 providers:
