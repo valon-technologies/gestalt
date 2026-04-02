@@ -67,9 +67,13 @@ func buildSBPLProfile(policy *Policy) string {
 	b.WriteString("(allow process*)\n")
 	b.WriteString("(allow sysctl-read)\n")
 	b.WriteString("(allow mach*)\n")
-	b.WriteString("(allow file-read*)\n")
+
+	for _, p := range policy.ReadOnlyPaths {
+		sbplAllowRead(&b, p)
+	}
 
 	for _, p := range policy.ReadWritePaths {
+		sbplAllowRead(&b, p)
 		sbplAllowWrite(&b, p)
 	}
 
@@ -83,11 +87,27 @@ func buildSBPLProfile(policy *Policy) string {
 	return b.String()
 }
 
+func sbplAllowRead(b *strings.Builder, p string) {
+	sbplAllowPath(b, "file-read*", p)
+}
+
 func sbplAllowWrite(b *strings.Builder, p string) {
-	fmt.Fprintf(b, "(allow file-write* (subpath %s))\n", sbplQuote(p))
+	sbplAllowPath(b, "file-write*", p)
+}
+
+func sbplAllowPath(b *strings.Builder, access, p string) {
+	sbplAllowOnePath(b, access, p)
 	if resolved, err := filepath.EvalSymlinks(p); err == nil && resolved != p {
-		fmt.Fprintf(b, "(allow file-write* (subpath %s))\n", sbplQuote(resolved))
+		sbplAllowOnePath(b, access, resolved)
 	}
+}
+
+func sbplAllowOnePath(b *strings.Builder, access, p string) {
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		fmt.Fprintf(b, "(allow %s (literal %s))\n", access, sbplQuote(p))
+		return
+	}
+	fmt.Fprintf(b, "(allow %s (subpath %s))\n", access, sbplQuote(p))
 }
 
 func sbplQuote(path string) string {
