@@ -27,6 +27,15 @@ func NewSlogAuditSink(w io.Writer) *SlogAuditSink {
 	}
 }
 
+func NewLoggerAuditSink(logger *slog.Logger) *SlogAuditSink {
+	if logger == nil {
+		return NewSlogAuditSink(nil)
+	}
+	return &SlogAuditSink{
+		logger: slog.New(auditHandler{inner: logger.Handler()}),
+	}
+}
+
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	attrs := []slog.Attr{
 		slog.String("log.type", auditLogType),
@@ -67,4 +76,24 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 		level = slog.LevelWarn
 	}
 	s.logger.LogAttrs(ctx, level, auditLogType, attrs...)
+}
+
+type auditHandler struct {
+	inner slog.Handler
+}
+
+func (h auditHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h auditHandler) Handle(ctx context.Context, record slog.Record) error {
+	return h.inner.Handle(ctx, record)
+}
+
+func (h auditHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return auditHandler{inner: h.inner.WithAttrs(attrs)}
+}
+
+func (h auditHandler) WithGroup(name string) slog.Handler {
+	return auditHandler{inner: h.inner.WithGroup(name)}
 }
