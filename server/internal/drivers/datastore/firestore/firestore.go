@@ -595,13 +595,13 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 
 	hashRef := s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(doc.HashedToken))
 	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
-		if err := tx.Delete(tokenRef); err != nil {
-			return fmt.Errorf("deleting api token: %w", err)
-		}
-
 		hashSnap, err := tx.Get(hashRef)
 		if err != nil && status.Code(err) != codes.NotFound {
 			return fmt.Errorf("getting api token hash lookup for revoke: %w", err)
+		}
+
+		if err := tx.Delete(tokenRef); err != nil {
+			return fmt.Errorf("deleting api token: %w", err)
 		}
 		if err == nil && hashSnap.Exists() {
 			var lookup apiTokenHashLookupDoc

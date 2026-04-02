@@ -11,7 +11,10 @@ import (
 	_ "github.com/sijms/go-ora/v2" // register database/sql driver
 )
 
-const oraUniqueViolation = "ORA-00001"
+const (
+	oraUniqueViolation    = "ORA-00001"
+	oracleEmptyConnection = "__GESTALT_EMPTY_CONNECTION__"
+)
 
 // dialect implements sqlstore.Dialect for Oracle.
 type dialect struct{}
@@ -71,6 +74,20 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), oraUniqueViolation)
+}
+
+func (dialect) NormalizeConnection(connection string) string {
+	if connection == "" {
+		return oracleEmptyConnection
+	}
+	return connection
+}
+
+func (dialect) DenormalizeConnection(connection string) string {
+	if connection == oracleEmptyConnection {
+		return ""
+	}
+	return connection
 }
 
 // Store embeds sqlstore.Store and adds Oracle-specific behavior.

@@ -32,6 +32,15 @@ type Dialect interface {
 	// unique-constraint violation. Dialects that handle duplicates
 	// via ON CONFLICT in the INSERT itself may always return false.
 	IsDuplicateKeyError(err error) bool
+
+	// NormalizeConnection converts the logical connection key to the
+	// persisted representation for dialects that cannot round-trip empty
+	// strings in NOT NULL columns.
+	NormalizeConnection(connection string) string
+
+	// DenormalizeConnection converts the persisted connection key back to
+	// the logical representation exposed by core.IntegrationToken.
+	DenormalizeConnection(connection string) string
 }
 
 // Store implements every core.Datastore method except Migrate (which
@@ -87,6 +96,7 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 		return nil, err
 	}
 
+	t.Connection = s.Dialect.DenormalizeConnection(t.Connection)
 	t.Scopes = scopes.String
 	t.MetadataJSON = metadataJSON.String
 
@@ -220,8 +230,9 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		return fmt.Errorf("encrypting token pair: %w", err)
 	}
 
+	connection := s.Dialect.NormalizeConnection(token.Connection)
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
-		token.ID, token.UserID, token.Integration, token.Connection, token.Instance,
+		token.ID, token.UserID, token.Integration, connection, token.Instance,
 		accessEnc, refreshEnc,
 		token.Scopes, NullableTime(token.ExpiresAt), NullableTime(token.LastRefreshedAt),
 		token.RefreshErrorCount, token.MetadataJSON, token.CreatedAt, token.UpdatedAt,
@@ -233,6 +244,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 }
 
 func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	connection = s.Dialect.NormalizeConnection(connection)
 	row := s.DB.QueryRowContext(ctx, `
 		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
@@ -293,6 +305,7 @@ func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integratio
 }
 
 func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	connection = s.Dialect.NormalizeConnection(connection)
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at

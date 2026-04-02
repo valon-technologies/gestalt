@@ -57,6 +57,9 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds PostgreSQL-specific behavior.
 type Store struct {
 	*sqlstore.Store

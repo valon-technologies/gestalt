@@ -42,6 +42,9 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds SQLite-specific behavior.
 type Store struct {
 	*sqlstore.Store

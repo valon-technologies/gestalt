@@ -72,6 +72,9 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return false
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds SQL Server-specific behavior.
 type Store struct {
 	*sqlstore.Store

@@ -39,6 +39,9 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds MySQL-specific behavior.
 type Store struct {
 	*sqlstore.Store
