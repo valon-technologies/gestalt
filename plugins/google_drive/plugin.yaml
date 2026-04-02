@@ -1,0 +1,44 @@
+source: github.com/valon-technologies/gestalt/google_drive
+version: 0.0.1-alpha.1
+display_name: Google Drive
+description: Read, create, update, and share files in Google Drive.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  config_schema_path: schemas/config.schema.json
+  auth:
+    type: oauth2
+    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/drive
+    authorization_params:
+      access_type: offline
+      prompt: consent
+  openapi: https://api.apis.guru/v2/specs/googleapis.com/drive/v3/openapi.json
+  allowed_operations:
+    drive.files.list:
+      alias: files.list
+    drive.files.get:
+      alias: files.get
+    drive.files.create:
+      alias: files.create
+    drive.files.update:
+      alias: files.update
+    drive.files.delete:
+      alias: files.delete
+    drive.files.copy:
+      alias: files.copy
+    drive.files.export:
+      alias: files.export
+    drive.permissions.list:
+      alias: permissions.list
+    drive.permissions.create:
+      alias: permissions.create
+    drive.permissions.update:
+      alias: permissions.update
+    drive.permissions.delete:
+      alias: permissions.delete
+    drive.about.get:
+      alias: about.get

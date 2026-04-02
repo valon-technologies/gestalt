@@ -294,6 +294,12 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
         "operationId": "api_list_items",
         "summary": "List items"
       }
+    },
+    "/items/{item_id}": {
+      "get": {
+        "operationId": "api_get_item",
+        "summary": "Get item"
+      }
     }
   }
 }`), 0o644); err != nil {
@@ -309,6 +315,11 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 			OpenAPI:       "openapi.json",
 			MCPURL:        mcpSrv.URL,
 			MCPConnection: "MCP",
+			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
+				"api_get_item": {
+					Alias: "get_item",
+				},
+			},
 			Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
 				"MCP": {
 					Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth},
@@ -332,6 +343,11 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 				IsDeclarative:        true,
 				ResolvedManifestPath: manifestPath,
 				ResolvedManifest:     manifest,
+				AllowedOperations: map[string]*config.OperationOverride{
+					"api_list_items": {
+						Alias: "list_items",
+					},
+				},
 			},
 		},
 	}
@@ -349,8 +365,11 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 		staticOps[op.ID] = op
 		staticIDs = append(staticIDs, fmt.Sprintf("%s:%s", op.ID, op.Transport))
 	}
-	if _, ok := staticOps["api_list_items"]; !ok {
+	if _, ok := staticOps["list_items"]; !ok {
 		t.Fatalf("expected REST operation from packaged openapi spec, got %v", staticIDs)
+	}
+	if _, ok := staticOps["api_get_item"]; ok {
+		t.Fatalf("expected local allowed_operations to replace manifest allowlist, got %v", staticIDs)
 	}
 
 	scp, ok := prov.(core.SessionCatalogProvider)
