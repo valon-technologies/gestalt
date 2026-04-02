@@ -371,28 +371,28 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 			name: "plugin connection unsupported",
 			pluginYAML: `command: /tmp/provider
 connection: default`,
-			wantError: "plugin.connection is not supported",
+			wantError: "plugin.connection is not supported; remove plugin.connection and use plugin.default_connection or a surface-specific *_connection field instead",
 		},
 		{
 			name: "env unsupported for inline plugin",
 			pluginYAML: `openapi: https://api.example.test/openapi.json
 env:
   API_KEY: secret`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process",
+			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
 			pluginYAML: `openapi: https://api.example.test/openapi.json
 allowed_hosts:
   - api.example.test`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process",
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
 			pluginYAML: `command: /tmp/provider
 headers:
   x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
 		{
 			name: "managed parameters unsupported without api surface",
@@ -401,7 +401,7 @@ managed_parameters:
   - in: header
     name: x-version
     value: "1"`,
-			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces",
+			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces; remove plugin.managed_parameters or configure OpenAPI or GraphQL",
 		},
 		{
 			name: "response mapping unsupported for inline operations only",
@@ -412,7 +412,7 @@ operations:
     path: /items
 response_mapping:
   data_path: items`,
-			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations",
+			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations; remove plugin.response_mapping or switch this integration to inline openapi or graphql_url",
 		},
 		{
 			name: "operations unsupported with spec surface",
@@ -427,7 +427,7 @@ operations:
 			name: "mcp connection requires mcp url",
 			pluginYAML: `command: /tmp/provider
 mcp_connection: default`,
-			wantError: "plugin.mcp_connection is only valid when mcp_url is configured",
+			wantError: "plugin.mcp_connection is only valid when mcp_url is configured; remove plugin.mcp_connection or configure an MCP surface",
 		},
 	}
 
@@ -480,7 +480,7 @@ func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
 			setup: setupPluginDir,
 			pluginYAML: `headers:
   x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
 	}
 

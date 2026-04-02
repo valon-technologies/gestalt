@@ -324,12 +324,12 @@ func runValidate(args []string) error {
 func validateConfig(configFlag string) error {
 	path, cfg, err := loadConfigForExecution(configFlag, true)
 	if err != nil {
-		return fmt.Errorf("config invalid: %v", err)
+		return err
 	}
 
 	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories())
 	if err != nil {
-		return fmt.Errorf("config invalid: %v", err)
+		return err
 	}
 
 	logConfigSummary(path, cfg)

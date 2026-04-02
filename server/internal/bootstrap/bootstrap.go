@@ -403,7 +403,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
-	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
+	audit := core.AuditSink(invocation.NewLoggerAuditSink(prepared.Telemetry.Logger()))
 
 	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
 	if err != nil {

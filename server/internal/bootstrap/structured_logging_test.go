@@ -8,9 +8,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
+	"gopkg.in/yaml.v3"
 )
+
+type testTelemetryProvider struct {
+	logger *slog.Logger
+}
+
+func (p *testTelemetryProvider) Logger() *slog.Logger { return p.logger }
+func (p *testTelemetryProvider) TracerProvider() trace.TracerProvider {
+	return nooptrace.NewTracerProvider()
+}
+func (p *testTelemetryProvider) MeterProvider() metric.MeterProvider {
+	return noopmetric.NewMeterProvider()
+}
+func (p *testTelemetryProvider) Shutdown(context.Context) error { return nil }
 
 func TestBootstrapProducesStructuredLogs(t *testing.T) { //nolint:paralleltest // mutates slog.Default
 
@@ -115,5 +134,76 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 
 	if !foundWarning {
 		t.Errorf("did not find 'skipping provider' WARN log line in output:\n%s", output)
+	}
+}
+
+func TestBootstrapAuditSinkUsesTelemetryLogger(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	cfg := validConfig()
+	factories := validFactories()
+	factories.Telemetry["test-telemetry"] = func(yaml.Node) (core.TelemetryProvider, error) {
+		return &testTelemetryProvider{
+			logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+	<-result.ProvidersReady
+
+	result.AuditSink.Log(context.Background(), core.AuditEntry{
+		RequestID: "req-allowed",
+		Source:    "binding:test-hook",
+		UserID:    "user-1",
+		Provider:  "alpha",
+		Operation: "read",
+		Allowed:   true,
+	})
+	result.AuditSink.Log(context.Background(), core.AuditEntry{
+		RequestID: "req-denied",
+		Source:    "binding:test-hook",
+		UserID:    "user-2",
+		Provider:  "alpha",
+		Operation: "write",
+		Allowed:   false,
+		Error:     "access denied",
+	})
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 audit log lines, got %d", len(lines))
+	}
+
+	var first map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("failed to parse first log line: %v", err)
+	}
+	if first["msg"] != "audit" {
+		t.Fatalf("expected first log msg=audit, got %v", first["msg"])
+	}
+	if first["level"] != "INFO" {
+		t.Fatalf("expected first log level=INFO, got %v", first["level"])
+	}
+	if first["request_id"] != "req-allowed" {
+		t.Fatalf("expected first log request_id=req-allowed, got %v", first["request_id"])
+	}
+
+	var second map[string]any
+	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
+		t.Fatalf("failed to parse second log line: %v", err)
+	}
+	if second["msg"] != "audit" {
+		t.Fatalf("expected second log msg=audit, got %v", second["msg"])
+	}
+	if second["level"] != "WARN" {
+		t.Fatalf("expected second log level=WARN, got %v", second["level"])
+	}
+	if second["request_id"] != "req-denied" {
+		t.Fatalf("expected second log request_id=req-denied, got %v", second["request_id"])
 	}
 }
