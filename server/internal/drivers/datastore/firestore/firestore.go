@@ -122,7 +122,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 	// we maintain a synthetic "users_by_email" lookup document keyed
 	// by email. The transaction atomically checks-then-creates both
 	// the lookup doc and the real user doc.
-	lookupRef := s.client.Collection(usersByEmailCollection).Doc(firestoreDocKey(email))
+	lookupRef := s.client.Collection(usersByEmailCollection).Doc(email)
 	userRef := s.client.Collection(datastore.UsersCollection).Doc(id)
 
 	var created bool
@@ -171,7 +171,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 }
 
 func (s *Store) findUserByEmail(ctx context.Context, email string) (*core.User, error) {
-	lookupSnap, err := s.client.Collection(usersByEmailCollection).Doc(firestoreDocKey(email)).Get(ctx)
+	lookupSnap, err := s.client.Collection(usersByEmailCollection).Doc(email).Get(ctx)
 	if status.Code(err) == codes.NotFound {
 		return nil, nil
 	}

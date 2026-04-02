@@ -5,11 +5,19 @@ on:
     branches:
       - main
     paths:
-      - "server/**"
+      - "server/go.mod"
+      - "server/go.sum"
+      - "server/core/datastore.go"
+      - "server/core/testing/datastore_suite.go"
+      - "server/internal/drivers/datastore/**"
       - ".github/workflows/datastore-integration.yml"
   pull_request:
     paths:
-      - "server/**"
+      - "server/go.mod"
+      - "server/go.sum"
+      - "server/core/datastore.go"
+      - "server/core/testing/datastore_suite.go"
+      - "server/internal/drivers/datastore/**"
       - ".github/workflows/datastore-integration.yml"
   workflow_dispatch:
 
@@ -180,7 +188,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
