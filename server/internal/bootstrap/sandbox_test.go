@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package bootstrap
 
 import (
@@ -9,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -24,16 +25,6 @@ func buildGestaltdBinary(t *testing.T) string {
 	return sharedGestaltdBin
 }
 
-func skipUnlessSandboxAvailable(t *testing.T) {
-	t.Helper()
-	switch runtime.GOOS {
-	case "linux", "darwin":
-		return
-	default:
-		t.Skipf("sandbox not available on %s", runtime.GOOS)
-	}
-}
-
 func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 	t.Helper()
 	host, _, err := net.SplitHostPort(ts.Listener.Addr().String())
@@ -44,7 +35,6 @@ func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 }
 
 func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
-	skipUnlessSandboxAvailable(t)
 	t.Parallel()
 
 	secret := filepath.Join(t.TempDir(), "secret.txt")
@@ -91,7 +81,6 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 }
 
 func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
-	skipUnlessSandboxAvailable(t)
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -177,7 +166,6 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 }
 
 func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
-	skipUnlessSandboxAvailable(t)
 	t.Parallel()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +220,6 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 }
 
 func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
-	skipUnlessSandboxAvailable(t)
 	t.Parallel()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
