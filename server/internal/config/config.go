@@ -798,76 +798,46 @@ func inlineConnectionReferences(p *PluginDef) []inlineConnectionReference {
 	return refs
 }
 
-func validateInlineConnectionReferences(name string, p *PluginDef) error {
-	if p == nil {
-		return nil
-	}
-	declared := make(map[string]struct{}, len(p.Connections))
-	for rawName := range p.Connections {
-		resolved := ResolveConnectionAlias(rawName)
-		if resolved == "" {
-			continue
-		}
-		declared[resolved] = struct{}{}
-	}
-
-	checkReference := func(field, rawName string) error {
-		if rawName == "" {
-			return nil
-		}
-		resolved := ResolveConnectionAlias(rawName)
-		if resolved == PluginConnectionName {
-			return nil
-		}
-		if _, ok := declared[resolved]; ok {
-			return nil
-		}
-		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, field, rawName)
-	}
-	for _, ref := range inlineConnectionReferences(p) {
-		if err := checkReference(ref.field, ref.name); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateInlineConnectionDefaults(name string, p *PluginDef) error {
-	if p == nil || len(p.Connections) == 0 {
-		return nil
-	}
-	for _, ref := range inlineConnectionReferences(p) {
-		if ref.required && ref.name == "" {
-			return fmt.Errorf("config validation: inline integration %q %s is required when %s", name, ref.field, ref.context)
-		}
-	}
-	return nil
-}
-
-func manifestBackedConnectionReferences(provider *pluginmanifestv1.Provider) []inlineConnectionReference {
+func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanifestv1.Provider) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
 
 	var refs []inlineConnectionReference
-	if provider.DefaultConnection != "" || len(provider.Operations) > 0 {
+	defaultConnection := provider.DefaultConnection
+	if plugin != nil && plugin.DefaultConnection != "" {
+		defaultConnection = plugin.DefaultConnection
+	}
+	if defaultConnection != "" || len(provider.Operations) > 0 {
 		refs = append(refs, inlineConnectionReference{
 			field:    "plugin.default_connection",
-			name:     provider.DefaultConnection,
+			name:     defaultConnection,
 			required: len(provider.Operations) > 0,
 			context:  "using declarative operations with named connections",
 		})
 	}
-	if provider.Auth != nil {
+	if provider.Auth != nil || (plugin != nil && plugin.Auth != nil) {
 		return refs
 	}
 	for _, surface := range OrderedSpecSurfaces {
-		if ManifestProviderSurfaceURL(provider, surface) == "" {
+		url := ManifestProviderSurfaceURL(provider, surface)
+		if plugin != nil {
+			if overrideURL := plugin.SurfaceURL(surface); overrideURL != "" {
+				url = overrideURL
+			}
+		}
+		if url == "" {
 			continue
+		}
+		connectionName := ManifestProviderSurfaceConnectionName(provider, surface)
+		if plugin != nil {
+			if overrideName := plugin.SurfaceConnectionName(surface); overrideName != "" {
+				connectionName = overrideName
+			}
 		}
 		refs = append(refs, inlineConnectionReference{
 			field:    "plugin." + surface.ConnectionField(),
-			name:     ManifestProviderSurfaceConnectionName(provider, surface),
+			name:     connectionName,
 			required: true,
 			context:  surface.NamedConnectionRequirementContext(),
 		})
@@ -875,51 +845,91 @@ func manifestBackedConnectionReferences(provider *pluginmanifestv1.Provider) []i
 	return refs
 }
 
-func validateManifestBackedConnectionReferences(name string, provider *pluginmanifestv1.Provider) error {
-	if provider == nil {
-		return nil
-	}
-	declared := make(map[string]struct{}, len(provider.Connections))
-	for rawName := range provider.Connections {
-		resolved := ResolveConnectionAlias(rawName)
-		if resolved == "" {
+func validateInlineConnectionReferences(name string, p *PluginDef) error {
+	return validateConnectionReferences(name, declaredInlineConnections(p), inlineConnectionReferences(p))
+}
+
+func validateInlineConnectionDefaults(name string, p *PluginDef) error {
+	declared := declaredInlineConnections(p)
+	return validateConnectionDefaults(name, "inline integration", len(declared), inlineConnectionReferences(p))
+}
+
+func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
+}
+
+func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
+}
+
+func validateConnectionReferences(name string, declared map[string]struct{}, refs []inlineConnectionReference) error {
+	for _, ref := range refs {
+		if ref.name == "" {
 			continue
 		}
-		declared[resolved] = struct{}{}
-	}
-
-	checkReference := func(field, rawName string) error {
-		if rawName == "" {
-			return nil
-		}
-		resolved := ResolveConnectionAlias(rawName)
+		resolved := ResolveConnectionAlias(ref.name)
 		if resolved == PluginConnectionName {
-			return nil
+			continue
 		}
 		if _, ok := declared[resolved]; ok {
-			return nil
+			continue
 		}
-		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, field, rawName)
+		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, ref.field, ref.name)
 	}
+	return nil
+}
 
-	for _, ref := range manifestBackedConnectionReferences(provider) {
-		if err := checkReference(ref.field, ref.name); err != nil {
-			return err
+func validateConnectionDefaults(name, subject string, declaredCount int, refs []inlineConnectionReference) error {
+	if declaredCount == 0 {
+		return nil
+	}
+	for _, ref := range refs {
+		if ref.required && ref.name == "" {
+			return fmt.Errorf("config validation: %s %q %s is required when %s", subject, name, ref.field, ref.context)
 		}
 	}
 	return nil
 }
 
-func validateManifestBackedConnectionDefaults(name string, provider *pluginmanifestv1.Provider) error {
-	if provider == nil || len(provider.Connections) == 0 {
+func declaredInlineConnections(plugin *PluginDef) map[string]struct{} {
+	if plugin == nil {
 		return nil
 	}
-	for _, ref := range manifestBackedConnectionReferences(provider) {
-		if ref.required && ref.name == "" {
-			return fmt.Errorf("config validation: integration %q %s is required when %s", name, ref.field, ref.context)
+	declared := make(map[string]struct{}, len(plugin.Connections))
+	for rawName := range plugin.Connections {
+		addDeclaredConnection(declared, rawName)
+	}
+	return declared
+}
+
+func declaredManifestBackedConnections(plugin *PluginDef, provider *pluginmanifestv1.Provider) map[string]struct{} {
+	size := 0
+	if plugin != nil {
+		size += len(plugin.Connections)
+	}
+	if provider != nil {
+		size += len(provider.Connections)
+	}
+	declared := make(map[string]struct{}, size)
+	if provider != nil {
+		for rawName := range provider.Connections {
+			addDeclaredConnection(declared, rawName)
 		}
 	}
-	return nil
+	if plugin != nil {
+		for rawName := range plugin.Connections {
+			addDeclaredConnection(declared, rawName)
+		}
+	}
+	return declared
+}
+
+func addDeclaredConnection(declared map[string]struct{}, rawName string) {
+	resolved := ResolveConnectionAlias(rawName)
+	if resolved == "" {
+		return
+	}
+	declared[resolved] = struct{}{}
 }
 
 func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
@@ -994,15 +1004,7 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		return nil
 	}
 
-	effectiveManifest, _, err := EffectiveManifestBackedInputs(name, plugin)
-	if err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
 	effectiveProvider := plugin.ManifestProvider()
-	if effectiveManifest != nil {
-		effectiveProvider = effectiveManifest.Provider
-	}
-
 	hasDirectOpenAPI := plugin.OpenAPI != ""
 	hasDirectGraphQL := plugin.GraphQLURL != ""
 	hasDirectMCP := plugin.MCPURL != ""
@@ -1094,10 +1096,10 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		}
 	}
 	if !plugin.IsInline() && effectiveProvider != nil {
-		if err := validateManifestBackedConnectionReferences(name, effectiveProvider); err != nil {
+		if err := validateManifestBackedConnectionReferences(name, plugin, effectiveProvider); err != nil {
 			return err
 		}
-		if err := validateManifestBackedConnectionDefaults(name, effectiveProvider); err != nil {
+		if err := validateManifestBackedConnectionDefaults(name, plugin, effectiveProvider); err != nil {
 			return err
 		}
 	}
