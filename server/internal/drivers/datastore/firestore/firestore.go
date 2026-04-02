@@ -29,7 +29,6 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(projectID, database string, encryptionKey []byte) (*Store, error) {
 	ctx := context.Background()
@@ -468,20 +467,6 @@ type apiTokenHashLookupDoc struct {
 	TokenID string `firestore:"token_id"`
 }
 
-type stagedConnectionDoc struct {
-	UserID                string     `firestore:"user_id"`
-	Integration           string     `firestore:"integration"`
-	Connection            string     `firestore:"connection"`
-	Instance              string     `firestore:"instance"`
-	AccessTokenEncrypted  string     `firestore:"access_token_encrypted"`
-	RefreshTokenEncrypted string     `firestore:"refresh_token_encrypted"`
-	TokenExpiresAt        *time.Time `firestore:"token_expires_at"`
-	MetadataJSON          string     `firestore:"metadata_json"`
-	CandidatesJSON        string     `firestore:"candidates_json"`
-	CreatedAt             time.Time  `firestore:"created_at"`
-	ExpiresAt             time.Time  `firestore:"expires_at"`
-}
-
 func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 	doc := apiTokenDoc{
 		UserID:      token.UserID,
@@ -691,74 +676,4 @@ func snapToAPIToken(snap *gcpfirestore.DocumentSnapshot) (*core.APIToken, error)
 		CreatedAt:   doc.CreatedAt,
 		UpdatedAt:   doc.UpdatedAt,
 	}, nil
-}
-
-func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
-	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(sc.AccessToken, sc.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("firestore: %w", err)
-	}
-
-	doc := stagedConnectionDoc{
-		UserID:                sc.UserID,
-		Integration:           sc.Integration,
-		Connection:            sc.Connection,
-		Instance:              sc.Instance,
-		AccessTokenEncrypted:  accessEnc,
-		RefreshTokenEncrypted: refreshEnc,
-		TokenExpiresAt:        sc.TokenExpiresAt,
-		MetadataJSON:          sc.MetadataJSON,
-		CandidatesJSON:        sc.CandidatesJSON,
-		CreatedAt:             sc.CreatedAt,
-		ExpiresAt:             sc.ExpiresAt,
-	}
-
-	_, err = s.client.Collection(datastore.StagedConnectionsCollection).Doc(sc.ID).Set(ctx, doc)
-	if err != nil {
-		return fmt.Errorf("firestore: storing staged connection: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
-	snap, err := s.client.Collection(datastore.StagedConnectionsCollection).Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("firestore: getting staged connection: %w", err)
-	}
-
-	var doc stagedConnectionDoc
-	if err := snap.DataTo(&doc); err != nil {
-		return nil, fmt.Errorf("firestore: unmarshalling staged connection: %w", err)
-	}
-
-	access, refresh, err := s.enc.DecryptTokenPair(doc.AccessTokenEncrypted, doc.RefreshTokenEncrypted)
-	if err != nil {
-		return nil, fmt.Errorf("firestore: %w", err)
-	}
-
-	return &core.StagedConnection{
-		ID:             snap.Ref.ID,
-		UserID:         doc.UserID,
-		Integration:    doc.Integration,
-		Connection:     doc.Connection,
-		Instance:       doc.Instance,
-		AccessToken:    access,
-		RefreshToken:   refresh,
-		TokenExpiresAt: doc.TokenExpiresAt,
-		MetadataJSON:   doc.MetadataJSON,
-		CandidatesJSON: doc.CandidatesJSON,
-		CreatedAt:      doc.CreatedAt,
-		ExpiresAt:      doc.ExpiresAt,
-	}, nil
-}
-
-func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
-	_, err := s.client.Collection(datastore.StagedConnectionsCollection).Doc(id).Delete(ctx)
-	if err != nil {
-		return fmt.Errorf("firestore: deleting staged connection: %w", err)
-	}
-	return nil
 }
