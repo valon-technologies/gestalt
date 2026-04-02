@@ -65,12 +65,6 @@ pub enum TokenSource {
     StoredCredentials,
 }
 
-struct AuthState {
-    token_source: TokenSource,
-    access_token: String,
-    stored_credentials: Option<Credentials>,
-}
-
 pub fn env_api_key_is_set() -> bool {
     std::env::var(ENV_API_KEY)
         .map(|v| !v.is_empty())
@@ -80,14 +74,17 @@ pub fn env_api_key_is_set() -> bool {
 pub struct ApiClient {
     client: Client,
     base_url: String,
-    auth: RefCell<AuthState>,
+    token: RefCell<String>,
+    token_source: TokenSource,
+    refresh_token: Option<String>,
+    fallback_token_id: Option<String>,
 }
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
         let base_url = resolve_url(url_override)?;
         if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
-            return Self::new_with_source(&base_url, &key, TokenSource::EnvVar);
+            return Self::build(&base_url, key, TokenSource::EnvVar, None, None);
         }
 
         match CredentialStore::new()?.load()? {
@@ -100,33 +97,26 @@ impl ApiClient {
     }
 
     pub fn from_credentials(base_url: &str, credentials: Credentials) -> Result<Self> {
-        let access_token = credentials.access_token.clone();
         Self::build(
             base_url,
-            AuthState {
-                token_source: TokenSource::StoredCredentials,
-                access_token,
-                stored_credentials: Some(credentials),
-            },
+            credentials.access_token,
+            TokenSource::StoredCredentials,
+            credentials.refresh_token,
+            credentials.refresh_token_id,
         )
     }
 
     pub fn new(base_url: &str, token: &str) -> Result<Self> {
-        Self::new_with_source(base_url, token, TokenSource::Direct)
+        Self::build(base_url, token.to_string(), TokenSource::Direct, None, None)
     }
 
-    fn new_with_source(base_url: &str, token: &str, token_source: TokenSource) -> Result<Self> {
-        Self::build(
-            base_url,
-            AuthState {
-                token_source,
-                access_token: token.to_string(),
-                stored_credentials: None,
-            },
-        )
-    }
-
-    fn build(base_url: &str, auth: AuthState) -> Result<Self> {
+    fn build(
+        base_url: &str,
+        token: String,
+        token_source: TokenSource,
+        refresh_token: Option<String>,
+        fallback_token_id: Option<String>,
+    ) -> Result<Self> {
         let mut default_headers = header::HeaderMap::new();
         default_headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
 
@@ -139,7 +129,10 @@ impl ApiClient {
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
-            auth: RefCell::new(auth),
+            token: RefCell::new(token),
+            token_source,
+            refresh_token,
+            fallback_token_id,
         })
     }
 
@@ -164,25 +157,13 @@ impl ApiClient {
     }
 
     pub fn revoke_cli_login(&self) -> Result<serde_json::Value> {
-        let refresh_token = self
-            .auth
-            .borrow()
-            .stored_credentials
-            .as_ref()
-            .and_then(|creds| creds.refresh_token.clone())
-            .ok_or_else(|| {
-                anyhow::anyhow!("stored CLI credentials do not contain a refresh token")
-            })?;
-
-        let url = format!("{}/api/v1/auth/cli/revoke", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .json(&serde_json::json!({ "refresh_token": refresh_token }))
-            .send()
-            .with_context(|| format!("request to {} failed", url))?;
-
-        self.handle_response(resp)
+        let refresh_token = self.refresh_token.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("stored CLI credentials do not contain a refresh token")
+        })?;
+        self.post_unauth(
+            "/api/v1/auth/cli/revoke",
+            &serde_json::json!({ "refresh_token": refresh_token }),
+        )
     }
 
     fn send_json_request(
@@ -191,13 +172,10 @@ impl ApiClient {
         path: &str,
         body: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value> {
-        let access_token = self.auth.borrow().access_token.clone();
-        let resp = self.send_authorized_request(method.clone(), path, body, &access_token)?;
-        if resp.status() == StatusCode::UNAUTHORIZED && self.can_refresh() {
+        let resp = self.send_authorized_request(method.clone(), path, body)?;
+        if resp.status() == StatusCode::UNAUTHORIZED && self.refresh_token.is_some() {
             self.refresh_cli_access_token()?;
-            let access_token = self.auth.borrow().access_token.clone();
-            let retry = self.send_authorized_request(method, path, body, &access_token)?;
-            return self.handle_response(retry);
+            return self.handle_response(self.send_authorized_request(method, path, body)?);
         }
         self.handle_response(resp)
     }
@@ -207,10 +185,12 @@ impl ApiClient {
         method: Method,
         path: &str,
         body: Option<&serde_json::Value>,
-        access_token: &str,
     ) -> Result<reqwest::blocking::Response> {
         let url = format!("{}{}", self.base_url, path);
-        let mut req = self.client.request(method, &url).bearer_auth(access_token);
+        let mut req = self
+            .client
+            .request(method, &url)
+            .bearer_auth(self.token.borrow().clone());
         if let Some(body) = body {
             req = req.json(body);
         }
@@ -218,53 +198,36 @@ impl ApiClient {
             .with_context(|| format!("request to {} failed", url))
     }
 
-    fn can_refresh(&self) -> bool {
-        self.auth
-            .borrow()
-            .stored_credentials
-            .as_ref()
-            .and_then(|creds| creds.refresh_token.as_ref())
-            .is_some()
+    fn refresh_cli_access_token(&self) -> Result<()> {
+        let refresh_token = self.refresh_token.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("stored CLI credentials do not support automatic refresh")
+        })?;
+        let payload = self.post_unauth(
+            "/api/v1/auth/cli/refresh",
+            &serde_json::json!({ "refresh_token": refresh_token }),
+        )?;
+        let access_token = payload["access_token"]
+            .as_str()
+            .context("refresh response missing access_token field")?;
+        *self.token.borrow_mut() = access_token.to_string();
+        CredentialStore::new()?.save(&Credentials {
+            api_url: self.base_url.clone(),
+            access_token: access_token.to_string(),
+            refresh_token: self.refresh_token.clone(),
+            refresh_token_id: self.fallback_token_id.clone(),
+        })?;
+        Ok(())
     }
 
-    fn refresh_cli_access_token(&self) -> Result<()> {
-        let refresh_token = self
-            .auth
-            .borrow()
-            .stored_credentials
-            .as_ref()
-            .and_then(|creds| creds.refresh_token.clone())
-            .ok_or_else(|| {
-                anyhow::anyhow!("stored CLI credentials do not support automatic refresh")
-            })?;
-
-        let url = format!("{}/api/v1/auth/cli/refresh", self.base_url);
+    fn post_unauth(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+        let url = format!("{}{}", self.base_url, path);
         let resp = self
             .client
             .post(&url)
-            .json(&serde_json::json!({ "refresh_token": refresh_token }))
+            .json(body)
             .send()
             .with_context(|| format!("request to {} failed", url))?;
-
-        let payload = self.handle_response(resp)?;
-        let access_token = payload["access_token"]
-            .as_str()
-            .context("refresh response missing access_token field")?
-            .to_string();
-
-        let stored_credentials = {
-            let mut auth = self.auth.borrow_mut();
-            auth.access_token = access_token.clone();
-            if let Some(creds) = auth.stored_credentials.as_mut() {
-                creds.access_token = access_token;
-            }
-            auth.stored_credentials.clone()
-        };
-
-        if let Some(creds) = stored_credentials {
-            CredentialStore::new()?.save(&creds)?;
-        }
-        Ok(())
+        self.handle_response(resp)
     }
 
     fn handle_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {
@@ -277,10 +240,12 @@ impl ApiClient {
         let body = resp.text().context("failed to read response body")?;
 
         if status.is_client_error() || status.is_server_error() {
-            let message = response_error_message(status, &body);
-            let token_source = self.auth.borrow().token_source;
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| extract_error_message(&v))
+                .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
 
-            if status == StatusCode::UNAUTHORIZED && token_source == TokenSource::EnvVar {
+            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
                 bail!(
                     "{} (using {} from environment; \
                      unset it to use your stored CLI credentials from 'gestalt auth login')",
@@ -288,7 +253,8 @@ impl ApiClient {
                     ENV_API_KEY,
                 );
             }
-            if status == StatusCode::UNAUTHORIZED && token_source == TokenSource::StoredCredentials
+            if status == StatusCode::UNAUTHORIZED
+                && self.token_source == TokenSource::StoredCredentials
             {
                 bail!(
                     "{} (stored CLI credentials may be expired or revoked; run 'gestalt auth login' to refresh them)",
@@ -305,13 +271,6 @@ impl ApiClient {
 
         serde_json::from_str(&body).context("failed to parse response JSON")
     }
-}
-
-fn response_error_message(status: StatusCode, body: &str) -> String {
-    serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|v| extract_error_message(&v))
-        .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body))
 }
 
 fn extract_error_message(value: &serde_json::Value) -> Option<String> {

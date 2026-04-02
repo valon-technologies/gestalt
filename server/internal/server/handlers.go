@@ -765,11 +765,6 @@ func (s *Server) decodeCLIRefreshRequest(r *http.Request) (string, error) {
 }
 
 func (s *Server) resolveCLIRefreshToken(ctx context.Context, plaintext string) (*core.APIToken, *core.User, *core.UserIdentity, error) {
-	typ, ok := principal.ParseTokenType(plaintext)
-	if !ok || typ != principal.TokenTypeCLIRefresh {
-		return nil, nil, nil, errInvalidCLIRefreshToken
-	}
-
 	token, err := s.datastore.ValidateAPIToken(ctx, principal.HashToken(plaintext))
 	if err != nil {
 		return nil, nil, nil, err
