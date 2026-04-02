@@ -130,17 +130,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 				UNIQUE(user_id, integration, connection, instance)
 			)`},
 		{"api_tokens", `
-				IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'api_tokens')
+			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'api_tokens')
 			CREATE TABLE api_tokens (
 				id NVARCHAR(36) NOT NULL PRIMARY KEY,
 				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
 				name NVARCHAR(255) NOT NULL,
 				hashed_token NVARCHAR(255) NOT NULL UNIQUE,
 				scopes NVARCHAR(MAX) NOT NULL DEFAULT '',
-					expires_at DATETIME2(6) NULL,
-					created_at DATETIME2(6) NOT NULL,
-					updated_at DATETIME2(6) NOT NULL
-				)`},
+				expires_at DATETIME2(6) NULL,
+				created_at DATETIME2(6) NOT NULL,
+				updated_at DATETIME2(6) NOT NULL
+			)`},
 	}
 
 	for _, m := range migrations {

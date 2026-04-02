@@ -113,16 +113,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("creating integration_tokens table: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE IF NOT EXISTS api_tokens (
+		CREATE TABLE IF NOT EXISTS api_tokens (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			name TEXT NOT NULL,
 			hashed_token TEXT UNIQUE NOT NULL,
 			scopes TEXT NOT NULL DEFAULT '',
-				expires_at TIMESTAMPTZ,
-				created_at TIMESTAMPTZ NOT NULL,
-				updated_at TIMESTAMPTZ NOT NULL
-			)`); err != nil {
+			expires_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`); err != nil {
 		return fmt.Errorf("creating api_tokens table: %w", err)
 	}
 	return tx.Commit()

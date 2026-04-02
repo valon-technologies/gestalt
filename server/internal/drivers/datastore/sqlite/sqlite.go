@@ -95,16 +95,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 			updated_at DATETIME NOT NULL,
 			UNIQUE(user_id, integration, connection, instance)
 		);
-			CREATE TABLE IF NOT EXISTS api_tokens (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL REFERENCES users(id),
+		CREATE TABLE IF NOT EXISTS api_tokens (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
 			name TEXT NOT NULL,
 			hashed_token TEXT UNIQUE NOT NULL,
 			scopes TEXT NOT NULL DEFAULT '',
-				expires_at DATETIME,
-				created_at DATETIME NOT NULL,
-				updated_at DATETIME NOT NULL
-			);
+			expires_at DATETIME,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
 		`)
 	return err
 }

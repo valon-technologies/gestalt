@@ -99,17 +99,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 		`CREATE TABLE IF NOT EXISTS api_tokens (
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
+			id VARCHAR(36) NOT NULL PRIMARY KEY,
 			user_id VARCHAR(36) NOT NULL,
 			name VARCHAR(255) NOT NULL,
 			hashed_token VARCHAR(255) NOT NULL,
 			scopes TEXT NOT NULL,
-				expires_at DATETIME(6) NULL,
-				created_at DATETIME(6) NOT NULL,
-				updated_at DATETIME(6) NOT NULL,
-				UNIQUE KEY idx_api_tokens_hashed (hashed_token),
-				CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
-			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			expires_at DATETIME(6) NULL,
+			created_at DATETIME(6) NOT NULL,
+			updated_at DATETIME(6) NOT NULL,
+			UNIQUE KEY idx_api_tokens_hashed (hashed_token),
+			CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 
 	for i, stmt := range migrations {
