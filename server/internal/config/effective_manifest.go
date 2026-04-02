@@ -64,7 +64,7 @@ func MergedManifestProvider(manifestProvider *pluginmanifestv1.Provider, plugin 
 	if len(plugin.Operations) > 0 {
 		merged.Operations = inlineOperationsToManifest(plugin.Operations)
 	}
-	merged.Connection = MergedProviderConnectionParams(manifestProvider, plugin)
+	merged.ConnectionParams = MergedProviderConnectionParams(manifestProvider, plugin)
 
 	if plugin.OpenAPI != "" {
 		merged.OpenAPI = plugin.OpenAPI
@@ -142,7 +142,7 @@ func MergedProviderConnectionParams(manifestProvider *pluginmanifestv1.Provider,
 
 	merged := cloneManifestConnectionParams(nil)
 	if manifestProvider != nil {
-		merged = cloneManifestConnectionParams(manifestProvider.Connection)
+		merged = cloneManifestConnectionParams(manifestProvider.ConnectionParams)
 	}
 	if plugin == nil || plugin.ConnectionParams == nil {
 		return merged
@@ -346,7 +346,7 @@ func cloneManifestProvider(provider *pluginmanifestv1.Provider) *pluginmanifestv
 	cloned.ManagedParameters = append([]pluginmanifestv1.ManagedParameter(nil), provider.ManagedParameters...)
 	cloned.Operations = cloneManifestOperations(provider.Operations)
 	cloned.PostConnectDiscovery = cloneManifestPostConnectDiscovery(provider.PostConnectDiscovery)
-	cloned.Connection = cloneManifestConnectionParams(provider.Connection)
+	cloned.ConnectionParams = cloneManifestConnectionParams(provider.ConnectionParams)
 	cloned.AllowedOperations = cloneManifestOperationOverrides(provider.AllowedOperations)
 	cloned.Connections = cloneManifestConnections(provider.Connections)
 	cloned.ResponseMapping = cloneManifestResponseMapping(provider.ResponseMapping)
