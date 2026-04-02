@@ -4,7 +4,7 @@ display_name: Gmail
 description: Read, send, and manage Gmail messages, threads, drafts, and labels.
 icon_file: assets/icon.svg
 provider:
-  config_schema_path: schemas/config.schema.json
+  config_schema_path: schemas/config.schema.yaml
   connections:
     default:
       auth:

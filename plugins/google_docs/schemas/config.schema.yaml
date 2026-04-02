@@ -1,0 +1,12 @@
+type: object
+properties:
+  client_id:
+    type: string
+    description: Google OAuth client ID for Google Docs.
+  client_secret:
+    type: string
+    description: Google OAuth client secret for Google Docs.
+required:
+  - client_id
+  - client_secret
+additionalProperties: false

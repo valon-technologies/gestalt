@@ -4,7 +4,7 @@ display_name: Google Drive
 description: Read, create, update, and share files in Google Drive.
 icon_file: assets/icon.svg
 provider:
-  config_schema_path: schemas/config.schema.json
+  config_schema_path: schemas/config.schema.yaml
   connections:
     default:
       auth:
