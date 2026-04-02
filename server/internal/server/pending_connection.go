@@ -6,12 +6,13 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-const pendingConnectionCookieName = "pending_connection"
 const pendingConnectionPath = "/api/v1/auth/pending-connection"
 
 var pendingConnectionSelectionPage = template.Must(template.New("pending-connection-selection").Parse(`<!doctype html>
@@ -122,6 +123,7 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
       {{range .Candidates}}
       <li>
         <form method="post" action="{{$.Action}}">
+          <input type="hidden" name="pending_token" value="{{$.PendingToken}}">
           <input type="hidden" name="candidate_id" value="{{.ID}}">
           <button type="submit">
             <strong>{{.Name}}</strong>
@@ -213,9 +215,10 @@ var pendingConnectionSuccessPage = template.Must(template.New("pending-connectio
 `))
 
 type pendingConnectionSelectionView struct {
-	Action      string
-	Integration string
-	Candidates  []core.DiscoveryCandidate
+	Action       string
+	Integration  string
+	PendingToken string
+	Candidates   []core.DiscoveryCandidate
 }
 
 func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []core.DiscoveryCandidate) (string, error) {
@@ -274,48 +277,14 @@ func findDiscoveryCandidate(candidates []core.DiscoveryCandidate, candidateID st
 	return nil
 }
 
-func (s *Server) setPendingConnectionCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     pendingConnectionCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(pendingConnectionTTL.Seconds()),
-		HttpOnly: true,
-		Secure:   s.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func (s *Server) clearPendingConnectionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     pendingConnectionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   s.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func (s *Server) loadPendingConnection(r *http.Request) (*pendingConnectionState, error) {
-	cookie, err := r.Cookie(pendingConnectionCookieName)
-	if err != nil {
-		if errors.Is(err, http.ErrNoCookie) {
-			return nil, fmt.Errorf("missing pending connection")
-		}
-		return nil, err
-	}
-	return s.decodePendingConnectionToken(cookie.Value)
-}
-
-func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, state *pendingConnectionState) {
+func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, state *pendingConnectionState, pendingToken string) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pendingConnectionSelectionPage.Execute(w, pendingConnectionSelectionView{
-		Action:      pendingConnectionPath,
-		Integration: state.Integration,
-		Candidates:  state.Candidates,
+		Action:       pendingConnectionPath,
+		Integration:  state.Integration,
+		PendingToken: pendingToken,
+		Candidates:   state.Candidates,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to render pending connection page")
 	}
@@ -329,18 +298,60 @@ func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integr
 	}
 }
 
-func (s *Server) getPendingConnection(w http.ResponseWriter, r *http.Request) {
-	state, err := s.loadPendingConnection(r)
-	if err != nil {
-		s.clearPendingConnectionCookie(w)
-		status := http.StatusBadRequest
-		if errors.Is(err, errPendingConnectionExpired) {
-			status = http.StatusGone
-		}
-		writeError(w, status, "invalid or expired pending connection")
-		return
+func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, error) {
+	if s.noAuth {
+		return "", false, nil
 	}
-	s.writePendingConnectionSelectionPage(w, state)
+
+	var token string
+	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+		token = c.Value
+	} else if header := r.Header.Get("Authorization"); header != "" {
+		bearer := strings.TrimPrefix(header, core.BearerScheme)
+		if bearer == header {
+			return "", true, principal.ErrInvalidToken
+		}
+		token = bearer
+	}
+	if token == "" {
+		return "", false, nil
+	}
+
+	p, err := s.resolver.ResolveToken(r.Context(), token)
+	if err != nil {
+		return "", true, err
+	}
+	if p.UserID != "" {
+		return p.UserID, true, nil
+	}
+	if p.Identity == nil || p.Identity.Email == "" {
+		return "", true, fmt.Errorf("authenticated principal missing email")
+	}
+	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), p.Identity.Email)
+	if err != nil {
+		return "", true, err
+	}
+	if dbUser == nil || dbUser.ID == "" {
+		return "", true, fmt.Errorf("authenticated principal missing user ID")
+	}
+	return dbUser.ID, true, nil
+}
+
+func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
+	userID, authenticated, err := s.resolvePendingConnectionUserID(r)
+	if err != nil {
+		if errors.Is(err, principal.ErrInvalidToken) {
+			writeError(w, http.StatusUnauthorized, "invalid token")
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
+		return false
+	}
+	if authenticated && userID != state.UserID {
+		writeError(w, http.StatusNotFound, "pending connection not found")
+		return false
+	}
+	return true
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {
@@ -348,20 +359,27 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid form body")
 		return
 	}
-	candidateID := r.Form.Get("candidate_id")
-	if candidateID == "" {
-		writeError(w, http.StatusBadRequest, "candidate_id is required")
+	pendingToken := r.Form.Get("pending_token")
+	if pendingToken == "" {
+		writeError(w, http.StatusBadRequest, "pending_token is required")
 		return
 	}
+	candidateID := r.Form.Get("candidate_id")
 
-	state, err := s.loadPendingConnection(r)
+	state, err := s.decodePendingConnectionToken(pendingToken)
 	if err != nil {
-		s.clearPendingConnectionCookie(w)
 		status := http.StatusBadRequest
 		if errors.Is(err, errPendingConnectionExpired) {
 			status = http.StatusGone
 		}
 		writeError(w, status, "invalid or expired pending connection")
+		return
+	}
+	if !s.authorizePendingConnection(w, r, state) {
+		return
+	}
+	if candidateID == "" {
+		s.writePendingConnectionSelectionPage(w, state, pendingToken)
 		return
 	}
 
@@ -386,7 +404,6 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to store connection")
 		return
 	}
-	s.clearPendingConnectionCookie(w)
 
 	if _, err := r.Cookie(sessionCookieName); err == nil {
 		http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(state.Integration), http.StatusSeeOther)

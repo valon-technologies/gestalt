@@ -2070,9 +2070,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("decoding start response: %v", err)
 		}
 
-		jar, _ := cookiejar.New(nil)
 		noRedirect := &http.Client{
-			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -2084,23 +2082,10 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode != http.StatusSeeOther {
-			t.Fatalf("expected 303, got %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
 		}
-		if loc := resp.Header.Get("Location"); loc != pendingSelectionPath {
-			t.Fatalf("expected redirect to %s, got %q", pendingSelectionPath, loc)
-		}
-
-		pageResp, err := noRedirect.Get(ts.URL + pendingSelectionPath)
-		if err != nil {
-			t.Fatalf("selection page request: %v", err)
-		}
-		defer func() { _ = pageResp.Body.Close() }()
-
-		if pageResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d", pageResp.StatusCode)
-		}
-		body, err := io.ReadAll(pageResp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
@@ -2113,6 +2098,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if !strings.Contains(text, pendingSelectionPath) {
 			t.Fatalf("expected selection form action in page, got %q", text)
+		}
+		if !strings.Contains(text, "name=\"pending_token\"") {
+			t.Fatalf("expected pending token hidden input in page, got %q", text)
 		}
 		if stored != nil {
 			t.Fatal("did not expect final token to be stored before selection")
@@ -3745,6 +3733,19 @@ func TestConnectManual(t *testing.T) {
 
 		var stored *core.IntegrationToken
 		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "stub",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "same-user-token":
+						return &core.UserIdentity{Email: "same@test.local"}, nil
+					case "other-user-token":
+						return &core.UserIdentity{Email: "other@test.local"}, nil
+					default:
+						return nil, fmt.Errorf("bad token")
+					}
+				},
+			}
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubDiscoveringManualProvider{
 				stubManualProvider: stubManualProvider{
 					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
@@ -3759,7 +3760,14 @@ func TestConnectManual(t *testing.T) {
 			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
 			cfg.Datastore = &coretesting.StubDatastore{
 				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-					return &core.User{ID: "u1", Email: email}, nil
+					switch email {
+					case "same@test.local":
+						return &core.User{ID: "u1", Email: email}, nil
+					case "other@test.local":
+						return &core.User{ID: "u2", Email: email}, nil
+					default:
+						return nil, fmt.Errorf("unexpected email %q", email)
+					}
 				},
 				StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
 					stored = tok
@@ -3769,9 +3777,7 @@ func TestConnectManual(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		jar, _ := cookiejar.New(nil)
 		noRedirect := &http.Client{
-			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -3780,6 +3786,7 @@ func TestConnectManual(t *testing.T) {
 		connectBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
 		connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", connectBody)
 		connectReq.Header.Set("Content-Type", "application/json")
+		connectReq.Header.Set("Authorization", "Bearer same-user-token")
 		connectResp, err := noRedirect.Do(connectReq)
 		if err != nil {
 			t.Fatalf("connect request: %v", err)
@@ -3793,6 +3800,7 @@ func TestConnectManual(t *testing.T) {
 		var connectResult struct {
 			Status       string `json:"status"`
 			SelectionURL string `json:"selection_url"`
+			PendingToken string `json:"pending_token"`
 		}
 		if err := json.NewDecoder(connectResp.Body).Decode(&connectResult); err != nil {
 			t.Fatalf("decode connect result: %v", err)
@@ -3803,11 +3811,18 @@ func TestConnectManual(t *testing.T) {
 		if connectResult.SelectionURL != pendingSelectionPath {
 			t.Fatalf("expected selection URL %q, got %q", pendingSelectionPath, connectResult.SelectionURL)
 		}
+		if connectResult.PendingToken == "" {
+			t.Fatal("expected pending token")
+		}
 		if stored != nil {
 			t.Fatal("did not expect final token to be stored before selection")
 		}
 
-		pageResp, err := noRedirect.Get(ts.URL + connectResult.SelectionURL)
+		renderForm := url.Values{"pending_token": {connectResult.PendingToken}}
+		renderReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(renderForm.Encode()))
+		renderReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		renderReq.AddCookie(&http.Cookie{Name: "session_token", Value: "same-user-token"})
+		pageResp, err := noRedirect.Do(renderReq)
 		if err != nil {
 			t.Fatalf("selection page request: %v", err)
 		}
@@ -3827,11 +3842,37 @@ func TestConnectManual(t *testing.T) {
 		if !strings.Contains(pageText, "Site A") || !strings.Contains(pageText, "Site B") {
 			t.Fatalf("expected both candidates in selection page, got %q", pageText)
 		}
+		if !strings.Contains(pageText, "name=\"pending_token\"") {
+			t.Fatalf("expected pending token in selection page, got %q", pageText)
+		}
 
-		form := url.Values{"candidate_id": {"site-b"}}
+		mismatchForm := url.Values{
+			"pending_token": {connectResult.PendingToken},
+			"candidate_id":  {"site-b"},
+		}
+		mismatchReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(mismatchForm.Encode()))
+		mismatchReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		mismatchReq.AddCookie(&http.Cookie{Name: "session_token", Value: "other-user-token"})
+		mismatchResp, err := noRedirect.Do(mismatchReq)
+		if err != nil {
+			t.Fatalf("mismatch request: %v", err)
+		}
+		defer func() { _ = mismatchResp.Body.Close() }()
+
+		if mismatchResp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404 for mismatched user, got %d", mismatchResp.StatusCode)
+		}
+		if stored != nil {
+			t.Fatal("did not expect token to be stored for mismatched user")
+		}
+
+		form := url.Values{
+			"pending_token": {connectResult.PendingToken},
+			"candidate_id":  {"site-b"},
+		}
 		selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(form.Encode()))
 		selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		selectReq.AddCookie(&http.Cookie{Name: "session_token", Value: "browser-session"})
+		selectReq.AddCookie(&http.Cookie{Name: "session_token", Value: "same-user-token"})
 		selectResp, err := noRedirect.Do(selectReq)
 		if err != nil {
 			t.Fatalf("select request: %v", err)

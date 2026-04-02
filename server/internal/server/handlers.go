@@ -890,12 +890,15 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	if result.Status == "selection_required" {
-		s.setPendingConnectionCookie(w, result.PendingToken)
-		http.Redirect(w, r, pendingConnectionPath, http.StatusSeeOther)
+		state, err := s.decodePendingConnectionToken(result.PendingToken)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to prepare pending connection")
+			return
+		}
+		s.writePendingConnectionSelectionPage(w, state, result.PendingToken)
 		return
 	}
 
-	s.clearPendingConnectionCookie(w)
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }
 
@@ -991,11 +994,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result.Status == "selection_required" {
-		s.setPendingConnectionCookie(w, result.PendingToken)
-	} else {
-		s.clearPendingConnectionCookie(w)
-	}
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1287,7 +1285,6 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.clearSessionCookie(w)
-	s.clearPendingConnectionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1394,7 +1391,7 @@ type postConnectResult struct {
 	Status       string `json:"status"`
 	Integration  string `json:"integration,omitempty"`
 	SelectionURL string `json:"selection_url,omitempty"`
-	PendingToken string `json:"-"`
+	PendingToken string `json:"pending_token,omitempty"`
 }
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
