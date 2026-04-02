@@ -41,6 +41,10 @@ gestaltd plugin release --version 0.1.0
 
 `gestalt` talks to the HTTP API exposed by `gestaltd`.
 
+`gestalt auth login` stores short-lived CLI access credentials and automatically
+refreshes them when possible. `gestalt auth logout` revokes the stored CLI
+refresh credential before removing the local credentials file.
+
 ### Global Flags
 
 | Flag | Purpose |

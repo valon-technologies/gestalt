@@ -32,6 +32,7 @@ type StubDatastore struct {
 	DeleteTokenFn              func(context.Context, string) error
 	StoreAPITokenFn            func(context.Context, *core.APIToken) error
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
+	ListAPITokensFn            func(context.Context, string) ([]*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
 	RevokeAllAPITokensFn       func(context.Context, string) (int64, error)
 }
@@ -130,7 +131,10 @@ func (s *StubDatastore) ValidateAPIToken(ctx context.Context, hashedToken string
 	}
 	return nil, nil
 }
-func (s *StubDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken, error) {
+func (s *StubDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
+	if s.ListAPITokensFn != nil {
+		return s.ListAPITokensFn(ctx, userID)
+	}
 	return nil, nil
 }
 func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {

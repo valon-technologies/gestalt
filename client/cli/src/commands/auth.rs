@@ -127,22 +127,32 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     let login_result: serde_json::Value = callback_resp
         .json()
         .context("callback response missing token response")?;
-    let api_token = login_result["token"]
+    let access_token = login_result["access_token"]
         .as_str()
-        .context("callback response missing token field")?;
-    let api_token_id = login_result["id"]
+        .context("callback response missing access_token field")?;
+    let refresh_token = login_result["refresh_token"]
         .as_str()
-        .context("callback response missing id field")?;
+        .context("callback response missing refresh_token field")?;
+    let refresh_token_id = login_result["refresh_token_id"]
+        .as_str()
+        .context("callback response missing refresh_token_id field")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: base_url,
-        api_token: api_token.to_string(),
-        api_token_id: api_token_id.to_string(),
+        access_token: access_token.to_string(),
+        access_token_expires_at: login_result["access_token_expires_at"]
+            .as_str()
+            .map(str::to_owned),
+        refresh_token: Some(refresh_token.to_string()),
+        refresh_token_id: Some(refresh_token_id.to_string()),
+        refresh_token_expires_at: login_result["refresh_token_expires_at"]
+            .as_str()
+            .map(str::to_owned),
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
-    output::print_success("Logged in successfully. Stored CLI API token.");
+    output::print_success("Logged in successfully. Stored CLI credentials.");
     Ok(())
 }
 
@@ -157,12 +167,22 @@ pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
     match store.load() {
         Ok(Some(creds)) => {
-            let client = ApiClient::new(&creds.api_url, &creds.api_token)?;
-            if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
-                output::print_warning(&format!(
-                    "Failed to revoke stored CLI token {}: {}",
-                    creds.api_token_id, err
-                ));
+            if creds.refresh_token.is_some() {
+                let client = ApiClient::from_credentials(&creds.api_url, creds.clone())?;
+                if let Err(err) = client.revoke_cli_login() {
+                    output::print_warning(&format!(
+                        "Failed to revoke stored CLI refresh token: {}",
+                        err
+                    ));
+                }
+            } else if let Some(token_id) = creds.refresh_token_id.as_deref() {
+                let client = ApiClient::new(&creds.api_url, &creds.access_token)?;
+                if let Err(err) = client.revoke_api_token(token_id) {
+                    output::print_warning(&format!(
+                        "Failed to revoke stored CLI token {}: {}",
+                        token_id, err
+                    ));
+                }
             }
         }
         Ok(None) => {}

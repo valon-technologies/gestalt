@@ -82,10 +82,21 @@ Content-Type: application/json
 They can be scoped to specific integrations and are accepted through:
 
 - `Authorization: Bearer gst_api_...`
-- the `gestalt` client CLI
 - authenticated calls to `/mcp`
 
 `server.api_token_ttl` controls the token lifetime.
+
+## CLI Credentials
+
+`gestalt auth login` does not need to keep a perpetual API bearer on disk.
+Instead, the CLI stores:
+
+- a short-lived platform access token used for normal API calls
+- a dedicated CLI refresh token used only for `/api/v1/auth/cli/refresh` and
+  `/api/v1/auth/cli/revoke`
+
+The CLI refreshes the short-lived access token automatically before it expires
+or after a `401`, and `gestalt auth logout` revokes the refresh token.
 
 ## Session Cookies
 

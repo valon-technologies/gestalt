@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -655,17 +656,13 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
-		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
+		loginResp, issueErr := s.issueCLILoginResponse(r.Context(), identity, dbUser.ID)
 		if issueErr != nil {
-			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
+			slog.ErrorContext(r.Context(), "failed to issue CLI login tokens", "error", issueErr)
+			writeError(w, http.StatusInternalServerError, "failed to issue CLI login tokens")
 			return
 		}
-		writeJSON(w, http.StatusOK, createTokenResponse{
-			ID:        apiToken.ID,
-			Name:      apiToken.Name,
-			Token:     plaintext,
-			ExpiresAt: apiToken.ExpiresAt,
-		})
+		writeJSON(w, http.StatusOK, loginResp)
 		return
 	}
 
@@ -717,6 +714,154 @@ func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
 		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+type cliLoginResponse struct {
+	AccessToken           string     `json:"access_token"`
+	AccessTokenExpiresAt  *time.Time `json:"access_token_expires_at,omitempty"`
+	RefreshToken          string     `json:"refresh_token"`
+	RefreshTokenID        string     `json:"refresh_token_id"`
+	RefreshTokenExpiresAt *time.Time `json:"refresh_token_expires_at,omitempty"`
+}
+
+type cliRefreshResponse struct {
+	AccessToken          string     `json:"access_token"`
+	AccessTokenExpiresAt *time.Time `json:"access_token_expires_at,omitempty"`
+}
+
+type cliRefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+var errInvalidCLIRefreshToken = errors.New("invalid CLI refresh token")
+
+func (s *Server) issueCLILoginResponse(ctx context.Context, identity *core.UserIdentity, userID string) (cliLoginResponse, error) {
+	issuer, ok := s.auth.(SessionTokenIssuer)
+	if !ok {
+		return cliLoginResponse{}, fmt.Errorf("auth provider does not support session tokens")
+	}
+
+	accessToken, err := issuer.IssueSessionToken(identity)
+	if err != nil {
+		return cliLoginResponse{}, fmt.Errorf("issuing CLI access token: %w", err)
+	}
+
+	refreshToken, plaintextRefresh, err := s.issueCLIRefreshToken(ctx, userID)
+	if err != nil {
+		return cliLoginResponse{}, fmt.Errorf("issuing CLI refresh token: %w", err)
+	}
+
+	return cliLoginResponse{
+		AccessToken:           accessToken,
+		AccessTokenExpiresAt:  s.sessionTokenExpiry(s.nowUTCSecond()),
+		RefreshToken:          plaintextRefresh,
+		RefreshTokenID:        refreshToken.ID,
+		RefreshTokenExpiresAt: refreshToken.ExpiresAt,
+	}, nil
+}
+
+func (s *Server) decodeCLIRefreshRequest(r *http.Request) (string, error) {
+	var req cliRefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return "", fmt.Errorf("invalid JSON body")
+	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		return "", fmt.Errorf("refresh_token is required")
+	}
+	return req.RefreshToken, nil
+}
+
+func (s *Server) resolveCLIRefreshToken(ctx context.Context, plaintext string) (*core.APIToken, *core.User, *core.UserIdentity, error) {
+	typ, ok := principal.ParseTokenType(plaintext)
+	if !ok || typ != principal.TokenTypeCLIRefresh {
+		return nil, nil, nil, errInvalidCLIRefreshToken
+	}
+
+	token, err := s.datastore.ValidateAPIToken(ctx, principal.HashToken(plaintext))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !isCLIRefreshToken(token) {
+		return nil, nil, nil, errInvalidCLIRefreshToken
+	}
+
+	user, err := s.datastore.GetUser(ctx, token.UserID)
+	if err != nil || user == nil || user.ID == "" {
+		return nil, nil, nil, errInvalidCLIRefreshToken
+	}
+
+	return token, user, &core.UserIdentity{
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+	}, nil
+}
+
+func (s *Server) refreshCLIToken(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := s.decodeCLIRefreshRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	_, _, identity, err := s.resolveCLIRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		if errors.Is(err, errInvalidCLIRefreshToken) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired CLI refresh token")
+			return
+		}
+		slog.ErrorContext(r.Context(), "failed to validate CLI refresh token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to validate CLI refresh token")
+		return
+	}
+
+	issuer, ok := s.auth.(SessionTokenIssuer)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
+		return
+	}
+
+	accessToken, err := issuer.IssueSessionToken(identity)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to issue refreshed CLI access token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to refresh CLI access token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, cliRefreshResponse{
+		AccessToken:          accessToken,
+		AccessTokenExpiresAt: s.sessionTokenExpiry(s.nowUTCSecond()),
+	})
+}
+
+func (s *Server) revokeCLIRefreshToken(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := s.decodeCLIRefreshRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	token, _, _, err := s.resolveCLIRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		if errors.Is(err, errInvalidCLIRefreshToken) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired CLI refresh token")
+			return
+		}
+		slog.ErrorContext(r.Context(), "failed to validate CLI refresh token for revoke", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to validate CLI refresh token")
+		return
+	}
+
+	if err := s.datastore.RevokeAPIToken(r.Context(), token.UserID, token.ID); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired CLI refresh token")
+			return
+		}
+		slog.ErrorContext(r.Context(), "failed to revoke CLI refresh token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to revoke CLI refresh token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
 type startOAuthRequest struct {
@@ -1025,6 +1170,10 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if isInternalAPITokenName(req.Name) {
+		writeError(w, http.StatusBadRequest, "name is reserved")
+		return
+	}
 
 	if req.Scopes != "" {
 		for _, scope := range strings.Fields(req.Scopes) {
@@ -1071,6 +1220,9 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]apiTokenInfo, 0, len(tokens))
 	for _, t := range tokens {
+		if isInternalAPITokenName(t.Name) {
+			continue
+		}
 		out = append(out, apiTokenInfoFromCore(t))
 	}
 	writeJSON(w, http.StatusOK, out)

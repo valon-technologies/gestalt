@@ -16,10 +16,12 @@ type TokenType int
 
 const (
 	TokenTypeAPI TokenType = iota
+	TokenTypeCLIRefresh
 )
 
 const (
-	prefixAPI = "gst_api_"
+	prefixAPI        = "gst_api_"
+	prefixCLIRefresh = "gst_rfr_"
 )
 
 func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
@@ -33,6 +35,8 @@ func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
 	switch typ {
 	case TokenTypeAPI:
 		prefix = prefixAPI
+	case TokenTypeCLIRefresh:
+		prefix = prefixCLIRefresh
 	default:
 		return "", "", fmt.Errorf("unknown token type %d", typ)
 	}
@@ -46,6 +50,8 @@ func ParseTokenType(token string) (TokenType, bool) {
 	switch {
 	case strings.HasPrefix(token, prefixAPI):
 		return TokenTypeAPI, true
+	case strings.HasPrefix(token, prefixCLIRefresh):
+		return TokenTypeCLIRefresh, true
 	default:
 		return 0, false
 	}
@@ -61,8 +67,13 @@ func NewResolver(auth core.AuthProvider, ds core.Datastore) *Resolver {
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
-	if typ, ok := ParseTokenType(token); ok && typ == TokenTypeAPI {
-		return r.resolveAPIToken(ctx, token)
+	if typ, ok := ParseTokenType(token); ok {
+		switch typ {
+		case TokenTypeAPI:
+			return r.resolveAPIToken(ctx, token)
+		case TokenTypeCLIRefresh:
+			return nil, ErrInvalidToken
+		}
 	}
 
 	identity, err := r.auth.ValidateToken(ctx, token)

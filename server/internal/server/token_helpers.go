@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,7 +11,9 @@ import (
 )
 
 const defaultIssuedTokenExpiry = 30 * 24 * time.Hour
-const cliLoginTokenName = "cli-token"
+const defaultCLIRefreshTokenExpiry = 90 * 24 * time.Hour
+const internalAPITokenNamePrefix = "__gestalt_internal__:"
+const cliRefreshTokenName = internalAPITokenNamePrefix + "cli-refresh"
 
 func (s *Server) nowUTCSecond() time.Time {
 	return s.now().UTC().Truncate(time.Second)
@@ -39,6 +42,29 @@ func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string,
 	return apiToken, plaintext, nil
 }
 
+func (s *Server) issueCLIRefreshToken(ctx context.Context, userID string) (*core.APIToken, string, error) {
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeCLIRefresh)
+	if err != nil {
+		return nil, "", err
+	}
+
+	now := s.nowUTCSecond()
+	expiry := now.Add(defaultCLIRefreshTokenExpiry)
+	apiToken := &core.APIToken{
+		ID:          uuid.NewString(),
+		UserID:      userID,
+		Name:        cliRefreshTokenName,
+		HashedToken: hashed,
+		ExpiresAt:   &expiry,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := s.datastore.StoreAPIToken(ctx, apiToken); err != nil {
+		return nil, "", err
+	}
+	return apiToken, plaintext, nil
+}
+
 func (s *Server) apiTokenExpiry(now time.Time, nonExpiring bool) *time.Time {
 	if nonExpiring {
 		return nil
@@ -49,6 +75,26 @@ func (s *Server) apiTokenExpiry(now time.Time, nonExpiring bool) *time.Time {
 	}
 	expiry := now.Add(ttl)
 	return &expiry
+}
+
+func (s *Server) sessionTokenExpiry(now time.Time) *time.Time {
+	ttl := defaultSessionCookieTTL
+	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
+		ttl = p.SessionTokenTTL()
+	}
+	if ttl <= 0 {
+		return nil
+	}
+	expiry := now.Add(ttl)
+	return &expiry
+}
+
+func isInternalAPITokenName(name string) bool {
+	return strings.HasPrefix(name, internalAPITokenNamePrefix)
+}
+
+func isCLIRefreshToken(token *core.APIToken) bool {
+	return token != nil && token.Name == cliRefreshTokenName
 }
 
 func apiTokenInfoFromCore(token *core.APIToken) apiTokenInfo {

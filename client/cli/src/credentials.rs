@@ -7,8 +7,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
     pub api_url: String,
-    pub api_token: String,
-    pub api_token_id: String,
+    #[serde(alias = "api_token")]
+    pub access_token: String,
+    #[serde(default)]
+    pub access_token_expires_at: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default, alias = "api_token_id")]
+    pub refresh_token_id: Option<String>,
+    #[serde(default)]
+    pub refresh_token_expires_at: Option<String>,
 }
 
 pub struct CredentialStore {
