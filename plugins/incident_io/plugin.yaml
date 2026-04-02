@@ -17,22 +17,22 @@ provider:
       document: https://api.incident.io/v1/openapiV3.json
   allowed_operations:
     "Incidents V2#List":
-      alias: list_incidents
+      alias: Incidents.List
     "Incidents V2#Show":
-      alias: get_incident
+      alias: Incidents.Show
     "Users V2#List":
-      alias: list_users
+      alias: Users.List
     "Users V2#Show":
-      alias: get_user
+      alias: Users.Show
     "Schedules V2#List":
-      alias: list_schedules
+      alias: Schedules.List
     "Schedules V2#ListScheduleEntries":
-      alias: get_schedule_entries
+      alias: Schedules.ListScheduleEntries
     "Severities V1#List":
-      alias: list_severities
+      alias: Severities.List
     "Incident Statuses V1#List":
-      alias: list_statuses
+      alias: IncidentStatuses.List
     "Incidents V2#Create":
-      alias: create_incident
+      alias: Incidents.Create
     "Incidents V2#Edit":
-      alias: update_incident
+      alias: Incidents.Edit
