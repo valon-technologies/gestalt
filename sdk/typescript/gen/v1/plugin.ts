@@ -82,9 +82,9 @@ export interface ProviderMetadata {
      */
     supportsPostConnect: boolean;
     /**
-     * @generated from protobuf field: string config_schema_json = 10
+     * @generated from protobuf field: string config_schema = 10
      */
-    configSchemaJson: string;
+    configSchema: string;
     /**
      * @generated from protobuf field: int32 min_protocol_version = 11
      */
@@ -382,7 +382,7 @@ class ProviderMetadata$Type extends MessageType<ProviderMetadata> {
             { no: 7, name: "static_catalog_json", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 8, name: "supports_session_catalog", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
             { no: 9, name: "supports_post_connect", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
-            { no: 10, name: "config_schema_json", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 10, name: "config_schema", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 11, name: "min_protocol_version", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
             { no: 12, name: "max_protocol_version", kind: "scalar", T: 5 /*ScalarType.INT32*/ }
         ]);
@@ -398,7 +398,7 @@ class ProviderMetadata$Type extends MessageType<ProviderMetadata> {
         message.staticCatalogJson = "";
         message.supportsSessionCatalog = false;
         message.supportsPostConnect = false;
-        message.configSchemaJson = "";
+        message.configSchema = "";
         message.minProtocolVersion = 0;
         message.maxProtocolVersion = 0;
         if (value !== undefined)
@@ -437,8 +437,8 @@ class ProviderMetadata$Type extends MessageType<ProviderMetadata> {
                 case /* bool supports_post_connect */ 9:
                     message.supportsPostConnect = reader.bool();
                     break;
-                case /* string config_schema_json */ 10:
-                    message.configSchemaJson = reader.string();
+                case /* string config_schema */ 10:
+                    message.configSchema = reader.string();
                     break;
                 case /* int32 min_protocol_version */ 11:
                     message.minProtocolVersion = reader.int32();
@@ -505,9 +505,9 @@ class ProviderMetadata$Type extends MessageType<ProviderMetadata> {
         /* bool supports_post_connect = 9; */
         if (message.supportsPostConnect !== false)
             writer.tag(9, WireType.Varint).bool(message.supportsPostConnect);
-        /* string config_schema_json = 10; */
-        if (message.configSchemaJson !== "")
-            writer.tag(10, WireType.LengthDelimited).string(message.configSchemaJson);
+        /* string config_schema = 10; */
+        if (message.configSchema !== "")
+            writer.tag(10, WireType.LengthDelimited).string(message.configSchema);
         /* int32 min_protocol_version = 11; */
         if (message.minProtocolVersion !== 0)
             writer.tag(11, WireType.Varint).int32(message.minProtocolVersion);

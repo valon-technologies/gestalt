@@ -166,7 +166,7 @@ type ProviderMetadata struct {
 	StaticCatalogJson      string                         `protobuf:"bytes,7,opt,name=static_catalog_json,json=staticCatalogJson,proto3" json:"static_catalog_json,omitempty"`
 	SupportsSessionCatalog bool                           `protobuf:"varint,8,opt,name=supports_session_catalog,json=supportsSessionCatalog,proto3" json:"supports_session_catalog,omitempty"`
 	SupportsPostConnect    bool                           `protobuf:"varint,9,opt,name=supports_post_connect,json=supportsPostConnect,proto3" json:"supports_post_connect,omitempty"`
-	ConfigSchemaJson       string                         `protobuf:"bytes,10,opt,name=config_schema_json,json=configSchemaJson,proto3" json:"config_schema_json,omitempty"`
+	ConfigSchema           string                         `protobuf:"bytes,10,opt,name=config_schema,json=configSchema,proto3" json:"config_schema,omitempty"`
 	MinProtocolVersion     int32                          `protobuf:"varint,11,opt,name=min_protocol_version,json=minProtocolVersion,proto3" json:"min_protocol_version,omitempty"`
 	MaxProtocolVersion     int32                          `protobuf:"varint,12,opt,name=max_protocol_version,json=maxProtocolVersion,proto3" json:"max_protocol_version,omitempty"`
 	unknownFields          protoimpl.UnknownFields
@@ -266,9 +266,9 @@ func (x *ProviderMetadata) GetSupportsPostConnect() bool {
 	return false
 }
 
-func (x *ProviderMetadata) GetConfigSchemaJson() string {
+func (x *ProviderMetadata) GetConfigSchema() string {
 	if x != nil {
-		return x.ConfigSchemaJson
+		return x.ConfigSchema
 	}
 	return ""
 }
@@ -861,7 +861,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\xda\x05\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\xd1\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -872,9 +872,9 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x11connection_params\x18\x06 \x03(\v29.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10connectionParams\x12.\n" +
 	"\x13static_catalog_json\x18\a \x01(\tR\x11staticCatalogJson\x128\n" +
 	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x122\n" +
-	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x12,\n" +
-	"\x12config_schema_json\x18\n" +
-	" \x01(\tR\x10configSchemaJson\x120\n" +
+	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x12#\n" +
+	"\rconfig_schema\x18\n" +
+	" \x01(\tR\fconfigSchema\x120\n" +
 	"\x14min_protocol_version\x18\v \x01(\x05R\x12minProtocolVersion\x120\n" +
 	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1aj\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +

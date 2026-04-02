@@ -1,13 +1,13 @@
 package pluginpkg
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string, config map[string]any) error {
@@ -24,15 +24,15 @@ func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.M
 	}
 
 	var schemaDoc any
-	if err := json.Unmarshal(data, &schemaDoc); err != nil {
+	if err := yaml.Unmarshal(data, &schemaDoc); err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
 
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("config.schema.json", schemaDoc); err != nil {
+	if err := compiler.AddResource("config.schema", schemaDoc); err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
-	schema, err := compiler.Compile("config.schema.json")
+	schema, err := compiler.Compile("config.schema")
 	if err != nil {
 		return fmt.Errorf("compile config schema: %w", err)
 	}

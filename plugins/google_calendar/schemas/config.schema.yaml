@@ -1,0 +1,12 @@
+type: object
+properties:
+  client_id:
+    type: string
+    description: Google OAuth client ID for Google Calendar.
+  client_secret:
+    type: string
+    description: Google OAuth client secret for Google Calendar.
+required:
+  - client_id
+  - client_secret
+additionalProperties: false

@@ -1,0 +1,12 @@
+type: object
+properties:
+  client_id:
+    type: string
+    description: Google OAuth client ID for Gmail.
+  client_secret:
+    type: string
+    description: Google OAuth client secret for Gmail.
+required:
+  - client_id
+  - client_secret
+additionalProperties: false
