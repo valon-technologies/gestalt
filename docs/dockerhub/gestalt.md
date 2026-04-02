@@ -105,6 +105,6 @@ of the Docker image.
 
 ## Learn more
 
-- Docs: https://docs.toolshed.peachstreet.dev
-- CLI reference: https://docs.toolshed.peachstreet.dev/reference/cli
+- Docs: https://docs.valon.tools
+- CLI reference: https://docs.valon.tools/reference/cli
 - Source: https://github.com/valon-technologies/gestalt

@@ -19,13 +19,13 @@ variable "dns_project_id" {
 variable "dns_zone_name" {
   description = "Cloud DNS managed zone name"
   type        = string
-  default     = "peachstreet-dev"
+  default     = "valon-tools"
 }
 
 variable "domain" {
   description = "Docs site domain"
   type        = string
-  default     = "docs.toolshed.peachstreet.dev"
+  default     = "docs.valon.tools"
 }
 
 variable "docs_image" {

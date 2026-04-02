@@ -54,7 +54,7 @@ jobs:
     env:
       REGISTRY_IMAGE: valontechnologies/gestalt
       IMAGE_SOURCE: https://github.com/${{ github.repository }}
-      IMAGE_DOCUMENTATION: https://docs.toolshed.peachstreet.dev
+      IMAGE_DOCUMENTATION: https://docs.valon.tools
       IMAGE_URL: https://hub.docker.com/r/valontechnologies/gestalt
     steps:
       - uses: actions/checkout@v6
