@@ -1928,6 +1928,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	const pendingSelectionPath = "/api/v1/auth/pending-connection"
 
 	t.Run("connected", func(t *testing.T) {
+		t.Parallel()
+
 		var stored *core.IntegrationToken
 
 		handler := &testOAuthHandler{
@@ -2013,6 +2015,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	})
 
 	t.Run("selection_required", func(t *testing.T) {
+		t.Parallel()
+
 		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
@@ -3672,6 +3676,8 @@ func TestConnectManual(t *testing.T) {
 	const pendingSelectionPath = "/api/v1/auth/pending-connection"
 
 	t.Run("connected", func(t *testing.T) {
+		t.Parallel()
+
 		var stored *core.IntegrationToken
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
@@ -3725,6 +3731,8 @@ func TestConnectManual(t *testing.T) {
 	})
 
 	t.Run("selection_required", func(t *testing.T) {
+		t.Parallel()
+
 		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
