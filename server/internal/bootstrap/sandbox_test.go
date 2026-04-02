@@ -24,19 +24,12 @@ func buildGestaltdBinary(t *testing.T) string {
 	return sharedGestaltdBin
 }
 
-func sandboxAvailable(t *testing.T) bool {
+func skipUnlessSandboxAvailable(t *testing.T) {
 	t.Helper()
 	switch runtime.GOOS {
 	case "linux", "darwin":
-		return true
+		return
 	default:
-		return false
-	}
-}
-
-func skipUnlessSandboxAvailable(t *testing.T) {
-	t.Helper()
-	if !sandboxAvailable(t) {
 		t.Skipf("sandbox not available on %s", runtime.GOOS)
 	}
 }
