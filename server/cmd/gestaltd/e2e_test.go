@@ -359,34 +359,122 @@ integrations:
 	}
 }
 
-//nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
-func TestE2EValidateRejectsMeaninglessPluginField(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		pluginYAML string
+		wantError  string
+	}{
+		{
+			name: "plugin connection unsupported",
+			pluginYAML: `command: /tmp/provider
+connection: default`,
+			wantError: "plugin.connection is not supported",
+		},
+		{
+			name: "headers unsupported without declarative ops or spec surface",
+			pluginYAML: `command: /tmp/provider
+headers:
+  x-test: value`,
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+		},
+		{
+			name: "managed parameters unsupported without api surface",
+			pluginYAML: `command: /tmp/provider
+managed_parameters:
+  - in: header
+    name: x-version
+    value: "1"`,
+			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces",
+		},
+		{
+			name: "response mapping unsupported for inline operations only",
+			pluginYAML: `base_url: https://api.example.test
+operations:
+  - name: list_items
+    method: GET
+    path: /items
+response_mapping:
+  data_path: items`,
+			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations",
+		},
+		{
+			name: "mcp connection requires mcp url",
+			pluginYAML: `command: /tmp/provider
+mcp_connection: default`,
+			wantError: "plugin.mcp_connection is only valid when mcp_url is configured",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := fmt.Sprintf(`auth:
   provider: local
 datastore:
   provider: sqlite
   config:
-    path: ` + filepath.Join(dir, "gestalt.db") + `
+    path: %s
 server:
   encryption_key: test-key
 integrations:
   example:
     plugin:
-      command: /tmp/provider
-      connection: default
-`
+      %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate to fail for unsupported plugin field, output: %s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest // Exercises validate --init so the prepared manifest can affect validation.
+func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`auth:
+  provider: local
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  encryption_key: test-key
+integrations:
+  example:
+    plugin:
+      package: %s
+      headers:
+        x-test: value
+`, filepath.Join(dir, "gestalt.db"), pluginDir)
+
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "validate", "--init", "--config", cfgPath).CombinedOutput()
 	if err == nil {
-		t.Fatalf("expected validate to fail for meaningless plugin field, output: %s", out)
+		t.Fatalf("expected validate --init to fail for unsupported managed plugin field, output: %s", out)
 	}
-	if !strings.Contains(string(out), "plugin.connection is not supported") {
-		t.Fatalf("expected output to mention unsupported plugin.connection, got: %s", out)
+	if !strings.Contains(string(out), "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface") {
+		t.Fatalf("expected output to mention unsupported plugin.headers, got: %s", out)
 	}
 }
 

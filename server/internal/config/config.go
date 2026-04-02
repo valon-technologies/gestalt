@@ -702,13 +702,16 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 		return fmt.Errorf("config validation: integration %q requires a plugin", name)
 	}
 	p := intg.Plugin
-	if p.Connection != "" {
-		return fmt.Errorf("config validation: integration %q plugin.connection is not supported; use default_connection or surface-specific *_connection fields", name)
-	}
 	if p.IsInline() {
-		return validateInlinePlugin(name, p)
+		if err := validateInlinePlugin(name, p); err != nil {
+			return err
+		}
+	} else {
+		if err := validateExternalPlugin("integration", name, p); err != nil {
+			return err
+		}
 	}
-	return validateExternalPlugin("integration", name, p)
+	return validateSupportedPluginFields(name, p)
 }
 
 func validateInlinePlugin(name string, p *PluginDef) error {
@@ -829,8 +832,10 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if err := validateManagedParameterConfig("config validation: "+kind+" "+strconv.Quote(name), plugin.Headers, plugin.ManagedParameters); err != nil {
 		return err
 	}
+	resolvedManagedArtifact := plugin.HasManagedArtifacts() && plugin.HasResolvedManifest()
+	hasOriginalCommand := plugin.Command != "" && (!plugin.HasManagedArtifacts() || !plugin.HasResolvedManifest())
 	sourceCount := 0
-	if plugin.Command != "" {
+	if hasOriginalCommand {
 		sourceCount++
 	}
 	if plugin.Package != "" {
@@ -858,10 +863,10 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		}
 	}
 
-	if (plugin.Command != "" || plugin.Package != "") && plugin.Version != "" {
+	if (hasOriginalCommand || plugin.Package != "") && plugin.Version != "" {
 		return fmt.Errorf("config validation: %s %q plugin.version is only valid with plugin.source", kind, name)
 	}
-	if plugin.Command == "" && len(plugin.Args) > 0 {
+	if !hasOriginalCommand && len(plugin.Args) > 0 && !resolvedManagedArtifact {
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	}
 	if strings.HasPrefix(plugin.Package, "http://") {
@@ -885,6 +890,97 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	}
 
 	return nil
+}
+
+func validateSupportedPluginFields(name string, plugin *PluginDef) error {
+	if plugin == nil {
+		return nil
+	}
+	if plugin.HasManagedArtifacts() && !plugin.HasResolvedManifest() {
+		// Package/source plugins may gain supported surfaces or declarative
+		// behavior from the resolved manifest. Validate those fields once init has
+		// prepared the artifact and loaded the manifest.
+		return nil
+	}
+
+	hasOpenAPI := effectivePluginSurfaceURL(plugin, SpecSurfaceOpenAPI) != ""
+	hasGraphQL := effectivePluginSurfaceURL(plugin, SpecSurfaceGraphQL) != ""
+	hasMCP := effectivePluginSurfaceURL(plugin, SpecSurfaceMCP) != ""
+	hasAPISurface := hasOpenAPI || hasGraphQL
+	hasSpecSurface := hasAPISurface || hasMCP
+	hasDeclarativeOps := plugin.IsDeclarative || (plugin.IsInline() && len(plugin.Operations) > 0)
+
+	checks := []struct {
+		field     string
+		present   bool
+		supported bool
+		reason    string
+	}{
+		{
+			field:     "plugin.connection",
+			present:   plugin.Connection != "",
+			supported: false,
+			reason:    "is not supported; use default_connection or surface-specific *_connection fields",
+		},
+		{
+			field:     "plugin.openapi_connection",
+			present:   plugin.OpenAPIConnection != "",
+			supported: hasOpenAPI,
+			reason:    "is only valid when openapi is configured",
+		},
+		{
+			field:     "plugin.graphql_connection",
+			present:   plugin.GraphQLConnection != "",
+			supported: hasGraphQL,
+			reason:    "is only valid when graphql_url is configured",
+		},
+		{
+			field:     "plugin.mcp_connection",
+			present:   plugin.MCPConnection != "",
+			supported: hasMCP,
+			reason:    "is only valid when mcp_url is configured",
+		},
+		{
+			field:     "plugin.base_url",
+			present:   plugin.BaseURL != "",
+			supported: hasAPISurface || (plugin.IsInline() && len(plugin.Operations) > 0),
+			reason:    "is only valid with inline operations or openapi/graphql surfaces",
+		},
+		{
+			field:     "plugin.headers",
+			present:   len(plugin.Headers) > 0,
+			supported: hasSpecSurface || hasDeclarativeOps,
+			reason:    "are only valid when the plugin exposes declarative operations or a spec surface",
+		},
+		{
+			field:     "plugin.managed_parameters",
+			present:   len(plugin.ManagedParameters) > 0,
+			supported: hasAPISurface,
+			reason:    "are only valid with openapi/graphql surfaces",
+		},
+		{
+			field:     "plugin.response_mapping",
+			present:   plugin.ResponseMapping != nil,
+			supported: plugin.IsInline() && hasAPISurface,
+			reason:    "is only valid for inline openapi/graphql integrations",
+		},
+	}
+	for _, check := range checks {
+		if check.present && !check.supported {
+			return fmt.Errorf("config validation: integration %q %s %s", name, check.field, check.reason)
+		}
+	}
+	return nil
+}
+
+func effectivePluginSurfaceURL(plugin *PluginDef, surface SpecSurface) string {
+	if plugin == nil {
+		return ""
+	}
+	if url := plugin.SurfaceURL(surface); url != "" {
+		return url
+	}
+	return ManifestProviderSurfaceURL(plugin.ManifestProvider(), surface)
 }
 
 func validateManagedParameterConfig(prefix string, headers map[string]string, params []ManagedParameterDef) error {
