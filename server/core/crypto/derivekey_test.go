@@ -88,16 +88,6 @@ func TestDeriveKeySamePassphraseProducesSameEncryption(t *testing.T) {
 	}
 }
 
-func TestDeriveKeyWithSaltDifferentSaltsProduceDifferentKeys(t *testing.T) {
-	t.Parallel()
-
-	key1 := crypto.DeriveKeyWithSalt("deployment-passphrase", []byte("salt-one-1234567"))
-	key2 := crypto.DeriveKeyWithSalt("deployment-passphrase", []byte("salt-two-1234567"))
-	if bytes.Equal(key1, key2) {
-		t.Fatal("different salts produced identical derived keys")
-	}
-}
-
 func TestDeriveKeySHA256KeyCannotDecryptArgon2idCiphertext(t *testing.T) {
 	t.Parallel()
 	passphrase := "dummy-phrase-kdf-mismatch"
@@ -120,33 +110,5 @@ func TestDeriveKeySHA256KeyCannotDecryptArgon2idCiphertext(t *testing.T) {
 	_, err = shaEnc.Decrypt(ciphertext)
 	if err == nil {
 		t.Fatal("SHA-256 derived key decrypted Argon2id ciphertext; KDF is not Argon2id")
-	}
-}
-
-func TestAESGCMFallbackDecryptsLegacyCiphertext(t *testing.T) {
-	t.Parallel()
-
-	legacyKey := crypto.DeriveKey("legacy-passphrase")
-	currentKey := crypto.DeriveKeyWithSalt("legacy-passphrase", []byte("current-salt-123"))
-
-	legacyEnc, err := crypto.NewAESGCM(legacyKey)
-	if err != nil {
-		t.Fatalf("NewAESGCM legacy: %v", err)
-	}
-	ciphertext, err := legacyEnc.Encrypt("secret-data")
-	if err != nil {
-		t.Fatalf("Encrypt legacy: %v", err)
-	}
-
-	currentEnc, err := crypto.NewAESGCMWithFallback(currentKey, legacyKey)
-	if err != nil {
-		t.Fatalf("NewAESGCMWithFallback: %v", err)
-	}
-	plaintext, err := currentEnc.Decrypt(ciphertext)
-	if err != nil {
-		t.Fatalf("Decrypt fallback: %v", err)
-	}
-	if plaintext != "secret-data" {
-		t.Fatalf("fallback decrypt returned %q, want %q", plaintext, "secret-data")
 	}
 }

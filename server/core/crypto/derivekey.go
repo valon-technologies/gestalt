@@ -15,14 +15,6 @@ const (
 
 var argonSalt = []byte("gestalt-derivekey-v1")
 
-func DecodeHexKey(s string) ([]byte, bool) {
-	if s == "" {
-		return nil, false
-	}
-	b, err := hex.DecodeString(s)
-	return b, err == nil && len(b) == 32
-}
-
 // DeriveKey converts an encryption key string to a 32-byte key for AES-256-GCM.
 // If the string is 64 hex characters it is hex-decoded directly; otherwise it is
 // derived using Argon2id. Returns nil for an empty string.
@@ -38,7 +30,7 @@ func DeriveKeyWithSalt(s string, salt []byte) []byte {
 	if s == "" {
 		return nil
 	}
-	if b, ok := DecodeHexKey(s); ok {
+	if b, err := hex.DecodeString(s); err == nil && len(b) == 32 {
 		return b
 	}
 	return argon2.IDKey([]byte(s), salt, argonTime, argonMemory, argonThreads, argonKeyLen)

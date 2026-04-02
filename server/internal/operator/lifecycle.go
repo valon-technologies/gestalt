@@ -63,6 +63,11 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
+	if absPath, err := filepath.Abs(configPath); err == nil {
+		cfg.ResolvedConfigPath = absPath
+	} else {
+		cfg.ResolvedConfigPath = configPath
+	}
 
 	paths := initPathsForConfig(configPath)
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
@@ -102,6 +107,11 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if absPath, err := filepath.Abs(configPath); err == nil {
+		cfg.ResolvedConfigPath = absPath
+	} else {
+		cfg.ResolvedConfigPath = configPath
 	}
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return nil, nil, err

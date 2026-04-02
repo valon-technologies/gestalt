@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/keymaterial"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
@@ -311,21 +310,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
-	keys, err := keymaterial.ResolveServerEncryptionKey(cfg)
+	encKey, legacyKey, err := resolveServerEncryptionKeys(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: resolving server encryption key: %w", err)
 	}
-	encKey := keys.Primary
 	if requireEncryptionKey && encKey == nil && cfg.Auth.Provider != "none" {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required when auth is enabled")
-	}
-	if keys.Created && keys.MetadataPath != "" {
-		slog.Info("initialized server encryption key metadata", "path", keys.MetadataPath)
 	}
 
 	deps := Deps{
 		EncryptionKey:       encKey,
-		LegacyEncryptionKey: keys.LegacyFallback,
+		LegacyEncryptionKey: legacyKey,
 		BaseURL:             cfg.Server.BaseURL,
 		SecretManager:       sm,
 	}

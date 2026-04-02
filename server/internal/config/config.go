@@ -549,11 +549,6 @@ func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, e
 	applyDefaults(&cfg)
 	resolveBaseURL(&cfg)
 	resolveRelativePaths(path, &cfg)
-	if absPath, err := filepath.Abs(path); err == nil {
-		cfg.ResolvedConfigPath = absPath
-	} else {
-		cfg.ResolvedConfigPath = path
-	}
 
 	if err := ValidateStructure(&cfg); err != nil {
 		return nil, err

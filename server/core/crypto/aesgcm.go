@@ -10,8 +10,8 @@ import (
 )
 
 type AESGCMEncryptor struct {
-	gcm          cipher.AEAD
-	fallbackGCMs []cipher.AEAD
+	gcm         cipher.AEAD
+	fallbackGCM cipher.AEAD
 }
 
 func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
@@ -23,18 +23,18 @@ func NewAESGCMWithFallback(key []byte, fallbackKeys ...[]byte) (*AESGCMEncryptor
 	if err != nil {
 		return nil, err
 	}
-	fallbackGCMs := make([]cipher.AEAD, 0, len(fallbackKeys))
-	for _, fallbackKey := range fallbackKeys {
-		if len(fallbackKey) == 0 {
-			continue
-		}
-		fallbackGCM, err := newGCM(fallbackKey)
+	var fallbackGCM cipher.AEAD
+	var fallbackKey []byte
+	if len(fallbackKeys) > 0 {
+		fallbackKey = fallbackKeys[0]
+	}
+	if len(fallbackKey) > 0 {
+		fallbackGCM, err = newGCM(fallbackKey)
 		if err != nil {
 			return nil, err
 		}
-		fallbackGCMs = append(fallbackGCMs, fallbackGCM)
 	}
-	return &AESGCMEncryptor{gcm: gcm, fallbackGCMs: fallbackGCMs}, nil
+	return &AESGCMEncryptor{gcm: gcm, fallbackGCM: fallbackGCM}, nil
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {
@@ -89,8 +89,8 @@ func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding) (string,
 	if err == nil {
 		return plaintext, nil
 	}
-	for _, fallbackGCM := range e.fallbackGCMs {
-		plaintext, fallbackErr := decryptWithGCM(fallbackGCM, data)
+	if e.fallbackGCM != nil {
+		plaintext, fallbackErr := decryptWithGCM(e.fallbackGCM, data)
 		if fallbackErr == nil {
 			return plaintext, nil
 		}
