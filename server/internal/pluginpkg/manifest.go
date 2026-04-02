@@ -87,59 +87,56 @@ func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
 }
 
 func DecodeSourceManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
-	jsonData := data
-	if format == ManifestFormatYAML {
-		var err error
-		jsonData, err = yamlToJSON(data)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return decodeManifestJSON(jsonData, true)
+	return decodeManifest(data, format, true)
 }
 
 func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
+	return decodeManifest(data, format, false)
+}
+
+func decodeManifest(data []byte, format string, allowMissingArtifactDigests bool) (*pluginmanifestv1.Manifest, error) {
+	wire, err := decodeManifestWire(data, format)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateManifestSchema(data, format); err != nil {
+		return nil, fmt.Errorf("manifest validation failed: %w", err)
+	}
+	manifest := wireManifestToInternal(wire)
+	if err := validateManifest(manifest, allowMissingArtifactDigests); err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+func validateManifestSchema(data []byte, format string) error {
 	jsonData := data
 	if format == ManifestFormatYAML {
 		var err error
 		jsonData, err = yamlToJSON(data)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return decodeManifestJSON(jsonData, false)
-}
 
-func decodeManifestJSON(data []byte, allowMissingArtifactDigests bool) (*pluginmanifestv1.Manifest, error) {
 	var doc any
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, fmt.Errorf("parse manifest JSON: %w", err)
+	if err := json.Unmarshal(jsonData, &doc); err != nil {
+		return fmt.Errorf("parse manifest JSON: %w", err)
 	}
 	var schemaDoc any
 	if err := json.Unmarshal(pluginmanifestv1.ManifestJSONSchema, &schemaDoc); err != nil {
-		return nil, fmt.Errorf("parse embedded manifest schema: %w", err)
+		return fmt.Errorf("parse embedded manifest schema: %w", err)
 	}
 
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource("manifest.schema.json", schemaDoc); err != nil {
-		return nil, fmt.Errorf("load manifest schema: %w", err)
+		return fmt.Errorf("load manifest schema: %w", err)
 	}
 	schema, err := compiler.Compile("manifest.schema.json")
 	if err != nil {
-		return nil, fmt.Errorf("compile manifest schema: %w", err)
+		return fmt.Errorf("compile manifest schema: %w", err)
 	}
-	if err := schema.Validate(doc); err != nil {
-		return nil, fmt.Errorf("manifest validation failed: %w", err)
-	}
-
-	var manifest pluginmanifestv1.Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("decode manifest: %w", err)
-	}
-	if err := validateManifest(&manifest, allowMissingArtifactDigests); err != nil {
-		return nil, err
-	}
-	return &manifest, nil
+	return schema.Validate(doc)
 }
 
 func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
@@ -395,7 +392,8 @@ func EncodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([
 }
 
 func encodeManifestJSON(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	wire := internalManifestToWire(manifest)
+	data, err := json.MarshalIndent(wire, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
@@ -403,7 +401,8 @@ func encodeManifestJSON(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 }
 
 func encodeManifestYAML(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
-	data, err := yaml.Marshal(manifest)
+	wire := internalManifestToWire(manifest)
+	data, err := yaml.Marshal(wire)
 	if err != nil {
 		return nil, fmt.Errorf("marshal manifest YAML: %w", err)
 	}

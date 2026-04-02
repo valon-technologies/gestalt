@@ -10,7 +10,7 @@ One plugin kind is supported:
 
 | Kind | Purpose |
 | --- | --- |
-| Provider plugin | Adds a provider for `integrations:`. |
+| Provider plugin | Adds a provider for `providers:`. |
 
 ## Startup Model
 
@@ -45,10 +45,10 @@ The SDK's `ProviderStarter` path receives:
 Provider plugin config lives here:
 
 ```yaml
-integrations:
+providers:
   example:
-    plugin:
+    from:
       command: ./provider
-      config:
-        greeting: hello
+    config:
+      greeting: hello
 ```

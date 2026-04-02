@@ -54,9 +54,9 @@ func writeTestConfig(t *testing.T, dir, packagePath string) string {
 	t.Helper()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `integrations:
+	cfg := `providers:
   example:
-    plugin:
+    from:
       package: ` + packagePath + `
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
@@ -146,9 +146,9 @@ func TestLockMatchesConfig_FalseWhenPackageChanged(t *testing.T) {
 	if err := os.MkdirAll(altDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	cfg := `integrations:
+	cfg := `providers:
   example:
-    plugin:
+    from:
       package: ` + altDir + `
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {

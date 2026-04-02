@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
-	"gopkg.in/yaml.v3"
 )
 
 var stdoutMu sync.Mutex
@@ -240,32 +238,72 @@ func TestRun_PluginReleaseRequiresVersion(t *testing.T) {
 func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := filepath.Join(t.TempDir(), "invalid-plugin")
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
+	cases := []struct {
+		name         string
+		manifestYAML string
+		wantError    string
+	}{
+		{
+			name: "rest surface requires operations",
+			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.1.0
-kinds:
-  - provider
 provider:
-  base_url: https://api.example.com
-  operations:
-    - name: list_items
-      method: GET
-      path: /items
-  connection:
-    tenant:
-      required: true
-`), 0644)
-
-	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
-	if err == nil {
-		t.Fatal("expected invalid manifest error")
+  surfaces:
+    rest:
+      base_url: https://api.example.com
+`,
+			wantError: "missing property 'operations'",
+		},
+		{
+			name: "exec requires artifact path",
+			manifestYAML: `
+source: github.com/testowner/plugins/invalid
+version: 0.1.0
+provider:
+  exec: {}
+  surfaces: {}
+`,
+			wantError: "missing property 'artifact_path'",
+		},
+		{
+			name: "mcp block requires enabled",
+			manifestYAML: `
+source: github.com/testowner/plugins/invalid
+version: 0.1.0
+provider:
+  mcp: {}
+  surfaces:
+    rest:
+      base_url: https://api.example.com
+      operations:
+        - name: list_items
+          method: GET
+          path: /items
+`,
+			wantError: "missing property 'enabled'",
+		},
 	}
-	if !strings.Contains(string(out), "connection") {
-		t.Fatalf("unexpected output: %s", out)
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			pluginDir := filepath.Join(t.TempDir(), "invalid-plugin")
+			if err := os.MkdirAll(pluginDir, 0755); err != nil {
+				t.Fatalf("MkdirAll(pluginDir): %v", err)
+			}
+			writeTestFile(t, pluginDir, "plugin.yaml", []byte(tc.manifestYAML), 0644)
+
+			out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
+			if err == nil {
+				t.Fatal("expected invalid manifest error")
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("unexpected output: %s", out)
+			}
+		})
 	}
 }
 
@@ -485,7 +523,7 @@ func TestRun_PluginReleaseTreatsDeclarativePluginWithHelperMainAsSource(t *testi
 	}
 }
 
-func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionParams(t *testing.T) {
+func TestRun_PluginReleasePreservesYAMLManifestFormatAndDefaultConnectionParams(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := filepath.Join(t.TempDir(), "declarative-provider")
@@ -495,17 +533,22 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionParams(t *test
 	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
 source: github.com/testowner/plugins/declarative-provider
 version: 0.0.1
-kinds:
-  - provider
 provider:
-  base_url: https://api.example.com
-  operations:
-    - name: list_items
-      method: GET
-      path: /items
-  connection_params:
-    tenant:
-      required: true
+  mcp:
+    enabled: true
+  connections:
+    default:
+      mode: identity
+      params:
+        tenant:
+          required: true
+  surfaces:
+    rest:
+      base_url: https://api.example.com
+      operations:
+        - name: list_items
+          method: GET
+          path: /items
 `), 0o644)
 
 	outputDir := t.TempDir()
@@ -525,13 +568,16 @@ provider:
 	if manifest.Provider == nil || len(manifest.Provider.ConnectionParams) != 1 || !manifest.Provider.ConnectionParams["tenant"].Required {
 		t.Fatalf("provider connection_params = %+v", manifest.Provider)
 	}
+	if manifest.Provider.ConnectionMode != "identity" {
+		t.Fatalf("provider connection_mode = %q, want %q", manifest.Provider.ConnectionMode, "identity")
+	}
 
 	manifestData, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read released manifest: %v", err)
 	}
-	if !strings.Contains(string(manifestData), "connection_params:") {
-		t.Fatalf("expected released manifest to use connection_params, got: %s", manifestData)
+	if !strings.Contains(string(manifestData), "mcp:") || !strings.Contains(string(manifestData), "enabled: true") || !strings.Contains(string(manifestData), "connections:") || !strings.Contains(string(manifestData), "params:") || !strings.Contains(string(manifestData), "mode: identity") {
+		t.Fatalf("expected released manifest to use connections.default.params, got: %s", manifestData)
 	}
 }
 
@@ -985,28 +1031,32 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 		t.Fatalf("WriteFile(openapi.yaml): %v", err)
 	}
 
-	manifest := `{
-  "source": "github.com/testowner/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {
-    "config_schema_path": "schemas/config.schema.json"
-  },
-  "artifacts": [
-    {
-      "os": "` + runtime.GOOS + `",
-      "arch": "` + runtime.GOARCH + `",
-      "path": "artifacts/` + runtime.GOOS + `/` + runtime.GOARCH + `/provider",
-      "sha256": "` + sha256HexForTest("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/` + runtime.GOOS + `/` + runtime.GOARCH + `/provider"
-    }
-  }
-}`
-	if err := os.WriteFile(filepath.Join(src, "plugin.json"), []byte(manifest), 0644); err != nil {
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/provider",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			ConfigSchemaPath: "schemas/config.schema.json",
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
+				SHA256: sha256HexForTest("provider"),
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
+			},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "plugin.json"), manifestData, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
 	return src
@@ -1218,6 +1268,8 @@ func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("prebuilt-provider"), 0755)
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
 		Source:      prebuiltHybridSource,
 		Version:     "0.0.1",
@@ -1248,8 +1300,6 @@ func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
 			},
 		},
 	})
-	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
-	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("prebuilt-provider"), 0755)
 	return pluginDir
 }
 
@@ -1260,6 +1310,9 @@ func newSpecLoadedHybridReleaseFixture(t *testing.T, dir string) string {
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("spec-loaded-hybrid-provider"), 0755)
+	writeTestFile(t, pluginDir, "specs/openapi.yaml", []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644)
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
 		Source:      specLoadedHybridSource,
 		Version:     "0.0.1",
@@ -1287,9 +1340,6 @@ func newSpecLoadedHybridReleaseFixture(t *testing.T, dir string) string {
 			},
 		},
 	})
-	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
-	writeTestFile(t, pluginDir, prebuiltHybridArtifactPath, []byte("spec-loaded-hybrid-provider"), 0755)
-	writeTestFile(t, pluginDir, "specs/openapi.yaml", []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644)
 	return pluginDir
 }
 
@@ -1388,6 +1438,7 @@ func writeReleaseTestManifest(t *testing.T, dir string, manifest *pluginmanifest
 func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
 
+	populateMissingArtifactDigests(t, dir, manifest)
 	data, err := encodeTestManifestFormat(manifest, pluginpkg.ManifestFormatFromPath(manifestFile))
 	if err != nil {
 		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
@@ -1395,19 +1446,27 @@ func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, mani
 	writeTestFile(t, dir, manifestFile, data, 0644)
 }
 
-func encodeTestManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
-	switch format {
-	case pluginpkg.ManifestFormatJSON:
-		data, err := json.MarshalIndent(manifest, "", "  ")
-		if err != nil {
-			return nil, err
+func populateMissingArtifactDigests(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
+	t.Helper()
+
+	for i := range manifest.Artifacts {
+		if manifest.Artifacts[i].SHA256 != "" {
+			continue
 		}
-		return append(data, '\n'), nil
-	case pluginpkg.ManifestFormatYAML:
-		return yaml.Marshal(manifest)
-	default:
-		return nil, errors.New("unsupported manifest format")
+
+		path := filepath.Join(dir, filepath.FromSlash(manifest.Artifacts[i].Path))
+		data, err := os.ReadFile(path)
+		if err == nil {
+			manifest.Artifacts[i].SHA256 = sha256HexForTest(string(data))
+			continue
+		}
+
+		manifest.Artifacts[i].SHA256 = sha256HexForTest(manifest.Artifacts[i].Path)
 	}
+}
+
+func encodeTestManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
+	return pluginpkg.EncodeManifestFormat(manifest, format)
 }
 
 func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode) {

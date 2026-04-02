@@ -30,24 +30,26 @@ Use this when the upstream already publishes a spec.
 Assume you already have a local OpenAPI file such as `./openapi/httpbin.yaml`.
 
 ```yaml
-integrations:
+providers:
   httpbin:
     display_name: HTTPBin
-    mcp_tool_prefix: httpbin_
-    plugin:
-      openapi: ./openapi/httpbin.yaml
-      openapi_connection: public
-      default_connection: public
-      connections:
-        public:
-          mode: none
-          auth:
-            type: none
-      allowed_operations:
-        get_ip:
-          alias: get_ip
-        get_headers:
-          alias: get_headers
+    mcp:
+      enabled: true
+      tool_prefix: httpbin_
+    connections:
+      public:
+        mode: none
+        auth:
+          type: none
+    surfaces:
+      openapi:
+        document: ./openapi/httpbin.yaml
+        connection: public
+    allowed_operations:
+      get_ip:
+        alias: get_ip
+      get_headers:
+        alias: get_headers
 ```
 
 ## Packaged Plugin
@@ -55,10 +57,10 @@ integrations:
 Use this when the logic belongs in code or should be versioned independently.
 
 ```yaml
-integrations:
+providers:
   support:
     display_name: Support
-    plugin:
+    from:
       package: ./dist/support-plugin.tar.gz
 ```
 
@@ -77,20 +79,24 @@ Assume you already have a local package such as `./dist/support-plugin.tar.gz`
 and a local OpenAPI file such as `./openapi/support.yaml`.
 
 ```yaml
-integrations:
+providers:
   support:
     display_name: Support
-    mcp_tool_prefix: support_
-    plugin:
+    mcp:
+      enabled: true
+      tool_prefix: support_
+    from:
       package: ./dist/support-plugin.tar.gz
-      openapi: ./openapi/support.yaml
-      openapi_connection: plugin
-      mcp_url: https://mcp.support.example.com/mcp
-      mcp_connection: plugin
-      default_connection: plugin
-      allowed_operations:
-        tickets.list:
-          alias: list_tickets
+    surfaces:
+      openapi:
+        document: ./openapi/support.yaml
+        connection: default
+      mcp:
+        url: https://mcp.support.example.com/mcp
+        connection: default
+    allowed_operations:
+      tickets.list:
+        alias: list_tickets
 ```
 
 ## Named Connections

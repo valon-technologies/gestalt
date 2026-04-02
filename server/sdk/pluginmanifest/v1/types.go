@@ -29,6 +29,7 @@ type WebUIMetadata struct {
 type Provider struct {
 	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
 	Auth                 *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
+	ConnectionMode       string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
 	MCP                  bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	BaseURL              string                             `json:"base_url,omitempty" yaml:"base_url,omitempty"`
 	Headers              map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`

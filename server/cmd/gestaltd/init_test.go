@@ -323,7 +323,7 @@ func writePreparedPluginPackageConfigWithConfig(t *testing.T, dir, packagePath s
 	cfgPath := filepath.Join(dir, "config.yaml")
 	var configBlock string
 	if pluginConfig != nil {
-		configBlock += "\n      config:"
+		configBlock += "\n    config:"
 		payload, err := json.Marshal(pluginConfig)
 		if err != nil {
 			t.Fatalf("Marshal(pluginConfig): %v", err)
@@ -333,7 +333,7 @@ func writePreparedPluginPackageConfigWithConfig(t *testing.T, dir, packagePath s
 			t.Fatalf("Unmarshal(pluginConfig): %v", err)
 		}
 		for key, value := range decoded {
-			configBlock += fmt.Sprintf("\n        %s: %q", key, value)
+			configBlock += fmt.Sprintf("\n      %s: %q", key, value)
 		}
 	}
 	cfg := `auth:
@@ -348,9 +348,9 @@ datastore:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
   encryption_key: test-key
-integrations:
+providers:
   example:
-    plugin:
+    from:
       package: ` + packagePath + configBlock + `
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
