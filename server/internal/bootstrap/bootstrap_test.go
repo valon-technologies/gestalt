@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -14,6 +16,8 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -120,9 +124,110 @@ func TestBootstrap(t *testing.T) {
 func TestValidate(t *testing.T) {
 	t.Parallel()
 
-	if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
-		t.Fatalf("Validate: %v", err)
-	}
+	t.Run("baseline", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
+	t.Run("allows resolved manifest local overrides", func(t *testing.T) {
+		t.Parallel()
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Reports API"},
+				"servers": []any{map[string]string{"url": "https://api.example.test"}},
+				"paths": map[string]any{
+					"/reports": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_reports",
+							"summary":     "List reports",
+						},
+					},
+				},
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
+
+		plugin := &config.PluginDef{
+			Source:            "github.com/acme/plugins/reports",
+			Version:           "1.0.0",
+			IsDeclarative:     true,
+			OpenAPIConnection: "reports",
+			ResponseMapping: &config.ResponseMappingDef{
+				DataPath: "results.items",
+			},
+			Connections: map[string]*config.ConnectionDef{
+				"reports": {
+					Mode: "user",
+					Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
+				},
+			},
+			ResolvedManifest: &pluginmanifestv1.Manifest{
+				Kinds: []string{pluginmanifestv1.KindProvider},
+				Provider: &pluginmanifestv1.Provider{
+					OpenAPI: specSrv.URL,
+				},
+			},
+		}
+
+		cfg := validConfig()
+		cfg.Integrations["reports"] = config.IntegrationDef{
+			Plugin: plugin,
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
+	t.Run("rejects undeclared resolved manifest connection override", func(t *testing.T) {
+		t.Parallel()
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Reports API"},
+				"servers": []any{map[string]string{"url": "https://api.example.test"}},
+				"paths": map[string]any{
+					"/reports": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_reports",
+							"summary":     "List reports",
+						},
+					},
+				},
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
+
+		cfg := validConfig()
+		cfg.Integrations["reports"] = config.IntegrationDef{
+			Plugin: &config.PluginDef{
+				Source:            "github.com/acme/plugins/reports",
+				Version:           "1.0.0",
+				IsDeclarative:     true,
+				OpenAPIConnection: "reports",
+				ResolvedManifest: &pluginmanifestv1.Manifest{
+					Kinds: []string{pluginmanifestv1.KindProvider},
+					Provider: &pluginmanifestv1.Provider{
+						OpenAPI: specSrv.URL,
+					},
+				},
+			},
+		}
+
+		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
+		if err == nil {
+			t.Fatal("expected validation error")
+		}
+		if !strings.Contains(err.Error(), `openapi_connection references undeclared connection "reports"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestValidateRejectsInvalidManagedParameters(t *testing.T) {

@@ -324,7 +324,15 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 				"MCP": {
 					Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth},
 				},
+				"manifest-api": {
+					Mode: "user",
+				},
+				"manifest-default": {
+					Mode: "user",
+				},
 			},
+			OpenAPIConnection: "manifest-api",
+			DefaultConnection: "manifest-default",
 		},
 	}
 	manifestData, err := pluginpkg.EncodeManifest(manifest)
@@ -340,12 +348,24 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"hybrid": {
 			Plugin: &config.PluginDef{
+				Source:               manifest.Source,
+				Version:              manifest.Version,
 				IsDeclarative:        true,
 				ResolvedManifestPath: manifestPath,
 				ResolvedManifest:     manifest,
 				AllowedOperations: map[string]*config.OperationOverride{
 					"api_list_items": {
 						Alias: "list_items",
+					},
+				},
+				OpenAPIConnection: "local-api",
+				DefaultConnection: "local-default",
+				Connections: map[string]*config.ConnectionDef{
+					"local-api": {
+						Mode: "user",
+					},
+					"local-default": {
+						Mode: "user",
 					},
 				},
 			},
@@ -399,8 +419,11 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConnectionMaps: %v", err)
 	}
-	if got := maps.APIConnection["hybrid"]; got != config.PluginConnectionName {
-		t.Fatalf("api connection = %q, want %q", got, config.PluginConnectionName)
+	if got := maps.DefaultConnection["hybrid"]; got != "local-default" {
+		t.Fatalf("default connection = %q, want %q", got, "local-default")
+	}
+	if got := maps.APIConnection["hybrid"]; got != "local-api" {
+		t.Fatalf("api connection = %q, want %q", got, "local-api")
 	}
 	if got := maps.MCPConnection["hybrid"]; got != "MCP" {
 		t.Fatalf("mcp connection = %q, want %q", got, "MCP")
