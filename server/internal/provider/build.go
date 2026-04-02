@@ -183,7 +183,9 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(conn.ConnectionParams))
 		for name, cpd := range conn.ConnectionParams {
 			base.ConnectionDefs[name] = core.ConnectionParamDef{
-				Required: cpd.Required,
+				Required:    cpd.Required,
+				Description: cpd.Description,
+				From:        cpd.From,
 			}
 		}
 	} else if len(def.Connection) > 0 {

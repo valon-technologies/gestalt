@@ -5,8 +5,7 @@
   "additionalProperties": false,
   "required": [
     "source",
-    "version",
-    "kinds"
+    "version"
   ],
   "properties": {
     "source": {
@@ -26,34 +25,59 @@
     "icon_file": {
       "type": "string"
     },
-    "kinds": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "enum": [
-          "provider",
-          "webui"
-        ]
-      }
+    "provider": {
+      "$ref": "#/$defs/provider"
     },
+    "webui": {
+      "$ref": "#/$defs/webui"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "provider"
+      ]
+    },
+    {
+      "required": [
+        "webui"
+      ]
+    }
+  ],
+  "$defs": {
     "provider": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "surfaces"
+      ],
       "properties": {
         "config_schema_path": {
           "type": "string",
           "minLength": 1
         },
-        "auth": {
-          "$ref": "#/$defs/provider_auth"
+        "exec": {
+          "$ref": "#/$defs/exec"
         },
-        "mcp": {
-          "type": "boolean"
-        },
-        "base_url": {
-          "type": "string",
-          "minLength": 1
+        "connections": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/provider_default_connection"
+            }
+          },
+          "patternProperties": {
+            "^(?!default$).+$": {
+              "$ref": "#/$defs/provider_named_connection"
+            }
+          },
+          "additionalProperties": false
         },
         "headers": {
           "type": "object",
@@ -67,16 +91,8 @@
             "$ref": "#/$defs/managed_parameter"
           }
         },
-        "operations": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/provider_operation"
-          }
-        },
-        "openapi": {
-          "type": "string",
-          "minLength": 1
+        "response_mapping": {
+          "$ref": "#/$defs/response_mapping"
         },
         "allowed_operations": {
           "type": "object",
@@ -84,94 +100,55 @@
             "$ref": "#/$defs/manifest_operation_override"
           }
         },
-        "graphql_url": {
-          "type": "string",
-          "minLength": 1
+        "surfaces": {
+          "$ref": "#/$defs/surfaces"
         },
-        "mcp_url": {
-          "type": "string",
-          "minLength": 1
+        "expose": {
+          "$ref": "#/$defs/expose"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "exec"
+          ]
         },
-        "openapi_connection": {
-          "type": "string",
-          "minLength": 1
-        },
-        "graphql_connection": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mcp_connection": {
-          "type": "string",
-          "minLength": 1
-        },
-        "default_connection": {
-          "type": "string",
-          "minLength": 1
-        },
-        "connections": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/manifest_connection_def"
-          }
-        },
-        "post_connect_discovery": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["url"],
+        {
           "properties": {
-            "url": {
-              "type": "string",
-              "format": "uri"
-            },
-            "id_path": {
-              "type": "string"
-            },
-            "name_path": {
-              "type": "string"
-            },
-            "metadata_mapping": {
-              "type": "object",
-              "additionalProperties": { "type": "string" }
-            }
-          }
-        },
-        "connection_params": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "required": { "type": "boolean" },
-              "description": { "type": "string" },
-              "from": { "type": "string", "enum": ["discovery"] }
-            }
-          }
-        },
-        "response_mapping": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["data_path"],
-          "properties": {
-            "data_path": {
-              "type": "string",
-              "minLength": 1
-            },
-            "pagination": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "has_more_path": { "type": "string" },
-                "cursor_path": { "type": "string" }
-              }
+            "surfaces": {
+              "anyOf": [
+                {
+                  "required": [
+                    "rest"
+                  ]
+                },
+                {
+                  "required": [
+                    "openapi"
+                  ]
+                },
+                {
+                  "required": [
+                    "graphql"
+                  ]
+                },
+                {
+                  "required": [
+                    "mcp"
+                  ]
+                }
+              ]
             }
           }
         }
-      }
+      ]
     },
     "webui": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["asset_root"],
+      "required": [
+        "asset_root"
+      ],
       "properties": {
         "asset_root": {
           "type": "string",
@@ -179,130 +156,287 @@
         }
       }
     },
-    "artifacts": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/artifact"
+    "exec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_path"
+      ],
+      "properties": {
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
-    "entrypoints": {
+    "provider_default_connection": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "provider": {
-          "$ref": "#/$defs/entrypoint"
-        }
-      }
-    }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "kinds": {
-            "contains": {
-              "const": "provider"
-            }
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user",
+            "identity",
+            "either"
+          ]
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/provider_connection_param"
           }
+        },
+        "discovery": {
+          "$ref": "#/$defs/provider_discovery"
         }
-      },
-      "then": {
-        "required": [
-          "provider"
-        ],
-        "anyOf": [
-          {
-            "required": [
-              "entrypoints"
-            ],
-            "properties": {
-              "entrypoints": {
-                "required": [
-                  "provider"
-                ]
-              }
-            }
-          },
-          {
-            "properties": {
-              "provider": {
-                "required": [
-                  "base_url",
-                  "operations"
-                ]
-              }
-            }
-          },
-          {
-            "properties": {
-              "provider": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "openapi"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "graphql_url"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "mcp_url"
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          {
-            "required": [
-              "entrypoints"
-            ],
-            "properties": {
-              "entrypoints": {
-                "required": [
-                  "provider"
-                ]
-              },
-              "provider": {
-                "required": [
-                  "base_url",
-                  "operations"
-                ]
-              }
-            }
-          }
-        ]
       }
     },
-    {
-      "if": {
-        "properties": {
-          "kinds": {
-            "contains": {
-              "const": "webui"
+    "provider_named_connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user",
+            "identity",
+            "either"
+          ]
+        },
+        "auth": {
+          "$ref": "#/$defs/provider_auth"
+        }
+      }
+    },
+    "provider_connection_param": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "enum": [
+            "discovery"
+          ]
+        }
+      }
+    },
+    "provider_discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "id_path": {
+          "type": "string"
+        },
+        "name_path": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rest": {
+          "$ref": "#/$defs/rest_surface"
+        },
+        "openapi": {
+          "$ref": "#/$defs/openapi_surface"
+        },
+        "graphql": {
+          "$ref": "#/$defs/graphql_surface"
+        },
+        "mcp": {
+          "$ref": "#/$defs/mcp_surface"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "rest",
+              "openapi"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "rest",
+              "graphql"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "openapi",
+              "graphql"
+            ]
+          }
+        }
+      ]
+    },
+    "rest_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_url",
+        "operations"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/provider_operation"
+          }
+        }
+      }
+    },
+    "openapi_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "graphql_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "mcp_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "expose": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mcp": {
+          "type": "boolean"
+        }
+      }
+    },
+    "response_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_path"
+      ],
+      "properties": {
+        "data_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "has_more_path": {
+              "type": "string"
+            },
+            "cursor_path": {
+              "type": "string"
             }
           }
         }
-      },
-      "then": {
-        "required": [
-          "webui"
-        ]
       }
-    }
-  ],
-  "$defs": {
+    },
     "provider_auth": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["oauth2", "mcp_oauth", "bearer", "manual", "none"]
+          "enum": [
+            "oauth2",
+            "mcp_oauth",
+            "bearer",
+            "manual",
+            "none"
+          ]
         },
         "authorization_url": {
           "type": "string",
@@ -320,60 +454,86 @@
         },
         "scopes": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "pkce": {
           "type": "boolean"
         },
         "client_auth": {
           "type": "string",
-          "enum": ["header"]
+          "enum": [
+            "header"
+          ]
         },
         "token_exchange": {
           "type": "string",
-          "enum": ["form", "json"]
+          "enum": [
+            "form",
+            "json"
+          ]
         },
         "access_token_path": {
-          "type": "string",
-          "description": "Dot-separated JSON path to extract the access token from the token response"
+          "type": "string"
         },
         "scope_param": {
-          "type": "string",
-          "description": "Query parameter name for scopes (default: scope)"
+          "type": "string"
         },
         "scope_separator": {
           "type": "string"
         },
         "authorization_params": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "token_params": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "refresh_params": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "accept_header": {
           "type": "string"
         },
         "token_metadata": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "credentials": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "properties": {
-              "name": { "type": "string", "minLength": 1, "pattern": "^[a-z][a-z0-9_]*$" },
-              "label": { "type": "string" },
-              "description": { "type": "string" },
-              "help_url": { "type": "string", "format": "uri" }
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "help_url": {
+                "type": "string",
+                "format": "uri"
+              }
             }
           }
         }
@@ -381,31 +541,29 @@
       "allOf": [
         {
           "if": {
-            "properties": { "type": { "const": "oauth2" } }
+            "properties": {
+              "type": {
+                "const": "oauth2"
+              }
+            }
           },
           "then": {
-            "required": ["authorization_url", "token_url"]
+            "required": [
+              "authorization_url",
+              "token_url"
+            ]
           }
         }
       ]
     },
-    "manifest_connection_def": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": ["none", "user", "identity", "either"]
-        },
-        "auth": {
-          "$ref": "#/$defs/provider_auth"
-        }
-      }
-    },
     "provider_operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "method", "path"],
+      "required": [
+        "name",
+        "method",
+        "path"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -416,7 +574,13 @@
         },
         "method": {
           "type": "string",
-          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
         },
         "path": {
           "type": "string",
@@ -430,26 +594,60 @@
         }
       }
     },
-    "manifest_operation_override": {
+    "provider_parameter": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "in"
+      ],
       "properties": {
-        "alias": {
-          "type": "string"
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "int",
+            "bool",
+            "object",
+            "array"
+          ]
+        },
+        "in": {
+          "type": "string",
+          "enum": [
+            "query",
+            "body",
+            "path"
+          ]
         },
         "description": {
           "type": "string"
+        },
+        "required": {
+          "type": "boolean"
         }
       }
     },
     "managed_parameter": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["in", "name", "value"],
+      "required": [
+        "in",
+        "name",
+        "value"
+      ],
       "properties": {
         "in": {
           "type": "string",
-          "enum": ["header", "path"]
+          "enum": [
+            "header",
+            "path"
+          ]
         },
         "name": {
           "type": "string",
@@ -461,28 +659,15 @@
         }
       }
     },
-    "provider_parameter": {
+    "manifest_operation_override": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type", "in"],
       "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "type": "string",
-          "enum": ["string", "int", "bool", "object", "array"]
-        },
-        "in": {
-          "type": "string",
-          "enum": ["query", "body", "path"]
+        "alias": {
+          "type": "string"
         },
         "description": {
           "type": "string"
-        },
-        "required": {
-          "type": "boolean"
         }
       }
     },
@@ -510,25 +695,6 @@
         "sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
-        }
-      }
-    },
-    "entrypoint": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "artifact_path"
-      ],
-      "properties": {
-        "artifact_path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     }

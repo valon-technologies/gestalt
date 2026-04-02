@@ -42,10 +42,10 @@ datastore:
 server:
   encryption_key: server-key
   port: 9090
-integrations:
+providers:
   service-a:
     display_name: Service A
-    plugin:
+    from:
       command: /tmp/provider
 `)
 
@@ -90,9 +90,9 @@ datastore:
   provider: data-store
 server:
   encryption_key: ${TEST_ENCRYPTION}
-integrations:
+providers:
   service-a:
-    plugin:
+    from:
       command: /tmp/provider
 `)
 
@@ -225,9 +225,9 @@ func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-integrations:
+providers:
   custom_tool:
-    plugin:
+    from:
       package: https://example.com/custom-tool.tar.gz
 `)
 
@@ -248,9 +248,9 @@ func TestLoadConfigValidation(t *testing.T) {
 		yaml string
 	}{
 		{
-			name: "integration with no plugin",
+			name: "provider with no source or surfaces",
 			yaml: `
-integrations:
+providers:
   service-a:
     display_name: Service A
 `,
@@ -286,46 +286,50 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "plugin only",
 			yaml: `
-integrations:
+providers:
   custom_tool:
-    plugin:
+    from:
       package: https://example.com/custom-tool.tar.gz
 `,
 		},
 		{
 			name: "plugin with command",
 			yaml: `
-integrations:
+providers:
   service:
-    plugin:
+    from:
       command: /usr/bin/provider
 `,
 		},
 		{
 			name: "inline plugin with openapi",
 			yaml: `
-integrations:
+providers:
   service:
-    plugin:
-      openapi: https://example.test/spec.json
-      base_url: https://api.example.test
-      auth:
-        type: oauth2
-        authorization_url: https://example.test/auth
-        token_url: https://example.test/token
+    connections:
+      default:
+        auth:
+          type: oauth2
+          authorization_url: https://example.test/auth
+          token_url: https://example.test/token
+    surfaces:
+      openapi:
+        document: https://example.test/spec.json
+        base_url: https://api.example.test
 `,
 		},
 		{
 			name: "inline plugin with operations",
 			yaml: `
-integrations:
+providers:
   service:
-    plugin:
-      base_url: https://api.example.test
-      operations:
-        - name: list_users
-          method: GET
-          path: /users
+    surfaces:
+      rest:
+        base_url: https://api.example.test
+        operations:
+          - name: list_users
+            method: GET
+            path: /users
 `,
 		},
 	}
@@ -353,18 +357,18 @@ func TestPluginValidation(t *testing.T) {
 		{
 			name: "integration plugin package is valid",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       package: ./plugins/dummy.tar.gz
 `,
 		},
 		{
 			name: "plugin package and command are mutually exclusive",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       command: /tmp/plugin
       package: ./plugins/dummy.tar.gz
 `,
@@ -373,9 +377,9 @@ integrations:
 		{
 			name: "plugin args require command not package",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       package: ./plugins/dummy.tar.gz
       args:
         - --verbose
@@ -385,9 +389,9 @@ integrations:
 		{
 			name: "plugin env with package is valid",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       package: ./plugins/dummy.tar.gz
       env:
         FOO: bar
@@ -396,29 +400,29 @@ integrations:
 		{
 			name: "plugin config with package is valid",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       package: ./plugins/dummy.tar.gz
-      config:
-        base_url: https://example.com
+    config:
+      base_url: https://example.com
 `,
 		},
 		{
 			name: "plugin command or package is required for external",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin: {}
+    {}
 `,
 			wantErr: true,
 		},
 		{
 			name: "plugin package with version is rejected",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       package: ./plugins/dummy.tar.gz
       version: 1.0.0
 `,
@@ -427,9 +431,9 @@ integrations:
 		{
 			name: "plugin source with version is valid",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       source: github.com/acme-corp/tools/widget
       version: 1.2.3
 `,
@@ -437,9 +441,9 @@ integrations:
 		{
 			name: "plugin source without version is rejected",
 			yaml: `
-integrations:
+providers:
   external:
-    plugin:
+    from:
       source: github.com/acme-corp/tools/widget
 `,
 			wantErr: true,
@@ -622,16 +626,16 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-integrations:
+providers:
   service-a:
     icon_file: ../assets/service.svg
-    plugin:
+    from:
       command: ../bin/provider
   service-b:
-    plugin:
+    from:
       package: ../plugins/dummy.tar.gz
   service-c:
-    plugin:
+    from:
       package: https://example.com/dummy.tar.gz
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -745,9 +749,9 @@ func TestLoad_ResolvesRelativePluginPackagePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `integrations:
+	cfg := `providers:
   sample:
-    plugin:
+    from:
       package: ./my-plugin
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {

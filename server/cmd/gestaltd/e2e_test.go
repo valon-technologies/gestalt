@@ -70,53 +70,42 @@ func TestE2EValidateRejectsInvalidInlineConnectionConfigs(t *testing.T) {
 		wantError  string
 	}{
 		{
-			name: "operations require default connection",
-			pluginYAML: `base_url: https://api.example.test
-auth:
-  type: manual
-connections:
+			name: "openapi requires explicit surface connection",
+			pluginYAML: `connections:
   workspace:
     auth:
       type: manual
-operations:
-  - name: list_items
-    method: GET
-    path: /items`,
-			wantError: "plugin.default_connection is required when using inline operations with named connections",
+surfaces:
+  openapi:
+    document: https://api.example.test/openapi.json`,
+			wantError: "surfaces.openapi.connection is required when using named connections without connections.default",
 		},
 		{
-			name: "openapi requires explicit surface connection",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-connections:
+			name: "graphql requires explicit surface connection",
+			pluginYAML: `connections:
   workspace:
     auth:
-      type: manual`,
-			wantError: "plugin.openapi_connection is required when using openapi with named connections and no top-level auth",
-		},
-		{
-			name: "graphql still requires surface connection when openapi also exists",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-openapi_connection: workspace
-graphql_url: https://api.example.test/graphql
-connections:
-  workspace:
-    auth:
-      type: manual`,
-			wantError: "plugin.graphql_connection is required when using graphql_url with named connections and no top-level auth",
+      type: manual
+surfaces:
+  graphql:
+    url: https://api.example.test/graphql`,
+			wantError: "surfaces.graphql.connection is required when using named connections without connections.default",
 		},
 		{
 			name: "default connection reference must exist",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-openapi_connection: workspace
-default_connection: missing
-connections:
+			pluginYAML: `connections:
   workspace:
     auth:
       type: manual
-    params:
-      tenant:
-        required: true`,
-			wantError: "plugin.default_connection references undeclared connection",
+surfaces:
+  rest:
+    connection: missing
+    base_url: https://api.example.test
+    operations:
+      - name: list_items
+        method: GET
+        path: /items`,
+			wantError: "surfaces.rest.connection references undeclared connection",
 		},
 	}
 
@@ -136,11 +125,10 @@ datastore:
 server:
   port: 18080
   encryption_key: test-e2e-key
-integrations:
+providers:
   example:
-    plugin:
-      %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+    %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
 
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 				t.Fatalf("write config: %v", err)
@@ -403,19 +391,22 @@ func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 	}{
 		{
 			name: "bogus field",
-			pluginYAML: `command: /tmp/provider
+			pluginYAML: `from:
+  command: /tmp/provider
 bogus: true`,
 			wantError: "bogus",
 		},
 		{
 			name: "removed plugin connection field",
-			pluginYAML: `command: /tmp/provider
+			pluginYAML: `from:
+  command: /tmp/provider
 connection: default`,
 			wantError: "connection",
 		},
 		{
-			name: "removed plugin params field",
-			pluginYAML: `command: /tmp/provider
+			name: "removed provider params field",
+			pluginYAML: `from:
+  command: /tmp/provider
 params:
   tenant:
     required: true`,
@@ -438,11 +429,10 @@ datastore:
     path: %s
 server:
   encryption_key: test-key
-integrations:
+providers:
   example:
-    plugin:
-      %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+    %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("WriteFile config: %v", err)
 			}
@@ -468,28 +458,36 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 	}{
 		{
 			name: "env unsupported for inline plugin",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-env:
-  API_KEY: secret`,
+			pluginYAML: `from:
+  env:
+    API_KEY: secret
+surfaces:
+  openapi:
+    document: https://api.example.test/openapi.json`,
 			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-allowed_hosts:
-  - api.example.test`,
+			pluginYAML: `from:
+  allowed_hosts:
+    - api.example.test
+surfaces:
+  openapi:
+    document: https://api.example.test/openapi.json`,
 			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
-			pluginYAML: `command: /tmp/provider
+			pluginYAML: `from:
+  command: /tmp/provider
 headers:
   x-test: value`,
 			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
 		{
 			name: "managed parameters unsupported without api surface",
-			pluginYAML: `command: /tmp/provider
+			pluginYAML: `from:
+  command: /tmp/provider
 managed_parameters:
   - in: header
     name: x-version
@@ -498,29 +496,43 @@ managed_parameters:
 		},
 		{
 			name: "response mapping unsupported for inline operations only",
-			pluginYAML: `base_url: https://api.example.test
-operations:
-  - name: list_items
-    method: GET
-    path: /items
-response_mapping:
-  data_path: items`,
+			pluginYAML: `response_mapping:
+  data_path: items
+surfaces:
+  rest:
+    base_url: https://api.example.test
+    operations:
+      - name: list_items
+        method: GET
+        path: /items`,
 			wantError: "plugin.response_mapping is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
 		},
 		{
-			name: "operations unsupported with spec surface",
-			pluginYAML: `openapi: https://api.example.test/openapi.json
-operations:
-  - name: list_items
-    method: GET
-    path: /items`,
-			wantError: "plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured",
+			name: "multiple api surfaces are rejected",
+			pluginYAML: `surfaces:
+  rest:
+    base_url: https://api.example.test
+    operations:
+      - name: list_items
+        method: GET
+        path: /items
+  openapi:
+    document: https://api.example.test/openapi.json`,
+			wantError: "provider config can define only one of surfaces.rest, surfaces.openapi, or surfaces.graphql",
 		},
 		{
 			name: "mcp connection requires mcp url",
-			pluginYAML: `command: /tmp/provider
-mcp_connection: default`,
-			wantError: "plugin.mcp_connection is only valid when mcp_url is configured; remove plugin.mcp_connection or configure an MCP surface",
+			pluginYAML: `connections:
+  workspace:
+    auth:
+      type: manual
+surfaces:
+  openapi:
+    document: https://api.example.test/openapi.json
+    connection: workspace
+  mcp:
+    connection: workspace`,
+			wantError: "surfaces.mcp.url is required when surfaces.mcp is configured",
 		},
 	}
 
@@ -539,11 +551,10 @@ datastore:
     path: %s
 server:
   encryption_key: test-key
-integrations:
+providers:
   example:
-    plugin:
-      %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+    %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
 
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("WriteFile config: %v", err)
@@ -571,7 +582,9 @@ func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
 		{
 			name:  "config headers unsupported for executable-only package plugin",
 			setup: setupPluginDir,
-			pluginYAML: `headers:
+			pluginYAML: `from:
+  package: %s
+headers:
   x-test: value`,
 			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
@@ -583,6 +596,7 @@ func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
 			dir := t.TempDir()
 			pluginDir := tc.setup(t, dir)
 			cfgPath := filepath.Join(dir, "config.yaml")
+			pluginYAML := fmt.Sprintf(tc.pluginYAML, pluginDir)
 			cfg := fmt.Sprintf(`auth:
   provider: local
 datastore:
@@ -591,12 +605,10 @@ datastore:
     path: %s
 server:
   encryption_key: test-key
-integrations:
+providers:
   example:
-    plugin:
-      package: %s
-      %s
-`, filepath.Join(dir, "gestalt.db"), pluginDir, strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+    %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(pluginYAML, "\n", "\n    "))
 
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("WriteFile config: %v", err)
@@ -626,9 +638,9 @@ datastore:
 server:
   encryption_key: test-key
   typo: true
-integrations:
+providers:
   example:
-    plugin:
+    from:
       command: /tmp/provider
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -772,9 +784,9 @@ datastore:
 server:
   port: %d
   encryption_key: test-e2e-key
-integrations:
+providers:
   example:
-    plugin:
+    from:
       package: %s
 `, filepath.Join(dir, "gestalt.db"), port, packageRef)
 
@@ -956,10 +968,10 @@ datastore:
 server:
   port: %d
   encryption_key: test-hybrid-key
-integrations:
+providers:
   hybrid:
     display_name: Hybrid Test
-    plugin:
+    from:
       package: %s
 `, filepath.Join(dir, "gestalt.db"), port, packageRef)
 
