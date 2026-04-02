@@ -1,0 +1,36 @@
+source: github.com/valon-technologies/gestalt/google_calendar
+version: 0.0.1-alpha.1
+display_name: Google Calendar
+description: Read and manage Google calendars and events.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  config_schema_path: schemas/config.schema.json
+  auth:
+    type: oauth2
+    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/calendar
+    authorization_params:
+      access_type: offline
+      prompt: consent
+  openapi: https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.json
+  allowed_operations:
+    calendar.calendarList.list:
+      alias: calendarList.list
+    calendar.calendarList.get:
+      alias: calendarList.get
+    calendar.events.list:
+      alias: events.list
+    calendar.events.get:
+      alias: events.get
+    calendar.events.insert:
+      alias: events.insert
+    calendar.events.update:
+      alias: events.update
+    calendar.events.delete:
+      alias: events.delete
+    calendar.events.quickAdd:
+      alias: events.quickAdd
