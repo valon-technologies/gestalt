@@ -135,7 +135,7 @@
             }
           }
         },
-        "connection": {
+        "connection_params": {
           "type": "object",
           "additionalProperties": {
             "type": "object",

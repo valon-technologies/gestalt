@@ -68,7 +68,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		auth:                 manifest.Provider.Auth,
 		httpClient:           httpClient,
 		postConnectDiscovery: manifest.Provider.PostConnectDiscovery,
-		connectionDefs:       manifest.Provider.Connection,
+		connectionDefs:       manifest.Provider.ConnectionParams,
 	}
 
 	for i := range manifest.Provider.Operations {

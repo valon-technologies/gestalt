@@ -16,6 +16,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 var stdoutMu sync.Mutex
@@ -154,6 +155,32 @@ func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Swaps os.Stdout via captureStdout.
+func TestRun_PluginPackageAcceptsYAMLManifestInput(t *testing.T) {
+	dir := t.TempDir()
+	src := newPluginPackageFixture(t, dir)
+	manifestPath, manifest := readManifestFromDir(t, src)
+	if err := os.Remove(manifestPath); err != nil {
+		t.Fatalf("remove %s: %v", manifestPath, err)
+	}
+	writeReleaseTestManifestFormat(t, src, "plugin.yaml", manifest)
+
+	inputPath := filepath.Join(src, "plugin.yaml")
+	outPath := filepath.Join(dir, "output-dir")
+
+	output := captureStdout(t, func() error {
+		return run([]string{"plugin", "package", "--input", inputPath, "--output", outPath})
+	})
+
+	packagedManifestPath, _ := readManifestFromDir(t, outPath)
+	if filepath.Base(packagedManifestPath) != "plugin.yaml" {
+		t.Fatalf("packaged manifest = %q, want plugin.yaml", filepath.Base(packagedManifestPath))
+	}
+	if !strings.Contains(output, "packaged") {
+		t.Fatalf("expected packaged output, got: %q", output)
+	}
+}
+
 func TestRun_PluginPackageRejectsOutputInsideInput(t *testing.T) {
 	t.Parallel()
 
@@ -223,17 +250,21 @@ version: 0.1.0
 kinds:
   - provider
 provider:
+  base_url: https://api.example.com
   operations:
     - name: list_items
       method: GET
       path: /items
+  connection:
+    tenant:
+      required: true
 `), 0644)
 
 	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
 	if err == nil {
 		t.Fatal("expected invalid manifest error")
 	}
-	if !strings.Contains(string(out), "base_url") {
+	if !strings.Contains(string(out), "connection") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -273,14 +304,7 @@ func TestE2EPluginReleaseBigquery(t *testing.T) {
 		t.Fatalf("extract archive: %v", err)
 	}
 
-	manifestData, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.ManifestFile))
-	if err != nil {
-		t.Fatalf("read plugin.json: %v", err)
-	}
-	var manifest pluginmanifestv1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		t.Fatalf("unmarshal manifest: %v", err)
-	}
+	_, manifest := readManifestFromDir(t, extractDir)
 	if manifest.Version != testVersion {
 		t.Fatalf("manifest version = %q, want %q", manifest.Version, testVersion)
 	}
@@ -368,15 +392,7 @@ func TestRun_PluginReleasePreservesCompiledWebUIMetadata(t *testing.T) {
 	archiveName := "gestalt-plugin-compiled-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 
-	manifestData, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.ManifestFile))
-	if err != nil {
-		t.Fatalf("read plugin.json: %v", err)
-	}
-
-	var manifest pluginmanifestv1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		t.Fatalf("unmarshal manifest: %v", err)
-	}
+	_, manifest := readManifestFromDir(t, extractDir)
 	if manifest.WebUI == nil || manifest.WebUI.AssetRoot != "out" {
 		t.Fatalf("manifest webui = %#v, want asset_root %q", manifest.WebUI, "out")
 	}
@@ -466,6 +482,56 @@ func TestRun_PluginReleaseTreatsDeclarativePluginWithHelperMainAsSource(t *testi
 	compiledArchiveName := "gestalt-plugin-declarative-provider_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
 		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
+	}
+}
+
+func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionParams(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := filepath.Join(t.TempDir(), "declarative-provider")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
+source: github.com/testowner/plugins/declarative-provider
+version: 0.0.1
+kinds:
+  - provider
+provider:
+  base_url: https://api.example.com
+  operations:
+    - name: list_items
+      method: GET
+      path: /items
+  connection_params:
+    tenant:
+      required: true
+`), 0o644)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-yaml.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-declarative-provider_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifestPath, manifest := readManifestFromDir(t, extractDir)
+	if filepath.Base(manifestPath) != "plugin.yaml" {
+		t.Fatalf("released manifest = %q, want plugin.yaml", filepath.Base(manifestPath))
+	}
+	if manifest.Provider == nil || len(manifest.Provider.ConnectionParams) != 1 || !manifest.Provider.ConnectionParams["tenant"].Required {
+		t.Fatalf("provider connection_params = %+v", manifest.Provider)
+	}
+
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read released manifest: %v", err)
+	}
+	if !strings.Contains(string(manifestData), "connection_params:") {
+		t.Fatalf("expected released manifest to use connection_params, got: %s", manifestData)
 	}
 }
 
@@ -1289,21 +1355,59 @@ func readReleasedManifest(t *testing.T, outputDir, archiveName string) *pluginma
 	t.Helper()
 
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	_, manifest, err := pluginpkg.ReadManifestFile(filepath.Join(extractDir, pluginpkg.ManifestFile))
+	manifestPath, err := pluginpkg.FindManifestFile(extractDir)
+	if err != nil {
+		t.Fatalf("find released manifest: %v", err)
+	}
+	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read released manifest: %v", err)
 	}
 	return manifest
 }
 
-func writeReleaseTestManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
+func readManifestFromDir(t *testing.T, dir string) (string, *pluginmanifestv1.Manifest) {
 	t.Helper()
 
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	manifestPath, err := pluginpkg.FindManifestFile(dir)
 	if err != nil {
-		t.Fatalf("MarshalIndent(plugin.json): %v", err)
+		t.Fatalf("find manifest: %v", err)
 	}
-	writeTestFile(t, dir, "plugin.json", append(data, '\n'), 0644)
+	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	return manifestPath, manifest
+}
+
+func writeReleaseTestManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
+	t.Helper()
+	writeReleaseTestManifestFormat(t, dir, pluginpkg.ManifestFile, manifest)
+}
+
+func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, manifest *pluginmanifestv1.Manifest) {
+	t.Helper()
+
+	data, err := encodeTestManifestFormat(manifest, pluginpkg.ManifestFormatFromPath(manifestFile))
+	if err != nil {
+		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
+	}
+	writeTestFile(t, dir, manifestFile, data, 0644)
+}
+
+func encodeTestManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
+	switch format {
+	case pluginpkg.ManifestFormatJSON:
+		data, err := json.MarshalIndent(manifest, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return append(data, '\n'), nil
+	case pluginpkg.ManifestFormatYAML:
+		return yaml.Marshal(manifest)
+	default:
+		return nil, errors.New("unsupported manifest format")
+	}
 }
 
 func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode) {

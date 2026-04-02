@@ -92,13 +92,12 @@ type EgressCredentialGrant struct {
 }
 
 type PluginDef struct {
-	Command    string            `yaml:"command"`
-	Package    string            `yaml:"package"`
-	Source     string            `yaml:"source"`
-	Version    string            `yaml:"version"`
-	Args       []string          `yaml:"args"`
-	Env        map[string]string `yaml:"env"`
-	Connection string            `yaml:"connection"`
+	Command string            `yaml:"command"`
+	Package string            `yaml:"package"`
+	Source  string            `yaml:"source"`
+	Version string            `yaml:"version"`
+	Args    []string          `yaml:"args"`
+	Env     map[string]string `yaml:"env"`
 
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
@@ -120,7 +119,7 @@ type PluginDef struct {
 	MCPConnection     string `yaml:"mcp_connection"`
 	DefaultConnection string `yaml:"default_connection"`
 
-	ConnectionParams  map[string]ConnectionParamDef `yaml:"params"`
+	ConnectionParams  map[string]ConnectionParamDef `yaml:"connection_params"`
 	MCP               bool                          `yaml:"mcp"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
 
@@ -241,9 +240,9 @@ type IntegrationDef struct {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection. All connections in a single integration must share the same Mode.
 type ConnectionDef struct {
-	Mode   string                        `yaml:"mode"`
-	Auth   ConnectionAuthDef             `yaml:"auth"`
-	Params map[string]ConnectionParamDef `yaml:"params"`
+	Mode             string                        `yaml:"mode"`
+	Auth             ConnectionAuthDef             `yaml:"auth"`
+	ConnectionParams map[string]ConnectionParamDef `yaml:"connection_params"`
 }
 
 type ConnectionAuthDef struct {
@@ -396,8 +395,8 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 		dst.Mode = src.Mode
 	}
 	MergeConnectionAuth(&dst.Auth, src.Auth)
-	if len(src.Params) > 0 {
-		dst.Params = src.Params
+	if len(src.ConnectionParams) > 0 {
+		dst.ConnectionParams = src.ConnectionParams
 	}
 }
 
@@ -444,7 +443,7 @@ func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginman
 		MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestProvider.Auth))
 	}
 	if plugin != nil {
-		override := &ConnectionDef{Params: plugin.ConnectionParams}
+		override := &ConnectionDef{ConnectionParams: plugin.ConnectionParams}
 		if plugin.Auth != nil {
 			override.Auth = *plugin.Auth
 		}
@@ -960,12 +959,6 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		supported bool
 		reason    string
 	}{
-		{
-			field:     "plugin.connection",
-			present:   plugin.Connection != "",
-			supported: false,
-			reason:    "is not supported; remove plugin.connection and use plugin.default_connection or a surface-specific *_connection field instead",
-		},
 		{
 			field:     "plugin.env",
 			present:   len(plugin.Env) > 0,
