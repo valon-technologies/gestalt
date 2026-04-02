@@ -164,7 +164,7 @@ func TestValidateConfigUsesPreparedManifestForPluginPackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", `{
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", "schemas/config.schema.json", `{
   "type": "object",
   "required": ["api_key"],
   "properties": {
@@ -187,13 +187,13 @@ func TestPrepareConfigRejectsPluginPackageSchemaViolation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", `{
-  "type": "object",
-  "required": ["api_key"],
-  "properties": {
-    "api_key": { "type": "string" }
-  }
-}`)
+	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", "schemas/config.schema.yaml", `type: object
+required:
+  - api_key
+properties:
+  api_key:
+    type: string
+`)
 	cfgPath := writePreparedPluginPackageConfigWithConfig(t, dir, packagePath, map[string]any{
 		"wrong_key": "value",
 	})
@@ -361,14 +361,14 @@ providers:
 
 func buildPreparedTestPluginPackage(t *testing.T, dir, source, version, content string) string {
 	t.Helper()
-	return buildPreparedTestPluginPackageWithSchema(t, dir, source, version, content, "")
+	return buildPreparedTestPluginPackageWithSchema(t, dir, source, version, content, "", "")
 }
 
-func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version, content, schema string) string {
+func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version, content, schemaPath, schema string) string {
 	t.Helper()
 	provider := &pluginmanifestv1.Provider{}
 	if schema != "" {
-		provider.ConfigSchemaPath = filepath.ToSlash(filepath.Join("schemas", "config.schema.json"))
+		provider.ConfigSchemaPath = filepath.ToSlash(schemaPath)
 	}
 	return buildPreparedTestPluginPackageWithManifestProvider(t, dir, source, version, content, provider, schema)
 }

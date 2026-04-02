@@ -61,7 +61,7 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 	if err != nil {
 		return nil, err
 	}
-	if schemaText := meta.GetConfigSchemaJson(); schemaText != "" {
+	if schemaText := meta.GetConfigSchema(); schemaText != "" {
 		slog.Warn("validating plugin config requires executing plugin binary", "plugin", name)
 		validationTarget := config
 		if validationTarget == nil {

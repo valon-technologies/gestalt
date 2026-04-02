@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"github.com/valon-technologies/gestalt/server/internal/jsonyaml"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string, config map[string]any) error {
@@ -23,16 +23,16 @@ func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.M
 		return fmt.Errorf("read config schema %q: %w", schemaName, err)
 	}
 
-	schemaDoc, err := jsonyaml.Decode(data)
-	if err != nil {
+	var schemaDoc any
+	if err := yaml.Unmarshal(data, &schemaDoc); err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
 
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("config.schema.json", schemaDoc); err != nil {
+	if err := compiler.AddResource("config.schema", schemaDoc); err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
-	schema, err := compiler.Compile("config.schema.json")
+	schema, err := compiler.Compile("config.schema")
 	if err != nil {
 		return fmt.Errorf("compile config schema: %w", err)
 	}

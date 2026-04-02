@@ -4,7 +4,7 @@ display_name: PagerDuty
 description: Manage incidents, services, and on-call schedules.
 icon_file: assets/icon.svg
 provider:
-  config_schema_path: schemas/config.schema.json
+  config_schema_path: schemas/config.schema.yaml
   connections:
     default:
       auth:

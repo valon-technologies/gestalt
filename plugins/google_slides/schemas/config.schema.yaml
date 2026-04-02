@@ -1,0 +1,12 @@
+type: object
+properties:
+  client_id:
+    type: string
+    description: Google OAuth client ID for Google Slides.
+  client_secret:
+    type: string
+    description: Google OAuth client secret for Google Slides.
+required:
+  - client_id
+  - client_secret
+additionalProperties: false

@@ -51,7 +51,7 @@ type schemaStubProvider struct {
 	schemaDocument string
 }
 
-func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schemaDocument }
+func (p *schemaStubProvider) ConfigSchema() string { return p.schemaDocument }
 
 type manualAuthStubProvider struct {
 	stubProvider
@@ -298,8 +298,8 @@ func TestProviderServerConfigSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
 	}
-	if meta.GetConfigSchemaJson() != `{"type":"object"}` {
-		t.Errorf("ConfigSchemaJson = %q, want %q", meta.GetConfigSchemaJson(), `{"type":"object"}`)
+	if meta.GetConfigSchema() != `{"type":"object"}` {
+		t.Errorf("ConfigSchema = %q, want %q", meta.GetConfigSchema(), `{"type":"object"}`)
 	}
 }
 

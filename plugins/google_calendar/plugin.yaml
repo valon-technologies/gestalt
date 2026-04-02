@@ -4,7 +4,7 @@ display_name: Google Calendar
 description: Read and manage Google calendars and events.
 icon_file: assets/icon.svg
 provider:
-  config_schema_path: schemas/config.schema.json
+  config_schema_path: schemas/config.schema.yaml
   connections:
     default:
       auth:

@@ -1,0 +1,12 @@
+type: object
+properties:
+  client_id:
+    type: string
+    description: PagerDuty OAuth client ID.
+  client_secret:
+    type: string
+    description: PagerDuty OAuth client secret.
+required:
+  - client_id
+  - client_secret
+additionalProperties: false
