@@ -71,11 +71,11 @@ func TestPluginFingerprintStable(t *testing.T) {
 		Env:     map[string]string{"API_KEY": "abc123"},
 	}
 
-	first, err := pluginFingerprint("external", plugin, nil, ".")
+	first, err := pluginFingerprint("external", plugin, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint: %v", err)
 	}
-	second, err := pluginFingerprint("external", plugin, nil, ".")
+	second, err := pluginFingerprint("external", plugin, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint second: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPluginFingerprintStable(t *testing.T) {
 	}
 
 	plugin.Package = "./plugins/dummy.tar.gz"
-	third, err := pluginFingerprint("external", plugin, nil, ".")
+	third, err := pluginFingerprint("external", plugin, ".")
 	if err != nil {
 		t.Fatalf("pluginFingerprint third: %v", err)
 	}
@@ -93,21 +93,103 @@ func TestPluginFingerprintStable(t *testing.T) {
 	}
 }
 
-func TestPluginFingerprintIncludesPreparedConfig(t *testing.T) {
+func TestLoadConfigForExecutionAllowsManagedPluginConfigChangeAfterInit(t *testing.T) {
 	t.Parallel()
 
-	plugin := &config.PluginDef{Package: "./plugins/dummy.tar.gz"}
+	dir := t.TempDir()
+	packagePath := buildPreparedTestPluginPackageRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	cfgPath := writePreparedPluginPackageConfigWithConfig(t, dir, packagePath, map[string]any{
+		"api_key": "one",
+	})
 
-	first, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "one"}, ".")
-	if err != nil {
-		t.Fatalf("pluginFingerprint first: %v", err)
+	if err := initConfig(cfgPath); err != nil {
+		t.Fatalf("initConfig: %v", err)
 	}
-	second, err := pluginFingerprint("external", plugin, map[string]any{"runtime_key": "two"}, ".")
+
+	writePreparedPluginPackageConfigWithConfig(t, dir, packagePath, map[string]any{
+		"api_key": "two",
+	})
+
+	_, cfg, err := loadConfigForExecution(cfgPath, true)
 	if err != nil {
-		t.Fatalf("pluginFingerprint second: %v", err)
+		t.Fatalf("loadConfigForExecution: %v", err)
 	}
-	if first == second {
-		t.Fatal("expected prepared config to affect fingerprint")
+
+	pluginConfig, err := config.NodeToMap(cfg.Integrations["example"].Plugin.Config)
+	if err != nil {
+		t.Fatalf("NodeToMap: %v", err)
+	}
+	if got := pluginConfig["api_key"]; got != "two" {
+		t.Fatalf("api_key = %v, want %q", got, "two")
+	}
+}
+
+func TestLoadConfigForExecutionResolvesLateBoundManagedPluginEnv(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	envVar := "TEST_API_KEY_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	portEnvVar := envVar + "_PORT"
+	mcpEnvVar := envVar + "_MCP"
+	packagePath := buildPreparedTestPluginPackageRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	cfgPath := writePreparedPluginPackageConfigWithConfig(t, dir, packagePath, map[string]any{
+		"api_key": "${" + envVar + "}",
+	})
+	cfgData, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("ReadFile config: %v", err)
+	}
+	updatedCfg := strings.Replace(string(cfgData), "server:\n  encryption_key: test-key\n", "server:\n  port: ${"+portEnvVar+"}\n  encryption_key: test-key\n", 1)
+	if updatedCfg == string(cfgData) {
+		t.Fatal("expected to rewrite server block in config")
+	}
+	updatedCfg += "    mcp:\n      enabled: ${" + mcpEnvVar + "}\n"
+	if err := os.WriteFile(cfgPath, []byte(updatedCfg), 0644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	savedEnv := map[string]*string{}
+	for _, key := range []string{envVar, portEnvVar, mcpEnvVar} {
+		if value, ok := os.LookupEnv(key); ok {
+			value := value
+			savedEnv[key] = &value
+		}
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("Unsetenv %s: %v", key, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, key := range []string{envVar, portEnvVar, mcpEnvVar} {
+			if value, ok := savedEnv[key]; ok && value != nil {
+				_ = os.Setenv(key, *value)
+				continue
+			}
+			_ = os.Unsetenv(key)
+		}
+	})
+
+	if err := initConfig(cfgPath); err != nil {
+		t.Fatalf("initConfig: %v", err)
+	}
+
+	if err := os.Setenv(envVar, "runtime-value"); err != nil {
+		t.Fatalf("Setenv %s: %v", envVar, err)
+	}
+
+	_, cfg, err := loadConfigForExecution(cfgPath, true)
+	if err != nil {
+		t.Fatalf("loadConfigForExecution: %v", err)
+	}
+
+	pluginConfig, err := config.NodeToMap(cfg.Integrations["example"].Plugin.Config)
+	if err != nil {
+		t.Fatalf("NodeToMap: %v", err)
+	}
+	if got := pluginConfig["api_key"]; got != "runtime-value" {
+		t.Fatalf("api_key = %v, want %q", got, "runtime-value")
+	}
+	if cfg.Server.Port != 8080 {
+		t.Fatalf("server.port = %d, want %d", cfg.Server.Port, 8080)
 	}
 }
 
@@ -164,13 +246,7 @@ func TestValidateConfigUsesPreparedManifestForPluginPackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedTestPluginPackageWithSchema(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable", "schemas/config.schema.json", `{
-  "type": "object",
-  "required": ["api_key"],
-  "properties": {
-    "api_key": { "type": "string" }
-  }
-}`)
+	packagePath := buildPreparedTestPluginPackageRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0", "not-an-executable")
 	cfgPath := writePreparedPluginPackageConfigWithConfig(t, dir, packagePath, map[string]any{
 		"api_key": "sk-test",
 	})
@@ -362,6 +438,17 @@ providers:
 func buildPreparedTestPluginPackage(t *testing.T, dir, source, version, content string) string {
 	t.Helper()
 	return buildPreparedTestPluginPackageWithSchema(t, dir, source, version, content, "", "")
+}
+
+func buildPreparedTestPluginPackageRequiringAPIKey(t *testing.T, dir, source, version, content string) string {
+	t.Helper()
+	return buildPreparedTestPluginPackageWithSchema(t, dir, source, version, content, "schemas/config.schema.json", `{
+  "type": "object",
+  "required": ["api_key"],
+  "properties": {
+    "api_key": { "type": "string" }
+  }
+}`)
 }
 
 func buildPreparedTestPluginPackageWithSchema(t *testing.T, dir, source, version, content, schemaPath, schema string) string {
