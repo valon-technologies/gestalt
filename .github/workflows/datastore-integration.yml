@@ -1,0 +1,303 @@
+name: Datastore Integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/go.mod"
+      - "server/go.sum"
+      - "server/core/datastore.go"
+      - "server/core/testing/datastore_suite.go"
+      - "server/internal/drivers/datastore/**"
+      - ".github/workflows/datastore-integration.yml"
+  pull_request:
+    paths:
+      - "server/go.mod"
+      - "server/go.sum"
+      - "server/core/datastore.go"
+      - "server/core/testing/datastore_suite.go"
+      - "server/internal/drivers/datastore/**"
+      - ".github/workflows/datastore-integration.yml"
+  workflow_dispatch:
+
+jobs:
+  postgres:
+    name: Postgres Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Run postgres datastore tests
+        run: go test -v ./internal/drivers/datastore/postgres
+        env:
+          GESTALT_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+
+  mysql:
+    name: MySQL Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Run mysql datastore tests
+        run: go test -v ./internal/drivers/datastore/mysql
+        env:
+          MYSQL_TEST_DSN: root:root@tcp(127.0.0.1:3306)/mysql?parseTime=true
+
+  mongodb:
+    name: MongoDB Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Wait for MongoDB
+        run: |
+          attempt=0
+          while [ "$attempt" -lt 60 ]; do
+            if (echo > /dev/tcp/127.0.0.1/27017) >/dev/null 2>&1; then
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+          echo "::error::MongoDB did not become ready"
+          exit 1
+
+      - name: Run mongodb datastore tests
+        run: go test -v ./internal/drivers/datastore/mongodb
+        env:
+          GESTALT_TEST_MONGODB_URI: mongodb://127.0.0.1:27017
+
+  dynamodb:
+    name: DynamoDB Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:2.5.2
+        ports:
+          - 8000:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Wait for DynamoDB
+        run: |
+          attempt=0
+          while [ "$attempt" -lt 60 ]; do
+            if (echo > /dev/tcp/127.0.0.1/8000) >/dev/null 2>&1; then
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+          echo "::error::DynamoDB did not become ready"
+          exit 1
+
+      - name: Run dynamodb datastore tests
+        run: go test -v ./internal/drivers/datastore/dynamodb
+        env:
+          GESTALT_TEST_DYNAMODB_ENDPOINT: http://127.0.0.1:8000
+
+  firestore:
+    name: Firestore Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: beta,cloud-firestore-emulator
+
+      - name: Start Firestore emulator
+        run: |
+          gcloud beta emulators firestore start --host-port=127.0.0.1:8787 --quiet >/tmp/firestore-emulator.log 2>&1 &
+          attempt=0
+          while [ "$attempt" -lt 60 ]; do
+            if (echo > /dev/tcp/127.0.0.1/8787) >/dev/null 2>&1; then
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+          echo "::error::Firestore emulator did not become ready"
+          cat /tmp/firestore-emulator.log
+          exit 1
+
+      - name: Run firestore datastore tests
+        run: go test -v ./internal/drivers/datastore/firestore
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8787
+          FIRESTORE_PROJECT_ID: test-project
+
+  sqlserver:
+    name: SQL Server Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: server
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: YourStrong!Passw0rd
+        ports:
+          - 1433:1433
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Wait for SQL Server
+        run: |
+          attempt=0
+          while [ "$attempt" -lt 90 ]; do
+            if (echo > /dev/tcp/127.0.0.1/1433) >/dev/null 2>&1; then
+              sleep 10
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 2
+          done
+          echo "::error::SQL Server did not become ready"
+          exit 1
+
+      - name: Run sqlserver datastore tests
+        run: go test -v ./internal/drivers/datastore/sqlserver
+        env:
+          GESTALT_TEST_SQLSERVER_DSN: sqlserver://sa:YourStrong%21Passw0rd@127.0.0.1:1433?database=tempdb&encrypt=disable
+
+  oracle:
+    name: Oracle Datastore
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    services:
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        env:
+          ORACLE_PASSWORD: oracle
+        ports:
+          - 1521:1521
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Wait for Oracle
+        run: |
+          attempt=0
+          while [ "$attempt" -lt 120 ]; do
+            if (echo > /dev/tcp/127.0.0.1/1521) >/dev/null 2>&1; then
+              sleep 20
+              exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 2
+          done
+          echo "::error::Oracle did not become ready"
+          exit 1
+
+      - name: Run oracle datastore tests
+        run: go test -v ./internal/drivers/datastore/oracle
+        env:
+          GESTALT_TEST_ORACLE_DSN: oracle://system:oracle@127.0.0.1:1521/FREEPDB1

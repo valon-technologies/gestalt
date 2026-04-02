@@ -41,7 +41,9 @@ func newTestStore(t *testing.T) *Store {
 	t.Cleanup(func() {
 		deleteAllDocs(t, store.client, datastore.UsersCollection)
 		deleteAllDocs(t, store.client, usersByEmailCollection)
+		deleteAllDocs(t, store.client, integrationTokenKeysCollection)
 		deleteAllDocs(t, store.client, datastore.IntegrationTokensCollection)
+		deleteAllDocs(t, store.client, apiTokensByHashCollection)
 		deleteAllDocs(t, store.client, datastore.APITokensCollection)
 		_ = store.Close()
 	})
@@ -127,5 +129,38 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 	if got.RefreshToken != "secret-refresh-token" {
 		t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, "secret-refresh-token")
+	}
+}
+
+func TestFindOrCreateUserHonorsLegacyEmailLookupKey(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	userID := "legacy-user"
+	email := "legacy@example.com"
+
+	_, err := store.client.Collection(datastore.UsersCollection).Doc(userID).Set(ctx, userDoc{
+		Email:     email,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	_, err = store.client.Collection(usersByEmailCollection).Doc(email).Set(ctx, userLookupDoc{
+		UserID: userID,
+	})
+	if err != nil {
+		t.Fatalf("seed user lookup: %v", err)
+	}
+
+	user, err := store.FindOrCreateUser(ctx, email)
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if user.ID != userID {
+		t.Fatalf("FindOrCreateUser returned %q, want %q", user.ID, userID)
 	}
 }

@@ -115,14 +115,14 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 }
 
 func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadata) (*Registration, error) {
-	if h.cfg.Store == nil {
-		return nil, nil
-	}
-
 	authServerURL := md.AuthServerURL
-	existing, err := h.cfg.Store.GetRegistration(ctx, authServerURL, h.cfg.RedirectURL)
-	if err != nil {
-		slog.Warn("mcpoauth: reading registration failed", "auth_server", authServerURL, "error", err)
+	var existing *Registration
+	if h.cfg.Store != nil {
+		var err error
+		existing, err = h.cfg.Store.GetRegistration(ctx, authServerURL, h.cfg.RedirectURL)
+		if err != nil {
+			slog.Warn("mcpoauth: reading registration failed", "auth_server", authServerURL, "error", err)
+		}
 	}
 
 	if existing != nil && !existing.Expired() {
@@ -158,8 +158,10 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 		reg.ScopesSupported = string(scopesJSON)
 	}
 
-	if err := h.cfg.Store.StoreRegistration(ctx, reg); err != nil {
-		slog.Warn("mcpoauth: storing registration failed", "auth_server", authServerURL, "error", err)
+	if h.cfg.Store != nil {
+		if err := h.cfg.Store.StoreRegistration(ctx, reg); err != nil {
+			slog.Warn("mcpoauth: storing registration failed", "auth_server", authServerURL, "error", err)
+		}
 	}
 
 	return reg, nil
