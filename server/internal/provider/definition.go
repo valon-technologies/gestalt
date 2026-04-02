@@ -59,7 +59,7 @@ type ConnectionParamDef struct {
 	Required    bool   `yaml:"required" json:"required"`
 	Description string `yaml:"description" json:"description"`
 	Default     string `yaml:"default" json:"default"`
-	From        string `yaml:"from" json:"from"`   // "" = user-provided, "token_response" = from OAuth response
+	From        string `yaml:"from" json:"from"`   // "" = user-provided, "token_response" = from OAuth response, "discovery" = from post-connect discovery
 	Field       string `yaml:"field" json:"field"` // JSON field name for token_response extraction
 }
 

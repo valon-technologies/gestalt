@@ -24,9 +24,6 @@ func RunDatastoreTests(t *testing.T, newStore func(t *testing.T) core.Datastore)
 	t.Run("APITokens", func(t *testing.T) {
 		testDatastoreAPITokens(t, newStore)
 	})
-	t.Run("StagedConnections", func(t *testing.T) {
-		testDatastoreStagedConnections(t, newStore)
-	})
 }
 
 func mustCreateUser(t *testing.T, ctx context.Context, ds core.Datastore, email string) *core.User {
@@ -459,91 +456,6 @@ func testDatastoreAPITokens(t *testing.T, newStore func(t *testing.T) core.Datas
 		}
 		if count != 0 {
 			t.Fatalf("RevokeAllAPITokens: got count %d, want 0", count)
-		}
-	})
-}
-
-func testDatastoreStagedConnections(t *testing.T, newStore func(t *testing.T) core.Datastore) {
-	t.Run("store get delete lifecycle", func(t *testing.T) {
-		ds := newStore(t)
-		t.Cleanup(func() { ds.Close() })
-
-		scs, ok := ds.(core.StagedConnectionStore)
-		if !ok {
-			t.Skip("datastore does not implement StagedConnectionStore")
-		}
-
-		ctx := context.Background()
-
-		user := mustCreateUser(t, ctx, ds, "staged@example.com")
-		now := time.Now().Truncate(time.Second)
-		expiry := now.Add(10 * time.Minute)
-
-		sc := &core.StagedConnection{
-			ID:             "sc-1",
-			UserID:         user.ID,
-			Integration:    "test-provider",
-			Instance:       "default",
-			AccessToken:    "staged-access-token",
-			RefreshToken:   "staged-refresh-token",
-			TokenExpiresAt: &expiry,
-			MetadataJSON:   `{"env":"prod"}`,
-			CandidatesJSON: `[{"id":"c1","name":"Site A"},{"id":"c2","name":"Site B"}]`,
-			CreatedAt:      now,
-			ExpiresAt:      expiry,
-		}
-
-		if err := scs.StoreStagedConnection(ctx, sc); err != nil {
-			t.Fatalf("StoreStagedConnection: %v", err)
-		}
-
-		got, err := scs.GetStagedConnection(ctx, "sc-1")
-		if err != nil {
-			t.Fatalf("GetStagedConnection: %v", err)
-		}
-		if got == nil {
-			t.Fatal("GetStagedConnection returned nil")
-		}
-		if got.AccessToken != "staged-access-token" {
-			t.Errorf("AccessToken: got %q, want %q", got.AccessToken, "staged-access-token")
-		}
-		if got.RefreshToken != "staged-refresh-token" {
-			t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, "staged-refresh-token")
-		}
-		if got.Integration != "test-provider" {
-			t.Errorf("Integration: got %q, want %q", got.Integration, "test-provider")
-		}
-		if got.TokenExpiresAt == nil || !got.TokenExpiresAt.Truncate(time.Second).Equal(expiry.Truncate(time.Second)) {
-			t.Errorf("TokenExpiresAt: got %v, want %v", got.TokenExpiresAt, expiry)
-		}
-		if got.CandidatesJSON != sc.CandidatesJSON {
-			t.Errorf("CandidatesJSON: got %q, want %q", got.CandidatesJSON, sc.CandidatesJSON)
-		}
-
-		if err := scs.DeleteStagedConnection(ctx, "sc-1"); err != nil {
-			t.Fatalf("DeleteStagedConnection: %v", err)
-		}
-
-		_, err = scs.GetStagedConnection(ctx, "sc-1")
-		if !errors.Is(err, core.ErrNotFound) {
-			t.Fatalf("GetStagedConnection after delete: expected ErrNotFound, got %v", err)
-		}
-	})
-
-	t.Run("get nonexistent returns ErrNotFound", func(t *testing.T) {
-		ds := newStore(t)
-		t.Cleanup(func() { ds.Close() })
-
-		scs, ok := ds.(core.StagedConnectionStore)
-		if !ok {
-			t.Skip("datastore does not implement StagedConnectionStore")
-		}
-
-		ctx := context.Background()
-
-		_, err := scs.GetStagedConnection(ctx, "nonexistent-id")
-		if !errors.Is(err, core.ErrNotFound) {
-			t.Fatalf("expected ErrNotFound, got %v", err)
 		}
 	})
 }

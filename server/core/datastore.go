@@ -24,9 +24,3 @@ type Datastore interface {
 	Migrate(ctx context.Context) error
 	Close() error
 }
-
-type StagedConnectionStore interface {
-	StoreStagedConnection(ctx context.Context, sc *StagedConnection) error
-	GetStagedConnection(ctx context.Context, id string) (*StagedConnection, error)
-	DeleteStagedConnection(ctx context.Context, id string) error
-}

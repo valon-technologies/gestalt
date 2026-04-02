@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 
@@ -18,9 +19,33 @@ func testDSN(t *testing.T) string {
 	return dsn
 }
 
+func resetTestSchema(t *testing.T, dsn string) {
+	t.Helper()
+
+	db, err := sql.Open("oracle", dsn)
+	if err != nil {
+		t.Fatalf("opening oracle for cleanup: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	drops := []string{
+		"BEGIN EXECUTE IMMEDIATE 'DROP TABLE oauth_registrations CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+		"BEGIN EXECUTE IMMEDIATE 'DROP TABLE staged_connections CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+		"BEGIN EXECUTE IMMEDIATE 'DROP TABLE api_tokens CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+		"BEGIN EXECUTE IMMEDIATE 'DROP TABLE integration_tokens CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+		"BEGIN EXECUTE IMMEDIATE 'DROP TABLE users CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+	}
+	for _, stmt := range drops {
+		if _, err := db.ExecContext(context.Background(), stmt); err != nil {
+			t.Fatalf("resetting oracle test schema: %v", err)
+		}
+	}
+}
+
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := testDSN(t)
+	resetTestSchema(t, dsn)
 
 	store, err := New(dsn, coretesting.EncryptionKey(t))
 	if err != nil {
@@ -31,7 +56,10 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() {
+		_ = store.Close()
+		resetTestSchema(t, dsn)
+	})
 	return store
 }
 
