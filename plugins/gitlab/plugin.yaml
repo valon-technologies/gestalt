@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/gitlab
-version: 0.0.1-alpha.2
+version: 0.0.1-alpha.3
 display_name: GitLab
 description: Repository, issue, merge request, and pipeline operations.
 icon_file: assets/icon.svg
@@ -7,10 +7,3 @@ kinds:
   - provider
 provider:
   openapi: openapi.yaml
-  auth:
-    type: oauth2
-    authorization_url: https://gitlab.com/oauth/authorize
-    token_url: https://gitlab.com/oauth/token
-    pkce: true
-    scopes:
-      - api

@@ -7,14 +7,26 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
+
+func mustConfigNode(t *testing.T, value any) yaml.Node {
+	t.Helper()
+	var node yaml.Node
+	if err := node.Encode(value); err != nil {
+		t.Fatalf("node.Encode: %v", err)
+	}
+	return node
+}
 
 func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
 	t.Parallel()
@@ -294,6 +306,232 @@ func TestBootstrap_ManagedParametersInjectHeadersAndHideOpenAPIParams(t *testing
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for upstream query param")
+	}
+}
+
+func TestBootstrap_OpenAPISecuritySchemesBuildManualCredentialFieldsAndHeaderMapping(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	type requestHeaders struct {
+		apiKey         string
+		applicationKey string
+	}
+
+	gotHeaders := make(chan requestHeaders, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- requestHeaders{
+			apiKey:         r.Header.Get("DD-API-KEY"),
+			applicationKey: r.Header.Get("DD-APPLICATION-KEY"),
+		}
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	pluginDir := t.TempDir()
+	openapiPath := filepath.Join(pluginDir, "openapi.json")
+	if err := os.WriteFile(openapiPath, []byte(`{
+  "openapi": "3.2.0",
+  "info": { "title": "Datadog Test API" },
+  "servers": [{ "url": "`+apiSrv.URL+`" }],
+  "security": [{ "api_key": [], "application_key": [] }],
+  "components": {
+    "securitySchemes": {
+      "api_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "DD-API-KEY"
+      },
+      "application_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "DD-APPLICATION-KEY"
+      }
+    }
+  },
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "list_items",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.json): %v", err)
+	}
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.json): %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/datadog",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "openapi.json",
+		},
+	}
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"datadog": {
+			Plugin: &config.PluginDef{
+				Source:               manifest.Source,
+				IsDeclarative:        true,
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest:     manifest,
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("datadog")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+
+	cfp, ok := prov.(core.CredentialFieldsProvider)
+	if !ok {
+		t.Fatalf("provider does not expose credential fields: %T", prov)
+	}
+	fields := cfp.CredentialFields()
+	if len(fields) != 2 {
+		t.Fatalf("credential fields = %d, want 2", len(fields))
+	}
+	if fields[0].Name != "api_key" || fields[0].Label != "API Key" {
+		t.Fatalf("first credential field = %+v", fields[0])
+	}
+	if fields[1].Name != "application_key" || fields[1].Label != "Application Key" {
+		t.Fatalf("second credential field = %+v", fields[1])
+	}
+
+	token := `{"api_key":"api-secret","application_key":"app-secret"}`
+	execResult, err := prov.Execute(ctx, "list_items", nil, token)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if execResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", execResult.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotHeaders:
+		if got.apiKey != "api-secret" || got.applicationKey != "app-secret" {
+			t.Fatalf("headers = %+v, want api-secret/app-secret", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
+	}
+}
+
+func TestBootstrap_OpenAPISecuritySchemesBuildOAuthConnectionHandlerWithoutManifestAuth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	pluginDir := t.TempDir()
+	openapiPath := filepath.Join(pluginDir, "openapi.json")
+	if err := os.WriteFile(openapiPath, []byte(`{
+  "openapi": "3.2.0",
+  "info": { "title": "GitLab Test API" },
+  "servers": [{ "url": "https://gitlab.example.com/api/v4" }],
+  "security": [{ "gitlab_oauth": ["api"] }],
+  "components": {
+    "securitySchemes": {
+      "gitlab_oauth": {
+        "type": "oauth2",
+        "oauth2MetadataUrl": "https://gitlab.example.com/.well-known/oauth-authorization-server",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://gitlab.example.com/oauth/authorize",
+            "tokenUrl": "https://gitlab.example.com/oauth/token",
+            "scopes": {
+              "api": "Full API access"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/projects": {
+      "get": {
+        "operationId": "list_projects",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.json): %v", err)
+	}
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.json): %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/gitlab",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "openapi.json",
+		},
+	}
+	cfg := validConfig()
+	cfg.Server.BaseURL = "https://gestalt.example.com"
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"gitlab": {
+			Plugin: &config.PluginDef{
+				Source:               manifest.Source,
+				IsDeclarative:        true,
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest:     manifest,
+				Config: mustConfigNode(t, map[string]any{
+					"client_id":     "gitlab-client-id",
+					"client_secret": "gitlab-client-secret",
+				}),
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	handler := result.ConnectionAuth()["gitlab"][config.PluginConnectionName]
+	if handler == nil {
+		t.Fatal("expected oauth handler for plugin connection")
+	}
+	if handler.AuthorizationBaseURL() != "https://gitlab.example.com/oauth/authorize" {
+		t.Fatalf("AuthorizationBaseURL = %q", handler.AuthorizationBaseURL())
+	}
+	if handler.TokenURL() != "https://gitlab.example.com/oauth/token" {
+		t.Fatalf("TokenURL = %q", handler.TokenURL())
+	}
+
+	authURL, _ := handler.StartOAuth("state-123", nil)
+	if !strings.HasPrefix(authURL, "https://gitlab.example.com/oauth/authorize?") {
+		t.Fatalf("auth url = %q", authURL)
+	}
+	if !strings.Contains(authURL, "client_id=gitlab-client-id") {
+		t.Fatalf("auth url missing client_id: %q", authURL)
+	}
+	if !strings.Contains(authURL, "scope=api") {
+		t.Fatalf("auth url missing scope: %q", authURL)
+	}
+	if !strings.Contains(authURL, "redirect_uri=https%3A%2F%2Fgestalt.example.com%2Fapi%2Fv1%2Fauth%2Fcallback") {
+		t.Fatalf("auth url missing redirect_uri: %q", authURL)
 	}
 }
 

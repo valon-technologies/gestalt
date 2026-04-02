@@ -815,7 +815,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	if err != nil {
 		return nil, err
 	}
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, nil, deps, regStore)
 }
 
 func resolveManifestBackedInputs(name string, plugin *config.PluginDef) (*pluginmanifestv1.Manifest, map[string]*config.OperationOverride, error) {
@@ -875,10 +875,10 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 			closeIfPossible(pluginProv)
 			return nil, err
 		}
-		return newProviderBuildResult(name, intg, manifest, pluginConfig, restricted, deps, regStore)
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, restricted, nil, deps, regStore)
 	}
 
-	specProv, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
+	specProv, _, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		plugin:            intg.Plugin,
 		manifestProvider:  manifestProvider,
 		allowedOperations: allowedOperations,
@@ -904,7 +904,7 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		return nil, err
 	}
 
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, merged, deps, regStore)
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, merged, nil, deps, regStore)
 }
 
 type specProviderConfig struct {
@@ -916,7 +916,26 @@ type specProviderConfig struct {
 	applyResponseMapping bool
 }
 
-func buildConfiguredSpecProvider(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, error) {
+func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
+	def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
+	if err != nil {
+		return nil, fmt.Errorf("load %s definition: %w", resolved.surface, err)
+	}
+	if cfg.baseURL != "" {
+		def.BaseURL = cfg.baseURL
+	}
+	applyPluginHeaders(def, cfg.plugin, cfg.manifestProvider)
+	if err := applyManagedParameters(def, cfg.plugin, cfg.manifestProvider); err != nil {
+		return nil, err
+	}
+	if cfg.applyResponseMapping {
+		applyManifestResponseMapping(def, cfg.manifestProvider)
+	}
+	meta.applyToDefinition(def)
+	return def, nil
+}
+
+func buildConfiguredSpecProvider(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *provider.Definition, error) {
 	var buildOpts []provider.BuildOption
 	if cfg.providerBuildOptions != nil {
 		buildOpts = cfg.providerBuildOptions(resolved.connection)
@@ -924,26 +943,15 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 
 	switch resolved.surface {
 	case config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL:
-		def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
+		def, err := loadConfiguredAPIDefinition(ctx, name, resolved, meta, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("load %s definition: %w", resolved.surface, err)
+			return nil, nil, err
 		}
-		if cfg.baseURL != "" {
-			def.BaseURL = cfg.baseURL
-		}
-		applyPluginHeaders(def, cfg.plugin, cfg.manifestProvider)
-		if err := applyManagedParameters(def, cfg.plugin, cfg.manifestProvider); err != nil {
-			return nil, err
-		}
-		if cfg.applyResponseMapping {
-			applyManifestResponseMapping(def, cfg.manifestProvider)
-		}
-		meta.applyToDefinition(def)
 		prov, err := provider.Build(def, resolved.connection, buildOpts...)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return prov, nil
+		return prov, def, nil
 
 	case config.SpecSurfaceMCP:
 		connMode := core.ConnectionMode(resolved.connection.Mode)
@@ -960,18 +968,18 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
 		if err != nil {
-			return nil, fmt.Errorf("create mcp upstream: %w", err)
+			return nil, nil, fmt.Errorf("create mcp upstream: %w", err)
 		}
 		if cfg.allowedOperations != nil {
 			if err := up.FilterOperations(cfg.allowedOperations); err != nil {
 				_ = up.Close()
-				return nil, fmt.Errorf("filter mcp operations: %w", err)
+				return nil, nil, fmt.Errorf("filter mcp operations: %w", err)
 			}
 		}
-		return up, nil
+		return up, nil, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported spec surface %q", resolved.surface)
+		return nil, nil, fmt.Errorf("unsupported spec surface %q", resolved.surface)
 	}
 }
 
@@ -986,10 +994,15 @@ func loadSpecDefinition(ctx context.Context, name string, resolved resolvedSpecS
 	}
 }
 
-func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+type specAuthFallback struct {
+	definition     *provider.Definition
+	connectionName string
+}
+
+func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	result := &ProviderBuildResult{Provider: prov}
 	var err error
-	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, deps, regStore)
+	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, authFallback, deps, regStore)
 	if err != nil {
 		closeIfPossible(prov)
 		return nil, err
@@ -1018,7 +1031,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 	}
 
 	buildSpec := func(resolved resolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, error) {
-		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
+		prov, _, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 			plugin:               intg.Plugin,
 			manifestProvider:     mp,
 			allowedOperations:    allowed,
@@ -1028,6 +1041,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 				return mcpOAuthBuildOpts(conn, mp, regStore, deps)
 			},
 		}, deps)
+		return prov, err
 	}
 
 	if !hasAPI {
@@ -1035,16 +1049,29 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		if err != nil {
 			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 		}
-		return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, deps, regStore)
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, nil, deps, regStore)
 	}
 
-	apiProv, err := buildSpec(apiResolved, allowedOperations)
+	apiProv, apiDef, err := buildConfiguredSpecProvider(ctx, name, apiResolved, meta, specProviderConfig{
+		plugin:               intg.Plugin,
+		manifestProvider:     mp,
+		allowedOperations:    allowedOperations,
+		baseURL:              mp.BaseURL,
+		applyResponseMapping: true,
+		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
+			return mcpOAuthBuildOpts(conn, mp, regStore, deps)
+		},
+	}, deps)
 	if err != nil {
 		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 	}
+	authFallback := &specAuthFallback{
+		definition:     apiDef,
+		connectionName: apiResolved.connectionName,
+	}
 
 	if !hasMCP {
-		return newProviderBuildResult(name, intg, manifest, pluginConfig, apiProv, deps, regStore)
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, apiProv, authFallback, deps, regStore)
 	}
 
 	mcpProv, err := buildSpec(mcpResolved, nil)
@@ -1073,7 +1100,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 		}
 	}
 
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), deps, regStore)
+	return newProviderBuildResult(name, intg, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), authFallback, deps, regStore)
 }
 
 func applyPluginHeaders(def *provider.Definition, plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) {
@@ -1324,6 +1351,34 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 	}
 
 	return WrapUpstreamHandler(oauth.NewUpstream(oauthCfg)), nil
+}
+
+func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.ConnectionDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
+	if def == nil || def.Auth.Type != "oauth2" {
+		return nil, nil
+	}
+
+	effectiveConn := conn
+	if id, _ := pluginConfig["client_id"].(string); id != "" {
+		effectiveConn.Auth.ClientID = id
+	}
+	if sec, _ := pluginConfig["client_secret"].(string); sec != "" {
+		effectiveConn.Auth.ClientSecret = sec
+	}
+	if effectiveConn.Auth.ClientID == "" || effectiveConn.Auth.ClientSecret == "" {
+		return nil, fmt.Errorf("client_id and client_secret are required for oauth2 auth")
+	}
+	if effectiveConn.Auth.RedirectURL == "" {
+		effectiveConn.Auth.RedirectURL = deps.BaseURL + config.IntegrationCallbackPath
+	}
+
+	defCopy := *def
+	provider.ApplyConnectionAuth(&defCopy, effectiveConn)
+	upstream, err := provider.BuildOAuthUpstream(&defCopy, effectiveConn, defCopy.BaseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return WrapUpstreamHandler(upstream), nil
 }
 
 func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoauth.RegistrationStore, deps Deps) *mcpoauth.Handler {

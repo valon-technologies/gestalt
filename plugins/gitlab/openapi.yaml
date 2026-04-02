@@ -1,9 +1,23 @@
-openapi: "3.0.0"
+openapi: "3.2.0"
 info:
   title: GitLab
   description: Repository, issue, merge request, and pipeline operations
 servers:
   - url: https://gitlab.com/api/v4
+security:
+  - gitlab_oauth: [api]
+
+components:
+  securitySchemes:
+    gitlab_oauth:
+      type: oauth2
+      oauth2MetadataUrl: https://gitlab.com/.well-known/oauth-authorization-server
+      flows:
+        authorizationCode:
+          authorizationUrl: https://gitlab.com/oauth/authorize
+          tokenUrl: https://gitlab.com/oauth/token
+          scopes:
+            api: Full GitLab API access
 
 paths:
   /projects:

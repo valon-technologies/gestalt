@@ -1,11 +1,11 @@
-openapi: "3.0.0"
+openapi: "3.2.0"
 info:
   title: Ashby
   description: Candidates, applications, jobs, offers, interviews, departments, locations, and users
 servers:
   - url: https://api.ashbyhq.com
 security:
-  - BasicAuth: []
+  - api_key: []
 
 paths:
   /candidate.list:
@@ -361,9 +361,10 @@ paths:
 
 components:
   securitySchemes:
-    BasicAuth:
+    api_key:
       type: http
       scheme: basic
+      description: "Create a key in [Ashby API Keys](https://app.ashbyhq.com/admin/api/keys)."
 
   schemas:
     PaginationParams:

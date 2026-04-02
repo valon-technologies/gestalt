@@ -1,5 +1,5 @@
 source: github.com/valon-technologies/gestalt/datadog
-version: 0.0.1-alpha.4
+version: 0.0.1-alpha.5
 display_name: Datadog
 description: Manage dashboards, monitors, incidents, logs, and RUM.
 icon_file: assets/icon.svg
@@ -7,10 +7,3 @@ kinds:
   - provider
 provider:
   openapi: openapi.yaml
-  auth:
-    type: manual
-    credentials:
-      - name: api_key
-        label: API Key
-      - name: app_key
-        label: Application Key
