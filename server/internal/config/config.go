@@ -680,6 +680,23 @@ func ValidateStructure(cfg *Config) error {
 	return nil
 }
 
+// ValidateResolvedStructure checks integration fields whose support depends on
+// resolved managed plugin manifests. Callers should use this after init has
+// applied locked plugin artifacts into the config. It intentionally does not
+// rerun the full structural validator on the mutated config.
+func ValidateResolvedStructure(cfg *Config) error {
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.Plugin == nil {
+			return fmt.Errorf("config validation: integration %q requires a plugin", name)
+		}
+		if err := validateSupportedPluginFields(name, intg.Plugin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ValidateRuntime checks runtime-only requirements: encryption key, auth
 // provider, and datastore provider. Callers that need a fully operational
 // config (serve) should call this after Load. Callers that only need
@@ -717,6 +734,9 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 func validateInlinePlugin(name string, p *PluginDef) error {
 	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
 		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
+	}
+	if len(p.Operations) > 0 && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "") {
+		return fmt.Errorf("config validation: inline integration %q plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured", name)
 	}
 	if err := validateManagedParameterConfig("config validation: integration "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
 		return err
@@ -832,10 +852,8 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if err := validateManagedParameterConfig("config validation: "+kind+" "+strconv.Quote(name), plugin.Headers, plugin.ManagedParameters); err != nil {
 		return err
 	}
-	resolvedManagedArtifact := plugin.HasManagedArtifacts() && plugin.HasResolvedManifest()
-	hasOriginalCommand := plugin.Command != "" && (!plugin.HasManagedArtifacts() || !plugin.HasResolvedManifest())
 	sourceCount := 0
-	if hasOriginalCommand {
+	if plugin.Command != "" {
 		sourceCount++
 	}
 	if plugin.Package != "" {
@@ -863,10 +881,10 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		}
 	}
 
-	if (hasOriginalCommand || plugin.Package != "") && plugin.Version != "" {
+	if (plugin.Command != "" || plugin.Package != "") && plugin.Version != "" {
 		return fmt.Errorf("config validation: %s %q plugin.version is only valid with plugin.source", kind, name)
 	}
-	if !hasOriginalCommand && len(plugin.Args) > 0 && !resolvedManagedArtifact {
+	if plugin.Command == "" && len(plugin.Args) > 0 {
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	}
 	if strings.HasPrefix(plugin.Package, "http://") {
@@ -908,8 +926,29 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 	hasMCP := effectivePluginSurfaceURL(plugin, SpecSurfaceMCP) != ""
 	hasAPISurface := hasOpenAPI || hasGraphQL
 	hasSpecSurface := hasAPISurface || hasMCP
-	hasDeclarativeOps := plugin.IsDeclarative || (plugin.IsInline() && len(plugin.Operations) > 0)
 	hasExecutableProcess := !plugin.IsInline() && !plugin.IsDeclarative
+	hasInlineOperations := plugin.IsInline() && len(plugin.Operations) > 0
+	hasResolvedDeclarativeOps := plugin.ManifestProvider() != nil && plugin.ManifestProvider().IsDeclarative()
+
+	supportsBaseURL := false
+	supportsHeaders := false
+	switch {
+	case hasExecutableProcess:
+		supportsBaseURL = hasAPISurface
+		supportsHeaders = hasSpecSurface
+	case plugin.IsInline():
+		if hasSpecSurface {
+			supportsBaseURL = hasAPISurface
+			supportsHeaders = hasSpecSurface
+			break
+		}
+		supportsBaseURL = hasInlineOperations
+		supportsHeaders = hasInlineOperations
+	case hasResolvedDeclarativeOps:
+		supportsHeaders = true
+	default:
+		supportsHeaders = hasSpecSurface
+	}
 
 	checks := []struct {
 		field     string
@@ -956,13 +995,13 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		{
 			field:     "plugin.base_url",
 			present:   plugin.BaseURL != "",
-			supported: hasAPISurface || (plugin.IsInline() && len(plugin.Operations) > 0),
-			reason:    "is only valid with inline operations or openapi/graphql surfaces",
+			supported: supportsBaseURL,
+			reason:    "is only valid with inline operations or openapi/graphql surfaces defined directly in config",
 		},
 		{
 			field:     "plugin.headers",
 			present:   len(plugin.Headers) > 0,
-			supported: hasSpecSurface || hasDeclarativeOps,
+			supported: supportsHeaders,
 			reason:    "are only valid when the plugin exposes declarative operations or a spec surface",
 		},
 		{

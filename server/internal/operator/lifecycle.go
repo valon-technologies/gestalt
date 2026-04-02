@@ -89,7 +89,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 	if err := l.applyLockedPlugins(configPath, cfg, true); err != nil {
 		return nil, err
 	}
-	if err := config.ValidateStructure(cfg); err != nil {
+	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +110,7 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 	if err := l.applyLockedPlugins(configPath, cfg, locked); err != nil {
 		return nil, nil, err
 	}
-	if err := config.ValidateStructure(cfg); err != nil {
+	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
 

@@ -415,6 +415,15 @@ response_mapping:
 			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations",
 		},
 		{
+			name: "operations unsupported with spec surface",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+operations:
+  - name: list_items
+    method: GET
+    path: /items`,
+			wantError: "plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured",
+		},
+		{
 			name: "mcp connection requires mcp url",
 			pluginYAML: `command: /tmp/provider
 mcp_connection: default`,
@@ -460,10 +469,43 @@ integrations:
 
 //nolint:paralleltest // Exercises validate --init so the prepared manifest can affect validation.
 func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`auth:
+	cases := []struct {
+		name       string
+		setup      func(t *testing.T, dir string) string
+		pluginYAML string
+		wantError  string
+	}{
+		{
+			name:  "config headers unsupported for executable-only package plugin",
+			setup: setupPluginDir,
+			pluginYAML: `headers:
+  x-test: value`,
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+		},
+		{
+			name: "config base_url unsupported for spec-loaded package plugin without executable",
+			setup: func(t *testing.T, dir string) string {
+				return setupManifestOnlyPluginDir(t, dir, &pluginmanifestv1.Manifest{
+					Source:  "github.com/test/plugins/provider",
+					Version: "0.1.0",
+					Kinds:   []string{pluginmanifestv1.KindProvider},
+					Provider: &pluginmanifestv1.Provider{
+						OpenAPI: "https://api.example.test/openapi.json",
+					},
+				})
+			},
+			pluginYAML: `base_url: https://api.example.test`,
+			wantError:  "plugin.base_url is only valid with inline operations or openapi/graphql surfaces defined directly in config",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			pluginDir := tc.setup(t, dir)
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := fmt.Sprintf(`auth:
   provider: local
 datastore:
   provider: sqlite
@@ -475,20 +517,21 @@ integrations:
   example:
     plugin:
       package: %s
-      headers:
-        x-test: value
-`, filepath.Join(dir, "gestalt.db"), pluginDir)
+      %s
+`, filepath.Join(dir, "gestalt.db"), pluginDir, strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
 
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--init", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected validate --init to fail for unsupported managed plugin field, output: %s", out)
-	}
-	if !strings.Contains(string(out), "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface") {
-		t.Fatalf("expected output to mention unsupported plugin.headers, got: %s", out)
+			out, err := exec.Command(gestaltdBin, "validate", "--init", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate --init to fail for unsupported managed plugin field, output: %s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
+			}
+		})
 	}
 }
 
@@ -564,6 +607,17 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	return pluginDir
 }
 
+func setupManifestOnlyPluginDir(t *testing.T, baseDir string, manifest *pluginmanifestv1.Manifest) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(baseDir, "plugin-src")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeManifestFile(t, pluginDir, manifest)
+	return pluginDir
+}
+
 func writeManifest(t *testing.T, pluginDir, version string) {
 	t.Helper()
 
@@ -594,11 +648,17 @@ func writeManifest(t *testing.T, pluginDir, version string) {
 			},
 		},
 	}
+	writeManifestFile(t, pluginDir, manifest)
+}
+
+func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
+	t.Helper()
+
 	data, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 }
