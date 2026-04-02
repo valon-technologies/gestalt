@@ -324,7 +324,15 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 				"MCP": {
 					Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth},
 				},
+				"manifest-api": {
+					Mode: "user",
+				},
+				"manifest-default": {
+					Mode: "user",
+				},
 			},
+			OpenAPIConnection: "manifest-api",
+			DefaultConnection: "manifest-default",
 		},
 	}
 	manifestData, err := pluginpkg.EncodeManifest(manifest)
@@ -340,12 +348,24 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"hybrid": {
 			Plugin: &config.PluginDef{
+				Source:               manifest.Source,
+				Version:              manifest.Version,
 				IsDeclarative:        true,
 				ResolvedManifestPath: manifestPath,
 				ResolvedManifest:     manifest,
 				AllowedOperations: map[string]*config.OperationOverride{
 					"api_list_items": {
 						Alias: "list_items",
+					},
+				},
+				OpenAPIConnection: "local-api",
+				DefaultConnection: "local-default",
+				Connections: map[string]*config.ConnectionDef{
+					"local-api": {
+						Mode: "user",
+					},
+					"local-default": {
+						Mode: "user",
 					},
 				},
 			},
@@ -399,8 +419,11 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConnectionMaps: %v", err)
 	}
-	if got := maps.APIConnection["hybrid"]; got != config.PluginConnectionName {
-		t.Fatalf("api connection = %q, want %q", got, config.PluginConnectionName)
+	if got := maps.DefaultConnection["hybrid"]; got != "local-default" {
+		t.Fatalf("default connection = %q, want %q", got, "local-default")
+	}
+	if got := maps.APIConnection["hybrid"]; got != "local-api" {
+		t.Fatalf("api connection = %q, want %q", got, "local-api")
 	}
 	if got := maps.MCPConnection["hybrid"]; got != "MCP" {
 		t.Fatalf("mcp connection = %q, want %q", got, "MCP")
@@ -541,50 +564,6 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 			t.Fatalf("auth url missing redirect_uri: %q", authURL)
 		}
 	})
-}
-
-func TestBuildConnectionMaps_UsesMergedManifestBackedOverrides(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
-			"docs": {
-				Plugin: &config.PluginDef{
-					Source:            "github.com/acme/plugins/docs",
-					Version:           "1.0.0",
-					DefaultConnection: "reports",
-					OpenAPIConnection: "reports",
-					Connections: map[string]*config.ConnectionDef{
-						"reports": {Mode: "user"},
-					},
-					ResolvedManifest: &pluginmanifestv1.Manifest{
-						Kinds: []string{pluginmanifestv1.KindProvider},
-						Provider: &pluginmanifestv1.Provider{
-							OpenAPI:           "https://example.com/openapi.json",
-							DefaultConnection: "manifest-default",
-							OpenAPIConnection: "manifest-api",
-							Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
-								"manifest-default": {Mode: "user"},
-								"manifest-api":     {Mode: "user"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	maps, err := bootstrap.BuildConnectionMaps(cfg)
-	if err != nil {
-		t.Fatalf("BuildConnectionMaps: %v", err)
-	}
-
-	if got := maps.DefaultConnection["docs"]; got != "reports" {
-		t.Fatalf("default connection = %q, want %q", got, "reports")
-	}
-	if got := maps.APIConnection["docs"]; got != "reports" {
-		t.Fatalf("api connection = %q, want %q", got, "reports")
-	}
 }
 
 func invokeListItemsConnection(t *testing.T, buildPlugin func(apiBase string) *config.PluginDef) string {
