@@ -57,13 +57,15 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds PostgreSQL-specific behavior.
 type Store struct {
 	*sqlstore.Store
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("pgx", dsn, encryptionKey, dialect{})
@@ -122,23 +124,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL
 		)`); err != nil {
 		return fmt.Errorf("creating api_tokens table: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS staged_connections (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id),
-			integration TEXT NOT NULL,
-			connection TEXT NOT NULL DEFAULT '',
-			instance TEXT NOT NULL,
-			access_token_encrypted TEXT NOT NULL,
-			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
-			token_expires_at TIMESTAMPTZ,
-			metadata_json TEXT NOT NULL DEFAULT '',
-			candidates_json TEXT NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL,
-			expires_at TIMESTAMPTZ NOT NULL
-		)`); err != nil {
-		return fmt.Errorf("creating staged_connections table: %w", err)
 	}
 	return tx.Commit()
 }

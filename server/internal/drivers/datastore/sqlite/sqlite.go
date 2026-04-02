@@ -42,13 +42,15 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds SQLite-specific behavior.
 type Store struct {
 	*sqlstore.Store
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -103,20 +105,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
 		);
-		CREATE TABLE IF NOT EXISTS staged_connections (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id),
-			integration TEXT NOT NULL,
-			connection TEXT NOT NULL DEFAULT '',
-			instance TEXT NOT NULL,
-			access_token_encrypted TEXT NOT NULL,
-			refresh_token_encrypted TEXT NOT NULL DEFAULT '',
-			token_expires_at DATETIME,
-			metadata_json TEXT NOT NULL DEFAULT '',
-			candidates_json TEXT NOT NULL,
-			created_at DATETIME NOT NULL,
-			expires_at DATETIME NOT NULL
-		);
-	`)
+		`)
 	return err
 }

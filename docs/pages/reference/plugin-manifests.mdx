@@ -127,9 +127,71 @@ provider:
 
 Use this style when:
 
-- the provider should ship its own auth and connection model
-- you want a reusable package with spec-backed operations
-- you want manifest-level config validation
+- the provider includes executable logic
+- a reusable package should ship its own auth and connection model
+- you want packaged custom code plus spec-backed operations
+
+## Post-Connect Discovery
+
+Declarative providers can define `provider.post_connect_discovery` to perform one
+extra authenticated lookup immediately after OAuth or manual connect succeeds.
+Gestalt calls the configured URL with the freshly acquired access token, parses
+the returned items, and turns them into candidate connections.
+
+Use this when a provider issues user credentials first, but the final stored
+connection still needs one discovered identifier such as a site, tenant, or
+workspace.
+
+```yaml
+provider:
+  auth:
+    type: oauth2
+    authorization_url: https://auth.example.com/authorize
+    token_url: https://auth.example.com/token
+  post_connect_discovery:
+    url: https://api.example.com/me/workspaces
+    items_path: data
+    id_path: id
+    name_path: display_name
+    metadata_mapping:
+      workspace_id: id
+  connection:
+    workspace_id:
+      required: true
+      description: Workspace identifier discovered after connect
+      from: discovery
+```
+
+Behavior:
+
+- if discovery returns exactly one item, Gestalt merges its mapped metadata into
+  the stored connection automatically
+- if discovery returns multiple items, Gestalt asks the user to choose one
+- if discovery returns zero items, connect fails
+
+`metadata_mapping` populates connection metadata, and connection fields marked
+with `from: discovery` are satisfied from that metadata instead of user input.
+
+## Runtime Manifest Example
+
+```yaml
+source: github.com/acme/plugins/notifier-runtime
+version: 0.4.0
+display_name: Notifier Runtime
+kinds:
+  - runtime
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/runtime
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+entrypoints:
+  runtime:
+    artifact_path: artifacts/linux/amd64/runtime
+```
+
+If you include `schemas/config.schema.json` in the package root, Gestalt uses it
+to validate `runtimes.*.config`.
 
 ## Web UI Manifest Example
 

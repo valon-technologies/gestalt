@@ -70,7 +70,7 @@ server.encryption_key
 
 The `server.encryption_key` is the root deployment secret. Gestalt derives all cryptographic material from it:
 
-- **AES-256-GCM key** for encrypting integration tokens and staged connections
+- **AES-256-GCM key** for encrypting integration tokens and pending connection continuations
 - **State secret** for encrypting OAuth state parameters and PKCE verifiers
 
 If the encryption key is a 64-character hex string, it is decoded directly as a 32-byte key. Otherwise, Argon2id derives a 32-byte key from the string.
@@ -83,7 +83,7 @@ Every encryption operation generates a fresh random nonce using `crypto/rand`. C
 | --- | --- |
 | OAuth access tokens | AES-256-GCM encrypted |
 | OAuth refresh tokens | AES-256-GCM encrypted |
-| Staged connection tokens | AES-256-GCM encrypted |
+| Pending connection continuations | AES-256-GCM encrypted |
 | OAuth state parameters | AES-256-GCM encrypted (URL-safe encoding, 10-minute TTL) |
 | API tokens | SHA-256 hashed (one-way, not reversible) |
 | User emails, display names | Plaintext |

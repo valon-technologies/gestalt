@@ -154,12 +154,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 	})
 	if err != nil {
 		var riue *ddbtypes.ResourceInUseException
-		if errors.As(err, &riue) {
-			return nil
+		if !errors.As(err, &riue) {
+			return fmt.Errorf("dynamodb: creating table: %w", err)
 		}
-		return fmt.Errorf("dynamodb: creating table: %w", err)
 	}
-	return nil
+	return s.waitForTableReady(ctx)
 }
 
 func (s *Store) Close() error { return nil }
@@ -560,6 +559,47 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 		}
 	}
 	return count, nil
+}
+
+func (s *Store) waitForTableReady(ctx context.Context) error {
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		out, err := s.client.DescribeTable(waitCtx, &dynamodb.DescribeTableInput{
+			TableName: &s.tableName,
+		})
+		if err == nil && tableReady(out.Table) {
+			return nil
+		}
+		if err != nil {
+			var rnfe *ddbtypes.ResourceNotFoundException
+			if !errors.As(err, &rnfe) {
+				return fmt.Errorf("dynamodb: describing table readiness: %w", err)
+			}
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("dynamodb: waiting for table readiness: %w", waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func tableReady(table *ddbtypes.TableDescription) bool {
+	if table == nil || table.TableStatus != ddbtypes.TableStatusActive {
+		return false
+	}
+	for _, gsi := range table.GlobalSecondaryIndexes {
+		if gsi.IndexStatus != ddbtypes.IndexStatusActive {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) lookupKeysByGSI(ctx context.Context, indexName, keyAttr, keyValue, skPrefix string) (pk, sk string, err error) {

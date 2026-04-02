@@ -32,6 +32,15 @@ type Dialect interface {
 	// unique-constraint violation. Dialects that handle duplicates
 	// via ON CONFLICT in the INSERT itself may always return false.
 	IsDuplicateKeyError(err error) bool
+
+	// NormalizeConnection converts the logical connection key to the
+	// persisted representation for dialects that cannot round-trip empty
+	// strings in NOT NULL columns.
+	NormalizeConnection(connection string) string
+
+	// DenormalizeConnection converts the persisted connection key back to
+	// the logical representation exposed by core.IntegrationToken.
+	DenormalizeConnection(connection string) string
 }
 
 // Store implements every core.Datastore method except Migrate (which
@@ -87,6 +96,7 @@ func (s *Store) scanIntegrationToken(row Scanner) (*core.IntegrationToken, error
 		return nil, err
 	}
 
+	t.Connection = s.Dialect.DenormalizeConnection(t.Connection)
 	t.Scopes = scopes.String
 	t.MetadataJSON = metadataJSON.String
 
@@ -220,8 +230,9 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		return fmt.Errorf("encrypting token pair: %w", err)
 	}
 
+	connection := s.Dialect.NormalizeConnection(token.Connection)
 	_, err = s.DB.ExecContext(ctx, s.Dialect.UpsertTokenSQL(),
-		token.ID, token.UserID, token.Integration, token.Connection, token.Instance,
+		token.ID, token.UserID, token.Integration, connection, token.Instance,
 		accessEnc, refreshEnc,
 		token.Scopes, NullableTime(token.ExpiresAt), NullableTime(token.LastRefreshedAt),
 		token.RefreshErrorCount, token.MetadataJSON, token.CreatedAt, token.UpdatedAt,
@@ -233,6 +244,7 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 }
 
 func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	connection = s.Dialect.NormalizeConnection(connection)
 	row := s.DB.QueryRowContext(ctx, `
 		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
@@ -293,6 +305,7 @@ func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integratio
 }
 
 func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
+	connection = s.Dialect.NormalizeConnection(connection)
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
 		       scopes, expires_at, last_refreshed_at, refresh_error_count, metadata_json, created_at, updated_at
@@ -398,69 +411,4 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 		return 0, fmt.Errorf("revoking all api tokens: %w", err)
 	}
 	return n, nil
-}
-
-func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
-	accessEnc, refreshEnc, err := s.Enc.EncryptTokenPair(sc.AccessToken, sc.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("encrypting staged connection tokens: %w", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, `
-		INSERT INTO staged_connections
-			(id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
-			 token_expires_at, metadata_json, candidates_json, created_at, expires_at)
-		VALUES (`+s.ph(1)+`, `+s.ph(2)+`, `+s.ph(3)+`, `+s.ph(4)+`, `+s.ph(5)+`, `+s.ph(6)+`, `+s.ph(7)+`,
-				`+s.ph(8)+`, `+s.ph(9)+`, `+s.ph(10)+`, `+s.ph(11)+`, `+s.ph(12)+`)`,
-		sc.ID, sc.UserID, sc.Integration, sc.Connection, sc.Instance,
-		accessEnc, refreshEnc,
-		NullableTime(sc.TokenExpiresAt), sc.MetadataJSON, sc.CandidatesJSON,
-		sc.CreatedAt, sc.ExpiresAt,
-	)
-	if err != nil {
-		return fmt.Errorf("inserting staged connection: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
-	row := s.DB.QueryRowContext(ctx, `
-		SELECT id, user_id, integration, connection, instance, access_token_encrypted, refresh_token_encrypted,
-		       token_expires_at, metadata_json, candidates_json, created_at, expires_at
-		FROM staged_connections WHERE id = `+s.ph(1), id)
-
-	var sc core.StagedConnection
-	var accessEnc, refreshEnc sql.NullString
-	var metadataJSON sql.NullString
-	var tokenExpiresAt sql.NullTime
-
-	if err := row.Scan(&sc.ID, &sc.UserID, &sc.Integration, &sc.Connection, &sc.Instance,
-		&accessEnc, &refreshEnc,
-		&tokenExpiresAt, &metadataJSON, &sc.CandidatesJSON,
-		&sc.CreatedAt, &sc.ExpiresAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("querying staged connection: %w", err)
-	}
-
-	sc.MetadataJSON = metadataJSON.String
-	if tokenExpiresAt.Valid {
-		sc.TokenExpiresAt = &tokenExpiresAt.Time
-	}
-
-	var err error
-	sc.AccessToken, sc.RefreshToken, err = s.Enc.DecryptTokenPair(accessEnc.String, refreshEnc.String)
-	if err != nil {
-		return nil, err
-	}
-	return &sc, nil
-}
-
-func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
-	_, err := s.DB.ExecContext(ctx, "DELETE FROM staged_connections WHERE id = "+s.ph(1), id)
-	if err != nil {
-		return fmt.Errorf("deleting staged connection: %w", err)
-	}
-	return nil
 }

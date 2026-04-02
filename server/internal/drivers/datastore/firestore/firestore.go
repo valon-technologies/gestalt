@@ -2,7 +2,9 @@ package firestore
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	gcpfirestore "cloud.google.com/go/firestore"
@@ -15,7 +17,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const usersByEmailCollection = "users_by_email"
+const (
+	usersByEmailCollection         = "users_by_email"
+	integrationTokenKeysCollection = "integration_token_keys"
+	apiTokensByHashCollection      = "api_tokens_by_hash"
+)
 
 type Store struct {
 	client *gcpfirestore.Client
@@ -58,8 +64,9 @@ func (s *Store) Ping(ctx context.Context) error {
 	return err
 }
 
-// Firestore creates collections implicitly; composite indexes must be
-// created externally via gcloud CLI or Firebase console.
+// Firestore creates collections implicitly. This datastore avoids composite
+// indexes by using deterministic lookup documents for uniqueness and point
+// lookups, then filtering in memory where appropriate.
 func (s *Store) Migrate(_ context.Context) error {
 	return nil
 }
@@ -75,6 +82,10 @@ type userDoc struct {
 	DisplayName string    `firestore:"display_name"`
 	CreatedAt   time.Time `firestore:"created_at"`
 	UpdatedAt   time.Time `firestore:"updated_at"`
+}
+
+type userLookupDoc struct {
+	UserID string `firestore:"user_id"`
 }
 
 func (s *Store) GetUser(ctx context.Context, id string) (*core.User, error) {
@@ -123,7 +134,7 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 			created = false
 			return nil
 		}
-		if err := tx.Create(lookupRef, map[string]string{"user_id": id}); err != nil {
+		if err := tx.Create(lookupRef, userLookupDoc{UserID: id}); err != nil {
 			return err
 		}
 		created = true
@@ -159,17 +170,27 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 }
 
 func (s *Store) findUserByEmail(ctx context.Context, email string) (*core.User, error) {
-	iter := s.client.Collection(datastore.UsersCollection).Where("email", "==", email).Limit(1).Documents(ctx)
-	defer iter.Stop()
-
-	snap, err := iter.Next()
-	if err == iterator.Done {
+	lookupSnap, err := s.client.Collection(usersByEmailCollection).Doc(email).Get(ctx)
+	if status.Code(err) == codes.NotFound {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("firestore: querying user by email: %w", err)
+		return nil, fmt.Errorf("firestore: getting user email lookup: %w", err)
 	}
-	return snapToUser(snap)
+
+	var lookup userLookupDoc
+	if err := lookupSnap.DataTo(&lookup); err != nil {
+		return nil, fmt.Errorf("firestore: unmarshalling user email lookup: %w", err)
+	}
+
+	user, err := s.GetUser(ctx, lookup.UserID)
+	if err == core.ErrNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("firestore: getting user from email lookup: %w", err)
+	}
+	return user, nil
 }
 
 func snapToUser(snap *gcpfirestore.DocumentSnapshot) (*core.User, error) {
@@ -184,6 +205,10 @@ func snapToUser(snap *gcpfirestore.DocumentSnapshot) (*core.User, error) {
 		CreatedAt:   doc.CreatedAt,
 		UpdatedAt:   doc.UpdatedAt,
 	}, nil
+}
+
+func firestoreDocKey(parts ...string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strings.Join(parts, "\x1f")))
 }
 
 // --- Integration Tokens ---
@@ -202,6 +227,10 @@ type integrationTokenDoc struct {
 	MetadataJSON          string     `firestore:"metadata_json"`
 	CreatedAt             time.Time  `firestore:"created_at"`
 	UpdatedAt             time.Time  `firestore:"updated_at"`
+}
+
+type integrationTokenLookupDoc struct {
+	TokenID string `firestore:"token_id"`
 }
 
 func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
@@ -226,48 +255,77 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		UpdatedAt:             token.UpdatedAt,
 	}
 
-	// Atomically delete any existing token for the same
-	// (user_id, integration, instance) triple, then write the new one.
-	// This mirrors the INSERT ... ON CONFLICT behavior of the SQL stores.
-	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
-		query := s.client.Collection(datastore.IntegrationTokensCollection).
-			Where("user_id", "==", token.UserID).
-			Where("integration", "==", token.Integration).
-			Where("connection", "==", token.Connection).
-			Where("instance", "==", token.Instance).
-			Limit(1)
-		iter := tx.Documents(query)
-		defer iter.Stop()
+	lookupRef := s.client.Collection(integrationTokenKeysCollection).Doc(
+		firestoreDocKey(token.UserID, token.Integration, token.Connection, token.Instance),
+	)
+	tokenRef := s.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID)
 
-		snap, err := iter.Next()
-		if err != nil && err != iterator.Done {
-			return fmt.Errorf("querying existing token: %w", err)
+	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
+		existingTokenSnap, err := tx.Get(tokenRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting existing token by id: %w", err)
 		}
-		if err == nil && snap.Ref.ID != token.ID {
-			if err := tx.Delete(snap.Ref); err != nil {
-				return fmt.Errorf("deleting stale integration token: %w", err)
+		var oldLookupRef *gcpfirestore.DocumentRef
+		if err == nil && existingTokenSnap.Exists() {
+			var existing integrationTokenDoc
+			if err := existingTokenSnap.DataTo(&existing); err != nil {
+				return fmt.Errorf("unmarshalling existing token by id: %w", err)
+			}
+			oldLookupRef = s.client.Collection(integrationTokenKeysCollection).Doc(
+				firestoreDocKey(existing.UserID, existing.Integration, existing.Connection, existing.Instance),
+			)
+		}
+
+		lookupSnap, err := tx.Get(lookupRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting token lookup: %w", err)
+		}
+		if err == nil && lookupSnap.Exists() {
+			var lookup integrationTokenLookupDoc
+			if err := lookupSnap.DataTo(&lookup); err != nil {
+				return fmt.Errorf("unmarshalling token lookup: %w", err)
+			}
+			if lookup.TokenID != "" && lookup.TokenID != token.ID {
+				if err := tx.Delete(s.client.Collection(datastore.IntegrationTokensCollection).Doc(lookup.TokenID)); err != nil {
+					return fmt.Errorf("deleting stale integration token: %w", err)
+				}
 			}
 		}
-		return tx.Set(s.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID), doc)
+
+		if oldLookupRef != nil && oldLookupRef.ID != lookupRef.ID {
+			if err := tx.Delete(oldLookupRef); err != nil {
+				return fmt.Errorf("deleting stale token lookup: %w", err)
+			}
+		}
+		if err := tx.Set(lookupRef, integrationTokenLookupDoc{TokenID: token.ID}); err != nil {
+			return fmt.Errorf("storing token lookup: %w", err)
+		}
+		return tx.Set(tokenRef, doc)
 	})
 }
 
 func (s *Store) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	iter := s.client.Collection(datastore.IntegrationTokensCollection).
-		Where("user_id", "==", userID).
-		Where("integration", "==", integration).
-		Where("connection", "==", connection).
-		Where("instance", "==", instance).
-		Limit(1).
-		Documents(ctx)
-	defer iter.Stop()
-
-	snap, err := iter.Next()
-	if err == iterator.Done {
+	lookupSnap, err := s.client.Collection(integrationTokenKeysCollection).Doc(
+		firestoreDocKey(userID, integration, connection, instance),
+	).Get(ctx)
+	if status.Code(err) == codes.NotFound {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("firestore: querying token: %w", err)
+		return nil, fmt.Errorf("firestore: getting token lookup: %w", err)
+	}
+
+	var lookup integrationTokenLookupDoc
+	if err := lookupSnap.DataTo(&lookup); err != nil {
+		return nil, fmt.Errorf("firestore: unmarshalling token lookup: %w", err)
+	}
+
+	snap, err := s.client.Collection(datastore.IntegrationTokensCollection).Doc(lookup.TokenID).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("firestore: getting token by id: %w", err)
 	}
 	return s.snapToIntegrationToken(snap)
 }
@@ -297,62 +355,72 @@ func (s *Store) ListTokens(ctx context.Context, userID string) ([]*core.Integrat
 }
 
 func (s *Store) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
-	iter := s.client.Collection(datastore.IntegrationTokensCollection).
-		Where("user_id", "==", userID).
-		Where("integration", "==", integration).
-		Documents(ctx)
-	defer iter.Stop()
-
-	var tokens []*core.IntegrationToken
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("firestore: listing tokens for integration: %w", err)
-		}
-		t, err := s.snapToIntegrationToken(snap)
-		if err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, t)
+	tokens, err := s.ListTokens(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
-	return tokens, nil
+
+	filtered := make([]*core.IntegrationToken, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Integration == integration {
+			filtered = append(filtered, token)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *Store) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
-	iter := s.client.Collection(datastore.IntegrationTokensCollection).
-		Where("user_id", "==", userID).
-		Where("integration", "==", integration).
-		Where("connection", "==", connection).
-		Documents(ctx)
-	defer iter.Stop()
-
-	var tokens []*core.IntegrationToken
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("firestore: listing tokens for connection: %w", err)
-		}
-		t, err := s.snapToIntegrationToken(snap)
-		if err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, t)
+	tokens, err := s.ListTokensForIntegration(ctx, userID, integration)
+	if err != nil {
+		return nil, err
 	}
-	return tokens, nil
+
+	filtered := make([]*core.IntegrationToken, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Connection == connection {
+			filtered = append(filtered, token)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
-	_, err := s.client.Collection(datastore.IntegrationTokensCollection).Doc(id).Delete(ctx)
-	if err != nil {
-		return fmt.Errorf("firestore: deleting token: %w", err)
+	tokenRef := s.client.Collection(datastore.IntegrationTokensCollection).Doc(id)
+	snap, err := tokenRef.Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return nil
 	}
-	return nil
+	if err != nil {
+		return fmt.Errorf("firestore: getting token for delete: %w", err)
+	}
+
+	var doc integrationTokenDoc
+	if err := snap.DataTo(&doc); err != nil {
+		return fmt.Errorf("firestore: unmarshalling token for delete: %w", err)
+	}
+
+	lookupRef := s.client.Collection(integrationTokenKeysCollection).Doc(
+		firestoreDocKey(doc.UserID, doc.Integration, doc.Connection, doc.Instance),
+	)
+
+	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
+		lookupSnap, err := tx.Get(lookupRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting token lookup for delete: %w", err)
+		}
+		if err == nil && lookupSnap.Exists() {
+			var lookup integrationTokenLookupDoc
+			if err := lookupSnap.DataTo(&lookup); err != nil {
+				return fmt.Errorf("unmarshalling token lookup for delete: %w", err)
+			}
+			if lookup.TokenID == id {
+				if err := tx.Delete(lookupRef); err != nil {
+					return fmt.Errorf("deleting token lookup: %w", err)
+				}
+			}
+		}
+		return tx.Delete(tokenRef)
+	})
 }
 
 func (s *Store) snapToIntegrationToken(snap *gcpfirestore.DocumentSnapshot) (*core.IntegrationToken, error) {
@@ -396,6 +464,10 @@ type apiTokenDoc struct {
 	UpdatedAt   time.Time  `firestore:"updated_at"`
 }
 
+type apiTokenHashLookupDoc struct {
+	TokenID string `firestore:"token_id"`
+}
+
 func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 	doc := apiTokenDoc{
 		UserID:      token.UserID,
@@ -406,27 +478,72 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 		CreatedAt:   token.CreatedAt,
 		UpdatedAt:   token.UpdatedAt,
 	}
-	_, err := s.client.Collection(datastore.APITokensCollection).Doc(token.ID).Set(ctx, doc)
-	if err != nil {
-		return fmt.Errorf("firestore: storing api token: %w", err)
-	}
-	return nil
+
+	hashRef := s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(token.HashedToken))
+	tokenRef := s.client.Collection(datastore.APITokensCollection).Doc(token.ID)
+
+	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
+		existingTokenSnap, err := tx.Get(tokenRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting existing api token by id: %w", err)
+		}
+		var oldHashRef *gcpfirestore.DocumentRef
+		if err == nil && existingTokenSnap.Exists() {
+			var existing apiTokenDoc
+			if err := existingTokenSnap.DataTo(&existing); err != nil {
+				return fmt.Errorf("unmarshalling existing api token by id: %w", err)
+			}
+			oldHashRef = s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(existing.HashedToken))
+		}
+
+		hashSnap, err := tx.Get(hashRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting api token hash lookup: %w", err)
+		}
+		if err == nil && hashSnap.Exists() {
+			var lookup apiTokenHashLookupDoc
+			if err := hashSnap.DataTo(&lookup); err != nil {
+				return fmt.Errorf("unmarshalling api token hash lookup: %w", err)
+			}
+			if lookup.TokenID != "" && lookup.TokenID != token.ID {
+				return fmt.Errorf("firestore: hashed token already exists")
+			}
+		}
+
+		if oldHashRef != nil && oldHashRef.ID != hashRef.ID {
+			if err := tx.Delete(oldHashRef); err != nil {
+				return fmt.Errorf("deleting stale api token hash lookup: %w", err)
+			}
+		}
+		if err := tx.Set(hashRef, apiTokenHashLookupDoc{TokenID: token.ID}); err != nil {
+			return fmt.Errorf("storing api token hash lookup: %w", err)
+		}
+		return tx.Set(tokenRef, doc)
+	})
 }
 
 func (s *Store) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
-	iter := s.client.Collection(datastore.APITokensCollection).
-		Where("hashed_token", "==", hashedToken).
-		Limit(1).
-		Documents(ctx)
-	defer iter.Stop()
-
-	snap, err := iter.Next()
-	if err == iterator.Done {
+	lookupSnap, err := s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(hashedToken)).Get(ctx)
+	if status.Code(err) == codes.NotFound {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("firestore: validating api token: %w", err)
+		return nil, fmt.Errorf("firestore: getting api token hash lookup: %w", err)
 	}
+
+	var lookup apiTokenHashLookupDoc
+	if err := lookupSnap.DataTo(&lookup); err != nil {
+		return nil, fmt.Errorf("firestore: unmarshalling api token hash lookup: %w", err)
+	}
+
+	snap, err := s.client.Collection(datastore.APITokensCollection).Doc(lookup.TokenID).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("firestore: getting api token by id: %w", err)
+	}
+
 	token, err := snapToAPIToken(snap)
 	if err != nil {
 		return nil, err
@@ -462,7 +579,8 @@ func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]*core.APITo
 }
 
 func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
-	snap, err := s.client.Collection(datastore.APITokensCollection).Doc(id).Get(ctx)
+	tokenRef := s.client.Collection(datastore.APITokensCollection).Doc(id)
+	snap, err := tokenRef.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return core.ErrNotFound
@@ -476,11 +594,30 @@ func (s *Store) RevokeAPIToken(ctx context.Context, userID, id string) error {
 	if doc.UserID != userID {
 		return core.ErrNotFound
 	}
-	_, err = s.client.Collection(datastore.APITokensCollection).Doc(id).Delete(ctx)
-	if err != nil {
-		return fmt.Errorf("firestore: revoking api token: %w", err)
-	}
-	return nil
+
+	hashRef := s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(doc.HashedToken))
+	return s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
+		hashSnap, err := tx.Get(hashRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting api token hash lookup for revoke: %w", err)
+		}
+
+		if err := tx.Delete(tokenRef); err != nil {
+			return fmt.Errorf("deleting api token: %w", err)
+		}
+		if err == nil && hashSnap.Exists() {
+			var lookup apiTokenHashLookupDoc
+			if err := hashSnap.DataTo(&lookup); err != nil {
+				return fmt.Errorf("unmarshalling api token hash lookup for revoke: %w", err)
+			}
+			if lookup.TokenID == id {
+				if err := tx.Delete(hashRef); err != nil {
+					return fmt.Errorf("deleting api token hash lookup: %w", err)
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
@@ -491,6 +628,7 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 
 	bw := s.client.BulkWriter(ctx)
 	var jobs []*gcpfirestore.BulkWriterJob
+	var deleted int64
 	for {
 		snap, err := iter.Next()
 		if err == iterator.Done {
@@ -499,22 +637,30 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 		if err != nil {
 			return 0, fmt.Errorf("firestore: iterating api tokens for revoke-all: %w", err)
 		}
+		var doc apiTokenDoc
+		if err := snap.DataTo(&doc); err != nil {
+			return 0, fmt.Errorf("firestore: unmarshalling api token for revoke-all: %w", err)
+		}
 		job, err := bw.Delete(snap.Ref)
 		if err != nil {
 			return 0, fmt.Errorf("firestore: queuing delete for revoke-all: %w", err)
 		}
 		jobs = append(jobs, job)
+		job, err = bw.Delete(s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(doc.HashedToken)))
+		if err != nil {
+			return 0, fmt.Errorf("firestore: queuing hash lookup delete for revoke-all: %w", err)
+		}
+		jobs = append(jobs, job)
+		deleted++
 	}
 	bw.End()
 
-	var count int64
 	for _, job := range jobs {
 		if _, err := job.Results(); err != nil {
-			return count, fmt.Errorf("firestore: deleting api token in revoke-all: %w", err)
+			return 0, fmt.Errorf("firestore: deleting api token in revoke-all: %w", err)
 		}
-		count++
 	}
-	return count, nil
+	return deleted, nil
 }
 
 func snapToAPIToken(snap *gcpfirestore.DocumentSnapshot) (*core.APIToken, error) {

@@ -29,6 +29,7 @@ Valid bearer tokens are:
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
 | `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
 | `GET` | `/api/v1/auth/callback` | Completes integration OAuth. |
+| `POST` | `/api/v1/auth/pending-connection` | Render or finalize a multi-candidate connection choice using a pending connection token. |
 
 ## Authenticated User Routes
 
@@ -47,9 +48,6 @@ Valid bearer tokens are:
 | --- | --- | --- |
 | `POST` | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. |
 | `POST` | `/api/v1/auth/connect-manual` | Submit manual integration credentials. |
-| `GET` | `/api/v1/connections/staged/{id}` | Inspect a staged connection. |
-| `POST` | `/api/v1/connections/staged/{id}/select` | Finalize a staged connection choice. |
-| `DELETE` | `/api/v1/connections/staged/{id}` | Cancel a staged connection. |
 
 ### API Tokens
 

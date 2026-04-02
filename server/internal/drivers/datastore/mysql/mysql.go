@@ -39,13 +39,15 @@ func (dialect) IsDuplicateKeyError(err error) bool {
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
+func (dialect) NormalizeConnection(connection string) string   { return connection }
+func (dialect) DenormalizeConnection(connection string) string { return connection }
+
 // Store embeds sqlstore.Store and adds MySQL-specific behavior.
 type Store struct {
 	*sqlstore.Store
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -107,22 +109,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 			updated_at DATETIME(6) NOT NULL,
 			UNIQUE KEY idx_api_tokens_hashed (hashed_token),
 			CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-		`CREATE TABLE IF NOT EXISTS staged_connections (
-			id VARCHAR(36) NOT NULL PRIMARY KEY,
-			user_id VARCHAR(36) NOT NULL,
-			integration VARCHAR(128) NOT NULL,
-			connection VARCHAR(128) NOT NULL DEFAULT '',
-			instance VARCHAR(128) NOT NULL,
-			access_token_encrypted TEXT NOT NULL,
-			refresh_token_encrypted TEXT NOT NULL,
-			token_expires_at DATETIME,
-			metadata_json TEXT NOT NULL,
-			candidates_json TEXT NOT NULL,
-			created_at DATETIME(6) NOT NULL,
-			expires_at DATETIME(6) NOT NULL,
-			CONSTRAINT fk_staged_connections_user FOREIGN KEY (user_id) REFERENCES users(id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 

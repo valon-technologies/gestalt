@@ -2,6 +2,7 @@ package sqlserver
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 
@@ -18,9 +19,31 @@ func testDSN(t *testing.T) string {
 	return dsn
 }
 
+func resetTestDB(t *testing.T, dsn string) {
+	t.Helper()
+
+	db, err := sql.Open(driverName, dsn)
+	if err != nil {
+		t.Fatalf("opening sqlserver for cleanup: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	const dropTables = `
+IF OBJECT_ID('oauth_registrations', 'U') IS NOT NULL DROP TABLE oauth_registrations;
+IF OBJECT_ID('staged_connections', 'U') IS NOT NULL DROP TABLE staged_connections;
+IF OBJECT_ID('api_tokens', 'U') IS NOT NULL DROP TABLE api_tokens;
+IF OBJECT_ID('integration_tokens', 'U') IS NOT NULL DROP TABLE integration_tokens;
+IF OBJECT_ID('users', 'U') IS NOT NULL DROP TABLE users;
+`
+	if _, err := db.ExecContext(context.Background(), dropTables); err != nil {
+		t.Fatalf("resetting sqlserver test database: %v", err)
+	}
+}
+
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := testDSN(t)
+	resetTestDB(t, dsn)
 
 	store, err := New(dsn, coretesting.EncryptionKey(t))
 	if err != nil {
@@ -31,7 +54,10 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() {
+		_ = store.Close()
+		resetTestDB(t, dsn)
+	})
 	return store
 }
 
