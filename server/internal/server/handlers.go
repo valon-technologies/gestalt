@@ -717,16 +717,13 @@ func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
 }
 
 type cliLoginResponse struct {
-	AccessToken           string     `json:"access_token"`
-	AccessTokenExpiresAt  *time.Time `json:"access_token_expires_at,omitempty"`
-	RefreshToken          string     `json:"refresh_token"`
-	RefreshTokenID        string     `json:"refresh_token_id"`
-	RefreshTokenExpiresAt *time.Time `json:"refresh_token_expires_at,omitempty"`
+	AccessToken    string `json:"access_token"`
+	RefreshToken   string `json:"refresh_token"`
+	RefreshTokenID string `json:"refresh_token_id"`
 }
 
 type cliRefreshResponse struct {
-	AccessToken          string     `json:"access_token"`
-	AccessTokenExpiresAt *time.Time `json:"access_token_expires_at,omitempty"`
+	AccessToken string `json:"access_token"`
 }
 
 type cliRefreshRequest struct {
@@ -752,11 +749,9 @@ func (s *Server) issueCLILoginResponse(ctx context.Context, identity *core.UserI
 	}
 
 	return cliLoginResponse{
-		AccessToken:           accessToken,
-		AccessTokenExpiresAt:  s.sessionTokenExpiry(s.nowUTCSecond()),
-		RefreshToken:          plaintextRefresh,
-		RefreshTokenID:        refreshToken.ID,
-		RefreshTokenExpiresAt: refreshToken.ExpiresAt,
+		AccessToken:    accessToken,
+		RefreshToken:   plaintextRefresh,
+		RefreshTokenID: refreshToken.ID,
 	}, nil
 }
 
@@ -827,10 +822,7 @@ func (s *Server) refreshCLIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cliRefreshResponse{
-		AccessToken:          accessToken,
-		AccessTokenExpiresAt: s.sessionTokenExpiry(s.nowUTCSecond()),
-	})
+	writeJSON(w, http.StatusOK, cliRefreshResponse{AccessToken: accessToken})
 }
 
 func (s *Server) revokeCLIRefreshToken(w http.ResponseWriter, r *http.Request) {

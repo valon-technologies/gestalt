@@ -10,13 +10,9 @@ pub struct Credentials {
     #[serde(alias = "api_token")]
     pub access_token: String,
     #[serde(default)]
-    pub access_token_expires_at: Option<String>,
-    #[serde(default)]
     pub refresh_token: Option<String>,
     #[serde(default, alias = "api_token_id")]
     pub refresh_token_id: Option<String>,
-    #[serde(default)]
-    pub refresh_token_expires_at: Option<String>,
 }
 
 pub struct CredentialStore {

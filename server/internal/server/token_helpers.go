@@ -77,18 +77,6 @@ func (s *Server) apiTokenExpiry(now time.Time, nonExpiring bool) *time.Time {
 	return &expiry
 }
 
-func (s *Server) sessionTokenExpiry(now time.Time) *time.Time {
-	ttl := defaultSessionCookieTTL
-	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
-		ttl = p.SessionTokenTTL()
-	}
-	if ttl <= 0 {
-		return nil
-	}
-	expiry := now.Add(ttl)
-	return &expiry
-}
-
 func isInternalAPITokenName(name string) bool {
 	return strings.HasPrefix(name, internalAPITokenNamePrefix)
 }

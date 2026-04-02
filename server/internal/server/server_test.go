@@ -1675,6 +1675,7 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	t.Parallel()
 
 	var stored *core.APIToken
+	var revokedTokenID string
 	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Now = func() time.Time { return fixedNow }
@@ -1695,6 +1696,25 @@ func TestLoginCallbackForCLI(t *testing.T) {
 			},
 			StoreAPITokenFn: func(_ context.Context, token *core.APIToken) error {
 				stored = token
+				return nil
+			},
+			ValidateAPITokenFn: func(_ context.Context, hashed string) (*core.APIToken, error) {
+				if stored != nil && hashed == stored.HashedToken {
+					return stored, nil
+				}
+				return nil, nil
+			},
+			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
+				if id != "u1" {
+					return nil, core.ErrNotFound
+				}
+				return &core.User{ID: "u1", Email: "user@example.com", DisplayName: "User"}, nil
+			},
+			RevokeAPITokenFn: func(_ context.Context, userID, id string) error {
+				if userID != "u1" || stored == nil || id != stored.ID {
+					return core.ErrNotFound
+				}
+				revokedTokenID = id
 				return nil
 			},
 		}
@@ -1734,12 +1754,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if result["refresh_token_id"] == "" {
 		t.Fatal("expected refresh_token_id in CLI login response")
 	}
-	if result["access_token_expires_at"] == nil {
-		t.Fatal("expected access_token_expires_at in CLI login response")
-	}
-	if result["refresh_token_expires_at"] == nil {
-		t.Fatal("expected refresh_token_expires_at in CLI login response")
-	}
 
 	if stored == nil {
 		t.Fatal("expected CLI refresh token to be stored")
@@ -1760,117 +1774,44 @@ func TestLoginCallbackForCLI(t *testing.T) {
 			t.Fatalf("did not expect session cookie for CLI login, got %q", cookie.Value)
 		}
 	}
-}
 
-func TestRefreshCLIToken(t *testing.T) {
-	t.Parallel()
-
-	future := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
-		}
-		cfg.Datastore = &coretesting.StubDatastore{
-			ValidateAPITokenFn: func(_ context.Context, hashed string) (*core.APIToken, error) {
-				if hashed == principal.HashToken("gst_rfr_valid") {
-					return &core.APIToken{
-						ID:        "rt-1",
-						UserID:    "u1",
-						Name:      "__gestalt_internal__:cli-refresh",
-						ExpiresAt: &future,
-					}, nil
-				}
-				return nil, nil
-			},
-			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
-				if id != "u1" {
-					return nil, core.ErrNotFound
-				}
-				return &core.User{ID: "u1", Email: "user@example.com", DisplayName: "User"}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Post(
+	refreshBody := fmt.Sprintf(`{"refresh_token":%q}`, result["refresh_token"])
+	refreshResp, err := http.Post(
 		ts.URL+"/api/v1/auth/cli/refresh",
 		"application/json",
-		strings.NewReader(`{"refresh_token":"gst_rfr_valid"}`),
+		strings.NewReader(refreshBody),
 	)
 	if err != nil {
-		t.Fatalf("request: %v", err)
+		t.Fatalf("refresh request: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	defer func() { _ = refreshResp.Body.Close() }()
+	if refreshResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(refreshResp.Body)
+		t.Fatalf("expected 200 from refresh, got %d: %s", refreshResp.StatusCode, body)
+	}
+	var refreshResult map[string]any
+	if err := json.NewDecoder(refreshResp.Body).Decode(&refreshResult); err != nil {
+		t.Fatalf("decoding refresh response: %v", err)
+	}
+	if refreshResult["access_token"] != "dev-token-user@example.com" {
+		t.Fatalf("unexpected refreshed access token: %v", refreshResult["access_token"])
 	}
 
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["access_token"] != "dev-token-user@example.com" {
-		t.Fatalf("unexpected access token: %v", result["access_token"])
-	}
-	if result["access_token_expires_at"] == nil {
-		t.Fatal("expected access_token_expires_at in refresh response")
-	}
-}
-
-func TestRevokeCLIRefreshToken(t *testing.T) {
-	t.Parallel()
-
-	var revokedUserID, revokedTokenID string
-	future := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
-		}
-		cfg.Datastore = &coretesting.StubDatastore{
-			ValidateAPITokenFn: func(_ context.Context, hashed string) (*core.APIToken, error) {
-				if hashed == principal.HashToken("gst_rfr_valid") {
-					return &core.APIToken{
-						ID:        "rt-1",
-						UserID:    "u1",
-						Name:      "__gestalt_internal__:cli-refresh",
-						ExpiresAt: &future,
-					}, nil
-				}
-				return nil, nil
-			},
-			GetUserFn: func(_ context.Context, id string) (*core.User, error) {
-				if id != "u1" {
-					return nil, core.ErrNotFound
-				}
-				return &core.User{ID: "u1", Email: "user@example.com", DisplayName: "User"}, nil
-			},
-			RevokeAPITokenFn: func(_ context.Context, userID, id string) error {
-				revokedUserID = userID
-				revokedTokenID = id
-				return nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Post(
+	revokeResp, err := http.Post(
 		ts.URL+"/api/v1/auth/cli/revoke",
 		"application/json",
-		strings.NewReader(`{"refresh_token":"gst_rfr_valid"}`),
+		strings.NewReader(refreshBody),
 	)
 	if err != nil {
-		t.Fatalf("request: %v", err)
+		t.Fatalf("revoke request: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	defer func() { _ = revokeResp.Body.Close() }()
+	if revokeResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(revokeResp.Body)
+		t.Fatalf("expected 200 from revoke, got %d: %s", revokeResp.StatusCode, body)
 	}
-	if revokedUserID != "u1" || revokedTokenID != "rt-1" {
-		t.Fatalf("unexpected revoke target user=%q token=%q", revokedUserID, revokedTokenID)
+	if revokedTokenID != stored.ID {
+		t.Fatalf("unexpected revoked token id %q", revokedTokenID)
 	}
 }
 
@@ -2343,10 +2284,23 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 func TestCreateAndListAPITokens(t *testing.T) {
 	t.Parallel()
 
+	var stored []*core.APIToken
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreAPITokenFn: func(_ context.Context, token *core.APIToken) error {
+				stored = append(stored, token)
+				return nil
+			},
+			ListAPITokensFn: func(_ context.Context, userID string) ([]*core.APIToken, error) {
+				if userID != "u1" {
+					return nil, nil
+				}
+				return append(append([]*core.APIToken{}, stored...),
+					&core.APIToken{ID: "hidden", UserID: "u1", Name: "__gestalt_internal__:cli-refresh"},
+				), nil
 			},
 		}
 	})
@@ -2365,41 +2319,19 @@ func TestCreateAndListAPITokens(t *testing.T) {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var createResult map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&createResult); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["token"] == "" {
+	if createResult["token"] == "" {
 		t.Fatal("expected non-empty token in response")
 	}
-	if result["name"] != "my-token" {
-		t.Fatalf("expected name my-token, got %q", result["name"])
+	if createResult["name"] != "my-token" {
+		t.Fatalf("expected name my-token, got %q", createResult["name"])
 	}
-}
 
-func TestListAPITokens_HidesInternalTokens(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			ListAPITokensFn: func(_ context.Context, userID string) ([]*core.APIToken, error) {
-				if userID != "u1" {
-					return nil, nil
-				}
-				return []*core.APIToken{
-					{ID: "visible", UserID: "u1", Name: "visible-token"},
-					{ID: "hidden", UserID: "u1", Name: "__gestalt_internal__:cli-refresh"},
-				}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
-	resp, err := http.DefaultClient.Do(req)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -2409,15 +2341,15 @@ func TestListAPITokens_HidesInternalTokens(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var result []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var listResult []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&listResult); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 visible token, got %d", len(result))
+	if len(listResult) != 1 {
+		t.Fatalf("expected 1 visible token, got %d", len(listResult))
 	}
-	if result[0]["id"] != "visible" {
-		t.Fatalf("unexpected visible token id: %v", result[0]["id"])
+	if listResult[0]["name"] != "my-token" {
+		t.Fatalf("unexpected visible token: %v", listResult[0]["name"])
 	}
 }
 

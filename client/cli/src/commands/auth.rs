@@ -141,14 +141,8 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     store.save(&Credentials {
         api_url: base_url,
         access_token: access_token.to_string(),
-        access_token_expires_at: login_result["access_token_expires_at"]
-            .as_str()
-            .map(str::to_owned),
         refresh_token: Some(refresh_token.to_string()),
         refresh_token_id: Some(refresh_token_id.to_string()),
-        refresh_token_expires_at: login_result["refresh_token_expires_at"]
-            .as_str()
-            .map(str::to_owned),
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
