@@ -5,7 +5,7 @@
 - an HTTP API
 - an embedded web UI
 - `/health` and `/ready` endpoints
-- an `/mcp` endpoint when integrations expose tools
+- an `/mcp` endpoint when providers expose tools
 - support for REST, GraphQL, MCP, and packaged plugins
 
 ## Quick reference
@@ -20,8 +20,8 @@
 
 - Default config path: `/etc/gestalt/config.yaml`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config uses `plugin.package`,
-  `plugin.source`, or a packaged UI, run `init` first.
+- Locked startup is the default. If your config uses `providers.*.from.package`,
+  `providers.*.from.source`, or a packaged UI, run `init` first.
 
 ## Supported tags
 
@@ -64,12 +64,12 @@ datastore:
   config:
     path: /data/gestalt.db
 
-integrations: {}
+providers: {}
 ```
 
 ## Run a prepared production image
 
-If your config uses `plugin.package`, `plugin.source`, or a packaged UI,
+If your config uses `providers.*.from.package`, `providers.*.from.source`, or a packaged UI,
 prepare it during the image build:
 
 ```dockerfile

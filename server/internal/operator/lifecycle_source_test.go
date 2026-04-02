@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -78,11 +79,10 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 		},
 	}
 
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
-		t.Fatalf("marshal manifest: %v", err)
+		t.Fatalf("encode manifest: %v", err)
 	}
-	manifestBytes = append(manifestBytes, '\n')
 
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
 	f, err := os.Create(archivePath)
@@ -116,9 +116,9 @@ func writeConfigYAML(t *testing.T, dir, source, version string) string {
 	t.Helper()
 
 	yaml := strings.Join([]string{
-		"integrations:",
+		"providers:",
 		"  alpha:",
-		"    plugin:",
+		"    from:",
 		"      source: " + source,
 		"      version: " + version,
 	}, "\n") + "\n"
@@ -359,9 +359,9 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		"    path: " + filepath.Join(dir, "data.db"),
 		"server:",
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"integrations:",
+		"providers:",
 		"  gadget:",
-		"    plugin:",
+		"    from:",
 		"      source: " + source,
 		"      version: " + version,
 	}, "\n") + "\n"
@@ -442,9 +442,9 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		"    path: " + filepath.Join(dir, "data.db"),
 		"server:",
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"integrations:",
+		"providers:",
 		"  alpha:",
-		"    plugin:",
+		"    from:",
 		"      source: " + testSource,
 		"      version: " + testVersion,
 	}, "\n") + "\n"

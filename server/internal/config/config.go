@@ -35,7 +35,7 @@ type Config struct {
 	Datastore    DatastoreConfig           `yaml:"datastore"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
-	Integrations map[string]IntegrationDef `yaml:"integrations"`
+	Integrations map[string]IntegrationDef `yaml:"providers"`
 	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
@@ -102,14 +102,16 @@ type PluginDef struct {
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
 
-	OpenAPI           string                `yaml:"openapi"`
-	GraphQLURL        string                `yaml:"graphql_url"`
-	MCPURL            string                `yaml:"mcp_url"`
-	BaseURL           string                `yaml:"base_url"`
-	Headers           map[string]string     `yaml:"headers"`
-	ManagedParameters []ManagedParameterDef `yaml:"managed_parameters"`
+	OpenAPI              string                                         `yaml:"openapi"`
+	GraphQLURL           string                                         `yaml:"graphql_url"`
+	MCPURL               string                                         `yaml:"mcp_url"`
+	BaseURL              string                                         `yaml:"base_url"`
+	Headers              map[string]string                              `yaml:"headers"`
+	ManagedParameters    []ManagedParameterDef                          `yaml:"managed_parameters"`
+	PostConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery `yaml:"-"`
 
 	Auth            *ConnectionAuthDef        `yaml:"auth"`
+	ConnectionMode  string                    `yaml:"-"`
 	Connections     map[string]*ConnectionDef `yaml:"connections"`
 	Operations      []InlineOperationDef      `yaml:"operations"`
 	ResponseMapping *ResponseMappingDef       `yaml:"response_mapping"`
@@ -280,7 +282,9 @@ type AuthMappingDef struct {
 }
 
 type ConnectionParamDef struct {
-	Required bool `yaml:"required"`
+	Required    bool   `yaml:"required"`
+	Description string `yaml:"description"`
+	From        string `yaml:"from"`
 }
 
 // ResolveConnectionAlias maps the user-facing "plugin" alias to the
@@ -443,7 +447,10 @@ func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginman
 		MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestProvider.Auth))
 	}
 	if plugin != nil {
-		override := &ConnectionDef{ConnectionParams: plugin.ConnectionParams}
+		override := &ConnectionDef{
+			Mode:             plugin.ConnectionMode,
+			ConnectionParams: plugin.ConnectionParams,
+		}
 		if plugin.Auth != nil {
 			override.Auth = *plugin.Auth
 		}

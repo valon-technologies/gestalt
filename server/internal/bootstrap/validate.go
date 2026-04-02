@@ -169,6 +169,9 @@ func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
 	if intg.Plugin == nil {
 		return core.ConnectionModeUser
 	}
+	if intg.Plugin.ConnectionMode != "" {
+		return core.ConnectionMode(intg.Plugin.ConnectionMode)
+	}
 	if intg.Plugin.Auth != nil && intg.Plugin.Auth.Type == "none" {
 		return core.ConnectionModeNone
 	}

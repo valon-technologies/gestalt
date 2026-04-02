@@ -1,39 +1,64 @@
 package pluginpkg
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
+
+func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *manifestWire {
+	return &manifestWire{
+		Source:  source,
+		Version: version,
+		Provider: &providerManifestWire{
+			Exec:     &providerExecWire{ArtifactPath: artifactPath},
+			Surfaces: providerManifestSurfacesWire{},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     osName,
+				Arch:   arch,
+				Path:   artifactPath,
+				SHA256: sha,
+			},
+		},
+	}
+}
+
+func mustManifestJSON(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	return mustManifestJSONBytes(wire)
+}
+
+func mustManifestYAML(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	data, err := yaml.Marshal(wire)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	return data
+}
+
+func mustManifestJSONBytes(wire *manifestWire) []byte {
+	data, err := json.MarshalIndent(wire, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return append(data, '\n')
+}
 
 func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {
-    "config_schema_path": "schemas/config.schema.json"
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider",
-      "args": []
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.ConfigSchemaPath = "schemas/config.schema.json"
+	wire.Provider.Exec.Args = []string{}
+	data := mustManifestJSON(t, wire)
 
 	manifest, err := DecodeManifest(data)
 	if err != nil {
@@ -47,25 +72,9 @@ func TestDecodeManifest_ValidProviderManifest(t *testing.T) {
 func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/linux/amd64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Exec.ArtifactPath = "artifacts/linux/amd64/provider"
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -76,24 +85,8 @@ func TestDecodeManifest_RejectsMissingEntrypointArtifact(t *testing.T) {
 func TestDecodeManifest_RejectsMissingArtifactSHA256(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", "")
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -107,24 +100,8 @@ func TestDecodeManifest_RejectsMissingArtifactSHA256(t *testing.T) {
 func TestDecodeSourceManifest_AllowsMissingArtifactSHA256(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", "")
+	data := mustManifestJSON(t, wire)
 
 	manifest, err := DecodeSourceManifestFormat(data, "json")
 	if err != nil {
@@ -201,25 +178,7 @@ func TestEncodeManifest_SpecLoadedProviderDoesNotRequireEntrypoint(t *testing.T)
 }
 
 func validV2JSON() []byte {
-	return []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	return mustManifestJSONBytes(mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider")))
 }
 
 func TestDecodeManifest_V2ValidSource(t *testing.T) {
@@ -277,8 +236,11 @@ func TestDecodeManifest_RejectsUnknownField(t *testing.T) {
   "source": "github.com/acme/plugins/echo",
   "id": "acme/echo",
   "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
+  "provider": {
+    "exec": {
+      "artifact_path": "artifacts/darwin/arm64/provider"
+    }
+  },
   "artifacts": [
     {
       "os": "darwin",
@@ -286,12 +248,7 @@ func TestDecodeManifest_RejectsUnknownField(t *testing.T) {
       "path": "artifacts/darwin/arm64/provider",
       "sha256": "` + sha256Hex("provider") + `"
     }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
+  ]
 }`)
 
 	_, err := DecodeManifest(data)
@@ -315,25 +272,8 @@ func TestDecodeManifest_V2RejectsInvalidSource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			data := []byte(`{
-  "source": "` + tc.source + `",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+			wire := mustProviderManifest(tc.source, "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+			data := mustManifestJSON(t, wire)
 
 			_, err := DecodeManifest(data)
 			if err == nil {
@@ -346,25 +286,8 @@ func TestDecodeManifest_V2RejectsInvalidSource(t *testing.T) {
 func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "v1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/echo", "v1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -372,51 +295,24 @@ func TestDecodeManifest_V2RejectsLeadingVVersion(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_V2RejectsUnsupportedKind(t *testing.T) {
+func TestDecodeManifest_RejectsProviderAndWebUICombination(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/test-org/test-repo/test-plugin",
-  "version": "1.0.0",
-  "kinds": ["unknown_kind"],
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {}
-}`)
+	wire := mustProviderManifest("github.com/test-org/test-repo/test-plugin", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.WebUI = &pluginmanifestv1.WebUIMetadata{AssetRoot: "out"}
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
-		t.Fatal("expected error for unsupported kind")
+		t.Fatal("expected error for provider+webui manifest")
 	}
 }
 
 func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -427,31 +323,14 @@ func TestDecodeManifest_V2RejectsMissingSource(t *testing.T) {
 func TestDecodeManifest_V2RejectsDuplicateArtifactPlatform(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/test-org/test-repo/test-plugin",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    },
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider2",
-      "sha256": "` + sha256Hex("provider2") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/test-org/test-repo/test-plugin", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Artifacts = append(wire.Artifacts, pluginmanifestv1.Artifact{
+		OS:     "darwin",
+		Arch:   "arm64",
+		Path:   "artifacts/darwin/arm64/provider2",
+		SHA256: sha256Hex("provider2"),
+	})
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -462,25 +341,8 @@ func TestDecodeManifest_V2RejectsDuplicateArtifactPlatform(t *testing.T) {
 func TestDecodeManifest_V2RejectsAbsoluteArtifactPath(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/test-org/test-repo/test-plugin",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "/absolute/path/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "/absolute/path/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/test-org/test-repo/test-plugin", "1.0.0", "darwin", "arm64", "/absolute/path/provider", sha256Hex("provider"))
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -488,65 +350,45 @@ func TestDecodeManifest_V2RejectsAbsoluteArtifactPath(t *testing.T) {
 	}
 }
 
-func TestDecodeManifest_V2ProviderWithoutMetadataRejected(t *testing.T) {
+func TestDecodeManifest_RejectsMissingProviderAndWebUI(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/test-org/test-repo/test-plugin",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/test-org/test-repo/test-plugin",
+		Version: "1.0.0",
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     "darwin",
+				Arch:   "arm64",
+				Path:   "artifacts/darwin/arm64/provider",
+				SHA256: sha256Hex("provider"),
+			},
+		},
+	})
 
 	_, err := DecodeManifest(data)
 	if err == nil {
-		t.Fatal("expected error for provider kind without provider metadata")
+		t.Fatal("expected error for manifest without provider or webui")
 	}
 }
 
 func TestDecodeManifest_V2WithOAuth2Auth(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "auth": {
-      "type": "oauth2",
-      "authorization_url": "https://example.com/authorize",
-      "token_url": "https://example.com/token",
-      "scopes": ["read", "write"],
-      "pkce": true,
-      "client_auth": "header"
-    }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+		"default": {
+			Auth: &pluginmanifestv1.ProviderAuth{
+				Type:             "oauth2",
+				AuthorizationURL: "https://example.com/authorize",
+				TokenURL:         "https://example.com/token",
+				Scopes:           []string{"read", "write"},
+				PKCE:             true,
+				ClientAuth:       "header",
+			},
+		},
+	}
+	data := mustManifestJSON(t, wire)
 
 	manifest, err := DecodeManifest(data)
 	if err != nil {
@@ -578,30 +420,16 @@ func TestDecodeManifest_V2WithOAuth2Auth(t *testing.T) {
 func TestDecodeManifest_V2OAuth2MissingTokenURL(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "auth": {
-      "type": "oauth2",
-      "authorization_url": "https://example.com/authorize"
-    }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+		"default": {
+			Auth: &pluginmanifestv1.ProviderAuth{
+				Type:             "oauth2",
+				AuthorizationURL: "https://example.com/authorize",
+			},
+		},
+	}
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -612,29 +440,13 @@ func TestDecodeManifest_V2OAuth2MissingTokenURL(t *testing.T) {
 func TestDecodeManifest_V2ManualAuth(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "auth": {
-      "type": "manual"
-    }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+		"default": {
+			Auth: &pluginmanifestv1.ProviderAuth{Type: "manual"},
+		},
+	}
+	data := mustManifestJSON(t, wire)
 
 	manifest, err := DecodeManifest(data)
 	if err != nil {
@@ -648,29 +460,13 @@ func TestDecodeManifest_V2ManualAuth(t *testing.T) {
 func TestDecodeManifest_V2InvalidAuthType(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "auth": {
-      "type": "bogus"
-    }
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+		"default": {
+			Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
+		},
+	}
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -739,21 +535,7 @@ func TestDecodeManifest_V2AuthRoundTrip(t *testing.T) {
 func TestDecodeManifestFormat_YAML(t *testing.T) {
 	t.Parallel()
 
-	yamlData := []byte(`
-source: github.com/acme/plugins/echo
-version: "1.0.0"
-kinds:
-  - provider
-provider: {}
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-    sha256: ` + sha256Hex("provider") + `
-entrypoints:
-  provider:
-    artifact_path: artifacts/darwin/arm64/provider
-`)
+	yamlData := mustManifestYAML(t, mustProviderManifest("github.com/acme/plugins/echo", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider")))
 
 	manifest, err := DecodeManifestFormat(yamlData, "yaml")
 	if err != nil {
@@ -767,36 +549,42 @@ entrypoints:
 func TestDecodeManifestFormat_YAMLDeclarative(t *testing.T) {
 	t.Parallel()
 
-	yamlData := []byte(`
-source: github.com/acme/plugins/testapi
-version: "0.1.0"
-display_name: Test API
-description: A test declarative provider
-kinds:
-  - provider
-provider:
-  base_url: https://api.example.com/v1
-  auth:
-    type: bearer
-  operations:
-    - name: list_items
-      description: List all items
-      method: GET
-      path: /items
-      parameters:
-        - name: limit
-          type: int
-          in: query
-    - name: create_item
-      description: Create an item
-      method: POST
-      path: /items
-      parameters:
-        - name: name
-          type: string
-          in: body
-          required: true
-`)
+	yamlData := mustManifestYAML(t, &manifestWire{
+		Source:      "github.com/acme/plugins/testapi",
+		Version:     "0.1.0",
+		DisplayName: "Test API",
+		Description: "A test declarative provider",
+		Provider: &providerManifestWire{
+			Connections: map[string]*providerManifestConnectionWire{
+				"default": {Auth: &pluginmanifestv1.ProviderAuth{Type: "bearer"}},
+			},
+			Surfaces: providerManifestSurfacesWire{
+				REST: &providerManifestRESTSurfaceWire{
+					BaseURL: "https://api.example.com/v1",
+					Operations: []pluginmanifestv1.ProviderOperation{
+						{
+							Name:        "list_items",
+							Description: "List all items",
+							Method:      "GET",
+							Path:        "/items",
+							Parameters: []pluginmanifestv1.ProviderParameter{
+								{Name: "limit", Type: "int", In: "query"},
+							},
+						},
+						{
+							Name:        "create_item",
+							Description: "Create an item",
+							Method:      "POST",
+							Path:        "/items",
+							Parameters: []pluginmanifestv1.ProviderParameter{
+								{Name: "name", Type: "string", In: "body", Required: true},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	manifest, err := DecodeManifestFormat(yamlData, "yaml")
 	if err != nil {
@@ -825,25 +613,12 @@ provider:
 func TestDecodeManifestFormat_YAMLAllowedOperations(t *testing.T) {
 	t.Parallel()
 
-	yamlData := []byte(`
-source: github.com/acme/plugins/testapi
-version: "0.1.0"
-kinds:
-  - provider
-provider:
-  openapi: https://api.example.com/openapi.json
-  allowed_operations:
-    api.items.list:
-      alias: list_items
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-    sha256: ` + sha256Hex("provider") + `
-entrypoints:
-  provider:
-    artifact_path: artifacts/darwin/arm64/provider
-`)
+	wire := mustProviderManifest("github.com/acme/plugins/testapi", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Surfaces.OpenAPI = &providerManifestOpenAPISurfaceWire{Document: "https://api.example.com/openapi.json"}
+	wire.Provider.AllowedOperations = map[string]*pluginmanifestv1.ManifestOperationOverride{
+		"api.items.list": {Alias: "list_items"},
+	}
+	yamlData := mustManifestYAML(t, wire)
 
 	manifest, err := DecodeManifestFormat(yamlData, "yaml")
 	if err != nil {
@@ -864,25 +639,30 @@ entrypoints:
 func TestDecodeManifest_DeclarativeProviderJSON(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/myapi",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.com",
-    "auth": { "type": "bearer" },
-    "operations": [
-      {
-        "name": "get_stuff",
-        "method": "GET",
-        "path": "/stuff",
-        "parameters": [
-          { "name": "q", "type": "string", "in": "query" }
-        ]
-      }
-    ]
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/acme/plugins/myapi",
+		Version: "1.0.0",
+		Provider: &providerManifestWire{
+			Connections: map[string]*providerManifestConnectionWire{
+				"default": {Auth: &pluginmanifestv1.ProviderAuth{Type: "bearer"}},
+			},
+			Surfaces: providerManifestSurfacesWire{
+				REST: &providerManifestRESTSurfaceWire{
+					BaseURL: "https://api.example.com",
+					Operations: []pluginmanifestv1.ProviderOperation{
+						{
+							Name:   "get_stuff",
+							Method: "GET",
+							Path:   "/stuff",
+							Parameters: []pluginmanifestv1.ProviderParameter{
+								{Name: "q", Type: "string", In: "query"},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	manifest, err := DecodeManifest(data)
 	if err != nil {
@@ -899,20 +679,19 @@ func TestDecodeManifest_DeclarativeProviderJSON(t *testing.T) {
 func TestDecodeManifest_DeclarativeRejectsMissingBaseURL(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/myapi",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "operations": [
-      {
-        "name": "get_stuff",
-        "method": "GET",
-        "path": "/stuff"
-      }
-    ]
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/acme/plugins/myapi",
+		Version: "1.0.0",
+		Provider: &providerManifestWire{
+			Surfaces: providerManifestSurfacesWire{
+				REST: &providerManifestRESTSurfaceWire{
+					Operations: []pluginmanifestv1.ProviderOperation{
+						{Name: "get_stuff", Method: "GET", Path: "/stuff"},
+					},
+				},
+			},
+		},
+	})
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -923,18 +702,21 @@ func TestDecodeManifest_DeclarativeRejectsMissingBaseURL(t *testing.T) {
 func TestDecodeManifest_DeclarativeRejectsDuplicateOpNames(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/myapi",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.com",
-    "operations": [
-      { "name": "do_thing", "method": "GET", "path": "/a" },
-      { "name": "do_thing", "method": "POST", "path": "/b" }
-    ]
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/acme/plugins/myapi",
+		Version: "1.0.0",
+		Provider: &providerManifestWire{
+			Surfaces: providerManifestSurfacesWire{
+				REST: &providerManifestRESTSurfaceWire{
+					BaseURL: "https://api.example.com",
+					Operations: []pluginmanifestv1.ProviderOperation{
+						{Name: "do_thing", Method: "GET", Path: "/a"},
+						{Name: "do_thing", Method: "POST", Path: "/b"},
+					},
+				},
+			},
+		},
+	})
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -945,26 +727,12 @@ func TestDecodeManifest_DeclarativeRejectsDuplicateOpNames(t *testing.T) {
 func TestDecodeManifestFormat_YAMLManagedParameters(t *testing.T) {
 	t.Parallel()
 
-	yamlData := []byte(`
-source: github.com/acme/plugins/testapi
-version: "0.1.0"
-kinds:
-  - provider
-provider:
-  openapi: https://api.example.com/openapi.json
-  managed_parameters:
-    - in: header
-      name: intercom-version
-      value: "2.11"
-artifacts:
-  - os: darwin
-    arch: arm64
-    path: artifacts/darwin/arm64/provider
-    sha256: ` + sha256Hex("provider") + `
-entrypoints:
-  provider:
-    artifact_path: artifacts/darwin/arm64/provider
-`)
+	wire := mustProviderManifest("github.com/acme/plugins/testapi", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Surfaces.OpenAPI = &providerManifestOpenAPISurfaceWire{Document: "https://api.example.com/openapi.json"}
+	wire.Provider.ManagedParameters = []pluginmanifestv1.ManagedParameter{
+		{In: "header", Name: "intercom-version", Value: "2.11"},
+	}
+	yamlData := mustManifestYAML(t, wire)
 
 	manifest, err := DecodeManifestFormat(yamlData, "yaml")
 	if err != nil {
@@ -984,37 +752,13 @@ entrypoints:
 func TestDecodeManifest_RejectsManagedParameterHeaderConflict(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/myapi",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "openapi": "https://api.example.com/openapi.json",
-    "headers": {
-      "Intercom-Version": "2.15"
-    },
-    "managed_parameters": [
-      {
-        "in": "header",
-        "name": "intercom-version",
-        "value": "2.11"
-      }
-    ]
-  },
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`)
+	wire := mustProviderManifest("github.com/acme/plugins/myapi", "1.0.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider"))
+	wire.Provider.Surfaces.OpenAPI = &providerManifestOpenAPISurfaceWire{Document: "https://api.example.com/openapi.json"}
+	wire.Provider.Headers = map[string]string{"Intercom-Version": "2.15"}
+	wire.Provider.ManagedParameters = []pluginmanifestv1.ManagedParameter{
+		{In: "header", Name: "intercom-version", Value: "2.11"},
+	}
+	data := mustManifestJSON(t, wire)
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -1028,24 +772,27 @@ func TestDecodeManifest_RejectsManagedParameterHeaderConflict(t *testing.T) {
 func TestDecodeManifest_DeclarativeRejectsOrphanPathParam(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/myapi",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.com",
-    "operations": [
-      {
-        "name": "get_item",
-        "method": "GET",
-        "path": "/items",
-        "parameters": [
-          { "name": "id", "type": "string", "in": "path" }
-        ]
-      }
-    ]
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/acme/plugins/myapi",
+		Version: "1.0.0",
+		Provider: &providerManifestWire{
+			Surfaces: providerManifestSurfacesWire{
+				REST: &providerManifestRESTSurfaceWire{
+					BaseURL: "https://api.example.com",
+					Operations: []pluginmanifestv1.ProviderOperation{
+						{
+							Name:   "get_item",
+							Method: "GET",
+							Path:   "/items",
+							Parameters: []pluginmanifestv1.ProviderParameter{
+								{Name: "id", Type: "string", In: "path"},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	_, err := DecodeManifest(data)
 	if err == nil {
@@ -1059,18 +806,21 @@ func TestDecodeManifest_IconFile(t *testing.T) {
 	t.Run("valid icon_file decodes and validates", func(t *testing.T) {
 		t.Parallel()
 
-		data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "icon_file": "assets/icon.svg",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.com",
-    "operations": [
-      {"name": "get_thing", "method": "GET", "path": "/thing"}
-    ]
-  }
-}`)
+		data := mustManifestJSON(t, &manifestWire{
+			Source:   "github.com/acme/plugins/echo",
+			Version:  "1.0.0",
+			IconFile: "assets/icon.svg",
+			Provider: &providerManifestWire{
+				Surfaces: providerManifestSurfacesWire{
+					REST: &providerManifestRESTSurfaceWire{
+						BaseURL: "https://api.example.com",
+						Operations: []pluginmanifestv1.ProviderOperation{
+							{Name: "get_thing", Method: "GET", Path: "/thing"},
+						},
+					},
+				},
+			},
+		})
 		manifest, err := DecodeManifest(data)
 		if err != nil {
 			t.Fatalf("DecodeManifest: %v", err)
@@ -1083,17 +833,20 @@ func TestDecodeManifest_IconFile(t *testing.T) {
 	t.Run("omitted icon_file is valid", func(t *testing.T) {
 		t.Parallel()
 
-		data := []byte(`{
-  "source": "github.com/acme/plugins/echo",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "base_url": "https://api.example.com",
-    "operations": [
-      {"name": "get_thing", "method": "GET", "path": "/thing"}
-    ]
-  }
-}`)
+		data := mustManifestJSON(t, &manifestWire{
+			Source:  "github.com/acme/plugins/echo",
+			Version: "1.0.0",
+			Provider: &providerManifestWire{
+				Surfaces: providerManifestSurfacesWire{
+					REST: &providerManifestRESTSurfaceWire{
+						BaseURL: "https://api.example.com",
+						Operations: []pluginmanifestv1.ProviderOperation{
+							{Name: "get_thing", Method: "GET", Path: "/thing"},
+						},
+					},
+				},
+			},
+		})
 		manifest, err := DecodeManifest(data)
 		if err != nil {
 			t.Fatalf("DecodeManifest: %v", err)

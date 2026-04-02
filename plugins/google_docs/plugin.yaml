@@ -3,20 +3,19 @@ version: 0.0.1-alpha.1
 display_name: Google Docs
 description: Read, create, and edit Google Docs documents.
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
   config_schema_path: schemas/config.schema.json
-  auth:
-    type: oauth2
-    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
-    token_url: https://oauth2.googleapis.com/token
-    scopes:
-      - https://www.googleapis.com/auth/documents
-    authorization_params:
-      access_type: offline
-      prompt: consent
-  openapi: https://api.apis.guru/v2/specs/googleapis.com/docs/v1/openapi.json
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+        token_url: https://oauth2.googleapis.com/token
+        scopes:
+          - https://www.googleapis.com/auth/documents
+        authorization_params:
+          access_type: offline
+          prompt: consent
   allowed_operations:
     docs.documents.get:
       alias: get
@@ -24,3 +23,6 @@ provider:
       alias: create
     docs.documents.batchUpdate:
       alias: batchUpdate
+  surfaces:
+    openapi:
+      document: https://api.apis.guru/v2/specs/googleapis.com/docs/v1/openapi.json

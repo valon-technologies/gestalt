@@ -3,20 +3,19 @@ version: 0.0.1-alpha.1
 display_name: Google Slides
 description: Create and update Google Slides presentations.
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
   config_schema_path: schemas/config.schema.json
-  auth:
-    type: oauth2
-    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
-    token_url: https://oauth2.googleapis.com/token
-    scopes:
-      - https://www.googleapis.com/auth/presentations
-    authorization_params:
-      access_type: offline
-      prompt: consent
-  openapi: https://api.apis.guru/v2/specs/googleapis.com/slides/v1/openapi.json
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+        token_url: https://oauth2.googleapis.com/token
+        scopes:
+          - https://www.googleapis.com/auth/presentations
+        authorization_params:
+          access_type: offline
+          prompt: consent
   allowed_operations:
     slides.presentations.create:
       alias: presentations.create
@@ -28,3 +27,6 @@ provider:
       alias: pages.get
     slides.presentations.pages.getThumbnail:
       alias: pages.getThumbnail
+  surfaces:
+    openapi:
+      document: https://api.apis.guru/v2/specs/googleapis.com/slides/v1/openapi.json
