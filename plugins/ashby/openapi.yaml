@@ -1,0 +1,463 @@
+openapi: "3.2.0"
+info:
+  title: Ashby
+  description: Candidates, applications, jobs, offers, interviews, departments, locations, and users
+servers:
+  - url: https://api.ashbyhq.com
+security:
+  - api_key: []
+
+paths:
+  /candidate.list:
+    post:
+      operationId: candidate.list
+      summary: List candidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /candidate.info:
+    post:
+      operationId: candidate.info
+      summary: Get a candidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /candidate.search:
+    post:
+      operationId: candidate.search
+      summary: Search candidates (max 100 results, no pagination)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /candidate.create:
+    post:
+      operationId: candidate.create
+      summary: Create a candidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CandidateCreate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /candidate.update:
+    post:
+      operationId: candidate.update
+      summary: Update a candidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CandidateUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /candidate.createNote:
+    post:
+      operationId: candidate.createNote
+      summary: Create a note on a candidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CandidateNoteCreate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /application.list:
+    post:
+      operationId: application.list
+      summary: List applications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /application.info:
+    post:
+      operationId: application.info
+      summary: Get an application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /application.create:
+    post:
+      operationId: application.create
+      summary: Create an application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationCreate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /application.changeStage:
+    post:
+      operationId: application.changeStage
+      summary: Change an application's interview stage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [applicationId, interviewStageId]
+              properties:
+                applicationId:
+                  type: string
+                interviewStageId:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /job.list:
+    post:
+      operationId: job.list
+      summary: List jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /job.info:
+    post:
+      operationId: job.info
+      summary: Get a job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /offer.list:
+    post:
+      operationId: offer.list
+      summary: List offers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /offer.info:
+    post:
+      operationId: offer.info
+      summary: Get an offer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /interviewSchedule.list:
+    post:
+      operationId: interviewSchedule.list
+      summary: List interview schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /department.list:
+    post:
+      operationId: department.list
+      summary: List departments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /location.list:
+    post:
+      operationId: location.list
+      summary: List locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+  /user.list:
+    post:
+      operationId: user.list
+      summary: List users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaginationParams"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse"
+
+components:
+  securitySchemes:
+    api_key:
+      type: http
+      scheme: basic
+      description: "Create a key in [Ashby API Keys](https://app.ashbyhq.com/admin/api/keys)."
+
+  schemas:
+    PaginationParams:
+      type: object
+      properties:
+        limit:
+          type: integer
+        cursor:
+          type: string
+
+    Response:
+      type: object
+      properties:
+        success:
+          type: boolean
+        results:
+          type: object
+
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        results:
+          type: array
+          items:
+            type: object
+        moreDataAvailable:
+          type: boolean
+        nextCursor:
+          type: string
+
+    CandidateCreate:
+      type: object
+      required: [firstName, lastName]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        primaryEmailAddress:
+          type: object
+          properties:
+            value:
+              type: string
+            type:
+              type: string
+        primaryPhoneNumber:
+          type: object
+          properties:
+            value:
+              type: string
+            type:
+              type: string
+        externalId:
+          type: string
+
+    CandidateUpdate:
+      type: object
+      required: [candidateId]
+      properties:
+        candidateId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        primaryEmailAddress:
+          type: object
+          properties:
+            value:
+              type: string
+            type:
+              type: string
+
+    CandidateNoteCreate:
+      type: object
+      required: [candidateId, content]
+      properties:
+        candidateId:
+          type: string
+        content:
+          type: string
+        type:
+          type: string
+
+    ApplicationCreate:
+      type: object
+      required: [candidateId, jobId]
+      properties:
+        candidateId:
+          type: string
+        jobId:
+          type: string
+        sourceId:
+          type: string

@@ -1194,6 +1194,13 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 }
 
 func connectionAuthTypes(authType string, integrationAuthTypes []string) []string {
+	if authType == "" {
+		if len(integrationAuthTypes) == 0 {
+			return nil
+		}
+		return append([]string(nil), integrationAuthTypes...)
+	}
+
 	authTypes := userFacingAuthTypes([]string{authType})
 	if len(authTypes) == 0 {
 		return nil

@@ -1,0 +1,1080 @@
+openapi: "3.2.0"
+info:
+  title: Extend
+  description: Extend document processing platform for parsing, extracting, and classifying files
+servers:
+  - url: https://api.extend.ai/v1
+security:
+  - api_key: []
+
+components:
+  securitySchemes:
+    api_key:
+      type: http
+      scheme: bearer
+      description: "Create one in [Extend Developer Settings](https://dashboard.extend.ai/developers)."
+
+paths:
+  /files:
+    post:
+      operationId: upload_file
+      description: Upload a file from a URL
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file to upload
+                file_base64:
+                  type: string
+                  description: Base64-encoded file content
+                file_name:
+                  type: string
+                  description: Filename (used with file_base64)
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_files
+      description: List uploaded files
+      parameters:
+        - name: name_contains
+          in: query
+          schema:
+            type: string
+          description: Filter by filename substring
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+          description: "Sort direction: asc or desc"
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /files/{id}:
+    get:
+      operationId: get_file
+      description: Get a file by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: File ID
+        - name: raw_text
+          in: query
+          schema:
+            type: boolean
+          description: Include raw text output
+        - name: markdown
+          in: query
+          schema:
+            type: boolean
+          description: Include markdown output
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_file
+      description: Delete a file
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: File ID
+      responses:
+        "200":
+          description: Successful response
+
+  /parse:
+    post:
+      operationId: parse_file
+      description: Parse a document synchronously
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file to parse
+                file_id:
+                  type: string
+                  description: ID of an uploaded file to parse
+      responses:
+        "200":
+          description: Successful response
+
+  /parse_runs:
+    post:
+      operationId: parse_file_async
+      description: Start an async parse run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file to parse
+                file_id:
+                  type: string
+                  description: ID of an uploaded file to parse
+      responses:
+        "200":
+          description: Successful response
+
+  /parse_runs/{id}:
+    get:
+      operationId: get_parse_run
+      description: Get parse run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Parse run ID
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_parse_run
+      description: Delete a parse run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Parse run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /extract:
+    post:
+      operationId: extract_file
+      description: Extract structured data synchronously
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+                extractor_id:
+                  type: string
+                  description: Extractor ID to use
+      responses:
+        "200":
+          description: Successful response
+
+  /extract_runs:
+    post:
+      operationId: extract_file_async
+      description: Start an async extract run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+                extractor_id:
+                  type: string
+                  description: Extractor ID to use
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_extract_runs
+      description: List extract runs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by status
+        - name: extractor_id
+          in: query
+          schema:
+            type: string
+          description: Filter by extractor ID
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /extract_runs/{id}:
+    get:
+      operationId: get_extract_run
+      description: Get extract run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Extract run ID
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_extract_run
+      description: Delete an extract run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Extract run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /extract_runs/{id}/cancel:
+    post:
+      operationId: cancel_extract_run
+      description: Cancel an extract run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Extract run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /extractors:
+    post:
+      operationId: create_extractor
+      description: Create an extractor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Extractor name
+                clone_extractor_id:
+                  type: string
+                  description: Clone from existing extractor
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_extractors
+      description: List extractors
+      parameters:
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+          description: Sort field
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+          description: "Sort direction: asc or desc"
+      responses:
+        "200":
+          description: Successful response
+
+  /extractors/{id}:
+    get:
+      operationId: get_extractor
+      description: Get an extractor by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Extractor ID
+      responses:
+        "200":
+          description: Successful response
+    patch:
+      operationId: update_extractor
+      description: Update an extractor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Extractor ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: New name
+      responses:
+        "200":
+          description: Successful response
+
+  /classify:
+    post:
+      operationId: classify_file
+      description: Classify a document synchronously
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+                classifier_id:
+                  type: string
+                  description: Classifier ID to use
+      responses:
+        "200":
+          description: Successful response
+
+  /classify_runs:
+    post:
+      operationId: classify_file_async
+      description: Start an async classify run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+                classifier_id:
+                  type: string
+                  description: Classifier ID to use
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_classify_runs
+      description: List classify runs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by status
+        - name: classifier_id
+          in: query
+          schema:
+            type: string
+          description: Filter by classifier ID
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /classify_runs/{id}:
+    get:
+      operationId: get_classify_run
+      description: Get classify run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Classify run ID
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_classify_run
+      description: Delete a classify run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Classify run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /classify_runs/{id}/cancel:
+    post:
+      operationId: cancel_classify_run
+      description: Cancel a classify run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Classify run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /classifiers:
+    post:
+      operationId: create_classifier
+      description: Create a classifier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Classifier name
+                clone_classifier_id:
+                  type: string
+                  description: Clone from existing classifier
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_classifiers
+      description: List classifiers
+      parameters:
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+          description: Sort field
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+          description: "Sort direction: asc or desc"
+      responses:
+        "200":
+          description: Successful response
+
+  /classifiers/{id}:
+    get:
+      operationId: get_classifier
+      description: Get a classifier by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Classifier ID
+      responses:
+        "200":
+          description: Successful response
+    patch:
+      operationId: update_classifier
+      description: Update a classifier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Classifier ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: New name
+      responses:
+        "200":
+          description: Successful response
+
+  /split:
+    post:
+      operationId: split_file
+      description: >-
+        Split a multi-document file synchronously using a nested file reference
+        and optional nested splitter reference. Example CLI params:
+        `-p 'file:={"id":"file_123"}' -p 'splitter:={"id":"spl_123"}'`
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: object
+                  description: File reference. Provide either `id` for an uploaded file or `url` for a remote file.
+                  properties:
+                    id:
+                      type: string
+                      description: ID of an uploaded file to split
+                    url:
+                      type: string
+                      description: URL of the file to split
+                splitter:
+                  type: object
+                  description: Optional splitter reference.
+                  required:
+                    - id
+                  properties:
+                    id:
+                      type: string
+                      description: Splitter ID to use
+      responses:
+        "200":
+          description: Successful response
+
+  /split_runs:
+    post:
+      operationId: split_file_async
+      description: >-
+        Start an async split run using a nested file reference and optional
+        nested splitter reference. Example CLI params:
+        `-p 'file:={"id":"file_123"}' -p 'splitter:={"id":"spl_123"}'`
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: object
+                  description: File reference. Provide either `id` for an uploaded file or `url` for a remote file.
+                  properties:
+                    id:
+                      type: string
+                      description: ID of an uploaded file to split
+                    url:
+                      type: string
+                      description: URL of the file to split
+                splitter:
+                  type: object
+                  description: Optional splitter reference.
+                  required:
+                    - id
+                  properties:
+                    id:
+                      type: string
+                      description: Splitter ID to use
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_split_runs
+      description: List split runs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by status
+        - name: splitter_id
+          in: query
+          schema:
+            type: string
+          description: Filter by splitter ID
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /split_runs/{id}:
+    get:
+      operationId: get_split_run
+      description: Get split run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Split run ID
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_split_run
+      description: Delete a split run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Split run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /split_runs/{id}/cancel:
+    post:
+      operationId: cancel_split_run
+      description: Cancel a split run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Split run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /splitters:
+    post:
+      operationId: create_splitter
+      description: Create a splitter
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Splitter name
+                clone_splitter_id:
+                  type: string
+                  description: Clone from existing splitter
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_splitters
+      description: List splitters
+      parameters:
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+          description: Sort field
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+          description: "Sort direction: asc or desc"
+      responses:
+        "200":
+          description: Successful response
+
+  /splitters/{id}:
+    get:
+      operationId: get_splitter
+      description: Get a splitter by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Splitter ID
+      responses:
+        "200":
+          description: Successful response
+    patch:
+      operationId: update_splitter
+      description: Update a splitter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Splitter ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: New name
+      responses:
+        "200":
+          description: Successful response
+
+  /edit:
+    post:
+      operationId: edit_file
+      description: Edit a PDF synchronously
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+      responses:
+        "200":
+          description: Successful response
+
+  /edit_runs:
+    post:
+      operationId: edit_file_async
+      description: Start an async edit run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+      responses:
+        "200":
+          description: Successful response
+
+  /edit_runs/{id}:
+    get:
+      operationId: get_edit_run
+      description: Get edit run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Edit run ID
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_edit_run
+      description: Delete an edit run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Edit run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /workflows:
+    post:
+      operationId: create_workflow
+      description: Create a workflow
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Workflow name
+      responses:
+        "200":
+          description: Successful response
+
+  /workflow_runs:
+    post:
+      operationId: run_workflow
+      description: Run a workflow on a file
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workflow_id
+              properties:
+                workflow_id:
+                  type: string
+                  description: Workflow ID
+                file_url:
+                  type: string
+                  description: URL of the file
+                file_id:
+                  type: string
+                  description: ID of an uploaded file
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_workflow_runs
+      description: List workflow runs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by status
+        - name: workflow_id
+          in: query
+          schema:
+            type: string
+          description: Filter by workflow ID
+        - name: batch_id
+          in: query
+          schema:
+            type: string
+          description: Filter by batch ID
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /workflow_runs/{id}:
+    get:
+      operationId: get_workflow_run
+      description: Get workflow run status and results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow run ID
+      responses:
+        "200":
+          description: Successful response
+    patch:
+      operationId: update_workflow_run
+      description: Update a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow run ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: New name
+      responses:
+        "200":
+          description: Successful response
+    delete:
+      operationId: delete_workflow_run
+      description: Delete a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /workflow_runs/{id}/cancel:
+    post:
+      operationId: cancel_workflow_run
+      description: Cancel a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow run ID
+      responses:
+        "200":
+          description: Successful response
+
+  /evaluation_sets:
+    post:
+      operationId: create_evaluation_set
+      description: Create an evaluation set
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - entity_id
+              properties:
+                name:
+                  type: string
+                  description: Evaluation set name
+                entity_id:
+                  type: string
+                  description: Entity ID
+                description:
+                  type: string
+                  description: Description
+      responses:
+        "200":
+          description: Successful response
+    get:
+      operationId: list_evaluation_sets
+      description: List evaluation sets
+      parameters:
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+          description: Filter by entity ID
+        - name: next_page_token
+          in: query
+          schema:
+            type: string
+          description: Pagination token
+        - name: max_page_size
+          in: query
+          schema:
+            type: integer
+          description: Max results per page
+      responses:
+        "200":
+          description: Successful response
+
+  /evaluation_sets/{id}:
+    get:
+      operationId: get_evaluation_set
+      description: Get an evaluation set by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Evaluation set ID
+      responses:
+        "200":
+          description: Successful response

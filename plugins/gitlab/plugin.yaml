@@ -1,0 +1,9 @@
+source: github.com/valon-technologies/gestalt/gitlab
+version: 0.0.1-alpha.3
+display_name: GitLab
+description: Repository, issue, merge request, and pipeline operations.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  openapi: openapi.yaml

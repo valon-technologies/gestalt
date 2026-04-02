@@ -1,0 +1,606 @@
+openapi: "3.2.0"
+info:
+  title: Datadog
+  description: Dashboards, monitors, metrics, logs, incidents, downtimes, and RUM
+servers:
+  - url: https://api.datadoghq.com
+security:
+  - api_key: []
+    application_key: []
+
+paths:
+  /api/v1/dashboard:
+    get:
+      operationId: list_dashboards
+      summary: List dashboards
+      parameters:
+        - name: filter[shared]
+          in: query
+          schema:
+            type: boolean
+          description: Filter by shared dashboards
+        - name: filter[deleted]
+          in: query
+          schema:
+            type: boolean
+          description: Include deleted dashboards
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: Max dashboards to return
+        - name: start
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Pagination offset
+      responses:
+        "200":
+          description: OK
+    post:
+      operationId: create_dashboard
+      summary: Create a dashboard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard"
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/dashboard/{dashboard_id}:
+    parameters:
+      - name: dashboard_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Dashboard ID
+    get:
+      operationId: get_dashboard
+      summary: Get a dashboard
+      responses:
+        "200":
+          description: OK
+    put:
+      operationId: update_dashboard
+      summary: Update a dashboard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard"
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/monitor:
+    get:
+      operationId: list_monitors
+      summary: List monitors
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Filter by name
+        - name: tags
+          in: query
+          schema:
+            type: string
+          description: Filter by tags
+        - name: monitor_tags
+          in: query
+          schema:
+            type: string
+          description: Filter by monitor tags
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Page number
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: Results per page
+      responses:
+        "200":
+          description: OK
+    post:
+      operationId: create_monitor
+      summary: Create a monitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Monitor"
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/monitor/{monitor_id}:
+    parameters:
+      - name: monitor_id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: Monitor ID
+    get:
+      operationId: get_monitor
+      summary: Get a monitor
+      responses:
+        "200":
+          description: OK
+    put:
+      operationId: update_monitor
+      summary: Update a monitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MonitorUpdate"
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/query:
+    get:
+      operationId: query_metrics
+      summary: Query metrics
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Start timestamp in seconds
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: End timestamp in seconds
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Metric query string
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/incidents:
+    get:
+      operationId: list_incidents
+      summary: List incidents
+      parameters:
+        - name: page[size]
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Results per page
+        - name: page[offset]
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Result offset
+      responses:
+        "200":
+          description: OK
+    post:
+      operationId: create_incident
+      summary: Create an incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncidentCreateRequest"
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/incidents/{incident_id}:
+    parameters:
+      - name: incident_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Incident ID
+    patch:
+      operationId: update_incident
+      summary: Update an incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncidentUpdateRequest"
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/logs/events/search:
+    post:
+      operationId: search_logs
+      summary: Search logs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogsSearchRequest"
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/downtime:
+    post:
+      operationId: create_downtime
+      summary: Create a downtime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DowntimeCreateRequest"
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/rum/events:
+    get:
+      operationId: list_rum_events
+      summary: List RUM events
+      parameters:
+        - name: filter[query]
+          in: query
+          schema:
+            type: string
+          description: RUM search query
+        - name: filter[from]
+          in: query
+          schema:
+            type: string
+          description: Minimum timestamp
+        - name: filter[to]
+          in: query
+          schema:
+            type: string
+          description: Maximum timestamp
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: ["timestamp", "-timestamp"]
+          description: Sort order
+        - name: page[cursor]
+          in: query
+          schema:
+            type: string
+          description: Pagination cursor
+        - name: page[limit]
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Page size
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/rum/events/search:
+    post:
+      operationId: search_rum_events
+      summary: Search RUM events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RUMSearchRequest"
+      responses:
+        "200":
+          description: OK
+
+  /api/v2/rum/analytics/aggregate:
+    post:
+      operationId: aggregate_rum_events
+      summary: Aggregate RUM events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RUMAggregateRequest"
+      responses:
+        "200":
+          description: OK
+
+components:
+  securitySchemes:
+    api_key:
+      type: apiKey
+      in: header
+      name: DD-API-KEY
+    application_key:
+      type: apiKey
+      in: header
+      name: DD-APPLICATION-KEY
+  schemas:
+    Dashboard:
+      type: object
+      required: [title, layout_type, widgets]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        layout_type:
+          type: string
+          enum: [ordered, free]
+        widgets:
+          type: array
+          items:
+            type: object
+        template_variables:
+          type: array
+          items:
+            type: object
+
+    Monitor:
+      type: object
+      required: [name, type, query]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: Monitor type such as query alert or metric alert
+        query:
+          type: string
+        message:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+
+    MonitorUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        query:
+          type: string
+        message:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+
+    IncidentAttributes:
+      type: object
+      required: [title, customer_impacted]
+      properties:
+        title:
+          type: string
+        customer_impacted:
+          type: boolean
+        customer_impact_scope:
+          type: string
+
+    IncidentUpdateAttributes:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+        customer_impacted:
+          type: boolean
+        customer_impact_scope:
+          type: string
+
+    IncidentCreateRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, attributes]
+          properties:
+            type:
+              type: string
+              enum: [incidents]
+            attributes:
+              $ref: "#/components/schemas/IncidentAttributes"
+
+    IncidentUpdateRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, type, attributes]
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              enum: [incidents]
+            attributes:
+              $ref: "#/components/schemas/IncidentUpdateAttributes"
+
+    DowntimeCreateRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, attributes]
+          properties:
+            type:
+              type: string
+              enum: [downtime]
+            attributes:
+              type: object
+              required: [scope]
+              properties:
+                scope:
+                  type: string
+                message:
+                  type: string
+                monitor_identifier:
+                  oneOf:
+                    - type: object
+                      properties:
+                        monitor_id:
+                          type: integer
+                    - type: object
+                      properties:
+                        monitor_tags:
+                          type: array
+                          items:
+                            type: string
+                schedule:
+                  type: object
+                  properties:
+                    start:
+                      type: string
+                      format: date-time
+                    end:
+                      type: string
+                      format: date-time
+
+    LogsSearchRequest:
+      type: object
+      required: [filter]
+      properties:
+        filter:
+          type: object
+          required: [query]
+          properties:
+            query:
+              type: string
+            from:
+              type: string
+              description: Minimum timestamp
+            to:
+              type: string
+              description: Maximum timestamp
+            indexes:
+              type: array
+              items:
+                type: string
+        page:
+          type: object
+          properties:
+            limit:
+              type: integer
+              default: 50
+        sort:
+          type: string
+
+    RUMSearchRequest:
+      type: object
+      required: [filter]
+      properties:
+        filter:
+          type: object
+          required: [query]
+          properties:
+            query:
+              type: string
+            from:
+              type: string
+            to:
+              type: string
+        options:
+          type: object
+          properties:
+            time_offset:
+              type: integer
+            timezone:
+              type: string
+        page:
+          type: object
+          properties:
+            cursor:
+              type: string
+            limit:
+              type: integer
+              default: 50
+        sort:
+          type: string
+
+    RUMAggregateRequest:
+      type: object
+      required: [filter, compute]
+      properties:
+        filter:
+          type: object
+          required: [query]
+          properties:
+            query:
+              type: string
+            from:
+              type: string
+            to:
+              type: string
+        compute:
+          type: array
+          items:
+            type: object
+            properties:
+              aggregation:
+                type: string
+              metric:
+                type: string
+              type:
+                type: string
+        group_by:
+          type: array
+          items:
+            type: object
+            properties:
+              facet:
+                type: string
+              limit:
+                type: integer
+              total:
+                type: boolean
+        options:
+          type: object
+          properties:
+            time_offset:
+              type: integer
+            timezone:
+              type: string
+        page:
+          type: object
+          properties:
+            cursor:
+              type: string
+            limit:
+              type: integer
+              default: 50

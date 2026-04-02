@@ -802,11 +802,92 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		authType string
+		name       string
+		provider   func(t *testing.T) core.Provider
+		plugin     *config.PluginDef
+		wantAuth   []string
+		wantFields []struct {
+			Name  string `json:"name"`
+			Label string `json:"label"`
+		}
 	}{
-		{name: "explicit oauth2 auth", authType: pluginmanifestv1.AuthTypeOAuth2},
-		{name: "empty auth type still exposes oauth", authType: ""},
+		{
+			name: "explicit oauth2 auth",
+			provider: func(t *testing.T) core.Provider {
+				t.Helper()
+				return &stubDualAuthProvider{
+					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
+				}
+			},
+			plugin: &config.PluginDef{
+				Auth: &config.ConnectionAuthDef{
+					Type:             pluginmanifestv1.AuthTypeOAuth2,
+					AuthorizationURL: "https://example.com/oauth/authorize",
+					TokenURL:         "https://example.com/oauth/token",
+				},
+			},
+			wantAuth: []string{"oauth", "manual"},
+			wantFields: []struct {
+				Name  string `json:"name"`
+				Label string `json:"label"`
+			}{
+				{Name: "api_token", Label: "API Token"},
+			},
+		},
+		{
+			name: "empty auth type still exposes oauth",
+			provider: func(t *testing.T) core.Provider {
+				t.Helper()
+				return &stubDualAuthProvider{
+					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
+				}
+			},
+			plugin: &config.PluginDef{
+				Auth: &config.ConnectionAuthDef{
+					Type:             "",
+					AuthorizationURL: "https://example.com/oauth/authorize",
+					TokenURL:         "https://example.com/oauth/token",
+				},
+			},
+			wantAuth: []string{"oauth", "manual"},
+			wantFields: []struct {
+				Name  string `json:"name"`
+				Label string `json:"label"`
+			}{
+				{Name: "api_token", Label: "API Token"},
+			},
+		},
+		{
+			name: "plugin auth unset uses provider auth types",
+			provider: func(t *testing.T) core.Provider {
+				t.Helper()
+				prov, err := provider.Build(&provider.Definition{
+					Provider:    "example",
+					DisplayName: "Example",
+					Auth:        provider.AuthDef{Type: "manual"},
+					CredentialFields: []provider.CredentialFieldDef{
+						{Name: "primary_token", Label: "Primary Token"},
+						{Name: "secondary_token", Label: "Secondary Token"},
+					},
+					Operations: map[string]provider.OperationDef{
+						"list_items": {Method: http.MethodGet, Path: "/items"},
+					},
+				}, config.ConnectionDef{})
+				if err != nil {
+					t.Fatalf("Build: %v", err)
+				}
+				return prov
+			},
+			plugin:   &config.PluginDef{},
+			wantAuth: []string{"manual"},
+			wantFields: []struct {
+				Name  string `json:"name"`
+				Label string `json:"label"`
+			}{
+				{Name: "primary_token", Label: "Primary Token"},
+				{Name: "secondary_token", Label: "Secondary Token"},
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -814,21 +895,10 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			stub := &stubDualAuthProvider{
-				StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
-			}
-			plugin := &config.PluginDef{
-				Auth: &config.ConnectionAuthDef{
-					Type:             tc.authType,
-					AuthorizationURL: "https://example.com/oauth/authorize",
-					TokenURL:         "https://example.com/oauth/token",
-				},
-			}
-
 			ts := newTestServer(t, func(cfg *server.Config) {
-				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider(t))
 				cfg.IntegrationDefs = map[string]config.IntegrationDef{
-					"example": {Plugin: plugin},
+					"example": {Plugin: tc.plugin},
 				}
 				cfg.Datastore = &coretesting.StubDatastore{
 					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
@@ -871,11 +941,11 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 			if conn.Name != config.PluginConnectionAlias {
 				t.Fatalf("expected plugin connection, got %+v", conn)
 			}
-			if !reflect.DeepEqual(conn.AuthTypes, []string{"oauth", "manual"}) {
-				t.Fatalf("expected dual auth types, got %+v", conn.AuthTypes)
+			if !reflect.DeepEqual(conn.AuthTypes, tc.wantAuth) {
+				t.Fatalf("auth types = %+v, want %+v", conn.AuthTypes, tc.wantAuth)
 			}
-			if len(conn.CredentialFields) != 1 || conn.CredentialFields[0].Name != "api_token" || conn.CredentialFields[0].Label != "API Token" {
-				t.Fatalf("unexpected credential fields: %+v", conn.CredentialFields)
+			if !reflect.DeepEqual(conn.CredentialFields, tc.wantFields) {
+				t.Fatalf("credential fields = %+v, want %+v", conn.CredentialFields, tc.wantFields)
 			}
 		})
 	}
