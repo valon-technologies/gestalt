@@ -56,6 +56,7 @@ export interface ConnectIntegrationResult {
   status: string;
   integration?: string;
   selection_url?: string;
+  pending_token?: string;
 }
 
 export class APIError extends Error {

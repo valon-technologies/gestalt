@@ -131,8 +131,20 @@ export default function IntegrationCard({
         integration.name, credential, connectionParams, instance, connection,
       );
       if (result.status === "selection_required") {
+        if (!result.pending_token) {
+          throw new Error("Connection requires selection, but the server did not return a pending token.");
+        }
         setSettingsOpen(false);
-        window.location.assign(result.selection_url || "/api/v1/auth/pending-connection");
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = result.selection_url || "/api/v1/auth/pending-connection";
+        const tokenInput = document.createElement("input");
+        tokenInput.type = "hidden";
+        tokenInput.name = "pending_token";
+        tokenInput.value = result.pending_token;
+        form.appendChild(tokenInput);
+        document.body.appendChild(form);
+        form.submit();
       } else {
         setSettingsOpen(false);
         onConnected?.();
