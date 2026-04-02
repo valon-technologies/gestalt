@@ -190,7 +190,7 @@ RUN go build -o ./my-plugin/artifacts/linux/amd64/provider ./plugins/cmd/myplugi
 
 ## Learn more
 
-- Docs: https://docs.toolshed.peachstreet.dev
-- CLI reference: https://docs.toolshed.peachstreet.dev/reference/cli
-- Deployment docs: https://docs.toolshed.peachstreet.dev/deploy
+- Docs: https://docs.valon.tools
+- CLI reference: https://docs.valon.tools/reference/cli
+- Deployment docs: https://docs.valon.tools/deploy
 - Source: https://github.com/valon-technologies/gestalt

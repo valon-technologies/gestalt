@@ -14,7 +14,7 @@ jobs:
     env:
       IMAGE_NAME: valontechnologies/gestaltd
       IMAGE_SOURCE: https://github.com/${{ github.repository }}
-      IMAGE_DOCUMENTATION: https://docs.toolshed.peachstreet.dev
+      IMAGE_DOCUMENTATION: https://docs.valon.tools
       IMAGE_URL: https://hub.docker.com/r/valontechnologies/gestaltd
     steps:
       - uses: actions/checkout@v4

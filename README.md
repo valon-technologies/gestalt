@@ -52,10 +52,10 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 
 ## Documentation
 
-Full documentation is available at [docs.toolshed.peachstreet.dev](https://docs.toolshed.peachstreet.dev).
+Full documentation is available at [docs.valon.tools](https://docs.valon.tools).
 
-- [Getting Started](https://docs.toolshed.peachstreet.dev/getting-started)
-- [Configuration](https://docs.toolshed.peachstreet.dev/concepts/configuration)
-- [CLI Reference](https://docs.toolshed.peachstreet.dev/reference/cli)
-- [Deployment](https://docs.toolshed.peachstreet.dev/deploy)
-- [Write a Plugin](https://docs.toolshed.peachstreet.dev/tasks/write-a-plugin)
+- [Getting Started](https://docs.valon.tools/getting-started)
+- [Configuration](https://docs.valon.tools/concepts/configuration)
+- [CLI Reference](https://docs.valon.tools/reference/cli)
+- [Deployment](https://docs.valon.tools/deploy)
+- [Write a Plugin](https://docs.valon.tools/tasks/write-a-plugin)
