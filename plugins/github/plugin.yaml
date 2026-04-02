@@ -1,0 +1,19 @@
+source: github.com/valon-technologies/gestalt/github
+version: 0.0.1-alpha.1
+display_name: GitHub
+description: Repository, issue, pull request, workflow, and code search operations.
+icon_file: assets/icon.svg
+provider:
+  config_schema_path: schemas/config.schema.json
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorization_url: https://github.com/login/oauth/authorize
+        token_url: https://github.com/login/oauth/access_token
+        accept_header: application/json
+        scopes:
+          - repo
+  surfaces:
+    openapi:
+      document: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.yaml
