@@ -367,9 +367,9 @@ func TestSourceDeclarativePluginLoadResolvesIconFile(t *testing.T) {
 		"    path: " + filepath.Join(dir, "data.db"),
 		"server:",
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"integrations:",
+		"providers:",
 		"  alpha:",
-		"    plugin:",
+		"    from:",
 		"      source: " + source,
 		"      version: " + version,
 	}, "\n") + "\n"
