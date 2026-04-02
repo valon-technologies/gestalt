@@ -21,9 +21,6 @@ type Store struct {
 	enc    *crypto.AESGCMEncryptor
 }
 
-var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
-
 type userDoc struct {
 	ID          string    `bson:"_id"`
 	Email       string    `bson:"email"`
@@ -58,21 +55,6 @@ type apiTokenDoc struct {
 	ExpiresAt   *time.Time `bson:"expires_at"`
 	CreatedAt   time.Time  `bson:"created_at"`
 	UpdatedAt   time.Time  `bson:"updated_at"`
-}
-
-type stagedConnectionDoc struct {
-	ID                    string     `bson:"_id"`
-	UserID                string     `bson:"user_id"`
-	Integration           string     `bson:"integration"`
-	Connection            string     `bson:"connection"`
-	Instance              string     `bson:"instance"`
-	AccessTokenEncrypted  string     `bson:"access_token_encrypted"`
-	RefreshTokenEncrypted string     `bson:"refresh_token_encrypted"`
-	TokenExpiresAt        *time.Time `bson:"token_expires_at"`
-	MetadataJSON          string     `bson:"metadata_json"`
-	CandidatesJSON        string     `bson:"candidates_json"`
-	CreatedAt             time.Time  `bson:"created_at"`
-	ExpiresAt             time.Time  `bson:"expires_at"`
 }
 
 func New(uri, database string, encryptionKey []byte) (*Store, error) {
@@ -373,78 +355,6 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 		return 0, fmt.Errorf("mongodb: revoking all api tokens: %w", err)
 	}
 	return result.DeletedCount, nil
-}
-
-func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
-	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(sc.AccessToken, sc.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("mongodb: %w", err)
-	}
-
-	doc := stagedConnectionDoc{
-		ID:                    sc.ID,
-		UserID:                sc.UserID,
-		Integration:           sc.Integration,
-		Connection:            sc.Connection,
-		Instance:              sc.Instance,
-		AccessTokenEncrypted:  accessEnc,
-		RefreshTokenEncrypted: refreshEnc,
-		TokenExpiresAt:        sc.TokenExpiresAt,
-		MetadataJSON:          sc.MetadataJSON,
-		CandidatesJSON:        sc.CandidatesJSON,
-		CreatedAt:             sc.CreatedAt,
-		ExpiresAt:             sc.ExpiresAt,
-	}
-
-	_, err = s.db.Collection(datastore.StagedConnectionsCollection).ReplaceOne(
-		ctx,
-		bson.M{"_id": sc.ID},
-		doc,
-		options.Replace().SetUpsert(true),
-	)
-	if err != nil {
-		return fmt.Errorf("mongodb: storing staged connection: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
-	var doc stagedConnectionDoc
-	err := s.db.Collection(datastore.StagedConnectionsCollection).FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return nil, core.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("mongodb: getting staged connection: %w", err)
-	}
-
-	access, refresh, err := s.enc.DecryptTokenPair(doc.AccessTokenEncrypted, doc.RefreshTokenEncrypted)
-	if err != nil {
-		return nil, fmt.Errorf("mongodb: %w", err)
-	}
-
-	return &core.StagedConnection{
-		ID:             doc.ID,
-		UserID:         doc.UserID,
-		Integration:    doc.Integration,
-		Connection:     doc.Connection,
-		Instance:       doc.Instance,
-		AccessToken:    access,
-		RefreshToken:   refresh,
-		TokenExpiresAt: doc.TokenExpiresAt,
-		MetadataJSON:   doc.MetadataJSON,
-		CandidatesJSON: doc.CandidatesJSON,
-		CreatedAt:      doc.CreatedAt,
-		ExpiresAt:      doc.ExpiresAt,
-	}, nil
-}
-
-func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
-	_, err := s.db.Collection(datastore.StagedConnectionsCollection).DeleteOne(ctx, bson.M{"_id": id})
-	if err != nil {
-		return fmt.Errorf("mongodb: deleting staged connection: %w", err)
-	}
-	return nil
 }
 
 func userFromDoc(doc *userDoc) *core.User {

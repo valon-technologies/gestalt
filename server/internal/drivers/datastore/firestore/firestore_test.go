@@ -45,7 +45,6 @@ func newTestStore(t *testing.T) *Store {
 		deleteAllDocs(t, store.client, datastore.IntegrationTokensCollection)
 		deleteAllDocs(t, store.client, apiTokensByHashCollection)
 		deleteAllDocs(t, store.client, datastore.APITokensCollection)
-		deleteAllDocs(t, store.client, datastore.StagedConnectionsCollection)
 		_ = store.Close()
 	})
 

@@ -29,8 +29,6 @@ const (
 	uniqueEmailSK    = "UNIQUE"
 	tokenSKPrefix    = "TOKEN#"
 	apiTokenSKPrefix = "APITOKEN#"
-	stagedPKPrefix   = "STAGED#"
-	stagedSK         = "STAGED"
 
 	attrID                = "id"
 	attrEmail             = "email"
@@ -45,11 +43,9 @@ const (
 	attrRefreshTokenEnc   = "refresh_token_enc"
 	attrScopes            = "scopes"
 	attrExpiresAt         = "expires_at"
-	attrTokenExpiresAt    = "token_expires_at"
 	attrLastRefreshedAt   = "last_refreshed_at"
 	attrRefreshErrorCount = "refresh_error_count"
 	attrMetadataJSON      = "metadata_json"
-	attrCandidatesJSON    = "candidates_json"
 	attrName              = "name"
 	attrHashedToken       = "hashed_token"
 
@@ -70,9 +66,6 @@ type Store struct {
 	enc       *crypto.AESGCMEncryptor
 	tableName string
 }
-
-var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(cfg Config) (*Store, error) {
 	enc, err := crypto.NewAESGCM(cfg.EncryptionKey)
@@ -566,134 +559,6 @@ func (s *Store) RevokeAllAPITokens(ctx context.Context, userID string) (int64, e
 		}
 	}
 	return count, nil
-}
-
-func (s *Store) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
-	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(sc.AccessToken, sc.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("dynamodb: %w", err)
-	}
-
-	item := map[string]ddbtypes.AttributeValue{
-		attrPK:              &ddbtypes.AttributeValueMemberS{Value: stagedPKPrefix + sc.ID},
-		attrSK:              &ddbtypes.AttributeValueMemberS{Value: stagedSK},
-		attrID:              &ddbtypes.AttributeValueMemberS{Value: sc.ID},
-		attrUserID:          &ddbtypes.AttributeValueMemberS{Value: sc.UserID},
-		attrIntegration:     &ddbtypes.AttributeValueMemberS{Value: sc.Integration},
-		attrConnection:      &ddbtypes.AttributeValueMemberS{Value: sc.Connection},
-		attrInstance:        &ddbtypes.AttributeValueMemberS{Value: sc.Instance},
-		attrAccessTokenEnc:  &ddbtypes.AttributeValueMemberS{Value: accessEnc},
-		attrRefreshTokenEnc: &ddbtypes.AttributeValueMemberS{Value: refreshEnc},
-		attrMetadataJSON:    &ddbtypes.AttributeValueMemberS{Value: sc.MetadataJSON},
-		attrCandidatesJSON:  &ddbtypes.AttributeValueMemberS{Value: sc.CandidatesJSON},
-		attrCreatedAt:       &ddbtypes.AttributeValueMemberS{Value: sc.CreatedAt.Format(time.RFC3339)},
-		attrExpiresAt:       &ddbtypes.AttributeValueMemberS{Value: sc.ExpiresAt.Format(time.RFC3339)},
-	}
-	if sc.TokenExpiresAt != nil {
-		item[attrTokenExpiresAt] = &ddbtypes.AttributeValueMemberS{Value: sc.TokenExpiresAt.Format(time.RFC3339)}
-	}
-
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &s.tableName,
-		Item:      item,
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb: storing staged connection: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
-	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: &s.tableName,
-		Key: map[string]ddbtypes.AttributeValue{
-			attrPK: &ddbtypes.AttributeValueMemberS{Value: stagedPKPrefix + id},
-			attrSK: &ddbtypes.AttributeValueMemberS{Value: stagedSK},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("dynamodb: getting staged connection: %w", err)
-	}
-	if out.Item == nil {
-		return nil, core.ErrNotFound
-	}
-
-	var sc core.StagedConnection
-	var accessEnc, refreshEnc string
-	var createdAt, expiresAt, tokenExpiresAt string
-
-	if err := unmarshalS(out.Item, attrID, &sc.ID); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrUserID, &sc.UserID); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrIntegration, &sc.Integration); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrConnection, &sc.Connection); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrInstance, &sc.Instance); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrAccessTokenEnc, &accessEnc); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrRefreshTokenEnc, &refreshEnc); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrMetadataJSON, &sc.MetadataJSON); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrCandidatesJSON, &sc.CandidatesJSON); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrCreatedAt, &createdAt); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrExpiresAt, &expiresAt); err != nil {
-		return nil, err
-	}
-	if err := unmarshalS(out.Item, attrTokenExpiresAt, &tokenExpiresAt); err != nil {
-		return nil, err
-	}
-
-	sc.AccessToken, sc.RefreshToken, err = s.enc.DecryptTokenPair(accessEnc, refreshEnc)
-	if err != nil {
-		return nil, fmt.Errorf("dynamodb: %w", err)
-	}
-	sc.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return nil, fmt.Errorf("parsing created_at: %w", err)
-	}
-	sc.ExpiresAt, err = time.Parse(time.RFC3339, expiresAt)
-	if err != nil {
-		return nil, fmt.Errorf("parsing expires_at: %w", err)
-	}
-	if tokenExpiresAt != "" {
-		parsed, err := time.Parse(time.RFC3339, tokenExpiresAt)
-		if err != nil {
-			return nil, fmt.Errorf("parsing token_expires_at: %w", err)
-		}
-		sc.TokenExpiresAt = &parsed
-	}
-
-	return &sc, nil
-}
-
-func (s *Store) DeleteStagedConnection(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]ddbtypes.AttributeValue{
-			attrPK: &ddbtypes.AttributeValueMemberS{Value: stagedPKPrefix + id},
-			attrSK: &ddbtypes.AttributeValueMemberS{Value: stagedSK},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb: deleting staged connection: %w", err)
-	}
-	return nil
 }
 
 func (s *Store) waitForTableReady(ctx context.Context) error {
