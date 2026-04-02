@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const pendingConnectionPath = "/api/v1/auth/pending-connection"
+const pendingConnectionCookieName = "pending_connection_state"
 
 var pendingConnectionSelectionPage = template.Must(template.New("pending-connection-selection").Parse(`<!doctype html>
 <html lang="en">
@@ -87,14 +91,14 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
     <p>{{.Message}}</p>
     {{if .Candidates}}
     <ul>
-      {{range .Candidates}}
+      {{range $i, $candidate := .Candidates}}
       <li>
         <form method="post" action="{{$.Action}}">
           <input type="hidden" name="pending_token" value="{{$.PendingToken}}">
-          <input type="hidden" name="candidate_id" value="{{.ID}}">
+          <input type="hidden" name="candidate_index" value="{{$i}}">
           <button type="submit">
-            <strong>{{.Name}}</strong>
-            <span class="subtle">{{.ID}}</span>
+            <strong>{{$candidate.Name}}</strong>
+            <span class="subtle">{{$candidate.ID}}</span>
           </button>
         </form>
       </li>
@@ -129,6 +133,7 @@ func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []cor
 	}
 	return encodePendingConnectionState(s.encryptor, pendingConnectionState{
 		Token:      tm,
+		BindingKey: uuid.NewString(),
 		Candidates: candidates,
 		ExpiresAt:  s.now().Add(pendingConnectionTTL).Unix(),
 	})
@@ -150,7 +155,57 @@ func findDiscoveryCandidate(candidates []core.DiscoveryCandidate, candidateID st
 	return nil
 }
 
+func findDiscoveryCandidateByIndex(candidates []core.DiscoveryCandidate, rawIndex string) (*core.DiscoveryCandidate, error) {
+	index, err := strconv.Atoi(rawIndex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid candidate index")
+	}
+	if index < 0 || index >= len(candidates) {
+		return nil, fmt.Errorf("candidate not found")
+	}
+	return &candidates[index], nil
+}
+
+func (s *Server) setPendingConnectionCookie(w http.ResponseWriter, state *pendingConnectionState) {
+	if s.encryptor == nil {
+		return
+	}
+	encoded, err := encodePendingConnectionBindingState(s.encryptor, pendingConnectionBindingState{
+		BindingKey: state.BindingKey,
+		ExpiresAt:  state.ExpiresAt,
+	})
+	if err != nil {
+		return
+	}
+	maxAge := int(time.Until(time.Unix(state.ExpiresAt, 0)).Seconds())
+	if maxAge < 0 {
+		maxAge = 0
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     pendingConnectionCookieName,
+		Value:    encoded,
+		Path:     pendingConnectionPath,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *Server) clearPendingConnectionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     pendingConnectionCookieName,
+		Value:    "",
+		Path:     pendingConnectionPath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, state *pendingConnectionState, pendingToken string) {
+	s.setPendingConnectionCookie(w, state)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pendingConnectionSelectionPage.Execute(w, pendingConnectionPageView{
@@ -166,6 +221,7 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 }
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
+	s.clearPendingConnectionCookie(w)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	linkURL := "/integrations"
@@ -221,6 +277,27 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	return dbUser.ID, true, nil
 }
 
+func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pendingConnectionState) error {
+	if s.noAuth {
+		return nil
+	}
+	if s.encryptor == nil {
+		return fmt.Errorf("pending connection encryption is not configured")
+	}
+	cookie, err := r.Cookie(pendingConnectionCookieName)
+	if err != nil {
+		return fmt.Errorf("missing pending connection cookie")
+	}
+	binding, err := decodePendingConnectionBindingState(s.encryptor, cookie.Value, s.now())
+	if err != nil {
+		return err
+	}
+	if binding.BindingKey != state.BindingKey {
+		return fmt.Errorf("pending connection cookie does not match")
+	}
+	return nil
+}
+
 func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
 	userID, authenticated, err := s.resolvePendingConnectionUserID(r)
 	if err != nil {
@@ -235,6 +312,12 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "pending connection not found")
 		return false
 	}
+	if !authenticated {
+		if err := s.authorizePendingConnectionByCookie(r, state); err != nil {
+			writeError(w, http.StatusUnauthorized, "pending connection authorization required")
+			return false
+		}
+	}
 	return true
 }
 
@@ -248,6 +331,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "pending_token is required")
 		return
 	}
+	candidateIndex := r.Form.Get("candidate_index")
 	candidateID := r.Form.Get("candidate_id")
 
 	state, err := s.decodePendingConnectionToken(pendingToken)
@@ -255,6 +339,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		status := http.StatusBadRequest
 		if errors.Is(err, errPendingConnectionExpired) {
 			status = http.StatusGone
+			s.clearPendingConnectionCookie(w)
 		}
 		writeError(w, status, "invalid or expired pending connection")
 		return
@@ -262,12 +347,25 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	if !s.authorizePendingConnection(w, r, state) {
 		return
 	}
-	if candidateID == "" {
+	if candidateIndex == "" && candidateID == "" {
 		s.writePendingConnectionSelectionPage(w, state, pendingToken)
 		return
 	}
 
-	selected := findDiscoveryCandidate(state.Candidates, candidateID)
+	var selected *core.DiscoveryCandidate
+	if candidateIndex != "" {
+		selected, err = findDiscoveryCandidateByIndex(state.Candidates, candidateIndex)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		selected = findDiscoveryCandidate(state.Candidates, candidateID)
+		if selected == nil {
+			writeError(w, http.StatusBadRequest, "candidate not found")
+			return
+		}
+	}
 	if selected == nil {
 		writeError(w, http.StatusBadRequest, "candidate not found")
 		return
@@ -290,6 +388,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	}
 
 	if _, err := r.Cookie(sessionCookieName); err == nil {
+		s.clearPendingConnectionCookie(w)
 		connectedURL := "/integrations"
 		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Token.Integration); err == nil {
 			connectedURL = nextURL

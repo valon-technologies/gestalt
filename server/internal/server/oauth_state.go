@@ -104,8 +104,14 @@ type loginState struct {
 
 type pendingConnectionState struct {
 	Token      tokenMaterial             `json:"tok"`
+	BindingKey string                    `json:"bind"`
 	Candidates []core.DiscoveryCandidate `json:"cand"`
 	ExpiresAt  int64                     `json:"exp"`
+}
+
+type pendingConnectionBindingState struct {
+	BindingKey string `json:"bind"`
+	ExpiresAt  int64  `json:"exp"`
 }
 
 func encodeLoginState(enc *cryptoutil.AESGCMEncryptor, state loginState) (string, error) {
@@ -147,6 +153,9 @@ func validatePendingConnectionState(state *pendingConnectionState, now time.Time
 	if state.Token.Integration == "" {
 		return fmt.Errorf("pending connection missing integration")
 	}
+	if state.BindingKey == "" {
+		return fmt.Errorf("pending connection missing binding key")
+	}
 	if len(state.Candidates) == 0 {
 		return fmt.Errorf("pending connection missing candidates")
 	}
@@ -165,6 +174,34 @@ func decodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, encoded strin
 		return nil, err
 	}
 	if err := validatePendingConnectionState(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func encodePendingConnectionBindingState(enc *cryptoutil.AESGCMEncryptor, state pendingConnectionBindingState) (string, error) {
+	return encodeEncryptedState(enc, "pending connection binding state", state)
+}
+
+func validatePendingConnectionBindingState(state *pendingConnectionBindingState, now time.Time) error {
+	if state.BindingKey == "" {
+		return fmt.Errorf("pending connection binding missing key")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("pending connection binding missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return errPendingConnectionExpired
+	}
+	return nil
+}
+
+func decodePendingConnectionBindingState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*pendingConnectionBindingState, error) {
+	state, err := decodeEncryptedState[pendingConnectionBindingState](enc, "pending connection binding state", encoded)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePendingConnectionBindingState(state, now); err != nil {
 		return nil, err
 	}
 	return state, nil

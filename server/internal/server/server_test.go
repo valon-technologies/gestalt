@@ -85,6 +85,21 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	return httptest.NewServer(srv)
 }
 
+func extractHiddenInputValue(t *testing.T, html, name string) string {
+	t.Helper()
+	needle := fmt.Sprintf(`name="%s" value="`, name)
+	start := strings.Index(html, needle)
+	if start == -1 {
+		t.Fatalf("missing hidden input %q in %q", name, html)
+	}
+	start += len(needle)
+	end := strings.Index(html[start:], `"`)
+	if end == -1 {
+		t.Fatalf("unterminated hidden input %q in %q", name, html)
+	}
+	return html[start : start+end]
+}
+
 // testOAuthHandler adapts a test stub into bootstrap.OAuthHandler for use in
 // server tests. Only the methods actually exercised by each test need non-nil
 // implementations.
@@ -2045,6 +2060,15 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "cli-api-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "cli@test.local"}, nil
+				},
+			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
@@ -2063,6 +2087,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer cli-api-token")
 		startResp, err := http.DefaultClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
@@ -2074,7 +2099,12 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("decoding start response: %v", err)
 		}
 
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
 		noRedirect := &http.Client{
+			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -2106,8 +2136,48 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if !strings.Contains(text, "name=\"pending_token\"") {
 			t.Fatalf("expected pending token hidden input in page, got %q", text)
 		}
+		if !strings.Contains(text, "name=\"candidate_index\"") {
+			t.Fatalf("expected candidate index hidden input in page, got %q", text)
+		}
 		if stored != nil {
 			t.Fatal("did not expect final token to be stored before selection")
+		}
+		selectionURL, err := url.Parse(ts.URL + pendingSelectionPath)
+		if err != nil {
+			t.Fatalf("parse selection url: %v", err)
+		}
+		cookies := jar.Cookies(selectionURL)
+		foundPendingCookie := false
+		for _, cookie := range cookies {
+			if cookie.Name == "pending_connection_state" {
+				foundPendingCookie = true
+				break
+			}
+		}
+		if !foundPendingCookie {
+			t.Fatal("expected pending connection cookie to be set on callback response")
+		}
+
+		form := url.Values{
+			"pending_token":   {extractHiddenInputValue(t, text, "pending_token")},
+			"candidate_index": {"1"},
+		}
+		selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+pendingSelectionPath, strings.NewReader(form.Encode()))
+		selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		selectResp, err := noRedirect.Do(selectReq)
+		if err != nil {
+			t.Fatalf("select request: %v", err)
+		}
+		defer func() { _ = selectResp.Body.Close() }()
+
+		if selectResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", selectResp.StatusCode)
+		}
+		if stored == nil {
+			t.Fatal("expected token to be stored after selection")
+		}
+		if stored.Integration != "slack" || stored.Instance != "default" {
+			t.Fatalf("stored token = %+v", stored)
 		}
 	})
 }
@@ -3853,10 +3923,28 @@ func TestConnectManual(t *testing.T) {
 		if !strings.Contains(pageText, "name=\"pending_token\"") {
 			t.Fatalf("expected pending token in selection page, got %q", pageText)
 		}
+		if !strings.Contains(pageText, "name=\"candidate_index\"") {
+			t.Fatalf("expected candidate index in selection page, got %q", pageText)
+		}
+
+		noAuthForm := url.Values{
+			"pending_token":   {connectResult.PendingToken},
+			"candidate_index": {"1"},
+		}
+		noAuthReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(noAuthForm.Encode()))
+		noAuthReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		noAuthResp, err := noRedirect.Do(noAuthReq)
+		if err != nil {
+			t.Fatalf("unauthenticated request: %v", err)
+		}
+		defer func() { _ = noAuthResp.Body.Close() }()
+		if noAuthResp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401 without auth or browser binding, got %d", noAuthResp.StatusCode)
+		}
 
 		mismatchForm := url.Values{
-			"pending_token": {connectResult.PendingToken},
-			"candidate_id":  {"site-b"},
+			"pending_token":   {connectResult.PendingToken},
+			"candidate_index": {"1"},
 		}
 		mismatchReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(mismatchForm.Encode()))
 		mismatchReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -3875,8 +3963,8 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		form := url.Values{
-			"pending_token": {connectResult.PendingToken},
-			"candidate_id":  {"site-b"},
+			"pending_token":   {connectResult.PendingToken},
+			"candidate_index": {"1"},
 		}
 		selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(form.Encode()))
 		selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
