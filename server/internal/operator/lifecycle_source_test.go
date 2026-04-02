@@ -112,6 +112,53 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	return archivePath
 }
 
+func buildDeclarativeArchive(t *testing.T, dir, source, version, iconSVG string) string {
+	t.Helper()
+
+	sourceDir := filepath.Join(dir, "source-plugin")
+	if err := os.MkdirAll(filepath.Join(sourceDir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll source plugin assets: %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:      source,
+		Version:     version,
+		DisplayName: "Declarative",
+		Description: "Declarative provider with icon",
+		IconFile:    "assets/icon.svg",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			BaseURL: "https://api.example.com",
+			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:        "ping",
+					Description: "Ping the API",
+					Method:      http.MethodGet,
+					Path:        "/ping",
+				},
+			},
+		},
+	}
+
+	manifestData, err := pluginpkg.EncodeManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "plugin.yaml"), manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.yaml): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "assets", "icon.svg"), []byte(iconSVG), 0o644); err != nil {
+		t.Fatalf("WriteFile(icon.svg): %v", err)
+	}
+
+	archivePath := filepath.Join(dir, "declarative-plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	return archivePath
+}
+
 func writeConfigYAML(t *testing.T, dir, source, version string) string {
 	t.Helper()
 
@@ -286,6 +333,87 @@ func TestReadLockfileV3Compat(t *testing.T) {
 	}
 	if entry.ArchiveSHA256 != "" {
 		t.Errorf("v3 archive_sha256 should be empty, got %q", entry.ArchiveSHA256)
+	}
+}
+
+func TestSourceDeclarativePluginLoadResolvesIconFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/declarative"
+	version := "1.0.0"
+	iconSVG := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></svg>`
+
+	archivePath := buildDeclarativeArchive(t, dir, source, version, iconSVG)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: "https://example.com/plugins/declarative.tar.gz",
+		sha256:      archiveSHA,
+	}
+
+	configYAML := strings.Join([]string{
+		"auth:",
+		"  provider: noop",
+		"datastore:",
+		"  provider: sqlite",
+		"  config:",
+		"    path: " + filepath.Join(dir, "data.db"),
+		"server:",
+		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"integrations:",
+		"  alpha:",
+		"    plugin:",
+		"      source: " + source,
+		"      version: " + version,
+	}, "\n") + "\n"
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	intg, ok := cfg.Integrations["alpha"]
+	if !ok {
+		t.Fatal("integration alpha not found")
+	}
+	if intg.IconFile == "" {
+		t.Fatal("expected integration IconFile to be populated from plugin manifest")
+	}
+	if intg.Plugin == nil {
+		t.Fatal("expected plugin config on integration")
+	}
+	if intg.Plugin.ResolvedIconFile != intg.IconFile {
+		t.Fatalf("ResolvedIconFile = %q, want %q", intg.Plugin.ResolvedIconFile, intg.IconFile)
+	}
+	if !intg.Plugin.IsDeclarative {
+		t.Fatal("expected declarative plugin to be marked IsDeclarative")
+	}
+	if intg.Plugin.Command != "" {
+		t.Fatalf("expected no command for declarative plugin, got %q", intg.Plugin.Command)
+	}
+
+	iconData, err := os.ReadFile(intg.IconFile)
+	if err != nil {
+		t.Fatalf("read resolved icon: %v", err)
+	}
+	if strings.TrimSpace(string(iconData)) != iconSVG {
+		t.Fatalf("icon content = %q, want %q", strings.TrimSpace(string(iconData)), iconSVG)
 	}
 }
 
