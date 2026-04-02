@@ -242,7 +242,7 @@ type IntegrationDef struct {
 type ConnectionDef struct {
 	Mode             string                        `yaml:"mode"`
 	Auth             ConnectionAuthDef             `yaml:"auth"`
-	ConnectionParams map[string]ConnectionParamDef `yaml:"connection_params"`
+	ConnectionParams map[string]ConnectionParamDef `yaml:"params"`
 }
 
 type ConnectionAuthDef struct {

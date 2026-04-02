@@ -112,7 +112,10 @@ default_connection: missing
 connections:
   workspace:
     auth:
-      type: manual`,
+      type: manual
+    params:
+      tenant:
+        required: true`,
 			wantError: "plugin.default_connection references undeclared connection",
 		},
 	}
