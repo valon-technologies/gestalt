@@ -32,7 +32,13 @@ func EffectiveManifestBackedInputs(name string, plugin *PluginDef) (*pluginmanif
 	if manifest == nil || manifest.Provider == nil {
 		return nil, nil, fmt.Errorf("manifest-backed provider %q is missing provider definition", name)
 	}
-	return manifest, OperationOverridesFromManifest(manifest.Provider.AllowedOperations), nil
+
+	allowedOperations := plugin.AllowedOperations
+	if allowedOperations == nil {
+		allowedOperations = OperationOverridesFromManifest(manifest.Provider.AllowedOperations)
+	}
+
+	return manifest, allowedOperations, nil
 }
 
 func MergedProviderHeaders(manifestProvider *pluginmanifestv1.Provider, plugin *PluginDef) map[string]string {

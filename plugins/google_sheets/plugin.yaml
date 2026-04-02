@@ -1,0 +1,38 @@
+source: github.com/valon-technologies/gestalt/google_sheets
+version: 0.0.1-alpha.1
+display_name: Google Sheets
+description: Read and update Google Sheets spreadsheets and values.
+icon_file: assets/icon.svg
+kinds:
+  - provider
+provider:
+  config_schema_path: schemas/config.schema.json
+  auth:
+    type: oauth2
+    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/spreadsheets
+    authorization_params:
+      access_type: offline
+      prompt: consent
+  openapi: https://api.apis.guru/v2/specs/googleapis.com/sheets/v4/openapi.json
+  allowed_operations:
+    sheets.spreadsheets.create:
+      alias: create
+    sheets.spreadsheets.get:
+      alias: get
+    sheets.spreadsheets.values.get:
+      alias: values.get
+    sheets.spreadsheets.values.update:
+      alias: values.update
+    sheets.spreadsheets.values.append:
+      alias: values.append
+    sheets.spreadsheets.values.batchGet:
+      alias: values.batchGet
+    sheets.spreadsheets.values.batchUpdate:
+      alias: values.batchUpdate
+    sheets.spreadsheets.values.clear:
+      alias: values.clear
+    sheets.spreadsheets.batchUpdate:
+      alias: batchUpdate
