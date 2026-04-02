@@ -505,7 +505,7 @@ operations:
     path: /items
 response_mapping:
   data_path: items`,
-			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations; remove plugin.response_mapping or switch this integration to inline openapi or graphql_url",
+			wantError: "plugin.response_mapping is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
 		},
 		{
 			name: "operations unsupported with spec surface",

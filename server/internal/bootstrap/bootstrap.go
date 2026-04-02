@@ -859,11 +859,16 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		return newProviderBuildResult(name, intg, manifest, pluginConfig, restricted, nil, deps, regStore)
 	}
 
+	baseURL := intg.Plugin.BaseURL
+	if manifestProvider != nil {
+		baseURL = manifestProvider.BaseURL
+	}
 	specProv, _, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-		plugin:            specPlugin,
-		manifestProvider:  manifestProvider,
-		allowedOperations: allowedOperations,
-		baseURL:           intg.Plugin.BaseURL,
+		plugin:               specPlugin,
+		manifestProvider:     manifestProvider,
+		allowedOperations:    allowedOperations,
+		baseURL:              baseURL,
+		applyResponseMapping: true,
 		providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
 			return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
 		},
@@ -910,7 +915,7 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved reso
 		return nil, err
 	}
 	if cfg.applyResponseMapping {
-		applyManifestResponseMapping(def, cfg.manifestProvider)
+		applyProviderResponseMapping(def, cfg.manifestProvider, cfg.plugin)
 	}
 	meta.applyToDefinition(def)
 	return def, nil
@@ -1326,17 +1331,18 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoau
 	})
 }
 
-func applyManifestResponseMapping(def *provider.Definition, mp *pluginmanifestv1.Provider) {
-	if mp.ResponseMapping == nil {
+func applyProviderResponseMapping(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) {
+	responseMapping := config.MergedProviderResponseMapping(manifestProvider, plugin)
+	if responseMapping == nil {
 		return
 	}
 	rm := &provider.ResponseMappingDef{
-		DataPath: mp.ResponseMapping.DataPath,
+		DataPath: responseMapping.DataPath,
 	}
-	if mp.ResponseMapping.Pagination != nil {
+	if responseMapping.Pagination != nil {
 		rm.Pagination = &provider.PaginationMappingDef{
-			HasMorePath: mp.ResponseMapping.Pagination.HasMorePath,
-			CursorPath:  mp.ResponseMapping.Pagination.CursorPath,
+			HasMorePath: responseMapping.Pagination.HasMorePath,
+			CursorPath:  responseMapping.Pagination.CursorPath,
 		}
 	}
 	def.ResponseMapping = rm
