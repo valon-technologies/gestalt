@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -29,6 +30,15 @@ const (
 	testOpenAPIConnectionName = "api"
 	testOpenAPIAccessToken    = "api-token"
 )
+
+func mustConfigNode(t *testing.T, value any) yaml.Node {
+	t.Helper()
+	var node yaml.Node
+	if err := node.Encode(value); err != nil {
+		t.Fatalf("node.Encode: %v", err)
+	}
+	return node
+}
 
 func serveMCPOAuthEndpoints(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -385,53 +395,137 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 	t.Parallel()
 
-	specSrv := serveOpenAPISpec(t)
-	var pluginConfig yaml.Node
-	if err := pluginConfig.Encode(map[string]any{
-		"client_id":     "vendor-id",
-		"client_secret": "vendor-secret",
-	}); err != nil {
-		t.Fatalf("pluginConfig.Encode: %v", err)
-	}
+	t.Run("named connection override", func(t *testing.T) {
+		t.Parallel()
 
-	cfg := validConfig()
-	cfg.Server.BaseURL = "https://gestalt.example.com"
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"vendor": {
-			Plugin: &config.PluginDef{
-				OpenAPI:           specSrv.URL,
-				OpenAPIConnection: testOpenAPIConnectionName,
-				Config:            pluginConfig,
-				Connections: map[string]*config.ConnectionDef{
-					testOpenAPIConnectionName: {
-						Auth: config.ConnectionAuthDef{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
-							AuthorizationURL: "https://example.com/authorize",
-							TokenURL:         "https://example.com/token",
+		specSrv := serveOpenAPISpec(t)
+		cfg := validConfig()
+		cfg.Server.BaseURL = "https://gestalt.example.com"
+		cfg.Integrations = map[string]config.IntegrationDef{
+			"sample": {
+				Plugin: &config.PluginDef{
+					OpenAPI:           specSrv.URL,
+					OpenAPIConnection: testOpenAPIConnectionName,
+					Config: mustConfigNode(t, map[string]any{
+						"client_id":     "sample-client-id",
+						"client_secret": "sample-client-secret",
+					}),
+					Connections: map[string]*config.ConnectionDef{
+						testOpenAPIConnectionName: {
+							Auth: config.ConnectionAuthDef{
+								Type:             pluginmanifestv1.AuthTypeOAuth2,
+								AuthorizationURL: "https://example.com/authorize",
+								TokenURL:         "https://example.com/token",
+							},
 						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	result := mustBootstrapResult(t, cfg, nil)
+		result := mustBootstrapResult(t, cfg, nil)
+		connAuth := result.ConnectionAuth()
+		sampleAuth, ok := connAuth["sample"]
+		if !ok {
+			t.Fatal("expected connection auth for sample integration")
+		}
+		handler, ok := sampleAuth[testOpenAPIConnectionName]
+		if !ok {
+			t.Fatalf("expected handler for connection %q", testOpenAPIConnectionName)
+		}
+		if handler.AuthorizationBaseURL() != "https://example.com/authorize" {
+			t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/authorize")
+		}
+		if handler.TokenURL() != "https://example.com/token" {
+			t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/token")
+		}
+	})
 
-	connAuth := result.ConnectionAuth()
-	vendorAuth, ok := connAuth["vendor"]
-	if !ok {
-		t.Fatal("expected connection auth for vendor integration")
-	}
-	handler, ok := vendorAuth[testOpenAPIConnectionName]
-	if !ok {
-		t.Fatalf("expected handler for connection %q", testOpenAPIConnectionName)
-	}
-	if handler.AuthorizationBaseURL() != "https://example.com/authorize" {
-		t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/authorize")
-	}
-	if handler.TokenURL() != "https://example.com/token" {
-		t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/token")
-	}
+	t.Run("spec security scheme fallback", func(t *testing.T) {
+		t.Parallel()
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.2.0",
+				"info":    map[string]string{"title": "Secured API"},
+				"servers": []any{map[string]string{"url": "https://api.example.com/v1"}},
+				"security": []any{
+					map[string]any{"oauth_auth": []string{"read"}},
+				},
+				"components": map[string]any{
+					"securitySchemes": map[string]any{
+						"oauth_auth": map[string]any{
+							"type":              "oauth2",
+							"oauth2MetadataUrl": "https://example.com/.well-known/oauth-authorization-server",
+							"flows": map[string]any{
+								"authorizationCode": map[string]any{
+									"authorizationUrl": "https://example.com/oauth/authorize",
+									"tokenUrl":         "https://example.com/oauth/token",
+									"scopes": map[string]string{
+										"read": "Read data",
+									},
+								},
+							},
+						},
+					},
+				},
+				"paths": map[string]any{
+					"/items": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_items",
+							"summary":     "List items",
+						},
+					},
+				},
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
+
+		cfg := validConfig()
+		cfg.Server.BaseURL = "https://gestalt.example.com"
+		cfg.Integrations = map[string]config.IntegrationDef{
+			"sample": {
+				Plugin: &config.PluginDef{
+					OpenAPI: specSrv.URL,
+					Config: mustConfigNode(t, map[string]any{
+						"client_id":     "sample-client-id",
+						"client_secret": "sample-client-secret",
+					}),
+				},
+			},
+		}
+
+		result := mustBootstrapResult(t, cfg, nil)
+		connAuth := result.ConnectionAuth()
+		sampleAuth, ok := connAuth["sample"]
+		if !ok {
+			t.Fatal("expected connection auth for sample integration")
+		}
+		handler, ok := sampleAuth[config.PluginConnectionName]
+		if !ok {
+			t.Fatalf("expected handler for connection %q", config.PluginConnectionName)
+		}
+		if handler.AuthorizationBaseURL() != "https://example.com/oauth/authorize" {
+			t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/oauth/authorize")
+		}
+		if handler.TokenURL() != "https://example.com/oauth/token" {
+			t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/oauth/token")
+		}
+
+		authURL, _ := handler.StartOAuth("state-123", nil)
+		if authURL == "" {
+			t.Fatal("expected non-empty authorization URL")
+		}
+		if !strings.Contains(authURL, "client_id=sample-client-id") {
+			t.Fatalf("auth url missing client_id: %q", authURL)
+		}
+		if !strings.Contains(authURL, "scope=read") {
+			t.Fatalf("auth url missing scope: %q", authURL)
+		}
+		if !strings.Contains(authURL, "redirect_uri=https%3A%2F%2Fgestalt.example.com%2Fapi%2Fv1%2Fauth%2Fcallback") {
+			t.Fatalf("auth url missing redirect_uri: %q", authURL)
+		}
+	})
 }
 
 func invokeListItemsConnection(t *testing.T, buildPlugin func(apiBase string) *config.PluginDef) string {
@@ -615,76 +709,176 @@ func TestInlineResponseMapping(t *testing.T) {
 
 func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeTestJSON(w, map[string]string{
-			"api_key": r.Header.Get("DD-API-KEY"),
-			"app_key": r.Header.Get("DD-APPLICATION-KEY"),
-		})
-	}))
-	testutil.CloseOnCleanup(t, apiSrv)
+	t.Run("configured mapping", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
 
-	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeTestJSON(w, map[string]any{
-			"openapi": "3.0.0",
-			"info":    map[string]string{"title": "Test API"},
-			"servers": []any{map[string]string{"url": apiSrv.URL}},
-			"paths": map[string]any{
-				"/items": map[string]any{
-					"get": map[string]any{
-						"operationId": "list_items",
-						"summary":     "List items",
+		apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeTestJSON(w, map[string]string{
+				"primary_token":   r.Header.Get("X-Primary-Token"),
+				"secondary_token": r.Header.Get("X-Secondary-Token"),
+			})
+		}))
+		testutil.CloseOnCleanup(t, apiSrv)
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Test API"},
+				"servers": []any{map[string]string{"url": apiSrv.URL}},
+				"paths": map[string]any{
+					"/items": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_items",
+							"summary":     "List items",
+						},
 					},
 				},
-			},
-		})
-	}))
-	testutil.CloseOnCleanup(t, specSrv)
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
 
-	const connName = "api"
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"datadog": {
-			Plugin: &config.PluginDef{
-				OpenAPI:           specSrv.URL,
-				OpenAPIConnection: connName,
-				Connections: map[string]*config.ConnectionDef{
-					connName: {
-						Auth: config.ConnectionAuthDef{
-							Type: pluginmanifestv1.AuthTypeManual,
-							AuthMapping: &config.AuthMappingDef{
-								Headers: map[string]string{
-									"DD-API-KEY":         "api_key",
-									"DD-APPLICATION-KEY": "app_key",
+		const connName = "api"
+		cfg := validConfig()
+		cfg.Integrations = map[string]config.IntegrationDef{
+			"sample": {
+				Plugin: &config.PluginDef{
+					OpenAPI:           specSrv.URL,
+					OpenAPIConnection: connName,
+					Connections: map[string]*config.ConnectionDef{
+						connName: {
+							Auth: config.ConnectionAuthDef{
+								Type: pluginmanifestv1.AuthTypeManual,
+								AuthMapping: &config.AuthMappingDef{
+									Headers: map[string]string{
+										"X-Primary-Token":   "primary_token",
+										"X-Secondary-Token": "secondary_token",
+									},
 								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	result := mustBootstrapResult(t, cfg, nil)
-	prov := mustGetProvider(t, result, "datadog")
+		result := mustBootstrapResult(t, cfg, nil)
+		prov := mustGetProvider(t, result, "sample")
 
-	token := `{"api_key":"k1","app_key":"k2"}`
-	opResult, err := prov.Execute(ctx, "list_items", nil, token)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
+		token := `{"primary_token":"k1","secondary_token":"k2"}`
+		opResult, err := prov.Execute(ctx, "list_items", nil, token)
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
 
-	var resp map[string]string
-	if err := json.Unmarshal([]byte(opResult.Body), &resp); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if resp["api_key"] != "k1" {
-		t.Errorf("DD-API-KEY = %q, want %q", resp["api_key"], "k1")
-	}
-	if resp["app_key"] != "k2" {
-		t.Errorf("DD-APPLICATION-KEY = %q, want %q", resp["app_key"], "k2")
-	}
+		var resp map[string]string
+		if err := json.Unmarshal([]byte(opResult.Body), &resp); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if resp["primary_token"] != "k1" {
+			t.Errorf("X-Primary-Token = %q, want %q", resp["primary_token"], "k1")
+		}
+		if resp["secondary_token"] != "k2" {
+			t.Errorf("X-Secondary-Token = %q, want %q", resp["secondary_token"], "k2")
+		}
+	})
+
+	t.Run("security scheme mapping", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeTestJSON(w, map[string]string{
+				"primary_token":   r.Header.Get("X-Primary-Token"),
+				"secondary_token": r.Header.Get("X-Secondary-Token"),
+			})
+		}))
+		testutil.CloseOnCleanup(t, apiSrv)
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.2.0",
+				"info":    map[string]string{"title": "Secured API"},
+				"servers": []any{map[string]string{"url": apiSrv.URL}},
+				"security": []any{
+					map[string]any{
+						"primary_token":   []any{},
+						"secondary_token": []any{},
+					},
+				},
+				"components": map[string]any{
+					"securitySchemes": map[string]any{
+						"primary_token": map[string]any{
+							"type":        "apiKey",
+							"in":          "header",
+							"name":        "X-Primary-Token",
+							"description": "Primary token",
+						},
+						"secondary_token": map[string]any{
+							"type":        "apiKey",
+							"in":          "header",
+							"name":        "X-Secondary-Token",
+							"description": "Secondary token",
+						},
+					},
+				},
+				"paths": map[string]any{
+					"/items": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_items",
+							"summary":     "List items",
+						},
+					},
+				},
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
+
+		cfg := validConfig()
+		cfg.Integrations = map[string]config.IntegrationDef{
+			"sample": {
+				Plugin: &config.PluginDef{
+					OpenAPI: specSrv.URL,
+				},
+			},
+		}
+
+		result := mustBootstrapResult(t, cfg, nil)
+		prov := mustGetProvider(t, result, "sample")
+
+		token := `{"primary_token":"k1","secondary_token":"k2"}`
+		opResult, err := prov.Execute(ctx, "list_items", nil, token)
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+
+		var resp map[string]string
+		if err := json.Unmarshal([]byte(opResult.Body), &resp); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if resp["primary_token"] != "k1" {
+			t.Errorf("X-Primary-Token = %q, want %q", resp["primary_token"], "k1")
+		}
+		if resp["secondary_token"] != "k2" {
+			t.Errorf("X-Secondary-Token = %q, want %q", resp["secondary_token"], "k2")
+		}
+
+		cfp, ok := prov.(core.CredentialFieldsProvider)
+		if !ok {
+			t.Fatalf("provider does not expose credential fields: %T", prov)
+		}
+		fields := cfp.CredentialFields()
+		if len(fields) != 2 {
+			t.Fatalf("credential fields = %d, want 2", len(fields))
+		}
+		if fields[0].Name != "primary_token" || fields[0].Label != "Primary Token" {
+			t.Fatalf("first credential field = %+v", fields[0])
+		}
+		if fields[1].Name != "secondary_token" || fields[1].Label != "Secondary Token" {
+			t.Fatalf("second credential field = %+v", fields[1])
+		}
+	})
 }
 
 func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *testing.T) {
