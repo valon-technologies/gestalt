@@ -67,14 +67,17 @@ func buildSBPLProfile(policy *Policy) string {
 	b.WriteString("(allow process*)\n")
 	b.WriteString("(allow sysctl-read)\n")
 	b.WriteString("(allow mach*)\n")
+	b.WriteString("(allow file-read-metadata)\n")
 
 	for _, p := range policy.ReadOnlyPaths {
 		sbplAllowRead(&b, p)
+		sbplAllowAncestorReadData(&b, p)
 	}
 
 	for _, p := range policy.ReadWritePaths {
 		sbplAllowRead(&b, p)
 		sbplAllowWrite(&b, p)
+		sbplAllowAncestorReadData(&b, p)
 	}
 
 	if policy.ProxyPort > 0 {
@@ -95,10 +98,35 @@ func sbplAllowWrite(b *strings.Builder, p string) {
 	sbplAllowPath(b, "file-write*", p)
 }
 
+func sbplAllowAncestorReadData(b *strings.Builder, p string) {
+	sbplAllowAncestorDirs(b, "file-read-data", p)
+}
+
 func sbplAllowPath(b *strings.Builder, access, p string) {
 	sbplAllowOnePath(b, access, p)
 	if resolved, err := filepath.EvalSymlinks(p); err == nil && resolved != p {
 		sbplAllowOnePath(b, access, resolved)
+	}
+}
+
+func sbplAllowAncestorDirs(b *strings.Builder, access, p string) {
+	sbplAllowAncestorDirsOnePath(b, access, p)
+	if resolved, err := filepath.EvalSymlinks(p); err == nil && resolved != p {
+		sbplAllowAncestorDirsOnePath(b, access, resolved)
+	}
+}
+
+func sbplAllowAncestorDirsOnePath(b *strings.Builder, access, p string) {
+	current := filepath.Clean(p)
+	if info, err := os.Stat(current); err == nil && !info.IsDir() {
+		current = filepath.Dir(current)
+	}
+	for {
+		fmt.Fprintf(b, "(allow %s (literal %s))\n", access, sbplQuote(current))
+		if current == "/" {
+			return
+		}
+		current = filepath.Dir(current)
 	}
 }
 

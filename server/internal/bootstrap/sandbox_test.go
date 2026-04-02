@@ -51,9 +51,7 @@ func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 }
 
 func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Landlock sandbox only available on Linux")
-	}
+	skipUnlessSandboxAvailable(t)
 	t.Parallel()
 
 	secret := filepath.Join(t.TempDir(), "secret.txt")
