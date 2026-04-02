@@ -1,0 +1,11 @@
+source: github.com/valon-technologies/gestalt/linear
+version: 0.0.1-alpha.1
+display_name: Linear
+description: Manage issues, projects, and teams.
+icon_file: assets/icon.svg
+provider:
+  surfaces:
+    graphql:
+      url: https://api.linear.app/graphql
+    mcp:
+      url: https://mcp.linear.app/mcp
