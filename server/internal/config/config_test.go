@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -273,6 +274,84 @@ egress:
 				t.Fatal("Load: expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestValidatePluginIntegrationAllowsExternalPluginLocalConnections(t *testing.T) {
+	t.Parallel()
+
+	err := validatePluginIntegration("reports", IntegrationDef{
+		Plugin: &PluginDef{
+			Source:  "github.com/acme/plugins/reports",
+			Version: "1.0.0",
+			Connections: map[string]*ConnectionDef{
+				"reports": {
+					Mode: "user",
+					Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeOAuth2},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("validatePluginIntegration: %v", err)
+	}
+}
+
+func TestValidateResolvedStructureRejectsUndeclaredConnectionReferenceForResolvedPlugin(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Integrations: map[string]IntegrationDef{
+			"reports": {
+				Plugin: &PluginDef{
+					Source:            "github.com/acme/plugins/reports",
+					Version:           "1.0.0",
+					OpenAPIConnection: "reports",
+					ResolvedManifest: &pluginmanifestv1.Manifest{
+						Kinds: []string{pluginmanifestv1.KindProvider},
+						Provider: &pluginmanifestv1.Provider{
+							OpenAPI: "https://example.com/openapi.json",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ValidateResolvedStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateResolvedStructure: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `plugin.openapi_connection references undeclared connection "reports"`) {
+		t.Fatalf("ValidateResolvedStructure error = %q", err)
+	}
+}
+
+func TestValidateResolvedStructureAllowsExternalPluginResponseMapping(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Integrations: map[string]IntegrationDef{
+			"reports": {
+				Plugin: &PluginDef{
+					Source:  "github.com/acme/plugins/reports",
+					Version: "1.0.0",
+					ResponseMapping: &ResponseMappingDef{
+						DataPath: "results.items",
+					},
+					ResolvedManifest: &pluginmanifestv1.Manifest{
+						Kinds: []string{pluginmanifestv1.KindProvider},
+						Provider: &pluginmanifestv1.Provider{
+							OpenAPI: "https://example.com/openapi.json",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateResolvedStructure(cfg); err != nil {
+		t.Fatalf("ValidateResolvedStructure: %v", err)
 	}
 }
 

@@ -1088,7 +1088,7 @@ func connectionInfosForPlugin(plugin *config.PluginDef, integrationAuthTypes []s
 	if plugin == nil {
 		return nil
 	}
-	manifestProvider := plugin.ManifestProvider()
+	manifestProvider := config.MergedManifestProvider(plugin.ManifestProvider(), plugin)
 
 	var infos []connectionDefInfo
 	if info, ok := connectionInfoFromAuth(config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {

@@ -29,7 +29,8 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 		mcpConnection := config.PluginConnectionName
 
 		if intg.Plugin != nil {
-			plan, err := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestProvider())
+			manifestProvider := config.MergedManifestProvider(intg.Plugin.ManifestProvider(), intg.Plugin)
+			plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
 			if err != nil {
 				return ConnectionMaps{}, fmt.Errorf("integration %q: %w", name, err)
 			}
