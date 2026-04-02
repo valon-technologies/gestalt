@@ -73,26 +73,8 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "artifacts", "darwin", "arm64", "provider"), []byte("provider"), 0755); err != nil {
 		t.Fatalf("WriteFile(provider): %v", err)
 	}
-	manifest := `{
-  "source": "github.com/acme/plugins/provider",
-  "version": "0.1.0",
-  "kinds": ["provider"],
-  "provider": {},
-  "artifacts": [
-    {
-      "os": "darwin",
-      "arch": "arm64",
-      "path": "artifacts/darwin/arm64/provider",
-      "sha256": "` + sha256Hex("provider") + `"
-    }
-  ],
-  "entrypoints": {
-    "provider": {
-      "artifact_path": "artifacts/darwin/arm64/provider"
-    }
-  }
-}`
-	if err := os.WriteFile(filepath.Join(src, ManifestFile), []byte(manifest), 0644); err != nil {
+	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider")))
+	if err := os.WriteFile(filepath.Join(src, ManifestFile), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
 

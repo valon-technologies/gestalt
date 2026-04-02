@@ -94,20 +94,22 @@ datastore:
   config:
     path: ./gestalt.db
 
-integrations:
+providers:
   httpbin:
     display_name: HTTPBin
     description: Public request and response inspection API
-    mcp_tool_prefix: httpbin_
-    plugin:
-      openapi: ./openapi/httpbin.yaml
-      openapi_connection: public
-      default_connection: public
-      connections:
-        public:
-          mode: none
-          auth:
-            type: none
+    connections:
+      public:
+        mode: none
+        auth:
+          type: none
+    surfaces:
+      openapi:
+        document: ./openapi/httpbin.yaml
+        connection: public
+    mcp:
+      enabled: true
+      tool_prefix: httpbin_
 ```
 
 This is the smallest useful Gestalt config:
@@ -115,7 +117,7 @@ This is the smallest useful Gestalt config:
 - one explicit server block
 - no platform auth
 - SQLite storage
-- one inline OpenAPI integration
+- one inline OpenAPI provider
 
 ## Validate And Start It
 

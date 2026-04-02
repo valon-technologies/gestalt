@@ -23,18 +23,20 @@ paths:
 ```
 
 ```yaml
-integrations:
+providers:
   httpbin:
-    mcp_tool_prefix: httpbin_
-    plugin:
-      openapi: ./openapi/httpbin.yaml
-      openapi_connection: public
-      default_connection: public
-      connections:
-        public:
-          mode: none
-          auth:
-            type: none
+    mcp:
+      enabled: true
+      tool_prefix: httpbin_
+    connections:
+      public:
+        mode: none
+        auth:
+          type: none
+    surfaces:
+      openapi:
+        document: ./openapi/httpbin.yaml
+        connection: public
 ```
 
 Start the server and `/mcp` is mounted automatically.
@@ -44,27 +46,30 @@ Start the server and `/mcp` is mounted automatically.
 Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
 
 ```yaml
-integrations:
+providers:
   notion:
-    mcp_tool_prefix: notion_
-    plugin:
-      openapi: ./openapi/notion.yaml
-      openapi_connection: REST
-      mcp_url: https://mcp.notion.com/mcp
-      mcp_connection: MCP
-      default_connection: REST
-      connections:
-        REST:
-          mode: user
-          auth:
-            type: bearer
-            credentials:
-              - name: token
-                label: API Token
-        MCP:
-          mode: user
-          auth:
-            type: mcp_oauth
+    mcp:
+      enabled: true
+      tool_prefix: notion_
+    connections:
+      REST:
+        mode: user
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: API Token
+      MCP:
+        mode: user
+        auth:
+          type: mcp_oauth
+    surfaces:
+      openapi:
+        document: ./openapi/notion.yaml
+        connection: REST
+      mcp:
+        url: https://mcp.notion.com/mcp
+        connection: MCP
 ```
 
 This gives you:

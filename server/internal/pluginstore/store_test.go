@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -509,11 +508,10 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 			},
 		},
 	}
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
-		t.Fatalf("MarshalIndent manifest: %v", err)
+		t.Fatalf("EncodeManifest: %v", err)
 	}
-	manifestBytes = append(manifestBytes, '\n')
 
 	archivePath := filepath.Join(dir, "mismatch.tar.gz")
 	out, err := os.Create(archivePath)

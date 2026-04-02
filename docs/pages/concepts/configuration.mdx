@@ -36,7 +36,7 @@ auth: {}
 datastore: {}
 secrets: {}
 telemetry: {}
-integrations: {}
+providers: {}
 bindings: {}
 server: {}
 egress: {}
@@ -52,7 +52,7 @@ Each block controls a distinct part of the runtime:
 | `datastore` | Where Gestalt stores users, tokens, and related runtime state. |
 | `secrets` | How `secret://...` values are resolved. |
 | `telemetry` | Observability: traces, metrics, and structured logs. |
-| `integrations` | The provider graph users call. |
+| `providers` | The provider graph users call. |
 | `bindings` | Additional inbound surfaces. |
 | `egress` | Outbound allow or deny policy plus credential grants. |
 | `ui` | Optional custom web UI plugin. |
@@ -110,9 +110,9 @@ gestaltd validate --config ./config.yaml
 
 Paths in config are resolved relative to the config file directory, not the process working directory. This matters for:
 
-- `integrations.<name>.icon_file`
-- `plugin.command`
-- local `plugin.package` paths
+- `providers.<name>.icon_file`
+- `providers.<name>.from.command`
+- local `providers.<name>.from.package` paths
 
 That makes configs portable across local runs, Docker mounts, and Kubernetes volumes.
 
@@ -152,7 +152,7 @@ datastore:
   config:
     path: ./gestalt.db
 
-integrations: {}
+providers: {}
 ```
 
 That is enough to boot a real server. Everything else is additive.

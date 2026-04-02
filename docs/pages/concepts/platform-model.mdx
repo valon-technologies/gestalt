@@ -7,7 +7,7 @@ startup path from configuration to invocation.
 ## The Core Model
 
 At the highest level, `gestaltd` loads a declarative config file, bootstraps the
-platform components that config names, builds providers from integrations, and
+platform components that config names, builds providers from `providers:`, and
 exposes those providers through shared request surfaces.
 
 ## The Main Primitives
@@ -17,7 +17,7 @@ exposes those providers through shared request surfaces.
 | `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
 | `datastore` | Persists users, API tokens, integration tokens, and some egress data. |
 | `secrets` | Resolves `secret://...` references during bootstrap. |
-| `integrations` | Define the provider graph users call. Each integration has one `plugin` block plus optional metadata. |
+| `providers` | Define the provider graph users call. Each named entry is provider-shaped directly. |
 | `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
 | `egress` | Policy and credential rules for outbound traffic. |
 
@@ -36,7 +36,7 @@ This is the actual shape of startup:
 9. Resolve `secret://...` references across the rest of the config.
 10. Build the platform auth provider.
 11. Build the datastore.
-12. Build providers from `integrations`.
+12. Build providers from `providers`.
 13. Build the shared invocation broker.
 14. Build bindings.
 15. Start the HTTP server, then start bindings once providers are ready.
@@ -48,7 +48,7 @@ built from it.
 
 That distinction matters:
 
-- you edit `integrations.<name>` in YAML
+- you edit `providers.<name>` in YAML
 - `gestaltd` turns that entry into a provider at startup
 - every request surface invokes the provider, not the raw YAML
 
@@ -56,8 +56,8 @@ Providers come from three sources:
 
 | Source | How it works |
 | --- | --- |
-| Inline declarative provider | Built from `plugin.base_url` plus `plugin.operations`. |
-| Inline spec-backed provider | Built from `plugin.openapi`, `plugin.graphql_url`, or `plugin.mcp_url`. |
+| Inline declarative provider | Built from `surfaces.rest`. |
+| Inline spec-backed provider | Built from `surfaces.openapi`, `surfaces.graphql`, or `surfaces.mcp`. |
 | Packaged provider plugin | Spawned as a separate process and connected over the plugin protocol. |
 
 A packaged plugin can also layer in spec-backed surfaces, which is how hybrid
@@ -65,14 +65,13 @@ providers work.
 
 ## Connection Resolution
 
-Gestalt resolves credentials through either the implicit plugin connection or a
-set of named connections.
+Gestalt resolves credentials through `connections.default` plus any optional
+named connections.
 
-- `plugin.auth` and `plugin.connection_params` define the implicit `plugin` connection
-- `plugin.connections` defines named connections for inline providers
-- packaged providers define their own named connections in the manifest
-- `openapi_connection`, `graphql_connection`, `mcp_connection`, and
-  `default_connection` decide which connection each surface uses
+- `connections.default` is the primary connection
+- `connections.<name>` defines additional named connections
+- only `connections.default` can carry `params` and `discovery`
+- each configured surface chooses its connection explicitly when needed
 
 Each connection has one mode:
 
@@ -117,7 +116,7 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 
 ## What You Actually Program Against
 
-As a Gestalt operator, you compose top-level config blocks, integration
-definitions, plugin definitions, connection definitions, binding definitions,
+As a Gestalt operator, you compose top-level config blocks, provider
+definitions, connection definitions, surface definitions, binding definitions,
 egress rules, and optional plugin manifests and packages. Everything else is a
 consequence of those inputs.
