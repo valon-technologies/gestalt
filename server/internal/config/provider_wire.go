@@ -13,6 +13,7 @@ type providerWire struct {
 	Description       string                             `yaml:"description"`
 	IconFile          string                             `yaml:"icon_file"`
 	Config            yaml.Node                          `yaml:"config"`
+	BaseURL           string                             `yaml:"base_url"`
 	From              providerSourceWire                 `yaml:"from"`
 	Connections       map[string]*providerConnectionWire `yaml:"connections"`
 	Headers           map[string]string                  `yaml:"headers"`
@@ -168,6 +169,9 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 	if wire.Surfaces.MCP != nil {
 		plugin.MCPURL = wire.Surfaces.MCP.URL
 		plugin.MCPConnection = remapWireConnectionName(wire.Surfaces.MCP.Connection)
+	}
+	if wire.BaseURL != "" {
+		plugin.BaseURL = wire.BaseURL
 	}
 
 	*i = IntegrationDef{
