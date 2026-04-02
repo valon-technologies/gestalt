@@ -18,5 +18,5 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("firestore: parsing config: %w", err)
 	}
-	return New(cfg.ProjectID, cfg.Database, deps.EncryptionKey)
+	return New(cfg.ProjectID, cfg.Database, deps.EncryptionKey, deps.LegacyEncryptionKey)
 }

@@ -20,5 +20,5 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 	if cfg.Path == "" {
 		cfg.Path = "./gestalt.db"
 	}
-	return New(cfg.Path, deps.EncryptionKey)
+	return New(cfg.Path, deps.EncryptionKey, deps.LegacyEncryptionKey)
 }

@@ -55,10 +55,11 @@ const (
 )
 
 type Config struct {
-	Table         string
-	Region        string
-	Endpoint      string
-	EncryptionKey []byte
+	Table               string
+	Region              string
+	Endpoint            string
+	EncryptionKey       []byte
+	LegacyEncryptionKey []byte
 }
 
 type Store struct {
@@ -68,7 +69,7 @@ type Store struct {
 }
 
 func New(cfg Config) (*Store, error) {
-	enc, err := crypto.NewAESGCM(cfg.EncryptionKey)
+	enc, err := crypto.NewAESGCMWithFallback(cfg.EncryptionKey, cfg.LegacyEncryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb: creating encryptor: %w", err)
 	}

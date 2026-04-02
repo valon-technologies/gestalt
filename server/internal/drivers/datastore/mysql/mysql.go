@@ -49,7 +49,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dsn string, encryptionKey []byte) (*Store, error) {
+func New(dsn string, encryptionKey []byte, fallbackKeys ...[]byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parsing dsn: %w", err)
@@ -61,7 +61,7 @@ func New(dsn string, encryptionKey []byte) (*Store, error) {
 		return nil, fmt.Errorf("opening mysql: %w", err)
 	}
 
-	s, err := sqlstore.OpenDB(db, "mysql", encryptionKey, dialect{})
+	s, err := sqlstore.OpenDB(db, "mysql", encryptionKey, dialect{}, fallbackKeys...)
 	if err != nil {
 		return nil, err
 	}

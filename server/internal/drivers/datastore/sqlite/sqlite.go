@@ -52,7 +52,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dbPath string, encryptionKey []byte) (*Store, error) {
+func New(dbPath string, encryptionKey []byte, fallbackKeys ...[]byte) (*Store, error) {
 	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -60,7 +60,7 @@ func New(dbPath string, encryptionKey []byte) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	enc, err := crypto.NewAESGCM(encryptionKey)
+	enc, err := crypto.NewAESGCMWithFallback(encryptionKey, fallbackKeys...)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("creating encryptor: %w", err)

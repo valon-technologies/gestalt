@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -153,7 +152,7 @@ func runServer(env *bootstrapEnv) error {
 		ConnectionAuth:    result.ConnectionAuth,
 		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
-		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
+		StateSecret:       result.EncryptionKey,
 		APITokenTTL:       apiTokenTTL,
 		Readiness: composeReadiness(
 			readinessFromChannel(result.ProvidersReady, "providers loading"),

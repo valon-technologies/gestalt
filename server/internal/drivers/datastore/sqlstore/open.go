@@ -15,19 +15,19 @@ const (
 	DefaultConnMaxLifetime = 5 * time.Minute
 )
 
-func Open(driverName, dsn string, encryptionKey []byte, d Dialect) (*Store, error) {
+func Open(driverName, dsn string, encryptionKey []byte, d Dialect, fallbackKeys ...[]byte) (*Store, error) {
 	db, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", driverName, err)
 	}
-	return openDB(db, driverName, encryptionKey, d)
+	return openDB(db, driverName, encryptionKey, d, fallbackKeys...)
 }
 
-func OpenDB(db *sql.DB, driverName string, encryptionKey []byte, d Dialect) (*Store, error) {
-	return openDB(db, driverName, encryptionKey, d)
+func OpenDB(db *sql.DB, driverName string, encryptionKey []byte, d Dialect, fallbackKeys ...[]byte) (*Store, error) {
+	return openDB(db, driverName, encryptionKey, d, fallbackKeys...)
 }
 
-func openDB(db *sql.DB, name string, encryptionKey []byte, d Dialect) (*Store, error) {
+func openDB(db *sql.DB, name string, encryptionKey []byte, d Dialect, fallbackKeys ...[]byte) (*Store, error) {
 	db.SetMaxOpenConns(DefaultMaxOpenConns)
 	db.SetMaxIdleConns(DefaultMaxIdleConns)
 	db.SetConnMaxLifetime(DefaultConnMaxLifetime)
@@ -37,7 +37,7 @@ func openDB(db *sql.DB, name string, encryptionKey []byte, d Dialect) (*Store, e
 		return nil, fmt.Errorf("pinging %s: %w", name, err)
 	}
 
-	enc, err := crypto.NewAESGCM(encryptionKey)
+	enc, err := crypto.NewAESGCMWithFallback(encryptionKey, fallbackKeys...)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("creating encryptor: %w", err)

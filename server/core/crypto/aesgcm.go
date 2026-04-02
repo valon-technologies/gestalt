@@ -10,10 +10,34 @@ import (
 )
 
 type AESGCMEncryptor struct {
-	gcm cipher.AEAD
+	gcm          cipher.AEAD
+	fallbackGCMs []cipher.AEAD
 }
 
 func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
+	return NewAESGCMWithFallback(key)
+}
+
+func NewAESGCMWithFallback(key []byte, fallbackKeys ...[]byte) (*AESGCMEncryptor, error) {
+	gcm, err := newGCM(key)
+	if err != nil {
+		return nil, err
+	}
+	fallbackGCMs := make([]cipher.AEAD, 0, len(fallbackKeys))
+	for _, fallbackKey := range fallbackKeys {
+		if len(fallbackKey) == 0 {
+			continue
+		}
+		fallbackGCM, err := newGCM(fallbackKey)
+		if err != nil {
+			return nil, err
+		}
+		fallbackGCMs = append(fallbackGCMs, fallbackGCM)
+	}
+	return &AESGCMEncryptor{gcm: gcm, fallbackGCMs: fallbackGCMs}, nil
+}
+
+func newGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
@@ -22,7 +46,7 @@ func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cipher.NewGCM: %w", err)
 	}
-	return &AESGCMEncryptor{gcm: gcm}, nil
+	return gcm, nil
 }
 
 func (e *AESGCMEncryptor) Encrypt(plaintext string) (string, error) {
@@ -61,12 +85,26 @@ func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding) (string,
 	if err != nil {
 		return "", fmt.Errorf("base64 decode: %w", err)
 	}
-	nonceSize := e.gcm.NonceSize()
+	plaintext, err := decryptWithGCM(e.gcm, data)
+	if err == nil {
+		return plaintext, nil
+	}
+	for _, fallbackGCM := range e.fallbackGCMs {
+		plaintext, fallbackErr := decryptWithGCM(fallbackGCM, data)
+		if fallbackErr == nil {
+			return plaintext, nil
+		}
+	}
+	return "", err
+}
+
+func decryptWithGCM(gcm cipher.AEAD, data []byte) (string, error) {
+	nonceSize := gcm.NonceSize()
 	if len(data) < nonceSize {
 		return "", fmt.Errorf("ciphertext too short")
 	}
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plaintext, err := e.gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return "", fmt.Errorf("decrypt: %w", err)
 	}

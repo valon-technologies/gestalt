@@ -57,8 +57,8 @@ type apiTokenDoc struct {
 	UpdatedAt   time.Time  `bson:"updated_at"`
 }
 
-func New(uri, database string, encryptionKey []byte) (*Store, error) {
-	enc, err := crypto.NewAESGCM(encryptionKey)
+func New(uri, database string, encryptionKey []byte, fallbackKeys ...[]byte) (*Store, error) {
+	enc, err := crypto.NewAESGCMWithFallback(encryptionKey, fallbackKeys...)
 	if err != nil {
 		return nil, fmt.Errorf("mongodb: creating encryptor: %w", err)
 	}

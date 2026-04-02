@@ -88,6 +88,61 @@ func TestEncryptionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncryptionFallbackDecryptsLegacyCiphertext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	legacyKey := coretesting.EncryptionKey(t)
+	currentKey := coretesting.EncryptionKey(t)
+
+	legacyStore, err := New(dbPath, legacyKey)
+	if err != nil {
+		t.Fatalf("New legacy store: %v", err)
+	}
+	if err := legacyStore.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate legacy store: %v", err)
+	}
+
+	user, err := legacyStore.FindOrCreateUser(ctx, "legacy@example.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	now := time.Now().Truncate(time.Second)
+	if err := legacyStore.StoreToken(ctx, &core.IntegrationToken{
+		ID:           "legacy-tok-1",
+		UserID:       user.ID,
+		Integration:  "test",
+		Instance:     "i1",
+		AccessToken:  "legacy-access-token",
+		RefreshToken: "legacy-refresh-token",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("StoreToken legacy: %v", err)
+	}
+	if err := legacyStore.Close(); err != nil {
+		t.Fatalf("Close legacy store: %v", err)
+	}
+
+	currentStore, err := New(dbPath, currentKey, legacyKey)
+	if err != nil {
+		t.Fatalf("New current store: %v", err)
+	}
+	t.Cleanup(func() { _ = currentStore.Close() })
+
+	got, err := currentStore.Token(ctx, user.ID, "test", "", "i1")
+	if err != nil {
+		t.Fatalf("Token with fallback: %v", err)
+	}
+	if got.AccessToken != "legacy-access-token" {
+		t.Errorf("AccessToken: got %q, want %q", got.AccessToken, "legacy-access-token")
+	}
+	if got.RefreshToken != "legacy-refresh-token" {
+		t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, "legacy-refresh-token")
+	}
+}
+
 func TestWALMode(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
