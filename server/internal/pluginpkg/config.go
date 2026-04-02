@@ -1,12 +1,12 @@
 package pluginpkg
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/valon-technologies/gestalt/server/internal/jsonyaml"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -23,8 +23,8 @@ func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.M
 		return fmt.Errorf("read config schema %q: %w", schemaName, err)
 	}
 
-	var schemaDoc any
-	if err := json.Unmarshal(data, &schemaDoc); err != nil {
+	schemaDoc, err := jsonyaml.Decode(data)
+	if err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
 

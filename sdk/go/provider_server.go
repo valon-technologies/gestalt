@@ -11,8 +11,9 @@ import (
 )
 
 // ConfigSchemaProvider is an optional interface a [Provider] can implement
-// to declare a JSON Schema for the provider-level configuration it accepts.
-// The host uses this schema to validate configuration before starting the plugin.
+// to declare a JSON Schema document for the provider-level configuration it accepts.
+// The returned schema document may be encoded as JSON or YAML.
+// The method name is retained for wire compatibility.
 type ConfigSchemaProvider interface {
 	ConfigSchemaJSON() string
 }
@@ -54,9 +55,9 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
 	}
-	var configSchema string
+	var configSchemaDocument string
 	if csp, ok := s.provider.(ConfigSchemaProvider); ok {
-		configSchema = csp.ConfigSchemaJSON()
+		configSchemaDocument = csp.ConfigSchemaJSON()
 	}
 	return &proto.ProviderMetadata{
 		Name:                   s.provider.Name(),
@@ -66,7 +67,7 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 		ConnectionParams:       connParams,
 		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
-		ConfigSchemaJson:       configSchema,
+		ConfigSchemaJson:       configSchemaDocument,
 		AuthTypes:              authTypes(s.provider),
 	}, nil
 }

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const testConfigSchema = `{
+const testConfigSchemaJSON = `{
 	"type": "object",
 	"properties": {
 		"api_key": {"type": "string"},
@@ -22,18 +22,28 @@ const testConfigSchema = `{
 	"required": ["api_key"]
 }`
 
+const testConfigSchemaYAML = `type: object
+properties:
+  api_key:
+    type: string
+  retries:
+    type: integer
+required:
+  - api_key
+`
+
 func TestValidateConfigSchema_Valid(t *testing.T) {
 	t.Parallel()
 	config := map[string]any{"api_key": "sk-123", "retries": 3}
-	if err := validateConfigSchema(config, testConfigSchema); err != nil {
+	if err := validateConfigSchema(config, testConfigSchemaJSON); err != nil {
 		t.Fatalf("expected valid config to pass: %v", err)
 	}
 }
 
-func TestValidateConfigSchema_MissingRequired(t *testing.T) {
+func TestValidateConfigSchemaJSON_MissingRequired(t *testing.T) {
 	t.Parallel()
 	config := map[string]any{"retries": 3}
-	err := validateConfigSchema(config, testConfigSchema)
+	err := validateConfigSchema(config, testConfigSchemaJSON)
 	if err == nil {
 		t.Fatal("expected error for missing required field")
 	}
@@ -42,10 +52,18 @@ func TestValidateConfigSchema_MissingRequired(t *testing.T) {
 	}
 }
 
-func TestValidateConfigSchema_EmptyConfigWithRequired(t *testing.T) {
+func TestValidateConfigSchemaYAML_Valid(t *testing.T) {
+	t.Parallel()
+	config := map[string]any{"api_key": "sk-123", "retries": 3}
+	if err := validateConfigSchema(config, testConfigSchemaYAML); err != nil {
+		t.Fatalf("expected valid config to pass: %v", err)
+	}
+}
+
+func TestValidateConfigSchemaJSON_EmptyConfigWithRequired(t *testing.T) {
 	t.Parallel()
 	config := map[string]any{}
-	err := validateConfigSchema(config, testConfigSchema)
+	err := validateConfigSchema(config, testConfigSchemaJSON)
 	if err == nil {
 		t.Fatal("expected error for empty config with required fields")
 	}
@@ -54,12 +72,12 @@ func TestValidateConfigSchema_EmptyConfigWithRequired(t *testing.T) {
 	}
 }
 
-func TestValidateConfigSchema_InvalidSchema(t *testing.T) {
+func TestValidateConfigSchema_InvalidSchemaDocument(t *testing.T) {
 	t.Parallel()
 	config := map[string]any{"key": "val"}
 	err := validateConfigSchema(config, `{not valid json`)
 	if err == nil {
-		t.Fatal("expected error for invalid schema JSON")
+		t.Fatal("expected error for invalid schema document")
 	}
 }
 
@@ -118,7 +136,7 @@ func TestNewRemoteProvider_SchemaRejectsInvalidConfig(t *testing.T) {
 		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
+			ConfigSchemaJson: testConfigSchemaJSON,
 		},
 	}
 	client := newProviderPluginClient(t, stub)
@@ -138,7 +156,27 @@ func TestNewRemoteProvider_SchemaAcceptsValidConfig(t *testing.T) {
 		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
+			ConfigSchemaJson: testConfigSchemaJSON,
+		},
+	}
+	client := newProviderPluginClient(t, stub)
+	prov, err := NewRemoteProvider(context.Background(), client, "test-plugin", map[string]any{"api_key": "sk-test"})
+	if err != nil {
+		t.Fatalf("expected valid config to pass: %v", err)
+	}
+	if prov.Name() != "test-plugin" {
+		t.Fatalf("unexpected name: %q", prov.Name())
+	}
+}
+
+func TestNewRemoteProvider_YAMLSchemaAcceptsValidConfig(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubProviderPluginServer{
+		metadata: &proto.ProviderMetadata{
+			Name:             "test-plugin",
+			DisplayName:      "Test Plugin",
+			ConfigSchemaJson: testConfigSchemaYAML,
 		},
 	}
 	client := newProviderPluginClient(t, stub)
@@ -158,7 +196,7 @@ func TestNewRemoteProvider_SchemaRejectsNilConfig(t *testing.T) {
 		metadata: &proto.ProviderMetadata{
 			Name:             "test-plugin",
 			DisplayName:      "Test Plugin",
-			ConfigSchemaJson: testConfigSchema,
+			ConfigSchemaJson: testConfigSchemaJSON,
 		},
 	}
 	client := newProviderPluginClient(t, stub)

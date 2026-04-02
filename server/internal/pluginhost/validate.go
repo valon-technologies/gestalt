@@ -1,15 +1,15 @@
 package pluginhost
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/valon-technologies/gestalt/server/internal/jsonyaml"
 )
 
-func validateConfigSchema(config map[string]any, schemaJSON string) error {
-	var schemaDoc any
-	if err := json.Unmarshal([]byte(schemaJSON), &schemaDoc); err != nil {
+func validateConfigSchema(config map[string]any, schemaText string) error {
+	schemaDoc, err := jsonyaml.Decode([]byte(schemaText))
+	if err != nil {
 		return fmt.Errorf("invalid config schema: %w", err)
 	}
 	compiler := jsonschema.NewCompiler()

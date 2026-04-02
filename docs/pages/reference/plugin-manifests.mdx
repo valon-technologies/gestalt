@@ -203,6 +203,7 @@ webui:
 - Declarative-only provider packages do not require `artifacts`.
 - Executable provider packages do require `artifacts` plus `provider.exec.artifact_path`.
 - `config_schema_path` validates `providers.*.config`.
+- Config schemas may be written in JSON or YAML.
 - Only `provider.connections.default` may define `params` and `discovery`.
 - `provider.surfaces.rest`, `provider.surfaces.openapi`, and `provider.surfaces.graphql` are mutually exclusive. `provider.surfaces.mcp` may be added alongside any of them.
 

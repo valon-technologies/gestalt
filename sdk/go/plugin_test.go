@@ -48,10 +48,10 @@ func (p *startableStubProvider) Start(_ context.Context, name string, config map
 
 type schemaStubProvider struct {
 	stubProvider
-	schema string
+	schemaDocument string
 }
 
-func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schema }
+func (p *schemaStubProvider) ConfigSchemaJSON() string { return p.schemaDocument }
 
 type manualAuthStubProvider struct {
 	stubProvider
@@ -288,7 +288,7 @@ func TestProviderServerConfigSchema(t *testing.T) {
 			name:     "test-provider",
 			connMode: gestalt.ConnectionModeNone,
 		},
-		schema: `{"type":"object"}`,
+		schemaDocument: `{"type":"object"}`,
 	}
 
 	client := newProviderPluginClient(t, prov)

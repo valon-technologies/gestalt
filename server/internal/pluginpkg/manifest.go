@@ -13,6 +13,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/jsonyaml"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -54,34 +55,6 @@ func isYAMLFile(path string) bool {
 	return ext == ".yaml" || ext == ".yml"
 }
 
-func yamlToJSON(data []byte) ([]byte, error) {
-	var doc any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil, fmt.Errorf("parse manifest YAML: %w", err)
-	}
-	doc = normalizeYAML(doc)
-	return json.Marshal(doc)
-}
-
-func normalizeYAML(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(val))
-		for k, v := range val {
-			out[k] = normalizeYAML(v)
-		}
-		return out
-	case []any:
-		out := make([]any, len(val))
-		for i, v := range val {
-			out[i] = normalizeYAML(v)
-		}
-		return out
-	default:
-		return val
-	}
-}
-
 func DecodeManifest(data []byte) (*pluginmanifestv1.Manifest, error) {
 	return DecodeManifestFormat(data, ManifestFormatJSON)
 }
@@ -110,21 +83,15 @@ func decodeManifest(data []byte, format string, allowMissingArtifactDigests bool
 }
 
 func validateManifestSchema(data []byte, format string) error {
-	jsonData := data
-	if format == ManifestFormatYAML {
-		var err error
-		jsonData, err = yamlToJSON(data)
-		if err != nil {
-			return err
+	doc, err := jsonyaml.Decode(data)
+	if err != nil {
+		if format == ManifestFormatYAML {
+			return fmt.Errorf("parse manifest YAML: %w", err)
 		}
-	}
-
-	var doc any
-	if err := json.Unmarshal(jsonData, &doc); err != nil {
 		return fmt.Errorf("parse manifest JSON: %w", err)
 	}
-	var schemaDoc any
-	if err := json.Unmarshal(pluginmanifestv1.ManifestJSONSchema, &schemaDoc); err != nil {
+	schemaDoc, err := jsonyaml.Decode(pluginmanifestv1.ManifestJSONSchema)
+	if err != nil {
 		return fmt.Errorf("parse embedded manifest schema: %w", err)
 	}
 
