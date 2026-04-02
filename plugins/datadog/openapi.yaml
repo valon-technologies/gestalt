@@ -3,7 +3,7 @@ info:
   title: Datadog
   description: Dashboards, monitors, metrics, logs, incidents, downtimes, and RUM
 servers:
-  - url: https://api.us5.datadoghq.com
+  - url: https://api.datadoghq.com
 security:
   - DatadogApiKey: []
 

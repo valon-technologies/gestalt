@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -85,6 +87,98 @@ func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
 	case got := <-gotHeader:
 		if got != configValue {
 			t.Fatalf("%s = %q, want %q", headerName, got, configValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
+	}
+}
+
+func TestBootstrap_ConfigBaseURLOverridesManifestBaseURL(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	gotPath := make(chan string, 1)
+	manifestSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- "manifest:" + r.URL.Path
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, manifestSrv)
+
+	overrideSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- "override:" + r.URL.Path
+		writeTestJSON(w, map[string]any{"ok": true})
+	}))
+	testutil.CloseOnCleanup(t, overrideSrv)
+
+	pluginDir := t.TempDir()
+	openapiPath := filepath.Join(pluginDir, "openapi.json")
+	if err := os.WriteFile(openapiPath, []byte(`{
+  "openapi": "3.0.0",
+  "info": { "title": "Base URL Override Test API" },
+  "servers": [{ "url": "`+manifestSrv.URL+`" }],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "list_items",
+        "summary": "List items",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.json): %v", err)
+	}
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.json): %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/sample",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			OpenAPI: "openapi.json",
+		},
+	}
+	cfg := validConfig()
+	cfg.Integrations = map[string]config.IntegrationDef{
+		"sample": {
+			Plugin: &config.PluginDef{
+				Source:               manifest.Source,
+				IsDeclarative:        true,
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest:     manifest,
+				BaseURL:              overrideSrv.URL,
+			},
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("sample")
+	if err != nil {
+		t.Fatalf("Providers.Get: %v", err)
+	}
+
+	execResult, err := prov.Execute(ctx, "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if execResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", execResult.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotPath:
+		if got != "override:/items" {
+			t.Fatalf("upstream request = %q, want %q", got, "override:/items")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for upstream request")

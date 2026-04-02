@@ -1093,11 +1093,16 @@ func mergedManifestProviderConfig(manifest *pluginmanifestv1.Manifest, plugin *c
 	}
 	headers := mergedHeaders(manifest.Provider, plugin)
 	managedParameters := mergedManagedParameters(manifest.Provider, plugin)
-	if len(headers) == 0 && len(managedParameters) == 0 {
+	baseURL := manifest.Provider.BaseURL
+	if plugin != nil && plugin.BaseURL != "" {
+		baseURL = plugin.BaseURL
+	}
+	if len(headers) == 0 && len(managedParameters) == 0 && baseURL == manifest.Provider.BaseURL {
 		return manifest
 	}
 	cloned := *manifest
 	providerCopy := *manifest.Provider
+	providerCopy.BaseURL = baseURL
 	providerCopy.Headers = headers
 	providerCopy.ManagedParameters = managedParameters
 	cloned.Provider = &providerCopy
