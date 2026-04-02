@@ -9,7 +9,7 @@ import { Cards } from 'nextra/components'
 | Piece | What it does |
 | --- | --- |
 | `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
-| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, integrations, bindings, and egress policy. |
+| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, providers, bindings, and egress policy. |
 | `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd init`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
 | Deploy assets | `server/Dockerfile`, `client/Dockerfile`, and a Helm chart for production deployment paths. |
 
@@ -17,7 +17,7 @@ import { Cards } from 'nextra/components'
 
 ### Configuration
 
-Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, integrations, bindings, and egress rules.
+Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, providers, bindings, and egress rules.
 
 ### Prepared State
 
@@ -25,7 +25,7 @@ If your config points at remote OpenAPI specs, GraphQL endpoints, or packaged pl
 
 ### Providers And Invocation
 
-Each integration becomes a provider. All request surfaces share the same invocation broker, so token lookup, refresh, connection mode, instance selection, and auditing work the same way everywhere.
+Each configured provider becomes a runtime provider. All request surfaces share the same invocation broker, so token lookup, refresh, connection mode, instance selection, and auditing work the same way everywhere.
 
 ### Surfaces
 

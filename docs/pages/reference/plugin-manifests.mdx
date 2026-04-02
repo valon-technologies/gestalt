@@ -8,17 +8,12 @@ Gestalt plugin packages are described by a manifest file named one of:
 
 YAML is the easiest format to author by hand.
 
-## Manifest Kinds
+## Top-Level Shape
 
-Supported manifest kinds are:
+A manifest can define exactly one of:
 
 - `provider`
 - `webui`
-
-A package can contain:
-
-- a provider only
-- a UI bundle only
 
 ## Common Fields
 
@@ -29,11 +24,9 @@ A package can contain:
 | `display_name` | Human-readable label. |
 | `description` | Human-readable description. |
 | `icon_file` | Relative path to an SVG icon bundled with the package. |
-| `kinds` | The plugin kinds contained in the package. |
 | `provider` | Provider metadata and optional declarative surfaces. |
-| `webui` | UI metadata for `webui` packages. |
+| `webui` | UI metadata for UI-only packages. |
 | `artifacts` | Packaged executable artifacts keyed by platform. |
-| `entrypoints` | Which packaged executable should be started for the provider. |
 
 ## Basic YAML Manifest
 
@@ -45,24 +38,26 @@ version: 0.1.0
 display_name: Support API
 description: Small ticket API
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
-  base_url: https://api.support.example.com
-  auth:
-    type: bearer
-    credentials:
-      - name: token
-        label: API Token
-  operations:
-    - name: list_tickets
-      description: Return open tickets
-      method: GET
-      path: /tickets
-    - name: get_ticket
-      description: Return one ticket
-      method: GET
-      path: /tickets/{ticket_id}
+  connections:
+    default:
+      auth:
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+  surfaces:
+    rest:
+      base_url: https://api.support.example.com
+      operations:
+        - name: list_tickets
+          description: Return open tickets
+          method: GET
+          path: /tickets
+        - name: get_ticket
+          description: Return one ticket
+          method: GET
+          path: /tickets/{ticket_id}
 ```
 
 Use this style when:
@@ -76,10 +71,11 @@ Use this style when:
 This example shows a provider package with:
 
 - a config schema
+- an executable entrypoint
 - OpenAPI and upstream MCP surfaces
-- multiple named connections
 - managed parameters
 - allowed operation aliases
+- multiple connections
 
 ```yaml
 source: github.com/acme/plugins/support
@@ -87,15 +83,10 @@ version: 1.2.3
 display_name: Support
 description: Tickets, knowledge base, and MCP workspace tools
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
   config_schema_path: schemas/config.schema.json
-  openapi: openapi.yaml
-  mcp_url: https://mcp.support.example.com/mcp
-  openapi_connection: api
-  mcp_connection: mcp
-  default_connection: api
+  exec:
+    artifact_path: artifacts/linux/amd64/provider
   headers:
     X-App-Version: "2026-04-01"
   managed_parameters:
@@ -103,7 +94,7 @@ provider:
       name: workspace_id
       value: primary
   connections:
-    api:
+    default:
       mode: user
       auth:
         type: oauth2
@@ -114,26 +105,47 @@ provider:
         scopes:
           - tickets.read
           - tickets.write
+      params:
+        workspace_id:
+          required: true
+          from: discovery
+      discovery:
+        url: https://api.support.example.com/workspaces
+        id_path: id
+        name_path: name
+        metadata:
+          workspace_id: id
     mcp:
       mode: user
       auth:
         type: mcp_oauth
+  surfaces:
+    openapi:
+      document: openapi.yaml
+    mcp:
+      url: https://mcp.support.example.com/mcp
+      connection: mcp
   allowed_operations:
     tickets.list:
       alias: list_tickets
     tickets.get:
       alias: get_ticket
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/provider
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 ```
 
 Use this style when:
 
 - the provider includes executable logic
-- a reusable package should ship its own auth and connection model
+- a reusable package should ship its own connection model
 - you want packaged custom code plus spec-backed operations
 
 ## Post-Connect Discovery
 
-Declarative providers can define `provider.post_connect_discovery` to perform one
+Providers can define `provider.connections.default.discovery` to perform one
 extra authenticated lookup immediately after OAuth or manual connect succeeds.
 Gestalt calls the configured URL with the freshly acquired access token, parses
 the returned items, and turns them into candidate connections.
@@ -144,22 +156,23 @@ workspace.
 
 ```yaml
 provider:
-  auth:
-    type: oauth2
-    authorization_url: https://auth.example.com/authorize
-    token_url: https://auth.example.com/token
-  post_connect_discovery:
-    url: https://api.example.com/me/workspaces
-    items_path: data
-    id_path: id
-    name_path: display_name
-    metadata_mapping:
-      workspace_id: id
-  connection:
-    workspace_id:
-      required: true
-      description: Workspace identifier discovered after connect
-      from: discovery
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorization_url: https://auth.example.com/authorize
+        token_url: https://auth.example.com/token
+      params:
+        workspace_id:
+          required: true
+          description: Workspace identifier discovered after connect
+          from: discovery
+      discovery:
+        url: https://api.example.com/me/workspaces
+        id_path: id
+        name_path: display_name
+        metadata:
+          workspace_id: id
 ```
 
 Behavior:
@@ -169,29 +182,8 @@ Behavior:
 - if discovery returns multiple items, Gestalt asks the user to choose one
 - if discovery returns zero items, connect fails
 
-`metadata_mapping` populates connection metadata, and connection fields marked
+`metadata` populates connection metadata, and connection fields marked
 with `from: discovery` are satisfied from that metadata instead of user input.
-
-## Runtime Manifest Example
-
-```yaml
-source: github.com/acme/plugins/notifier-runtime
-version: 0.4.0
-display_name: Notifier Runtime
-kinds:
-  - runtime
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/runtime
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-entrypoints:
-  runtime:
-    artifact_path: artifacts/linux/amd64/runtime
-```
-
-If you include `schemas/config.schema.json` in the package root, Gestalt uses it
-to validate `runtimes.*.config`.
 
 ## Web UI Manifest Example
 
@@ -199,8 +191,6 @@ to validate `runtimes.*.config`.
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 display_name: Custom UI
-kinds:
-  - webui
 webui:
   asset_root: ui/out
 ```
@@ -209,12 +199,12 @@ webui:
 
 - Manifest paths must stay inside the package.
 - `source` and `version` are required.
-- Declarative-only provider packages do not require `artifacts` or
-  `entrypoints`.
-- Executable provider packages do require `artifacts` plus
-  `entrypoints.provider`.
-- `config_schema_path` validates `integrations.*.plugin.config`.
-- Connection parameters discovered after auth live under `provider.connection_params`.
+- A manifest defines either `provider` or `webui`, not both.
+- Declarative-only provider packages do not require `artifacts`.
+- Executable provider packages do require `artifacts` plus `provider.exec.artifact_path`.
+- `config_schema_path` validates `providers.*.config`.
+- Only `provider.connections.default` may define `params` and `discovery`.
+- `provider.surfaces.rest`, `provider.surfaces.openapi`, and `provider.surfaces.graphql` are mutually exclusive. `provider.surfaces.mcp` may be added alongside any of them.
 
 ## Packaging And Release
 

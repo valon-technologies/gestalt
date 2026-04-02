@@ -15,17 +15,19 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		DisplayName: name,
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			BaseURL:           p.BaseURL,
-			Headers:           NormalizeHeaders(p.Headers),
-			ManagedParameters: NormalizeManagedParameters(p.ManagedParameters),
-			MCP:               p.MCP,
-			OpenAPI:           p.OpenAPI,
-			GraphQLURL:        p.GraphQLURL,
-			MCPURL:            p.MCPURL,
-			OpenAPIConnection: p.OpenAPIConnection,
-			GraphQLConnection: p.GraphQLConnection,
-			MCPConnection:     p.MCPConnection,
-			DefaultConnection: p.DefaultConnection,
+			BaseURL:              p.BaseURL,
+			Headers:              NormalizeHeaders(p.Headers),
+			ManagedParameters:    NormalizeManagedParameters(p.ManagedParameters),
+			ConnectionMode:       p.ConnectionMode,
+			MCP:                  p.MCP,
+			OpenAPI:              p.OpenAPI,
+			GraphQLURL:           p.GraphQLURL,
+			MCPURL:               p.MCPURL,
+			OpenAPIConnection:    p.OpenAPIConnection,
+			GraphQLConnection:    p.GraphQLConnection,
+			MCPConnection:        p.MCPConnection,
+			DefaultConnection:    p.DefaultConnection,
+			PostConnectDiscovery: p.PostConnectDiscovery,
 		},
 	}
 
@@ -90,7 +92,9 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 		manifest.Provider.ConnectionParams = make(map[string]pluginmanifestv1.ProviderConnectionParam, len(p.ConnectionParams))
 		for k, v := range p.ConnectionParams {
 			manifest.Provider.ConnectionParams[k] = pluginmanifestv1.ProviderConnectionParam{
-				Required: v.Required,
+				Required:    v.Required,
+				Description: v.Description,
+				From:        v.From,
 			}
 		}
 	}

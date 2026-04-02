@@ -134,7 +134,7 @@ datastore:
     path: ` + filepath.Join(dir, "gestalt.db") + `
 server:
   encryption_key: test-key
-integrations:
+providers:
   broken:
     display_name: Broken
 `
@@ -146,7 +146,7 @@ integrations:
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), `requires a plugin`) {
-		t.Fatalf("expected requires-a-plugin error, got: %v", err)
+	if !strings.Contains(err.Error(), `plugin.command, plugin.package, or plugin.source is required`) {
+		t.Fatalf("expected provider-source validation error, got: %v", err)
 	}
 }

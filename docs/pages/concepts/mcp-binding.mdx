@@ -28,13 +28,15 @@ If a provider supports request-scoped catalogs, Gestalt refreshes those tools at
 
 ## Tool Naming
 
-Tool names come from the provider operation IDs. Use `mcp_tool_prefix` on an
-integration to keep names stable across providers.
+Tool names come from the provider operation IDs. Use `mcp.tool_prefix` on a
+provider to keep names stable across providers.
 
 ```yaml
-integrations:
+providers:
   slack:
-    mcp_tool_prefix: slack_
+    mcp:
+      enabled: true
+      tool_prefix: slack_
 ```
 
 ## Authentication
@@ -64,27 +66,30 @@ integration can use different named connections.
 Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
 
 ```yaml
-integrations:
+providers:
   notion:
-    mcp_tool_prefix: notion_
-    plugin:
-      openapi: ./openapi/notion.yaml
-      openapi_connection: REST
-      mcp_url: https://mcp.notion.com/mcp
-      mcp_connection: MCP
-      default_connection: REST
-      connections:
-        REST:
-          mode: user
-          auth:
-            type: bearer
-            credentials:
-              - name: token
-                label: API Token
-        MCP:
-          mode: user
-          auth:
-            type: mcp_oauth
+    mcp:
+      enabled: true
+      tool_prefix: notion_
+    surfaces:
+      openapi:
+        document: ./openapi/notion.yaml
+        connection: REST
+      mcp:
+        url: https://mcp.notion.com/mcp
+        connection: MCP
+    connections:
+      MCP:
+        mode: user
+        auth:
+          type: mcp_oauth
+      REST:
+        mode: user
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: API Token
 ```
 
 With this config:

@@ -3,21 +3,20 @@ version: 0.0.1-alpha.4
 display_name: Gmail
 description: Read, send, and manage Gmail messages, threads, drafts, and labels.
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
   config_schema_path: schemas/config.schema.json
-  auth:
-    type: oauth2
-    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
-    token_url: https://oauth2.googleapis.com/token
-    scopes:
-      - https://www.googleapis.com/auth/gmail.modify
-      - https://www.googleapis.com/auth/gmail.compose
-    authorization_params:
-      access_type: offline
-      prompt: consent
-  openapi: https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.json
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+        token_url: https://oauth2.googleapis.com/token
+        scopes:
+          - https://www.googleapis.com/auth/gmail.modify
+          - https://www.googleapis.com/auth/gmail.compose
+        authorization_params:
+          access_type: offline
+          prompt: consent
   managed_parameters:
     - in: path
       name: userId
@@ -39,3 +38,6 @@ provider:
       alias: threads.get
     gmail.users.getProfile:
       alias: getProfile
+  surfaces:
+    openapi:
+      document: https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.json

@@ -3,7 +3,7 @@ version: 0.0.1-alpha.5
 display_name: Datadog
 description: Manage dashboards, monitors, incidents, logs, and RUM.
 icon_file: assets/icon.svg
-kinds:
-  - provider
 provider:
-  openapi: openapi.yaml
+  surfaces:
+    openapi:
+      document: openapi.yaml
