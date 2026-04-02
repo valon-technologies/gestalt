@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -230,21 +231,39 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 
 	port := allocateTestPort(t)
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: stdout
+  config:
+    level: warn
+    format: json
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
 
 	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start serve: %v", err)
 	}
+	stopped := false
 	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
+		if !stopped {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		}
 	})
 
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
@@ -267,6 +286,48 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	}
 	if result["echo"] != "hello" {
 		t.Fatalf("expected echo=hello, got %v", result)
+	}
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+
+	var foundAudit bool
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			continue
+		}
+		if record["msg"] != "audit" {
+			continue
+		}
+
+		foundAudit = true
+		if record["level"] != "INFO" {
+			t.Fatalf("expected audit log level=INFO, got %v\nstdout:\n%s\nstderr:\n%s", record["level"], stdout.String(), stderr.String())
+		}
+		if record["log.type"] != "audit" {
+			t.Fatalf("expected audit log.type=audit, got %v\nstdout:\n%s\nstderr:\n%s", record["log.type"], stdout.String(), stderr.String())
+		}
+		if record["provider"] != "example" {
+			t.Fatalf("expected audit provider=example, got %v\nstdout:\n%s\nstderr:\n%s", record["provider"], stdout.String(), stderr.String())
+		}
+		if record["operation"] != "echo" {
+			t.Fatalf("expected audit operation=echo, got %v\nstdout:\n%s\nstderr:\n%s", record["operation"], stdout.String(), stderr.String())
+		}
+		if record["allowed"] != true {
+			t.Fatalf("expected audit allowed=true, got %v\nstdout:\n%s\nstderr:\n%s", record["allowed"], stdout.String(), stderr.String())
+		}
+		break
+	}
+
+	if !foundAudit {
+		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 }
 
@@ -371,28 +432,28 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 			name: "plugin connection unsupported",
 			pluginYAML: `command: /tmp/provider
 connection: default`,
-			wantError: "plugin.connection is not supported",
+			wantError: "plugin.connection is not supported; remove plugin.connection and use plugin.default_connection or a surface-specific *_connection field instead",
 		},
 		{
 			name: "env unsupported for inline plugin",
 			pluginYAML: `openapi: https://api.example.test/openapi.json
 env:
   API_KEY: secret`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process",
+			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
 			pluginYAML: `openapi: https://api.example.test/openapi.json
 allowed_hosts:
   - api.example.test`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process",
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.command, plugin.package, or plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
 			pluginYAML: `command: /tmp/provider
 headers:
   x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
 		{
 			name: "managed parameters unsupported without api surface",
@@ -401,7 +462,7 @@ managed_parameters:
   - in: header
     name: x-version
     value: "1"`,
-			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces",
+			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces; remove plugin.managed_parameters or configure OpenAPI or GraphQL",
 		},
 		{
 			name: "response mapping unsupported for inline operations only",
@@ -412,7 +473,7 @@ operations:
     path: /items
 response_mapping:
   data_path: items`,
-			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations",
+			wantError: "plugin.response_mapping is only valid for inline openapi/graphql integrations; remove plugin.response_mapping or switch this integration to inline openapi or graphql_url",
 		},
 		{
 			name: "operations unsupported with spec surface",
@@ -427,7 +488,7 @@ operations:
 			name: "mcp connection requires mcp url",
 			pluginYAML: `command: /tmp/provider
 mcp_connection: default`,
-			wantError: "plugin.mcp_connection is only valid when mcp_url is configured",
+			wantError: "plugin.mcp_connection is only valid when mcp_url is configured; remove plugin.mcp_connection or configure an MCP surface",
 		},
 	}
 
@@ -480,7 +541,7 @@ func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
 			setup: setupPluginDir,
 			pluginYAML: `headers:
   x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface",
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
 		},
 	}
 
