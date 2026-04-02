@@ -909,6 +909,7 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 	hasAPISurface := hasOpenAPI || hasGraphQL
 	hasSpecSurface := hasAPISurface || hasMCP
 	hasDeclarativeOps := plugin.IsDeclarative || (plugin.IsInline() && len(plugin.Operations) > 0)
+	hasExecutableProcess := !plugin.IsInline() && !plugin.IsDeclarative
 
 	checks := []struct {
 		field     string
@@ -921,6 +922,18 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			present:   plugin.Connection != "",
 			supported: false,
 			reason:    "is not supported; use default_connection or surface-specific *_connection fields",
+		},
+		{
+			field:     "plugin.env",
+			present:   len(plugin.Env) > 0,
+			supported: hasExecutableProcess,
+			reason:    "is only valid when the plugin runs as an executable process",
+		},
+		{
+			field:     "plugin.allowed_hosts",
+			present:   len(plugin.AllowedHosts) > 0,
+			supported: hasExecutableProcess,
+			reason:    "is only valid when the plugin runs as an executable process",
 		},
 		{
 			field:     "plugin.openapi_connection",

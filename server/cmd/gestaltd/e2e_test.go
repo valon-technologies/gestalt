@@ -374,6 +374,20 @@ connection: default`,
 			wantError: "plugin.connection is not supported",
 		},
 		{
+			name: "env unsupported for inline plugin",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+env:
+  API_KEY: secret`,
+			wantError: "plugin.env is only valid when the plugin runs as an executable process",
+		},
+		{
+			name: "allowed hosts unsupported for inline plugin",
+			pluginYAML: `openapi: https://api.example.test/openapi.json
+allowed_hosts:
+  - api.example.test`,
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process",
+		},
+		{
 			name: "headers unsupported without declarative ops or spec surface",
 			pluginYAML: `command: /tmp/provider
 headers:
