@@ -45,7 +45,6 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -97,33 +96,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 		`CREATE TABLE IF NOT EXISTS api_tokens (
-			id VARCHAR(36) NOT NULL PRIMARY KEY,
+				id VARCHAR(36) NOT NULL PRIMARY KEY,
 			user_id VARCHAR(36) NOT NULL,
 			name VARCHAR(255) NOT NULL,
 			hashed_token VARCHAR(255) NOT NULL,
 			scopes TEXT NOT NULL,
-			expires_at DATETIME(6) NULL,
-			created_at DATETIME(6) NOT NULL,
-			updated_at DATETIME(6) NOT NULL,
-			UNIQUE KEY idx_api_tokens_hashed (hashed_token),
-			CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-		`CREATE TABLE IF NOT EXISTS staged_connections (
-			id VARCHAR(36) NOT NULL PRIMARY KEY,
-			user_id VARCHAR(36) NOT NULL,
-			integration VARCHAR(128) NOT NULL,
-			connection VARCHAR(128) NOT NULL DEFAULT '',
-			instance VARCHAR(128) NOT NULL,
-			access_token_encrypted TEXT NOT NULL,
-			refresh_token_encrypted TEXT NOT NULL,
-			token_expires_at DATETIME,
-			metadata_json TEXT NOT NULL,
-			candidates_json TEXT NOT NULL,
-			created_at DATETIME(6) NOT NULL,
-			expires_at DATETIME(6) NOT NULL,
-			CONSTRAINT fk_staged_connections_user FOREIGN KEY (user_id) REFERENCES users(id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				expires_at DATETIME(6) NULL,
+				created_at DATETIME(6) NOT NULL,
+				updated_at DATETIME(6) NOT NULL,
+				UNIQUE KEY idx_api_tokens_hashed (hashed_token),
+				CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 
 	for i, stmt := range migrations {

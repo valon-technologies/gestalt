@@ -17,10 +17,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
 
-		r.Get("/connections/staged/{id}", s.getStagedConnection)
-		r.Post("/connections/staged/{id}/select", s.selectStagedConnection)
-		r.Delete("/connections/staged/{id}", s.cancelStagedConnection)
-
 		r.Post("/tokens", s.createAPIToken)
 		r.Get("/tokens", s.listAPITokens)
 		r.Delete("/tokens", s.revokeAllAPITokens)

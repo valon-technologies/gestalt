@@ -1925,88 +1925,199 @@ func TestStartIntegrationOAuth(t *testing.T) {
 func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
-	var stored *core.IntegrationToken
+	const pendingSelectionPath = "/api/v1/auth/pending-connection"
 
-	handler := &testOAuthHandler{
-		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
-		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
-			if code == "good-code" {
-				return &core.TokenResponse{AccessToken: "slack-token"}, nil
-			}
-			return nil, fmt.Errorf("bad code")
-		},
-	}
+	t.Run("connected", func(t *testing.T) {
+		var stored *core.IntegrationToken
 
-	stub := &stubIntegrationWithAuthURL{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
-		authURL:         "https://slack.com/oauth/v2/authorize",
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
-				stored = tok
-				return nil
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
 			},
 		}
+
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+					stored = tok
+					return nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+
+		if startResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		noRedirect := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("expected 303, got %d", resp.StatusCode)
+		}
+		loc := resp.Header.Get("Location")
+		if loc != "/integrations?connected=slack" {
+			t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
+		}
+		if stored == nil {
+			t.Fatal("expected token to be stored")
+		}
+		if stored.UserID != "u1" {
+			t.Fatalf("stored token user ID = %q, want %q", stored.UserID, "u1")
+		}
+		if stored.Integration != "slack" {
+			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
+		}
+		if stored.AccessToken != "slack-token" {
+			t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	startBody := bytes.NewBufferString(`{"integration":"slack"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-	startReq.Header.Set("Content-Type", "application/json")
-	startResp, err := http.DefaultClient.Do(startReq)
-	if err != nil {
-		t.Fatalf("start request: %v", err)
-	}
-	defer func() { _ = startResp.Body.Close() }()
+	t.Run("selection_required", func(t *testing.T) {
+		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
+		}))
+		testutil.CloseOnCleanup(t, discoverySrv)
 
-	if startResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
-	}
+		var stored *core.IntegrationToken
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
 
-	var startResult map[string]string
-	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
-		t.Fatalf("decoding start response: %v", err)
-	}
+		stub := &stubDiscoveringProvider{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			discovery: &core.DiscoveryConfig{
+				URL:             discoverySrv.URL,
+				IDPath:          "id",
+				NamePath:        "name",
+				MetadataMapping: map[string]string{"workspace": "workspace"},
+			},
+		}
 
-	noRedirect := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
-	resp, err := noRedirect.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+					stored = tok
+					return nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
 
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("expected 303, got %d", resp.StatusCode)
-	}
-	loc := resp.Header.Get("Location")
-	if loc != "/integrations?connected=slack" {
-		t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
-	}
-	if stored == nil {
-		t.Fatal("expected token to be stored")
-	}
-	if stored.UserID != "u1" {
-		t.Fatalf("stored token user ID = %q, want %q", stored.UserID, "u1")
-	}
-	if stored.Integration != "slack" {
-		t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
-	}
-	if stored.AccessToken != "slack-token" {
-		t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
-	}
+		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		jar, _ := cookiejar.New(nil)
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("expected 303, got %d", resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != pendingSelectionPath {
+			t.Fatalf("expected redirect to %s, got %q", pendingSelectionPath, loc)
+		}
+
+		pageResp, err := noRedirect.Get(ts.URL + pendingSelectionPath)
+		if err != nil {
+			t.Fatalf("selection page request: %v", err)
+		}
+		defer func() { _ = pageResp.Body.Close() }()
+
+		if pageResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", pageResp.StatusCode)
+		}
+		body, err := io.ReadAll(pageResp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		text := string(body)
+		if !strings.Contains(text, "Select a slack connection") {
+			t.Fatalf("expected selection page, got %q", text)
+		}
+		if !strings.Contains(text, "Site A") || !strings.Contains(text, "Site B") {
+			t.Fatalf("expected both candidates in page, got %q", text)
+		}
+		if !strings.Contains(text, pendingSelectionPath) {
+			t.Fatalf("expected selection form action in page, got %q", text)
+		}
+		if stored != nil {
+			t.Fatal("did not expect final token to be stored before selection")
+		}
+	})
 }
 
 func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
@@ -3539,6 +3650,24 @@ type stubManualProvider struct {
 
 func (s *stubManualProvider) SupportsManualAuth() bool { return true }
 
+type stubDiscoveringManualProvider struct {
+	stubManualProvider
+	discovery *core.DiscoveryConfig
+}
+
+func (s *stubDiscoveringManualProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	return s.discovery
+}
+
+type stubDiscoveringProvider struct {
+	coretesting.StubIntegration
+	discovery *core.DiscoveryConfig
+}
+
+func (s *stubDiscoveringProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	return s.discovery
+}
+
 type stubDualAuthProvider struct {
 	coretesting.StubIntegration
 }
@@ -3552,56 +3681,183 @@ func (s *stubDualAuthProvider) CredentialFields() []core.CredentialFieldDef {
 func TestConnectManual(t *testing.T) {
 	t.Parallel()
 
-	var stored *core.IntegrationToken
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
-			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+	const pendingSelectionPath = "/api/v1/auth/pending-connection"
+
+	t.Run("connected", func(t *testing.T) {
+		var stored *core.IntegrationToken
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+					stored = tok
+					return nil
+				},
+			}
 		})
-		cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
-				stored = tok
-				return nil
-			},
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["status"] != "connected" {
+			t.Fatalf("expected connected, got %q", result["status"])
+		}
+		if stored == nil {
+			t.Fatal("expected StoreToken to be called")
+		}
+		if stored.UserID != "u1" {
+			t.Fatalf("expected user u1, got %q", stored.UserID)
+		}
+		if stored.Integration != "manual-svc" {
+			t.Fatalf("expected integration manual-svc, got %q", stored.Integration)
+		}
+		if stored.AccessToken != "my-api-key" {
+			t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
 		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("selection_required", func(t *testing.T) {
+		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
+		}))
+		testutil.CloseOnCleanup(t, discoverySrv)
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
+		var stored *core.IntegrationToken
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubDiscoveringManualProvider{
+				stubManualProvider: stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+				},
+				discovery: &core.DiscoveryConfig{
+					URL:             discoverySrv.URL,
+					IDPath:          "id",
+					NamePath:        "name",
+					MetadataMapping: map[string]string{"workspace": "workspace"},
+				},
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+					stored = tok
+					return nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["status"] != "connected" {
-		t.Fatalf("expected connected, got %q", result["status"])
-	}
-	if stored == nil {
-		t.Fatal("expected StoreToken to be called")
-	}
-	if stored.UserID != "u1" {
-		t.Fatalf("expected user u1, got %q", stored.UserID)
-	}
-	if stored.Integration != "manual-svc" {
-		t.Fatalf("expected integration manual-svc, got %q", stored.Integration)
-	}
-	if stored.AccessToken != "my-api-key" {
-		t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
-	}
+		jar, _ := cookiejar.New(nil)
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+
+		connectBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+		connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", connectBody)
+		connectReq.Header.Set("Content-Type", "application/json")
+		connectResp, err := noRedirect.Do(connectReq)
+		if err != nil {
+			t.Fatalf("connect request: %v", err)
+		}
+		defer func() { _ = connectResp.Body.Close() }()
+
+		if connectResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", connectResp.StatusCode)
+		}
+
+		var connectResult struct {
+			Status       string `json:"status"`
+			SelectionURL string `json:"selection_url"`
+		}
+		if err := json.NewDecoder(connectResp.Body).Decode(&connectResult); err != nil {
+			t.Fatalf("decode connect result: %v", err)
+		}
+		if connectResult.Status != "selection_required" {
+			t.Fatalf("expected selection_required, got %q", connectResult.Status)
+		}
+		if connectResult.SelectionURL != pendingSelectionPath {
+			t.Fatalf("expected selection URL %q, got %q", pendingSelectionPath, connectResult.SelectionURL)
+		}
+		if stored != nil {
+			t.Fatal("did not expect final token to be stored before selection")
+		}
+
+		pageResp, err := noRedirect.Get(ts.URL + connectResult.SelectionURL)
+		if err != nil {
+			t.Fatalf("selection page request: %v", err)
+		}
+		defer func() { _ = pageResp.Body.Close() }()
+
+		if pageResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", pageResp.StatusCode)
+		}
+		pageBody, err := io.ReadAll(pageResp.Body)
+		if err != nil {
+			t.Fatalf("read page body: %v", err)
+		}
+		pageText := string(pageBody)
+		if !strings.Contains(pageText, "Select a manual-svc connection") {
+			t.Fatalf("expected selection page body, got %q", pageText)
+		}
+		if !strings.Contains(pageText, "Site A") || !strings.Contains(pageText, "Site B") {
+			t.Fatalf("expected both candidates in selection page, got %q", pageText)
+		}
+
+		form := url.Values{"candidate_id": {"site-b"}}
+		selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+connectResult.SelectionURL, strings.NewReader(form.Encode()))
+		selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		selectReq.AddCookie(&http.Cookie{Name: "session_token", Value: "browser-session"})
+		selectResp, err := noRedirect.Do(selectReq)
+		if err != nil {
+			t.Fatalf("select request: %v", err)
+		}
+		defer func() { _ = selectResp.Body.Close() }()
+
+		if selectResp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("expected 303, got %d", selectResp.StatusCode)
+		}
+		if loc := selectResp.Header.Get("Location"); loc != "/integrations?connected=manual-svc" {
+			t.Fatalf("expected redirect to /integrations?connected=manual-svc, got %q", loc)
+		}
+		if stored == nil {
+			t.Fatal("expected token to be stored")
+		}
+		if stored.AccessToken != "my-api-key" {
+			t.Fatalf("expected access token my-api-key, got %q", stored.AccessToken)
+		}
+		var metadata map[string]string
+		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
+			t.Fatalf("unmarshal metadata: %v", err)
+		}
+		if metadata["workspace"] != "beta" {
+			t.Fatalf("expected workspace metadata beta, got %q", metadata["workspace"])
+		}
+	})
 }
 
 func TestConnectManual_OAuthProviderRejected(t *testing.T) {

@@ -890,10 +890,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	if result.Status == "selection_required" {
-		http.Redirect(w, r, "/integrations?pending="+url.QueryEscape(result.StagedID), http.StatusSeeOther)
+		s.setPendingConnectionCookie(w, result.PendingToken)
+		http.Redirect(w, r, pendingConnectionPath, http.StatusSeeOther)
 		return
 	}
 
+	s.clearPendingConnectionCookie(w)
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }
 
@@ -989,6 +991,11 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if result.Status == "selection_required" {
+		s.setPendingConnectionCookie(w, result.PendingToken)
+	} else {
+		s.clearPendingConnectionCookie(w)
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1280,6 +1287,7 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.clearSessionCookie(w)
+	s.clearPendingConnectionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1371,8 +1379,6 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-const stagedConnectionTTL = 30 * time.Minute
-
 type tokenMaterial struct {
 	UserID         string
 	Integration    string
@@ -1385,9 +1391,10 @@ type tokenMaterial struct {
 }
 
 type postConnectResult struct {
-	Status     string                    `json:"status"`
-	StagedID   string                    `json:"staged_id,omitempty"`
-	Candidates []core.DiscoveryCandidate `json:"candidates,omitempty"`
+	Status       string `json:"status"`
+	Integration  string `json:"integration,omitempty"`
+	SelectionURL string `json:"selection_url,omitempty"`
+	PendingToken string `json:"-"`
 }
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
@@ -1463,39 +1470,18 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
 					return nil, err
 				}
-				return &postConnectResult{Status: "connected"}, nil
+				return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
 			}
 
-			scs, err := s.stagedConnectionStore()
+			pendingToken, err := s.encodePendingConnectionToken(tm, candidates)
 			if err != nil {
-				return nil, err
-			}
-			candidatesJSON, err := json.Marshal(candidates)
-			if err != nil {
-				return nil, fmt.Errorf("marshal discovery candidates: %w", err)
-			}
-			now := s.now().UTC().Truncate(time.Second)
-			sc := &core.StagedConnection{
-				ID:             uuid.NewString(),
-				UserID:         tm.UserID,
-				Integration:    tm.Integration,
-				Connection:     tm.Connection,
-				Instance:       tm.Instance,
-				AccessToken:    tm.AccessToken,
-				RefreshToken:   tm.RefreshToken,
-				TokenExpiresAt: tm.TokenExpiresAt,
-				MetadataJSON:   tm.MetadataJSON,
-				CandidatesJSON: string(candidatesJSON),
-				CreatedAt:      now,
-				ExpiresAt:      now.Add(stagedConnectionTTL),
-			}
-			if err := scs.StoreStagedConnection(ctx, sc); err != nil {
-				return nil, fmt.Errorf("storing staged connection: %w", err)
+				return nil, fmt.Errorf("encode pending connection: %w", err)
 			}
 			return &postConnectResult{
-				Status:     "selection_required",
-				StagedID:   sc.ID,
-				Candidates: candidates,
+				Status:       "selection_required",
+				Integration:  tm.Integration,
+				SelectionURL: pendingConnectionPath,
+				PendingToken: pendingToken,
 			}, nil
 		}
 	}
@@ -1503,159 +1489,5 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
-	return &postConnectResult{Status: "connected"}, nil
-}
-
-func (s *Server) loadStagedConnection(w http.ResponseWriter, r *http.Request, userID string, scs core.StagedConnectionStore) (*core.StagedConnection, bool) {
-	id := chi.URLParam(r, "id")
-	sc, err := scs.GetStagedConnection(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "staged connection not found")
-			return nil, false
-		}
-		writeError(w, http.StatusInternalServerError, "failed to get staged connection")
-		return nil, false
-	}
-	if sc.UserID != userID {
-		writeError(w, http.StatusNotFound, "staged connection not found")
-		return nil, false
-	}
-	if s.now().After(sc.ExpiresAt) {
-		_ = scs.DeleteStagedConnection(r.Context(), id)
-		writeError(w, http.StatusGone, "staged connection has expired")
-		return nil, false
-	}
-	return sc, true
-}
-
-func (s *Server) getStagedConnection(w http.ResponseWriter, r *http.Request) {
-	scs, err := s.stagedConnectionStore()
-	if err != nil {
-		writeError(w, http.StatusNotImplemented, err.Error())
-		return
-	}
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
-		return
-	}
-	sc, ok := s.loadStagedConnection(w, r, userID, scs)
-	if !ok {
-		return
-	}
-
-	var candidates []core.DiscoveryCandidate
-	if err := json.Unmarshal([]byte(sc.CandidatesJSON), &candidates); err != nil {
-		writeError(w, http.StatusInternalServerError, "corrupt candidates data")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":          sc.ID,
-		"integration": sc.Integration,
-		"instance":    sc.Instance,
-		"candidates":  candidates,
-	})
-}
-
-func (s *Server) selectStagedConnection(w http.ResponseWriter, r *http.Request) {
-	scs, err := s.stagedConnectionStore()
-	if err != nil {
-		writeError(w, http.StatusNotImplemented, err.Error())
-		return
-	}
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		CandidateID string `json:"candidate_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.CandidateID == "" {
-		writeError(w, http.StatusBadRequest, "candidate_id is required")
-		return
-	}
-
-	sc, ok := s.loadStagedConnection(w, r, userID, scs)
-	if !ok {
-		return
-	}
-
-	var candidates []core.DiscoveryCandidate
-	if err := json.Unmarshal([]byte(sc.CandidatesJSON), &candidates); err != nil {
-		writeError(w, http.StatusInternalServerError, "corrupt candidates data")
-		return
-	}
-
-	var selected *core.DiscoveryCandidate
-	for i := range candidates {
-		if candidates[i].ID == req.CandidateID {
-			selected = &candidates[i]
-			break
-		}
-	}
-	if selected == nil {
-		writeError(w, http.StatusBadRequest, "candidate not found")
-		return
-	}
-
-	if err := validateDiscoveryMetadata(selected.Metadata); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	merged, err := mergeMetadataJSON(sc.MetadataJSON, selected.Metadata)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
-		return
-	}
-
-	tm := tokenMaterial{
-		UserID:         sc.UserID,
-		Integration:    sc.Integration,
-		Connection:     sc.Connection,
-		Instance:       sc.Instance,
-		AccessToken:    sc.AccessToken,
-		RefreshToken:   sc.RefreshToken,
-		TokenExpiresAt: sc.TokenExpiresAt,
-		MetadataJSON:   merged,
-	}
-	if _, err := s.storeTokenFromMaterial(r.Context(), tm); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store connection")
-		return
-	}
-
-	if err := scs.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
-		slog.ErrorContext(r.Context(), "failed to delete staged connection", "staged_connection_id", sc.ID, "error", err)
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
-}
-
-func (s *Server) cancelStagedConnection(w http.ResponseWriter, r *http.Request) {
-	scs, err := s.stagedConnectionStore()
-	if err != nil {
-		writeError(w, http.StatusNotImplemented, err.Error())
-		return
-	}
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
-		return
-	}
-
-	sc, ok := s.loadStagedConnection(w, r, userID, scs)
-	if !ok {
-		return
-	}
-
-	if err := scs.DeleteStagedConnection(r.Context(), sc.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to cancel staged connection")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "canceled"})
+	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
 }

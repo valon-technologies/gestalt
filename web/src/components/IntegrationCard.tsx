@@ -127,11 +127,16 @@ export default function IntegrationCard({
     setSubmitting(true);
     setError(null);
     try {
-      await connectManualIntegration(
+      const result = await connectManualIntegration(
         integration.name, credential, connectionParams, instance, connection,
       );
-      setSettingsOpen(false);
-      onConnected?.();
+      if (result.status === "selection_required") {
+        setSettingsOpen(false);
+        window.location.assign(result.selection_url || "/api/v1/auth/pending-connection");
+      } else {
+        setSettingsOpen(false);
+        onConnected?.();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
     } finally {

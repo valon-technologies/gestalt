@@ -78,7 +78,6 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})
@@ -128,33 +127,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 				UNIQUE(user_id, integration, connection, instance)
 			)`},
 		{"api_tokens", `
-			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'api_tokens')
+				IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'api_tokens')
 			CREATE TABLE api_tokens (
 				id NVARCHAR(36) NOT NULL PRIMARY KEY,
 				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
 				name NVARCHAR(255) NOT NULL,
 				hashed_token NVARCHAR(255) NOT NULL UNIQUE,
 				scopes NVARCHAR(MAX) NOT NULL DEFAULT '',
-				expires_at DATETIME2(6) NULL,
-				created_at DATETIME2(6) NOT NULL,
-				updated_at DATETIME2(6) NOT NULL
-			)`},
-		{"staged_connections", `
-			IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'staged_connections')
-			CREATE TABLE staged_connections (
-				id NVARCHAR(36) NOT NULL PRIMARY KEY,
-				user_id NVARCHAR(36) NOT NULL REFERENCES users(id),
-				integration NVARCHAR(128) NOT NULL,
-				connection NVARCHAR(128) NOT NULL DEFAULT '',
-				instance NVARCHAR(128) NOT NULL,
-				access_token_encrypted NVARCHAR(MAX) NOT NULL,
-				refresh_token_encrypted NVARCHAR(MAX) NOT NULL DEFAULT '',
-				token_expires_at DATETIME2,
-				metadata_json NVARCHAR(MAX) NOT NULL DEFAULT '',
-				candidates_json NVARCHAR(MAX) NOT NULL,
-				created_at DATETIME2(6) NOT NULL,
-				expires_at DATETIME2(6) NOT NULL
-			)`},
+					expires_at DATETIME2(6) NULL,
+					created_at DATETIME2(6) NOT NULL,
+					updated_at DATETIME2(6) NOT NULL
+				)`},
 	}
 
 	for _, m := range migrations {

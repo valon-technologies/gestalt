@@ -52,6 +52,12 @@ export interface CreateTokenResponse {
   token: string;
 }
 
+export interface ConnectIntegrationResult {
+  status: string;
+  integration?: string;
+  selection_url?: string;
+}
+
 export class APIError extends Error {
   constructor(
     public status: number,
@@ -158,7 +164,7 @@ export async function connectManualIntegration(
   connectionParams?: Record<string, string>,
   instance?: string,
   connection?: string,
-): Promise<{ status: string }> {
+): Promise<ConnectIntegrationResult> {
   const body: Record<string, unknown> = {
     integration,
     instance,
