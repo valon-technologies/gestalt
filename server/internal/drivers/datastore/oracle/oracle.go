@@ -79,7 +79,6 @@ type Store struct {
 }
 
 var _ core.Datastore = (*Store)(nil)
-var _ core.StagedConnectionStore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
@@ -132,26 +131,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 				hashed_token VARCHAR2(255) NOT NULL,
 				scopes CLOB,
 				expires_at TIMESTAMP WITH TIME ZONE,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
-		},
-		{
-			name: "STAGED_CONNECTIONS",
-			ddl: `CREATE TABLE staged_connections (
-				id VARCHAR2(36) PRIMARY KEY,
-				user_id VARCHAR2(36) NOT NULL,
-				integration VARCHAR2(128) NOT NULL,
-				connection VARCHAR2(128) DEFAULT '' NOT NULL,
-				instance VARCHAR2(128) NOT NULL,
-				access_token_encrypted CLOB NOT NULL,
-				refresh_token_encrypted CLOB,
-				token_expires_at TIMESTAMP,
-				metadata_json CLOB,
-				candidates_json CLOB NOT NULL,
-				created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-				expires_at TIMESTAMP WITH TIME ZONE NOT NULL
-			)`,
+					created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+					updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+				)`,
 		},
 	}
 
@@ -190,10 +172,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{
 			name: "FK_API_TOKENS_USER",
 			ddl:  "ALTER TABLE api_tokens ADD CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)",
-		},
-		{
-			name: "FK_STAGED_CONN_USER",
-			ddl:  "ALTER TABLE staged_connections ADD CONSTRAINT fk_staged_conn_user FOREIGN KEY (user_id) REFERENCES users(id)",
 		},
 	}
 

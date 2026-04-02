@@ -19,8 +19,6 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 	return "", core.ErrSecretNotFound
 }
 
-var _ core.StagedConnectionStore = (*StubDatastore)(nil)
-
 // Set Fn fields to override individual methods; nil fields return zero values.
 type StubDatastore struct {
 	PingFn                     func(context.Context) error
@@ -36,9 +34,6 @@ type StubDatastore struct {
 	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
 	RevokeAPITokenFn           func(context.Context, string, string) error
 	RevokeAllAPITokensFn       func(context.Context, string) (int64, error)
-	StoreStagedConnectionFn    func(context.Context, *core.StagedConnection) error
-	GetStagedConnectionFn      func(context.Context, string) (*core.StagedConnection, error)
-	DeleteStagedConnectionFn   func(context.Context, string) error
 }
 
 func (s *StubDatastore) Ping(ctx context.Context) error {
@@ -149,24 +144,6 @@ func (s *StubDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (
 		return s.RevokeAllAPITokensFn(ctx, userID)
 	}
 	return 0, nil
-}
-func (s *StubDatastore) StoreStagedConnection(ctx context.Context, sc *core.StagedConnection) error {
-	if s.StoreStagedConnectionFn != nil {
-		return s.StoreStagedConnectionFn(ctx, sc)
-	}
-	return nil
-}
-func (s *StubDatastore) GetStagedConnection(ctx context.Context, id string) (*core.StagedConnection, error) {
-	if s.GetStagedConnectionFn != nil {
-		return s.GetStagedConnectionFn(ctx, id)
-	}
-	return nil, core.ErrNotFound
-}
-func (s *StubDatastore) DeleteStagedConnection(ctx context.Context, id string) error {
-	if s.DeleteStagedConnectionFn != nil {
-		return s.DeleteStagedConnectionFn(ctx, id)
-	}
-	return nil
 }
 func (s *StubDatastore) Migrate(context.Context) error { return nil }
 func (s *StubDatastore) Close() error                  { return nil }
