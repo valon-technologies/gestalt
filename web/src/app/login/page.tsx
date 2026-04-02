@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setUserEmail } from "@/lib/auth";
-import { NONE_PROVIDER, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
+import { DEFAULT_LOCAL_EMAIL, DOCUMENTATION_URL, NONE_PROVIDER } from "@/lib/constants";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
@@ -55,7 +55,9 @@ export default function LoginPage() {
         <p className="mt-2 text-center text-sm text-stone-500 dark:text-stone-400">
           Or read the{" "}
           <a
-            href="/docs"
+            href={DOCUMENTATION_URL}
+            target="_blank"
+            rel="noreferrer"
             className="font-medium text-timber-600 hover:text-timber-700 dark:text-timber-400 dark:hover:text-timber-300"
           >
             documentation

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clearSession, getUserEmail } from "@/lib/auth";
 import { logout } from "@/lib/api";
-import { LOGIN_PATH } from "@/lib/constants";
+import { DOCUMENTATION_URL, LOGIN_PATH } from "@/lib/constants";
 import { useTheme } from "@/hooks/use-theme";
 import { MoonIcon, SunIcon, SunMoonIcon } from "./icons";
 
@@ -12,7 +12,7 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/integrations", label: "Integrations" },
   { href: "/tokens", label: "API Tokens" },
-  { href: "/docs", label: "Docs" },
+  { href: DOCUMENTATION_URL, label: "Docs", external: true },
 ];
 
 export default function Nav() {
@@ -37,13 +37,19 @@ export default function Nav() {
           <div className="flex gap-4">
             {links.map((link) => {
               const className = `text-sm ${
-                pathname === link.href
+                !link.external && pathname === link.href
                   ? "font-medium text-timber-600 dark:text-timber-400"
                   : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
               }`;
-              if (link.href === "/docs") {
+              if (link.external) {
                 return (
-                  <a key={link.href} href={link.href} className={className}>
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={className}
+                  >
                     {link.label}
                   </a>
                 );

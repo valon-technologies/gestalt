@@ -20,6 +20,22 @@ test.describe("Authentication", () => {
     ).toBeVisible();
   });
 
+  test("web docs links point to the external documentation site", async ({ page }) => {
+    await mockAuthInfo(page, { provider: "test-sso", display_name: "Test SSO" });
+    await page.goto("/login");
+    await expect(page.getByRole("link", { name: "documentation" })).toHaveAttribute("href", "https://docs.valon.tools");
+    await expect(page.getByRole("link", { name: "documentation" })).toHaveAttribute("target", "_blank");
+
+    await page.addInitScript(() => {
+      localStorage.setItem("user_email", "test@gestalt.dev");
+    });
+    await mockIntegrations(page, []);
+    await mockTokens(page, []);
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://docs.valon.tools");
+    await expect(page.getByRole("link", { name: "Docs" })).toHaveAttribute("target", "_blank");
+  });
+
   test("authenticated user sees dashboard", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, [{ name: "test-svc", display_name: "Test Service" }]);
