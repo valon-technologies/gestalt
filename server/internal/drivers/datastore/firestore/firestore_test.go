@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
-	gcpfirestore "cloud.google.com/go/firestore"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore"
-	"google.golang.org/api/iterator"
 )
 
 func testProjectID() string {
@@ -28,7 +27,7 @@ func newTestStore(t *testing.T) *Store {
 		t.Skip("FIRESTORE_EMULATOR_HOST not set")
 	}
 
-	projectID := testProjectID()
+	projectID := fmt.Sprintf("%s-%s", testProjectID(), strings.ToLower(uuid.NewString()[:8]))
 	store, err := New(projectID, "", coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -39,34 +38,10 @@ func newTestStore(t *testing.T) *Store {
 	}
 
 	t.Cleanup(func() {
-		deleteAllDocs(t, store.client, datastore.UsersCollection)
-		deleteAllDocs(t, store.client, usersByEmailCollection)
-		deleteAllDocs(t, store.client, integrationTokenKeysCollection)
-		deleteAllDocs(t, store.client, datastore.IntegrationTokensCollection)
-		deleteAllDocs(t, store.client, apiTokensByHashCollection)
-		deleteAllDocs(t, store.client, datastore.APITokensCollection)
 		_ = store.Close()
 	})
 
 	return store
-}
-
-func deleteAllDocs(t *testing.T, client *gcpfirestore.Client, collection string) {
-	t.Helper()
-	ctx := context.Background()
-	iter := client.Collection(collection).Documents(ctx)
-	defer iter.Stop()
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			t.Logf("cleanup %s: %v", collection, err)
-			return
-		}
-		_, _ = snap.Ref.Delete(ctx)
-	}
 }
 
 func TestFirestoreDatastoreConformance(t *testing.T) {
@@ -162,5 +137,85 @@ func TestFindOrCreateUserHonorsLegacyEmailLookupKey(t *testing.T) {
 	}
 	if user.ID != userID {
 		t.Fatalf("FindOrCreateUser returned %q, want %q", user.ID, userID)
+	}
+}
+
+func TestStoreTokenAndAPITokenAllowLookupKeyChanges(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	user, err := store.FindOrCreateUser(ctx, "rekey@example.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	token := &core.IntegrationToken{
+		ID:          "rekey-int-token",
+		UserID:      user.ID,
+		Integration: "svc-a",
+		Instance:    "i1",
+		AccessToken: "a1",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.StoreToken(ctx, token); err != nil {
+		t.Fatalf("StoreToken initial: %v", err)
+	}
+	token.Integration = "svc-b"
+	token.Instance = "i2"
+	token.AccessToken = "a2"
+	token.UpdatedAt = now.Add(time.Second)
+	if err := store.StoreToken(ctx, token); err != nil {
+		t.Fatalf("StoreToken update: %v", err)
+	}
+
+	oldToken, err := store.Token(ctx, user.ID, "svc-a", "", "i1")
+	if err != nil {
+		t.Fatalf("Token old lookup: %v", err)
+	}
+	if oldToken != nil {
+		t.Fatalf("old token lookup should be gone, got %+v", oldToken)
+	}
+	newToken, err := store.Token(ctx, user.ID, "svc-b", "", "i2")
+	if err != nil {
+		t.Fatalf("Token new lookup: %v", err)
+	}
+	if newToken == nil || newToken.AccessToken != "a2" {
+		t.Fatalf("new token lookup = %+v, want updated token", newToken)
+	}
+
+	apiToken := &core.APIToken{
+		ID:          "rekey-api-token",
+		UserID:      user.ID,
+		Name:        "token",
+		HashedToken: "sha256:old",
+		Scopes:      "read",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.StoreAPIToken(ctx, apiToken); err != nil {
+		t.Fatalf("StoreAPIToken initial: %v", err)
+	}
+	apiToken.HashedToken = "sha256:new"
+	apiToken.UpdatedAt = now.Add(2 * time.Second)
+	if err := store.StoreAPIToken(ctx, apiToken); err != nil {
+		t.Fatalf("StoreAPIToken update: %v", err)
+	}
+
+	oldAPIToken, err := store.ValidateAPIToken(ctx, "sha256:old")
+	if err != nil {
+		t.Fatalf("ValidateAPIToken old hash: %v", err)
+	}
+	if oldAPIToken != nil {
+		t.Fatalf("old api token hash should be gone, got %+v", oldAPIToken)
+	}
+	newAPIToken, err := store.ValidateAPIToken(ctx, "sha256:new")
+	if err != nil {
+		t.Fatalf("ValidateAPIToken new hash: %v", err)
+	}
+	if newAPIToken == nil || newAPIToken.ID != apiToken.ID {
+		t.Fatalf("new api token lookup = %+v, want %q", newAPIToken, apiToken.ID)
 	}
 }

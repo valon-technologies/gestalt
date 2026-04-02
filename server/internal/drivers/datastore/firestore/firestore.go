@@ -265,19 +265,15 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 		if err != nil && status.Code(err) != codes.NotFound {
 			return fmt.Errorf("getting existing token by id: %w", err)
 		}
+		var oldLookupRef *gcpfirestore.DocumentRef
 		if err == nil && existingTokenSnap.Exists() {
 			var existing integrationTokenDoc
 			if err := existingTokenSnap.DataTo(&existing); err != nil {
 				return fmt.Errorf("unmarshalling existing token by id: %w", err)
 			}
-			oldLookupRef := s.client.Collection(integrationTokenKeysCollection).Doc(
+			oldLookupRef = s.client.Collection(integrationTokenKeysCollection).Doc(
 				firestoreDocKey(existing.UserID, existing.Integration, existing.Connection, existing.Instance),
 			)
-			if oldLookupRef.ID != lookupRef.ID {
-				if err := tx.Delete(oldLookupRef); err != nil {
-					return fmt.Errorf("deleting stale token lookup: %w", err)
-				}
-			}
 		}
 
 		lookupSnap, err := tx.Get(lookupRef)
@@ -296,6 +292,11 @@ func (s *Store) StoreToken(ctx context.Context, token *core.IntegrationToken) er
 			}
 		}
 
+		if oldLookupRef != nil && oldLookupRef.ID != lookupRef.ID {
+			if err := tx.Delete(oldLookupRef); err != nil {
+				return fmt.Errorf("deleting stale token lookup: %w", err)
+			}
+		}
 		if err := tx.Set(lookupRef, integrationTokenLookupDoc{TokenID: token.ID}); err != nil {
 			return fmt.Errorf("storing token lookup: %w", err)
 		}
@@ -486,17 +487,13 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 		if err != nil && status.Code(err) != codes.NotFound {
 			return fmt.Errorf("getting existing api token by id: %w", err)
 		}
+		var oldHashRef *gcpfirestore.DocumentRef
 		if err == nil && existingTokenSnap.Exists() {
 			var existing apiTokenDoc
 			if err := existingTokenSnap.DataTo(&existing); err != nil {
 				return fmt.Errorf("unmarshalling existing api token by id: %w", err)
 			}
-			oldHashRef := s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(existing.HashedToken))
-			if oldHashRef.ID != hashRef.ID {
-				if err := tx.Delete(oldHashRef); err != nil {
-					return fmt.Errorf("deleting stale api token hash lookup: %w", err)
-				}
-			}
+			oldHashRef = s.client.Collection(apiTokensByHashCollection).Doc(firestoreDocKey(existing.HashedToken))
 		}
 
 		hashSnap, err := tx.Get(hashRef)
@@ -513,6 +510,11 @@ func (s *Store) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
 			}
 		}
 
+		if oldHashRef != nil && oldHashRef.ID != hashRef.ID {
+			if err := tx.Delete(oldHashRef); err != nil {
+				return fmt.Errorf("deleting stale api token hash lookup: %w", err)
+			}
+		}
 		if err := tx.Set(hashRef, apiTokenHashLookupDoc{TokenID: token.ID}); err != nil {
 			return fmt.Errorf("storing api token hash lookup: %w", err)
 		}
