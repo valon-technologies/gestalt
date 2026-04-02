@@ -680,6 +680,23 @@ func ValidateStructure(cfg *Config) error {
 	return nil
 }
 
+// ValidateResolvedStructure checks integration fields whose support depends on
+// resolved managed plugin manifests. Callers should use this after init has
+// applied locked plugin artifacts into the config. It intentionally does not
+// rerun the full structural validator on the mutated config.
+func ValidateResolvedStructure(cfg *Config) error {
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.Plugin == nil {
+			return fmt.Errorf("config validation: integration %q requires a plugin", name)
+		}
+		if err := validateSupportedPluginFields(name, intg.Plugin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ValidateRuntime checks runtime-only requirements: encryption key, auth
 // provider, and datastore provider. Callers that need a fully operational
 // config (serve) should call this after Load. Callers that only need
@@ -703,14 +720,23 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 	}
 	p := intg.Plugin
 	if p.IsInline() {
-		return validateInlinePlugin(name, p)
+		if err := validateInlinePlugin(name, p); err != nil {
+			return err
+		}
+	} else {
+		if err := validateExternalPlugin("integration", name, p); err != nil {
+			return err
+		}
 	}
-	return validateExternalPlugin("integration", name, p)
+	return validateSupportedPluginFields(name, p)
 }
 
 func validateInlinePlugin(name string, p *PluginDef) error {
 	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
 		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
+	}
+	if len(p.Operations) > 0 && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "") {
+		return fmt.Errorf("config validation: inline integration %q plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured", name)
 	}
 	if err := validateManagedParameterConfig("config validation: integration "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
 		return err
@@ -881,6 +907,125 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		return fmt.Errorf("config validation: integration %q external plugin cannot use inline connections; declare connections in the plugin manifest instead", name)
 	}
 
+	return nil
+}
+
+func validateSupportedPluginFields(name string, plugin *PluginDef) error {
+	if plugin == nil {
+		return nil
+	}
+	if plugin.HasManagedArtifacts() && !plugin.HasResolvedManifest() {
+		// Package/source plugins may gain supported surfaces or declarative
+		// behavior from the resolved manifest. Validate those fields once init has
+		// prepared the artifact and loaded the manifest.
+		return nil
+	}
+
+	effectiveManifest, _, err := EffectiveManifestBackedInputs(name, plugin)
+	if err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+	effectiveProvider := plugin.ManifestProvider()
+	if effectiveManifest != nil {
+		effectiveProvider = effectiveManifest.Provider
+	}
+
+	hasDirectOpenAPI := plugin.OpenAPI != ""
+	hasDirectGraphQL := plugin.GraphQLURL != ""
+	hasDirectMCP := plugin.MCPURL != ""
+	hasOpenAPI := hasDirectOpenAPI || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceOpenAPI) != ""
+	hasGraphQL := hasDirectGraphQL || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceGraphQL) != ""
+	hasMCP := hasDirectMCP || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceMCP) != ""
+	hasAPISurface := hasOpenAPI || hasGraphQL
+	hasSpecSurface := hasAPISurface || hasMCP
+	hasExecutableProcess := !plugin.IsInline() && !plugin.IsDeclarative
+	hasInlineOperations := plugin.IsInline() && len(plugin.Operations) > 0
+	hasDeclarativeRuntime := hasInlineOperations || (!hasExecutableProcess && effectiveProvider != nil && effectiveProvider.IsDeclarative())
+
+	supportsBaseURL := hasDeclarativeRuntime || hasDirectOpenAPI || hasDirectGraphQL || (!plugin.IsInline() && hasAPISurface)
+	supportsHeaders := false
+	switch {
+	case plugin.IsInline():
+		supportsHeaders = hasInlineOperations || hasSpecSurface
+	case hasExecutableProcess:
+		supportsHeaders = hasSpecSurface
+	default:
+		supportsHeaders = effectiveProvider != nil && effectiveProvider.IsManifestBacked()
+	}
+	supportsResponseMapping := plugin.IsInline() && (hasDirectOpenAPI || hasDirectGraphQL)
+
+	checks := []struct {
+		field     string
+		present   bool
+		supported bool
+		reason    string
+	}{
+		{
+			field:     "plugin.connection",
+			present:   plugin.Connection != "",
+			supported: false,
+			reason:    "is not supported; use default_connection or surface-specific *_connection fields",
+		},
+		{
+			field:     "plugin.env",
+			present:   len(plugin.Env) > 0,
+			supported: hasExecutableProcess,
+			reason:    "is only valid when the plugin runs as an executable process",
+		},
+		{
+			field:     "plugin.allowed_hosts",
+			present:   len(plugin.AllowedHosts) > 0,
+			supported: hasExecutableProcess,
+			reason:    "is only valid when the plugin runs as an executable process",
+		},
+		{
+			field:     "plugin.openapi_connection",
+			present:   plugin.OpenAPIConnection != "",
+			supported: hasOpenAPI,
+			reason:    "is only valid when openapi is configured",
+		},
+		{
+			field:     "plugin.graphql_connection",
+			present:   plugin.GraphQLConnection != "",
+			supported: hasGraphQL,
+			reason:    "is only valid when graphql_url is configured",
+		},
+		{
+			field:     "plugin.mcp_connection",
+			present:   plugin.MCPConnection != "",
+			supported: hasMCP,
+			reason:    "is only valid when mcp_url is configured",
+		},
+		{
+			field:     "plugin.base_url",
+			present:   plugin.BaseURL != "",
+			supported: supportsBaseURL,
+			reason:    "is only valid when the resolved provider actually uses a base URL",
+		},
+		{
+			field:     "plugin.headers",
+			present:   len(plugin.Headers) > 0,
+			supported: supportsHeaders,
+			reason:    "are only valid when the plugin exposes declarative operations or a spec surface",
+		},
+		{
+			field:     "plugin.managed_parameters",
+			present:   len(plugin.ManagedParameters) > 0,
+			supported: hasAPISurface,
+			reason:    "are only valid with openapi/graphql surfaces",
+		},
+		{
+			field:     "plugin.response_mapping",
+			present:   plugin.ResponseMapping != nil,
+			supported: supportsResponseMapping,
+			reason:    "is only valid for inline openapi/graphql integrations",
+		},
+	}
+	for _, check := range checks {
+		if check.present && !check.supported {
+			return fmt.Errorf("config validation: integration %q %s %s", name, check.field, check.reason)
+		}
+	}
 	return nil
 }
 

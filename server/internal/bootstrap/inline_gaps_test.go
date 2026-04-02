@@ -202,15 +202,11 @@ func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"alpha": {
 			Plugin: &config.PluginDef{
-				BaseURL: "https://api.test.example",
-				MCPURL:  mcpSrv.URL + "/mcp",
+				MCPURL: mcpSrv.URL + "/mcp",
 				Auth: &config.ConnectionAuthDef{
 					Type:         "mcp_oauth",
 					ClientID:     "test-id",
 					ClientSecret: "test-secret",
-				},
-				Operations: []config.InlineOperationDef{
-					{Name: "do_thing", Method: "POST", Path: "/things"},
 				},
 			},
 		},
