@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Integration,
+  PENDING_CONNECTION_PATH,
   startIntegrationOAuth,
   connectManualIntegration,
   disconnectIntegration,
@@ -59,6 +60,11 @@ type ConnectionTarget = {
   connection?: string;
 };
 
+type PendingSelection = {
+  action: string;
+  pendingToken: string;
+};
+
 export default function IntegrationCard({
   integration,
   onConnected,
@@ -74,12 +80,19 @@ export default function IntegrationCard({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showParamForm, setShowParamForm] = useState(false);
   const [pendingOAuthTarget, setPendingOAuthTarget] = useState<ConnectionTarget>({});
+  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const pendingSelectionFormRef = useRef<HTMLFormElement>(null);
 
   const safeIconSVG = integration.icon_svg
     ? sanitizeSVG(integration.icon_svg)
     : "";
   const needsParams = hasConnectionParams(integration);
+
+  useEffect(() => {
+    if (!pendingSelection) return;
+    pendingSelectionFormRef.current?.submit();
+  }, [pendingSelection]);
 
   function collectConnectionParams(
     form: HTMLFormElement,
@@ -135,16 +148,10 @@ export default function IntegrationCard({
           throw new Error("Connection requires selection, but the server did not return a pending token.");
         }
         setSettingsOpen(false);
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = result.selection_url || "/api/v1/auth/pending-connection";
-        const tokenInput = document.createElement("input");
-        tokenInput.type = "hidden";
-        tokenInput.name = "pending_token";
-        tokenInput.value = result.pending_token;
-        form.appendChild(tokenInput);
-        document.body.appendChild(form);
-        form.submit();
+        setPendingSelection({
+          action: result.selection_url || PENDING_CONNECTION_PATH,
+          pendingToken: result.pending_token,
+        });
       } else {
         setSettingsOpen(false);
         onConnected?.();
@@ -212,6 +219,20 @@ export default function IntegrationCard({
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5 shadow-warm">
+      {pendingSelection && (
+        <form
+          ref={pendingSelectionFormRef}
+          method="post"
+          action={pendingSelection.action}
+          className="hidden"
+        >
+          <input
+            type="hidden"
+            name="pending_token"
+            value={pendingSelection.pendingToken}
+          />
+        </form>
+      )}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-500 [&>svg]:h-5 [&>svg]:w-5 dark:bg-stone-800 dark:text-stone-400">

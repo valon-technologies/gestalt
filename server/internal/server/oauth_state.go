@@ -38,41 +38,60 @@ func newIntegrationOAuthStateCodec(secret []byte) (*integrationOAuthStateCodec, 
 	return &integrationOAuthStateCodec{encryptor: encryptor}, nil
 }
 
-func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string, error) {
+func encodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label string, state T) (string, error) {
 	payload, err := json.Marshal(state)
 	if err != nil {
-		return "", fmt.Errorf("marshal oauth state: %w", err)
+		return "", fmt.Errorf("marshal %s: %w", label, err)
 	}
-	encoded, err := c.encryptor.EncryptURLSafe(string(payload))
+	encoded, err := enc.EncryptURLSafe(string(payload))
 	if err != nil {
-		return "", fmt.Errorf("encrypt oauth state: %w", err)
+		return "", fmt.Errorf("encrypt %s: %w", label, err)
 	}
 	return encoded, nil
 }
 
-func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*integrationOAuthState, error) {
-	plaintext, err := c.encryptor.DecryptURLSafe(encoded)
+func decodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded string) (*T, error) {
+	plaintext, err := enc.DecryptURLSafe(encoded)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt oauth state: %w", err)
+		return nil, fmt.Errorf("decrypt %s: %w", label, err)
 	}
 
-	var state integrationOAuthState
+	var state T
 	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
-		return nil, fmt.Errorf("unmarshal oauth state: %w", err)
-	}
-	if state.UserID == "" {
-		return nil, fmt.Errorf("oauth state missing user ID")
-	}
-	if state.Integration == "" {
-		return nil, fmt.Errorf("oauth state missing integration")
-	}
-	if state.ExpiresAt == 0 {
-		return nil, fmt.Errorf("oauth state missing expiration")
-	}
-	if now.Unix() > state.ExpiresAt {
-		return nil, fmt.Errorf("oauth state expired")
+		return nil, fmt.Errorf("unmarshal %s: %w", label, err)
 	}
 	return &state, nil
+}
+
+func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) error {
+	if state.UserID == "" {
+		return fmt.Errorf("oauth state missing user ID")
+	}
+	if state.Integration == "" {
+		return fmt.Errorf("oauth state missing integration")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("oauth state missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("oauth state expired")
+	}
+	return nil
+}
+
+func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string, error) {
+	return encodeEncryptedState(c.encryptor, "oauth state", state)
+}
+
+func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*integrationOAuthState, error) {
+	state, err := decodeEncryptedState[integrationOAuthState](c.encryptor, "oauth state", encoded)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateIntegrationOAuthState(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 const loginStateTTL = 10 * time.Minute
@@ -84,77 +103,71 @@ type loginState struct {
 }
 
 type pendingConnectionState struct {
-	UserID         string                    `json:"uid"`
-	Integration    string                    `json:"int"`
-	Connection     string                    `json:"con,omitempty"`
-	Instance       string                    `json:"ins,omitempty"`
-	AccessToken    string                    `json:"at"`
-	RefreshToken   string                    `json:"rt,omitempty"`
-	TokenExpiresAt int64                     `json:"tex,omitempty"`
-	MetadataJSON   string                    `json:"meta,omitempty"`
-	Candidates     []core.DiscoveryCandidate `json:"cand"`
-	ExpiresAt      int64                     `json:"exp"`
+	Token      tokenMaterial             `json:"tok"`
+	Candidates []core.DiscoveryCandidate `json:"cand"`
+	ExpiresAt  int64                     `json:"exp"`
 }
 
 func encodeLoginState(enc *cryptoutil.AESGCMEncryptor, state loginState) (string, error) {
-	payload, err := json.Marshal(state)
-	if err != nil {
-		return "", fmt.Errorf("marshal login state: %w", err)
+	return encodeEncryptedState(enc, "login state", state)
+}
+
+func validateLoginState(state *loginState, now time.Time) error {
+	if state.State == "" {
+		return fmt.Errorf("login state missing state value")
 	}
-	return enc.EncryptURLSafe(string(payload))
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("login state missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("login state expired")
+	}
+	return nil
 }
 
 func decodeLoginState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*loginState, error) {
-	plaintext, err := enc.DecryptURLSafe(encoded)
+	state, err := decodeEncryptedState[loginState](enc, "login state", encoded)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt login state: %w", err)
+		return nil, err
 	}
-	var state loginState
-	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
-		return nil, fmt.Errorf("unmarshal login state: %w", err)
+	if err := validateLoginState(state, now); err != nil {
+		return nil, err
 	}
-	if state.State == "" {
-		return nil, fmt.Errorf("login state missing state value")
-	}
-	if now.Unix() > state.ExpiresAt {
-		return nil, fmt.Errorf("login state expired")
-	}
-	return &state, nil
+	return state, nil
 }
 
 func encodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, state pendingConnectionState) (string, error) {
-	payload, err := json.Marshal(state)
-	if err != nil {
-		return "", fmt.Errorf("marshal pending connection state: %w", err)
+	return encodeEncryptedState(enc, "pending connection state", state)
+}
+
+func validatePendingConnectionState(state *pendingConnectionState, now time.Time) error {
+	if state.Token.UserID == "" {
+		return fmt.Errorf("pending connection missing user ID")
 	}
-	return enc.EncryptURLSafe(string(payload))
+	if state.Token.Integration == "" {
+		return fmt.Errorf("pending connection missing integration")
+	}
+	if len(state.Candidates) == 0 {
+		return fmt.Errorf("pending connection missing candidates")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("pending connection missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return errPendingConnectionExpired
+	}
+	return nil
 }
 
 func decodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*pendingConnectionState, error) {
-	plaintext, err := enc.DecryptURLSafe(encoded)
+	state, err := decodeEncryptedState[pendingConnectionState](enc, "pending connection state", encoded)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt pending connection state: %w", err)
+		return nil, err
 	}
-	var state pendingConnectionState
-	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
-		return nil, fmt.Errorf("unmarshal pending connection state: %w", err)
+	if err := validatePendingConnectionState(state, now); err != nil {
+		return nil, err
 	}
-	if state.UserID == "" {
-		return nil, fmt.Errorf("pending connection missing user ID")
-	}
-	if state.Integration == "" {
-		return nil, fmt.Errorf("pending connection missing integration")
-	}
-	if len(state.Candidates) == 0 {
-		return nil, fmt.Errorf("pending connection missing candidates")
-	}
-	if state.ExpiresAt == 0 {
-		return nil, fmt.Errorf("pending connection missing expiration")
-	}
-	if now.Unix() > state.ExpiresAt {
-		return nil, errPendingConnectionExpired
-	}
-	return &state, nil
+	return state, nil
 }
 
 func setURLQueryParam(rawURL, key, value string) (string, error) {
