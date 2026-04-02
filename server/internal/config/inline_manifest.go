@@ -87,9 +87,9 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 	}
 
 	if len(p.ConnectionParams) > 0 {
-		manifest.Provider.Connection = make(map[string]pluginmanifestv1.ProviderConnectionParam, len(p.ConnectionParams))
+		manifest.Provider.ConnectionParams = make(map[string]pluginmanifestv1.ProviderConnectionParam, len(p.ConnectionParams))
 		for k, v := range p.ConnectionParams {
-			manifest.Provider.Connection[k] = pluginmanifestv1.ProviderConnectionParam{
+			manifest.Provider.ConnectionParams[k] = pluginmanifestv1.ProviderConnectionParam{
 				Required: v.Required,
 			}
 		}

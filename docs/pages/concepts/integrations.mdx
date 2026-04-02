@@ -126,7 +126,7 @@ still comes from a spec or upstream server.
 
 ## The Implicit Plugin Connection
 
-When you use top-level `plugin.auth` and `plugin.params`, Gestalt creates an
+When you use top-level `plugin.auth` and `plugin.connection_params`, Gestalt creates an
 implicit connection internally. In API responses and UI flows this connection is
 exposed as `plugin`.
 
@@ -138,7 +138,7 @@ plugin:
     token_url: https://accounts.example.com/oauth/token
     client_id: ${CLIENT_ID}
     client_secret: ${CLIENT_SECRET}
-  params:
+  connection_params:
     tenant:
       required: true
 ```
@@ -166,6 +166,9 @@ plugin:
         token_url: https://accounts.example.com/oauth/token
         client_id: ${CLIENT_ID}
         client_secret: ${CLIENT_SECRET}
+      params:
+        tenant:
+          required: true
     mcp:
       mode: user
       auth:

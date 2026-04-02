@@ -112,7 +112,10 @@ default_connection: missing
 connections:
   workspace:
     auth:
-      type: manual`,
+      type: manual
+    params:
+      tenant:
+        required: true`,
 			wantError: "plugin.default_connection references undeclared connection",
 		},
 	}
@@ -391,32 +394,67 @@ func TestE2EValidateNonMutating(t *testing.T) {
 
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		pluginYAML string
+		wantError  string
+	}{
+		{
+			name: "bogus field",
+			pluginYAML: `command: /tmp/provider
+bogus: true`,
+			wantError: "bogus",
+		},
+		{
+			name: "removed plugin connection field",
+			pluginYAML: `command: /tmp/provider
+connection: default`,
+			wantError: "connection",
+		},
+		{
+			name: "removed plugin params field",
+			pluginYAML: `command: /tmp/provider
+params:
+  tenant:
+    required: true`,
+			wantError: "params",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := fmt.Sprintf(`auth:
   provider: local
 datastore:
   provider: sqlite
   config:
-    path: ` + filepath.Join(dir, "gestalt.db") + `
+    path: %s
 server:
   encryption_key: test-key
 integrations:
   example:
     plugin:
-      command: /tmp/provider
-      bogus: true
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
+      %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected validate to fail for unknown field, output: %s", out)
-	}
-	if !strings.Contains(string(out), "bogus") || !strings.Contains(string(out), "parsing config YAML") {
-		t.Fatalf("expected output to mention unknown field and YAML parsing, got: %s", out)
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate to fail for unknown field, output: %s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) || !strings.Contains(string(out), "parsing config YAML") {
+				t.Fatalf("expected output to mention %q and YAML parsing, got: %s", tc.wantError, out)
+			}
+		})
 	}
 }
 
@@ -428,12 +466,6 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 		pluginYAML string
 		wantError  string
 	}{
-		{
-			name: "plugin connection unsupported",
-			pluginYAML: `command: /tmp/provider
-connection: default`,
-			wantError: "plugin.connection is not supported; remove plugin.connection and use plugin.default_connection or a surface-specific *_connection field instead",
-		},
 		{
 			name: "env unsupported for inline plugin",
 			pluginYAML: `openapi: https://api.example.test/openapi.json

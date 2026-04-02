@@ -28,10 +28,7 @@ func ReadPackageManifest(packagePath string) (_ []byte, _ *pluginmanifestv1.Mani
 			}
 			continue
 		}
-		format := "json"
-		if isYAMLFile(name) {
-			format = "yaml"
-		}
+		format := ManifestFormatFromPath(name)
 		manifest, err := DecodeManifestFormat(data, format)
 		if err != nil {
 			return nil, nil, err
@@ -46,10 +43,7 @@ func ReadManifestFile(p string) ([]byte, *pluginmanifestv1.Manifest, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
 	}
-	format := "json"
-	if isYAMLFile(p) {
-		format = "yaml"
-	}
+	format := ManifestFormatFromPath(p)
 	manifest, err := DecodeManifestFormat(data, format)
 	if err != nil {
 		return nil, nil, err
@@ -62,10 +56,7 @@ func ReadSourceManifestFile(p string) ([]byte, *pluginmanifestv1.Manifest, error
 	if err != nil {
 		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
 	}
-	format := "json"
-	if isYAMLFile(p) {
-		format = "yaml"
-	}
+	format := ManifestFormatFromPath(p)
 	manifest, err := DecodeSourceManifestFormat(data, format)
 	if err != nil {
 		return nil, nil, err
@@ -86,8 +77,7 @@ func LoadManifestFromPath(inputPath string) ([]byte, *pluginmanifestv1.Manifest,
 		data, manifest, err := ReadManifestFile(manifestPath)
 		return data, manifest, manifestPath, err
 	}
-	base := filepath.Base(inputPath)
-	if base == "plugin.json" || base == "plugin.yaml" || base == "plugin.yml" {
+	if IsManifestFile(inputPath) {
 		data, manifest, err := ReadManifestFile(inputPath)
 		return data, manifest, inputPath, err
 	}
