@@ -59,7 +59,7 @@ provider:
       path: "/api/v2/spaces/{space_id}"
       parameters:
         - name: space_id
-          type: string
+          type: int
           in: path
           required: true
     - name: list_pages
@@ -67,6 +67,9 @@ provider:
       method: GET
       path: /api/v2/pages
       parameters:
+        - name: body-format
+          type: string
+          in: query
         - name: title
           type: string
           in: query
@@ -88,9 +91,12 @@ provider:
       path: "/api/v2/spaces/{space_id}/pages"
       parameters:
         - name: space_id
-          type: string
+          type: int
           in: path
           required: true
+        - name: body-format
+          type: string
+          in: query
         - name: depth
           type: string
           in: query
@@ -107,14 +113,17 @@ provider:
           type: int
           in: query
     - name: get_page
-      description: Get a Confluence page by id
+      description: Get a Confluence page by id, including body content when body-format is provided
       method: GET
       path: "/api/v2/pages/{page_id}"
       parameters:
         - name: page_id
-          type: string
+          type: int
           in: path
           required: true
+        - name: body-format
+          type: string
+          in: query
     - name: search_content
       description: Search Confluence content with CQL
       method: GET
@@ -168,7 +177,7 @@ provider:
       path: "/api/v2/pages/{page_id}"
       parameters:
         - name: page_id
-          type: string
+          type: int
           in: path
           required: true
         - name: id
