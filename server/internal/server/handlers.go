@@ -717,9 +717,8 @@ func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
 }
 
 type cliLoginResponse struct {
-	AccessToken    string `json:"access_token"`
-	RefreshToken   string `json:"refresh_token"`
-	RefreshTokenID string `json:"refresh_token_id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type cliRefreshResponse struct {
@@ -743,15 +742,14 @@ func (s *Server) issueCLILoginResponse(ctx context.Context, identity *core.UserI
 		return cliLoginResponse{}, fmt.Errorf("issuing CLI access token: %w", err)
 	}
 
-	refreshToken, plaintextRefresh, err := s.issueCLIRefreshToken(ctx, userID)
+	_, plaintextRefresh, err := s.issueCLIRefreshToken(ctx, userID)
 	if err != nil {
 		return cliLoginResponse{}, fmt.Errorf("issuing CLI refresh token: %w", err)
 	}
 
 	return cliLoginResponse{
-		AccessToken:    accessToken,
-		RefreshToken:   plaintextRefresh,
-		RefreshTokenID: refreshToken.ID,
+		AccessToken:  accessToken,
+		RefreshToken: plaintextRefresh,
 	}, nil
 }
 

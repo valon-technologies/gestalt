@@ -19,8 +19,8 @@ func (s *Server) nowUTCSecond() time.Time {
 	return s.now().UTC().Truncate(time.Second)
 }
 
-func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string, nonExpiring bool) (*core.APIToken, string, error) {
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+func (s *Server) issueStoredToken(ctx context.Context, userID, name, scopes string, typ principal.TokenType, expiresAt *time.Time) (*core.APIToken, string, error) {
+	plaintext, hashed, err := principal.GenerateToken(typ)
 	if err != nil {
 		return nil, "", err
 	}
@@ -32,7 +32,7 @@ func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string,
 		Name:        name,
 		HashedToken: hashed,
 		Scopes:      scopes,
-		ExpiresAt:   s.apiTokenExpiry(now, nonExpiring),
+		ExpiresAt:   expiresAt,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -42,27 +42,20 @@ func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string,
 	return apiToken, plaintext, nil
 }
 
-func (s *Server) issueCLIRefreshToken(ctx context.Context, userID string) (*core.APIToken, string, error) {
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeCLIRefresh)
-	if err != nil {
-		return nil, "", err
-	}
+func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string, nonExpiring bool) (*core.APIToken, string, error) {
+	return s.issueStoredToken(
+		ctx,
+		userID,
+		name,
+		scopes,
+		principal.TokenTypeAPI,
+		s.apiTokenExpiry(s.nowUTCSecond(), nonExpiring),
+	)
+}
 
-	now := s.nowUTCSecond()
-	expiry := now.Add(defaultCLIRefreshTokenExpiry)
-	apiToken := &core.APIToken{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		Name:        cliRefreshTokenName,
-		HashedToken: hashed,
-		ExpiresAt:   &expiry,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	if err := s.datastore.StoreAPIToken(ctx, apiToken); err != nil {
-		return nil, "", err
-	}
-	return apiToken, plaintext, nil
+func (s *Server) issueCLIRefreshToken(ctx context.Context, userID string) (*core.APIToken, string, error) {
+	expiry := s.nowUTCSecond().Add(defaultCLIRefreshTokenExpiry)
+	return s.issueStoredToken(ctx, userID, cliRefreshTokenName, "", principal.TokenTypeCLIRefresh, &expiry)
 }
 
 func (s *Server) apiTokenExpiry(now time.Time, nonExpiring bool) *time.Time {

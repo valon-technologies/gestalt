@@ -133,16 +133,13 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     let refresh_token = login_result["refresh_token"]
         .as_str()
         .context("callback response missing refresh_token field")?;
-    let refresh_token_id = login_result["refresh_token_id"]
-        .as_str()
-        .context("callback response missing refresh_token_id field")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: base_url,
         access_token: access_token.to_string(),
         refresh_token: Some(refresh_token.to_string()),
-        refresh_token_id: Some(refresh_token_id.to_string()),
+        refresh_token_id: None,
     })?;
 
     let _ = send_browser_response(&stream, "Login successful! You can close this tab.");

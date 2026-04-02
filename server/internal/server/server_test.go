@@ -1751,9 +1751,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if result["refresh_token"] == "" {
 		t.Fatal("expected refresh_token in CLI login response")
 	}
-	if result["refresh_token_id"] == "" {
-		t.Fatal("expected refresh_token_id in CLI login response")
-	}
 
 	if stored == nil {
 		t.Fatal("expected CLI refresh token to be stored")
