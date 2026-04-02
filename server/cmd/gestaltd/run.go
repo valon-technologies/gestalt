@@ -109,6 +109,7 @@ func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 
 	result := env.Result
+	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
 	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
 	if err != nil {
 		return err
@@ -146,7 +147,7 @@ func runServer(env *bootstrapEnv) error {
 		Datastore:         result.Datastore,
 		Providers:         result.Providers,
 		Bindings:          result.Bindings,
-		Invoker:           result.Invoker,
+		Invoker:           httpInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -230,21 +231,39 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 
 	port := allocateTestPort(t)
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: stdout
+  config:
+    level: warn
+    format: json
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
 
 	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start serve: %v", err)
 	}
+	stopped := false
 	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
+		if !stopped {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		}
 	})
 
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
@@ -267,6 +286,48 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	}
 	if result["echo"] != "hello" {
 		t.Fatalf("expected echo=hello, got %v", result)
+	}
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+
+	var foundAudit bool
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			continue
+		}
+		if record["msg"] != "audit" {
+			continue
+		}
+
+		foundAudit = true
+		if record["level"] != "INFO" {
+			t.Fatalf("expected audit log level=INFO, got %v\nstdout:\n%s\nstderr:\n%s", record["level"], stdout.String(), stderr.String())
+		}
+		if record["log.type"] != "audit" {
+			t.Fatalf("expected audit log.type=audit, got %v\nstdout:\n%s\nstderr:\n%s", record["log.type"], stdout.String(), stderr.String())
+		}
+		if record["provider"] != "example" {
+			t.Fatalf("expected audit provider=example, got %v\nstdout:\n%s\nstderr:\n%s", record["provider"], stdout.String(), stderr.String())
+		}
+		if record["operation"] != "echo" {
+			t.Fatalf("expected audit operation=echo, got %v\nstdout:\n%s\nstderr:\n%s", record["operation"], stdout.String(), stderr.String())
+		}
+		if record["allowed"] != true {
+			t.Fatalf("expected audit allowed=true, got %v\nstdout:\n%s\nstderr:\n%s", record["allowed"], stdout.String(), stderr.String())
+		}
+		break
+	}
+
+	if !foundAudit {
+		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 }
 
