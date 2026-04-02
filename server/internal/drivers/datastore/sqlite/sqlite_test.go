@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/crypto"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
 
@@ -125,7 +126,10 @@ func TestEncryptionFallbackDecryptsLegacyCiphertext(t *testing.T) {
 		t.Fatalf("Close legacy store: %v", err)
 	}
 
-	currentStore, err := New(dbPath, currentKey, legacyKey)
+	crypto.SetDefaultAESGCMFallbackKey(legacyKey)
+	t.Cleanup(func() { crypto.SetDefaultAESGCMFallbackKey(nil) })
+
+	currentStore, err := New(dbPath, currentKey)
 	if err != nil {
 		t.Fatalf("New current store: %v", err)
 	}

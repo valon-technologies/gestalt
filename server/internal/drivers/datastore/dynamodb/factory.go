@@ -23,10 +23,9 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 		cfg.Table = "gestalt"
 	}
 	return New(Config{
-		Table:               cfg.Table,
-		Region:              cfg.Region,
-		Endpoint:            cfg.Endpoint,
-		EncryptionKey:       deps.EncryptionKey,
-		LegacyEncryptionKey: deps.LegacyEncryptionKey,
+		Table:         cfg.Table,
+		Region:        cfg.Region,
+		Endpoint:      cfg.Endpoint,
+		EncryptionKey: deps.EncryptionKey,
 	})
 }

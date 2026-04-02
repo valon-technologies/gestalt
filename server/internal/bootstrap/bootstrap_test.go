@@ -494,19 +494,18 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 	t.Run("same sqlite deployment reuses persisted salt", func(t *testing.T) {
 		t.Parallel()
 
-		dbPath := filepath.Join(t.TempDir(), "gestalt.db")
+		configDir := t.TempDir()
+		configPath := filepath.Join(configDir, "config.yaml")
 		var keys [][]byte
 		for i := 0; i < 2; i++ {
 			factories := validFactories()
-			factories.Datastores["sqlite"] = stubDatastoreFactory()
 			factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 				keys = append(keys, append([]byte(nil), deps.EncryptionKey...))
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
 
 			cfg := validConfig()
-			cfg.Datastore.Provider = "sqlite"
-			cfg.Datastore.Config = sqliteConfigNode(dbPath)
+			cfg.ResolvedConfigPath = configPath
 			cfg.Server.EncryptionKey = "deterministic"
 
 			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
@@ -518,29 +517,27 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		if !bytes.Equal(keys[0], keys[1]) {
 			t.Fatal("expected persisted salt to keep the derived key stable")
 		}
-		if _, err := os.Stat(dbPath + ".argon2id-salt"); err != nil {
+		if _, err := os.Stat(filepath.Join(configDir, ".gestalt", "encryption-key.argon2id-salt")); err != nil {
 			t.Fatalf("salt file missing: %v", err)
 		}
 	})
 
-	t.Run("same passphrase produces different keys for different sqlite deployments", func(t *testing.T) {
+	t.Run("same passphrase produces different keys for different config directories", func(t *testing.T) {
 		t.Parallel()
 
 		var keys [][]byte
-		for _, dbPath := range []string{
-			filepath.Join(t.TempDir(), "one.db"),
-			filepath.Join(t.TempDir(), "two.db"),
+		for _, configPath := range []string{
+			filepath.Join(t.TempDir(), "one", "config.yaml"),
+			filepath.Join(t.TempDir(), "two", "config.yaml"),
 		} {
 			factories := validFactories()
-			factories.Datastores["sqlite"] = stubDatastoreFactory()
 			factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 				keys = append(keys, append([]byte(nil), deps.EncryptionKey...))
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
 
 			cfg := validConfig()
-			cfg.Datastore.Provider = "sqlite"
-			cfg.Datastore.Config = sqliteConfigNode(dbPath)
+			cfg.ResolvedConfigPath = configPath
 			cfg.Server.EncryptionKey = "deterministic"
 
 			result, err := bootstrap.Bootstrap(ctx, cfg, factories)
@@ -557,13 +554,12 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 	t.Run("hex key skips salt persistence", func(t *testing.T) {
 		t.Parallel()
 
-		dbPath := filepath.Join(t.TempDir(), "gestalt.db")
+		configDir := t.TempDir()
+		configPath := filepath.Join(configDir, "config.yaml")
 		factories := validFactories()
-		factories.Datastores["sqlite"] = stubDatastoreFactory()
 
 		cfg := validConfig()
-		cfg.Datastore.Provider = "sqlite"
-		cfg.Datastore.Config = sqliteConfigNode(dbPath)
+		cfg.ResolvedConfigPath = configPath
 		cfg.Server.EncryptionKey = hex.EncodeToString(bytes.Repeat([]byte{0x7f}, 32))
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
@@ -572,7 +568,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		}
 		<-result.ProvidersReady
 
-		if _, err := os.Stat(dbPath + ".argon2id-salt"); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(configDir, ".gestalt", "encryption-key.argon2id-salt")); !os.IsNotExist(err) {
 			t.Fatalf("unexpected salt file for hex key: %v", err)
 		}
 	})
@@ -732,16 +728,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
-}
-
-func sqliteConfigNode(path string) yaml.Node {
-	return yaml.Node{
-		Kind: yaml.MappingNode,
-		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Value: "path", Tag: "!!str"},
-			{Kind: yaml.ScalarNode, Value: path, Tag: "!!str"},
-		},
-	}
 }
 
 func TestBootstrapWithBindings(t *testing.T) {

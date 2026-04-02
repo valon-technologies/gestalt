@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"sync"
 )
 
 type AESGCMEncryptor struct {
@@ -14,8 +15,25 @@ type AESGCMEncryptor struct {
 	fallbackGCM cipher.AEAD
 }
 
+var defaultFallbackKey struct {
+	mu  sync.RWMutex
+	key []byte
+}
+
+func SetDefaultAESGCMFallbackKey(key []byte) {
+	defaultFallbackKey.mu.Lock()
+	defer defaultFallbackKey.mu.Unlock()
+	defaultFallbackKey.key = append(defaultFallbackKey.key[:0], key...)
+}
+
+func getDefaultAESGCMFallbackKey() []byte {
+	defaultFallbackKey.mu.RLock()
+	defer defaultFallbackKey.mu.RUnlock()
+	return append([]byte(nil), defaultFallbackKey.key...)
+}
+
 func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
-	return NewAESGCMWithFallback(key)
+	return NewAESGCMWithFallback(key, getDefaultAESGCMFallbackKey())
 }
 
 func NewAESGCMWithFallback(key []byte, fallbackKeys ...[]byte) (*AESGCMEncryptor, error) {

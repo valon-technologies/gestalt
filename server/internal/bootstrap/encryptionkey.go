@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	sqliteEncryptionSaltSuffix = ".argon2id-salt"
-	configEncryptionSaltDir    = ".gestalt"
-	configEncryptionSaltFile   = "encryption-key.argon2id-salt"
-	argon2SaltSizeBytes        = 16
+	configEncryptionSaltDir  = ".gestalt"
+	configEncryptionSaltFile = "encryption-key.argon2id-salt"
+	argon2SaltSizeBytes      = 16
 )
 
 func resolveServerEncryptionKeys(cfg *config.Config) ([]byte, []byte, error) {
@@ -46,20 +45,6 @@ func resolveServerEncryptionKeys(cfg *config.Config) ([]byte, []byte, error) {
 }
 
 func encryptionSaltPath(cfg *config.Config) (string, bool, error) {
-	if cfg.Datastore.Provider == "sqlite" {
-		var sqliteCfg struct {
-			Path string `yaml:"path"`
-		}
-		if cfg.Datastore.Config.Kind != 0 {
-			if err := cfg.Datastore.Config.Decode(&sqliteCfg); err != nil {
-				return "", false, fmt.Errorf("resolving sqlite encryption salt path: %w", err)
-			}
-		}
-		if sqliteCfg.Path == "" {
-			sqliteCfg.Path = "./gestalt.db"
-		}
-		return sqliteCfg.Path + sqliteEncryptionSaltSuffix, true, nil
-	}
 	if cfg.ResolvedConfigPath == "" {
 		return "", false, nil
 	}

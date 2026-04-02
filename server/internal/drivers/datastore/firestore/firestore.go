@@ -30,7 +30,7 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(projectID, database string, encryptionKey []byte, fallbackKeys ...[]byte) (*Store, error) {
+func New(projectID, database string, encryptionKey []byte) (*Store, error) {
 	ctx := context.Background()
 	var (
 		client *gcpfirestore.Client
@@ -45,7 +45,7 @@ func New(projectID, database string, encryptionKey []byte, fallbackKeys ...[]byt
 		return nil, fmt.Errorf("firestore: creating client: %w", err)
 	}
 
-	enc, err := crypto.NewAESGCMWithFallback(encryptionKey, fallbackKeys...)
+	enc, err := crypto.NewAESGCM(encryptionKey)
 	if err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("firestore: creating encryptor: %w", err)

@@ -161,13 +161,12 @@ func (m providerMetadata) iconSVGOr(v string) string {
 }
 
 type Deps struct {
-	EncryptionKey       []byte
-	LegacyEncryptionKey []byte
-	BaseURL             string
-	SecretManager       core.SecretManager
-	SQLDB               any // *sql.DB when available, nil otherwise
-	SQLDialect          any // Placeholder(int)string when available, nil otherwise
-	Egress              EgressDeps
+	EncryptionKey []byte
+	BaseURL       string
+	SecretManager core.SecretManager
+	SQLDB         any // *sql.DB when available, nil otherwise
+	SQLDialect    any // Placeholder(int)string when available, nil otherwise
+	Egress        EgressDeps
 }
 
 type sqlDBAccessor interface{ RawDB() any }
@@ -317,12 +316,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if requireEncryptionKey && encKey == nil && cfg.Auth.Provider != "none" {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required when auth is enabled")
 	}
+	crypto.SetDefaultAESGCMFallbackKey(legacyKey)
 
 	deps := Deps{
-		EncryptionKey:       encKey,
-		LegacyEncryptionKey: legacyKey,
-		BaseURL:             cfg.Server.BaseURL,
-		SecretManager:       sm,
+		EncryptionKey: encKey,
+		BaseURL:       cfg.Server.BaseURL,
+		SecretManager: sm,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)
@@ -704,7 +703,7 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	if !ok || dialect == nil {
 		return nil
 	}
-	enc, err := crypto.NewAESGCMWithFallback(deps.EncryptionKey, deps.LegacyEncryptionKey)
+	enc, err := crypto.NewAESGCM(deps.EncryptionKey)
 	if err != nil {
 		slog.Warn("cannot create encryptor for registration store", "component", "mcpoauth", "error", err)
 		return nil

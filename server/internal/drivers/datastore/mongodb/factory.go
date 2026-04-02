@@ -23,5 +23,5 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 	if cfg.Database == "" {
 		cfg.Database = defaultDatabase
 	}
-	return New(cfg.URI, cfg.Database, deps.EncryptionKey, deps.LegacyEncryptionKey)
+	return New(cfg.URI, cfg.Database, deps.EncryptionKey)
 }

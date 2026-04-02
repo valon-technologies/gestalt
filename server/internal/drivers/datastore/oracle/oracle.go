@@ -97,8 +97,8 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dsn string, encryptionKey []byte, fallbackKeys ...[]byte) (*Store, error) {
-	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{}, fallbackKeys...)
+func New(dsn string, encryptionKey []byte) (*Store, error) {
+	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
 	if err != nil {
 		return nil, err
 	}
