@@ -1,0 +1,38 @@
+source: github.com/valon-technologies/gestalt/incident_io
+version: 0.0.1-alpha.1
+display_name: incident.io
+description: Manage incidents, schedules, users, severities, and statuses.
+icon_file: assets/icon.svg
+provider:
+  connections:
+    default:
+      auth:
+        type: manual
+        credentials:
+          - name: token
+            label: API Key
+            description: "Create one in [Settings → API Keys](https://app.incident.io/settings/api-keys)"
+  surfaces:
+    openapi:
+      document: https://api.incident.io/v1/openapiV3.json
+  allowed_operations:
+    "Incidents V2#List":
+      alias: list_incidents
+    "Incidents V2#Show":
+      alias: get_incident
+    "Users V2#List":
+      alias: list_users
+    "Users V2#Show":
+      alias: get_user
+    "Schedules V2#List":
+      alias: list_schedules
+    "Schedules V2#ListScheduleEntries":
+      alias: get_schedule_entries
+    "Severities V1#List":
+      alias: list_severities
+    "Incident Statuses V1#List":
+      alias: list_statuses
+    "Incidents V2#Create":
+      alias: create_incident
+    "Incidents V2#Edit":
+      alias: update_incident
