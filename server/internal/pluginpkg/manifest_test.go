@@ -460,18 +460,19 @@ func TestDecodeManifest_V2ManualAuth(t *testing.T) {
 func TestDecodeManifest_V2WithMCPOAuth(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{
-  "source": "github.com/acme/plugins/linear",
-  "version": "1.0.0",
-  "kinds": ["provider"],
-  "provider": {
-    "graphql_url": "https://api.linear.app/graphql",
-    "mcp_url": "https://mcp.linear.app/mcp",
-    "auth": {
-      "type": "mcp_oauth"
-    }
-  }
-}`)
+	data := mustManifestJSON(t, &manifestWire{
+		Source:  "github.com/acme/plugins/linear",
+		Version: "1.0.0",
+		Provider: &providerManifestWire{
+			Connections: map[string]*providerManifestConnectionWire{
+				"default": {Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth}},
+			},
+			Surfaces: providerManifestSurfacesWire{
+				GraphQL: &providerManifestGraphQLSurfaceWire{URL: "https://api.linear.app/graphql"},
+				MCP:     &providerManifestMCPSurfaceWire{URL: "https://mcp.linear.app/mcp"},
+			},
+		},
+	})
 
 	manifest, err := DecodeManifest(data)
 	if err != nil {
@@ -482,6 +483,12 @@ func TestDecodeManifest_V2WithMCPOAuth(t *testing.T) {
 	}
 	if manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("unexpected auth type %q", manifest.Provider.Auth.Type)
+	}
+	if manifest.Provider.GraphQLURL != "https://api.linear.app/graphql" {
+		t.Fatalf("unexpected graphql_url %q", manifest.Provider.GraphQLURL)
+	}
+	if manifest.Provider.MCPURL != "https://mcp.linear.app/mcp" {
+		t.Fatalf("unexpected mcp_url %q", manifest.Provider.MCPURL)
 	}
 }
 
