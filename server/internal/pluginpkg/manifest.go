@@ -313,7 +313,7 @@ func validateProviderAuth(auth *pluginmanifestv1.ProviderAuth) error {
 		if auth.TokenURL == "" {
 			return fmt.Errorf("provider.auth.token_url is required for oauth2")
 		}
-	case pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
+	case pluginmanifestv1.AuthTypeMCPOAuth, pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
 	default:
 		return fmt.Errorf("unsupported provider.auth.type %q", auth.Type)
 	}

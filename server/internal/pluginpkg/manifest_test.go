@@ -457,6 +457,34 @@ func TestDecodeManifest_V2ManualAuth(t *testing.T) {
 	}
 }
 
+func TestDecodeManifest_V2WithMCPOAuth(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+  "source": "github.com/acme/plugins/linear",
+  "version": "1.0.0",
+  "kinds": ["provider"],
+  "provider": {
+    "graphql_url": "https://api.linear.app/graphql",
+    "mcp_url": "https://mcp.linear.app/mcp",
+    "auth": {
+      "type": "mcp_oauth"
+    }
+  }
+}`)
+
+	manifest, err := DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest: %v", err)
+	}
+	if manifest.Provider.Auth == nil {
+		t.Fatal("expected provider auth to be set")
+	}
+	if manifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("unexpected auth type %q", manifest.Provider.Auth.Type)
+	}
+}
+
 func TestDecodeManifest_V2InvalidAuthType(t *testing.T) {
 	t.Parallel()
 
