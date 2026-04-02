@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Integration,
   PENDING_CONNECTION_PATH,
+  resolveAPIPath,
   startIntegrationOAuth,
   connectManualIntegration,
   disconnectIntegration,
@@ -149,7 +150,7 @@ export default function IntegrationCard({
         }
         setSettingsOpen(false);
         setPendingSelection({
-          action: result.selection_url || PENDING_CONNECTION_PATH,
+          action: resolveAPIPath(result.selection_url || PENDING_CONNECTION_PATH),
           pendingToken: result.pending_token,
         });
       } else {

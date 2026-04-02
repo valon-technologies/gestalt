@@ -72,11 +72,18 @@ export class APIError extends Error {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 export const PENDING_CONNECTION_PATH = "/api/v1/auth/pending-connection";
 
+export function resolveAPIPath(path: string): string {
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(path)) {
+    return path;
+  }
+  return `${API_BASE}${path}`;
+}
+
 export async function fetchAPI<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(API_BASE + path, {
+  const res = await fetch(resolveAPIPath(path), {
     ...options,
     credentials: "include",
     headers: {
