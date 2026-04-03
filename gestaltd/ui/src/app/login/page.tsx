@@ -44,7 +44,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center gradient-warm">
+    <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm animate-fade-in-up">
         <div className="rounded-lg border border-alpha bg-base-white p-10 shadow-dropdown dark:bg-surface">
           <div className="text-center">

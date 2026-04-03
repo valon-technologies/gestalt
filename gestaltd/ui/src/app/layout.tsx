@@ -64,7 +64,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${seasonSerif.variable} ${melangeGrotesk.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body className={`${seasonSerif.variable} ${melangeGrotesk.variable} ${geistMono.variable} font-sans antialiased gradient-warm`}>
         {children}
       </body>
     </html>
