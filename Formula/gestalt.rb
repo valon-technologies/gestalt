@@ -6,7 +6,7 @@ class Gestalt < Formula
   desc "CLI for Gestalt API - authentication, integration management, and operation invocation"
   homepage "https://github.com/valon-technologies/gestalt"
   version "0.0.1-alpha.1"
-  license "Proprietary"
+  license "Apache-2.0"
 
   on_macos do
     on_arm do
