@@ -63,9 +63,14 @@ html {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
 }
 
-h1, h2, h3, h4, h5, h6,
-article h1, article h2, article h3, article h4 {
+h1, article h1 {
   font-family: 'Season Serif', Georgia, serif;
+  letter-spacing: -0.5px;
+}
+
+h2, h3, h4, h5, h6,
+article h2, article h3, article h4 {
+  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
   letter-spacing: -0.5px;
 }
 
