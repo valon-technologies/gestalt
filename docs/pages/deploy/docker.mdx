@@ -1,0 +1,80 @@
+# Docker
+
+## Quick start
+
+```sh
+docker run --rm \
+  -p 8080:8080 \
+  -e GESTALT_ENCRYPTION_KEY=change-me \
+  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
+  -v gestalt-data:/data \
+  valontechnologies/gestaltd:latest
+```
+
+Mount a config file at `/etc/gestalt/config.yaml`. The image is not zero-config and will fail to start without one.
+
+## Docker Compose
+
+```yaml
+services:
+  gestalt:
+    image: valontechnologies/gestaltd:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - gestalt-data:/data
+    environment:
+      GESTALT_ENCRYPTION_KEY: change-me
+
+volumes:
+  gestalt-data:
+```
+
+## Production image
+
+For deterministic production deployments, run `gestaltd init` locally to resolve plugins and write lock state, then bake the result into a derived image:
+
+```
+deploy/
+  config.yaml
+  gestalt.lock.json
+  .gestaltd/providers/...
+  .gestaltd/plugins/...
+```
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+This produces a self-contained image that starts without fetching or resolving anything at runtime.
+
+## Environment variables and secrets
+
+Gestalt expands `${VAR}` placeholders in the config before YAML decoding. The image also supports the `*_FILE` convention: if `VAR` is not set but `VAR_FILE` is, `${VAR}` resolves to the contents of that file. This works well with Docker secrets:
+
+```sh
+docker run --rm \
+  -p 8080:8080 \
+  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
+  -v /run/secrets/encryption-key:/run/secrets/encryption-key:ro \
+  -e GESTALT_ENCRYPTION_KEY_FILE=/run/secrets/encryption-key \
+  valontechnologies/gestaltd:latest
+```
+
+For production, use a dedicated secret manager with `secret://` references. See [Configuration](/concepts/configuration) for details.
+
+## Health endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Liveness check. Returns 200 when the process is running. |
+| `GET /ready` | Readiness check. Returns 503 until providers and the datastore are ready. |
+
+## SQLite and persistent storage
+
+SQLite works for local development, demos, and single-instance deployments. Store the database on a mounted volume (e.g. `/data/gestalt.db`) to persist data across container restarts.
+
+For horizontally scaled deployments, use Postgres or MySQL instead.

@@ -5,7 +5,7 @@ export default {
   "ui-plugins": "UI Plugins",
   "http-api": "HTTP API",
   cli: "CLI",
-  "docker-image": "Docker Image",
+  "docker-images": "Docker Images",
   observability: "Observability",
   "built-in-providers": "Built-in Providers",
 };
