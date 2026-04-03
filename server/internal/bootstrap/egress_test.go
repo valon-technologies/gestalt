@@ -26,7 +26,7 @@ func TestEgressPolicyWiredThroughBootstrap(t *testing.T) {
 		},
 		Credentials: []config.EgressCredentialGrant{
 			{
-				SecretRef:  "secret://alpha-key",
+				SecretRef:  "alpha-key",
 				AuthStyle:  "bearer",
 				Host:       "api.test",
 				PathPrefix: "/v1/private",

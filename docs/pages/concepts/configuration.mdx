@@ -23,7 +23,7 @@ Loading a config is more than YAML parsing:
 4. Connection auth is validated against surface references.
 5. Relative paths are resolved against the directory that contains the config file.
 6. Validation runs.
-7. During bootstrap, `secret://...` values are resolved through the configured secret manager.
+7. During bootstrap, `secret://...` values in bootstrap-managed config sections are resolved through the configured secret manager.
 
 `secret://...` resolution is intentionally later than basic config parsing. That keeps the config loader simple and lets the secret manager itself be configured normally.
 
@@ -118,7 +118,7 @@ That makes configs portable across local runs, Docker mounts, and Kubernetes vol
 
 ## Secret References
 
-Any string value outside `secrets.config` may use the `secret://` scheme:
+Bootstrap-managed string values in `server`, `auth`, `datastore`, `telemetry`, `providers`, and `bindings` may use the `secret://` scheme:
 
 ```yaml
 auth:
@@ -135,6 +135,8 @@ The secret manager resolves the part after `secret://`:
 - `aws_secrets_manager` reads it from AWS Secrets Manager
 - `vault` reads it from HashiCorp Vault
 - `azure_key_vault` reads it from Azure Key Vault
+
+`egress.credentials[].secret_ref` is a different mechanism. It uses a bare secret name and resolves it at request time rather than during bootstrap.
 
 ## The Smallest Explicit Config
 

@@ -1316,6 +1316,9 @@ func validateEgress(cfg *EgressConfig) error {
 		if c.SecretRef == "" {
 			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref is required", i)
 		}
+		if strings.HasPrefix(c.SecretRef, "secret://") {
+			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref must be a bare secret name without secret://", i)
+		}
 		if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
 			SubjectKind: c.SubjectKind,
 			SubjectID:   c.SubjectID,
