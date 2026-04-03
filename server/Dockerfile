@@ -44,4 +44,4 @@ LABEL org.opencontainers.image.title="gestaltd" \
 USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml"]
+CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]

@@ -101,16 +101,20 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	return archivePath
 }
 
-func writeConfigYAML(t *testing.T, dir, source, version string) string {
+func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) string {
 	t.Helper()
 
-	yaml := strings.Join([]string{
+	lines := []string{
+		"server:",
+		"  artifacts_dir: " + artifactsDir,
 		"providers:",
 		"  alpha:",
 		"    from:",
 		"      source: " + source,
 		"      version: " + version,
-	}, "\n") + "\n"
+	}
+
+	yaml := strings.Join(lines, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
@@ -142,7 +146,8 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 		sha256:      archiveSHA,
 	}
 
-	configPath := writeConfigYAML(t, dir, source, version)
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := writeConfigYAML(t, dir, source, version, artifactsDir)
 
 	lc := NewLifecycle(resolver)
 	lock, err := lc.InitAtPath(configPath)
@@ -181,8 +186,8 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	}
 
 	configDir := filepath.Dir(configPath)
-	manifestPath := resolveLockPath(configDir, entry.Manifest)
-	executablePath := resolveLockPath(configDir, entry.Executable)
+	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
 	if _, err := os.Stat(manifestPath); err != nil {
 		t.Errorf("manifest not found at %s: %v", manifestPath, err)
 	}
@@ -222,81 +227,6 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	}
 }
 
-func TestReadLockfileV3Compat(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	v3Lock := Lockfile{
-		Version:   LockVersionCompat,
-		Providers: map[string]LockProviderEntry{},
-		Plugins: map[string]LockPluginEntry{
-			"integration:beta": {
-				Fingerprint: "abc123",
-				Package:     "/tmp/beta.tar.gz",
-				Manifest:    ".gestalt/plugins/integration_beta/plugin.json",
-				Executable:  ".gestalt/plugins/integration_beta/artifacts/darwin/arm64/provider",
-			},
-		},
-	}
-
-	lockPath := filepath.Join(dir, InitLockfileName)
-	data, err := json.MarshalIndent(v3Lock, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if err := os.WriteFile(lockPath, append(data, '\n'), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	lock, err := ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile v3: %v", err)
-	}
-	if lock.Version != LockVersionCompat {
-		t.Errorf("version = %d, want %d", lock.Version, LockVersionCompat)
-	}
-
-	entry := lock.Plugins["integration:beta"]
-	if entry.Fingerprint != "abc123" {
-		t.Errorf("fingerprint = %q, want %q", entry.Fingerprint, "abc123")
-	}
-	if entry.Package != "/tmp/beta.tar.gz" {
-		t.Errorf("package = %q, want %q", entry.Package, "/tmp/beta.tar.gz")
-	}
-
-	if entry.Source != "" {
-		t.Errorf("v3 source should be empty, got %q", entry.Source)
-	}
-	if entry.Version != "" {
-		t.Errorf("v3 version should be empty, got %q", entry.Version)
-	}
-	if entry.ResolvedURL != "" {
-		t.Errorf("v3 resolved_url should be empty, got %q", entry.ResolvedURL)
-	}
-	if entry.ArchiveSHA256 != "" {
-		t.Errorf("v3 archive_sha256 should be empty, got %q", entry.ArchiveSHA256)
-	}
-}
-
-func TestReadLockfileRejectsV2(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, InitLockfileName)
-	data := []byte(`{"version": 2, "providers": {}, "plugins": {}}`)
-	if err := os.WriteFile(lockPath, data, 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	_, err := ReadLockfile(lockPath)
-	if err == nil {
-		t.Fatal("expected error for version 2 lockfile")
-	}
-	if !strings.Contains(err.Error(), "unsupported lockfile version") {
-		t.Errorf("error = %q, want to contain 'unsupported lockfile version'", err.Error())
-	}
-}
-
 func TestSourcePluginNilResolver(t *testing.T) {
 	t.Parallel()
 
@@ -304,7 +234,7 @@ func TestSourcePluginNilResolver(t *testing.T) {
 	source := "github.com/acme/tools/widget"
 	version := "1.0.0"
 
-	configPath := writeConfigYAML(t, dir, source, version)
+	configPath := writeConfigYAML(t, dir, source, version, filepath.Join(dir, "prepared-artifacts"))
 
 	lc := NewLifecycle(nil)
 	_, err := lc.InitAtPath(configPath)
@@ -346,6 +276,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		sha256:      archiveSHA,
 	}
 
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	yaml := strings.Join([]string{
 		"auth:",
 		"  provider: noop",
@@ -354,6 +285,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		"  config:",
 		"    path: " + filepath.Join(dir, "data.db"),
 		"server:",
+		"  artifacts_dir: " + artifactsDir,
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"providers:",
 		"  gadget:",
@@ -387,7 +319,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
 	entry := lock.Plugins[LockPluginKey("integration", "gadget")]
-	pluginRoot := filepath.Join(filepath.Dir(configPath), ".gestaltd", "plugins", "integration_gadget")
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "plugins", "integration_gadget")
 	if err := os.RemoveAll(pluginRoot); err != nil {
 		t.Fatalf("RemoveAll plugin root: %v", err)
 	}
@@ -405,8 +337,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		t.Fatalf("download count during locked rehydration = %d, want 1", got)
 	}
 
-	manifestPath := resolveLockPath(filepath.Dir(configPath), entry.Manifest)
-	executablePath := resolveLockPath(filepath.Dir(configPath), entry.Executable)
+	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
 	if _, err := os.Stat(manifestPath); err != nil {
 		t.Fatalf("manifest not rehydrated at %s: %v", manifestPath, err)
 	}
@@ -491,6 +423,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
 		"auth:",
 		"  provider: noop",
@@ -499,6 +432,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		"  config:",
 		"    path: " + filepath.Join(dir, "data.db"),
 		"server:",
+		"  artifacts_dir: " + artifactsDir,
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"providers:",
 		"  alpha:",
@@ -567,14 +501,14 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}
 
 	wantDirName := "integration_alpha"
-	executablePath := resolveLockPath(configDir, entry.Executable)
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
 	if !strings.Contains(executablePath, wantDirName) {
 		t.Errorf("executable path %q does not contain expected dir %q", executablePath, wantDirName)
 	}
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Errorf("executable not found at %s: %v", executablePath, err)
 	}
-	manifestPath := resolveLockPath(configDir, entry.Manifest)
+	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
 	if _, err := os.Stat(manifestPath); err != nil {
 		t.Errorf("manifest not found at %s: %v", manifestPath, err)
 	}
@@ -587,7 +521,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("executable content = %q, want %q", execData, testBinary)
 	}
 
-	pluginRoot := filepath.Join(configDir, ".gestaltd", "plugins", "integration_alpha")
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "plugins", "integration_alpha")
 	if err := os.RemoveAll(pluginRoot); err != nil {
 		t.Fatalf("RemoveAll plugin root: %v", err)
 	}

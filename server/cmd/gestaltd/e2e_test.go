@@ -212,8 +212,18 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	deployDir := filepath.Join(dir, "deploy")
+	dataDir := filepath.Join(dir, "data")
+	artifactsDir := filepath.Join(dir, "runtime-artifacts")
+	if err := os.MkdirAll(deployDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll deploy dir: %v", err)
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll data dir: %v", err)
+	}
+
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	archivePath := filepath.Join(deployDir, "plugin.tar.gz")
 
 	out, err := exec.Command(gestaltdBin, "plugin", "package", "--input", pluginDir, "--output", archivePath).CombinedOutput()
 	if err != nil {
@@ -221,7 +231,7 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfigWithPaths(t, deployDir, "plugin.tar.gz", filepath.Join(dataDir, "gestalt.db"), artifactsDir, port)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -236,14 +246,30 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 		t.Fatalf("write config telemetry: %v", err)
 	}
 
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath, "--artifacts-dir", artifactsDir).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
+	lockPath := filepath.Join(deployDir, initLockfileName)
+	t.Cleanup(func() {
+		_ = os.Chmod(deployDir, 0o755)
+		_ = os.Chmod(cfgPath, 0o644)
+		_ = os.Chmod(lockPath, 0o644)
+	})
+	if err := os.Chmod(cfgPath, 0o444); err != nil {
+		t.Fatalf("Chmod config: %v", err)
+	}
+	if err := os.Chmod(lockPath, 0o444); err != nil {
+		t.Fatalf("Chmod lockfile: %v", err)
+	}
+	if err := os.Chmod(deployDir, 0o555); err != nil {
+		t.Fatalf("Chmod deploy dir: %v", err)
+	}
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
+	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath, "--artifacts-dir", artifactsDir)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
@@ -837,26 +863,35 @@ func fileSHA256(path string) (string, error) {
 
 func writeE2EConfig(t *testing.T, dir, packageRef string, port int) string {
 	t.Helper()
+	return writeE2EConfigWithPaths(t, dir, packageRef, filepath.Join(dir, "gestalt.db"), "", port)
+}
+
+func writeE2EConfigWithPaths(t *testing.T, dir, packageRef, dbPath, artifactsDir string, port int) string {
+	t.Helper()
 
 	if port == 0 {
 		port = 18080
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
+	serverBlock := fmt.Sprintf(`server:
+  port: %d
+  encryption_key: test-e2e-key
+`, port)
+	if artifactsDir != "" {
+		serverBlock += fmt.Sprintf("  artifacts_dir: %s\n", artifactsDir)
+	}
 	cfg := fmt.Sprintf(`auth:
   provider: none
 datastore:
   provider: sqlite
   config:
     path: %s
-server:
-  port: %d
-  encryption_key: test-e2e-key
-providers:
+%sproviders:
   example:
     from:
       package: %s
-`, filepath.Join(dir, "gestalt.db"), port, packageRef)
+`, dbPath, serverBlock, packageRef)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
