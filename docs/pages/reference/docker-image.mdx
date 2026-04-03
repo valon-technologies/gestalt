@@ -1,32 +1,61 @@
-# Docker
+# Docker Image
 
-The published image is `valontechnologies/gestaltd`.
+The published image is `valontechnologies/gestaltd:latest`.
 
-## What The Image Does
+## Quick start
 
-- exposes port `8080`
-- uses `/gestaltd` as the entrypoint
-- defaults to `serve --locked --config /etc/gestalt/config.yaml`
+```sh
+docker run -p 8080:8080 valontechnologies/gestaltd
+```
 
-## Mount A Prepared Config Directory
+## Image details
 
-If you already ran `gestaltd init`, mount the whole config directory at
-`/etc/gestalt`.
+| Property | Value |
+| --- | --- |
+| Image | `valontechnologies/gestaltd:latest` |
+| Port | `8080` |
+| Entrypoint | `/gestaltd` |
+| Default command | `serve --locked --config /etc/gestalt/config.yaml` |
+| Config path | `/etc/gestalt/config.yaml` |
 
-That directory should contain:
+## Environment variables
 
-- `config.yaml`
-- `gestalt.lock.json`
-- `.gestalt/` when packaged plugins, prepared OpenAPI definitions, or a UI
-  plugin were prepared
+Gestalt config supports `${VAR}` placeholders that are resolved from
+environment variables at startup. See the [Config File](/reference/config-file)
+reference for the full list of configuration options.
 
-## Mutable Local Startup In Docker
+## Docker Compose
 
-For local development, override the default command and start the container with
-`serve --config /etc/gestalt/config.yaml`.
+```yaml
+services:
+  gestalt:
+    image: valontechnologies/gestaltd:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+    environment:
+      GESTALT_BASE_URL: http://localhost:8080
+      GESTALT_ENCRYPTION_KEY: dev-only-change-me
+```
 
-## Bake Prepared State Into A Derived Image
+## Production image
 
-If you want an immutable runtime image, run `gestaltd init` in a build stage,
-copy the prepared config directory plus `.gestalt/` into the final image, and
-keep the runtime container on the default locked command.
+For production, run `gestaltd init` locally to resolve plugins and generate
+a lock file, then commit both the config and lock file to your repo. At
+build time, copy them into a derived image:
+
+```
+deploy/
+  config.yaml
+  gestalt.lock.json
+```
+
+```dockerfile
+FROM valontechnologies/gestaltd
+COPY deploy/ /etc/gestalt/
+```
+
+The image starts with `serve --locked` by default, so it will use the
+committed lock file without fetching anything at runtime. This gives you a
+fully self-contained, deterministic image.
