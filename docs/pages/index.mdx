@@ -2,43 +2,27 @@ import { Cards } from 'nextra/components'
 
 # Gestalt
 
-`gestaltd` is a self-hosted integration server. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with authentication, token storage, integration execution, an optional MCP endpoint, and an embedded web UI served from the same HTTP port.
+Gestalt is a platform for self-hostable, configurable integrations and tooling, with authentication and execution out-of-the-box.
 
-## What Actually Ships
+## How does Gestalt work?
 
-| Piece | What it does |
-| --- | --- |
-| `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
-| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, providers, and runtime settings. |
-| `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd init`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
-| Deploy assets | `gestaltd/Dockerfile`, `gestalt/Dockerfile`, and a Helm chart for production deployment paths. |
+Gestalt works in three stages:
 
-## The Four Foundations
+**Configure.** Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
 
-### Configuration
+**Connect.** Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
 
-Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, providers, and runtime behavior.
+**Invoke.** Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
 
-### Prepared State
+## Why Gestalt?
 
-If your config points at remote OpenAPI specs, GraphQL endpoints, or packaged plugins, `gestaltd init` resolves them and writes lock state next to the config. Production deployments normally start from that prepared state with `gestaltd serve --locked`.
+**Self-hosted and private.** Gestalt runs in your infrastructure. Credentials and data never leave your network.
 
-### Providers And Invocation
+**One config, many integrations.** A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
 
-Each configured provider becomes a runtime provider. All request surfaces share the same invocation broker, so token lookup, refresh, connection mode, instance selection, and auditing work the same way everywhere.
+**Works with AI tooling.** Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
 
-### Surfaces
-
-The same provider graph can be reached through the HTTP API, the embedded web UI, and `/mcp`.
-
-## Deployment Paths
-
-| Mode | Description |
-| --- | --- |
-| No config | Local-only, auto-generated config, `auth.provider: none`, SQLite, and a generated encryption key. |
-| Docker | Single container, single HTTP port, config mounted into `/etc/gestalt/config.yaml`. |
-| Helm on Kubernetes | One Deployment for `gestaltd`, optional init container for locked startup. |
-| Bare binary | `gestaltd`, `gestaltd serve`, `gestaltd init`, and `gestaltd validate`. |
+**Extensible.** Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
 
 ## Start Here
 
