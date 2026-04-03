@@ -11,7 +11,6 @@ secrets: {}
 telemetry: {}
 providers: {}
 server: {}
-egress: {}
 ui: {}
 ```
 
@@ -581,53 +580,6 @@ mcp:
   tool_prefix: github_
 ```
 
-## `egress`
-
-```yaml
-egress:
-  default_action: deny
-  policies:
-    - action: allow
-      subject_kind: user
-      provider: github
-      method: GET
-      host: api.github.com
-      path_prefix: /repos
-  credentials:
-    - host: api.github.com
-      secret_ref: github-api-key
-      auth_style: bearer
-    - host: api.openai.com
-      secret_ref: openai-api-key
-      auth_style: bearer
-```
-
-### `policies`
-
-| Field | Purpose |
-| --- | --- |
-| `action` | `allow` or `deny`. |
-| `subject_kind` | Match a subject kind. |
-| `subject_id` | Match a specific subject. |
-| `provider` | Match a provider name. |
-| `operation` | Match an operation name. |
-| `method` | Match an HTTP method. |
-| `host` | Match an outbound host. |
-| `path_prefix` | Match a path prefix. |
-
-### `credentials`
-
-| Field | Purpose |
-| --- | --- |
-| `secret_ref` | Required. Secret manager key resolved at request time. |
-| `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Defaults to `bearer`. |
-| `subject_kind` | Optional subject filter. |
-| `subject_id` | Optional subject filter. |
-| `operation` | Optional operation filter. |
-| `method` | Optional HTTP-method filter. |
-| `host` | Optional host filter. |
-| `path_prefix` | Optional path filter. |
-
 ## `ui`
 
 ```yaml
@@ -667,7 +619,6 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 - All connections in a provider must share the same mode
 - `surfaces.*.connection` must reference a declared connection when present
 - URL templates in spec surfaces and auth URLs must reference required params
-- `egress.default_action` and policy `action` must be `allow` or `deny`
 - `ui.plugin` requires exactly one of `package` or `source`
 - `ui.plugin.version` is required with `source` and invalid with `package`
 

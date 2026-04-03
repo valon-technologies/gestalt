@@ -1,6 +1,6 @@
 # Security Model
 
-Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, enforces egress policy, and isolates plugin processes. This page describes the trust boundaries, cryptographic primitives, and security-relevant configuration.
+Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes. This page describes the trust boundaries, cryptographic primitives, and security-relevant configuration.
 
 ## Trust Boundaries
 
@@ -21,12 +21,7 @@ Gestalt sits between callers and upstream APIs. It authenticates users, stores e
            │  │ Invoker │ │  MCP    │  │
            │  │ (Broker)│ │ Server  │  │
            │  └────┬────┘ └────┬────┘  │
-           │       │           │       │
-           │  ┌────▼───────────▼────┐  │
-           │  │   Egress Policy     │  │
-           │  │   Enforcement       │  │
-           │  └────┬───────────┬────┘  │
-           └───────┼───────────┼───────┘
+           └───────┬───────────┬───────┘
                    │           │
          ┌─────────▼──┐  ┌────▼──────────┐
          │  Upstream   │  │   Plugin      │
@@ -41,7 +36,7 @@ Four trust boundaries:
 | Boundary | What crosses it | Protection |
 | --- | --- | --- |
 | Internet → Gestalt | User requests | Platform auth (session or API token) |
-| Gestalt → upstream APIs | OAuth tokens, API keys | Egress policy, credential encryption, TLS |
+| Gestalt → upstream APIs | OAuth tokens, API keys | Credential encryption, TLS |
 | Gestalt → plugins | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
 | Operator → Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
 
@@ -191,50 +186,6 @@ Request arrives
       └─ No credentials ──▶ 401 Unauthorized
 ```
 
-## Egress Policy Enforcement
-
-Egress policies control what outbound requests Gestalt makes on behalf of callers. Policy evaluation happens **before** credential resolution. Denied requests never trigger secret fetches or token decryption.
-
-```
-Invocation request
-        │
-        ▼
-  Build PolicyInput:
-    subject (user/identity/system)
-    target  (provider, operation, method, host, path)
-        │
-        ▼
-  Evaluate rules (first match wins)
-        │
-        ├─ Rule matches with action: allow ──▶ Resolve credentials ──▶ Execute
-        ├─ Rule matches with action: deny  ──▶ Block (no credential fetch)
-        └─ No rule matches ──▶ Apply default_action
-```
-
-Policy rules match on any combination of:
-
-| Field | Matches against |
-| --- | --- |
-| `subject_kind` | `user`, `identity`, or `system` |
-| `subject_id` | Specific user email or token ID |
-| `provider` | Integration provider name |
-| `operation` | Operation name |
-| `method` | HTTP method |
-| `host` | Outbound hostname |
-| `path_prefix` | Outbound URL path prefix |
-
-Empty fields are wildcards. The first matching rule wins. If no rule matches, `egress.default_action` applies (default: `allow`).
-
-### Credential Injection
-
-Egress credential grants inject secrets into outbound requests. Credentials are resolved from the secret manager at request time, not at config load time.
-
-| `auth_style` | Behavior |
-| --- | --- |
-| `bearer` | Sets `Authorization: Bearer <secret>` |
-| `basic` | Sets `Authorization: Basic <secret>` |
-| `raw` | Sets `Authorization: <secret>` |
-
 ## Security Headers
 
 Gestalt sets the following headers on every response:
@@ -317,7 +268,6 @@ These configuration choices directly affect the security posture of a deployment
 | `server.encryption_key` | Protect this value. If compromised, all stored integration tokens can be decrypted. Use a strong random string or a 64-character hex key. Must be the same across all instances in a cluster. |
 | `auth.provider` | `none` disables all authentication. Never use in production. |
 | `server.base_url` | Must match the public URL exactly. OAuth callback URLs are derived from it. A mismatch can break auth flows or create open-redirect risks. |
-| `egress.default_action` | Set to `deny` in production and explicitly allow required paths. |
 | TLS termination | Gestalt does not terminate TLS itself. Deploy behind a reverse proxy (Nginx, Envoy, cloud load balancer) that handles TLS. |
 | `secrets.provider` | Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`) or `file` in production. `env` is acceptable but secrets may appear in process listings. |
 | `datastore.provider` | Use Postgres or another SQL datastore in production. SQLite is single-writer and not suitable for multi-replica deployments. |
