@@ -240,12 +240,12 @@ jobs:
 
       - name: Helm template (default chart profile)
         run: |
-          helm template test-release server/deploy/helm/gestalt \
+          helm template test-release gestaltd/deploy/helm/gestalt \
             > /tmp/rendered-default.yaml
 
       - name: Helm template (ingress)
         run: |
-          helm template test-release server/deploy/helm/gestalt \
+          helm template test-release gestaltd/deploy/helm/gestalt \
             --set ingress.enabled=true \
             --set-string ingress.hosts[0].host=gestalt.example.com \
             --set-string ingress.hosts[0].paths[0].path=/gestalt \
