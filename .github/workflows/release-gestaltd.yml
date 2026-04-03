@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
       - run: cd web && npm ci && npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-assets
           path: web/out/
@@ -54,12 +54,12 @@ jobs:
             goarch: arm64
             suffix: linux-arm64
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-assets
           path: server/internal/webui/out/
@@ -80,7 +80,7 @@ jobs:
         run: |
           tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz gestaltd
           shasum -a 256 gestaltd-${{ matrix.platform.suffix }}.tar.gz > gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gestaltd-${{ matrix.platform.suffix }}
           path: |
@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
       - name: Flatten artifacts
@@ -102,7 +102,7 @@ jobs:
           mkdir release
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} release/ \;
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           files: release/*
           generate_release_notes: true
@@ -119,21 +119,21 @@ jobs:
       IMAGE_DOCUMENTATION: https://docs.valon.tools
       IMAGE_URL: https://hub.docker.com/r/valontechnologies/gestaltd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
       - name: Compute image metadata
         id: meta
         run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build and push image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           file: server/Dockerfile
@@ -154,7 +154,7 @@ jobs:
           sbom: true
           provenance: mode=max
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
           format: table
@@ -162,7 +162,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
       - name: Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v5
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
         with:
           username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
           password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
@@ -176,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: main
           token: ${{ secrets.PAT_TOKEN }}
@@ -243,7 +243,7 @@ jobs:
           CHART="server/deploy/helm/gestalt/Chart.yaml"
           sed -i "s/^version:.*/version: ${VERSION}/" "$CHART"
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "$CHART"
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
       - name: Package and push Helm chart to GHCR
         env:
           VERSION: ${{ steps.version.outputs.version }}
