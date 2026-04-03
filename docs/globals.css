@@ -341,19 +341,26 @@ article.nextra-content main::before {
   transform: translateY(-1px);
 }
 
+.nextra-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
 .nextra-card p {
   margin-top: 0 !important;
   color: var(--valon-secondary) !important;
   line-height: 1.6;
+  order: 2;
 }
 
 .nextra-card > span:last-child {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 0 0 !important;
-  font-weight: 400 !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  padding: 0 0 0.75rem !important;
+  font-weight: 600 !important;
+  color: rgba(35, 24, 16, 1) !important;
+  order: 1;
 }
 
 table {

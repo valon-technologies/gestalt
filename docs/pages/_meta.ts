@@ -1,5 +1,6 @@
 export default {
   index: "Overview",
+  introduction: "Introduction",
   "getting-started": "Getting Started",
   concepts: "Concepts",
   tasks: "Tasks",

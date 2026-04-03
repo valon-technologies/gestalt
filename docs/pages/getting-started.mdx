@@ -1,9 +1,4 @@
-import { Callout } from 'nextra/components'
-
 # Getting Started
-
-This guide starts with the zero-config local path and then switches to an
-explicit `config.yaml`.
 
 ## Install
 
@@ -20,65 +15,23 @@ Download the latest binaries from the
 [GitHub releases page](https://github.com/valon-technologies/gestalt/releases)
 and place them on your `PATH`.
 
-**Docker**
+## Run a local server
 
-The published image is `valontechnologies/gestaltd`. It expects
-`/etc/gestalt/config.yaml` and defaults to
-`serve --locked --config /etc/gestalt/config.yaml`.
-See [Docker](/deploy/gateway-only) for the container layout and mount
-expectations.
-
-## Run A Local Server With No Config
+Start a local Gestalt server with a single command:
 
 ```sh
 gestaltd
 ```
 
-If you do not pass `--config` and no local config exists, Gestalt writes a new
-file at `~/.gestalt/config.yaml` and starts immediately.
+When no configuration file is provided, `gestaltd` generates a default local
+config and starts immediately. The server is now running at
+`http://localhost:8080`.
 
-The generated local config uses:
+## Add a provider
 
-- `auth.provider: none`
-- `datastore.provider: sqlite`
-- `secrets.provider: env`
-- `telemetry.provider: stdout`
-- `server.port: 8080`
-
-The generated SQLite database lives at `~/.gestalt/gestalt.db`.
-
-<Callout>
-  `gestaltd` is intentionally local-friendly. Production deployments should
-  usually use `gestaltd init` followed by `gestaltd serve --locked`.
-</Callout>
-
-## Write An Explicit Config
-
-Save this as `openapi/httpbin.yaml`:
-
-```yaml
-openapi: 3.0.3
-info:
-  title: HTTPBin
-  version: 1.0.0
-servers:
-  - url: https://httpbin.org
-paths:
-  /ip:
-    get:
-      operationId: get_ip
-      responses:
-        "200":
-          description: OK
-  /headers:
-    get:
-      operationId: get_headers
-      responses:
-        "200":
-          description: OK
-```
-
-Save this as `config.yaml`:
+Create a file called `config.yaml` with a provider definition. This example
+adds [HTTPBin](https://httpbin.org), a public API that requires no
+authentication:
 
 ```yaml
 server:
@@ -112,26 +65,46 @@ providers:
       tool_prefix: httpbin_
 ```
 
-This is the smallest useful Gestalt config:
+Save the following OpenAPI spec as `openapi/httpbin.yaml`:
 
-- one explicit server block
-- no platform auth
-- SQLite storage
-- one inline OpenAPI provider
-
-## Validate And Start It
-
-```sh
-gestaltd init --config ./config.yaml
-gestaltd validate --config ./config.yaml
-gestaltd serve --locked --config ./config.yaml
+```yaml
+openapi: 3.0.3
+info:
+  title: HTTPBin
+  version: 1.0.0
+servers:
+  - url: https://httpbin.org
+paths:
+  /ip:
+    get:
+      operationId: get_ip
+      responses:
+        "200":
+          description: OK
+  /headers:
+    get:
+      operationId: get_headers
+      responses:
+        "200":
+          description: OK
 ```
 
-`init` writes `gestalt.lock.json`. With this inline config there are no packaged
-artifacts to fetch, but the same workflow scales to packaged providers and UI
-plugins.
+Start the server with your config:
 
-## Call The Integration
+```sh
+gestaltd serve --config ./config.yaml
+```
+
+## Call an integration
+
+Once the server is running, you can invoke the provider through any surface.
+
+**Client CLI**
+
+```sh
+gestalt invoke httpbin get_ip
+gestalt invoke httpbin get_headers
+```
 
 **HTTP API**
 
@@ -139,21 +112,16 @@ plugins.
 curl http://localhost:8080/api/v1/httpbin/get_ip
 ```
 
-**Client CLI**
+**Web UI**
 
-```sh
-gestalt --url http://localhost:8080 integrations list
-gestalt --url http://localhost:8080 invoke httpbin get_headers
-```
+Open `http://localhost:8080` in a browser to explore and invoke integrations
+interactively.
 
-Because `auth.provider` is `none`, no login step is required.
+## Next steps
 
-## Next Steps
-
-- [Configuration](/concepts/configuration) explains config discovery, defaults,
+- [Configuration](/concepts/configuration) explains the config file format,
   environment expansion, and locked startup.
 - [Integrations](/concepts/integrations) covers inline, packaged, and hybrid
   providers.
-- [Plugin Manifests](/reference/plugin-manifests) shows how YAML manifests work
-  for packaged plugins.
-- [Run Locally](/tasks/run-locally) walks through local development patterns.
+- [Add an Integration](/tasks/add-an-integration) walks through adding a
+  real-world provider with OAuth.
