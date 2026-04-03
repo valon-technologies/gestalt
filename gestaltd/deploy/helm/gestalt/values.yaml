@@ -1,5 +1,9 @@
-# These example values use SQLite with a single replica.
-# Switch to Postgres or MySQL before scaling horizontally.
+# The default chart profile is for smoke tests, local development, or
+# trusted internal clusters. It uses auth.provider=none, SQLite, and a
+# single replica so the chart boots without extra secrets.
+#
+# Configure OAuth/OIDC, server.encryption_key, and a networked datastore
+# before using this chart in production.
 replicaCount: 1
 
 image:
@@ -59,19 +63,28 @@ persistence:
   size: 1Gi
 
 # Mounted as /etc/gestalt/config.yaml. The app expands ${ENV_VAR}
-# placeholders at startup, so secrets can be injected via extraEnv.
+# placeholders at startup, so secrets can be injected via extraEnv when
+# you enable OAuth/OIDC or an external datastore below.
 config:
   server:
     port: 8080
-    base_url: "${GESTALT_BASE_URL}"
-    encryption_key: "${GESTALT_ENCRYPTION_KEY}"
+    # Dev-only default so the smoke profile can boot. Override this with
+    # a secret value before production use.
+    encryption_key: "dev-only-insecure-key-change-me"
+    # base_url is optional for the default smoke/dev profile.
+    # Set it to your public HTTPS URL when auth callbacks or external
+    # integrations need it.
+    # base_url: "${GESTALT_BASE_URL}"
   auth:
-    provider: google
-    config:
-      client_id: "${GOOGLE_CLIENT_ID}"
-      client_secret: "${GOOGLE_CLIENT_SECRET}"
-      # Optional. If omitted, Gestalt derives the callback from server.base_url.
-      # redirect_url: "${GOOGLE_REDIRECT_URL}"
+    provider: none
+    config: {}
+    # For Google OAuth:
+    # provider: google
+    # config:
+    #   client_id: "${GOOGLE_CLIENT_ID}"
+    #   client_secret: "${GOOGLE_CLIENT_SECRET}"
+    #   # Optional. If omitted, Gestalt derives the callback from server.base_url.
+    #   # redirect_url: "${GOOGLE_REDIRECT_URL}"
     # For OIDC (Okta, Azure AD, Auth0, Keycloak, Firebase, etc.):
     # provider: oidc
     # config:
@@ -88,8 +101,9 @@ config:
     config:
       path: /data/gestalt.db
 
-# Extra environment variables for the container. These are required
-# for the ${VAR} placeholders in the config above to resolve.
+# Extra environment variables for the container. These are only required
+# when your config uses ${VAR} placeholders for auth, base_url, or
+# external datastore settings.
 extraEnv: []
 # - name: GESTALT_BASE_URL
 #   value: "https://gestalt.example.com"

@@ -232,8 +232,28 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
       - name: Helm lint
         run: helm lint gestaltd/deploy/helm/gestalt
+
+      - name: Helm template (default smoke profile)
+        run: |
+          helm template test-release server/deploy/helm/gestalt \
+            > /tmp/rendered-default.yaml
+
+      - name: Helm template (ingress)
+        run: |
+          helm template test-release server/deploy/helm/gestalt \
+            --set ingress.enabled=true \
+            --set-string ingress.hosts[0].host=gestalt.example.com \
+            --set-string ingress.hosts[0].paths[0].path=/gestalt \
+            --set-string ingress.hosts[0].paths[0].pathType=Prefix \
+            > /tmp/rendered-ingress.yaml
 
       - name: Helm template
         run: |
@@ -263,6 +283,15 @@ jobs:
 
       - name: Validate Kubernetes schemas
         run: kubeconform -strict -summary /tmp/rendered.yaml
+
+      - name: Validate Kubernetes schemas (default smoke profile)
+        run: kubeconform -strict -summary /tmp/rendered-default.yaml
+
+      - name: Validate Kubernetes schemas (ingress)
+        run: kubeconform -strict -summary /tmp/rendered-ingress.yaml
+
+      - name: Run Helm e2e smoke test
+        run: cd server && go test ./cmd/gestaltd -run TestE2EHelmChart -count=1
 
       - name: Helm template (plugin-init)
         run: |
