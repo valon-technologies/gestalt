@@ -26,16 +26,15 @@ export default function TokensPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen">
+      <div className="page-shell">
         <Nav />
-        <main className="mx-auto max-w-5xl px-6 py-12">
-          <div className="animate-fade-in-up">
+        <main className="page-main">
+          <div className="page-hero animate-fade-in-up">
             <span className="label-text">Security</span>
-            <h1 className="mt-2 text-2xl font-heading font-bold text-primary">
-              API Tokens
-            </h1>
-            <p className="mt-2 text-sm text-muted">
-              Manage tokens for programmatic access to the Gestalt API.
+            <h1 className="page-title mt-4">API Tokens</h1>
+            <p className="page-subtitle mt-4">
+              Manage programmatic access with clearer hierarchy, more space, and
+              less of the generic dashboard feel.
             </p>
           </div>
 

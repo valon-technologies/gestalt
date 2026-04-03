@@ -32,16 +32,15 @@ export default function DashboardPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen">
+      <div className="page-shell">
         <Nav />
-        <main className="mx-auto max-w-5xl px-6 py-12">
-          <div className="animate-fade-in-up">
+        <main className="page-main">
+          <div className="page-hero animate-fade-in-up">
             <span className="label-text">Overview</span>
-            <h1 className="mt-2 text-2xl font-heading font-bold text-primary">
-              Dashboard
-            </h1>
-            <p className="mt-2 text-sm text-muted">
-              Your Gestalt overview at a glance.
+            <h1 className="page-title mt-4">Dashboard</h1>
+            <p className="page-subtitle mt-4">
+              A warm, readable control surface for integrations, tokens, and
+              the operational details that matter most.
             </p>
           </div>
 
@@ -49,31 +48,43 @@ export default function DashboardPage() {
             <p className="mt-8 text-sm text-ember-500">{data.error}</p>
           )}
 
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 animate-fade-in-up [animation-delay:60ms]">
+          <div className="mt-8 grid grid-cols-1 gap-6 md:mt-10 md:grid-cols-2 animate-fade-in-up [animation-delay:60ms]">
             <Link
               href="/integrations"
-              className="group rounded-lg border border-alpha bg-base-100 p-8 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface"
+              className="surface-card group p-6 md:p-8"
             >
               <span className="label-text">Integrations</span>
-              <p className="mt-3 text-3xl font-heading font-bold text-primary">
+              <p className="metric-value mt-5">
                 {data.integrations ?? "--"}
               </p>
-              <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
+              <p className="mt-5 max-w-xs text-sm leading-6 text-muted group-hover:text-secondary">
+                Browse providers, establish new connections, and keep the
+                catalog in good shape.
+              </p>
+              <p className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-primary">
                 Manage integrations
-                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
+                <span className="inline-block transition-transform duration-150 group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
               </p>
             </Link>
             <Link
               href="/tokens"
-              className="group rounded-lg border border-alpha bg-base-100 p-8 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface"
+              className="surface-card group p-6 md:p-8"
             >
               <span className="label-text">API Tokens</span>
-              <p className="mt-3 text-3xl font-heading font-bold text-primary">
+              <p className="metric-value mt-5">
                 {data.tokens ?? "--"}
               </p>
-              <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
+              <p className="mt-5 max-w-xs text-sm leading-6 text-muted group-hover:text-secondary">
+                Create, rotate, and retire credentials without losing visual
+                clarity in the process.
+              </p>
+              <p className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-primary">
                 Manage tokens
-                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
+                <span className="inline-block transition-transform duration-150 group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
               </p>
             </Link>
           </div>

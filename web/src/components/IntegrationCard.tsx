@@ -220,7 +220,7 @@ export default function IntegrationCard({
   }
 
   return (
-    <div className="rounded-lg border border-alpha bg-base-white p-6 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface">
+    <div className="surface-card h-full p-6 md:p-7">
       {pendingSelection && (
         <form
           ref={pendingSelectionFormRef}
@@ -235,9 +235,9 @@ export default function IntegrationCard({
           />
         </form>
       )}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-base-100 text-muted [&>svg]:h-5 [&>svg]:w-5 dark:bg-surface-raised">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-base-100 text-muted [&>svg]:h-5 [&>svg]:w-5 dark:bg-surface-raised">
             {safeIconSVG ? (
               <div
                 dangerouslySetInnerHTML={{ __html: safeIconSVG }}
@@ -247,12 +247,15 @@ export default function IntegrationCard({
               <DefaultIcon />
             )}
           </div>
-          <div>
-            <h3 className="text-base font-heading font-semibold text-primary">
+          <div className="min-w-0">
+            <p className="label-text">
+              {integration.connected ? "Connected" : "Available"}
+            </p>
+            <h3 className="section-title mt-3 text-[1.25rem]">
               {integration.display_name || integration.name}
             </h3>
             {integration.description && (
-              <p className="mt-1 line-clamp-2 text-sm text-muted">
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">
                 {integration.description}
               </p>
             )}
@@ -264,18 +267,34 @@ export default function IntegrationCard({
           )}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition-all duration-150 hover:bg-alpha-5 hover:text-muted"
+            className="icon-button h-9 w-9"
             aria-label={`${integration.display_name || integration.name} settings`}
           >
             <GearIcon className="h-4 w-4" />
           </button>
         </div>
       </div>
+      <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+        <span
+          className={`rounded-full border px-3 py-1.5 ${
+            integration.connected
+              ? "border-grove-200 bg-grove-50 text-grove-700 dark:border-grove-600 dark:bg-grove-700/15 dark:text-grove-200"
+              : "border-alpha bg-alpha-5 text-muted"
+          }`}
+        >
+          {integration.connected ? "Ready to use" : "Ready to connect"}
+        </span>
+        <span className="text-faint">
+          {integration.instances?.length
+            ? `${integration.instances.length} connection${integration.instances.length === 1 ? "" : "s"}`
+            : "No saved connections"}
+        </span>
+      </div>
       {error && !settingsOpen && (
         <p className="mt-3 text-sm text-ember-500">{error}</p>
       )}
       {showParamForm && (
-        <form onSubmit={handleParamSubmit} className="mt-4">
+        <form onSubmit={handleParamSubmit} className="mt-6 border-t border-alpha pt-6">
           {renderConnectionParamFields()}
           <div className="mt-4 flex gap-2">
             <Button type="submit" disabled={loading}>
