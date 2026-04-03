@@ -13,12 +13,17 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
+	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
@@ -320,7 +325,12 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 
 	var logRequests, traceRequests, metricRequests atomic.Int32
+	metricObserver := newOTLPMetricObserver()
+	var metricDecodeErr atomic.Value
 	otlpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+
 		switch r.URL.Path {
 		case "/v1/logs":
 			logRequests.Add(1)
@@ -328,10 +338,11 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 			traceRequests.Add(1)
 		case "/v1/metrics":
 			metricRequests.Add(1)
+			if err := metricObserver.recordExport(body); err != nil && metricDecodeErr.Load() == nil {
+				metricDecodeErr.Store(err.Error())
+			}
 		}
 
-		_, _ = io.Copy(io.Discard, r.Body)
-		_ = r.Body.Close()
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(otlpServer.Close)
@@ -366,7 +377,19 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	stdout, stderr := serveLockedAndInvokeExampleEcho(t, cfgPath, port, "")
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		body := invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal success response: %v\nbody: %s", err, body)
+		}
+		if result["echo"] != "hello" {
+			t.Fatalf("expected echo=hello, got %v", result)
+		}
+
+		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
+	})
 
 	if traceRequests.Load() == 0 {
 		t.Fatalf("expected OTLP trace export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
@@ -376,6 +399,34 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 	if logRequests.Load() != 0 {
 		t.Fatalf("expected logs to stay on stdout, saw %d OTLP log exports\nstdout:\n%s\nstderr:\n%s", logRequests.Load(), stdout, stderr)
+	}
+	if v := metricDecodeErr.Load(); v != nil {
+		t.Fatalf("decode OTLP metrics: %s\nstdout:\n%s\nstderr:\n%s", v.(string), stdout, stderr)
+	}
+	if !metricObserver.hasMetric("gestaltd.operation.count") {
+		t.Fatalf("expected gestaltd.operation.count in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !metricObserver.hasMetric("gestaltd.operation.duration") {
+		t.Fatalf("expected gestaltd.operation.duration in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !metricObserver.hasMetric("gestaltd.operation.error_count") {
+		t.Fatalf("expected gestaltd.operation.error_count in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !metricObserver.hasMetricAttributes("gestaltd.operation.count", map[string]string{
+		"gestalt.connection_mode": "none",
+		"gestalt.operation":       "echo",
+		"gestalt.provider":        "example",
+		"gestalt.transport":       "plugin",
+	}) {
+		t.Fatalf("expected gestaltd.operation.count attrs for plugin echo invoke\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !metricObserver.hasMetricAttributes("gestaltd.operation.error_count", map[string]string{
+		"gestalt.connection_mode": "none",
+		"gestalt.operation":       "unknown",
+		"gestalt.provider":        "example",
+		"gestalt.transport":       "unknown",
+	}) {
+		t.Fatalf("expected gestaltd.operation.error_count attrs for unknown operation invoke\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
@@ -1046,7 +1097,7 @@ func writeE2EConfigForDir(t *testing.T, dir, pluginDir string) string {
 	return writeE2EConfig(t, dir, pluginDir, 0)
 }
 
-func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, artifactsDir string) (string, string) {
+func serveLockedAndExerciseExample(t *testing.T, cfgPath string, port int, artifactsDir string, exercise func(t *testing.T, baseURL string)) (string, string) {
 	t.Helper()
 
 	args := []string{"serve", "--locked", "--config", cfgPath}
@@ -1073,30 +1124,185 @@ func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, art
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 	waitForReady(t, baseURL, 30*time.Second)
 
-	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo", strings.NewReader(`{"message":"hello"}`))
+	exercise(t, baseURL)
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+	return stdout.String(), stderr.String()
+}
+
+func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, artifactsDir string) (string, string) {
+	t.Helper()
+
+	return serveLockedAndExerciseExample(t, cfgPath, port, artifactsDir, func(t *testing.T, baseURL string) {
+		body := invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal: %v\nbody: %s", err, body)
+		}
+		if result["echo"] != "hello" {
+			t.Fatalf("expected echo=hello, got %v", result)
+		}
+	})
+}
+
+func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string, wantStatus int) []byte {
+	t.Helper()
+
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/"+operation, strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("invoke returned %d: %s", resp.StatusCode, body)
+		if resp.StatusCode != wantStatus {
+			t.Fatalf("invoke %q returned %d, want %d: %s", operation, resp.StatusCode, wantStatus, respBody)
+		}
+	}
+	return respBody
+}
+
+type otlpMetricObserver struct {
+	mu       sync.Mutex
+	names    map[string]struct{}
+	attrSets map[string]map[string]struct{}
+}
+
+func newOTLPMetricObserver() *otlpMetricObserver {
+	return &otlpMetricObserver{
+		names:    make(map[string]struct{}),
+		attrSets: make(map[string]map[string]struct{}),
+	}
+}
+
+func (o *otlpMetricObserver) recordExport(body []byte) error {
+	var req colmetricspb.ExportMetricsServiceRequest
+	if err := proto.Unmarshal(body, &req); err != nil {
+		return err
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		t.Fatalf("unmarshal: %v\nbody: %s", err, body)
-	}
-	if result["echo"] != "hello" {
-		t.Fatalf("expected echo=hello, got %v", result)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	for _, rm := range req.GetResourceMetrics() {
+		for _, sm := range rm.GetScopeMetrics() {
+			for _, metric := range sm.GetMetrics() {
+				o.names[metric.GetName()] = struct{}{}
+				if o.attrSets[metric.GetName()] == nil {
+					o.attrSets[metric.GetName()] = make(map[string]struct{})
+				}
+				for _, attrSet := range otlpMetricAttributeSets(metric) {
+					o.attrSets[metric.GetName()][attrSet] = struct{}{}
+				}
+			}
+		}
 	}
 
-	stopped = true
-	_ = cmd.Process.Signal(os.Interrupt)
-	_ = cmd.Wait()
-	return stdout.String(), stderr.String()
+	return nil
+}
+
+func (o *otlpMetricObserver) hasMetric(name string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	_, ok := o.names[name]
+	return ok
+}
+
+func (o *otlpMetricObserver) hasMetricAttributes(name string, attrs map[string]string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	sets := o.attrSets[name]
+	if len(sets) == 0 {
+		return false
+	}
+	_, ok := sets[serializeMetricAttributes(attrs)]
+	return ok
+}
+
+func otlpMetricAttributeSets(metric *metricspb.Metric) []string {
+	switch {
+	case metric.GetGauge() != nil:
+		return otlpNumberDataPointAttributeSets(metric.GetGauge().GetDataPoints())
+	case metric.GetSum() != nil:
+		return otlpNumberDataPointAttributeSets(metric.GetSum().GetDataPoints())
+	case metric.GetHistogram() != nil:
+		out := make([]string, 0, len(metric.GetHistogram().GetDataPoints()))
+		for _, point := range metric.GetHistogram().GetDataPoints() {
+			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+		}
+		return out
+	case metric.GetExponentialHistogram() != nil:
+		out := make([]string, 0, len(metric.GetExponentialHistogram().GetDataPoints()))
+		for _, point := range metric.GetExponentialHistogram().GetDataPoints() {
+			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+		}
+		return out
+	case metric.GetSummary() != nil:
+		out := make([]string, 0, len(metric.GetSummary().GetDataPoints()))
+		for _, point := range metric.GetSummary().GetDataPoints() {
+			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func otlpNumberDataPointAttributeSets[T interface{ GetAttributes() []*commonv1.KeyValue }](points []T) []string {
+	out := make([]string, 0, len(points))
+	for _, point := range points {
+		out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+	}
+	return out
+}
+
+func serializeOTLPAttributes(attrs []*commonv1.KeyValue) string {
+	parts := make([]string, 0, len(attrs))
+	for _, attr := range attrs {
+		parts = append(parts, attr.GetKey()+"="+otlpAnyValueString(attr.GetValue()))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func serializeMetricAttributes(attrs map[string]string) string {
+	parts := make([]string, 0, len(attrs))
+	for key, value := range attrs {
+		parts = append(parts, key+"="+value)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func otlpAnyValueString(value *commonv1.AnyValue) string {
+	if value == nil {
+		return ""
+	}
+
+	switch v := value.Value.(type) {
+	case *commonv1.AnyValue_StringValue:
+		return v.StringValue
+	case *commonv1.AnyValue_BoolValue:
+		if v.BoolValue {
+			return "true"
+		}
+		return "false"
+	case *commonv1.AnyValue_IntValue:
+		return fmt.Sprintf("%d", v.IntValue)
+	case *commonv1.AnyValue_DoubleValue:
+		return fmt.Sprintf("%g", v.DoubleValue)
+	case *commonv1.AnyValue_BytesValue:
+		return string(v.BytesValue)
+	default:
+		return ""
+	}
 }
 
 var nextTestPort atomic.Int32 // zero value; first allocation returns 19100

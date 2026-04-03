@@ -64,14 +64,18 @@ func providerCatalog(prov core.Provider) *catalog.Catalog {
 	return prov.Catalog()
 }
 
-func catalogHasOperation(cat *catalog.Catalog, operation string) bool {
+func catalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {
 	if cat == nil || strings.TrimSpace(operation) == "" {
-		return false
+		return "", false
 	}
 	for i := range cat.Operations {
 		if cat.Operations[i].ID == operation {
-			return true
+			transport := strings.TrimSpace(cat.Operations[i].Transport)
+			if transport == "" && strings.TrimSpace(cat.Operations[i].Method) != "" {
+				transport = catalog.TransportREST
+			}
+			return transport, true
 		}
 	}
-	return false
+	return "", false
 }
