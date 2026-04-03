@@ -1,16 +1,46 @@
 # Gestalt
 
-Gestalt is a gateway for integrations. It loads config, resolves remote specs and packaged plugins, and serves a single HTTP and MCP surface.
+Gestalt is organized as a small monorepo with three primary codebases:
+
+| Path | What it contains |
+| --- | --- |
+| `gestaltd` | The Go server daemon. It loads config, resolves remote specs and packaged plugins, serves the HTTP API and MCP surface, embeds the UI, and includes Docker and Helm deployment assets. |
+| `gestalt` | The Rust CLI client. It connects to a running `gestaltd` instance for authentication, operations, and local operator workflows. |
+| `gestaltd/ui` | The Next.js web UI that ships with `gestaltd` and is embedded into server builds. |
+
+Supporting directories:
+
+| Path | What it contains |
+| --- | --- |
+| `plugins` | Built-in and example plugin packages. |
+| `sdk` | Shared SDKs and plugin manifest definitions. |
+| `docs` | The documentation site. |
 
 ## Run
 
-Local:
+Server from source:
 
 ```sh
-gestaltd
+cd gestaltd
+go run ./cmd/gestaltd
 ```
 
-Production:
+CLI:
+
+```sh
+cd gestalt
+cargo run -- --help
+```
+
+UI:
+
+```sh
+cd gestaltd/ui
+npm ci
+npm run dev
+```
+
+Installed production server:
 
 ```sh
 gestaltd init --config ./config.yaml

@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 	specs := []buildSpec{
 		{
 			name:   "echo plugin",
-			dir:    filepath.Join(root, "server"),
+			dir:    filepath.Join(root, "gestaltd"),
 			target: "./internal/testplugins/echo",
 			output: sharedEchoPluginBin,
 		},
@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 		},
 		{
 			name:   "gestaltd",
-			dir:    filepath.Join(root, "server"),
+			dir:    filepath.Join(root, "gestaltd"),
 			target: "./cmd/gestaltd",
 			output: sharedGestaltdBin,
 		},

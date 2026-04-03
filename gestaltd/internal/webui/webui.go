@@ -2,8 +2,8 @@
 //
 // Build the frontend before go build:
 //
-//	cd web && npm run build
-//	cp -r web/out server/internal/webui/out
+//	cd gestaltd/ui && npm run build
+//	cp -r gestaltd/ui/out gestaltd/internal/webui/out
 package webui
 
 import (

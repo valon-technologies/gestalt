@@ -20,12 +20,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-      - run: cd web && npm ci && npm run build
+          cache-dependency-path: gestaltd/ui/package-lock.json
+      - run: cd gestaltd/ui && npm ci && npm run build
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-assets
-          path: web/out/
+          path: gestaltd/ui/out/
           if-no-files-found: error
 
   build:
@@ -57,12 +57,12 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-assets
-          path: server/internal/webui/out/
+          path: gestaltd/internal/webui/out/
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
@@ -72,13 +72,14 @@ jobs:
           GOOS: ${{ matrix.platform.goos }}
           GOARCH: ${{ matrix.platform.goarch }}
         run: |
-          cd server && go build \
+          mkdir -p build
+          cd gestaltd && go build \
             -ldflags "-X main.version=${{ steps.version.outputs.version }}" \
-            -o ../gestaltd \
+            -o ../build/gestaltd \
             ./cmd/gestaltd
       - name: Package
         run: |
-          tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz gestaltd
+          tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz -C build gestaltd
           shasum -a 256 gestaltd-${{ matrix.platform.suffix }}.tar.gz > gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -136,7 +137,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
-          file: server/Dockerfile
+          file: gestaltd/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -240,7 +241,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          CHART="server/deploy/helm/gestalt/Chart.yaml"
+          CHART="gestaltd/deploy/helm/gestalt/Chart.yaml"
           sed -i "s/^version:.*/version: ${VERSION}/" "$CHART"
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "$CHART"
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -248,14 +249,14 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          helm package server/deploy/helm/gestalt --destination /tmp/charts
+          helm package gestaltd/deploy/helm/gestalt --destination /tmp/charts
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
           helm push /tmp/charts/gestalt-${VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/gestaltd.rb server/deploy/helm/gestalt/Chart.yaml
+          git add Formula/gestaltd.rb gestaltd/deploy/helm/gestalt/Chart.yaml
           git diff --cached --quiet && { echo "No changes"; exit 0; }
           git commit -m "Update gestaltd formula and chart to v${{ steps.version.outputs.version }}"
           git pull --rebase origin main
