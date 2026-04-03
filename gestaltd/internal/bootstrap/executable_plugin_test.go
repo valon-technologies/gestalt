@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -357,6 +358,127 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("echo status = %d, want %d", result.Status, http.StatusOK)
+	}
+}
+
+func TestHybridPluginMergesCommandAndDeclarativeREST(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+
+	gotPath := make(chan string, 1)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/acme/plugins/hybrid",
+		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			BaseURL: apiSrv.URL,
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:        "list_items",
+					Description: "List items",
+					Method:      http.MethodGet,
+					Path:        "/items",
+				},
+				{
+					Name:        "get_item",
+					Description: "Get item",
+					Method:      http.MethodGet,
+					Path:        "/items/{id}",
+					Parameters: []pluginmanifestv1.ProviderParameter{
+						{
+							Name:     "id",
+							Type:     "string",
+							In:       "path",
+							Required: true,
+						},
+					},
+				},
+			},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+				SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{
+				ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider",
+			},
+		},
+	}
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"hybrid": {
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected hybrid provider catalog")
+	}
+	ops := make(map[string]catalog.CatalogOperation, len(cat.Operations))
+	for _, op := range cat.Operations {
+		ops[op.ID] = op
+	}
+
+	if op, ok := ops["echo"]; !ok {
+		t.Fatal("expected plugin operation 'echo' to be present")
+	} else if op.Transport != catalog.TransportPlugin {
+		t.Fatalf("echo transport = %q, want %q", op.Transport, catalog.TransportPlugin)
+	}
+	if op, ok := ops["list_items"]; !ok {
+		t.Fatal("expected declarative REST operation 'list_items' to be present")
+	} else if op.Transport != catalog.TransportREST {
+		t.Fatalf("list_items transport = %q, want %q", op.Transport, catalog.TransportREST)
+	}
+	if _, ok := ops["get_item"]; !ok {
+		t.Fatal("expected declarative REST operation 'get_item' to be present")
+	}
+
+	result, err := prov.Execute(context.Background(), "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(list_items): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("list_items status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	select {
+	case got := <-gotPath:
+		if got != "/items" {
+			t.Fatalf("path = %q, want %q", got, "/items")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream request")
 	}
 }
 

@@ -782,6 +782,37 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		closeIfPossible(pluginProv)
 		return nil, fmt.Errorf("build external plugin provider %q: %w", name, err)
 	}
+
+	if manifestProvider != nil && manifestProvider.IsDeclarative() {
+		declarative, err := pluginhost.NewDeclarativeProvider(
+			manifest,
+			nil,
+			pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+		)
+		if err != nil {
+			closeIfPossible(pluginProv)
+			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+		}
+		apiProv, err := applyAllowedOperations(name, allowedOperations, declarative)
+		if err != nil {
+			closeIfPossible(declarative, pluginProv)
+			return nil, err
+		}
+		merged, err := composite.NewMergedWithConnections(
+			name,
+			meta.displayNameOr(pluginProv.DisplayName()),
+			meta.descriptionOr(pluginProv.Description()),
+			meta.iconSVGOr(firstProviderIconSVG(pluginProv, apiProv)),
+			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+			composite.BoundProvider{Provider: apiProv, Connection: plan.apiConnection()},
+		)
+		if err != nil {
+			closeIfPossible(apiProv, pluginProv)
+			return nil, err
+		}
+		return newProviderBuildResult(name, intg, manifest, pluginConfig, merged, nil, deps, regStore)
+	}
+
 	resolved, hasSpecSurface := plan.configuredSpecSurface()
 
 	if !hasSpecSurface {
