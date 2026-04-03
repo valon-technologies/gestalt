@@ -433,8 +433,6 @@ func TestResolveSuccess(t *testing.T) {
 	srv := newTestServer(t, assetName)
 	defer srv.Close()
 
-	browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag() + "/" + assetName
-
 	resolver := &GitHubResolver{BaseURL: srv.URL}
 	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
 	if err != nil {
@@ -448,8 +446,9 @@ func TestResolveSuccess(t *testing.T) {
 	if pkg.ArchiveSHA256 != testAssetSHA256() {
 		t.Errorf("SHA256 = %s, want %s", pkg.ArchiveSHA256, testAssetSHA256())
 	}
-	if pkg.ResolvedURL != browserURL {
-		t.Errorf("ResolvedURL = %s, want %s", pkg.ResolvedURL, browserURL)
+	wantURL := srv.URL + "/asset-dl"
+	if pkg.ResolvedURL != wantURL {
+		t.Errorf("ResolvedURL = %s, want %s", pkg.ResolvedURL, wantURL)
 	}
 
 	pkg.Cleanup()

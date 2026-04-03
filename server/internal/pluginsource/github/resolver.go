@@ -72,10 +72,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := r.Token
-	if token == "" {
-		token = os.Getenv(envGitHubToken)
-	}
+	token := resolveToken(r.Token)
 
 	tag := src.ReleaseTag(version)
 	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
@@ -99,8 +96,15 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		LocalPath:     dl.LocalPath,
 		Cleanup:       dl.Cleanup,
 		ArchiveSHA256: dl.SHA256Hex,
-		ResolvedURL:   asset.BrowserDownloadURL,
+		ResolvedURL:   asset.URL,
 	}, nil
+}
+
+func resolveToken(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return os.Getenv(envGitHubToken)
 }
 
 func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, url, token, tag, slug string) (*releaseResponse, error) {
@@ -282,7 +286,11 @@ func joinAssetNames(assets []releaseAsset) string {
 	return strings.Join(names, ", ")
 }
 
-func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
+func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	token = resolveToken(token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create asset download request: %w", err)
@@ -292,4 +300,8 @@ func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client,
 		req.Header.Set(headerAuthorization, authTokenPrefix+token)
 	}
 	return pluginpkg.DownloadRequest(client, req)
+}
+
+func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
+	return DownloadResolvedAsset(ctx, client, assetURL, token)
 }
