@@ -1,8 +1,6 @@
 package operator
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -61,6 +59,10 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	t.Helper()
 
 	artPath := artifactRelPath("provider")
+	srcDir := filepath.Join(dir, "provider-src")
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
+		t.Fatalf("create provider src dir: %v", err)
+	}
 	manifest := &pluginmanifestv1.Manifest{
 		Source:   source,
 		Version:  version,
@@ -83,31 +85,17 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(srcDir, "plugin.json"), manifestBytes, 0644); err != nil {
+		t.Fatalf("write provider manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), []byte(binaryContent), 0755); err != nil {
+		t.Fatalf("write provider artifact: %v", err)
+	}
 
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	f, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("create archive: %v", err)
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir provider: %v", err)
 	}
-	defer func() { _ = f.Close() }()
-
-	gzw := gzip.NewWriter(f)
-	defer func() { _ = gzw.Close() }()
-	tw := tar.NewWriter(gzw)
-	defer func() { _ = tw.Close() }()
-
-	writeEntry := func(name string, data []byte, mode int64) {
-		t.Helper()
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(data))}); err != nil {
-			t.Fatalf("write header %s: %v", name, err)
-		}
-		if _, err := tw.Write(data); err != nil {
-			t.Fatalf("write data %s: %v", name, err)
-		}
-	}
-
-	writeEntry("plugin.json", manifestBytes, 0644)
-	writeEntry(artPath, []byte(binaryContent), 0755)
 
 	return archivePath
 }
@@ -334,7 +322,6 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	source := "github.com/acme/tools/gadget"
 	version := "2.0.0"
 	binaryContent := "fake-gadget-binary"
-	resolvedURL := "https://github.com/acme/tools/releases/download/v2.0.0/gestalt-plugin-gadget_v2.0.0.tar.gz"
 
 	archivePath := buildV2Archive(t, dir, source, version, binaryContent)
 	archiveData, err := os.ReadFile(archivePath)
@@ -344,9 +331,17 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	archiveSum := sha256.Sum256(archiveData)
 	archiveSHA := hex.EncodeToString(archiveSum[:])
 
+	var downloadCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadCount.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archiveData)
+	}))
+	defer srv.Close()
+
 	resolver := &fakeResolver{
 		archivePath: archivePath,
-		resolvedURL: resolvedURL,
+		resolvedURL: srv.URL + "/plugin.tar.gz",
 		sha256:      archiveSHA,
 	}
 
@@ -384,6 +379,41 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 	if resolver.calls != callsBefore {
 		t.Errorf("resolver called during LoadForExecution (locked), want no additional calls")
+	}
+
+	lock, err := ReadLockfile(filepath.Join(filepath.Dir(configPath), InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	entry := lock.Plugins[LockPluginKey("integration", "gadget")]
+	pluginRoot := filepath.Join(filepath.Dir(configPath), ".gestalt", "plugins", "integration_gadget")
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+
+	callsBefore = resolver.calls
+	downloadsBefore := downloadCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath after cache removal: %v", err)
+	}
+	if resolver.calls != callsBefore {
+		t.Fatalf("resolver called during locked rehydration: got %d, want %d", resolver.calls, callsBefore)
+	}
+	if got := downloadCount.Load() - downloadsBefore; got != 1 {
+		t.Fatalf("download count during locked rehydration = %d, want 1", got)
+	}
+
+	manifestPath := resolveLockPath(filepath.Dir(configPath), entry.Manifest)
+	executablePath := resolveLockPath(filepath.Dir(configPath), entry.Executable)
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Fatalf("manifest not rehydrated at %s: %v", manifestPath, err)
+	}
+	if _, err := os.Stat(executablePath); err != nil {
+		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
+	}
+	if cfg.Integrations["gadget"].Plugin.Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Integrations["gadget"].Plugin.Command, executablePath)
 	}
 }
 
