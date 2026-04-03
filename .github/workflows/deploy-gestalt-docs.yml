@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: REDACTED_GCP_PROJECT
-  REGION: us-east4
-  SERVICE: gestalt-docs
-  IMAGE: us-east4-docker.pkg.dev/REDACTED_GCP_PROJECT/cloud-run-source-deploy/gestalt-docs
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: ${{ vars.DOCS_SERVICE_NAME }}
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ vars.DOCS_SERVICE_NAME }}
 
 jobs:
   deploy:
@@ -39,7 +39,7 @@ jobs:
       - name: Authenticate to Artifact Registry
         uses: docker/login-action@v3
         with:
-          registry: us-east4-docker.pkg.dev
+          registry: ${{ env.REGION }}-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.gcp-auth.outputs.access_token }}
 
