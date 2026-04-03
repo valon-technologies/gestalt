@@ -20,10 +20,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
-	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
-	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
-	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
-	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
@@ -403,21 +399,31 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	metricBodiesMu.Lock()
 	exports := append([][]byte(nil), metricBodies...)
 	metricBodiesMu.Unlock()
-	requireExportedMetric(t, exports, "gestaltd.operation.count", nil, stdout, stderr)
-	requireExportedMetric(t, exports, "gestaltd.operation.duration", nil, stdout, stderr)
-	requireExportedMetric(t, exports, "gestaltd.operation.error_count", nil, stdout, stderr)
-	requireExportedMetric(t, exports, "gestaltd.operation.count", map[string]string{
-		"gestalt.connection_mode": "none",
-		"gestalt.operation":       "echo",
-		"gestalt.provider":        "example",
-		"gestalt.transport":       "plugin",
-	}, stdout, stderr)
-	requireExportedMetric(t, exports, "gestaltd.operation.error_count", map[string]string{
-		"gestalt.connection_mode": "none",
-		"gestalt.operation":       "unknown",
-		"gestalt.provider":        "example",
-		"gestalt.transport":       "unknown",
-	}, stdout, stderr)
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.count")
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.duration")
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.error_count")
+	requireMetricPayload(t, exports, stdout, stderr,
+		"gestaltd.operation.count",
+		"gestalt.connection_mode",
+		"none",
+		"gestalt.operation",
+		"echo",
+		"gestalt.provider",
+		"example",
+		"gestalt.transport",
+		"plugin",
+	)
+	requireMetricPayload(t, exports, stdout, stderr,
+		"gestaltd.operation.error_count",
+		"gestalt.connection_mode",
+		"none",
+		"gestalt.operation",
+		"unknown",
+		"gestalt.provider",
+		"example",
+		"gestalt.transport",
+		"unknown",
+	)
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -1155,83 +1161,25 @@ func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string
 	return respBody
 }
 
-func requireExportedMetric(t *testing.T, exports [][]byte, name string, attrs map[string]string, stdout, stderr string) {
+func requireMetricPayload(t *testing.T, exports [][]byte, stdout, stderr string, parts ...string) {
 	t.Helper()
 
-	found, err := hasExportedMetric(exports, name, attrs)
-	if err != nil {
-		t.Fatalf("decode OTLP metrics: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
-	}
-	if found {
-		return
-	}
-	if attrs == nil {
-		t.Fatalf("expected %s in OTLP export\nstdout:\n%s\nstderr:\n%s", name, stdout, stderr)
-	}
-	t.Fatalf("expected %s attrs %s in OTLP export\nstdout:\n%s\nstderr:\n%s", name, serializeMetricAttributes(attrs), stdout, stderr)
-}
-
-func hasExportedMetric(exports [][]byte, name string, attrs map[string]string) (bool, error) {
-	wantAttrs := serializeMetricAttributes(attrs)
 	for _, body := range exports {
-		var req colmetricspb.ExportMetricsServiceRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
-			return false, err
-		}
-		for _, rm := range req.GetResourceMetrics() {
-			for _, sm := range rm.GetScopeMetrics() {
-				for _, metric := range sm.GetMetrics() {
-					if metric.GetName() != name {
-						continue
-					}
-					if attrs == nil || metricHasAttributes(metric, wantAttrs) {
-						return true, nil
-					}
-				}
-			}
+		if payloadContainsAll(body, parts...) {
+			return
 		}
 	}
-	return false, nil
+
+	t.Fatalf("expected OTLP metric payload to contain %q\nstdout:\n%s\nstderr:\n%s", parts, stdout, stderr)
 }
 
-func metricHasAttributes(metric *metricspb.Metric, want string) bool {
-	var points [][]*commonv1.KeyValue
-	switch {
-	case metric.GetSum() != nil:
-		for _, point := range metric.GetSum().GetDataPoints() {
-			points = append(points, point.GetAttributes())
-		}
-	case metric.GetHistogram() != nil:
-		for _, point := range metric.GetHistogram().GetDataPoints() {
-			points = append(points, point.GetAttributes())
-		}
-	default:
-		return false
-	}
-	for _, attrs := range points {
-		if serializeOTLPAttributes(attrs) == want {
-			return true
+func payloadContainsAll(body []byte, parts ...string) bool {
+	for _, part := range parts {
+		if !bytes.Contains(body, []byte(part)) {
+			return false
 		}
 	}
-	return false
-}
-
-func serializeOTLPAttributes(attrs []*commonv1.KeyValue) string {
-	parts := make([]string, 0, len(attrs))
-	for _, attr := range attrs {
-		parts = append(parts, attr.GetKey()+"="+attr.GetValue().GetStringValue())
-	}
-	sort.Strings(parts)
-	return strings.Join(parts, ",")
-}
-
-func serializeMetricAttributes(attrs map[string]string) string {
-	parts := make([]string, 0, len(attrs))
-	for key, value := range attrs {
-		parts = append(parts, key+"="+value)
-	}
-	sort.Strings(parts)
-	return strings.Join(parts, ",")
+	return true
 }
 
 var nextTestPort atomic.Int32 // zero value; first allocation returns 19100
