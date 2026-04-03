@@ -515,24 +515,94 @@ func OperationOverridesFromManifest(overrides map[string]*pluginmanifestv1.Manif
 }
 
 func Load(path string) (*Config, error) {
-	return LoadWithLookup(path, os.LookupEnv)
+	return loadWithLookup(path, os.LookupEnv, false)
 }
 
 func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
-	return LoadWithLookup(path, func(key string) (string, bool) {
+	return loadWithLookup(path, func(key string) (string, bool) {
 		// Preserve the legacy os.Expand-style contract for callers that only
 		// provide a string mapping: the mapped value wins even when it is empty.
 		return getenv(key), true
-	})
+	}, false)
 }
 
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
+	return loadWithLookup(path, lookup, false)
+}
+
+func OverlayManagedPluginConfig(path string, cfg *Config) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading config file: %w", err)
+	}
+
+	var root yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(&root); err != nil && err != io.EOF {
+		return fmt.Errorf("parsing config YAML: %w", err)
+	}
+	providers := mappingValueNode(documentValueNode(&root), "providers")
+	if providers == nil {
+		return nil
+	}
+
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() {
+			continue
+		}
+
+		raw := mappingValueNode(providers, name)
+		if raw == nil {
+			continue
+		}
+		configNode := mappingValueNode(raw, "config")
+		if configNode == nil || configNode.Kind == 0 {
+			continue
+		}
+
+		node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
+		if err != nil {
+			return fmt.Errorf("expanding managed plugin config for integration %q: %w", name, err)
+		}
+
+		intg.Plugin.Config = node
+		cfg.Integrations[name] = intg
+	}
+
+	return nil
+}
+
+func documentValueNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
+		return node.Content[0]
+	}
+	return node
+}
+
+func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func loadWithLookup(path string, lookup func(string) (string, bool), preserveMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup)
+	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
 	if err != nil {
 		return nil, err
 	}
@@ -555,7 +625,7 @@ func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, e
 	return &cfg, nil
 }
 
-func expandEnvVariables(input string, lookup func(string) (string, bool)) (string, error) {
+func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, error) {
 	var expandErr error
 	resolved := os.Expand(input, func(key string) string {
 		if expandErr != nil {
@@ -566,6 +636,9 @@ func expandEnvVariables(input string, lookup func(string) (string, bool)) (strin
 		}
 		filePath, ok := lookup(key + "_FILE")
 		if !ok || filePath == "" {
+			if preserveMissing {
+				return "${" + key + "}"
+			}
 			return ""
 		}
 		data, err := os.ReadFile(filePath)
@@ -579,6 +652,28 @@ func expandEnvVariables(input string, lookup func(string) (string, bool)) (strin
 		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
 	}
 	return resolved, nil
+}
+
+func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {
+	data, err := yaml.Marshal(&node)
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("marshaling config node: %w", err)
+	}
+
+	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+
+	var out yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(resolved))
+	if err := dec.Decode(&out); err != nil && err != io.EOF {
+		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if out.Kind == yaml.DocumentNode && len(out.Content) == 1 {
+		return *out.Content[0], nil
+	}
+	return out, nil
 }
 
 func applyDefaults(cfg *Config) {

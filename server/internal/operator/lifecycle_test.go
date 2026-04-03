@@ -303,35 +303,16 @@ func TestPluginFingerprint_Stable(t *testing.T) {
 	plugin := &config.PluginDef{
 		Package: "./test-plugin-dir",
 	}
-	first, err := PluginFingerprint("example", plugin, nil, ".")
+	first, err := PluginFingerprint("example", plugin, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("example", plugin, nil, ".")
+	second, err := PluginFingerprint("example", plugin, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
 	if first != second {
 		t.Fatalf("fingerprint not stable: %q != %q", first, second)
-	}
-}
-
-func TestPluginFingerprint_ChangesWithConfig(t *testing.T) {
-	t.Parallel()
-
-	plugin := &config.PluginDef{
-		Package: "./test-plugin-dir",
-	}
-	first, err := PluginFingerprint("example", plugin, map[string]any{"key": "one"}, ".")
-	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
-	}
-	second, err := PluginFingerprint("example", plugin, map[string]any{"key": "two"}, ".")
-	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
-	}
-	if first == second {
-		t.Fatal("fingerprint should differ with different config")
 	}
 }
 
@@ -341,11 +322,11 @@ func TestPluginFingerprint_ChangesWithName(t *testing.T) {
 	plugin := &config.PluginDef{
 		Package: "./test-plugin-dir",
 	}
-	first, err := PluginFingerprint("alpha", plugin, nil, ".")
+	first, err := PluginFingerprint("alpha", plugin, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("beta", plugin, nil, ".")
+	second, err := PluginFingerprint("beta", plugin, ".")
 	if err != nil {
 		t.Fatalf("PluginFingerprint: %v", err)
 	}

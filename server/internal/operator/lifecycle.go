@@ -63,6 +63,9 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
+	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
+		return nil, fmt.Errorf("loading config: %v", err)
+	}
 
 	paths := initPathsForConfig(configPath)
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
@@ -126,14 +129,10 @@ type initPaths struct {
 }
 
 type pluginFingerprintInput struct {
-	Name    string            `json:"name"`
-	Command string            `json:"command,omitempty"`
-	Package string            `json:"package,omitempty"`
-	Source  string            `json:"source,omitempty"`
-	Version string            `json:"version,omitempty"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Config  map[string]any    `json:"config,omitempty"`
+	Name    string `json:"name"`
+	Package string `json:"package,omitempty"`
+	Source  string `json:"source,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 func configHasPlugins(cfg *config.Config) bool {
@@ -214,8 +213,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		entry, found := lock.Plugins[LockPluginKey("integration", name)]
-		configMap, err := config.NodeToMap(intg.Plugin.Config)
-		if err != nil || !pluginEntryMatches(paths, name, intg.Plugin, configMap, entry, found) {
+		if !pluginEntryMatches(paths, name, intg.Plugin, entry, found) {
 			return false
 		}
 	}
@@ -257,22 +255,16 @@ func relativePackagePath(configDir, pkg string) string {
 	return pkg
 }
 
-func PluginFingerprint(name string, plugin *config.PluginDef, configMap map[string]any, configDir string) (string, error) {
+func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) (string, error) {
 	if plugin == nil {
 		return "", nil
 	}
 
 	input := pluginFingerprintInput{
 		Name:    name,
-		Command: plugin.Command,
 		Package: relativePackagePath(configDir, plugin.Package),
 		Source:  plugin.Source,
 		Version: plugin.Version,
-		Args:    plugin.Args,
-		Env:     plugin.Env,
-	}
-	if configMap != nil {
-		input.Config = configMap
 	}
 
 	payload, err := json.Marshal(input)
@@ -305,11 +297,11 @@ func LockPluginKey(kind, name string) string {
 	return kind + ":" + name
 }
 
-func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any, entry LockPluginEntry, found bool) bool {
+func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, entry LockPluginEntry, found bool) bool {
 	if !found {
 		return false
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, configMap, paths.configDir)
+	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
@@ -430,7 +422,7 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, kind, name string
 	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKind(kind), configMap); err != nil {
 		return LockPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, configMap, paths.configDir)
+	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
@@ -485,7 +477,7 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kin
 	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKind(kind), configMap); err != nil {
 		return LockPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, configMap, paths.configDir)
+	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
@@ -674,7 +666,7 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	if !ok {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, configMap, paths.configDir)
+	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
