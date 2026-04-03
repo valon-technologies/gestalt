@@ -225,7 +225,7 @@ jobs:
         working-directory: server
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest@sha256:49b45a911dc535e9345fbfd7101a1bd8a1e190a5f29b877ef75387a061e5fcf0
+        image: mcr.microsoft.com/mssql/server:2022-CU24-ubuntu-22.04@sha256:49b45a911dc535e9345fbfd7101a1bd8a1e190a5f29b877ef75387a061e5fcf0
         env:
           ACCEPT_EULA: Y
           MSSQL_PID: Developer
