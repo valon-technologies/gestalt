@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -21,11 +21,11 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/metricspipeline"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"gopkg.in/yaml.v3"
@@ -52,7 +52,9 @@ type tracesConfig struct {
 }
 
 type metricsConfig struct {
-	Interval string `yaml:"interval"`
+	Interval   string                           `yaml:"interval"`
+	Prometheus metricspipeline.PrometheusConfig `yaml:"prometheus"`
+	Dashboard  metricspipeline.DashboardConfig  `yaml:"dashboard"`
 }
 
 type logsConfig struct {
@@ -71,10 +73,12 @@ const (
 )
 
 type Provider struct {
-	logger *slog.Logger
-	tp     *sdktrace.TracerProvider
-	mp     *sdkmetric.MeterProvider
-	lp     *sdklog.LoggerProvider
+	logger           *slog.Logger
+	tp               *sdktrace.TracerProvider
+	mp               *sdkmetric.MeterProvider
+	lp               *sdklog.LoggerProvider
+	prometheus       http.Handler
+	operationMetrics core.OperationMetrics
 }
 
 func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
@@ -86,14 +90,14 @@ func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 		return nil, fmt.Errorf("otlp telemetry: unknown protocol %q (expected \"grpc\" or \"http\")", cfg.Protocol)
 	}
 
-	res := buildResource(cfg)
+	res := telemetryutil.BuildResource(cfg.ServiceName, cfg.ResourceAttributes)
 
 	tp, err := buildTracerProvider(ctx, cfg, res)
 	if err != nil {
 		return nil, fmt.Errorf("otlp telemetry: building tracer provider: %w", err)
 	}
 
-	mp, err := buildMeterProvider(ctx, cfg, res)
+	metrics, err := buildMeterProvider(ctx, cfg, res)
 	if err != nil {
 		_ = tp.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp telemetry: building meter provider: %w", err)
@@ -102,24 +106,28 @@ func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 	logger, lp, err := buildLogger(ctx, cfg, res)
 	if err != nil {
 		_ = tp.Shutdown(ctx)
-		_ = mp.Shutdown(ctx)
+		_ = metrics.MeterProvider.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp telemetry: building logger: %w", err)
 	}
 
 	otel.SetTracerProvider(tp)
-	otel.SetMeterProvider(mp)
+	otel.SetMeterProvider(metrics.MeterProvider)
 
 	return &Provider{
-		logger: logger,
-		tp:     tp,
-		mp:     mp,
-		lp:     lp,
+		logger:           logger,
+		tp:               tp,
+		mp:               metrics.MeterProvider,
+		lp:               lp,
+		prometheus:       metrics.Prometheus,
+		operationMetrics: metrics.OperationMetrics,
 	}, nil
 }
 
-func (p *Provider) Logger() *slog.Logger                 { return p.logger }
-func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
-func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
+func (p *Provider) Logger() *slog.Logger                    { return p.logger }
+func (p *Provider) TracerProvider() trace.TracerProvider    { return p.tp }
+func (p *Provider) MeterProvider() metric.MeterProvider     { return p.mp }
+func (p *Provider) PrometheusHandler() http.Handler         { return p.prometheus }
+func (p *Provider) OperationMetrics() core.OperationMetrics { return p.operationMetrics }
 
 func (p *Provider) Shutdown(ctx context.Context) error {
 	tpErr := p.tp.Shutdown(ctx)
@@ -156,16 +164,6 @@ func applyConfigDefaults(cfg *yamlConfig) {
 	if cfg.Logs.Format == "" {
 		cfg.Logs.Format = defaultLogFormat
 	}
-}
-
-func buildResource(cfg yamlConfig) *resource.Resource {
-	attrs := []attribute.KeyValue{
-		semconv.ServiceName(cfg.ServiceName),
-	}
-	for k, v := range cfg.ResourceAttributes {
-		attrs = append(attrs, attribute.String(k, v))
-	}
-	return resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 }
 
 func buildTracerProvider(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) {
@@ -210,7 +208,7 @@ func buildTracerProvider(ctx context.Context, cfg yamlConfig, res *resource.Reso
 	), nil
 }
 
-func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
+func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*metricspipeline.Result, error) {
 	interval, err := time.ParseDuration(cfg.Metrics.Interval)
 	if err != nil {
 		return nil, fmt.Errorf("parsing metrics interval: %w", err)
@@ -248,10 +246,10 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 	}
 
 	reader := sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(interval))
-	return sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(reader),
-		sdkmetric.WithResource(res),
-	), nil
+	return metricspipeline.Build(res, metricspipeline.Config{
+		Prometheus: cfg.Metrics.Prometheus,
+		Dashboard:  cfg.Metrics.Dashboard,
+	}, reader)
 }
 
 func buildLogger(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*slog.Logger, *sdklog.LoggerProvider, error) {

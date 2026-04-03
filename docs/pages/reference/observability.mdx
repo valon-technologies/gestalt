@@ -1,7 +1,8 @@
 # Observability
 
-Gestalt ships with structured logging, health endpoints, readiness checks, and
-optional OpenTelemetry export.
+Gestalt ships with structured logging, health endpoints, readiness checks,
+built-in operation metrics, a Prometheus scrape endpoint, and optional
+OpenTelemetry export.
 
 ## Health Endpoints
 
@@ -20,6 +21,10 @@ telemetry:
 ```
 
 That gives you structured logs without external collectors.
+
+By default, `stdout` also keeps a local in-process metric store for the web UI
+dashboard and exposes a Prometheus-compatible `/metrics` endpoint. Traces remain
+disabled unless you switch to `telemetry.provider: otlp`.
 
 ## OTLP Export
 
@@ -50,6 +55,8 @@ Supported OTLP config includes:
 - `resource_attributes`
 - trace sampling
 - metric export interval
+- Prometheus enablement
+- built-in dashboard enablement
 - log level
 
 If you want traces and metrics in OTLP but want application logs to remain on
@@ -84,6 +91,45 @@ These metrics use low-cardinality attributes:
 
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
+
+## Prometheus Scrape Endpoint
+
+When telemetry metrics are enabled, Gestalt exposes a Prometheus scrape endpoint
+at `/metrics`.
+
+- `telemetry.provider: stdout` keeps metrics local and serves them directly.
+- `telemetry.provider: otlp` exports metrics over OTLP and also serves `/metrics`
+  locally unless you disable the Prometheus bridge.
+- `telemetry.provider: noop` disables `/metrics`.
+
+The Prometheus endpoint, OTLP export, and the built-in dashboard all hang off
+the same broker instrumentation point. The built-in dashboard keeps its own
+local in-memory rollups; you do not need separate instrumentation for each
+sink.
+
+## Built-In Dashboard Metrics
+
+The default web UI reads a compact authenticated JSON payload from
+`/api/v1/metrics/overview` and renders a lightweight dashboard for recent
+operation activity.
+
+By default it shows:
+
+- rolling request and error volume
+- latency summaries from `gestaltd.operation.duration`
+- recent bucket activity
+- top providers and operations
+
+This dashboard is intentionally basic:
+
+- fixed one-hour window
+- fixed one-minute buckets
+- process-local in-memory data
+- reset on restart
+- no cross-replica aggregation
+
+It is designed for built-in product visibility, not as a replacement for a
+full observability backend.
 
 ## What Gets Logged
 

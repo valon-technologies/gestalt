@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -385,6 +386,31 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		}
 
 		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
+
+		overview := waitForOperationMetricsOverview(t, baseURL, 5*time.Second)
+		if !overview.Enabled {
+			t.Fatalf("expected built-in metrics overview to be enabled: %+v", overview)
+		}
+		if overview.Summary.Requests == 0 {
+			t.Fatalf("expected overview request count > 0: %+v", overview.Summary)
+		}
+		if overview.Summary.Errors == 0 {
+			t.Fatalf("expected overview error count > 0: %+v", overview.Summary)
+		}
+		if overview.WindowSeconds != 3600 || overview.BucketSeconds != 60 {
+			t.Fatalf("expected fixed 1h/60s built-in metrics window, got %+v", overview)
+		}
+		if overview.Summary.ThroughputRPS <= 0.01 {
+			t.Fatalf("expected summary throughput to use active data span, got %+v", overview.Summary)
+		}
+
+		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusOK)
+		if !bytes.Contains(promBody, []byte("gestaltd_operation_count_total")) {
+			t.Fatalf("expected prometheus counter in /metrics body: %s", promBody)
+		}
+		if !bytes.Contains(promBody, []byte("gestaltd_operation_duration_seconds_bucket")) {
+			t.Fatalf("expected prometheus histogram in /metrics body: %s", promBody)
+		}
 	})
 
 	if traceRequests.Load() == 0 {
@@ -424,6 +450,78 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		"gestalt.transport",
 		"unknown",
 	)
+	if !strings.Contains(stdout, `"msg":"audit"`) {
+		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestE2EInitServeLockedStdoutExposesPrometheusAndDashboardMetricsByDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: stdout
+  config:
+    level: info
+    format: json
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
+
+		overview := waitForOperationMetricsOverview(t, baseURL, 5*time.Second)
+		if !overview.Enabled {
+			t.Fatalf("expected built-in metrics overview to be enabled: %+v", overview)
+		}
+		if overview.Summary.Requests == 0 {
+			t.Fatalf("expected overview request count > 0: %+v", overview.Summary)
+		}
+		if overview.Summary.Errors == 0 {
+			t.Fatalf("expected overview error count > 0: %+v", overview.Summary)
+		}
+		if overview.WindowSeconds != 3600 || overview.BucketSeconds != 60 {
+			t.Fatalf("expected fixed 1h/60s built-in metrics window, got %+v", overview)
+		}
+		if overview.Summary.ThroughputRPS <= 0.01 {
+			t.Fatalf("expected summary throughput to use active data span, got %+v", overview.Summary)
+		}
+		if len(overview.Providers) == 0 || overview.Providers[0].Provider != "example" {
+			t.Fatalf("expected provider breakdown for example: %+v", overview.Providers)
+		}
+		if overview.Providers[0].ThroughputRPS <= 0.01 {
+			t.Fatalf("expected provider throughput to use active data span, got %+v", overview.Providers[0])
+		}
+
+		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusOK)
+		if !bytes.Contains(promBody, []byte("gestaltd_operation_count_total")) {
+			t.Fatalf("expected prometheus counter in /metrics body: %s", promBody)
+		}
+		if !bytes.Contains(promBody, []byte(`gestalt_provider="example"`)) {
+			t.Fatalf("expected provider label in /metrics body: %s", promBody)
+		}
+	})
+
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -1159,6 +1257,43 @@ func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string
 		t.Fatalf("invoke %q returned %d, want %d: %s", operation, resp.StatusCode, wantStatus, respBody)
 	}
 	return respBody
+}
+
+func getEndpointBody(t *testing.T, url string, wantStatus int) []byte {
+	t.Helper()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s: %v", url, err)
+	}
+	if resp.StatusCode != wantStatus {
+		t.Fatalf("GET %s returned %d, want %d: %s", url, resp.StatusCode, wantStatus, body)
+	}
+	return body
+}
+
+func waitForOperationMetricsOverview(t *testing.T, baseURL string, timeout time.Duration) core.OperationMetricsOverview {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		body := getEndpointBody(t, baseURL+"/api/v1/metrics/overview", http.StatusOK)
+		var overview core.OperationMetricsOverview
+		if err := json.Unmarshal(body, &overview); err != nil {
+			t.Fatalf("unmarshal metrics overview: %v\nbody: %s", err, body)
+		}
+		if overview.Enabled && overview.Summary.Requests > 0 {
+			return overview
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("metrics overview did not report requests within %s", timeout)
+	return core.OperationMetricsOverview{}
 }
 
 func requireMetricPayload(t *testing.T, exports [][]byte, stdout, stderr string, parts ...string) {

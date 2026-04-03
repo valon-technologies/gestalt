@@ -41,6 +41,8 @@ type Server struct {
 	apiTokenTTL        time.Duration
 	now                func() time.Time
 	readiness          ReadinessChecker
+	prometheusMetrics  http.Handler
+	operationMetrics   core.OperationMetricsReader
 	mcpHandler         http.Handler
 	webUI              http.Handler
 }
@@ -59,6 +61,8 @@ type Config struct {
 	APITokenTTL       time.Duration
 	Now               func() time.Time
 	Readiness         ReadinessChecker
+	PrometheusMetrics http.Handler
+	OperationMetrics  core.OperationMetricsReader
 	MCPHandler        http.Handler
 	WebUI             http.Handler
 }
@@ -111,6 +115,8 @@ func New(cfg Config) (*Server, error) {
 		apiTokenTTL:       cfg.APITokenTTL,
 		now:               now,
 		readiness:         cfg.Readiness,
+		prometheusMetrics: cfg.PrometheusMetrics,
+		operationMetrics:  cfg.OperationMetrics,
 		mcpHandler:        cfg.MCPHandler,
 		webUI:             cfg.WebUI,
 	}

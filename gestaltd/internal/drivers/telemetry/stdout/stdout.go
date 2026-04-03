@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/metricspipeline"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"gopkg.in/yaml.v3"
 )
@@ -22,14 +23,19 @@ import (
 var _ core.TelemetryProvider = (*Provider)(nil)
 
 type yamlConfig struct {
-	Level  string `yaml:"level"`
-	Format string `yaml:"format"`
+	Level              string                 `yaml:"level"`
+	Format             string                 `yaml:"format"`
+	ServiceName        string                 `yaml:"service_name"`
+	ResourceAttributes map[string]string      `yaml:"resource_attributes"`
+	Metrics            metricspipeline.Config `yaml:"metrics"`
 }
 
 type Provider struct {
-	logger *slog.Logger
-	tp     trace.TracerProvider
-	mp     metric.MeterProvider
+	logger           *slog.Logger
+	tp               trace.TracerProvider
+	mp               metric.MeterProvider
+	prometheus       http.Handler
+	operationMetrics core.OperationMetrics
 }
 
 func NewLogger(levelName, format string) *slog.Logger {
@@ -49,23 +55,38 @@ func NewLogger(levelName, format string) *slog.Logger {
 
 func New(cfg yamlConfig) (*Provider, error) {
 	tp := nooptrace.NewTracerProvider()
-	mp := noopmetric.NewMeterProvider()
+	metrics, err := metricspipeline.Build(
+		telemetryutil.BuildResource(cfg.ServiceName, cfg.ResourceAttributes),
+		cfg.Metrics,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("stdout telemetry: building meter provider: %w", err)
+	}
 
 	otel.SetTracerProvider(tp)
-	otel.SetMeterProvider(mp)
+	otel.SetMeterProvider(metrics.MeterProvider)
 
 	return &Provider{
-		logger: NewLogger(cfg.Level, cfg.Format),
-		tp:     tp,
-		mp:     mp,
+		logger:           NewLogger(cfg.Level, cfg.Format),
+		tp:               tp,
+		mp:               metrics.MeterProvider,
+		prometheus:       metrics.Prometheus,
+		operationMetrics: metrics.OperationMetrics,
 	}, nil
 }
 
-func (p *Provider) Logger() *slog.Logger                 { return p.logger }
-func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
-func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
+func (p *Provider) Logger() *slog.Logger                    { return p.logger }
+func (p *Provider) TracerProvider() trace.TracerProvider    { return p.tp }
+func (p *Provider) MeterProvider() metric.MeterProvider     { return p.mp }
+func (p *Provider) PrometheusHandler() http.Handler         { return p.prometheus }
+func (p *Provider) OperationMetrics() core.OperationMetrics { return p.operationMetrics }
 
-func (p *Provider) Shutdown(context.Context) error { return nil }
+func (p *Provider) Shutdown(ctx context.Context) error {
+	if shutdowner, ok := p.mp.(interface{ Shutdown(context.Context) error }); ok {
+		return shutdowner.Shutdown(ctx)
+	}
+	return nil
+}
 
 var Factory bootstrap.TelemetryFactory = func(node yaml.Node) (core.TelemetryProvider, error) {
 	var cfg yamlConfig

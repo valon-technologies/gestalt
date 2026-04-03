@@ -2,32 +2,70 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getIntegrations, getTokens } from "@/lib/api";
+import {
+  getIntegrations,
+  getOperationMetricsOverview,
+  getTokens,
+  type OperationMetricsOverview,
+} from "@/lib/api";
 import Nav from "@/components/Nav";
 import AuthGuard from "@/components/AuthGuard";
+import DashboardMetrics from "@/components/DashboardMetrics";
 
 export default function DashboardPage() {
   const [data, setData] = useState<{
     integrations: number | null;
     tokens: number | null;
+    metrics: OperationMetricsOverview | null;
     error: string | null;
-  }>({ integrations: null, tokens: null, error: null });
+    metricsError: string | null;
+  }>({
+    integrations: null,
+    tokens: null,
+    metrics: null,
+    error: null,
+    metricsError: null,
+  });
 
   useEffect(() => {
-    Promise.all([getIntegrations(), getTokens()])
-      .then(([integrations, tokens]) => {
-        setData({
-          integrations: integrations.length,
-          tokens: tokens.length,
-          error: null,
-        });
-      })
-      .catch((err) => {
-        setData((prev) => ({
-          ...prev,
-          error: err instanceof Error ? err.message : "Failed to load",
-        }));
+    let active = true;
+
+    Promise.allSettled([
+      getIntegrations(),
+      getTokens(),
+      getOperationMetricsOverview(),
+    ]).then(([integrationsResult, tokensResult, metricsResult]) => {
+      if (!active) return;
+
+      const error =
+        integrationsResult.status === "rejected"
+          ? errorMessage(integrationsResult.reason)
+          : tokensResult.status === "rejected"
+            ? errorMessage(tokensResult.reason)
+            : null;
+
+      setData({
+        integrations:
+          integrationsResult.status === "fulfilled"
+            ? integrationsResult.value.length
+            : null,
+        tokens:
+          tokensResult.status === "fulfilled"
+            ? tokensResult.value.length
+            : null,
+        metrics:
+          metricsResult.status === "fulfilled" ? metricsResult.value : null,
+        error,
+        metricsError:
+          metricsResult.status === "rejected"
+            ? errorMessage(metricsResult.reason)
+            : null,
       });
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -60,7 +98,9 @@ export default function DashboardPage() {
               </p>
               <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
                 Manage integrations
-                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
+                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
               </p>
             </Link>
             <Link
@@ -73,12 +113,26 @@ export default function DashboardPage() {
               </p>
               <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
                 Manage tokens
-                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
+                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
               </p>
             </Link>
           </div>
+
+          <DashboardMetrics metrics={data.metrics} error={data.metricsError} />
         </main>
       </div>
     </AuthGuard>
   );
+}
+
+function errorMessage(reason: unknown): string {
+  if (reason instanceof Error) {
+    return reason.message;
+  }
+  if (typeof reason === "string") {
+    return reason;
+  }
+  return "Failed to load";
 }

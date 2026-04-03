@@ -25,6 +25,12 @@ func (s *Server) routes() {
 func (s *Server) mountCoreRoutes(r chi.Router) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
+	if s.prometheusMetrics != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			r.Handle("/metrics", s.prometheusMetrics)
+		})
+	}
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {
