@@ -127,10 +127,8 @@ resource "google_dns_record_set" "docs" {
 
 # ---------- Workload Identity Federation ----------
 
-data "google_project" "current" {}
-
 resource "google_service_account_iam_member" "github_actions_wif" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/github-actions@${var.project_id}.iam.gserviceaccount.com"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repository}"
 }

@@ -4,6 +4,11 @@ variable "project_id" {
   default     = "REDACTED_GCP_PROJECT"
 }
 
+variable "project_number" {
+  description = "GCP project number hosting the Cloud Run service"
+  type        = string
+}
+
 variable "region" {
   description = "GCP region for Cloud Run"
   type        = string
