@@ -20,12 +20,12 @@ There are three ways to point at a packaged plugin from `config.yaml`.
 Use a local executable directly.
 
 ```yaml
-integrations:
+providers:
   example:
-    plugin:
+    from:
       command: ./bin/example-provider
-      config:
-        greeting: hello
+    config:
+      greeting: hello
 ```
 
 This is best for local development.
@@ -35,9 +35,9 @@ This is best for local development.
 Load a local directory, local archive, or HTTPS archive.
 
 ```yaml
-integrations:
+providers:
   example:
-    plugin:
+    from:
       package: ./dist/example-provider.tar.gz
 ```
 
@@ -54,8 +54,8 @@ This is the cleanest path for reusable, versioned packages.
 
 `gestaltd init` resolves and prepares:
 
-- `plugin.package`
-- `plugin.source`
+- `from.package`
+- `from.source`
 - `ui.plugin.package`
 - `ui.plugin.source`
 

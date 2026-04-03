@@ -19,24 +19,9 @@ exposes those providers through shared request surfaces.
 | `secrets` | Resolves `secret://...` references during bootstrap. |
 | `providers` | Define the provider graph users call. Each named entry is provider-shaped directly. |
 
-## Bootstrap Order
+## Bootstrap
 
-This is the actual shape of startup:
-
-1. Load YAML from the resolved config path.
-2. Expand `${ENV_VAR}` placeholders.
-3. Apply defaults such as `server.port: 8080` and `secrets.provider: env`.
-4. Resolve connection auth and inherited parameters.
-5. Fill redirect URLs from `server.base_url` when possible.
-6. Resolve relative paths against the config file directory.
-7. Validate the config.
-8. Build the secret manager.
-9. Resolve `secret://...` references.
-10. Build the platform auth provider.
-11. Build the datastore.
-12. Build providers from `providers`.
-13. Build the shared invocation broker.
-14. Start the HTTP server.
+At startup, `gestaltd` loads the config, expands environment variables and secrets, builds the platform components (auth, datastore, secret manager), builds providers, and starts the HTTP server. See [Configuration](/concepts/configuration) for the full config lifecycle.
 
 ## Integrations Become Providers
 

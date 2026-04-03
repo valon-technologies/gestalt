@@ -259,7 +259,7 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 ### Audit logs
 
-Audit records are emitted as structured log entries with `log.type=audit`. Route them to a dedicated audit backend using OTel Collector attribute-based filtering. See [Observability](/concepts/observability) for details.
+Audit records are emitted as structured log entries with `log.type=audit`. Route them to a dedicated audit backend using OTel Collector attribute-based filtering. See [Observability](/reference/observability) for details.
 
 ## `providers`
 
@@ -620,7 +620,7 @@ ui:
 | `plugin.source` | Managed plugin source address. Requires `version`. |
 | `plugin.version` | Required with `source`. Must be valid SemVer without leading `v`. |
 
-When `ui` is omitted, `gestaltd` serves the embedded frontend. When `ui.plugin` is configured, the plugin's assets are served instead. See [UI Plugins](/concepts/ui-plugins) for the full workflow.
+When `ui` is omitted, `gestaltd` serves the embedded frontend. When `ui.plugin` is configured, the plugin's assets are served instead. See [UI Plugins](/reference/ui-plugins) for the full workflow.
 
 ## Validation Rules
 

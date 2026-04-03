@@ -228,9 +228,9 @@ Isolation properties:
 Plugins are automatically sandboxed when `allowed_hosts` is configured. No additional configuration is needed:
 
 ```yaml
-integrations:
+providers:
   my-plugin:
-    plugin:
+    from:
       source: github.com/acme/plugins/my-plugin
       version: 1.0.0
       allowed_hosts:
@@ -241,9 +241,9 @@ integrations:
 Without `allowed_hosts`, the plugin runs unrestricted:
 
 ```yaml
-integrations:
+providers:
   trusted-plugin:
-    plugin:
+    from:
       command: ./my-trusted-plugin
 ```
 
