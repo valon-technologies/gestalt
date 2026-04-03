@@ -95,9 +95,25 @@ Start the server with your config:
 gestaltd serve --config ./config.yaml
 ```
 
+## Connect the CLI
+
+Point the `gestalt` client at your running server:
+
+```sh
+gestalt init
+```
+
+The interactive wizard prompts for the server URL (default `http://localhost:8080`)
+and saves it to your local client config. You can also set it directly:
+
+```sh
+gestalt config set url http://localhost:8080
+```
+
 ## Call an integration
 
-Once the server is running, you can invoke the provider through any surface.
+Once the server is running and the CLI is configured, you can invoke the
+provider through any surface.
 
 **Client CLI**
 
