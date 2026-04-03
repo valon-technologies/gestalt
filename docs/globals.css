@@ -95,21 +95,27 @@ article h1 {
   font-weight: 400 !important;
   font-size: clamp(2.75rem, 6vw, 4.25rem) !important;
   line-height: 0.98 !important;
-  letter-spacing: -0.03em !important;
+  letter-spacing: -0.75px !important;
   color: rgba(var(--valon-ink), 1) !important;
 }
 
 h2,
 h3,
+article h2,
+article h3 {
+  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
+  font-weight: 700 !important;
+  letter-spacing: -0.4px !important;
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
 h4,
 h5,
 h6,
-article h2,
-article h3,
 article h4 {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
   font-weight: 400 !important;
-  letter-spacing: -0.03em !important;
+  letter-spacing: -0.2px !important;
   color: rgba(var(--valon-ink), 1) !important;
 }
 
