@@ -46,65 +46,31 @@ func newTestStore(t *testing.T) *Store {
 
 func TestFirestoreDatastoreConformance(t *testing.T) {
 	t.Parallel()
-	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
+	coretesting.RunDatastoreDriverTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
+	}, coretesting.DatastoreDriverHooks{
+		AssertTokenEncryptedAtRest: func(t *testing.T, ctx context.Context, ds core.Datastore, token *core.IntegrationToken) {
+			store := ds.(*Store)
+
+			snap, err := store.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID).Get(ctx)
+			if err != nil {
+				t.Fatalf("raw Get: %v", err)
+			}
+			var doc integrationTokenDoc
+			if err := snap.DataTo(&doc); err != nil {
+				t.Fatalf("DataTo: %v", err)
+			}
+			if doc.AccessTokenEncrypted == token.AccessToken {
+				t.Error("access token stored in plaintext")
+			}
+			if doc.RefreshTokenEncrypted == token.RefreshToken {
+				t.Error("refresh token stored in plaintext")
+			}
+			if doc.AccessTokenEncrypted == "" {
+				t.Error("access_token_encrypted is empty")
+			}
+		},
 	})
-}
-
-func TestEncryptionRoundTrip(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t)
-	ctx := context.Background()
-
-	user, err := store.FindOrCreateUser(ctx, "enc@example.com")
-	if err != nil {
-		t.Fatalf("FindOrCreateUser: %v", err)
-	}
-
-	now := time.Now().Truncate(time.Second)
-	token := &core.IntegrationToken{
-		ID:           fmt.Sprintf("enc-tok-%s", uuid.NewString()),
-		UserID:       user.ID,
-		Integration:  "test",
-		Instance:     "i1",
-		AccessToken:  "secret-access-token",
-		RefreshToken: "secret-refresh-token",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := store.StoreToken(ctx, token); err != nil {
-		t.Fatalf("StoreToken: %v", err)
-	}
-
-	// Verify the raw document stores encrypted values.
-	snap, err := store.client.Collection(datastore.IntegrationTokensCollection).Doc(token.ID).Get(ctx)
-	if err != nil {
-		t.Fatalf("raw Get: %v", err)
-	}
-	var doc integrationTokenDoc
-	if err := snap.DataTo(&doc); err != nil {
-		t.Fatalf("DataTo: %v", err)
-	}
-	if doc.AccessTokenEncrypted == "secret-access-token" {
-		t.Error("access token stored in plaintext")
-	}
-	if doc.RefreshTokenEncrypted == "secret-refresh-token" {
-		t.Error("refresh token stored in plaintext")
-	}
-	if doc.AccessTokenEncrypted == "" {
-		t.Error("access_token_encrypted is empty")
-	}
-
-	got, err := store.Token(ctx, user.ID, "test", "", "i1")
-	if err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	if got.AccessToken != "secret-access-token" {
-		t.Errorf("AccessToken: got %q, want %q", got.AccessToken, "secret-access-token")
-	}
-	if got.RefreshToken != "secret-refresh-token" {
-		t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, "secret-refresh-token")
-	}
 }
 
 func TestFindOrCreateUserHonorsLegacyEmailLookupKey(t *testing.T) {

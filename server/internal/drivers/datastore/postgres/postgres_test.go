@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -80,124 +79,41 @@ func uuidNoDashes(t *testing.T) string {
 
 func TestPostgresDatastoreConformance(t *testing.T) {
 	t.Parallel()
-	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
+	coretesting.RunDatastoreDriverTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
-	})
-}
+	}, coretesting.DatastoreDriverHooks{
+		AssertTokenEncryptedAtRest: func(t *testing.T, ctx context.Context, ds core.Datastore, token *core.IntegrationToken) {
+			store := ds.(*Store)
 
-func TestEncryptionRoundTrip(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t)
-	ctx := context.Background()
-
-	user, err := store.FindOrCreateUser(ctx, "enc@example.com")
-	if err != nil {
-		t.Fatalf("FindOrCreateUser: %v", err)
-	}
-
-	now := time.Now().Truncate(time.Second)
-	token := &core.IntegrationToken{
-		ID:           "enc-tok-1",
-		UserID:       user.ID,
-		Integration:  "test",
-		Instance:     "i1",
-		AccessToken:  "secret-access-token",
-		RefreshToken: "secret-refresh-token",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := store.StoreToken(ctx, token); err != nil {
-		t.Fatalf("StoreToken: %v", err)
-	}
-
-	var accessEnc, refreshEnc string
-	err = store.DB.QueryRowContext(ctx,
-		"SELECT access_token_encrypted, refresh_token_encrypted FROM integration_tokens WHERE id = $1",
-		"enc-tok-1",
-	).Scan(&accessEnc, &refreshEnc)
-	if err != nil {
-		t.Fatalf("raw query: %v", err)
-	}
-	if accessEnc == "secret-access-token" {
-		t.Error("access token stored in plaintext")
-	}
-	if refreshEnc == "secret-refresh-token" {
-		t.Error("refresh token stored in plaintext")
-	}
-	if accessEnc == "" {
-		t.Error("access_token_encrypted is empty")
-	}
-
-	got, err := store.Token(ctx, user.ID, "test", "", "i1")
-	if err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	if got.AccessToken != "secret-access-token" {
-		t.Errorf("AccessToken: got %q, want %q", got.AccessToken, "secret-access-token")
-	}
-	if got.RefreshToken != "secret-refresh-token" {
-		t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, "secret-refresh-token")
-	}
-}
-
-func TestConcurrentReadWrite(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t)
-	ctx := context.Background()
-
-	user, err := store.FindOrCreateUser(ctx, "concurrent@example.com")
-	if err != nil {
-		t.Fatalf("FindOrCreateUser: %v", err)
-	}
-
-	now := time.Now().Truncate(time.Second)
-	var wg sync.WaitGroup
-	errs := make([]error, 10)
-
-	for i := range 10 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			tok := &core.IntegrationToken{
-				ID:          uuid.NewString(),
-				UserID:      user.ID,
-				Integration: "svc",
-				Instance:    uuid.NewString(),
-				AccessToken: "tok",
-				CreatedAt:   now,
-				UpdatedAt:   now,
+			var accessEnc, refreshEnc string
+			err := store.DB.QueryRowContext(ctx,
+				"SELECT access_token_encrypted, refresh_token_encrypted FROM integration_tokens WHERE id = $1",
+				token.ID,
+			).Scan(&accessEnc, &refreshEnc)
+			if err != nil {
+				t.Fatalf("raw query: %v", err)
 			}
-			errs[idx] = store.StoreToken(ctx, tok)
-		}(i)
-	}
-	wg.Wait()
+			if accessEnc == token.AccessToken {
+				t.Error("access token stored in plaintext")
+			}
+			if refreshEnc == token.RefreshToken {
+				t.Error("refresh token stored in plaintext")
+			}
+			if accessEnc == "" {
+				t.Error("access_token_encrypted is empty")
+			}
+		},
+		AssertRejectsOrphanTokenInsert: func(t *testing.T, ctx context.Context, ds core.Datastore) {
+			store := ds.(*Store)
+			now := time.Now().UTC().Truncate(time.Second)
 
-	for i, err := range errs {
-		if err != nil {
-			t.Errorf("concurrent write %d: %v", i, err)
-		}
-	}
-
-	tokens, err := store.ListTokens(ctx, user.ID)
-	if err != nil {
-		t.Fatalf("ListTokens: %v", err)
-	}
-	if len(tokens) != 10 {
-		t.Errorf("expected 10 tokens, got %d", len(tokens))
-	}
-}
-
-func TestForeignKeyEnforcement(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t)
-	ctx := context.Background()
-
-	now := time.Now().Truncate(time.Second)
-	_, err := store.DB.ExecContext(ctx,
-		"INSERT INTO integration_tokens (id, user_id, integration, instance, access_token_encrypted, created_at, updated_at, last_refreshed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		"fk-tok", "nonexistent-user", "svc", "i1", "enc", now, now, now,
-	)
-	if err == nil {
-		t.Error("expected foreign key violation, got nil error")
-	}
+			_, err := store.DB.ExecContext(ctx,
+				"INSERT INTO integration_tokens (id, user_id, integration, instance, access_token_encrypted, created_at, updated_at, last_refreshed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+				"fk-tok", "nonexistent-user", "svc", "i1", "enc", now, now, now,
+			)
+			if err == nil {
+				t.Error("expected foreign key violation, got nil error")
+			}
+		},
+	})
 }
