@@ -366,14 +366,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cat.Operations)
 }
 
-func (s *Server) listBindings(w http.ResponseWriter, _ *http.Request) {
-	if s.bindings == nil {
-		writeJSON(w, http.StatusOK, []string{})
-		return
-	}
-	writeJSON(w, http.StatusOK, s.bindings.List())
-}
-
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
 	operationName := chi.URLParam(r, "operation")

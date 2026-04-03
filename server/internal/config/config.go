@@ -36,7 +36,6 @@ type Config struct {
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Integrations map[string]IntegrationDef `yaml:"providers"`
-	Bindings     map[string]BindingDef     `yaml:"bindings"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
 	UI           UIConfig                  `yaml:"ui"`
@@ -201,12 +200,6 @@ type ManagedParameterDef = pluginmanifestv1.ManagedParameter
 type PaginationMapping struct {
 	HasMorePath string `yaml:"has_more_path"`
 	CursorPath  string `yaml:"cursor_path"`
-}
-
-type BindingDef struct {
-	Type      string    `yaml:"type"`
-	Providers []string  `yaml:"providers"`
-	Config    yaml.Node `yaml:"config"`
 }
 
 type SecretsConfig struct {

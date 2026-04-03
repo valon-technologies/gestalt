@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -290,14 +289,11 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	}
 }
 
-func TestGatewayMode_NoBindingsRequired(t *testing.T) {
+func TestBootstrapProvidesInvoker(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	cfg := validConfig()
-	cfg.Bindings = nil
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -311,67 +307,6 @@ func TestGatewayMode_NoBindingsRequired(t *testing.T) {
 	names := result.Providers.List()
 	if len(names) != 1 || names[0] != "alpha" {
 		t.Errorf("Providers.List: got %v, want [alpha]", names)
-	}
-	if result.Bindings != nil {
-		t.Error("expected Bindings to be nil")
-	}
-}
-
-func TestPlatformMode_BindingsUseScopedInvoker(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	doOp := config.InlineOperationDef{Name: "do", Method: "POST", Path: "/do"}
-	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.PluginDef{
-			BaseURL:    "https://api.test",
-			Operations: []config.InlineOperationDef{doOp},
-		},
-	}
-	cfg.Integrations["beta"] = config.IntegrationDef{
-		Plugin: &config.PluginDef{
-			BaseURL:    "https://api.test",
-			Operations: []config.InlineOperationDef{doOp},
-		},
-	}
-
-	cfg.Bindings = map[string]config.BindingDef{
-		"my-binding": {
-			Type:      "test-binding",
-			Providers: []string{"beta"},
-		},
-	}
-
-	factories := validFactories()
-
-	var bindingDeps bootstrap.BindingDeps
-	factories.Bindings["test-binding"] = func(_ context.Context, name string, _ config.BindingDef, deps bootstrap.BindingDeps) (core.Binding, error) {
-		bindingDeps = deps
-		return &coretesting.StubBinding{N: name}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.AuditSink == nil {
-		t.Fatal("expected AuditSink to be non-nil")
-	}
-
-	if bindingDeps.Invoker == nil {
-		t.Fatal("expected binding deps to carry an invoker")
-	}
-
-	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "alpha", "", "do", nil)
-	if err == nil || !strings.Contains(err.Error(), "not available in this scope") {
-		t.Fatalf("expected scoped binding invoker to reject alpha, got %v", err)
-	}
-
-	_, err = bindingDeps.Invoker.Invoke(ctx, &principal.Principal{}, "beta", "", "do", nil)
-	if err != nil && strings.Contains(err.Error(), "not available in this scope") {
-		t.Fatalf("expected scoped binding invoker to allow beta, but got scope error: %v", err)
 	}
 }
 
@@ -666,61 +601,4 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
-}
-
-func TestBootstrapWithBindings(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Bindings = map[string]config.BindingDef{
-		"my-webhook": {Type: "webhook"},
-	}
-
-	factories := validFactories()
-	factories.Bindings["webhook"] = func(_ context.Context, name string, _ config.BindingDef, _ bootstrap.BindingDeps) (core.Binding, error) {
-		return &coretesting.StubBinding{N: name}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Bindings == nil {
-		t.Fatal("expected Bindings to be non-nil")
-	}
-	names := result.Bindings.List()
-	if len(names) != 1 || names[0] != "my-webhook" {
-		t.Fatalf("Bindings.List: got %v, want [my-webhook]", names)
-	}
-}
-
-func TestBootstrapNoBindings(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-	if result.Bindings != nil {
-		t.Fatalf("expected Bindings to be nil, got %v", result.Bindings.List())
-	}
-}
-
-func TestBootstrapUnknownBindingType(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Bindings = map[string]config.BindingDef{
-		"bad": {Type: "nonexistent"},
-	}
-
-	_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err == nil {
-		t.Fatal("expected error for unknown binding type")
-	}
 }

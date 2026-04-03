@@ -65,8 +65,3 @@ func New() *Registry {
 		Providers:     newPluginMap[core.Provider]("provider"),
 	}
 }
-
-func NewBindingMap() *PluginMap[core.Binding] {
-	m := newPluginMap[core.Binding]("binding")
-	return &m
-}

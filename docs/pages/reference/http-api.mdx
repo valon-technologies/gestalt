@@ -9,10 +9,6 @@ Authenticated routes accept:
 - the `session_token` cookie
 - or `Authorization: Bearer <token>`
 
-For proxy routes, Gestalt also understands:
-
-- `Proxy-Authorization: Bearer <token>`
-
 Valid bearer tokens are:
 
 - platform session tokens
@@ -57,22 +53,6 @@ Valid bearer tokens are:
 | `GET` | `/api/v1/tokens` | List API tokens for the current user. |
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 | `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
-
-### Binding Discovery
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/bindings` | List configured bindings. |
-
-## Dynamic Binding Routes
-
-Bindings may add routes under:
-
-```text
-/api/v1/bindings/{binding-name}/...
-```
-
-The exact paths and auth behavior depend on the binding type and its config.
 
 ## MCP
 

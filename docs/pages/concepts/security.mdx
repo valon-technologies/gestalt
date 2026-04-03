@@ -191,8 +191,6 @@ Request arrives
       └─ No credentials ──▶ 401 Unauthorized
 ```
 
-For proxy bindings, `Proxy-Authorization: Bearer` is checked first, then `Authorization: Bearer`. A `407 Proxy Authentication Required` is returned instead of `401`.
-
 ## Egress Policy Enforcement
 
 Egress policies control what outbound requests Gestalt makes on behalf of callers. Policy evaluation happens **before** credential resolution. Denied requests never trigger secret fetches or token decryption.
@@ -309,32 +307,6 @@ When `allowed_hosts` is configured, `gestaltd` starts a local HTTP proxy and set
 **Process group isolation:**
 
 Sandboxed plugins run in their own process group. On shutdown, `gestaltd` signals the entire group, ensuring child processes spawned by the plugin are also cleaned up.
-
-## Webhook Signature Verification
-
-Webhook bindings with `auth_mode: signed` verify request authenticity using HMAC-SHA256:
-
-```
-expected = HMAC-SHA256(signing_secret, request_body)
-provided = hex-decode(signature_header)
-
-Verification: constant-time comparison (hmac.Equal)
-```
-
-Constant-time comparison prevents timing side-channel attacks.
-
-## Proxy Header Sanitization
-
-The proxy binding strips the following headers before forwarding requests upstream:
-
-- `Authorization` (replaced by egress credential injection)
-- `Cookie`
-- `Host`
-- `Proxy-Authorization`
-- `X-Forwarded-*` headers
-- Hop-by-hop headers (`TE`, `Trailer`, `Transfer-Encoding`, `Upgrade`)
-
-Request bodies are limited to 1 MB through the proxy.
 
 ## Operator Responsibilities
 

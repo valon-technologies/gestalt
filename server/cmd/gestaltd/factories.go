@@ -16,8 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/drivers/auth/local"
 	authnone "github.com/valon-technologies/gestalt/server/internal/drivers/auth/none"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/auth/oidc"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/bindings/proxy"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/bindings/webhook"
 	dynamodbstore "github.com/valon-technologies/gestalt/server/internal/drivers/datastore/dynamodb"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/firestore"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/mongodb"
@@ -122,8 +120,6 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Datastores["oracle"] = oracle.Factory
 	factories.Datastores["firestore"] = firestore.Factory
 	factories.Datastores["sqlserver"] = sqlserver.Factory
-	factories.Bindings["webhook"] = webhook.Factory
-	factories.Bindings["proxy"] = proxy.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["google_secret_manager"] = secretsgoogle.Factory

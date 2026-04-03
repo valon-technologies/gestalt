@@ -2,14 +2,14 @@ import { Cards } from 'nextra/components'
 
 # Gestalt
 
-`gestaltd` is a self-hosted integration server. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with authentication, token storage, integration execution, an optional MCP endpoint, optional bindings, and an embedded web UI served from the same HTTP port.
+`gestaltd` is a self-hosted integration server. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with authentication, token storage, integration execution, an optional MCP endpoint, and an embedded web UI served from the same HTTP port.
 
 ## What Actually Ships
 
 | Piece | What it does |
 | --- | --- |
 | `gestaltd` | The server binary. It loads config, bootstraps plugins, serves the HTTP API, serves the web UI, and mounts `/mcp` when MCP is enabled. |
-| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, providers, bindings, and egress policy. |
+| `config.yaml` | The declarative control plane. This is where you define auth, datastore, secrets, providers, and egress policy. |
 | `gestalt.lock.json` and `.gestalt/` | Optional prepared state written by `gestaltd init`. Use it for deterministic startup when you depend on remote OpenAPI, GraphQL, or packaged plugins. |
 | Deploy assets | `server/Dockerfile`, `client/Dockerfile`, and a Helm chart for production deployment paths. |
 
@@ -17,7 +17,7 @@ import { Cards } from 'nextra/components'
 
 ### Configuration
 
-Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, providers, bindings, and egress rules.
+Your YAML file declares the feature sets that make up a Gestalt deployment: platform auth, token storage, secret resolution, providers, and egress rules.
 
 ### Prepared State
 
@@ -29,7 +29,7 @@ Each configured provider becomes a runtime provider. All request surfaces share 
 
 ### Surfaces
 
-The same provider graph can be reached through the HTTP API, the embedded web UI, `/mcp`, webhook bindings, and proxy bindings.
+The same provider graph can be reached through the HTTP API, the embedded web UI, and `/mcp`.
 
 ## Deployment Paths
 
@@ -47,7 +47,7 @@ The same provider graph can be reached through the HTTP API, the embedded web UI
     Run `gestaltd` out of the box, then move to an explicit config and locked startup.
   </Cards.Card>
   <Cards.Card title="Platform Model" href="/concepts/platform-model">
-    See how config, providers, the invocation broker, bindings, and MCP fit together.
+    See how config, providers, the invocation broker, and MCP fit together.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/concepts/configuration">
     Learn the top-level primitives and the lifecycle of `init`, `validate`, and `serve --locked`.

@@ -33,23 +33,3 @@ func CloseProviders(providers *registry.PluginMap[core.Provider]) error {
 
 	return errors.Join(errs...)
 }
-
-func CloseBindings(bindings *registry.PluginMap[core.Binding], names []string) error {
-	if bindings == nil {
-		return nil
-	}
-
-	var errs []error
-	for _, name := range names {
-		binding, err := bindings.Get(name)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("looking up binding %q during shutdown: %w", name, err))
-			continue
-		}
-		if err := binding.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("closing binding %q: %w", name, err))
-		}
-	}
-
-	return errors.Join(errs...)
-}

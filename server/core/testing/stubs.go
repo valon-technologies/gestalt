@@ -189,28 +189,6 @@ func (r *StubRuntime) Stop(ctx context.Context) error {
 	return nil
 }
 
-type StubBinding struct {
-	N       string
-	StartFn func(context.Context) error
-	CloseFn func() error
-	R       []core.Route
-}
-
-func (b *StubBinding) Name() string         { return b.N }
-func (b *StubBinding) Routes() []core.Route { return b.R }
-func (b *StubBinding) Start(ctx context.Context) error {
-	if b.StartFn != nil {
-		return b.StartFn(ctx)
-	}
-	return nil
-}
-func (b *StubBinding) Close() error {
-	if b.CloseFn != nil {
-		return b.CloseFn()
-	}
-	return nil
-}
-
 type StubIntegration struct {
 	N              string
 	DN             string

@@ -9,7 +9,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/integrations", s.listIntegrations)
 		r.Delete("/integrations/{name}", s.disconnectIntegration)
 		r.Get("/integrations/{name}/operations", s.listOperations)
-		r.Get("/bindings", s.listBindings)
 
 		r.Get("/{integration}/{operation}", s.executeOperation)
 		r.Post("/{integration}/{operation}", s.executeOperation)

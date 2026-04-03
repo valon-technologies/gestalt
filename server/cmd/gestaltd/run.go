@@ -148,7 +148,6 @@ func runServer(env *bootstrapEnv) error {
 		Auth:              result.Auth,
 		Datastore:         result.Datastore,
 		Providers:         result.Providers,
-		Bindings:          result.Bindings,
 		Invoker:           httpInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
@@ -369,10 +368,6 @@ func logConfigSummary(path string, cfg *config.Config) {
 		}
 	}
 
-	for name := range cfg.Bindings {
-		b := cfg.Bindings[name]
-		slog.Info("binding configured", "binding", name, "type", b.Type)
-	}
 }
 
 func maskSecret(s string) string {

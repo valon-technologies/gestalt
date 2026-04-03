@@ -10,7 +10,6 @@ datastore: {}
 secrets: {}
 telemetry: {}
 providers: {}
-bindings: {}
 server: {}
 egress: {}
 ui: {}
@@ -581,63 +580,6 @@ mcp:
   enabled: true
   tool_prefix: github_
 ```
-
-## `bindings`
-
-```yaml
-bindings:
-  inbound:
-    type: webhook
-    providers:
-      - github
-    config:
-      path: /events/github
-      provider: github
-      operation: issues_listForAuthenticatedUser
-      auth_mode: signed
-      signing_secret: secret://webhook-secret
-```
-
-```yaml
-bindings:
-  outbound_proxy:
-    type: proxy
-    providers:
-      - github
-    config:
-      path: /proxy
-      instance: default
-```
-
-### Common binding fields
-
-| Field | Purpose |
-| --- | --- |
-| `type` | `webhook` or `proxy`. |
-| `providers` | Allowlist of providers the binding can access. |
-| `config` | Binding-type-specific config. |
-
-### Webhook binding config
-
-| Field | Purpose |
-| --- | --- |
-| `path` | Required. Must start with `/`. |
-| `provider` | Optional target provider for forwarding. |
-| `instance` | Optional provider instance. |
-| `operation` | Optional target operation. |
-| `auth_mode` | `public`, `signed`, or `trusted_user_header`. |
-| `signing_secret` | Required for `signed`. |
-| `signature_header` | Header carrying the HMAC signature. Defaults to `X-Signature`. |
-| `user_header` | Required for `trusted_user_header`. |
-| `trusted_sources` | Source IP allowlist for `trusted_user_header`. |
-
-### Proxy binding config
-
-| Field | Purpose |
-| --- | --- |
-| `path` | Required. Must start with `/`. |
-
-Proxy bindings may declare zero or one provider in `bindings.<name>.providers`. Webhook forwarding requires the forwarded provider to be present in the binding allowlist.
 
 ## `egress`
 
