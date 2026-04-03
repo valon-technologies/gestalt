@@ -350,6 +350,49 @@ func TestE2EBareGestaltdAutoInit(t *testing.T) {
 	waitForHealth(t, baseURL, 20*time.Second)
 }
 
+func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	configDir := filepath.Join(homeDir, ".gestaltd")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll config dir: %v", err)
+	}
+
+	port := allocateTestPort(t)
+	cfg := `auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: ` + filepath.Join(configDir, "gestalt.db") + `
+server:
+  port: ` + fmt.Sprintf("%d", port) + `
+  encryption_key: test-key
+`
+	cfgPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")
+	cmd.Env = append(cmd.Env, "HOME="+homeDir)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start gestaltd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(os.Interrupt)
+		_ = cmd.Wait()
+	})
+
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	waitForHealth(t, baseURL, 20*time.Second)
+}
+
 func TestE2EValidateNonMutating(t *testing.T) {
 	t.Parallel()
 
@@ -378,6 +421,18 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected lockfile after validate --init: %v", err)
 	}
+}
+
+func withoutEnvVar(env []string, name string) []string {
+	prefix := name + "="
+	filtered := env[:0]
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
 }
 
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.

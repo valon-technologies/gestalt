@@ -21,8 +21,8 @@ import (
 
 const (
 	InitLockfileName     = "gestalt.lock.json"
-	PreparedProvidersDir = ".gestalt/providers"
-	PluginsDir           = ".gestalt/plugins"
+	PreparedProvidersDir = ".gestaltd/providers"
+	PluginsDir           = ".gestaltd/plugins"
 	LockVersion          = 4
 	LockVersionCompat    = 3
 )

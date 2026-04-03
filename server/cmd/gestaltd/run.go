@@ -414,7 +414,7 @@ func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd init [--config PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Resolve remote providers and packaged plugins and write lock state.")
-	writeUsageLine(w, "Creates gestalt.lock.json and .gestalt/ in the config directory.")
+	writeUsageLine(w, "Creates gestalt.lock.json and .gestaltd/ in the config directory.")
 	writeUsageLine(w, "Use this before `gestaltd serve --locked` for production deployments.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")

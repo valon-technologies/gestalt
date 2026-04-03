@@ -9,12 +9,28 @@ import (
 	"path/filepath"
 )
 
+const (
+	localConfigDirName       = ".gestaltd"
+	legacyLocalConfigDirName = ".gestalt"
+)
+
 func DefaultLocalConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".gestalt", "config.yaml")
+	return filepath.Join(home, localConfigDirName, "config.yaml")
+}
+
+func LocalConfigPaths() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, localConfigDirName, "config.yaml"),
+		filepath.Join(home, legacyLocalConfigDirName, "config.yaml"),
+	}
 }
 
 func GenerateDefaultConfig(configDir string) (string, error) {
