@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -40,26 +40,17 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 	}
 }
 
-func makeDirectHandler(cfg Config, provName, opName, connection string, caller directToolCaller) mcpserver.ToolHandlerFunc {
+func makeDirectHandler(cfg Config, prov core.Provider, provName, opName, connection string) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		p := principal.FromContext(ctx)
-		if p == nil {
-			return mcpgo.NewToolResultError("not authenticated"), nil
-		}
-		ctx = attachEgressSubject(ctx, p)
-
 		args := req.GetArguments()
 		instance, _ := args["_instance"].(string)
 		delete(args, "_instance")
 
-		token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
+		result, err := invocation.CallDirectTool(ctx, cfg.TokenResolver, principal.FromContext(ctx), prov, provName, opName, connection, instance, args, req.Params.Meta)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
-
-		ctx = mcpupstream.WithUpstreamToken(ctx, token)
-		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
-		return caller.CallTool(ctx, opName, args)
+		return result, nil
 	}
 }
 

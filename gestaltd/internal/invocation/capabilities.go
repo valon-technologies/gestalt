@@ -64,7 +64,7 @@ func providerCatalog(prov core.Provider) *catalog.Catalog {
 	return prov.Catalog()
 }
 
-func catalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {
+func CatalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {
 	if cat == nil || strings.TrimSpace(operation) == "" {
 		return "", false
 	}

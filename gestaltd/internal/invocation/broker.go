@@ -6,10 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
+	"strings"
 	"time"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -82,6 +87,7 @@ type Broker struct {
 	providers      *registry.PluginMap[core.Provider]
 	datastore      core.Datastore
 	connMapper     ConnectionMapper
+	mcpMapper      ConnectionMapper
 	connectionAuth RefresherResolver
 	refreshGroup   singleflight.Group
 }
@@ -90,6 +96,10 @@ type BrokerOption func(*Broker)
 
 func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.connMapper = m }
+}
+
+func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
+	return func(b *Broker) { b.mcpMapper = m }
 }
 
 func WithConnectionAuth(r RefresherResolver) BrokerOption {
@@ -184,22 +194,41 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
 
-	if transport, ok := catalogOperationTransport(providerCatalog(prov), operation); ok {
-		metricOperation = operation
-		metricTransport = metricAttrValue(transport)
-		span.SetAttributes(attrTransport.String(metricTransport))
-	} else {
-		return fail(fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName))
-	}
-
 	conn := ConnectionFromContext(ctx)
+
+	transport, err := b.resolveTransport(ctx, p, prov, providerName, operation, conn, instance)
+	if err != nil {
+		return fail(err)
+	}
+	metricOperation = operation
+	metricTransport = metricAttrValue(transport)
+	span.SetAttributes(attrTransport.String(metricTransport))
+
 	if conn == "" {
-		if ocp, ok := prov.(core.OperationConnectionProvider); ok {
+		if transport == catalog.TransportMCPPassthrough {
+			conn = b.mcpConnection(providerName)
+		} else if ocp, ok := prov.(core.OperationConnectionProvider); ok {
 			conn = ocp.ConnectionForOperation(operation)
 		}
 	}
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
+	}
+
+	if transport == catalog.TransportMCPPassthrough {
+		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, nil)
+		if err != nil {
+			return fail(err)
+		}
+		opResult, err := toolResultToOperationResult(result)
+		if err != nil {
+			var operationErr *apiexec.UpstreamOperationError
+			if errors.As(err, &operationErr) {
+				return fail(err)
+			}
+			return fail(fmt.Errorf("%w: converting tool result: %v", ErrInternal, err))
+		}
+		return opResult, nil
 	}
 
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
@@ -215,6 +244,81 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	return result, nil
+}
+
+func (b *Broker) resolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error) {
+	if transport, ok := CatalogOperationTransport(providerCatalog(prov), operation); ok {
+		return transport, nil
+	}
+
+	if _, ok := prov.(core.SessionCatalogProvider); ok {
+		if connection == "" {
+			connection = b.mcpConnection(providerName)
+		}
+		cat, err := resolveSessionCatalog(ctx, prov, providerName, b, p, connection, instance)
+		if err != nil {
+			return "", err
+		}
+		if transport, ok := CatalogOperationTransport(cat, operation); ok {
+			return transport, nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
+}
+
+func (b *Broker) mcpConnection(providerName string) string {
+	if b.mcpMapper != nil {
+		if conn := b.mcpMapper.ConnectionForProvider(providerName); conn != "" {
+			return conn
+		}
+	}
+	if b.connMapper != nil {
+		return b.connMapper.ConnectionForProvider(providerName)
+	}
+	return ""
+}
+
+func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {
+	headers := http.Header{}
+	headers.Set("Content-Type", core.ContentTypeJSON)
+
+	if result == nil {
+		return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: `{}`}, nil
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("%w: %s", &apiexec.UpstreamOperationError{Message: "operation failed"}, toolErrorMessage(result))
+	}
+
+	if result.StructuredContent != nil {
+		body, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			return nil, err
+		}
+		return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
+	}
+
+	if len(result.Content) == 1 {
+		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
+			return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: text.Text}, nil
+		}
+	}
+
+	body, err := json.Marshal(map[string]any{"content": result.Content})
+	if err != nil {
+		return nil, err
+	}
+	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
+}
+
+func toolErrorMessage(result *mcpgo.CallToolResult) string {
+	for _, item := range result.Content {
+		if text, ok := mcpgo.AsTextContent(item); ok && strings.TrimSpace(text.Text) != "" {
+			return text.Text
+		}
+	}
+	return "operation failed"
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {

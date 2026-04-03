@@ -5,7 +5,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -18,17 +17,13 @@ const (
 	toolNameSep   = "_"
 )
 
-type TokenResolver interface {
-	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error)
-}
-
 type directToolCaller interface {
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
 type Config struct {
 	Invoker          invocation.Invoker
-	TokenResolver    TokenResolver
+	TokenResolver    invocation.TokenResolver
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolPrefixes     map[string]string

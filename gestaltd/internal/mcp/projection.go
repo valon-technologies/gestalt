@@ -18,7 +18,7 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 }
 
 func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) map[string]mcpserver.ServerTool {
-	caller, isDirect := unwrapDirectCaller(prov)
+	directProv, isDirect := unwrapDirectProvider(prov)
 	if isDirect && cfg.TokenResolver == nil {
 		isDirect = false
 	}
@@ -59,7 +59,7 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 
 		var handler mcpserver.ToolHandlerFunc
 		if isDirect && op.Transport != catalog.TransportREST {
-			handler = makeDirectHandler(cfg, provName, op.ID, conn, caller)
+			handler = makeDirectHandler(cfg, directProv, provName, op.ID, conn)
 		} else {
 			handler = makeHandler(cfg.Invoker, provName, op.ID, "")
 		}
@@ -68,14 +68,16 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 	return tools
 }
 
-func unwrapDirectCaller(prov core.Provider) (directToolCaller, bool) {
-	if c, ok := prov.(directToolCaller); ok {
-		return c, true
+func unwrapDirectProvider(prov core.Provider) (core.Provider, bool) {
+	if _, ok := prov.(directToolCaller); ok {
+		return prov, true
 	}
 	type inner interface{ Inner() core.Provider }
 	if r, ok := prov.(inner); ok {
-		c, ok := r.Inner().(directToolCaller)
-		return c, ok
+		innerProv := r.Inner()
+		if _, ok := innerProv.(directToolCaller); ok {
+			return innerProv, true
+		}
 	}
 	return nil, false
 }

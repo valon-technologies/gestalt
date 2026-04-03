@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -82,7 +83,7 @@ func TestResolveCatalog_StaticCatalog(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalog(context.Background(), prov, "widget-api", nil, nil, "")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "widget-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +139,7 @@ func TestResolveCatalog_FlatProviderErrors(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalog(context.Background(), prov, "gadget-svc", nil, nil, "")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "gadget-svc", nil, nil, "", "")
 	if err == nil {
 		t.Fatalf("expected error for provider without catalog, got catalog %+v", cat)
 	}
@@ -174,7 +175,7 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	resolver := &stubTokenResolver{token: "tok_123"}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := resolveCatalog(context.Background(), prov, "combo-api", resolver, p, "default")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "combo-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 	resolver := &stubTokenResolver{token: "tok_456"}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := resolveCatalog(context.Background(), prov, "clash-api", resolver, p, "default")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -263,7 +264,7 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	resolver := &stubTokenResolver{err: fmt.Errorf("token expired")}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := resolveCatalog(context.Background(), prov, "auth-api", resolver, p, "default")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "auth-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("expected no error on token failure, got: %v", err)
 	}
@@ -299,7 +300,7 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalog(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -337,7 +338,7 @@ func TestResolveCatalog_IconOnlyCatalogPreserved(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalog(context.Background(), prov, "icon-api", nil, nil, "")
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "icon-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -373,7 +374,7 @@ func TestResolveCatalog_CloneSafety(t *testing.T) {
 		cat: original,
 	}
 
-	_, err := resolveCatalog(context.Background(), prov, "clone-api", nil, nil, "")
+	_, err := invocation.ResolveCatalog(context.Background(), prov, "clone-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
