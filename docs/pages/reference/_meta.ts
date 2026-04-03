@@ -7,5 +7,5 @@ export default {
   cli: "CLI",
   "docker-image": "Docker Image",
   observability: "Observability",
-  "built-in-plugins": "Built-in Plugins",
+  "built-in-providers": "Built-in Providers",
 };
