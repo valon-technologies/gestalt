@@ -28,12 +28,14 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | default "ImplementationSpecific" }}
             backend:
               service:
                 name: {{ include "gestalt.fullname" $ }}
                 port:
                   name: http
+          {{- end }}
     {{- end }}
 {{- end }}

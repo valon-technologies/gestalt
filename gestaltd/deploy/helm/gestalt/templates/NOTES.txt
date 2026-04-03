@@ -37,11 +37,20 @@ Verify the deployment:
 Health check:
   curl http://127.0.0.1:{{ .Values.service.port }}/health
 
-Required environment variables (provide via extraEnv):
-  GESTALT_BASE_URL        Public URL of this Gestalt instance
-  GESTALT_ENCRYPTION_KEY  Encryption key for token storage
+Default chart profile:
+  auth.provider=none, SQLite on /data, single replica
+  static dev-only encryption key
+  Suitable for local development or trusted internal clusters
+  Replace server.encryption_key and auth settings before production use
 
-The default auth provider is Google. Provide these for Google OAuth:
+If you enable OAuth/OIDC or other ${VAR} placeholders, provide the matching
+environment variables via extraEnv.
+
+Common env vars:
+  GESTALT_BASE_URL         Public URL of this Gestalt instance
+  GESTALT_ENCRYPTION_KEY   Required when auth.provider is not "none"
+
+For Google OAuth:
   GOOGLE_CLIENT_ID         Google OAuth client ID
   GOOGLE_CLIENT_SECRET     Google OAuth client secret
 

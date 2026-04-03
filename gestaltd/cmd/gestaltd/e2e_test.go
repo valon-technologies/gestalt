@@ -19,6 +19,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func TestE2EInitArchiveAndValidate(t *testing.T) {
@@ -482,6 +483,75 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	}
 }
 
+func TestE2EHelmChart(t *testing.T) {
+	t.Parallel()
+
+	helmPath, err := exec.LookPath("helm")
+	if err != nil {
+		t.Skip("helm not installed")
+	}
+
+	chartDir := filepath.Join("..", "..", "deploy", "helm", "gestalt")
+
+	t.Run("default chart profile boots", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		port := allocateTestPort(t)
+		dbPath := filepath.Join(dir, "gestalt.db")
+		rendered := renderHelmChart(t, helmPath, chartDir,
+			"--set", fmt.Sprintf("config.server.port=%d", port),
+			"--set-string", "config.datastore.config.path="+dbPath,
+		)
+
+		cfgPath := filepath.Join(dir, "config.yaml")
+		if err := os.WriteFile(cfgPath, []byte(extractRenderedConfig(t, rendered)), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+
+		out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("gestaltd validate: %v\n%s", err, out)
+		}
+
+		cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("start serve: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		})
+
+		baseURL := fmt.Sprintf("http://localhost:%d", port)
+		waitForHealth(t, baseURL, 20*time.Second)
+		waitForReady(t, baseURL, 20*time.Second)
+	})
+
+	t.Run("ingress paths render from values", func(t *testing.T) {
+		t.Parallel()
+
+		rendered := renderHelmChart(t, helmPath, chartDir,
+			"--set", "ingress.enabled=true",
+			"--set-string", "ingress.hosts[0].host=gestalt.example.com",
+			"--set-string", "ingress.hosts[0].paths[0].path=/gestalt",
+			"--set-string", "ingress.hosts[0].paths[0].pathType=Prefix",
+		)
+
+		for _, want := range []string{
+			`host: "gestalt.example.com"`,
+			`path: "/gestalt"`,
+			`pathType: Prefix`,
+		} {
+			if !strings.Contains(rendered, want) {
+				t.Fatalf("expected rendered manifest to contain %q\n%s", want, rendered)
+			}
+		}
+	})
+}
+
 func withoutEnvVar(env []string, name string) []string {
 	prefix := name + "="
 	filtered := env[:0]
@@ -492,6 +562,45 @@ func withoutEnvVar(env []string, name string) []string {
 		filtered = append(filtered, entry)
 	}
 	return filtered
+}
+
+func renderHelmChart(t *testing.T, helmPath, chartDir string, extraArgs ...string) string {
+	t.Helper()
+	args := append([]string{"template", "test-release", chartDir}, extraArgs...)
+	out, err := exec.Command(helmPath, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("helm template: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
+func extractRenderedConfig(t *testing.T, rendered string) string {
+	t.Helper()
+
+	var doc struct {
+		Kind string            `yaml:"kind"`
+		Data map[string]string `yaml:"data"`
+	}
+
+	dec := yaml.NewDecoder(strings.NewReader(rendered))
+	for {
+		doc = struct {
+			Kind string            `yaml:"kind"`
+			Data map[string]string `yaml:"data"`
+		}{}
+		if err := dec.Decode(&doc); err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatalf("decode rendered manifest: %v", err)
+		}
+		if doc.Kind == "ConfigMap" && doc.Data["config.yaml"] != "" {
+			return doc.Data["config.yaml"]
+		}
+	}
+
+	t.Fatal("rendered chart missing config.yaml ConfigMap")
+	return ""
 }
 
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.

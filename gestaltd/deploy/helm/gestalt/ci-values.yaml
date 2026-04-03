@@ -9,7 +9,3 @@ config:
 
 image:
   tag: "ci-test"
-
-web:
-  image:
-    tag: "ci-test"

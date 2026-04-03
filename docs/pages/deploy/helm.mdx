@@ -15,6 +15,66 @@ helm upgrade --install gestalt \
 Provide a `values.yaml` file that sets the required auth, datastore, and server
 settings along with the matching `extraEnv` entries.
 
+The default chart profile is intentionally minimal:
+
+- `auth.provider: none`
+- SQLite on a PVC mounted at `/data`
+- a static dev-only `server.encryption_key`
+- one replica
+- no ingress
+
+That profile is suitable for local development and trusted internal clusters.
+It is not a production-ready security posture.
+
+## Production Install Pattern
+
+For production, override the default auth and datastore settings and provide
+the required environment variables through `extraEnv`.
+
+```yaml
+config:
+  server:
+    base_url: "${GESTALT_BASE_URL}"
+    encryption_key: "${GESTALT_ENCRYPTION_KEY}"
+  auth:
+    provider: oidc
+    config:
+      issuer_url: "${OIDC_ISSUER_URL}"
+      client_id: "${OIDC_CLIENT_ID}"
+      client_secret: "${OIDC_CLIENT_SECRET}"
+  datastore:
+    provider: postgres
+    config:
+      dsn: "${DATABASE_URL}"
+
+extraEnv:
+  - name: GESTALT_BASE_URL
+    value: "https://gestalt.example.com"
+  - name: GESTALT_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: encryption-key
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: database-url
+
+pluginInit:
+  enabled: true
+```
+
+Apply that with:
+
+```sh
+helm upgrade --install gestalt \
+  oci://ghcr.io/valon-technologies/gestalt/charts/gestalt \
+  --namespace gestalt \
+  --set image.tag=<version> \
+  -f values-production.yaml
+```
+
 ## Important Chart Values
 
 | Value | Purpose |
@@ -24,6 +84,7 @@ settings along with the matching `extraEnv` entries.
 | `persistence` | PVC settings for SQLite or other local state. |
 | `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. |
 | `ingress` | Standard ingress settings. |
+| `ingress.hosts[].paths` | Per-host ingress paths and path types. |
 
 ## Example Values
 
