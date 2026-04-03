@@ -1,0 +1,67 @@
+# AWS App Runner
+
+App Runner runs the `gestaltd` container as a managed service with automatic TLS, scaling, and load balancing.
+
+## Prerequisites
+
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) installed and authenticated
+- An ECR repository for the Gestalt image
+
+## Push the image
+
+Create an ECR repository and push the Gestalt image:
+
+```sh
+aws ecr create-repository --repository-name gestalt/gestaltd --region us-east-1
+
+docker pull valontechnologies/gestaltd:latest
+docker tag valontechnologies/gestaltd:latest \
+  <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/gestalt/gestaltd:latest
+
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com
+
+docker push <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/gestalt/gestaltd:latest
+```
+
+## Deploy
+
+Create a service configuration file called `app-runner.json`:
+
+```json
+{
+  "ServiceName": "gestalt",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/gestalt/gestaltd:latest",
+      "ImageRepositoryType": "ECR",
+      "ImageConfiguration": {
+        "Port": "8080",
+        "RuntimeEnvironmentVariables": {
+          "GESTALT_BASE_URL": "https://<SERVICE_URL>",
+          "GESTALT_ENCRYPTION_KEY": "<KEY>"
+        }
+      }
+    },
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "<ECR_ACCESS_ROLE_ARN>"
+    }
+  },
+  "InstanceConfiguration": {
+    "Cpu": "1024",
+    "Memory": "2048"
+  }
+}
+```
+
+Then create the service:
+
+```sh
+aws apprunner create-service --cli-input-json file://app-runner.json
+```
+
+## Persistent storage
+
+App Runner is stateless. Use an external database like RDS Postgres for
+production instead of SQLite.

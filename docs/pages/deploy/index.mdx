@@ -1,18 +1,16 @@
 # Deploy
 
-## Recommended Production Pattern
+Gestalt publishes a Docker image (`valontechnologies/gestaltd`) that runs on
+any platform that supports containers. See the
+[Docker Image](/reference/docker-image) reference for image details.
 
-1. Prepare artifacts with `gestaltd init`.
-2. Start the server with `gestaltd serve --locked`.
-3. Persist the datastore appropriately for your chosen backend.
-4. Set `server.base_url` to the public HTTPS URL.
+## Deployment guides
 
-## Deployment Options
-
-| Path | Use it for |
+| Platform | Description |
 | --- | --- |
-| [Helm](/deploy/helm) | Helm chart for Kubernetes deployments. |
-
-The published Docker image (`valontechnologies/gestaltd`) can be used directly
-on any container platform. See the [Docker Image](/reference/docker-image)
-reference for image layout and mount expectations.
+| [Helm](/deploy/helm) | Helm chart for Kubernetes clusters. |
+| [Google Cloud Run](/deploy/google-cloud-run) | Fully managed containers on GCP. |
+| [AWS App Runner](/deploy/aws-app-runner) | Fully managed containers on AWS. |
+| [Fly.io](/deploy/fly-io) | Deploy containers close to your users. |
+| [Render](/deploy/render) | Simple container hosting with zero-downtime deploys. |
+| [Cloudflare](/deploy/cloudflare) | Run containers on Cloudflare's global network. |

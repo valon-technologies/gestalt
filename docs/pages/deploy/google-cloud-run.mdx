@@ -1,0 +1,40 @@
+# Google Cloud Run
+
+Cloud Run runs the `gestaltd` container as a fully managed service with automatic TLS and scaling.
+
+## Prerequisites
+
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) installed and authenticated
+- A GCP project with Cloud Run and Artifact Registry enabled
+
+## Push the image
+
+Tag and push the Gestalt image to Artifact Registry:
+
+```sh
+docker pull valontechnologies/gestaltd:latest
+docker tag valontechnologies/gestaltd:latest \
+  us-docker.pkg.dev/<PROJECT>/gestalt/gestaltd:latest
+docker push us-docker.pkg.dev/<PROJECT>/gestalt/gestaltd:latest
+```
+
+## Deploy
+
+```sh
+gcloud run deploy gestalt \
+  --image us-docker.pkg.dev/<PROJECT>/gestalt/gestaltd:latest \
+  --port 8080 \
+  --allow-unauthenticated \
+  --set-env-vars GESTALT_BASE_URL=https://<SERVICE_URL> \
+  --set-env-vars GESTALT_ENCRYPTION_KEY=<KEY> \
+  --region us-central1
+```
+
+Pass additional environment variables with `--set-env-vars` or use
+`--set-secrets` to reference Secret Manager entries.
+
+## Persistent storage
+
+Cloud Run is stateless. If you use SQLite as your datastore, switch to
+Postgres or another external database for production. Set the `DATABASE_URL`
+environment variable and configure your `config.yaml` accordingly.

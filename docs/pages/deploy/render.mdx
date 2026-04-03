@@ -1,0 +1,39 @@
+# Render
+
+Render runs the `gestaltd` container as a web service with automatic TLS and zero-downtime deploys.
+
+## Deploy from the dashboard
+
+1. Go to the [Render Dashboard](https://dashboard.render.com) and click **+ New > Web Service**.
+2. Under Source Code, choose **Existing Image**.
+3. Enter `valontechnologies/gestaltd:latest` as the image URL.
+4. Set the following environment variables:
+   - `GESTALT_BASE_URL` = your service URL (e.g. `https://gestalt-xxxx.onrender.com`)
+   - `GESTALT_ENCRYPTION_KEY` = your encryption key
+5. Click **Deploy**.
+
+## Deploy with render.yaml
+
+Add a `render.yaml` to your repo for reproducible deployments:
+
+```yaml
+services:
+  - type: web
+    name: gestalt
+    runtime: image
+    image:
+      url: valontechnologies/gestaltd:latest
+    envVars:
+      - key: GESTALT_BASE_URL
+        value: https://gestalt-xxxx.onrender.com
+      - key: GESTALT_ENCRYPTION_KEY
+        sync: false
+```
+
+Setting `sync: false` on a variable prompts you to provide the value in the
+dashboard rather than storing it in the file.
+
+## Persistent storage
+
+Render web services are stateless. Use a Render Postgres database or an
+external database for production instead of SQLite.

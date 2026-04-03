@@ -1,0 +1,55 @@
+# Cloudflare Containers
+
+Cloudflare Containers run Docker workloads on Cloudflare's global network.
+
+## Prerequisites
+
+- [Wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed and authenticated
+- Docker running locally
+
+## Create the project
+
+Start from the Cloudflare containers template:
+
+```sh
+npm create cloudflare@latest -- --template=cloudflare/templates/containers-template
+```
+
+## Configure
+
+Edit `wrangler.jsonc` to point at the Gestalt image:
+
+```jsonc
+{
+  "name": "gestalt",
+  "containers": [
+    {
+      "class_name": "GestaltContainer",
+      "image": "valontechnologies/gestaltd:latest",
+      "max_instances": 5
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GESTALT",
+        "class_name": "GestaltContainer"
+      }
+    ]
+  }
+}
+```
+
+## Deploy
+
+```sh
+npx wrangler deploy
+```
+
+After the first deploy, allow a few minutes for the container to provision
+before it starts accepting requests.
+
+## Persistent storage
+
+Cloudflare Containers are stateless. Use an external database for production
+instead of SQLite.

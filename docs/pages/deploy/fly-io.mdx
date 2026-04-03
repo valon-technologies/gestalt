@@ -1,0 +1,45 @@
+# Fly.io
+
+Fly.io runs the `gestaltd` container on hardware close to your users with automatic TLS.
+
+## Prerequisites
+
+- [flyctl](https://fly.io/docs/flyctl/install/) installed and authenticated
+
+## Create the app
+
+```sh
+fly launch --image valontechnologies/gestaltd:latest --no-deploy
+```
+
+This generates a `fly.toml` file. Edit it to configure the port and environment:
+
+```toml
+app = "gestalt"
+primary_region = "iad"
+
+[env]
+  GESTALT_BASE_URL = "https://gestalt.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+```
+
+## Set secrets
+
+```sh
+fly secrets set GESTALT_ENCRYPTION_KEY=<KEY>
+```
+
+## Deploy
+
+```sh
+fly deploy
+```
+
+## Persistent storage
+
+For production, use Fly Postgres or an external database instead of SQLite.
+Create a Fly Postgres cluster with `fly postgres create` and attach it to
+your app with `fly postgres attach`.
