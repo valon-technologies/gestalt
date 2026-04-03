@@ -631,8 +631,22 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		if err := applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 			return err
 		}
+		changed := false
+		if manifest := intg.Plugin.ResolvedManifest; manifest != nil {
+			if intg.DisplayName == "" && manifest.DisplayName != "" {
+				intg.DisplayName = manifest.DisplayName
+				changed = true
+			}
+			if intg.Description == "" && manifest.Description != "" {
+				intg.Description = manifest.Description
+				changed = true
+			}
+		}
 		if intg.IconFile == "" && intg.Plugin.ResolvedIconFile != "" {
 			intg.IconFile = intg.Plugin.ResolvedIconFile
+			changed = true
+		}
+		if changed {
 			cfg.Integrations[name] = intg
 		}
 	}

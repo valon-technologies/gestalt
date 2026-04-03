@@ -935,7 +935,38 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 	waitForReady(t, baseURL, 30*time.Second)
 
-	resp, err := http.Get(baseURL + "/api/v1/integrations/example/operations")
+	resp, err := http.Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("list integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list integrations returned %d: %s", resp.StatusCode, body)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decode integrations: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("integrations = %+v, want 1 entry", integrations)
+	}
+	if integrations[0].Name != "example" {
+		t.Fatalf("integration name = %q, want %q", integrations[0].Name, "example")
+	}
+	if integrations[0].DisplayName != "Spec Loaded Hybrid" {
+		t.Fatalf("display_name = %q, want %q", integrations[0].DisplayName, "Spec Loaded Hybrid")
+	}
+	if integrations[0].Description != "Hybrid package metadata from the manifest" {
+		t.Fatalf("description = %q, want %q", integrations[0].Description, "Hybrid package metadata from the manifest")
+	}
+
+	resp, err = http.Get(baseURL + "/api/v1/integrations/example/operations")
 	if err != nil {
 		t.Fatalf("list operations: %v", err)
 	}
@@ -1048,9 +1079,11 @@ paths:
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/test/plugins/hybrid-spec-loaded",
-		Version: "0.1.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Source:      "github.com/test/plugins/hybrid-spec-loaded",
+		Version:     "0.1.0",
+		DisplayName: "Spec Loaded Hybrid",
+		Description: "Hybrid package metadata from the manifest",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			OpenAPI: specRel,
 			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
