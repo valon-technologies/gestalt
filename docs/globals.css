@@ -171,6 +171,16 @@ pre {
   box-shadow: none !important;
 }
 
+:not(pre) > code.nextra-code,
+p code,
+li code,
+td code {
+  border: 1px solid rgba(35, 24, 16, 0.08);
+  border-radius: 6px;
+  background: rgba(248, 246, 243, 0.9) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
 pre code {
   display: flex !important;
   flex-direction: column !important;
@@ -182,16 +192,6 @@ pre code {
 
 pre code > span {
   white-space: pre !important;
-}
-
-:not(pre) > code.nextra-code,
-p code,
-li code,
-td code {
-  border: 1px solid rgba(35, 24, 16, 0.08);
-  border-radius: 6px;
-  background: rgba(248, 246, 243, 0.9) !important;
-  color: rgba(var(--valon-ink), 1) !important;
 }
 
 .nextra-nav-container {
