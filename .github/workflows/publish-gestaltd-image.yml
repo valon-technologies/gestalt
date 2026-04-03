@@ -62,5 +62,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
           password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
           repository: ${{ env.IMAGE_NAME }}
-          short-description: Self-hosted integration runtime for REST, GraphQL, MCP, and plugins.
+          short-description: Platform for self-hostable, configurable integrations and tooling
           readme-filepath: docs/dockerhub/gestaltd.md

@@ -1,6 +1,6 @@
 # gestaltd Docker image
 
-`gestaltd` is a self-hosted integration gateway. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
+`gestaltd` is a platform for self-hostable, configurable integrations and tooling. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
 
 - an HTTP API
 - an embedded web UI
@@ -15,10 +15,11 @@
 - Default command:
 
   ```sh
-  /gestaltd serve --locked --config /etc/gestalt/config.yaml
+  /gestaltd serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data
   ```
 
 - Default config path: `/etc/gestalt/config.yaml`
+- Default writable data and artifacts dir: `/data`
 - This image is not zero-config. Mount or bake a config file before starting it.
 - Locked startup is the default. If your config uses `providers.*.from.package`,
   `providers.*.from.source`, or a packaged UI, run `init` first.
@@ -35,7 +36,9 @@ The image is published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
 
-The image is Alpine-based and includes `gestaltd`, a shell, and `ca-certificates`. It runs as `nobody:nobody` by default.
+The image is Alpine-based and includes `gestaltd`, a shell, and
+`ca-certificates`. It runs as `nobody:nobody` by default and pre-creates
+`/data` as a writable directory for SQLite and prepared artifacts.
 
 ## Run a simple static config
 
@@ -44,10 +47,15 @@ If your config does not need prepared artifacts, mount it directly:
 ```sh
 docker run --rm \
   -p 8080:8080 \
+  -e GESTALT_ENCRYPTION_KEY=change-me \
   -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
+
+The default image command still points `--artifacts-dir` at `/data`, so keeping
+that volume mounted is the safe default even when your current config does not
+need prepared plugins.
 
 Example minimal config:
 
@@ -69,21 +77,32 @@ providers: {}
 
 ## Run a prepared production image
 
-If your config uses `providers.*.from.package`, `providers.*.from.source`, or a packaged UI,
-prepare it during the image build:
+For deterministic production images, run `gestaltd init` before `docker build`
+and copy the prepared state into the image.
+
+For a config at `deploy/config.yaml`, `init` writes:
+
+```text
+deploy/
+  config.yaml
+  gestalt.lock.json
+  .gestaltd/providers/...
+  .gestaltd/plugins/...
+```
+
+Build the image from that prepared directory:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:latest AS init
-USER root
-COPY config.yaml /app/config.yaml
-RUN ["/gestaltd", "init", "--config", "/app/config.yaml"]
-
 FROM valontechnologies/gestaltd:latest
-COPY --from=init /app/ /app/
+COPY deploy/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
 This is the recommended production pattern.
+
+If you intentionally want the image build itself to generate prepared state,
+`RUN gestaltd init` in a build stage also works, but it is a build-time
+convenience rather than the primary deterministic workflow.
 
 ## Compose example
 

@@ -12,7 +12,7 @@
 
 - Image: `valontechnologies/gestalt`
 - Entrypoint: `/gestalt`
-- This image contains a statically linked binary on a distroless base. There is no shell.
+- This image runs the `gestalt` CLI on a distroless base. There is no shell.
 
 ## Supported tags
 
@@ -23,8 +23,9 @@ The image is published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
 
-The image uses `gcr.io/distroless/static-debian12` as its base and contains
-only the `gestalt` binary and CA certificates. It runs as `nobody:nobody`.
+The image uses `gcr.io/distroless/cc-debian12` as its base and contains the
+`gestalt` binary on a minimal distroless runtime with CA certificates. It runs
+as `nonroot:nonroot`.
 
 ## Usage
 
@@ -57,13 +58,13 @@ binary is inconvenient:
 jobs:
   check-integrations:
     runs-on: ubuntu-latest
-    container:
-      image: valontechnologies/gestalt:latest
     steps:
-      - run: gestalt integrations list --format json
-        env:
-          GESTALT_URL: ${{ vars.GESTALT_URL }}
-          GESTALT_API_KEY: ${{ secrets.GESTALT_API_KEY }}
+      - run: |
+          docker run --rm \
+            -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
+            -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
+            valontechnologies/gestalt:latest \
+            integrations list --format json
 ```
 
 ## Available commands

@@ -1,12 +1,19 @@
-# Docker Image
+# Server Docker Image
 
 The published image is `valontechnologies/gestaltd:latest`.
 
 ## Quick start
 
 ```sh
-docker run -p 8080:8080 valontechnologies/gestaltd
+docker run --rm \
+  -p 8080:8080 \
+  -e GESTALT_ENCRYPTION_KEY=change-me \
+  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
+  -v gestalt-data:/data \
+  valontechnologies/gestaltd:latest
 ```
+
+The image is not zero-config. Mount or bake a config file before starting it.
 
 ## Image details
 
@@ -15,8 +22,9 @@ docker run -p 8080:8080 valontechnologies/gestaltd
 | Image | `valontechnologies/gestaltd:latest` |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
-| Default command | `serve --locked --config /etc/gestalt/config.yaml` |
+| Default command | `serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data` |
 | Config path | `/etc/gestalt/config.yaml` |
+| Writable data and artifacts dir | `/data` |
 
 ## Environment variables
 
@@ -34,28 +42,41 @@ services:
       - "8080:8080"
     volumes:
       - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - gestalt-data:/data
     environment:
       GESTALT_BASE_URL: http://localhost:8080
       GESTALT_ENCRYPTION_KEY: dev-only-change-me
+
+volumes:
+  gestalt-data:
 ```
 
 ## Production image
 
-For production, run `gestaltd init` locally to resolve plugins and generate
-a lock file, then commit both the config and lock file to your repo. At
-build time, copy them into a derived image:
+For deterministic production images, run `gestaltd init` before `docker build`
+and copy the prepared state into the image.
 
-```
+For a config at `deploy/config.yaml`, `init` writes:
+
+```text
 deploy/
   config.yaml
   gestalt.lock.json
+  .gestaltd/providers/...
+  .gestaltd/plugins/...
 ```
+
+Build the image from that prepared directory:
 
 ```dockerfile
-FROM valontechnologies/gestaltd
-COPY deploy/ /etc/gestalt/
+FROM valontechnologies/gestaltd:latest
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
-The image starts with `serve --locked` by default, so it will use the
-committed lock file without fetching anything at runtime. This gives you a
-fully self-contained, deterministic image.
+This keeps the prepared state next to the config inside the derived image and
+avoids relying on the base image's default `--artifacts-dir /data` override.
+
+If you intentionally want the image build itself to generate prepared state,
+`RUN gestaltd init` in a build stage also works, but it should be treated as a
+build-time convenience rather than the primary deterministic workflow.

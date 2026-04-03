@@ -7,15 +7,14 @@ ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestalt
 
 FROM --platform=$BUILDPLATFORM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659 AS unpack
 ARG TARGETARCH
-WORKDIR /dist
-COPY dist/ /dist/
+COPY dist/gestalt-linux-*.tar.gz /dist/
 RUN case "$TARGETARCH" in \
-      amd64) archive=gestalt-linux-x86_64.tar.gz ;; \
-      arm64) archive=gestalt-linux-arm64.tar.gz ;; \
+      amd64) archive=/dist/gestalt-linux-x86_64.tar.gz ;; \
+      arm64) archive=/dist/gestalt-linux-arm64.tar.gz ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac && \
     mkdir -p /out && \
-    tar -xzf "/dist/$archive" -C /out && \
+    tar -xzf "$archive" -C /out && \
     test -x /out/gestalt
 
 FROM gcr.io/distroless/cc-debian12@sha256:329e54034ce498f9c6b345044e8f530c6691f99e94a92446f68c0adf9baa8464
