@@ -107,17 +107,34 @@ type providerMetadata struct {
 }
 
 func resolveProviderMetadata(intg config.IntegrationDef) providerMetadata {
-	meta := providerMetadata{
-		displayName: intg.DisplayName,
-		description: intg.Description,
+	displayName := intg.DisplayName
+	description := intg.Description
+	iconFile := intg.IconFile
+	if intg.Plugin != nil {
+		if manifest := intg.Plugin.ResolvedManifest; manifest != nil {
+			if displayName == "" {
+				displayName = manifest.DisplayName
+			}
+			if description == "" {
+				description = manifest.Description
+			}
+		}
+		if iconFile == "" {
+			iconFile = intg.Plugin.ResolvedIconFile
+		}
 	}
-	if intg.IconFile == "" {
+
+	meta := providerMetadata{
+		displayName: displayName,
+		description: description,
+	}
+	if iconFile == "" {
 		return meta
 	}
 
-	svg, err := provider.ReadIconFile(intg.IconFile)
+	svg, err := provider.ReadIconFile(iconFile)
 	if err != nil {
-		slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
+		slog.Warn("could not read icon_file", "path", iconFile, "error", err)
 		return meta
 	}
 	meta.iconSVG = svg

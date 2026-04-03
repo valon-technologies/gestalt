@@ -215,6 +215,61 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	}
 }
 
+func TestExecutablePluginUsesResolvedManifestMetadata(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:      "github.com/acme/plugins/echo",
+		Version:     "1.0.0",
+		DisplayName: "Manifest Echo",
+		Description: "Manifest-backed description",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider:    &pluginmanifestv1.Provider{},
+	}
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echo": {
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+	if prov.DisplayName() != manifest.DisplayName {
+		t.Fatalf("DisplayName = %q, want %q", prov.DisplayName(), manifest.DisplayName)
+	}
+	if prov.Description() != manifest.Description {
+		t.Fatalf("Description = %q, want %q", prov.Description(), manifest.Description)
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.DisplayName != manifest.DisplayName {
+		t.Fatalf("catalog DisplayName = %q, want %q", cat.DisplayName, manifest.DisplayName)
+	}
+	if cat.Description != manifest.Description {
+		t.Fatalf("catalog Description = %q, want %q", cat.Description, manifest.Description)
+	}
+}
+
 func TestPluginProcessEnvIsolation(t *testing.T) {
 	t.Parallel()
 	bin := buildEchoPluginBinary(t)
