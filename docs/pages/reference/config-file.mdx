@@ -165,12 +165,6 @@ secrets:
 | `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `mount_path` defaults to `secret`. |
 | `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `version` defaults to latest. |
 
-Any string value outside `secrets.config` may use the `secret://` prefix:
-
-```yaml
-encryption_key: secret://name-of-secret
-```
-
 ## `telemetry`
 
 Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced.

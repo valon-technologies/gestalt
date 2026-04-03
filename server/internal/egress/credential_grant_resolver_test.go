@@ -3,6 +3,7 @@ package egress
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -109,7 +110,7 @@ func TestCredentialGrantResolver_MultiTenantHostMatching(t *testing.T) {
 	}
 }
 
-func TestCredentialGrantResolver_StripsSecretURIPrefix(t *testing.T) {
+func TestCredentialGrantResolver_RejectsSecretURIPrefix(t *testing.T) {
 	t.Parallel()
 
 	secrets := &stubSecretResolver{
@@ -136,15 +137,16 @@ func TestCredentialGrantResolver_StripsSecretURIPrefix(t *testing.T) {
 		Subject{Kind: SubjectUser, ID: "user-1"},
 		Target{Method: http.MethodGet, Host: "api.prefix.test", Path: "/v1"},
 	)
-	if err != nil {
-		t.Fatalf("ResolveCredential: %v", err)
+	if err == nil {
+		t.Fatal("ResolveCredential: expected error, got nil")
 	}
-
-	const wantAuth = "Bearer sk-with-prefix"
-	if materialized.Authorization != wantAuth {
-		t.Fatalf("Authorization = %q, want %q", materialized.Authorization, wantAuth)
+	if materialized.Authorization != "" || len(materialized.Headers) != 0 {
+		t.Fatalf("materialized = %+v, want empty authorization and headers", materialized)
 	}
-	if len(secrets.lookups) != 1 || secrets.lookups[0] != "prefixed-key" {
-		t.Fatalf("secret lookups = %v, want [prefixed-key]", secrets.lookups)
+	if len(secrets.lookups) != 0 {
+		t.Fatalf("secret lookups = %v, want []", secrets.lookups)
+	}
+	if !strings.Contains(err.Error(), "bare secret name") {
+		t.Fatalf("error = %q, want bare secret name guidance", err)
 	}
 }
