@@ -229,6 +229,7 @@ type ServerConfig struct {
 	BaseURL       string `yaml:"base_url"`
 	EncryptionKey string `yaml:"encryption_key"`
 	APITokenTTL   string `yaml:"api_token_ttl"`
+	ArtifactsDir  string `yaml:"artifacts_dir"`
 }
 
 type IntegrationDef struct {

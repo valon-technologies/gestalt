@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	initLockfileName     = operator.InitLockfileName
-	preparedProvidersDir = operator.PreparedProvidersDir
-	lockVersion          = operator.LockVersion
+	initLockfileName = operator.InitLockfileName
+	lockVersion      = operator.LockVersion
 )
 
 type initLockfile = operator.Lockfile
@@ -21,18 +20,22 @@ func operatorLifecycle() *operator.Lifecycle {
 }
 
 func initConfig(configFlag string) error {
+	return initConfigWithArtifactsDir(configFlag, "")
+}
+
+func initConfigWithArtifactsDir(configFlag, artifactsDir string) error {
 	configPath := resolveConfigPath(configFlag)
-	_, err := initConfigAtPath(configPath)
+	_, err := operatorLifecycle().InitAtPathWithArtifactsDir(configPath, artifactsDir)
 	return err
 }
 
-func initConfigAtPath(configPath string) (*initLockfile, error) {
-	return operatorLifecycle().InitAtPath(configPath)
+func loadConfigForExecution(configFlag string, locked bool) (string, *config.Config, error) {
+	return loadConfigForExecutionWithArtifactsDir(configFlag, "", locked)
 }
 
-func loadConfigForExecution(configFlag string, locked bool) (string, *config.Config, error) {
+func loadConfigForExecutionWithArtifactsDir(configFlag, artifactsDir string, locked bool) (string, *config.Config, error) {
 	configPath := resolveConfigPath(configFlag)
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPath(configPath, locked)
+	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathWithArtifactsDir(configPath, artifactsDir, locked)
 	if err != nil {
 		return "", nil, err
 	}

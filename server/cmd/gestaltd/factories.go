@@ -47,7 +47,11 @@ type bootstrapEnv struct {
 }
 
 func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
-	_, cfg, err := loadConfigForExecution(configFlag, locked)
+	return setupBootstrapWithArtifactsDir(configFlag, "", locked)
+}
+
+func setupBootstrapWithArtifactsDir(configFlag, artifactsDir string, locked bool) (*bootstrapEnv, error) {
+	_, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlag, artifactsDir, locked)
 	if err != nil {
 		return nil, err
 	}

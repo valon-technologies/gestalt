@@ -25,8 +25,7 @@ const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestaltd/providers"
 	PluginsDir           = ".gestaltd/plugins"
-	LockVersion          = 4
-	LockVersionCompat    = 3
+	LockVersion          = 1
 )
 
 type Lockfile struct {
@@ -62,6 +61,10 @@ func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
+	return l.InitAtPathWithArtifactsDir(configPath, "")
+}
+
+func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
@@ -70,7 +73,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
 
-	paths := initPathsForConfig(configPath)
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating providers dir: %w", err)
 	}
@@ -92,7 +95,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, err
 	}
-	if err := l.applyLockedPlugins(configPath, cfg, true); err != nil {
+	if err := l.applyLockedPlugins(configPath, artifactsDir, cfg, true); err != nil {
 		return nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -105,6 +108,10 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
+	return l.LoadForExecutionAtPathWithArtifactsDir(configPath, "", locked)
+}
+
+func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifactsDir string, locked bool) (*config.Config, map[string]string, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
@@ -113,7 +120,7 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 		return nil, nil, err
 	}
 
-	if err := l.applyLockedPlugins(configPath, cfg, locked); err != nil {
+	if err := l.applyLockedPlugins(configPath, artifactsDir, cfg, locked); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -126,6 +133,7 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 type initPaths struct {
 	configPath   string
 	configDir    string
+	artifactsDir string
 	lockfilePath string
 	providersDir string
 	pluginsDir   string
@@ -154,14 +162,38 @@ func resolveLockPath(baseDir, provider string) string {
 	return filepath.Join(baseDir, filepath.FromSlash(provider))
 }
 
+func resolveArtifactsDir(configPath string, cfg *config.Config, override string) string {
+	dir := override
+	if dir == "" && cfg != nil {
+		dir = cfg.Server.ArtifactsDir
+	}
+	if dir == "" {
+		return filepath.Dir(configPath)
+	}
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	return filepath.Join(filepath.Dir(configPath), dir)
+}
+
 func initPathsForConfig(configPath string) initPaths {
+	return initPathsForConfigWithArtifactsDir(configPath, "")
+}
+
+func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPaths {
 	configDir := filepath.Dir(configPath)
+	if artifactsDir == "" {
+		artifactsDir = configDir
+	} else if !filepath.IsAbs(artifactsDir) {
+		artifactsDir = filepath.Join(configDir, artifactsDir)
+	}
 	return initPaths{
 		configPath:   configPath,
 		configDir:    configDir,
+		artifactsDir: artifactsDir,
 		lockfilePath: filepath.Join(configDir, InitLockfileName),
-		providersDir: filepath.Join(configDir, filepath.FromSlash(PreparedProvidersDir)),
-		pluginsDir:   filepath.Join(configDir, filepath.FromSlash(PluginsDir)),
+		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
+		pluginsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PluginsDir)),
 	}
 }
 
@@ -187,7 +219,7 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	if lock.Version != LockVersion && lock.Version != LockVersionCompat {
+	if lock.Version != LockVersion {
 		return nil, fmt.Errorf("unsupported lockfile version %d", lock.Version)
 	}
 	if lock.Providers == nil {
@@ -207,7 +239,7 @@ func WriteLockfile(path string, lock *Lockfile) error {
 }
 
 func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool {
-	if lock == nil || (lock.Version != LockVersion && lock.Version != LockVersionCompat) {
+	if lock == nil || lock.Version != LockVersion {
 		return false
 	}
 	for name := range cfg.Integrations {
@@ -230,11 +262,11 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if err != nil || entry.Fingerprint != fingerprint {
 			return false
 		}
-		manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
 		if _, err := os.Stat(manifestPath); err != nil {
 			return false
 		}
-		assetRootPath := resolveLockPath(paths.configDir, entry.AssetRoot)
+		assetRootPath := resolveLockPath(paths.artifactsDir, entry.AssetRoot)
 		if _, err := os.Stat(assetRootPath); err != nil {
 			return false
 		}
@@ -315,12 +347,12 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, 
 	} else if entry.Package != relativePackagePath(paths.configDir, plugin.Package) {
 		return false
 	}
-	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
+	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
 	if _, err := os.Stat(manifestPath); err != nil {
 		return false
 	}
 	if entry.Executable != "" {
-		executablePath := resolveLockPath(paths.configDir, entry.Executable)
+		executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
 		if _, err := os.Stat(executablePath); err != nil {
 			return false
 		}
@@ -429,13 +461,13 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, kind, name string
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
-	manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
 	}
 	var executableRel string
 	if installed.ExecutablePath != "" {
-		executablePath, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
+		executablePath, err := filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 		}
@@ -484,13 +516,13 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kin
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
-	manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 	if err != nil {
 		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
 	}
 	var executableRel string
 	if installed.ExecutablePath != "" {
-		ep, err := filepath.Rel(paths.configDir, installed.ExecutablePath)
+		ep, err := filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 		}
@@ -541,11 +573,11 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 		if installed.Manifest.Version != plugin.Version {
 			return LockPluginEntry{}, fmt.Errorf("ui plugin manifest version %q does not match config version %q", installed.Manifest.Version, plugin.Version)
 		}
-		manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
 		}
-		assetRoot, err := filepath.Rel(paths.configDir, installed.AssetRoot)
+		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
 		}
@@ -588,11 +620,11 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 				return LockPluginEntry{}, fmt.Errorf("ui plugin source digest: %w", err)
 			}
 		}
-		manifestPath, err := filepath.Rel(paths.configDir, installed.ManifestPath)
+		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
 		}
-		assetRoot, err := filepath.Rel(paths.configDir, installed.AssetRoot)
+		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
 		}
@@ -608,15 +640,15 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 	return LockPluginEntry{}, fmt.Errorf("ui plugin requires package or source")
 }
 
-func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, locked bool) error {
+func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
 	if !configHasPlugins(cfg) {
 		return nil
 	}
 
-	paths := initPathsForConfig(configPath)
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-		lock, err = l.InitAtPath(configPath)
+		lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
 	}
 	if err != nil {
 		return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
@@ -651,8 +683,8 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		if err != nil || entry.Fingerprint != fingerprint {
 			return fmt.Errorf("prepared artifact for ui plugin is missing or stale; run `gestaltd init --config %s`", paths.configPath)
 		}
-		manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
-		assetRootPath := resolveLockPath(paths.configDir, entry.AssetRoot)
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+		assetRootPath := resolveLockPath(paths.artifactsDir, entry.AssetRoot)
 		if _, err := os.Stat(manifestPath); err != nil {
 			return fmt.Errorf("prepared manifest for ui plugin not found at %s", manifestPath)
 		}
@@ -683,8 +715,8 @@ func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
-	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
-	executablePath := resolveLockPath(paths.configDir, entry.Executable)
+	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+	executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
 	needMaterialize := false
 	if entry.Source != "" {
 		if _, err := os.Stat(manifestPath); err != nil {
