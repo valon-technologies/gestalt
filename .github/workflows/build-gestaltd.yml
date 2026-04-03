@@ -54,6 +54,9 @@ jobs:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
 
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
       - name: Run tests
         run: go test ./...
 
@@ -232,12 +235,6 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
-
       - name: Helm lint
         run: helm lint gestaltd/deploy/helm/gestalt
 
@@ -289,9 +286,6 @@ jobs:
 
       - name: Validate Kubernetes schemas (ingress)
         run: kubeconform -strict -summary /tmp/rendered-ingress.yaml
-
-      - name: Run Helm e2e validation
-        run: cd server && go test ./cmd/gestaltd -run TestE2EHelmChart -count=1
 
       - name: Helm template (plugin-init)
         run: |
