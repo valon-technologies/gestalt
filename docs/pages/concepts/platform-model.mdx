@@ -1,102 +1,55 @@
 # Platform Model
 
-Gestalt has a small number of primitives, but they compose into a full
-integration platform. The easiest way to understand `gestaltd` is to follow the
-startup path from configuration to invocation.
+Gestalt is built on a small set of composable primitives. A single YAML configuration file defines which primitives to use, and `gestaltd` assembles them into a running integration platform at startup.
 
-## The Core Model
+## Primitives
 
-At the highest level, `gestaltd` loads a declarative config file, bootstraps the
-platform components that config names, builds providers from `providers:`, and
-exposes those providers through shared request surfaces.
-
-## The Main Primitives
-
-| Primitive | Purpose |
+| Primitive | Role |
 | --- | --- |
-| `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
-| `datastore` | Persists users, API tokens, integration tokens, and related runtime state. |
-| `secrets` | Resolves `secret://...` references during bootstrap. |
-| `providers` | Define the provider graph users call. Each named entry is provider-shaped directly. |
+| `auth` | Authenticates users to Gestalt and issues platform sessions. |
+| `datastore` | Stores users, API tokens, OAuth credentials, and runtime state. |
+| `secrets` | Resolves `secret://` references in the config at boot time. |
+| `providers` | The integrations that users interact with. Each entry under `providers:` becomes a callable provider. |
 
-## Bootstrap
+## Startup
 
-At startup, `gestaltd` loads the config, expands environment variables and secrets, builds the platform components (auth, datastore, secret manager), builds providers, and starts the HTTP server. See [Configuration](/concepts/configuration) for the full config lifecycle.
+When `gestaltd` starts, it loads the config file, expands environment variables and secret references, builds each platform primitive, builds providers, and starts the HTTP server. See [Configuration](/concepts/configuration) for the full config lifecycle.
 
-## Integrations Become Providers
+## Providers
 
-An integration is a declarative definition. A provider is the executable object
-built from it.
+Each entry under `providers:` in the config becomes a runtime provider. Providers can be built from three sources:
 
-That distinction matters:
-
-- you edit `providers.<name>` in YAML
-- `gestaltd` turns that entry into a provider at startup
-- every request surface invokes the provider, not the raw YAML
-
-Providers come from three sources:
-
-| Source | How it works |
+| Source | Description |
 | --- | --- |
-| Inline declarative provider | Built from `surfaces.rest`. |
-| Inline spec-backed provider | Built from `surfaces.openapi`, `surfaces.graphql`, or `surfaces.mcp`. |
-| Packaged provider plugin | Spawned as a separate process and connected over the plugin protocol. |
+| Inline declarative | Defined entirely in YAML using `surfaces.rest`. |
+| Inline spec-backed | Generated from an OpenAPI spec, GraphQL endpoint, or upstream MCP server. |
+| Packaged plugin | A separate process that communicates with `gestaltd` over gRPC. See [Plugins](/plugins). |
 
-A packaged plugin can also layer in spec-backed surfaces, which is how hybrid
-providers work.
+A packaged plugin can also expose spec-backed surfaces alongside its own operations. This is referred to as a hybrid provider.
 
-## Connection Resolution
+## Connections
 
-Gestalt resolves credentials through `connections.default` plus any optional
-named connections.
+Connections define how a provider authenticates with upstream APIs. Each provider has a `connections.default` entry and may define additional named connections.
 
-- `connections.default` is the primary connection
-- `connections.<name>` defines additional named connections
-- only `connections.default` can carry `params` and `discovery`
-- each configured surface chooses its connection explicitly when needed
-
-Each connection has one mode:
-
-| Mode | Meaning |
+| Mode | Description |
 | --- | --- |
-| `none` | No stored credential is needed. |
-| `user` | Use a user-scoped stored connection. |
-| `identity` | Use a shared service identity. |
-| `either` | Prefer user auth and fall back to the shared identity. |
+| `none` | No credential is needed. |
+| `user` | Each user authenticates individually. |
+| `identity` | A single shared service credential is used. |
+| `either` | User credentials are preferred, with fallback to the shared identity. |
 
-If an integration has more than one stored connection for the chosen subject,
-callers must specify an instance. If there is exactly one, Gestalt selects it
-automatically.
+When a user has multiple stored connections for the same provider, callers must specify which instance to use. When only one exists, Gestalt selects it automatically.
 
-## The Shared Invocation Broker
+## Invocation
 
-Every execution path in Gestalt goes through the same invocation broker.
+All execution paths go through a shared invocation broker. The broker resolves the target provider and operation, selects and refreshes credentials, and returns normalized results. Because the broker is shared, the same authorization and credential behavior applies whether the request comes from the HTTP API, the web UI, or an MCP client.
 
-The broker is responsible for:
+## Surfaces
 
-- locating the target provider and operation
-- resolving credentials based on connection mode
-- choosing an instance when multiple connections exist
-- refreshing expiring OAuth tokens
-- injecting connection metadata into execution context
-- returning normalized operation results
+Providers are accessible through three surfaces, all served from the same `gestaltd` process:
 
-Because this broker is shared, the same token and policy behavior applies
-whether the caller is the web UI, a direct HTTP client, or an MCP client
-hitting `/mcp`.
-
-## Surfaces Built On Top
-
-Once providers exist, `gestaltd` projects them into several surfaces:
-
-| Surface | What it exposes |
+| Surface | Endpoint |
 | --- | --- |
-| HTTP API | `/api/v1/...` for integration listing, auth flows, invocation, and token management. |
-| Embedded web UI | Served by the same server process and port as the API. |
-| MCP endpoint | `/mcp`, mounted when at least one integration exposes tools. |
-
-## What You Actually Program Against
-
-As a Gestalt operator, you compose top-level config blocks, provider
-definitions, connection definitions, surface definitions, and optional plugin
-manifests and packages. Everything else is a consequence of those inputs.
+| HTTP API | `/api/v1/` |
+| Web UI | `/` |
+| MCP | `/mcp` (mounted when at least one provider exposes MCP tools) |

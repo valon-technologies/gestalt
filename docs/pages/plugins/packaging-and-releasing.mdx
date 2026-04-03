@@ -1,0 +1,124 @@
+# Packaging and Releasing
+
+Once a plugin is working locally with `from.command`, you can package it for distribution. Packaged plugins are self-contained archives that include a manifest, compiled binaries, and optional assets.
+
+## Plugin manifest
+
+Every package requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). The manifest declares the plugin's metadata, supported platforms, and entry points.
+
+A minimal manifest for an executable provider:
+
+```yaml
+name: my-plugin
+version: 0.1.0
+kinds:
+  - provider
+entrypoints:
+  provider:
+    artifact_path: artifacts/my-plugin
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/my-plugin-linux-amd64
+  - os: darwin
+    arch: arm64
+    path: artifacts/my-plugin-darwin-arm64
+```
+
+### Declarative-only packages
+
+A manifest can describe a declarative provider that requires no compiled binary. This is useful for distributing reusable REST providers, OpenAPI-backed integrations, or web UI bundles:
+
+```yaml
+name: my-rest-provider
+version: 0.1.0
+kinds:
+  - provider
+```
+
+## Package a plugin
+
+Use `gestaltd plugin package` to create a distributable archive from a plugin directory:
+
+```sh
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
+```
+
+The input directory should contain the manifest and any referenced artifacts.
+
+## Build a cross-platform release
+
+Use `gestaltd plugin release` to compile the plugin for multiple platforms and produce release archives:
+
+```sh
+gestaltd plugin release --version 0.1.0
+```
+
+Run this from the plugin source directory. It compiles the binary for each target platform, produces release archives, and writes a checksums file.
+
+## Reference a packaged plugin
+
+There are three ways to reference a packaged plugin from the Gestalt config:
+
+### Local path
+
+Point to a directory or archive on disk:
+
+```yaml
+providers:
+  my-plugin:
+    from:
+      package: ./dist/my-plugin.tar.gz
+```
+
+### HTTPS URL
+
+Reference a remote archive:
+
+```yaml
+providers:
+  my-plugin:
+    from:
+      package: https://releases.example.com/my-plugin-0.1.0.tar.gz
+```
+
+### Versioned source
+
+Reference a published plugin by source and version. `gestaltd init` resolves the package and writes it to lock state:
+
+```yaml
+providers:
+  my-plugin:
+    from:
+      source: github.com/your-org/your-plugins/my-plugin
+      version: 0.1.0
+```
+
+This is the recommended approach for production deployments.
+
+## Prepared state
+
+When a config references packaged or remote plugins, run `gestaltd init` to resolve and prepare them:
+
+```sh
+gestaltd init --config ./config.yaml
+```
+
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestalt/`. After init, `gestaltd serve --locked` starts the server using only the prepared state, without fetching or resolving anything at runtime.
+
+## Package layout
+
+A typical plugin package contains:
+
+```
+plugin.yaml
+artifacts/
+  my-plugin-linux-amd64
+  my-plugin-darwin-arm64
+schemas/
+  config.schema.json
+assets/
+  icon.svg
+```
+
+The exact structure is determined by the manifest. The `schemas/` directory is optional and used for config validation. The `assets/` directory is optional and used for icons or other static files.

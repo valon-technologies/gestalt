@@ -1,35 +1,20 @@
 # MCP
 
-Gestalt exposes one MCP endpoint at `/mcp`.
+Gestalt exposes a single MCP endpoint at `/mcp`. AI agents, coding assistants, and other MCP clients can use this endpoint to discover and invoke any provider that has MCP enabled.
 
-## When `/mcp` Exists
+## Availability
 
-The endpoint is mounted when at least one integration declares an MCP-capable
-surface. In practice that includes:
+The `/mcp` endpoint is mounted when at least one provider declares an MCP-capable surface. This includes providers with inline declarative operations, OpenAPI or GraphQL surfaces, upstream MCP connections, and packaged plugins with an operation catalog.
 
-- inline declarative operations
-- OpenAPI-backed integrations
-- GraphQL-backed integrations
-- integrations with `mcp_url`
-- packaged providers whose catalog should be available through MCP
+## Tool discovery
 
-## How Tool Discovery Works
+Gestalt converts provider operation catalogs into MCP tools. HTTP-backed operations become tools that route through the invocation broker. Upstream MCP tools from `surfaces.mcp` are passed through directly. Hybrid providers expose both sets under a single integration.
 
-Gestalt turns provider catalogs into MCP tools.
+Providers that support request-scoped catalogs have their tool lists refreshed at discovery and call time, so the available tools reflect the caller's current connection state.
 
-- HTTP-backed operations become normal tools that route through the invocation
-  broker.
-- Upstream MCP tools can be passed through directly.
-- Hybrid providers expose both sets in one integration catalog.
+## Tool naming
 
-If a provider supports request-scoped catalogs, Gestalt refreshes those tools at
- MCP list or call time so the tool surface reflects the caller's current
- connection.
-
-## Tool Naming
-
-Tool names come from the provider operation IDs. Use `mcp.tool_prefix` on a
-provider to keep names stable across providers.
+Tool names are derived from provider operation IDs. Use `mcp.tool_prefix` to namespace tools and prevent collisions across providers:
 
 ```yaml
 providers:
@@ -41,29 +26,17 @@ providers:
 
 ## Authentication
 
-`/mcp` uses the same auth middleware as the rest of the authenticated API.
+The `/mcp` endpoint uses the same authentication as the rest of the HTTP API. Callers authenticate with a platform session cookie or an API token (`Authorization: Bearer gst_api_...`).
 
-Callers can authenticate with:
+## Connection selection
 
-- a platform session cookie
-- `Authorization: Bearer <gst_api_...>`
+MCP requests follow the same connection resolution logic as the HTTP API. The server resolves the provider's default connection, honors surface-specific connection names, and fails the request if multiple stored instances exist without a unique match.
 
-The endpoint does not have a separate auth model.
-
-## Connection Selection
-
-The same connection logic used by the HTTP API also applies to MCP:
-
-- the server resolves the integration's default connection
-- surface-specific connection names are honored
-- if there are multiple stored instances and no unique match, the call fails
-
-For hybrid providers this means the API-backed and MCP-backed parts of the same
-integration can use different named connections.
+For hybrid providers, the API-backed and MCP-backed surfaces can use different named connections.
 
 ## Example
 
-Assume you already have a local OpenAPI file such as `./openapi/notion.yaml`.
+This configuration exposes a provider with both OpenAPI operations and upstream MCP tools:
 
 ```yaml
 providers:
@@ -92,8 +65,4 @@ providers:
               label: API Token
 ```
 
-With this config:
-
-- the HTTP API exposes the OpenAPI-backed operations
-- `/mcp` exposes the same REST operations plus the upstream Notion MCP tools
-- the upstream MCP tools authenticate through the `MCP` named connection
+With this configuration, the HTTP API exposes the OpenAPI-backed operations, and `/mcp` exposes both the REST operations and the upstream Notion MCP tools. Each surface authenticates through its own named connection.
