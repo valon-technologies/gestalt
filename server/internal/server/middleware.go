@@ -62,8 +62,24 @@ func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 	}
 }
 
+// contentSecurityPolicy is the CSP applied to all responses. script-src and
+// style-src require 'unsafe-inline' because the Next.js static export embeds
+// inline <script> tags for RSC flight data that change with every build,
+// making hash-based policies impractical.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self' 'unsafe-inline'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"font-src 'self'; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'"
+
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		if s.secureCookies {

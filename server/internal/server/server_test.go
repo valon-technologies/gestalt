@@ -253,6 +253,18 @@ func TestSecurityHeaders(t *testing.T) {
 		if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
 			t.Errorf("Strict-Transport-Security = %q, want empty (secureCookies=false)", got)
 		}
+		csp := resp.Header.Get("Content-Security-Policy")
+		for _, directive := range []string{
+			"default-src 'self'",
+			"script-src 'self' 'unsafe-inline'",
+			"style-src 'self' 'unsafe-inline'",
+			"object-src 'none'",
+			"frame-ancestors 'none'",
+		} {
+			if !strings.Contains(csp, directive) {
+				t.Errorf("Content-Security-Policy missing directive %q; got %q", directive, csp)
+			}
+		}
 	})
 
 	t.Run("secure_cookies", func(t *testing.T) {
