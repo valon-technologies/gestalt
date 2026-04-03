@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -631,10 +632,12 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		if err := applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 			return err
 		}
-		if intg.IconFile == "" && intg.Plugin.ResolvedIconFile != "" {
-			intg.IconFile = intg.Plugin.ResolvedIconFile
-			cfg.Integrations[name] = intg
+		if manifest := intg.Plugin.ResolvedManifest; manifest != nil {
+			intg.DisplayName = cmp.Or(intg.DisplayName, manifest.DisplayName)
+			intg.Description = cmp.Or(intg.Description, manifest.Description)
 		}
+		intg.IconFile = cmp.Or(intg.IconFile, intg.Plugin.ResolvedIconFile)
+		cfg.Integrations[name] = intg
 	}
 	if cfg.UI.Plugin.HasManagedArtifacts() {
 		key := LockPluginKey("ui", "default")
