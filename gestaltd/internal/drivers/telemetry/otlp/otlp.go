@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -55,7 +56,9 @@ type metricsConfig struct {
 }
 
 type logsConfig struct {
-	Level string `yaml:"level"`
+	Level    string `yaml:"level"`
+	Exporter string `yaml:"exporter"`
+	Format   string `yaml:"format"`
 }
 
 const (
@@ -63,6 +66,8 @@ const (
 	defaultServiceName = "gestaltd"
 	defaultInterval    = 60 * time.Second
 	defaultLogLevel    = "info"
+	defaultLogExporter = "otlp"
+	defaultLogFormat   = "text"
 )
 
 type Provider struct {
@@ -94,21 +99,15 @@ func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 		return nil, fmt.Errorf("otlp telemetry: building meter provider: %w", err)
 	}
 
-	lp, err := buildLoggerProvider(ctx, cfg, res)
+	logger, lp, err := buildLogger(ctx, cfg, res)
 	if err != nil {
 		_ = tp.Shutdown(ctx)
 		_ = mp.Shutdown(ctx)
-		return nil, fmt.Errorf("otlp telemetry: building logger provider: %w", err)
+		return nil, fmt.Errorf("otlp telemetry: building logger: %w", err)
 	}
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-
-	level := telemetryutil.ParseLevel(cfg.Logs.Level)
-	logger := slog.New(otelslog.NewHandler("gestaltd",
-		otelslog.WithLoggerProvider(lp),
-	))
-	logger = slog.New(levelFilterHandler{level: level, inner: logger.Handler()})
 
 	return &Provider{
 		logger: logger,
@@ -123,10 +122,14 @@ func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
 func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 
 func (p *Provider) Shutdown(ctx context.Context) error {
+	var lpErr error
+	if p.lp != nil {
+		lpErr = p.lp.Shutdown(ctx)
+	}
 	return errors.Join(
 		p.tp.Shutdown(ctx),
 		p.mp.Shutdown(ctx),
-		p.lp.Shutdown(ctx),
+		lpErr,
 	)
 }
 
@@ -146,6 +149,12 @@ func applyConfigDefaults(cfg *yamlConfig) {
 	}
 	if cfg.Logs.Level == "" {
 		cfg.Logs.Level = defaultLogLevel
+	}
+	if cfg.Logs.Exporter == "" {
+		cfg.Logs.Exporter = defaultLogExporter
+	}
+	if cfg.Logs.Format == "" {
+		cfg.Logs.Format = defaultLogFormat
 	}
 }
 
@@ -243,6 +252,45 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(res),
 	), nil
+}
+
+func buildLogger(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*slog.Logger, *sdklog.LoggerProvider, error) {
+	switch strings.ToLower(cfg.Logs.Exporter) {
+	case "otlp":
+		lp, err := buildLoggerProvider(ctx, cfg, res)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		level := telemetryutil.ParseLevel(cfg.Logs.Level)
+		logger := slog.New(otelslog.NewHandler("gestaltd",
+			otelslog.WithLoggerProvider(lp),
+		))
+		logger = slog.New(levelFilterHandler{level: level, inner: logger.Handler()})
+		return logger, lp, nil
+
+	case "stdout":
+		level := telemetryutil.ParseLevel(cfg.Logs.Level)
+		opts := &slog.HandlerOptions{Level: level}
+
+		var handler slog.Handler
+		switch strings.ToLower(cfg.Logs.Format) {
+		case "json":
+			handler = slog.NewJSONHandler(os.Stdout, opts)
+		default:
+			handler = slog.NewTextHandler(os.Stdout, opts)
+		}
+
+		return slog.New(handler), nil, nil
+
+	default:
+		return nil, nil, fmt.Errorf(
+			"unknown logs exporter %q (expected %q or %q)",
+			cfg.Logs.Exporter,
+			"otlp",
+			"stdout",
+		)
+	}
 }
 
 func buildLoggerProvider(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*sdklog.LoggerProvider, error) {

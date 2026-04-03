@@ -52,6 +52,21 @@ Supported OTLP config includes:
 - metric export interval
 - log level
 
+If you want traces and metrics in OTLP but want application logs to remain on
+stdout for the host platform to collect, set:
+
+```yaml
+telemetry:
+  provider: otlp
+  config:
+    endpoint: otel-collector:4317
+    protocol: grpc
+    logs:
+      exporter: stdout
+      format: json
+      level: info
+```
+
 ## What Gets Logged
 
 Gestalt logs:

@@ -204,6 +204,7 @@ telemetry:
     metrics:
       interval: 60s
     logs:
+      exporter: otlp
       level: info
 ```
 
@@ -217,9 +218,27 @@ telemetry:
 | `resource_attributes` | No | — | Key-value pairs attached as resource attributes. |
 | `traces.sampling_ratio` | No | `1.0` | Fraction of traces to sample, `0.0` to `1.0`. |
 | `metrics.interval` | No | `60s` | Metric export interval. |
-| `logs.level` | No | `info` | Minimum exported log level. |
+| `logs.exporter` | No | `otlp` | `otlp` exports logs over OTLP, `stdout` keeps logs on standard output. |
+| `logs.level` | No | `info` | Minimum log level for the configured log exporter. |
+| `logs.format` | No | `text` | `text` or `json` when `logs.exporter` is `stdout`. |
 
 Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent).
+
+To keep system logs on stdout while still exporting traces and metrics over OTLP:
+
+```yaml
+telemetry:
+  provider: otlp
+  config:
+    endpoint: otel-collector:4317
+    protocol: grpc
+    metrics:
+      interval: 60s
+    logs:
+      exporter: stdout
+      format: json
+      level: info
+```
 
 ### `noop`
 
