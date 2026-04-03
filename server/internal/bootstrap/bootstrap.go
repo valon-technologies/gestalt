@@ -182,7 +182,6 @@ type FactoryRegistry struct {
 	Datastores map[string]DatastoreFactory
 	Secrets    map[string]SecretManagerFactory
 	Telemetry  map[string]TelemetryFactory
-	Bindings   map[string]BindingFactory
 	Builtins   []core.Provider
 }
 
@@ -192,7 +191,6 @@ func NewFactoryRegistry() *FactoryRegistry {
 		Datastores: make(map[string]DatastoreFactory),
 		Secrets:    make(map[string]SecretManagerFactory),
 		Telemetry:  make(map[string]TelemetryFactory),
-		Bindings:   make(map[string]BindingFactory),
 	}
 }
 
@@ -202,7 +200,6 @@ type Result struct {
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
-	Bindings         *registry.PluginMap[core.Binding]
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
 	AuditSink        core.AuditSink
@@ -210,9 +207,8 @@ type Result struct {
 	Telemetry        core.TelemetryProvider
 	Egress           EgressDeps
 
-	mu                sync.Mutex
-	extensionsStarted bool
-	closed            bool
+	mu     sync.Mutex
+	closed bool
 }
 
 func (r *Result) Start(ctx context.Context) error {
@@ -225,13 +221,6 @@ func (r *Result) Start(ctx context.Context) error {
 	if r.closed {
 		return fmt.Errorf("bootstrap result already closed")
 	}
-	if r.extensionsStarted {
-		return nil
-	}
-	if err := startBindings(ctx, r.Bindings); err != nil {
-		return err
-	}
-	r.extensionsStarted = true
 	return nil
 }
 
@@ -247,12 +236,6 @@ func (r *Result) Close(ctx context.Context) error {
 	}
 
 	var errs []error
-	if r.extensionsStarted {
-		errs = append(errs,
-			CloseBindings(r.Bindings, bindingNames(r.Bindings)),
-		)
-		r.extensionsStarted = false
-	}
 	errs = append(errs,
 		CloseProviders(r.Providers),
 		closeDatastore(r.Datastore),
@@ -405,27 +388,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	)
 	audit := core.AuditSink(invocation.NewLoggerAuditSink(prepared.Telemetry.Logger()))
 
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
-	if err != nil {
-		return nil, err
-	}
-	shutdownBindings := true
-	defer func() {
-		if shutdownBindings {
-			_ = CloseBindings(bindings, bindingNames(bindings))
-		}
-	}()
-
 	closeProviders = false
 	closeCore = false
-	shutdownBindings = false
 	return &Result{
 		Auth:             prepared.Auth,
 		Datastore:        prepared.Datastore,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		ConnectionAuth:   connAuthResolver,
-		Bindings:         bindings,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,
 		AuditSink:        audit,
@@ -457,32 +427,6 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", cfg.Secrets.Provider, err)
 	}
 	return sm, nil
-}
-
-func startBindings(ctx context.Context, bindings *registry.PluginMap[core.Binding]) error {
-	if bindings == nil {
-		return nil
-	}
-
-	var started []string
-	for _, name := range bindingNames(bindings) {
-		binding, err := bindings.Get(name)
-		if err != nil {
-			return errors.Join(
-				fmt.Errorf("getting binding %q: %w", name, err),
-				CloseBindings(bindings, started),
-			)
-		}
-		if err := binding.Start(ctx); err != nil {
-			return errors.Join(
-				fmt.Errorf("starting binding %q: %w", name, err),
-				CloseBindings(bindings, started),
-			)
-		}
-		started = append(started, name)
-	}
-
-	return nil
 }
 
 func closeDatastore(ds core.Datastore) error {
@@ -559,16 +503,6 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	}
 	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {
 		return err
-	}
-	for name := range cfg.Bindings {
-		b := cfg.Bindings[name]
-		if err := resolveStringFields(&b, resolve); err != nil {
-			return err
-		}
-		if err := resolveYAMLNode(&b.Config, resolve); err != nil {
-			return err
-		}
-		cfg.Bindings[name] = b
 	}
 
 	return nil

@@ -43,13 +43,6 @@ Components registered by the `gestaltd` binary at startup.
 | `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
 | `noop` | Disables all telemetry collection. |
 
-## Bindings
-
-| Name | Purpose |
-| --- | --- |
-| `webhook` | Inbound HTTP endpoint with optional HMAC signature verification and provider forwarding. |
-| `proxy` | HTTP proxy surface with egress policy enforcement and credential injection. |
-
 ## Named Providers
 
 No named providers are currently built into the binary. BigQuery, Jira, Slack, and other external plugins are published from the standalone [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins) repository.

@@ -5,7 +5,7 @@
 | Path | Purpose |
 | --- | --- |
 | `server/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
-| `server/core` | Public interfaces for auth, datastore, secrets, providers, and bindings. |
+| `server/core` | Public interfaces for auth, datastore, secrets, and providers. |
 | `server/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other server internals. |
 | `plugins` | External plugin packages (declarative and compiled). |
 | `sdk` | Public SDKs and plugin manifest definitions. |
@@ -51,7 +51,7 @@ Keep the bare semantic version aligned across artifacts when they are meant to s
 
 ## Adding New Built-Ins
 
-If you add a new built-in auth provider, datastore, secret manager, binding, or named provider:
+If you add a new built-in auth provider, datastore, secret manager, or named provider:
 
 1. register it in the relevant `server/cmd/gestaltd` file
 2. add or update tests

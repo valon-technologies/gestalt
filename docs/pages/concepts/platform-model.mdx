@@ -18,7 +18,6 @@ exposes those providers through shared request surfaces.
 | `datastore` | Persists users, API tokens, integration tokens, and some egress data. |
 | `secrets` | Resolves `secret://...` references during bootstrap. |
 | `providers` | Define the provider graph users call. Each named entry is provider-shaped directly. |
-| `bindings` | Extra entry points, such as inbound webhooks or HTTP proxy routes. |
 | `egress` | Policy and credential rules for outbound traffic. |
 
 ## Bootstrap Order
@@ -38,8 +37,7 @@ This is the actual shape of startup:
 11. Build the datastore.
 12. Build providers from `providers`.
 13. Build the shared invocation broker.
-14. Build bindings.
-15. Start the HTTP server, then start bindings once providers are ready.
+14. Start the HTTP server.
 
 ## Integrations Become Providers
 
@@ -100,8 +98,8 @@ The broker is responsible for:
 - returning normalized operation results
 
 Because this broker is shared, the same token and policy behavior applies
-whether the caller is the web UI, a direct HTTP client, an MCP client hitting
-`/mcp`, a webhook binding, or a proxy binding.
+whether the caller is the web UI, a direct HTTP client, or an MCP client
+hitting `/mcp`.
 
 ## Surfaces Built On Top
 
@@ -112,11 +110,10 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 | HTTP API | `/api/v1/...` for integration listing, auth flows, invocation, and token management. |
 | Embedded web UI | Served by the same server process and port as the API. |
 | MCP endpoint | `/mcp`, mounted when at least one integration exposes tools. |
-| Bindings | Additional routes and triggers declared under `bindings:`. |
 
 ## What You Actually Program Against
 
 As a Gestalt operator, you compose top-level config blocks, provider
-definitions, connection definitions, surface definitions, binding definitions,
-egress rules, and optional plugin manifests and packages. Everything else is a
-consequence of those inputs.
+definitions, connection definitions, surface definitions, egress rules, and
+optional plugin manifests and packages. Everything else is a consequence of
+those inputs.

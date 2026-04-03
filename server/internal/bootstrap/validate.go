@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
@@ -37,17 +36,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 
 	if err := validateMCPCatalogs(providers); err != nil {
 		return warnings, err
-	}
-
-	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore)
-	audit := core.AuditSink(invocation.NewSlogAuditSink(nil))
-
-	bindings, err := buildBindings(ctx, cfg, factories, sharedInvoker, sharedInvoker, audit, prepared.Deps.Egress)
-	if err != nil {
-		return warnings, err
-	}
-	if bindings != nil {
-		defer func() { _ = CloseBindings(bindings, bindingNames(bindings)) }()
 	}
 
 	return warnings, nil
