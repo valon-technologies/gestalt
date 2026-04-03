@@ -21,10 +21,28 @@ type operationMetrics struct {
 	duration   metric.Float64Histogram
 }
 
-var (
-	operationMetricsOnce sync.Once
-	operationMetricState operationMetrics
-)
+var operationMetricsOnce = sync.OnceValue(func() operationMetrics {
+	meter := otel.Meter(tracerName)
+
+	return operationMetrics{
+		count: newInt64Counter(
+			meter,
+			"gestaltd.operation.count",
+			"Counts gestaltd operation invocations.",
+		),
+		errorCount: newInt64Counter(
+			meter,
+			"gestaltd.operation.error_count",
+			"Counts gestaltd operation invocations that fail.",
+		),
+		duration: newFloat64Histogram(
+			meter,
+			"gestaltd.operation.duration",
+			"Measures gestaltd operation invocation duration.",
+			"s",
+		),
+	}
+})
 
 func recordOperationMetrics(
 	ctx context.Context,
@@ -35,7 +53,7 @@ func recordOperationMetrics(
 	connectionMode string,
 	failed bool,
 ) {
-	metrics := loadOperationMetrics()
+	metrics := operationMetricsOnce()
 	attrs := []attribute.KeyValue{
 		attrProvider.String(metricAttrValue(provider)),
 		attrOperation.String(metricAttrValue(operation)),
@@ -50,46 +68,26 @@ func recordOperationMetrics(
 	}
 }
 
-func loadOperationMetrics() operationMetrics {
-	operationMetricsOnce.Do(func() {
-		meter := otel.Meter(tracerName)
+func newInt64Counter(meter metric.Meter, name, desc string) metric.Int64Counter {
+	counter, err := meter.Int64Counter(name, metric.WithDescription(desc))
+	if err != nil {
+		otel.Handle(err)
+		return noopmetric.Int64Counter{}
+	}
+	return counter
+}
 
-		count, err := meter.Int64Counter(
-			"gestaltd.operation.count",
-			metric.WithDescription("Counts gestaltd operation invocations."),
-		)
-		if err != nil {
-			otel.Handle(err)
-			count = noopmetric.Int64Counter{}
-		}
-
-		errorCount, err := meter.Int64Counter(
-			"gestaltd.operation.error_count",
-			metric.WithDescription("Counts gestaltd operation invocations that fail."),
-		)
-		if err != nil {
-			otel.Handle(err)
-			errorCount = noopmetric.Int64Counter{}
-		}
-
-		duration, err := meter.Float64Histogram(
-			"gestaltd.operation.duration",
-			metric.WithDescription("Measures gestaltd operation invocation duration."),
-			metric.WithUnit("s"),
-		)
-		if err != nil {
-			otel.Handle(err)
-			duration = noopmetric.Float64Histogram{}
-		}
-
-		operationMetricState = operationMetrics{
-			count:      count,
-			errorCount: errorCount,
-			duration:   duration,
-		}
-	})
-
-	return operationMetricState
+func newFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Float64Histogram {
+	histogram, err := meter.Float64Histogram(
+		name,
+		metric.WithDescription(desc),
+		metric.WithUnit(unit),
+	)
+	if err != nil {
+		otel.Handle(err)
+		return noopmetric.Float64Histogram{}
+	}
+	return histogram
 }
 
 func metricAttrValue(value string) string {

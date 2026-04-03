@@ -325,8 +325,8 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 
 	var logRequests, traceRequests, metricRequests atomic.Int32
-	metricObserver := newOTLPMetricObserver()
-	var metricDecodeErr atomic.Value
+	var metricBodiesMu sync.Mutex
+	var metricBodies [][]byte
 	otlpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		_ = r.Body.Close()
@@ -338,9 +338,9 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 			traceRequests.Add(1)
 		case "/v1/metrics":
 			metricRequests.Add(1)
-			if err := metricObserver.recordExport(body); err != nil && metricDecodeErr.Load() == nil {
-				metricDecodeErr.Store(err.Error())
-			}
+			metricBodiesMu.Lock()
+			metricBodies = append(metricBodies, bytes.Clone(body))
+			metricBodiesMu.Unlock()
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -400,34 +400,24 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	if logRequests.Load() != 0 {
 		t.Fatalf("expected logs to stay on stdout, saw %d OTLP log exports\nstdout:\n%s\nstderr:\n%s", logRequests.Load(), stdout, stderr)
 	}
-	if v := metricDecodeErr.Load(); v != nil {
-		t.Fatalf("decode OTLP metrics: %s\nstdout:\n%s\nstderr:\n%s", v.(string), stdout, stderr)
-	}
-	if !metricObserver.hasMetric("gestaltd.operation.count") {
-		t.Fatalf("expected gestaltd.operation.count in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
-	if !metricObserver.hasMetric("gestaltd.operation.duration") {
-		t.Fatalf("expected gestaltd.operation.duration in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
-	if !metricObserver.hasMetric("gestaltd.operation.error_count") {
-		t.Fatalf("expected gestaltd.operation.error_count in OTLP export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
-	if !metricObserver.hasMetricAttributes("gestaltd.operation.count", map[string]string{
+	metricBodiesMu.Lock()
+	exports := append([][]byte(nil), metricBodies...)
+	metricBodiesMu.Unlock()
+	requireExportedMetric(t, exports, "gestaltd.operation.count", nil, stdout, stderr)
+	requireExportedMetric(t, exports, "gestaltd.operation.duration", nil, stdout, stderr)
+	requireExportedMetric(t, exports, "gestaltd.operation.error_count", nil, stdout, stderr)
+	requireExportedMetric(t, exports, "gestaltd.operation.count", map[string]string{
 		"gestalt.connection_mode": "none",
 		"gestalt.operation":       "echo",
 		"gestalt.provider":        "example",
 		"gestalt.transport":       "plugin",
-	}) {
-		t.Fatalf("expected gestaltd.operation.count attrs for plugin echo invoke\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
-	if !metricObserver.hasMetricAttributes("gestaltd.operation.error_count", map[string]string{
+	}, stdout, stderr)
+	requireExportedMetric(t, exports, "gestaltd.operation.error_count", map[string]string{
 		"gestalt.connection_mode": "none",
 		"gestalt.operation":       "unknown",
 		"gestalt.provider":        "example",
 		"gestalt.transport":       "unknown",
-	}) {
-		t.Fatalf("expected gestaltd.operation.error_count attrs for unknown operation invoke\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
+	}, stdout, stderr)
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -1165,82 +1155,65 @@ func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string
 	return respBody
 }
 
-type otlpMetricObserver struct {
-	mu       sync.Mutex
-	names    map[string]struct{}
-	attrSets map[string]map[string]struct{}
+func requireExportedMetric(t *testing.T, exports [][]byte, name string, attrs map[string]string, stdout, stderr string) {
+	t.Helper()
+
+	found, err := hasExportedMetric(exports, name, attrs)
+	if err != nil {
+		t.Fatalf("decode OTLP metrics: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if found {
+		return
+	}
+	if attrs == nil {
+		t.Fatalf("expected %s in OTLP export\nstdout:\n%s\nstderr:\n%s", name, stdout, stderr)
+	}
+	t.Fatalf("expected %s attrs %s in OTLP export\nstdout:\n%s\nstderr:\n%s", name, serializeMetricAttributes(attrs), stdout, stderr)
 }
 
-func newOTLPMetricObserver() *otlpMetricObserver {
-	return &otlpMetricObserver{
-		names:    make(map[string]struct{}),
-		attrSets: make(map[string]map[string]struct{}),
-	}
-}
-
-func (o *otlpMetricObserver) recordExport(body []byte) error {
-	var req colmetricspb.ExportMetricsServiceRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		return err
-	}
-
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	for _, rm := range req.GetResourceMetrics() {
-		for _, sm := range rm.GetScopeMetrics() {
-			for _, metric := range sm.GetMetrics() {
-				o.names[metric.GetName()] = struct{}{}
-				if o.attrSets[metric.GetName()] == nil {
-					o.attrSets[metric.GetName()] = make(map[string]struct{})
-				}
-				for _, attrSet := range otlpMetricAttributeSets(metric) {
-					o.attrSets[metric.GetName()][attrSet] = struct{}{}
+func hasExportedMetric(exports [][]byte, name string, attrs map[string]string) (bool, error) {
+	wantAttrs := serializeMetricAttributes(attrs)
+	for _, body := range exports {
+		var req colmetricspb.ExportMetricsServiceRequest
+		if err := proto.Unmarshal(body, &req); err != nil {
+			return false, err
+		}
+		for _, rm := range req.GetResourceMetrics() {
+			for _, sm := range rm.GetScopeMetrics() {
+				for _, metric := range sm.GetMetrics() {
+					if metric.GetName() != name {
+						continue
+					}
+					if attrs == nil || metricHasAttributes(metric, wantAttrs) {
+						return true, nil
+					}
 				}
 			}
 		}
 	}
-
-	return nil
+	return false, nil
 }
 
-func (o *otlpMetricObserver) hasMetric(name string) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	_, ok := o.names[name]
-	return ok
-}
-
-func (o *otlpMetricObserver) hasMetricAttributes(name string, attrs map[string]string) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	sets := o.attrSets[name]
-	if len(sets) == 0 {
-		return false
-	}
-	_, ok := sets[serializeMetricAttributes(attrs)]
-	return ok
-}
-
-func otlpMetricAttributeSets(metric *metricspb.Metric) []string {
+func metricHasAttributes(metric *metricspb.Metric, want string) bool {
+	var points [][]*commonv1.KeyValue
 	switch {
 	case metric.GetSum() != nil:
-		out := make([]string, 0, len(metric.GetSum().GetDataPoints()))
 		for _, point := range metric.GetSum().GetDataPoints() {
-			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+			points = append(points, point.GetAttributes())
 		}
-		return out
 	case metric.GetHistogram() != nil:
-		out := make([]string, 0, len(metric.GetHistogram().GetDataPoints()))
 		for _, point := range metric.GetHistogram().GetDataPoints() {
-			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+			points = append(points, point.GetAttributes())
 		}
-		return out
 	default:
-		return nil
+		return false
 	}
+	for _, attrs := range points {
+		if serializeOTLPAttributes(attrs) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func serializeOTLPAttributes(attrs []*commonv1.KeyValue) string {
