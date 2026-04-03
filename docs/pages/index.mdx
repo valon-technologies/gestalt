@@ -8,38 +8,49 @@ Gestalt is a platform for self-hostable, configurable integrations and tooling, 
 
 Gestalt works in three stages:
 
-**Configure.** Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
+### Configure
 
-**Connect.** Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
+Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
 
-**Invoke.** Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
+### Connect
+
+Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
+
+### Invoke
+
+Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
 
 ## Why Gestalt?
 
-**Self-hosted and private.** Gestalt runs in your infrastructure. Credentials and data never leave your network.
+### Self-hosted and private
 
-**One config, many integrations.** A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
+Gestalt runs in your infrastructure. Credentials and data never leave your network.
 
-**Works with AI tooling.** Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
+### One config, many integrations
 
-**Extensible.** Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
+A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
+
+### Works with AI tooling
+
+Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
+
+### Extensible
+
+Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
 
 ## Start Here
 
 <Cards>
   <Cards.Card title="Getting Started" href="/getting-started">
-    Run `gestaltd` out of the box, then move to an explicit config and locked startup.
+    Run Gestalt out-of-the-box, then move to custom configurations.
   </Cards.Card>
   <Cards.Card title="Platform Model" href="/concepts/platform-model">
-    See how config, providers, the invocation broker, and MCP fit together.
+    See how the pieces of Gestalt all fit together.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/concepts/configuration">
-    Learn the top-level primitives and the lifecycle of `init`, `validate`, and `serve --locked`.
+    Learn the top-level primitives and lifecycle of Gestalt.
   </Cards.Card>
   <Cards.Card title="Deploy" href="/deploy">
-    Use the shipped Docker and Helm paths, then adapt the same model to Fly.io, Railway, Render, or Lambda.
-  </Cards.Card>
-  <Cards.Card title="Config File" href="/reference/config-file">
-    Full reference for every top-level block and the fields inside them.
+    Ship Gestalt to the cloud provider of your choice.
   </Cards.Card>
 </Cards>

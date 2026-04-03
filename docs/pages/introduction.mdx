@@ -1,0 +1,25 @@
+# Introduction
+
+The Gestalt platform comes with two prebuilt binaries: the `gestaltd` server and the `gestalt` client.
+
+## `gestaltd`, the server
+
+`gestaltd` is the Gestalt server. It reads a single YAML configuration file and starts an HTTP server that handles authentication, token management, and integration execution for every provider you configure.
+
+The server exposes three surfaces:
+
+- **HTTP API** for programmatic access to any configured integration.
+- **Web UI** for browser-based authentication, connection management, and interactive invocation.
+- **MCP endpoint** (optional) so AI agents and coding assistants can use your integrations as tools.
+
+All three surfaces share the same authorization rules, token storage, and audit logging.
+
+## `gestalt`, the client CLI
+
+`gestalt` is a command-line client for interacting with a running `gestaltd` server. It handles login, lists available integrations, and invokes provider operations from the terminal.
+
+The CLI is designed with progressive disclosure: common tasks like listing integrations or invoking a tool are simple one-liners, while advanced options are available when you need them.
+
+## How they work together
+
+You run `gestaltd` once to start the server. From there, any number of clients can connect to it: the `gestalt` CLI, the web UI, direct HTTP calls, or AI agents. A single Gestalt deployment serves as a shared gateway for all of these consumers.
