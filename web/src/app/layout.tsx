@@ -1,22 +1,29 @@
 import type { Metadata } from "next";
-import { Bitter, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const bitter = Bitter({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+const seasonSerif = localFont({
+  src: [
+    { path: "../../public/fonts/SeasonSerif_Regular.woff", weight: "400", style: "normal" },
+    { path: "../../public/fonts/SeasonSerif_RegularItalic.woff", weight: "400", style: "italic" },
+  ],
   variable: "--font-heading",
 });
 
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const melangeGrotesk = localFont({
+  src: [
+    { path: "../../public/fonts/KMRMelangeGrotesk_Regular.woff", weight: "400", style: "normal" },
+    { path: "../../public/fonts/KMRMelangeGrotesk_Bold.woff", weight: "700", style: "normal" },
+    { path: "../../public/fonts/KMRMelangeGrotesk_Italic.woff", weight: "400", style: "italic" },
+    { path: "../../public/fonts/KMRMelangeGrotesk_BoldItalic.woff", weight: "700", style: "italic" },
+  ],
   variable: "--font-body",
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
+const geistMono = localFont({
+  src: [
+    { path: "../../public/fonts/GeistMono_Regular.woff2", weight: "400", style: "normal" },
+  ],
   variable: "--font-mono",
 });
 
@@ -56,7 +63,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${bitter.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
+      <body className={`${seasonSerif.variable} ${melangeGrotesk.variable} ${geistMono.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>

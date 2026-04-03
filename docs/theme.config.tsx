@@ -2,7 +2,7 @@ import { useConfig } from "nextra-theme-docs";
 import type { DocsThemeConfig } from "nextra-theme-docs";
 
 const config: DocsThemeConfig = {
-  logo: <strong style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}>Gestalt</strong>,
+  logo: <strong style={{ fontFamily: "'Season Serif', Georgia, serif" }}>Gestalt</strong>,
   project: {
     link: "https://github.com/valon-technologies/gestalt",
   },

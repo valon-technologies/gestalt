@@ -1,4 +1,58 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono&display=swap');
+@font-face {
+  font-family: 'Season Serif';
+  src: url('/fonts/SeasonSerif_Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Season Serif';
+  src: url('/fonts/SeasonSerif_RegularItalic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'KMR Melange Grotesk';
+  src: url('/fonts/KMRMelangeGrotesk_Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'KMR Melange Grotesk';
+  src: url('/fonts/KMRMelangeGrotesk_Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'KMR Melange Grotesk';
+  src: url('/fonts/KMRMelangeGrotesk_Italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'KMR Melange Grotesk';
+  src: url('/fonts/KMRMelangeGrotesk_BoldItalic.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono_Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --nextra-primary-hue: 30deg;
@@ -6,16 +60,17 @@
 }
 
 html {
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6,
 article h1, article h2, article h3, article h4 {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: 'Season Serif', Georgia, serif;
+  letter-spacing: -0.5px;
 }
 
 code, pre, kbd, samp {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
 }
 
 /* Show the TOC at lg (1024px) instead of xl (1280px).
