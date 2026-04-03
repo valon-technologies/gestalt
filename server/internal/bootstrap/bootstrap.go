@@ -166,7 +166,6 @@ type Deps struct {
 	SecretManager core.SecretManager
 	SQLDB         any // *sql.DB when available, nil otherwise
 	SQLDialect    any // Placeholder(int)string when available, nil otherwise
-	Egress        EgressDeps
 }
 
 type sqlDBAccessor interface{ RawDB() any }
@@ -205,7 +204,6 @@ type Result struct {
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
 	Telemetry        core.TelemetryProvider
-	Egress           EgressDeps
 
 	mu     sync.Mutex
 	closed bool
@@ -318,7 +316,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
-	deps.Egress = newEgressDeps(cfg, sm)
 	if acc, ok := ds.(sqlDBAccessor); ok {
 		deps.SQLDB = acc.RawDB()
 	}
@@ -401,7 +398,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:        audit,
 		SecretManager:    prepared.SecretManager,
 		Telemetry:        prepared.Telemetry,
-		Egress:           prepared.Deps.Egress,
 	}, nil
 }
 
@@ -803,9 +799,6 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		allowedOperations:    allowedOperations,
 		baseURL:              baseURL,
 		applyResponseMapping: true,
-		providerBuildOptions: func(config.ConnectionDef) []provider.BuildOption {
-			return []provider.BuildOption{provider.WithEgressResolver(deps.Egress.Resolver)}
-		},
 	}, deps)
 	if err != nil {
 		closeIfPossible(pluginProv)
@@ -884,7 +877,6 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			resolved.url,
 			connMode,
 			config.MergedProviderHeaders(cfg.manifestProvider, cfg.plugin),
-			deps.Egress.Resolver,
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
 		if err != nil {

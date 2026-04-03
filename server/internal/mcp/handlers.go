@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -46,7 +45,6 @@ func makeDirectHandler(cfg Config, provName, opName, connection string, caller d
 		if p == nil {
 			return mcpgo.NewToolResultError("not authenticated"), nil
 		}
-		ctx = attachEgressSubject(ctx, p)
 
 		args := req.GetArguments()
 		instance, _ := args["_instance"].(string)
@@ -61,8 +59,4 @@ func makeDirectHandler(cfg Config, provName, opName, connection string, caller d
 		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
 		return caller.CallTool(ctx, opName, args)
 	}
-}
-
-func attachEgressSubject(ctx context.Context, p *principal.Principal) context.Context {
-	return egress.WithSubjectFromPrincipal(ctx, p)
 }

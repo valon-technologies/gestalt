@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
@@ -37,7 +36,6 @@ type Upstream struct {
 	cat      *catalog.Catalog
 	client   mcpclient.MCPClient
 	exposure *operationexposure.Policy
-	resolver *egress.Resolver
 }
 
 type Option func(*Upstream)
@@ -56,7 +54,7 @@ func WithMetadataOverrides(displayName, description, iconSVG string) Option {
 	}
 }
 
-func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver, opts ...Option) (*Upstream, error) {
+func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, opts ...Option) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
@@ -68,7 +66,6 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		url:      url,
 		connMode: connMode,
 		headers:  config.NormalizeHeaders(headers),
-		resolver: resolver,
 	}
 	for _, opt := range opts {
 		opt(u)
@@ -163,8 +160,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	}
 
 	httpClient := &http.Client{
-		Timeout:   httpTimeout,
-		Transport: egress.NewResolvingRoundTripper(http.DefaultTransport, u.resolver),
+		Timeout: httpTimeout,
 	}
 
 	client, err := mcpclient.NewStreamableHttpClient(u.url,

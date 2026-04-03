@@ -38,7 +38,6 @@ secrets: {}
 telemetry: {}
 providers: {}
 server: {}
-egress: {}
 ui: {}
 ```
 
@@ -52,7 +51,6 @@ Each block controls a distinct part of the runtime:
 | `secrets` | How `secret://...` values are resolved. |
 | `telemetry` | Observability: traces, metrics, and structured logs. |
 | `providers` | The provider graph users call. |
-| `egress` | Outbound allow or deny policy plus credential grants. |
 | `ui` | Optional custom web UI plugin. |
 
 ## Defaults And Required Fields

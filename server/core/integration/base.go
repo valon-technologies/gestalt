@@ -2,15 +2,16 @@ package integration
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"maps"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 )
@@ -103,7 +104,6 @@ type Base struct {
 	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse   apiexec.ResponseChecker
 	ExecuteFunc     func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
-	EgressResolver  *egress.Resolver
 	ResponseMapping *ResponseMappingConfig
 
 	ConnectionDefs      map[string]core.ConnectionParamDef
@@ -270,71 +270,184 @@ func (b *Base) executeGraphQL(ctx context.Context, operation string, query strin
 		return nil, err
 	}
 
-	resolved, err := b.resolveGraphQLEgress(ctx, operation, gqlReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return egress.ExecuteGraphQL(ctx, b.httpClient(), egress.GraphQLRequestSpec{
-		Target:     resolved.Target,
-		URL:        gqlReq.URL,
-		Query:      gqlReq.Query,
-		Variables:  gqlReq.Variables,
-		Headers:    resolved.Headers,
-		Credential: resolved.Credential,
-	})
+	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
 }
 
-func (b *Base) egressAuthStyle() egress.AuthStyle {
+type requestAuth struct {
+	token        string
+	authHeader   string
+	extraHeaders map[string]string
+}
+
+func (b *Base) materializeAuth(token string) (requestAuth, error) {
+	if b.TokenParser != nil {
+		authHeader, extraHeaders, err := b.TokenParser(token)
+		if err != nil {
+			return requestAuth{}, err
+		}
+		return requestAuth{authHeader: authHeader, extraHeaders: extraHeaders}, nil
+	}
+
 	switch b.AuthStyle {
+	case AuthStyleBearer:
+		return requestAuth{token: token}, nil
 	case AuthStyleRaw:
-		return egress.AuthStyleRaw
+		return requestAuth{authHeader: token}, nil
 	case AuthStyleNone:
-		return egress.AuthStyleNone
+		return requestAuth{}, nil
 	case AuthStyleBasic:
-		return egress.AuthStyleBasic
+		if token == "" {
+			return requestAuth{}, nil
+		}
+		cred := token
+		if !strings.Contains(cred, ":") {
+			cred += ":"
+		}
+		return requestAuth{
+			authHeader: "Basic " + base64.StdEncoding.EncodeToString([]byte(cred)),
+		}, nil
 	default:
-		return egress.AuthStyleBearer
+		return requestAuth{}, fmt.Errorf("unknown auth style %d", b.AuthStyle)
 	}
-}
-
-func (b *Base) materializeCredential(token string) (egress.CredentialMaterialization, error) {
-	return egress.MaterializeCredential(token, b.egressAuthStyle(), b.TokenParser)
 }
 
 func (b *Base) applyAuth(req *apiexec.Request, token string) error {
-	auth, err := b.materializeCredential(token)
+	auth, err := b.materializeAuth(token)
 	if err != nil {
 		return err
 	}
-	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
-	for _, header := range auth.Headers {
+	req.Token = auth.token
+	req.AuthHeader = auth.authHeader
+	for name, value := range auth.extraHeaders {
 		if req.CustomHeaders == nil {
 			req.CustomHeaders = make(map[string]string)
 		}
-		req.CustomHeaders[header.Name] = header.Value
+		req.CustomHeaders[name] = value
 	}
 	return nil
 }
 
 func (b *Base) applyGraphQLAuth(req *apiexec.GraphQLRequest, token string) error {
-	auth, err := b.materializeCredential(token)
+	auth, err := b.materializeAuth(token)
 	if err != nil {
 		return err
 	}
-	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
-	for _, header := range auth.Headers {
+	req.Token = auth.token
+	req.AuthHeader = auth.authHeader
+	for name, value := range auth.extraHeaders {
 		if req.CustomHeaders == nil {
 			req.CustomHeaders = make(map[string]string)
 		}
-		req.CustomHeaders[header.Name] = header.Value
+		req.CustomHeaders[name] = value
 	}
 	return nil
 }
 
-func (b *Base) requestAuthFields(token string, auth egress.CredentialMaterialization) (string, string) {
-	if b.TokenParser == nil && b.AuthStyle == AuthStyleBearer {
-		return token, ""
+func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
+	if catOp == nil {
+		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
-	return "", auth.Authorization
+	method := strings.ToUpper(strings.TrimSpace(catOp.Method))
+	if method == "" {
+		return nil, fmt.Errorf("operation %q is missing method", operation)
+	}
+	if strings.TrimSpace(catOp.Path) == "" {
+		return nil, fmt.Errorf("operation %q is missing path", operation)
+	}
+
+	bodyParams, queryParams, headerParams := partitionParams(catOp, params)
+
+	baseURL, headers := b.resolvedURLAndHeaders(ctx)
+	for k, v := range headerParams {
+		if headers == nil {
+			headers = make(map[string]string)
+		}
+		headers[k] = v
+	}
+
+	req := apiexec.Request{
+		Method:        method,
+		BaseURL:       baseURL,
+		Path:          catOp.Path,
+		Params:        bodyParams,
+		QueryParams:   queryParams,
+		CustomHeaders: headers,
+		CheckResponse: b.CheckResponse,
+	}
+	if err := b.applyAuth(&req, token); err != nil {
+		return nil, err
+	}
+
+	var (
+		result *core.OperationResult
+		err    error
+	)
+	if pgn, ok := b.Pagination[operation]; ok {
+		result, err = apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
+	} else {
+		result, err = apiexec.Do(ctx, b.httpClient(), req)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if b.ResponseMapping != nil {
+		result = applyResponseMapping(result, b.ResponseMapping)
+	}
+	return result, nil
+}
+
+func findCatalogOp(cat *catalog.Catalog, id string) *catalog.CatalogOperation {
+	if cat == nil {
+		return nil
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == id {
+			return &cat.Operations[i]
+		}
+	}
+	return nil
+}
+
+func partitionParams(catOp *catalog.CatalogOperation, params map[string]any) (body map[string]any, query map[string]any, headers map[string]string) {
+	if catOp == nil || len(catOp.Parameters) == 0 {
+		return params, nil, nil
+	}
+
+	locations := make(map[string]string, len(catOp.Parameters))
+	var wireNames map[string]string
+	for _, p := range catOp.Parameters {
+		if p.Location != "" {
+			locations[p.Name] = p.Location
+		}
+		if p.WireName != "" {
+			if wireNames == nil {
+				wireNames = make(map[string]string)
+			}
+			wireNames[p.Name] = p.WireName
+		}
+	}
+	if len(locations) == 0 {
+		return params, nil, nil
+	}
+
+	body = make(map[string]any)
+	query = make(map[string]any)
+	headers = make(map[string]string)
+	for k, v := range params {
+		httpKey := k
+		if wn, ok := wireNames[k]; ok {
+			httpKey = wn
+		}
+		switch locations[k] {
+		case "query":
+			query[httpKey] = v
+		case "header":
+			headers[httpKey] = fmt.Sprintf("%v", v)
+		case "path":
+			body[httpKey] = v
+		default:
+			body[k] = v
+		}
+	}
+	return body, query, headers
 }

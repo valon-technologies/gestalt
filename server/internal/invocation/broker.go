@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -183,8 +182,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
-	ctx = b.withSubject(ctx, p)
-
 	result, err := prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
@@ -206,10 +203,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 	}
 	_, tok, resolveErr := b.resolveToken(ctx, prov, p, providerName, connection, instance)
 	return tok, resolveErr
-}
-
-func (b *Broker) withSubject(ctx context.Context, p *principal.Principal) context.Context {
-	return egress.WithSubjectFromPrincipal(ctx, p)
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {

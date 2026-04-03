@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -37,7 +36,6 @@ type Config struct {
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Integrations map[string]IntegrationDef `yaml:"providers"`
 	Server       ServerConfig              `yaml:"server"`
-	Egress       EgressConfig              `yaml:"egress"`
 	UI           UIConfig                  `yaml:"ui"`
 }
 
@@ -60,34 +58,6 @@ type UIPluginDef struct {
 
 func (p *UIPluginDef) HasManagedArtifacts() bool {
 	return p != nil && (p.Package != "" || p.Source != "")
-}
-
-type EgressConfig struct {
-	DefaultAction string                  `yaml:"default_action"`
-	Policies      []EgressPolicyRule      `yaml:"policies"`
-	Credentials   []EgressCredentialGrant `yaml:"credentials"`
-}
-
-type EgressPolicyRule struct {
-	Action      string `yaml:"action"`
-	SubjectKind string `yaml:"subject_kind"`
-	SubjectID   string `yaml:"subject_id"`
-	Provider    string `yaml:"provider"`
-	Operation   string `yaml:"operation"`
-	Method      string `yaml:"method"`
-	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"path_prefix"`
-}
-
-type EgressCredentialGrant struct {
-	SecretRef   string `yaml:"secret_ref"`
-	AuthStyle   string `yaml:"auth_style"`
-	SubjectKind string `yaml:"subject_kind"`
-	SubjectID   string `yaml:"subject_id"`
-	Operation   string `yaml:"operation"`
-	Method      string `yaml:"method"`
-	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"path_prefix"`
 }
 
 type PluginDef struct {
@@ -754,7 +724,7 @@ func resolvePackagePath(baseDir, value string) string {
 }
 
 // ValidateStructure checks config shape: integration references, plugin
-// declarations, connection references, URL template params, egress rules.
+// declarations, and connection references.
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key, auth.provider, or datastore.provider.
 func ValidateStructure(cfg *Config) error {
@@ -762,9 +732,6 @@ func ValidateStructure(cfg *Config) error {
 		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
 			return fmt.Errorf("config validation: server.api_token_ttl: %w", err)
 		}
-	}
-	if err := validateEgress(&cfg.Egress); err != nil {
-		return err
 	}
 	if err := validateUIPlugin(cfg.UI.Plugin); err != nil {
 		return err
@@ -1290,40 +1257,4 @@ func NodeToMap(node yaml.Node) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-func validateEgress(cfg *EgressConfig) error {
-	switch cfg.DefaultAction {
-	case "", "allow", "deny":
-	default:
-		return fmt.Errorf("config validation: egress.default_action must be \"allow\" or \"deny\", got %q", cfg.DefaultAction)
-	}
-	for i := range cfg.Policies {
-		switch cfg.Policies[i].Action {
-		case "allow", "deny":
-		default:
-			return fmt.Errorf("config validation: egress.policies[%d].action must be \"allow\" or \"deny\", got %q", i, cfg.Policies[i].Action)
-		}
-	}
-	for i := range cfg.Credentials {
-		c := &cfg.Credentials[i]
-		if c.SecretRef == "" {
-			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref is required", i)
-		}
-		if strings.HasPrefix(c.SecretRef, "secret://") {
-			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref must be a bare secret name without secret://", i)
-		}
-		if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
-			SubjectKind: c.SubjectKind,
-			SubjectID:   c.SubjectID,
-			Operation:   c.Operation,
-			Method:      c.Method,
-			Host:        c.Host,
-			PathPrefix:  c.PathPrefix,
-			AuthStyle:   c.AuthStyle,
-		}); err != nil {
-			return fmt.Errorf("config validation: egress.credentials[%d]: %w", i, err)
-		}
-	}
-	return nil
 }

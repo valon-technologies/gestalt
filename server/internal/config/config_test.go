@@ -255,13 +255,6 @@ providers:
     display_name: Service A
 `,
 		},
-		{
-			name: "egress default action must be allow or deny",
-			yaml: `
-egress:
-  default_action: block
-`,
-		},
 	}
 
 	for _, tc := range cases {
@@ -456,28 +449,6 @@ providers:
   external:
     from:
       source: github.com/acme-corp/tools/widget
-`,
-			wantErr: true,
-		},
-		{
-			name: "egress default_action allow is valid",
-			yaml: `
-egress:
-  default_action: allow
-`,
-		},
-		{
-			name: "egress default_action deny is valid",
-			yaml: `
-egress:
-  default_action: deny
-`,
-		},
-		{
-			name: "egress default_action invalid",
-			yaml: `
-egress:
-  default_action: block
 `,
 			wantErr: true,
 		},

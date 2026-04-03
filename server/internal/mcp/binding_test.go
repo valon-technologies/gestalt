@@ -14,7 +14,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
@@ -687,7 +686,6 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 
 	var calledName string
 	var calledArgs map[string]any
-	var gotSubject egress.Subject
 
 	cat := &catalog.Catalog{
 		Name: "clickhouse",
@@ -706,11 +704,6 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 		ops:             []core.Operation{{Name: "run_query", Description: "Execute a SQL query"}},
 		cat:             cat,
 		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
-			subject, ok := egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in direct caller context")
-			}
-			gotSubject = subject
 			calledName = name
 			calledArgs = args
 			return mcpgo.NewToolResultText("query result"), nil
@@ -758,9 +751,6 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 	if calledArgs["sql"] != "SELECT 1" {
 		t.Fatalf("expected sql=SELECT 1, got %v", calledArgs)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
 	}
 
 	text, ok := result.Content[0].(mcpgo.TextContent)
@@ -963,110 +953,6 @@ func TestNewServer_DirectCallerNoPrincipal(t *testing.T) {
 	}
 }
 
-func TestNewServer_DirectCallerUsesIdentitySubjectEmail(t *testing.T) {
-	t.Parallel()
-
-	var gotSubject egress.Subject
-
-	cat := &catalog.Catalog{
-		Name: "sample",
-		Operations: []catalog.CatalogOperation{
-			{ID: "perform", Description: "Perform action"},
-		},
-	}
-	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "sample"},
-		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
-		cat:             cat,
-		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			var ok bool
-			gotSubject, ok = egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in direct caller context")
-			}
-			return mcpgo.NewToolResultText("ok"), nil
-		},
-	}
-
-	providers := testutil.NewProviderRegistry(t, prov)
-	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "test-token"},
-		Providers:     providers,
-	})
-
-	tool := srv.GetTool("sample_perform")
-	if tool == nil {
-		t.Fatal("tool not found")
-	}
-
-	req := mcpgo.CallToolRequest{}
-	req.Params.Name = "sample_perform"
-
-	result, err := tool.Handler(ctxWithIdentityPrincipal("identity@example.invalid", principal.IdentityPrincipal), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: "identity@example.invalid"}) {
-		t.Fatalf("subject = %+v, want identity email subject", gotSubject)
-	}
-}
-
-func TestNewServer_DirectCallerUsesIdentitySubjectSentinel(t *testing.T) {
-	t.Parallel()
-
-	var gotSubject egress.Subject
-
-	cat := &catalog.Catalog{
-		Name: "sample",
-		Operations: []catalog.CatalogOperation{
-			{ID: "perform", Description: "Perform action"},
-		},
-	}
-	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "sample"},
-		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
-		cat:             cat,
-		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			var ok bool
-			gotSubject, ok = egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in direct caller context")
-			}
-			return mcpgo.NewToolResultText("ok"), nil
-		},
-	}
-
-	providers := testutil.NewProviderRegistry(t, prov)
-	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "test-token"},
-		Providers:     providers,
-	})
-
-	tool := srv.GetTool("sample_perform")
-	if tool == nil {
-		t.Fatal("tool not found")
-	}
-
-	req := mcpgo.CallToolRequest{}
-	req.Params.Name = "sample_perform"
-
-	result, err := tool.Handler(ctxWithIdentityPrincipal("", principal.IdentityPrincipal), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: principal.IdentityPrincipal}) {
-		t.Fatalf("subject = %+v, want identity sentinel subject", gotSubject)
-	}
-}
-
 func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 	t.Parallel()
 
@@ -1107,15 +993,9 @@ func TestNewServer_DynamicCatalogProviderListsSessionTools(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
-	var gotSubject egress.Subject
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
 		sessionCatalogFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
-			subject, ok := egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in session catalog context")
-			}
-			gotSubject = subject
 			gotToken = token
 			return &catalog.Catalog{
 				Name: "clickhouse",
@@ -1145,9 +1025,6 @@ func TestNewServer_DynamicCatalogProviderListsSessionTools(t *testing.T) {
 	if gotToken != "upstream-token" {
 		t.Fatalf("expected token upstream-token, got %q", gotToken)
 	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
-	}
 	if len(result.Tools) != 1 {
 		t.Fatalf("expected 1 tool, got %d", len(result.Tools))
 	}
@@ -1161,16 +1038,10 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 
 	var calledName string
 	var gotToken string
-	var gotSubject egress.Subject
 
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
 		sessionCatalogFn: func(ctx context.Context, _ string) (*catalog.Catalog, error) {
-			subject, ok := egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in session catalog context")
-			}
-			gotSubject = subject
 			return &catalog.Catalog{
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
@@ -1208,9 +1079,6 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 	if gotToken != "upstream-token" {
 		t.Fatalf("expected upstream-token, got %q", gotToken)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
 	}
 }
 

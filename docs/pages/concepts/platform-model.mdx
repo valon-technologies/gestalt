@@ -15,10 +15,9 @@ exposes those providers through shared request surfaces.
 | Primitive | Purpose |
 | --- | --- |
 | `auth` | Authenticates users to Gestalt itself and issues platform sessions. |
-| `datastore` | Persists users, API tokens, integration tokens, and some egress data. |
+| `datastore` | Persists users, API tokens, and integration tokens. |
 | `secrets` | Resolves `secret://...` references during bootstrap. |
 | `providers` | Define the provider graph users call. Each named entry is provider-shaped directly. |
-| `egress` | Policy and credential rules for outbound traffic. |
 
 ## Bootstrap Order
 
@@ -114,6 +113,5 @@ Once providers exist, `gestaltd` projects them into several surfaces:
 ## What You Actually Program Against
 
 As a Gestalt operator, you compose top-level config blocks, provider
-definitions, connection definitions, surface definitions, egress rules, and
-optional plugin manifests and packages. Everything else is a consequence of
-those inputs.
+definitions, connection definitions, surface definitions, and optional plugin
+manifests and packages. Everything else is a consequence of those inputs.
