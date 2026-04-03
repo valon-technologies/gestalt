@@ -1159,10 +1159,8 @@ func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode != wantStatus {
-			t.Fatalf("invoke %q returned %d, want %d: %s", operation, resp.StatusCode, wantStatus, respBody)
-		}
+	if resp.StatusCode != wantStatus {
+		t.Fatalf("invoke %q returned %d, want %d: %s", operation, resp.StatusCode, wantStatus, respBody)
 	}
 	return respBody
 }
@@ -1228,25 +1226,15 @@ func (o *otlpMetricObserver) hasMetricAttributes(name string, attrs map[string]s
 
 func otlpMetricAttributeSets(metric *metricspb.Metric) []string {
 	switch {
-	case metric.GetGauge() != nil:
-		return otlpNumberDataPointAttributeSets(metric.GetGauge().GetDataPoints())
 	case metric.GetSum() != nil:
-		return otlpNumberDataPointAttributeSets(metric.GetSum().GetDataPoints())
+		out := make([]string, 0, len(metric.GetSum().GetDataPoints()))
+		for _, point := range metric.GetSum().GetDataPoints() {
+			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
+		}
+		return out
 	case metric.GetHistogram() != nil:
 		out := make([]string, 0, len(metric.GetHistogram().GetDataPoints()))
 		for _, point := range metric.GetHistogram().GetDataPoints() {
-			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
-		}
-		return out
-	case metric.GetExponentialHistogram() != nil:
-		out := make([]string, 0, len(metric.GetExponentialHistogram().GetDataPoints()))
-		for _, point := range metric.GetExponentialHistogram().GetDataPoints() {
-			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
-		}
-		return out
-	case metric.GetSummary() != nil:
-		out := make([]string, 0, len(metric.GetSummary().GetDataPoints()))
-		for _, point := range metric.GetSummary().GetDataPoints() {
 			out = append(out, serializeOTLPAttributes(point.GetAttributes()))
 		}
 		return out
@@ -1255,18 +1243,10 @@ func otlpMetricAttributeSets(metric *metricspb.Metric) []string {
 	}
 }
 
-func otlpNumberDataPointAttributeSets[T interface{ GetAttributes() []*commonv1.KeyValue }](points []T) []string {
-	out := make([]string, 0, len(points))
-	for _, point := range points {
-		out = append(out, serializeOTLPAttributes(point.GetAttributes()))
-	}
-	return out
-}
-
 func serializeOTLPAttributes(attrs []*commonv1.KeyValue) string {
 	parts := make([]string, 0, len(attrs))
 	for _, attr := range attrs {
-		parts = append(parts, attr.GetKey()+"="+otlpAnyValueString(attr.GetValue()))
+		parts = append(parts, attr.GetKey()+"="+attr.GetValue().GetStringValue())
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")
@@ -1279,30 +1259,6 @@ func serializeMetricAttributes(attrs map[string]string) string {
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")
-}
-
-func otlpAnyValueString(value *commonv1.AnyValue) string {
-	if value == nil {
-		return ""
-	}
-
-	switch v := value.Value.(type) {
-	case *commonv1.AnyValue_StringValue:
-		return v.StringValue
-	case *commonv1.AnyValue_BoolValue:
-		if v.BoolValue {
-			return "true"
-		}
-		return "false"
-	case *commonv1.AnyValue_IntValue:
-		return fmt.Sprintf("%d", v.IntValue)
-	case *commonv1.AnyValue_DoubleValue:
-		return fmt.Sprintf("%g", v.DoubleValue)
-	case *commonv1.AnyValue_BytesValue:
-		return string(v.BytesValue)
-	default:
-		return ""
-	}
 }
 
 var nextTestPort atomic.Int32 // zero value; first allocation returns 19100
