@@ -165,14 +165,6 @@ secrets:
 | `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `mount_path` defaults to `secret`. |
 | `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `version` defaults to latest. |
 
-Bootstrap-managed string values in `server`, `auth`, `datastore`, `telemetry`, `providers`, and `bindings` may use the `secret://` prefix:
-
-```yaml
-encryption_key: secret://name-of-secret
-```
-
-`egress.credentials[].secret_ref` is separate: it is a bare secret name resolved at request time and must not include `secret://`.
-
 ## `telemetry`
 
 Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced.
@@ -685,7 +677,7 @@ egress:
 
 | Field | Purpose |
 | --- | --- |
-| `secret_ref` | Required. Bare secret manager key resolved at request time. Do not include `secret://`. |
+| `secret_ref` | Required. Secret manager key resolved at request time. |
 | `auth_style` | How the resolved secret is injected: `bearer`, `basic`, or `raw`. Defaults to `bearer`. |
 | `subject_kind` | Optional subject filter. |
 | `subject_id` | Optional subject filter. |
