@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-const secretURIPrefix = "secret://"
-
 // CredentialGrantLoader loads credential grants for resolution. Implementations
 // may return static config grants or fetch persisted grants from a store.
 type CredentialGrantLoader interface {
@@ -71,10 +69,12 @@ func resolveSecretGrant(ctx context.Context, sr SecretResolver, grant *Credentia
 	if sr == nil {
 		return CredentialMaterialization{}, fmt.Errorf("egress credentials: no secret resolver configured")
 	}
-	name := strings.TrimPrefix(grant.SecretRef, secretURIPrefix)
-	secret, err := sr.GetSecret(ctx, name)
+	if strings.HasPrefix(grant.SecretRef, "secret://") {
+		return CredentialMaterialization{}, fmt.Errorf("egress credentials: secret_ref %q must be a bare secret name without secret://", grant.SecretRef)
+	}
+	secret, err := sr.GetSecret(ctx, grant.SecretRef)
 	if err != nil {
-		return CredentialMaterialization{}, fmt.Errorf("egress credentials: resolving secret %q: %w", name, err)
+		return CredentialMaterialization{}, fmt.Errorf("egress credentials: resolving secret %q: %w", grant.SecretRef, err)
 	}
 	style := grant.AuthStyle
 	if style == "" {

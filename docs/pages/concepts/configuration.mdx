@@ -116,26 +116,6 @@ Paths in config are resolved relative to the config file directory, not the proc
 
 That makes configs portable across local runs, Docker mounts, and Kubernetes volumes.
 
-## Secret References
-
-Any string value outside `secrets.config` may use the `secret://` scheme:
-
-```yaml
-auth:
-  provider: oidc
-  config:
-    client_secret: secret://oidc-client-secret
-```
-
-The secret manager resolves the part after `secret://`:
-
-- `env` reads it from an environment variable name
-- `file` reads it from a file inside a configured directory
-- `google_secret_manager` reads it from Google Cloud Secret Manager
-- `aws_secrets_manager` reads it from AWS Secrets Manager
-- `vault` reads it from HashiCorp Vault
-- `azure_key_vault` reads it from Azure Key Vault
-
 ## The Smallest Explicit Config
 
 ```yaml
