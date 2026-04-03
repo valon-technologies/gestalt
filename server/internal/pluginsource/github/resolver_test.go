@@ -86,8 +86,16 @@ func expectedTag() string {
 	return testSource.ReleaseTag(testVersion)
 }
 
+func legacyExpectedTag() string {
+	return testSource.LegacyReleaseTag(testVersion)
+}
+
 func releasePath() string {
 	return "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag()
+}
+
+func legacyReleasePath() string {
+	return "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + legacyExpectedTag()
 }
 
 type requestLog struct {
@@ -139,6 +147,35 @@ func newTestServer(t *testing.T, assetName string, opts ...serverOption) *httpte
 		}
 		switch r.URL.Path {
 		case releasePath():
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(releaseJSON(t, []releaseAsset{
+				{
+					Name:               assetName,
+					URL:                "http://" + r.Host + "/asset-dl",
+					BrowserDownloadURL: browserURL,
+				},
+			}))
+		case "/asset-dl":
+			_, _ = w.Write(testAssetPayload())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func newLegacyTagServer(t *testing.T, assetName string, opts ...serverOption) *httptest.Server {
+	t.Helper()
+	browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + legacyExpectedTag() + "/" + assetName
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, opt := range opts {
+			if opt(w, r) {
+				return
+			}
+		}
+		switch r.URL.Path {
+		case releasePath():
+			w.WriteHeader(http.StatusNotFound)
+		case legacyReleasePath():
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(releaseJSON(t, []releaseAsset{
 				{
@@ -477,6 +514,27 @@ func TestResolveBackwardCompatAsset(t *testing.T) {
 	}
 }
 
+func TestResolveFallsBackToLegacyReleaseTag(t *testing.T) {
+	t.Parallel()
+
+	assetName := currentPlatformAssetName()
+	srv := newLegacyTagServer(t, assetName)
+	defer srv.Close()
+
+	browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + legacyExpectedTag() + "/" + assetName
+
+	resolver := &GitHubResolver{BaseURL: srv.URL}
+	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	defer pkg.Cleanup()
+
+	if pkg.ResolvedURL != browserURL {
+		t.Errorf("ResolvedURL = %s, want %s", pkg.ResolvedURL, browserURL)
+	}
+}
+
 func TestResolveReleaseNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -491,7 +549,7 @@ func TestResolveReleaseNotFound(t *testing.T) {
 		t.Fatal("expected error for 404 release")
 	}
 
-	want := "release tag " + expectedTag() + " not found for " + testOwner + "/" + testRepo
+	want := "github plugin release not found: release tag " + legacyExpectedTag() + " not found for " + testOwner + "/" + testRepo
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
 	}

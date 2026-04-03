@@ -112,9 +112,19 @@ func TestSourceReleaseTag(t *testing.T) {
 	t.Parallel()
 
 	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
-	const want = "plugin/testplugin/v1.2.3"
+	const want = "testplugin/v1.2.3"
 	if got := src.ReleaseTag("1.2.3"); got != want {
 		t.Errorf("ReleaseTag(1.2.3) = %q, want %q", got, want)
+	}
+}
+
+func TestSourceLegacyReleaseTag(t *testing.T) {
+	t.Parallel()
+
+	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
+	const want = "plugin/testplugin/v1.2.3"
+	if got := src.LegacyReleaseTag("1.2.3"); got != want {
+		t.Errorf("LegacyReleaseTag(1.2.3) = %q, want %q", got, want)
 	}
 }
 
