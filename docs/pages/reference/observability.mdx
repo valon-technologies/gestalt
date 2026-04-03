@@ -67,6 +67,24 @@ telemetry:
       level: info
 ```
 
+## Built-In Operation Metrics
+
+`gestaltd` emits broker-level OTEL metrics for operation execution:
+
+- `gestaltd.operation.count`
+- `gestaltd.operation.error_count`
+- `gestaltd.operation.duration`
+
+These metrics use low-cardinality attributes:
+
+- `gestalt.provider`: the integration key
+- `gestalt.operation`: the catalog operation id
+- `gestalt.transport`: how the operation is implemented: `plugin`, `rest`, or `mcp-passthrough`
+- `gestalt.connection_mode`: the provider auth mode: `none`, `user`, `identity`, or `either`
+
+When a request references an unknown provider or operation, `gestaltd` records
+`unknown` for the missing metric attributes instead of using raw user input.
+
 ## What Gets Logged
 
 Gestalt logs:

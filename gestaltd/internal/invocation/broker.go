@@ -27,6 +27,7 @@ const (
 
 	attrProvider       = attribute.Key("gestalt.provider")
 	attrOperation      = attribute.Key("gestalt.operation")
+	attrTransport      = attribute.Key("gestalt.transport")
 	attrUserID         = attribute.Key("gestalt.user_id")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
 )
@@ -123,11 +124,28 @@ func (b *Broker) ListCapabilities() []core.Capability {
 	return caps
 }
 
-func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (_ *core.OperationResult, err error) {
+	startedAt := time.Now()
+	metricProvider := unknownMetricAttrValue
+	metricOperation := unknownMetricAttrValue
+	metricTransport := unknownMetricAttrValue
+	metricConnectionMode := unknownMetricAttrValue
+
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
 	defer span.End()
+	defer func() {
+		recordOperationMetrics(
+			ctx,
+			startedAt,
+			metricProvider,
+			metricOperation,
+			metricTransport,
+			metricConnectionMode,
+			err != nil,
+		)
+	}()
 
 	span.SetAttributes(
 		attrProvider.String(providerName),
@@ -150,7 +168,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
-	span.SetAttributes(attrConnectionMode.String(string(prov.ConnectionMode())))
+	metricProvider = providerName
+	metricConnectionMode = normalizeConnectionMode(prov.ConnectionMode())
+	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -164,7 +184,11 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
 
-	if !catalogHasOperation(providerCatalog(prov), operation) {
+	if transport, ok := catalogOperationTransport(providerCatalog(prov), operation); ok {
+		metricOperation = operation
+		metricTransport = metricAttrValue(transport)
+		span.SetAttributes(attrTransport.String(metricTransport))
+	} else {
 		return fail(fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName))
 	}
 

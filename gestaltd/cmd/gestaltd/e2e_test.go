@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -320,7 +321,12 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 
 	var logRequests, traceRequests, metricRequests atomic.Int32
+	var metricBodiesMu sync.Mutex
+	var metricBodies [][]byte
 	otlpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+
 		switch r.URL.Path {
 		case "/v1/logs":
 			logRequests.Add(1)
@@ -328,10 +334,11 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 			traceRequests.Add(1)
 		case "/v1/metrics":
 			metricRequests.Add(1)
+			metricBodiesMu.Lock()
+			metricBodies = append(metricBodies, bytes.Clone(body))
+			metricBodiesMu.Unlock()
 		}
 
-		_, _ = io.Copy(io.Discard, r.Body)
-		_ = r.Body.Close()
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(otlpServer.Close)
@@ -366,7 +373,19 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	stdout, stderr := serveLockedAndInvokeExampleEcho(t, cfgPath, port, "")
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		body := invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal success response: %v\nbody: %s", err, body)
+		}
+		if result["echo"] != "hello" {
+			t.Fatalf("expected echo=hello, got %v", result)
+		}
+
+		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
+	})
 
 	if traceRequests.Load() == 0 {
 		t.Fatalf("expected OTLP trace export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
@@ -377,6 +396,34 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	if logRequests.Load() != 0 {
 		t.Fatalf("expected logs to stay on stdout, saw %d OTLP log exports\nstdout:\n%s\nstderr:\n%s", logRequests.Load(), stdout, stderr)
 	}
+	metricBodiesMu.Lock()
+	exports := append([][]byte(nil), metricBodies...)
+	metricBodiesMu.Unlock()
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.count")
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.duration")
+	requireMetricPayload(t, exports, stdout, stderr, "gestaltd.operation.error_count")
+	requireMetricPayload(t, exports, stdout, stderr,
+		"gestaltd.operation.count",
+		"gestalt.connection_mode",
+		"none",
+		"gestalt.operation",
+		"echo",
+		"gestalt.provider",
+		"example",
+		"gestalt.transport",
+		"plugin",
+	)
+	requireMetricPayload(t, exports, stdout, stderr,
+		"gestaltd.operation.error_count",
+		"gestalt.connection_mode",
+		"none",
+		"gestalt.operation",
+		"unknown",
+		"gestalt.provider",
+		"example",
+		"gestalt.transport",
+		"unknown",
+	)
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -1046,7 +1093,7 @@ func writeE2EConfigForDir(t *testing.T, dir, pluginDir string) string {
 	return writeE2EConfig(t, dir, pluginDir, 0)
 }
 
-func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, artifactsDir string) (string, string) {
+func serveLockedAndExerciseExample(t *testing.T, cfgPath string, port int, artifactsDir string, exercise func(t *testing.T, baseURL string)) (string, string) {
 	t.Helper()
 
 	args := []string{"serve", "--locked", "--config", cfgPath}
@@ -1073,30 +1120,66 @@ func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, art
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 	waitForReady(t, baseURL, 30*time.Second)
 
-	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo", strings.NewReader(`{"message":"hello"}`))
+	exercise(t, baseURL)
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+	return stdout.String(), stderr.String()
+}
+
+func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, artifactsDir string) (string, string) {
+	t.Helper()
+
+	return serveLockedAndExerciseExample(t, cfgPath, port, artifactsDir, func(t *testing.T, baseURL string) {
+		body := invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal: %v\nbody: %s", err, body)
+		}
+		if result["echo"] != "hello" {
+			t.Fatalf("expected echo=hello, got %v", result)
+		}
+	})
+}
+
+func invokeExampleOperation(t *testing.T, baseURL, operation, requestBody string, wantStatus int) []byte {
+	t.Helper()
+
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/"+operation, strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("invoke returned %d: %s", resp.StatusCode, body)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != wantStatus {
+		t.Fatalf("invoke %q returned %d, want %d: %s", operation, resp.StatusCode, wantStatus, respBody)
+	}
+	return respBody
+}
+
+func requireMetricPayload(t *testing.T, exports [][]byte, stdout, stderr string, parts ...string) {
+	t.Helper()
+
+	for _, body := range exports {
+		if payloadContainsAll(body, parts...) {
+			return
+		}
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		t.Fatalf("unmarshal: %v\nbody: %s", err, body)
-	}
-	if result["echo"] != "hello" {
-		t.Fatalf("expected echo=hello, got %v", result)
-	}
+	t.Fatalf("expected OTLP metric payload to contain %q\nstdout:\n%s\nstderr:\n%s", parts, stdout, stderr)
+}
 
-	stopped = true
-	_ = cmd.Process.Signal(os.Interrupt)
-	_ = cmd.Wait()
-	return stdout.String(), stderr.String()
+func payloadContainsAll(body []byte, parts ...string) bool {
+	for _, part := range parts {
+		if !bytes.Contains(body, []byte(part)) {
+			return false
+		}
+	}
+	return true
 }
 
 var nextTestPort atomic.Int32 // zero value; first allocation returns 19100
