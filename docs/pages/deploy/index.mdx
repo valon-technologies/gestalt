@@ -1,11 +1,5 @@
 # Deploy
 
-The current deployment model is straightforward:
-
-- use `gestaltd` directly for local development
-- use the published Docker image for container deployments
-- use the Helm chart for Kubernetes
-
 ## Recommended Production Pattern
 
 1. Prepare artifacts with `gestaltd init`.
@@ -17,8 +11,8 @@ The current deployment model is straightforward:
 
 | Path | Use it for |
 | --- | --- |
-| [Docker](/deploy/docker) | Single-container or container-platform deployments. |
 | [Helm](/deploy/helm) | Helm chart for Kubernetes deployments. |
 
-If you deploy on another container platform, use the Docker path as the base
-model.
+The published Docker image (`valontechnologies/gestaltd`) can be used directly
+on any container platform. See the [Docker Image](/reference/docker-image)
+reference for image layout and mount expectations.
