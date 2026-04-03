@@ -122,15 +122,15 @@ func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
 func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 
 func (p *Provider) Shutdown(ctx context.Context) error {
+	tpErr := p.tp.Shutdown(ctx)
+	mpErr := p.mp.Shutdown(ctx)
+
 	var lpErr error
 	if p.lp != nil {
 		lpErr = p.lp.Shutdown(ctx)
 	}
-	return errors.Join(
-		p.tp.Shutdown(ctx),
-		p.mp.Shutdown(ctx),
-		lpErr,
-	)
+
+	return errors.Join(tpErr, mpErr, lpErr)
 }
 
 func applyConfigDefaults(cfg *yamlConfig) {
