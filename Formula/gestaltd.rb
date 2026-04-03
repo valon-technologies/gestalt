@@ -6,7 +6,7 @@ class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
   version "0.0.1-alpha.1"
-  license "Proprietary"
+  license "Apache-2.0"
 
   on_macos do
     on_arm do
