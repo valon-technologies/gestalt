@@ -267,50 +267,10 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 		t.Fatalf("Chmod deploy dir: %v", err)
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath, "--artifacts-dir", artifactsDir)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start serve: %v", err)
-	}
-	stopped := false
-	t.Cleanup(func() {
-		if !stopped {
-			_ = cmd.Process.Signal(os.Interrupt)
-			_ = cmd.Wait()
-		}
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForReady(t, baseURL, 30*time.Second)
-
-	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo", strings.NewReader(`{"message":"hello"}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("invoke: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("invoke returned %d: %s", resp.StatusCode, body)
-	}
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		t.Fatalf("unmarshal: %v\nbody: %s", err, body)
-	}
-	if result["echo"] != "hello" {
-		t.Fatalf("expected echo=hello, got %v", result)
-	}
-
-	stopped = true
-	_ = cmd.Process.Signal(os.Interrupt)
-	_ = cmd.Wait()
+	stdout, stderr := serveLockedAndInvokeExampleEcho(t, cfgPath, port, artifactsDir)
 
 	var foundAudit bool
-	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -326,25 +286,98 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 
 		foundAudit = true
 		if record["level"] != "INFO" {
-			t.Fatalf("expected audit log level=INFO, got %v\nstdout:\n%s\nstderr:\n%s", record["level"], stdout.String(), stderr.String())
+			t.Fatalf("expected audit log level=INFO, got %v\nstdout:\n%s\nstderr:\n%s", record["level"], stdout, stderr)
 		}
 		if record["log.type"] != "audit" {
-			t.Fatalf("expected audit log.type=audit, got %v\nstdout:\n%s\nstderr:\n%s", record["log.type"], stdout.String(), stderr.String())
+			t.Fatalf("expected audit log.type=audit, got %v\nstdout:\n%s\nstderr:\n%s", record["log.type"], stdout, stderr)
 		}
 		if record["provider"] != "example" {
-			t.Fatalf("expected audit provider=example, got %v\nstdout:\n%s\nstderr:\n%s", record["provider"], stdout.String(), stderr.String())
+			t.Fatalf("expected audit provider=example, got %v\nstdout:\n%s\nstderr:\n%s", record["provider"], stdout, stderr)
 		}
 		if record["operation"] != "echo" {
-			t.Fatalf("expected audit operation=echo, got %v\nstdout:\n%s\nstderr:\n%s", record["operation"], stdout.String(), stderr.String())
+			t.Fatalf("expected audit operation=echo, got %v\nstdout:\n%s\nstderr:\n%s", record["operation"], stdout, stderr)
 		}
 		if record["allowed"] != true {
-			t.Fatalf("expected audit allowed=true, got %v\nstdout:\n%s\nstderr:\n%s", record["allowed"], stdout.String(), stderr.String())
+			t.Fatalf("expected audit allowed=true, got %v\nstdout:\n%s\nstderr:\n%s", record["allowed"], stdout, stderr)
 		}
 		break
 	}
 
 	if !foundAudit {
-		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	var logRequests, traceRequests, metricRequests atomic.Int32
+	otlpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/logs":
+			logRequests.Add(1)
+		case "/v1/traces":
+			traceRequests.Add(1)
+		case "/v1/metrics":
+			metricRequests.Add(1)
+		}
+
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(otlpServer.Close)
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: otlp
+  config:
+    endpoint: `+strings.TrimPrefix(otlpServer.URL, "http://")+`
+    protocol: http
+    insecure: true
+    traces:
+      sampling_ratio: 1.0
+    metrics:
+      interval: 50ms
+    logs:
+      exporter: stdout
+      format: json
+      level: info
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	stdout, stderr := serveLockedAndInvokeExampleEcho(t, cfgPath, port, "")
+
+	if traceRequests.Load() == 0 {
+		t.Fatalf("expected OTLP trace export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if metricRequests.Load() == 0 {
+		t.Fatalf("expected OTLP metric export\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if logRequests.Load() != 0 {
+		t.Fatalf("expected logs to stay on stdout, saw %d OTLP log exports\nstdout:\n%s\nstderr:\n%s", logRequests.Load(), stdout, stderr)
+	}
+	if !strings.Contains(stdout, `"msg":"audit"`) {
+		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 }
 
@@ -902,6 +935,59 @@ datastore:
 func writeE2EConfigForDir(t *testing.T, dir, pluginDir string) string {
 	t.Helper()
 	return writeE2EConfig(t, dir, pluginDir, 0)
+}
+
+func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, artifactsDir string) (string, string) {
+	t.Helper()
+
+	args := []string{"serve", "--locked", "--config", cfgPath}
+	if artifactsDir != "" {
+		args = append(args, "--artifacts-dir", artifactsDir)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.Command(gestaltdBin, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start serve: %v", err)
+	}
+	stopped := false
+	t.Cleanup(func() {
+		if !stopped {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		}
+	})
+
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	waitForReady(t, baseURL, 30*time.Second)
+
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo", strings.NewReader(`{"message":"hello"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("invoke returned %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("unmarshal: %v\nbody: %s", err, body)
+	}
+	if result["echo"] != "hello" {
+		t.Fatalf("expected echo=hello, got %v", result)
+	}
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+	return stdout.String(), stderr.String()
 }
 
 var nextTestPort atomic.Int32 // zero value; first allocation returns 19100
