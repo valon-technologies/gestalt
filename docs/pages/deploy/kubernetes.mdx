@@ -6,12 +6,13 @@ The repository includes a Helm chart under `gestaltd/deploy/helm/gestalt`.
 
 ```sh
 helm upgrade --install gestalt ./gestaltd/deploy/helm/gestalt \
+  --namespace gestalt \
   --set image.tag=<version> \
-  --dry-run --debug
+  -f values.yaml
 ```
 
-Remove `--dry-run --debug` when you are ready to apply the release to a real
-cluster.
+Provide a `values.yaml` file that sets the required auth, datastore, and server
+settings along with the matching `extraEnv` entries.
 
 ## Important Chart Values
 
@@ -46,6 +47,30 @@ config:
 extraEnv:
   - name: GESTALT_BASE_URL
     value: "https://gestalt.example.com"
+  - name: GESTALT_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: encryption-key
+  - name: OIDC_ISSUER_URL
+    value: "https://login.example.com"
+  - name: OIDC_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: oidc-client-id
+  - name: OIDC_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: oidc-client-secret
+  - name: OIDC_REDIRECT_URL
+    value: "https://gestalt.example.com/auth/callback"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: gestalt-secrets
+        key: database-url
 
 pluginInit:
   enabled: true
