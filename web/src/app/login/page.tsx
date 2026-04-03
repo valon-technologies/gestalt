@@ -44,31 +44,35 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm">
-        <h1 className="text-center text-2xl font-heading font-bold text-timber-800 dark:text-timber-200">
-          Gestalt
-        </h1>
-        <p className="mt-2 text-center text-sm text-stone-500 dark:text-stone-400">
-          Sign in to manage your integrations.
-        </p>
-        <p className="mt-2 text-center text-sm text-stone-500 dark:text-stone-400">
-          Or read the{" "}
-          <a
-            href="/docs"
-            className="font-medium text-timber-600 hover:text-timber-700 dark:text-timber-400 dark:hover:text-timber-300"
-          >
-            documentation
-          </a>
-          .
-        </p>
-        {error && (
-          <p className="mt-4 text-center text-sm text-ember-500">{error}</p>
-        )}
-        <div className="mt-6">
-          <Button onClick={handleLogin} disabled={loading} className="w-full">
-            {loading ? "Redirecting..." : authLabel}
-          </Button>
+    <div className="flex min-h-screen items-center justify-center gradient-warm">
+      <div className="w-full max-w-sm animate-fade-in-up">
+        <div className="rounded-lg border border-alpha bg-base-white p-10 shadow-dropdown dark:bg-surface">
+          <div className="text-center">
+            <h1 className="text-2xl font-heading font-bold text-primary">
+              Gestalt
+            </h1>
+            <p className="mt-3 text-sm text-muted">
+              Sign in to manage your integrations.
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Or read the{" "}
+              <a
+                href="/docs"
+                className="font-medium text-muted hover:text-primary transition-colors duration-150 underline underline-offset-2 decoration-base-300 dark:decoration-base-600"
+              >
+                documentation
+              </a>
+              .
+            </p>
+          </div>
+          {error && (
+            <p className="mt-5 text-center text-sm text-ember-500">{error}</p>
+          )}
+          <div className="mt-8">
+            <Button onClick={handleLogin} disabled={loading} className="w-full">
+              {loading ? "Redirecting..." : authLabel}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

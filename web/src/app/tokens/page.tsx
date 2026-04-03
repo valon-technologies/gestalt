@@ -28,22 +28,27 @@ export default function TokensPage() {
     <AuthGuard>
       <div className="min-h-screen">
         <Nav />
-        <main className="mx-auto max-w-5xl px-6 py-8">
-          <h1 className="text-2xl font-heading font-bold text-stone-900 dark:text-stone-100">
-            API Tokens
-          </h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Manage tokens for programmatic access to the Gestalt API.
-          </p>
+        <main className="mx-auto max-w-5xl px-6 py-12">
+          <div className="animate-fade-in-up">
+            <span className="label-text">Security</span>
+            <h1 className="mt-2 text-2xl font-heading font-bold text-primary">
+              API Tokens
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              Manage tokens for programmatic access to the Gestalt API.
+            </p>
+          </div>
 
-          <TokenCreateForm onCreated={loadTokens} />
+          <div className="animate-fade-in-up [animation-delay:60ms]">
+            <TokenCreateForm onCreated={loadTokens} />
+          </div>
 
           {error && <p className="mt-4 text-sm text-ember-500">{error}</p>}
 
           {loading ? (
-            <p className="mt-8 text-sm text-stone-400 dark:text-stone-500">Loading...</p>
+            <p className="mt-10 text-sm text-faint">Loading...</p>
           ) : !error ? (
-            <div className="mt-6">
+            <div className="mt-8 animate-fade-in-up [animation-delay:120ms]">
               <TokenTable tokens={tokens} onRevoked={loadTokens} />
             </div>
           ) : null}

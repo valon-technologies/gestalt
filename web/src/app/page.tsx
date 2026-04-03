@@ -34,43 +34,46 @@ export default function DashboardPage() {
     <AuthGuard>
       <div className="min-h-screen">
         <Nav />
-        <main className="mx-auto max-w-5xl px-6 py-8">
-          <h1 className="text-2xl font-heading font-bold text-stone-900 dark:text-stone-100">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Your Gestalt overview at a glance.
-          </p>
+        <main className="mx-auto max-w-5xl px-6 py-12">
+          <div className="animate-fade-in-up">
+            <span className="label-text">Overview</span>
+            <h1 className="mt-2 text-2xl font-heading font-bold text-primary">
+              Dashboard
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              Your Gestalt overview at a glance.
+            </p>
+          </div>
 
           {data.error && (
             <p className="mt-8 text-sm text-ember-500">{data.error}</p>
           )}
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 animate-fade-in-up [animation-delay:60ms]">
             <Link
               href="/integrations"
-              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300 dark:hover:border-timber-600"
+              className="group rounded-lg border border-alpha bg-base-100 p-8 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface"
             >
-              <p className="text-sm font-medium text-stone-500 dark:text-stone-400">
-                Integrations
-              </p>
-              <p className="mt-2 text-3xl font-heading font-bold text-stone-900 dark:text-stone-100">
+              <span className="label-text">Integrations</span>
+              <p className="mt-3 text-3xl font-heading font-bold text-primary">
                 {data.integrations ?? "--"}
               </p>
-              <p className="mt-1 text-sm font-medium text-timber-600 dark:text-timber-400">
-                Manage integrations &rarr;
+              <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
+                Manage integrations
+                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
               </p>
             </Link>
             <Link
               href="/tokens"
-              className="rounded-lg border border-border bg-surface p-6 shadow-warm transition-all hover:shadow-md hover:border-timber-300 dark:hover:border-timber-600"
+              className="group rounded-lg border border-alpha bg-base-100 p-8 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface"
             >
-              <p className="text-sm font-medium text-stone-500 dark:text-stone-400">API Tokens</p>
-              <p className="mt-2 text-3xl font-heading font-bold text-stone-900 dark:text-stone-100">
+              <span className="label-text">API Tokens</span>
+              <p className="mt-3 text-3xl font-heading font-bold text-primary">
                 {data.tokens ?? "--"}
               </p>
-              <p className="mt-1 text-sm font-medium text-timber-600 dark:text-timber-400">
-                Manage tokens &rarr;
+              <p className="mt-3 text-sm text-muted group-hover:text-primary transition-colors duration-150">
+                Manage tokens
+                <span className="inline-block ml-1 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
               </p>
             </Link>
           </div>
