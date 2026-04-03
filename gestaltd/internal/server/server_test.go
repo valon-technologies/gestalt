@@ -24,6 +24,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
@@ -980,56 +981,72 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 	t.Parallel()
 
 	const testSVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
-	def := &provider.Definition{
-		Provider:    "iconprov",
-		DisplayName: "Icon Provider",
-		Description: "Has an icon",
-		IconSVG:     testSVG,
-		BaseURL:     "https://api.example.com",
-		Auth:        provider.AuthDef{Type: "manual"},
-		Operations: map[string]provider.OperationDef{
-			"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
-		},
-	}
-	prov, err := provider.Build(def, config.ConnectionDef{})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, prov)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
+	newIconProvider := func(t *testing.T) core.Provider {
+		t.Helper()
+		prov, err := provider.Build(&provider.Definition{
+			Provider:    "iconprov",
+			DisplayName: "Icon Provider",
+			Description: "Has an icon",
+			IconSVG:     testSVG,
+			BaseURL:     "https://api.example.com",
+			Auth:        provider.AuthDef{Type: "manual"},
+			Operations: map[string]provider.OperationDef{
+				"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 			},
+		}, config.ConnectionDef{})
+		if err != nil {
+			t.Fatalf("Build: %v", err)
 		}
-	})
-	defer ts.Close()
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+		return prov
 	}
 
-	var integrations []struct {
-		Name    string `json:"name"`
-		IconSVG string `json:"icon_svg"`
+	assertIcon := func(t *testing.T, prov core.Provider) {
+		t.Helper()
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+			}
+		})
+		defer ts.Close()
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var integrations []struct {
+			IconSVG string `json:"icon_svg"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK || len(integrations) != 1 {
+			t.Fatalf("unexpected integrations response: status=%d body=%+v", resp.StatusCode, integrations)
+		}
+		if integrations[0].IconSVG != testSVG {
+			t.Fatalf("icon_svg = %q, want %q", integrations[0].IconSVG, testSVG)
+		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if len(integrations) != 1 {
-		t.Fatalf("expected 1 integration, got %d", len(integrations))
-	}
-	if integrations[0].IconSVG != testSVG {
-		t.Fatalf("icon_svg = %q, want %q", integrations[0].IconSVG, testSVG)
-	}
+
+	assertIcon(t, newIconProvider(t))
+
+	assertIcon(t, composite.New("iconprov", newIconProvider(t), &mcpPassthroughProvider{
+		StubIntegration: coretesting.StubIntegration{N: "iconprov"},
+		catVal: &catalog.Catalog{
+			Name:        "iconprov",
+			DisplayName: "Icon Provider",
+			Description: "Has an icon",
+			Operations: []catalog.CatalogOperation{
+				{ID: "search", Description: "Search via MCP", Transport: catalog.TransportMCPPassthrough},
+			},
+		},
+	}))
 }
 
 func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
@@ -4537,7 +4554,11 @@ type mcpPassthroughProvider struct {
 }
 
 func (p *mcpPassthroughProvider) Catalog() *catalog.Catalog { return p.catVal }
-func (p *mcpPassthroughProvider) SupportsManualAuth() bool  { return true }
+func (p *mcpPassthroughProvider) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return p.catVal, nil
+}
+func (p *mcpPassthroughProvider) SupportsManualAuth() bool { return true }
+func (p *mcpPassthroughProvider) Close() error             { return nil }
 func (p *mcpPassthroughProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if p.callFn != nil {
 		return p.callFn(ctx, name, args)

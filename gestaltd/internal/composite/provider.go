@@ -1,6 +1,7 @@
 package composite
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -145,8 +146,9 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 
 	merged := &catalog.Catalog{
 		Name:        p.name,
-		DisplayName: mcpCat.DisplayName,
-		Description: mcpCat.Description,
+		DisplayName: cmp.Or(apiCat.DisplayName, mcpCat.DisplayName),
+		Description: cmp.Or(apiCat.Description, mcpCat.Description),
+		IconSVG:     cmp.Or(apiCat.IconSVG, mcpCat.IconSVG),
 		Operations:  make([]catalog.CatalogOperation, 0, len(mcpCat.Operations)+len(apiCat.Operations)),
 	}
 	for i := range mcpCat.Operations {
