@@ -133,6 +133,10 @@ function buildAuthActions(targets: AuthTarget[], connected: boolean): AuthAction
   return actions;
 }
 
+import { INPUT_CLASSES } from "@/lib/constants";
+
+const inputClasses = `mt-1.5 w-full ${INPUT_CLASSES}`;
+
 export default function IntegrationSettingsModal({
   integration,
   onClose,
@@ -274,18 +278,18 @@ export default function IntegrationSettingsModal({
       onCancel={handleCancel}
       onClose={onClose}
       onClick={handleBackdropClick}
-      className="m-auto w-full max-w-sm rounded-lg border border-border bg-surface p-0 shadow-warm"
+      className="m-auto w-full max-w-sm rounded-lg border border-alpha bg-base-white p-0 shadow-dropdown dark:bg-surface"
     >
-      <div className="p-6">
+      <div className="p-7">
         {view === "disconnect" ? (
           <>
             <h2
               id={headingId}
-              className="text-lg font-heading font-semibold text-stone-900 dark:text-stone-100"
+              className="text-lg font-heading font-semibold text-primary"
             >
               Disconnect {displayName}?
             </h2>
-            <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+            <p className="mt-3 text-sm text-muted">
               This will remove your {displayName} integration. You can reconnect
               at any time.
             </p>
@@ -316,14 +320,14 @@ export default function IntegrationSettingsModal({
           <form onSubmit={handleInstanceSubmit}>
             <h2
               id={headingId}
-              className="text-lg font-heading font-semibold text-stone-900 dark:text-stone-100"
+              className="text-lg font-heading font-semibold text-primary"
             >
               Add Connection
             </h2>
             {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
             <label
               htmlFor={`instance-name-${integration.name}`}
-              className="mt-4 block text-sm font-medium text-stone-700 dark:text-stone-300"
+              className="mt-5 label-text block"
             >
               Connection name
             </label>
@@ -334,7 +338,7 @@ export default function IntegrationSettingsModal({
               required
               placeholder="e.g. my-store, acme-workspace"
               autoFocus
-              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
+              className={inputClasses}
             />
             <div className="mt-6 flex gap-3">
               <Button
@@ -366,13 +370,13 @@ export default function IntegrationSettingsModal({
             <div className="flex items-start justify-between">
               <h2
                 id={headingId}
-                className="text-lg font-heading font-semibold text-stone-900 dark:text-stone-100"
+                className="text-lg font-heading font-semibold text-primary"
               >
                 {displayName}
               </h2>
               <button
                 onClick={closeDialog}
-                className="rounded p-1 text-stone-400 hover:text-stone-600 transition-colors dark:text-stone-500 dark:hover:text-stone-300"
+                className="rounded-md p-1.5 text-faint hover:text-muted transition-colors duration-150 hover:bg-alpha-5"
                 aria-label="Close"
               >
                 <CloseIcon className="h-4 w-4" />
@@ -382,15 +386,15 @@ export default function IntegrationSettingsModal({
             {integration.connected ? (
               <>
                 {integration.instances && integration.instances.length > 0 && (
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-5 space-y-2">
                     {integration.instances.map((inst) => (
-                      <div key={inst.name} className="flex items-center justify-between rounded border border-border px-3 py-2">
-                        <div className="flex items-center gap-2">
+                      <div key={inst.name} className="flex items-center justify-between rounded-md border border-alpha px-4 py-3">
+                        <div className="flex items-center gap-2.5">
                           <CheckCircleIcon className="h-4 w-4 text-grove-500" />
                           <div>
-                            <div className="text-sm text-stone-700 dark:text-stone-300">{inst.name}</div>
+                            <div className="text-sm text-primary">{inst.name}</div>
                             {inst.connection && (
-                              <div className="text-xs text-stone-500 dark:text-stone-400">{inst.connection}</div>
+                              <div className="text-xs text-faint">{inst.connection}</div>
                             )}
                           </div>
                         </div>
@@ -400,7 +404,7 @@ export default function IntegrationSettingsModal({
                             setView("disconnect");
                           }}
                           disabled={disconnecting}
-                          className="text-xs text-ember-500 hover:text-ember-600"
+                          className="text-xs text-ember-500 hover:text-ember-600 transition-colors duration-150"
                         >
                           Disconnect
                         </button>
@@ -414,7 +418,7 @@ export default function IntegrationSettingsModal({
               </>
             ) : (
               <>
-                <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Not connected</p>
+                <p className="mt-4 text-sm text-faint">Not connected</p>
                 {error && <p className="mt-3 text-sm text-ember-500">{error}</p>}
                 {renderConnectionButtons()}
               </>
@@ -433,7 +437,7 @@ function renderLinkedText(text: string): (string | JSX.Element)[] {
   return text.split(LINK_RE).map((seg, i) => {
     const m = seg.match(LINK_MATCH_RE);
     if (!m) return seg;
-    return <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="text-timber-500 hover:underline dark:text-timber-400">{m[1]}</a>;
+    return <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="text-gold-600 hover:underline dark:text-gold-400">{m[1]}</a>;
   });
 }
 
@@ -463,15 +467,15 @@ function TokenForm({
     <form onSubmit={onSubmit}>
       <h2
         id={headingId}
-        className="text-lg font-heading font-semibold text-stone-900 dark:text-stone-100"
+        className="text-lg font-heading font-semibold text-primary"
       >
         {heading}
       </h2>
       {connectionParams && Object.entries(connectionParams).map(([name, def]) => (
-        <div key={name} className="mt-2">
+        <div key={name} className="mt-3">
           <label
             htmlFor={`cp_${name}-${integrationName}`}
-            className="block text-sm font-medium text-stone-700 dark:text-stone-300"
+            className="label-text block"
           >
             {def.description || name}
           </label>
@@ -482,7 +486,7 @@ function TokenForm({
             required={def.required}
             defaultValue={def.default}
             placeholder={name}
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
+            className={inputClasses}
           />
         </div>
       ))}
@@ -490,7 +494,7 @@ function TokenForm({
         <div key={field.name} className="mt-4">
           <label
             htmlFor={`cred_${field.name}-${integrationName}`}
-            className="block text-sm font-medium text-stone-700 dark:text-stone-300"
+            className="label-text block"
           >
             {field.label || field.name}
             {field.help_url && (
@@ -498,14 +502,14 @@ function TokenForm({
                 href={field.help_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-1 text-xs text-timber-500 hover:underline dark:text-timber-400"
+                className="ml-1.5 normal-case tracking-normal text-gold-600 hover:underline dark:text-gold-400"
               >
                 (where to find this)
               </a>
             )}
           </label>
           {field.description && (
-            <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">{renderLinkedText(field.description)}</p>
+            <p className="mt-1 text-xs text-faint normal-case tracking-normal">{renderLinkedText(field.description)}</p>
           )}
           <input
             id={`cred_${field.name}-${integrationName}`}
@@ -514,7 +518,7 @@ function TokenForm({
             required
             placeholder={field.label || field.name}
             autoFocus={idx === 0}
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
+            className={inputClasses}
           />
         </div>
       ))}
