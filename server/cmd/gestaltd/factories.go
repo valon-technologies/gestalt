@@ -139,7 +139,10 @@ func resolveConfigPath(flagValue string) string {
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
 	}
-	if p := defaultLocalConfigPath(); p != "" {
+	for _, p := range localConfigPaths() {
+		if p == "" {
+			continue
+		}
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}

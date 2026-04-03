@@ -201,7 +201,7 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 		t.Errorf("executable not found at %s: %v", executablePath, err)
 	}
 
-	wantPrefix := ".gestalt/plugins/integration_alpha/"
+	wantPrefix := ".gestaltd/plugins/integration_alpha/"
 	if !strings.HasPrefix(entry.Manifest, wantPrefix) {
 		t.Errorf("manifest path %q does not start with %q", entry.Manifest, wantPrefix)
 	}

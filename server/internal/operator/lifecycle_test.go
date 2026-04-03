@@ -376,15 +376,15 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 		Providers: map[string]LockProviderEntry{
 			"test-provider": {
 				Fingerprint: "test-fp",
-				Provider:    ".gestalt/providers/test.json",
+				Provider:    ".gestaltd/providers/test.json",
 			},
 		},
 		Plugins: map[string]LockPluginEntry{
 			"integration:example": {
 				Fingerprint: "plugin-fp",
 				Package:     "./test-plugin",
-				Manifest:    ".gestalt/plugins/integration_example/plugin.json",
-				Executable:  ".gestalt/plugins/integration_example/artifacts/darwin/arm64/provider",
+				Manifest:    ".gestaltd/plugins/integration_example/plugin.json",
+				Executable:  ".gestaltd/plugins/integration_example/artifacts/darwin/arm64/provider",
 			},
 		},
 	}

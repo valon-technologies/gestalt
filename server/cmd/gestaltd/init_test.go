@@ -26,15 +26,15 @@ func TestPreparedLockfileRoundTripPreservesPluginsSection(t *testing.T) {
 		Providers: map[string]lockProviderEntry{
 			"restapi": {
 				Fingerprint: "provider-fingerprint",
-				Provider:    ".gestalt/providers/restapi.json",
+				Provider:    ".gestaltd/providers/restapi.json",
 			},
 		},
 		Plugins: map[string]lockPluginEntry{
 			"integration:external": {
 				Fingerprint: "plugin-fingerprint",
 				Package:     "./plugins/dummy.tar.gz",
-				Manifest:    ".gestalt/plugins/integration_external/plugin.json",
-				Executable:  ".gestalt/plugins/integration_external/artifacts/linux/amd64/provider",
+				Manifest:    ".gestaltd/plugins/integration_external/plugin.json",
+				Executable:  ".gestaltd/plugins/integration_external/artifacts/linux/amd64/provider",
 			},
 		},
 	}
