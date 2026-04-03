@@ -1,11 +1,12 @@
-# Kubernetes
+# Helm
 
-The repository includes a Helm chart under `gestaltd/deploy/helm/gestalt`.
+Gestalt publishes a Helm chart for deploying `gestaltd` to Kubernetes.
 
 ## Install The Chart
 
 ```sh
-helm upgrade --install gestalt ./gestaltd/deploy/helm/gestalt \
+helm upgrade --install gestalt \
+  oci://ghcr.io/valon-technologies/gestalt/charts/gestalt \
   --namespace gestalt \
   --set image.tag=<version> \
   -f values.yaml
