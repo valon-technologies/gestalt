@@ -380,6 +380,12 @@ func TestValidateConfigUsesPreparedManifestForSpecLoadedPluginPackage(t *testing
 	if plugin.ResolvedManifest == nil || plugin.ResolvedManifest.Provider == nil {
 		t.Fatal("expected resolved manifest provider to be set after prepare")
 	}
+	if got := cfg.Integrations["example"].DisplayName; got != "Spec Loaded Provider" {
+		t.Fatalf("display name = %q, want %q", got, "Spec Loaded Provider")
+	}
+	if got := cfg.Integrations["example"].Description; got != "Prepared spec-loaded provider metadata" {
+		t.Fatalf("description = %q, want %q", got, "Prepared spec-loaded provider metadata")
+	}
 	if !filepath.IsAbs(plugin.ResolvedManifest.Provider.OpenAPI) {
 		t.Fatalf("resolved openapi path = %q, want absolute path", plugin.ResolvedManifest.Provider.OpenAPI)
 	}
@@ -526,9 +532,11 @@ func buildPreparedSpecLoadedPluginPackage(t *testing.T, dir, source, version str
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Source:      source,
+		Version:     version,
+		DisplayName: "Spec Loaded Provider",
+		Description: "Prepared spec-loaded provider metadata",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			OpenAPI: filepath.ToSlash(filepath.Join("specs", "openapi.yaml")),
 		},
