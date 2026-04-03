@@ -5,7 +5,7 @@ ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
 ARG GESTALT_DOCUMENTATION=https://docs.valon.tools
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestalt
 
-FROM --platform=$BUILDPLATFORM alpine:3.23 AS unpack
+FROM --platform=$BUILDPLATFORM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659 AS unpack
 ARG TARGETARCH
 WORKDIR /dist
 COPY dist/ /dist/
@@ -18,7 +18,7 @@ RUN case "$TARGETARCH" in \
     tar -xzf "/dist/$archive" -C /out && \
     test -x /out/gestalt
 
-FROM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian12@sha256:329e54034ce498f9c6b345044e8f530c6691f99e94a92446f68c0adf9baa8464
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
