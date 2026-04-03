@@ -15,7 +15,7 @@ jobs:
   build:
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
-      working-directory: client
+      working-directory: gestalt
       binary-name: gestalt
       artifact-prefix: gestalt
       run-tests: true
@@ -80,7 +80,7 @@ jobs:
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: .
-          file: client/Dockerfile
+          file: gestalt/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |

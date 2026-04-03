@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -23,8 +23,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Check go mod tidy
         run: |
@@ -35,7 +35,7 @@ jobs:
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
           version: v2.11.3
-          working-directory: server
+          working-directory: gestaltd
 
   test:
     name: Go Tests
@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -51,8 +51,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Run tests
         run: go test ./...
@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -71,8 +71,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Run coverage
         run: go test -coverprofile=coverage.out ./...
@@ -80,7 +80,7 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
-          files: server/coverage.out
+          files: gestaltd/coverage.out
           fail_ci_if_error: false
 
   race:
@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -98,8 +98,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Run race tests
         run: go test -race ./...
@@ -110,7 +110,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: web
+        working-directory: gestaltd/ui
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -120,7 +120,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: gestaltd/ui/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -166,28 +166,30 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: gestaltd/ui/package-lock.json
 
       - name: Build frontend
-        run: cd web && npm ci && npm run build
+        run: cd gestaltd/ui && npm ci && npm run build
 
       - name: Copy frontend assets
-        run: rm -rf server/internal/webui/out && cp -r web/out server/internal/webui/out
+        run: rm -rf gestaltd/internal/webui/out && cp -r gestaltd/ui/out gestaltd/internal/webui/out
 
       - name: Build Go server
-        run: cd server && go build -o ../gestaltd ./cmd/gestaltd
+        run: |
+          mkdir -p build
+          cd gestaltd && go build -o ../build/gestaltd ./cmd/gestaltd
 
       - name: Start Go server
         run: |
-          ./gestaltd &
+          ./build/gestaltd &
           ready=false
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health; then
@@ -203,11 +205,11 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
-        working-directory: web
+        working-directory: gestaltd/ui
 
       - name: Run E2E tests against Go server
         run: npx playwright test
-        working-directory: web
+        working-directory: gestaltd/ui
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://localhost:8080
@@ -217,7 +219,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: gestalt-playwright-report
-          path: web/playwright-report/
+          path: gestaltd/ui/playwright-report/
           retention-days: 7
 
   helm-validate:
@@ -231,12 +233,12 @@ jobs:
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Helm lint
-        run: helm lint server/deploy/helm/gestalt
+        run: helm lint gestaltd/deploy/helm/gestalt
 
       - name: Helm template
         run: |
-          helm template test-release server/deploy/helm/gestalt \
-            -f server/deploy/helm/gestalt/ci-values.yaml \
+          helm template test-release gestaltd/deploy/helm/gestalt \
+            -f gestaltd/deploy/helm/gestalt/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform
@@ -264,8 +266,8 @@ jobs:
 
       - name: Helm template (plugin-init)
         run: |
-          helm template test-release server/deploy/helm/gestalt \
-            -f server/deploy/helm/gestalt/ci-values-plugin-init.yaml \
+          helm template test-release gestaltd/deploy/helm/gestalt \
+            -f gestaltd/deploy/helm/gestalt/ci-values-plugin-init.yaml \
             > /tmp/rendered-plugin-init.yaml
 
       - name: Validate Kubernetes schemas (plugin-init)

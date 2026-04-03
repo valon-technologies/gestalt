@@ -5,11 +5,11 @@ on:
     branches:
       - main
     paths:
-      - 'client/**'
+      - 'gestalt/**'
       - '.github/workflows/build-gestalt-cli.yml'
   pull_request:
     paths:
-      - 'client/**'
+      - 'gestalt/**'
 
   workflow_dispatch:
 
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: client
+        working-directory: gestalt
 
     steps:
       - name: Checkout repository
@@ -43,8 +43,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            client/target/
-          key: ${{ runner.os }}-cargo-gestalt-cli-${{ hashFiles('client/**/Cargo.toml') }}
+            gestalt/target/
+          key: ${{ runner.os }}-cargo-gestalt-cli-${{ hashFiles('gestalt/**/Cargo.toml') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -59,7 +59,7 @@ jobs:
     needs: lint
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
-      working-directory: client
+      working-directory: gestalt
       binary-name: gestalt
       artifact-prefix: gestalt
       run-tests: true

@@ -5,19 +5,19 @@ on:
     branches:
       - main
     paths:
-      - "server/go.mod"
-      - "server/go.sum"
-      - "server/core/datastore.go"
-      - "server/core/testing/datastore_suite.go"
-      - "server/internal/drivers/datastore/**"
+      - "gestaltd/go.mod"
+      - "gestaltd/go.sum"
+      - "gestaltd/core/datastore.go"
+      - "gestaltd/core/testing/datastore_suite.go"
+      - "gestaltd/internal/drivers/datastore/**"
       - ".github/workflows/datastore-integration.yml"
   pull_request:
     paths:
-      - "server/go.mod"
-      - "server/go.sum"
-      - "server/core/datastore.go"
-      - "server/core/testing/datastore_suite.go"
-      - "server/internal/drivers/datastore/**"
+      - "gestaltd/go.mod"
+      - "gestaltd/go.sum"
+      - "gestaltd/core/datastore.go"
+      - "gestaltd/core/testing/datastore_suite.go"
+      - "gestaltd/internal/drivers/datastore/**"
       - ".github/workflows/datastore-integration.yml"
   workflow_dispatch:
 
@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       postgres:
         image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
@@ -49,8 +49,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Run postgres datastore tests
         run: go test -v ./internal/drivers/datastore/postgres
@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       mysql:
         image: mysql:8.4@sha256:da906917ca4ace3ba55538b7c2ee97a9bc865ef14a4b6920b021f0249d603f3d
@@ -82,8 +82,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Run mysql datastore tests
         run: go test -v ./internal/drivers/datastore/mysql
@@ -96,7 +96,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       mongodb:
         image: mongo:7@sha256:45d9c9b48aa1b56b5e3a9f906763fe432f376abb3bc2832438022b6d2534e4fe
@@ -108,8 +108,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Wait for MongoDB
         run: |
@@ -135,7 +135,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       dynamodb:
         image: amazon/dynamodb-local:2.5.2@sha256:d7ebddeb60fa418bcda218a6c6a402a58441b2a20d54c9cb1d85fd5194341753
@@ -147,8 +147,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Wait for DynamoDB
         run: |
@@ -174,15 +174,15 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Set up Java
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -222,7 +222,7 @@ jobs:
     timeout-minutes: 25
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-CU24-ubuntu-22.04@sha256:49b45a911dc535e9345fbfd7101a1bd8a1e190a5f29b877ef75387a061e5fcf0
@@ -238,8 +238,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Wait for SQL Server
         run: |
@@ -266,7 +266,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: server
+        working-directory: gestaltd
     services:
       oracle:
         image: gvenzl/oracle-free:23-slim-faststart@sha256:c9803db54238b5be268c7f5916e3c5811ef106e58aeb2f1f9b690c135ed50672
@@ -280,8 +280,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
 
       - name: Wait for Oracle
         run: |

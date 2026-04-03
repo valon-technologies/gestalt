@@ -1,14 +1,14 @@
 version: 2
 updates:
   - package-ecosystem: docker
-    directory: /server
+    directory: /gestaltd
     schedule:
       interval: weekly
     commit-message:
       prefix: build
 
   - package-ecosystem: docker
-    directory: /client
+    directory: /gestalt
     schedule:
       interval: weekly
     commit-message:

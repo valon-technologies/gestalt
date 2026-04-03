@@ -6,7 +6,7 @@ on:
       working-directory:
         description: 'Cargo workspace directory'
         type: string
-        default: 'gestalt/client'
+        default: 'gestalt'
       binary-name:
         description: 'Name of the compiled binary'
         type: string

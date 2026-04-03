@@ -1,5 +1,4 @@
 # Go
-/gestaltd
 *.db-shm
 *.db-wal
 
@@ -44,12 +43,11 @@ Thumbs.db
 # Build artifacts
 build/
 dist/
-web/out/
-server/internal/webui/out/
-!server/internal/webui/out/.gitkeep
+gestaltd/ui/out/
+gestaltd/internal/webui/out/
+!gestaltd/internal/webui/out/.gitkeep
 
 # Exceptions
-!server/internal/manifest/
+!gestaltd/internal/manifest/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
-server/gestaltd

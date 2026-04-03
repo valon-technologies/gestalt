@@ -15,7 +15,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GESTALT_DIR="$SCRIPT_DIR/.."
+GESTALTD_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-8080}"
 
@@ -47,18 +48,18 @@ if [[ ! -d node_modules ]]; then
     npm install
 fi
 
-if [[ -f "$GESTALT_DIR/.env" ]]; then
-    info "Loading $GESTALT_DIR/.env"
+if [[ -f "$REPO_DIR/.env" ]]; then
+    info "Loading $REPO_DIR/.env"
     set -a
     # shellcheck disable=SC1091
-    source "$GESTALT_DIR/.env"
+    source "$REPO_DIR/.env"
     set +a
 fi
 
 CONFIG="${1:-${GESTALT_CONFIG:-}}"
 if [[ -n "$CONFIG" ]]; then
     if [[ "$CONFIG" != /* ]]; then
-        CONFIG="$GESTALT_DIR/$CONFIG"
+        CONFIG="$REPO_DIR/$CONFIG"
     fi
     if [[ ! -f "$CONFIG" ]]; then
         err "Config not found: $CONFIG"
@@ -104,9 +105,9 @@ fi
 info "Starting Go API server on port $API_PORT..."
 warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
 if [[ -n "$CONFIG" ]]; then
-    (cd "$GESTALT_DIR/server" && go run ./cmd/gestaltd --config "$CONFIG") &
+    (cd "$GESTALTD_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
 else
-    (cd "$GESTALT_DIR/server" && go run ./cmd/gestaltd) &
+    (cd "$GESTALTD_DIR" && go run ./cmd/gestaltd) &
 fi
 API_PID=$!
 
