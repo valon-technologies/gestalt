@@ -1,83 +1,38 @@
 # Gestalt
 
-Gestalt is organized as a small monorepo with three primary codebases:
+Gestalt is a platform for self-hostable, configurable integrations and tooling, with authentication and execution out-of-the-box.
 
-| Path | What it contains |
+## How does Gestalt work?
+
+Gestalt works in three stages:
+
+**Configure.** Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
+
+**Connect.** Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
+
+**Invoke.** Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
+
+## Why Gestalt?
+
+**Self-hosted and private.** Gestalt runs in your infrastructure. Credentials and data never leave your network.
+
+**One config, many integrations.** A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
+
+**Works with AI tooling.** Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
+
+**Extensible.** Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
+
+## Repository
+
+| Path | Description |
 | --- | --- |
-| `gestaltd` | The Go server daemon. It loads config, resolves remote specs and packaged plugins, serves the HTTP API and MCP surface, embeds the UI, and includes Docker and Helm deployment assets. |
-| `gestalt` | The Rust CLI client. It connects to a running `gestaltd` instance for authentication, operations, and local operator workflows. |
-| `gestaltd/ui` | The Next.js web UI that ships with `gestaltd` and is embedded into server builds. |
-
-Supporting directories:
-
-| Path | What it contains |
-| --- | --- |
-| `plugins` | Built-in and example plugin packages. |
-| `sdk` | Shared SDKs and plugin manifest definitions. |
-| `docs` | The documentation site. |
-
-## Run
-
-Server from source:
-
-```sh
-cd gestaltd
-go run ./cmd/gestaltd
-```
-
-CLI:
-
-```sh
-cd gestalt
-cargo run -- --help
-```
-
-UI:
-
-```sh
-cd gestaltd/ui
-npm ci
-npm run dev
-```
-
-Installed production server:
-
-```sh
-gestaltd init --config ./config.yaml
-gestaltd serve --locked --config ./config.yaml
-```
-
-`init` resolves remote state and writes a lockfile. `serve --locked` starts from that prepared state without fetching or mutating anything.
-
-## Commands
-
-- `gestaltd`
-- `gestaltd init --config PATH`
-- `gestaltd serve --locked --config PATH`
-- `gestaltd validate --config PATH`
-- `gestaltd plugin package --input PATH --output PATH`
-- `gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]`
-
-## Plugins
-
-Versioned provider plugins are published from [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins).
-
-Managed installs use:
-
-```yaml
-plugin:
-  source: github.com/valon-technologies/gestalt-plugins/<plugin>
-  version: 0.0.1-alpha.1
-```
-
-Use bare SemVer in config. The corresponding GitHub release tag format is `<plugin>/v<version>`.
+| [`gestaltd`](./gestaltd) | The Go server daemon. Loads config, serves the HTTP API, MCP surface, and embedded web UI. |
+| [`gestalt`](./gestalt) | The Rust CLI client. Connects to a running `gestaltd` instance for authentication and operations. |
+| [`gestaltd/ui`](./gestaltd/ui) | The Next.js web UI embedded into `gestaltd`. |
+| [`plugins`](./plugins) | Built-in and example plugin packages. |
+| [`sdk`](./sdk) | Shared SDKs and plugin manifest definitions. |
+| [`docs`](./docs) | The documentation site. |
 
 ## Documentation
 
-Docs: [docs.valon.tools](https://docs.valon.tools)
-
-- [Getting Started](https://docs.valon.tools/getting-started)
-- [Configuration](https://docs.valon.tools/concepts/configuration)
-- [CLI Reference](https://docs.valon.tools/reference/cli)
-- [Deployment](https://docs.valon.tools/deploy)
-- [Write a Plugin](https://docs.valon.tools/tasks/write-a-plugin)
+[docs.valon.tools](https://docs.valon.tools)
