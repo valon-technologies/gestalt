@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "xtask"]
+members = ["cli"]
 
 [workspace.package]
 version = "0.0.1-alpha.1"
