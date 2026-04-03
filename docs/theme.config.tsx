@@ -2,12 +2,31 @@ import { useConfig } from "nextra-theme-docs";
 import type { DocsThemeConfig } from "nextra-theme-docs";
 
 const config: DocsThemeConfig = {
-  logo: <strong style={{ fontFamily: "'Season Serif', Georgia, serif" }}>Gestalt</strong>,
+  logo: (
+    <span style={{ fontFamily: "'Season Serif', Georgia, serif", fontSize: "1.7rem", letterSpacing: "-0.03em" }}>
+      Gestalt
+    </span>
+  ),
   project: {
     link: "https://github.com/valon-technologies/gestalt",
   },
   docsRepositoryBase:
     "https://github.com/valon-technologies/gestalt/tree/main/docs",
+  darkMode: false,
+  nextThemes: {
+    defaultTheme: "light",
+    forcedTheme: "light",
+    storageKey: "gestalt-docs-theme",
+  },
+  backgroundColor: {
+    light: "#FFFFFF",
+    dark: "#FFFFFF",
+  },
+  color: {
+    hue: 37,
+    saturation: 84,
+    lightness: 48,
+  },
   head: function Head() {
     const { title } = useConfig();
     const fullTitle = title ? `${title} – Gestalt` : "Gestalt";
@@ -21,6 +40,9 @@ const config: DocsThemeConfig = {
   },
   footer: {
     content: <span>Gestalt, a self-hosted integration platform</span>,
+  },
+  search: {
+    placeholder: "Search documentation",
   },
   sidebar: {
     defaultMenuCollapseLevel: 1,

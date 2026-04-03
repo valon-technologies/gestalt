@@ -55,59 +55,327 @@
 }
 
 :root {
-  --nextra-primary-hue: 30deg;
-  --nextra-primary-saturation: 50%;
+  --valon-ink: 35, 24, 16;
+  --valon-bg: #ffffff;
+  --valon-surface: #f8f6f3;
+  --valon-surface-strong: #ece4dd;
+  --valon-line: rgba(35, 24, 16, 0.1);
+  --valon-line-strong: rgba(35, 24, 16, 0.2);
+  --valon-muted: rgba(35, 24, 16, 0.6);
+  --valon-secondary: rgba(35, 24, 16, 0.8);
+  --valon-gold: #e19614;
+  --nextra-primary-hue: 37deg;
+  --nextra-primary-saturation: 84%;
 }
 
 html {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
+  background: var(--valon-bg);
 }
 
-h1, article h1 {
+body {
+  color: var(--valon-secondary);
+  background:
+    radial-gradient(
+      200% 80% at 50% 0%,
+      rgba(246, 241, 234, 0.9) 0%,
+      rgba(243, 233, 221, 0.82) 8%,
+      rgba(241, 225, 208, 0.76) 16%,
+      rgba(238, 213, 174, 0.52) 30%,
+      rgba(234, 204, 184, 0.42) 44%,
+      rgba(232, 203, 190, 0.34) 56%,
+      rgba(237, 223, 212, 0.24) 66%,
+      rgba(244, 237, 230, 0.14) 76%,
+      transparent 88%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #fdfcf9 100%);
+}
+
+a {
+  color: inherit;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+h1,
+article h1 {
   font-family: 'Season Serif', Georgia, serif;
-  letter-spacing: -0.5px;
+  font-weight: 400 !important;
+  font-size: clamp(2.75rem, 6vw, 4.25rem) !important;
+  line-height: 0.98 !important;
+  letter-spacing: -0.03em !important;
+  color: rgba(var(--valon-ink), 1) !important;
 }
 
-h2, h3, h4, h5, h6,
-article h2, article h3, article h4 {
+h2,
+h3,
+h4,
+h5,
+h6,
+article h2,
+article h3,
+article h4 {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
-  letter-spacing: -0.5px;
+  font-weight: 400 !important;
+  letter-spacing: -0.03em !important;
+  color: rgba(var(--valon-ink), 1) !important;
 }
 
-code, pre, kbd, samp {
-  font-family: 'Geist Mono', monospace;
+article h2 {
+  font-size: clamp(1.75rem, 3vw, 2rem) !important;
+  line-height: 1.15 !important;
+  border-bottom-color: var(--valon-line) !important;
+  padding-bottom: 0.75rem !important;
 }
 
-/* Card padding — Nextra only pads the title span, not the description. */
+article h3 {
+  font-size: clamp(1.25rem, 2vw, 1.5rem) !important;
+  line-height: 1.2 !important;
+}
+
+article p,
+article li,
+article td,
+article th {
+  color: var(--valon-secondary);
+}
+
+article p,
+article li {
+  line-height: 1.7;
+}
+
+article a:not(.nextra-card):not(.subheading-anchor) {
+  color: rgba(var(--valon-ink), 1);
+  text-decoration-color: rgba(35, 24, 16, 0.24);
+  text-underline-offset: 0.18em;
+}
+
+article a:not(.nextra-card):not(.subheading-anchor):hover {
+  color: var(--valon-gold);
+  text-decoration-color: rgba(225, 150, 20, 0.5);
+}
+
+code,
+pre,
+kbd,
+samp,
+.nextra-code {
+  font-family: 'Geist Mono', monospace !important;
+}
+
+pre {
+  border: 1px solid var(--valon-line);
+  border-radius: 12px;
+  background: rgba(248, 246, 243, 0.88) !important;
+}
+
+code.nextra-code,
+p code,
+li code,
+td code {
+  border: 1px solid rgba(35, 24, 16, 0.08);
+  border-radius: 6px;
+  background: rgba(248, 246, 243, 0.9) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+.nextra-nav-container {
+  background: rgba(255, 255, 255, 0.84) !important;
+  border-bottom: 1px solid var(--valon-line);
+  backdrop-filter: blur(16px);
+}
+
+.nextra-nav-container-blur {
+  display: none;
+}
+
+.nextra-nav-container nav,
+footer > div {
+  width: min(1300px, calc(100% - 2rem)) !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.nextra-nav-container nav a,
+.nextra-nav-container nav button {
+  color: var(--valon-secondary) !important;
+}
+
+.nextra-nav-container nav a:hover,
+.nextra-nav-container nav button:hover {
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+.nextra-nav-container input[type='search'] {
+  border: 1px solid var(--valon-line) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 246, 243, 0.9) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+  box-shadow: none !important;
+}
+
+.nextra-nav-container input[type='search']::placeholder {
+  color: var(--valon-muted) !important;
+}
+
+.nextra-sidebar-container {
+  background: transparent !important;
+}
+
+@media (min-width: 768px) {
+  .nextra-sidebar-container {
+    border-right: 1px solid var(--valon-line);
+  }
+}
+
+.nextra-sidebar-container a,
+.nextra-sidebar-container button,
+.nextra-toc a,
+.nextra-breadcrumb,
+.nextra-breadcrumb span,
+.nextra-toc-footer a {
+  color: var(--valon-muted) !important;
+}
+
+.nextra-sidebar-container a:hover,
+.nextra-sidebar-container button:hover,
+.nextra-toc a:hover,
+.nextra-toc-footer a:hover {
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+.nextra-menu-desktop li.active > a,
+.nextra-menu-mobile li.active > a {
+  background: rgba(35, 24, 16, 0.08) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+  font-weight: 700 !important;
+}
+
+.nextra-menu-desktop ul::before,
+.nextra-menu-mobile ul::before {
+  background: var(--valon-line) !important;
+}
+
+nav[aria-label='table of contents'] li:has(> a._ms-8),
+nav[aria-label='table of contents'] li:has(> a._ms-12),
+nav[aria-label='table of contents'] li:has(> a._ms-16) {
+  display: none;
+}
+
+.nextra-toc {
+  width: 13rem !important;
+}
+
+.nextra-toc p,
+.nextra-toc strong {
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+article.nextra-content {
+  padding-bottom: 4rem;
+}
+
+article.nextra-content main {
+  max-width: 1300px !important;
+  padding-top: 1.5rem !important;
+}
+
+.nextra-breadcrumb {
+  font-size: 0.7rem !important;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 .nextra-card {
-  padding: 1.25rem;
-}
-.nextra-card > span:last-child {
-  padding: 0.75rem 0 0;
+  border: 1px solid var(--valon-line) !important;
+  border-radius: 12px !important;
+  background: rgba(248, 246, 243, 0.9) !important;
+  box-shadow: none !important;
+  padding: 1.5rem !important;
 }
 
-/* Show the TOC at lg (1024px) instead of xl (1280px).
-   Nextra hard-codes max-xl:_hidden on nav.nextra-toc.
-   Higher specificity (element + two classes) overrides the theme rule. */
+.nextra-card:hover {
+  border-color: var(--valon-line-strong) !important;
+  background: rgba(248, 246, 243, 0.98) !important;
+  box-shadow: 0 8px 24px rgba(35, 24, 16, 0.08) !important;
+  transform: translateY(-1px);
+}
+
+.nextra-card p {
+  margin-top: 0 !important;
+  color: var(--valon-secondary) !important;
+  line-height: 1.6;
+}
+
+.nextra-card > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 0 0 !important;
+  font-weight: 400 !important;
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--valon-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+thead tr,
+tbody tr:nth-child(even) {
+  background: rgba(35, 24, 16, 0.03) !important;
+}
+
+th,
+td {
+  border-color: var(--valon-line) !important;
+}
+
+th {
+  color: rgba(var(--valon-ink), 1) !important;
+  font-weight: 700 !important;
+}
+
+hr,
+footer hr {
+  border-color: var(--valon-line) !important;
+}
+
+footer {
+  background: rgba(248, 246, 243, 0.72) !important;
+  border-top: 1px solid var(--valon-line);
+}
+
+button[title='Change theme'],
+.nextra-nav-container [aria-label='Menu'] + div button[title='Change theme'] {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  .nextra-nav-container nav,
+  footer > div {
+    width: min(1300px, calc(100% - 4rem)) !important;
+  }
+}
+
 @media (min-width: 1024px) {
-  nav.nextra-toc.max-xl\:_hidden {
-    display: flex;
+  .nextra-nav-container nav,
+  footer > div {
+    width: min(1300px, calc(100% - 8rem)) !important;
+  }
+
+  .nextra-toc {
+    display: flex !important;
     flex-direction: column;
   }
-}
-
-/* Between lg and xl, use a narrower TOC to leave room for content.
-   Default is 256px (_w-64). */
-@media (min-width: 1024px) and (max-width: 1279.98px) {
-  nav.nextra-toc {
-    width: 12rem;
-  }
-}
-
-/* Limit "On this page" TOC to h2–h3 only.
-   Nextra applies _ms-8 / _ms-12 / _ms-16 to depths 4 / 5 / 6. */
-nav[aria-label="table of contents"] li:has(> a._ms-8),
-nav[aria-label="table of contents"] li:has(> a._ms-12),
-nav[aria-label="table of contents"] li:has(> a._ms-16) {
-  display: none;
 }

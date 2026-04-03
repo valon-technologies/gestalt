@@ -66,6 +66,33 @@ if [[ -n "$CONFIG" ]]; then
     fi
 fi
 
+if [[ -z "$CONFIG" && "$API_PORT" != "8080" ]]; then
+    DEV_STATE_DIR="${HOME}/.gestaltd-dev/api-${API_PORT}"
+    mkdir -p "$DEV_STATE_DIR"
+    KEY_FILE="$DEV_STATE_DIR/encryption_key"
+    if [[ ! -f "$KEY_FILE" ]]; then
+        if ! command -v openssl &>/dev/null; then
+            err "openssl is required for custom API_PORT dev config generation"
+            exit 1
+        fi
+        openssl rand -hex 32 > "$KEY_FILE"
+    fi
+    CONFIG="$DEV_STATE_DIR/config.yaml"
+    cat > "$CONFIG" <<EOF
+auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: "$DEV_STATE_DIR/gestalt.db"
+secrets:
+  provider: env
+server:
+  port: $API_PORT
+  encryption_key: "$(cat "$KEY_FILE")"
+EOF
+fi
+
 if ! command -v go &>/dev/null; then
     err "Go is not installed. Install it from https://go.dev/dl/"
     exit 1
@@ -77,9 +104,9 @@ fi
 info "Starting Go API server on port $API_PORT..."
 warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
 if [[ -n "$CONFIG" ]]; then
-    (cd "$GESTALT_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
+    (cd "$GESTALT_DIR/server" && go run ./cmd/gestaltd --config "$CONFIG") &
 else
-    (cd "$GESTALT_DIR" && go run ./cmd/gestaltd) &
+    (cd "$GESTALT_DIR/server" && go run ./cmd/gestaltd) &
 fi
 API_PID=$!
 

@@ -44,21 +44,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center gradient-warm">
-      <div className="w-full max-w-sm animate-fade-in-up">
-        <div className="rounded-lg border border-alpha bg-base-white p-10 shadow-dropdown dark:bg-surface">
+    <div className="page-shell gradient-warm flex min-h-screen items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md animate-fade-in-up">
+        <div className="surface-card p-8 md:p-10">
           <div className="text-center">
-            <h1 className="text-2xl font-heading font-bold text-primary">
+            <span className="label-text">Client Portal</span>
+            <h1 className="page-title mt-4 text-[clamp(2.5rem,8vw,3.5rem)]">
               Gestalt
             </h1>
-            <p className="mt-3 text-sm text-muted">
-              Sign in to manage your integrations.
+            <p className="mt-4 text-base leading-7 text-secondary">
+              Sign in to manage integrations, credentials, and the operational
+              surface around them.
             </p>
-            <p className="mt-2 text-sm text-muted">
+            <p className="mt-3 text-sm text-muted">
               Or read the{" "}
               <a
                 href="/docs"
-                className="font-medium text-muted hover:text-primary transition-colors duration-150 underline underline-offset-2 decoration-base-300 dark:decoration-base-600"
+                className="font-bold text-primary underline underline-offset-4 decoration-base-300"
               >
                 documentation
               </a>

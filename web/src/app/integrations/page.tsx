@@ -34,11 +34,11 @@ export default function IntegrationsPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen">
+      <div className="page-shell">
         <Nav />
-        <main className="mx-auto max-w-5xl px-6 py-12">
+        <main className="page-main">
           {toast && (
-            <div className="mb-8 flex items-center justify-between rounded-lg border border-grove-200 bg-grove-50 px-5 py-3.5 text-sm text-grove-700 dark:border-grove-600 dark:bg-grove-700/20 dark:text-grove-200">
+            <div className="mb-8 flex items-center justify-between rounded-lg border border-grove-200 bg-grove-50 px-5 py-4 text-sm text-grove-700 dark:border-grove-600 dark:bg-grove-700/20 dark:text-grove-200">
               <span>{toast}</span>
               <button
                 onClick={() => setToast(null)}
@@ -50,30 +50,29 @@ export default function IntegrationsPage() {
             </div>
           )}
 
-          <div className="animate-fade-in-up">
+          <div className="page-hero animate-fade-in-up">
             <span className="label-text">Catalog</span>
-            <h1 className="mt-2 text-2xl font-heading font-bold text-primary">
-              Integrations
-            </h1>
-            <p className="mt-2 text-sm text-muted">
-              Browse and connect third-party services.
+            <h1 className="page-title mt-4">Integrations</h1>
+            <p className="page-subtitle mt-4">
+              Browse and connect third-party services with a warmer, quieter
+              surface that lets the provider states do the talking.
             </p>
           </div>
 
           {loading && (
-            <p className="mt-10 text-sm text-faint">Loading...</p>
+            <p className="mt-10 text-sm text-faint">Loading integrations...</p>
           )}
 
           {error && <p className="mt-10 text-sm text-ember-500">{error}</p>}
 
           {!loading && !error && integrations.length === 0 && (
-            <p className="mt-10 text-sm text-faint">
+            <div className="surface-card mt-10 p-6 text-sm text-muted">
               No integrations registered.
-            </p>
+            </div>
           )}
 
           {!loading && !error && integrations.length > 0 && (
-            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up [animation-delay:60ms]">
+            <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 animate-fade-in-up [animation-delay:60ms]">
               {integrations.map((integration) => (
                 <IntegrationCard
                   key={integration.name}
