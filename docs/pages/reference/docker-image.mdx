@@ -1,32 +1,72 @@
-# Docker
+# Docker Image
 
 The published image is `valontechnologies/gestaltd`.
 
-## What The Image Does
+## Quick start
 
-- exposes port `8080`
-- uses `/gestaltd` as the entrypoint
-- defaults to `serve --locked --config /etc/gestalt/config.yaml`
+```sh
+docker run -p 8080:8080 valontechnologies/gestaltd
+```
 
-## Mount A Prepared Config Directory
+## Image details
 
-If you already ran `gestaltd init`, mount the whole config directory at
-`/etc/gestalt`.
+| Property | Value |
+| --- | --- |
+| Image | `valontechnologies/gestaltd` |
+| Port | `8080` |
+| Entrypoint | `/gestaltd` |
+| Default command | `serve --locked --config /etc/gestalt/config.yaml` |
+| Config path | `/etc/gestalt/config.yaml` |
 
-That directory should contain:
+## Environment variables
+
+Gestalt config supports `${VAR}` placeholders that are resolved from
+environment variables at startup. Common variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `GESTALT_BASE_URL` | Public HTTPS URL of the server. |
+| `GESTALT_ENCRYPTION_KEY` | Key used to encrypt stored tokens. |
+| `DATABASE_URL` | Connection string when using Postgres. |
+| `OIDC_ISSUER_URL` | OIDC provider issuer URL. |
+| `OIDC_CLIENT_ID` | OIDC client ID. |
+| `OIDC_CLIENT_SECRET` | OIDC client secret. |
+| `OIDC_REDIRECT_URL` | OIDC redirect URL. |
+
+## Docker Compose
+
+```yaml
+services:
+  gestalt:
+    image: valontechnologies/gestaltd:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+    environment:
+      GESTALT_BASE_URL: http://localhost:8080
+      GESTALT_ENCRYPTION_KEY: dev-only-change-me
+```
+
+## Mount a prepared config directory
+
+If you ran `gestaltd init` locally, mount the entire config directory at
+`/etc/gestalt`. It should contain:
 
 - `config.yaml`
 - `gestalt.lock.json`
-- `.gestalt/` when packaged plugins, prepared OpenAPI definitions, or a UI
-  plugin were prepared
+- `.gestalt/` (when packaged plugins or prepared specs are present)
 
-## Mutable Local Startup In Docker
+## Bake prepared state into a derived image
 
-For local development, override the default command and start the container with
-`serve --config /etc/gestalt/config.yaml`.
+Run `gestaltd init` in a build stage, copy the prepared config directory
+into the final image, and keep the default locked command:
 
-## Bake Prepared State Into A Derived Image
+```dockerfile
+FROM valontechnologies/gestaltd AS init
+COPY config.yaml /etc/gestalt/config.yaml
+RUN /gestaltd init --config /etc/gestalt/config.yaml
 
-If you want an immutable runtime image, run `gestaltd init` in a build stage,
-copy the prepared config directory plus `.gestalt/` into the final image, and
-keep the runtime container on the default locked command.
+FROM valontechnologies/gestaltd
+COPY --from=init /etc/gestalt /etc/gestalt
+```
