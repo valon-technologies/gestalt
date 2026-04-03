@@ -5,14 +5,14 @@ ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
 ARG GESTALT_DOCUMENTATION=https://docs.valon.tools
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestaltd
 
-FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:20-alpine@sha256:f598378b5240225e6beab68fa9f356db1fb8efe55173e6d4d8153113bb8f333c AS frontend
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ .
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build-binary
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS build-binary
 WORKDIR /build
 COPY server/go.mod server/go.sum server/
 COPY sdk/go/go.mod sdk/go/go.sum sdk/go/
@@ -23,7 +23,7 @@ ARG TARGETARCH
 RUN cd server && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gestaltd ./cmd/gestaltd
 RUN mkdir /data
 
-FROM alpine:3.23
+FROM alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
