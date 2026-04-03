@@ -292,9 +292,9 @@ article.nextra-content main::before {
   content: '';
   position: absolute;
   top: -1rem;
-  left: -2rem;
-  right: -2rem;
-  height: 18rem;
+  left: 0;
+  width: min(100%, calc(var(--valon-content-width) + 4rem));
+  height: 16rem;
   border-radius: 24px;
   background:
     radial-gradient(
@@ -423,8 +423,7 @@ button[title='Change theme'],
   }
 
   article.nextra-content main::before {
-    left: -3rem;
-    right: -3rem;
+    width: min(100%, calc(var(--valon-content-width) + 5rem));
   }
 }
 
@@ -436,7 +435,7 @@ button[title='Change theme'],
 
   article.nextra-content main::before {
     left: -1rem;
-    right: -1rem;
+    width: calc(100% + 2rem);
     height: 14rem;
   }
 }
