@@ -40,7 +40,7 @@ Health check:
 Default chart profile:
   auth.provider=none, SQLite on /data, single replica
   static dev-only encryption key
-  Suitable for smoke tests, local development, or trusted internal clusters
+  Suitable for local development or trusted internal clusters
   Replace server.encryption_key and auth settings before production use
 
 If you enable OAuth/OIDC or other ${VAR} placeholders, provide the matching

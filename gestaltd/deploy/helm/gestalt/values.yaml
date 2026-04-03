@@ -1,6 +1,6 @@
-# The default chart profile is for smoke tests, local development, or
-# trusted internal clusters. It uses auth.provider=none, SQLite, and a
-# single replica so the chart boots without extra secrets.
+# The default chart profile is for local development or trusted internal
+# clusters. It uses auth.provider=none, SQLite, and a single replica so
+# the chart boots without extra secrets.
 #
 # Configure OAuth/OIDC, server.encryption_key, and a networked datastore
 # before using this chart in production.
@@ -68,10 +68,10 @@ persistence:
 config:
   server:
     port: 8080
-    # Dev-only default so the smoke profile can boot. Override this with
+    # Dev-only default so the default chart profile can boot. Override this with
     # a secret value before production use.
     encryption_key: "dev-only-insecure-key-change-me"
-    # base_url is optional for the default smoke/dev profile.
+    # base_url is optional for the default local/dev profile.
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
     # base_url: "${GESTALT_BASE_URL}"

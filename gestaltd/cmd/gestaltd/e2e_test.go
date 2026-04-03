@@ -460,7 +460,7 @@ func TestE2EHelmChart(t *testing.T) {
 
 	chartDir := filepath.Join("..", "..", "deploy", "helm", "gestalt")
 
-	t.Run("default smoke profile boots", func(t *testing.T) {
+	t.Run("default chart profile boots", func(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
