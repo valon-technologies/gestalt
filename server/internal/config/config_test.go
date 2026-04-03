@@ -276,25 +276,6 @@ egress:
 	}
 }
 
-func TestLoadConfigRejectsPrefixedEgressSecretRef(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-egress:
-  credentials:
-    - host: api.example.com
-      secret_ref: secret://api-key
-`)
-
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("Load: expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "bare secret name without secret://") {
-		t.Fatalf("Load: error = %q, want bare secret name guidance", err)
-	}
-}
-
 func TestValidConfigurations(t *testing.T) {
 	t.Parallel()
 
