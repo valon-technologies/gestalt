@@ -1,6 +1,6 @@
 # Docker Image
 
-The published image is `valontechnologies/gestaltd`.
+The published image is `valontechnologies/gestaltd:latest`.
 
 ## Quick start
 
@@ -12,7 +12,7 @@ docker run -p 8080:8080 valontechnologies/gestaltd
 
 | Property | Value |
 | --- | --- |
-| Image | `valontechnologies/gestaltd` |
+| Image | `valontechnologies/gestaltd:latest` |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
 | Default command | `serve --locked --config /etc/gestalt/config.yaml` |
@@ -21,17 +21,8 @@ docker run -p 8080:8080 valontechnologies/gestaltd
 ## Environment variables
 
 Gestalt config supports `${VAR}` placeholders that are resolved from
-environment variables at startup. Common variables:
-
-| Variable | Purpose |
-| --- | --- |
-| `GESTALT_BASE_URL` | Public HTTPS URL of the server. |
-| `GESTALT_ENCRYPTION_KEY` | Key used to encrypt stored tokens. |
-| `DATABASE_URL` | Connection string when using Postgres. |
-| `OIDC_ISSUER_URL` | OIDC provider issuer URL. |
-| `OIDC_CLIENT_ID` | OIDC client ID. |
-| `OIDC_CLIENT_SECRET` | OIDC client secret. |
-| `OIDC_REDIRECT_URL` | OIDC redirect URL. |
+environment variables at startup. See the [Config File](/reference/config-file)
+reference for the full list of configuration options.
 
 ## Docker Compose
 
@@ -48,25 +39,23 @@ services:
       GESTALT_ENCRYPTION_KEY: dev-only-change-me
 ```
 
-## Mount a prepared config directory
+## Production image
 
-If you ran `gestaltd init` locally, mount the entire config directory at
-`/etc/gestalt`. It should contain:
+For production, run `gestaltd init` locally to resolve plugins and generate
+a lock file, then commit both the config and lock file to your repo. At
+build time, copy them into a derived image:
 
-- `config.yaml`
-- `gestalt.lock.json`
-- `.gestalt/` (when packaged plugins or prepared specs are present)
-
-## Bake prepared state into a derived image
-
-Run `gestaltd init` in a build stage, copy the prepared config directory
-into the final image, and keep the default locked command:
+```
+deploy/
+  config.yaml
+  gestalt.lock.json
+```
 
 ```dockerfile
-FROM valontechnologies/gestaltd AS init
-COPY config.yaml /etc/gestalt/config.yaml
-RUN /gestaltd init --config /etc/gestalt/config.yaml
-
 FROM valontechnologies/gestaltd
-COPY --from=init /etc/gestalt /etc/gestalt
+COPY deploy/ /etc/gestalt/
 ```
+
+The image starts with `serve --locked` by default, so it will use the
+committed lock file without fetching anything at runtime. This gives you a
+fully self-contained, deterministic image.

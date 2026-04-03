@@ -1,7 +1,7 @@
 # Deploy
 
 Gestalt runs anywhere you can run a Docker container. The published image is
-`valontechnologies/gestaltd`. See the
+`valontechnologies/gestaltd:latest`. See the
 [Docker Image](/reference/docker-image) reference for image details,
 environment variables, and a Docker Compose example.
 
@@ -10,10 +10,3 @@ For Kubernetes, Gestalt publishes a [Helm chart](/deploy/helm).
 Any container platform that can run a Docker image on port `8080` with
 environment variables will work, including Google Cloud Run, AWS App Runner
 or ECS, Fly.io, Render, Railway, and others.
-
-## Production checklist
-
-- Set `server.base_url` to your public HTTPS URL.
-- Use an external database (Postgres) instead of SQLite.
-- Store secrets (encryption key, OIDC credentials) in your platform's secret manager.
-- Run `gestaltd init` before `gestaltd serve --locked` for deterministic startup.
