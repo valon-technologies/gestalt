@@ -47,8 +47,8 @@ func writeLockfile(path string, lock *initLockfile) error {
 	return operator.WriteLockfile(path, lock)
 }
 
-func pluginFingerprint(name string, plugin *config.PluginDef, configMap map[string]any, configDir string) (string, error) {
-	return operator.PluginFingerprint(name, plugin, configMap, configDir)
+func pluginFingerprint(name string, plugin *config.PluginDef, configDir string) (string, error) {
+	return operator.PluginFingerprint(name, plugin, configDir)
 }
 
 func lockPluginKey(kind, name string) string {
