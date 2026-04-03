@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono&display=swap');
 
 :root {
   --nextra-primary-hue: 30deg;
@@ -6,16 +6,16 @@
 }
 
 html {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Outfit', system-ui, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6,
 article h1, article h2, article h3, article h4 {
-  font-family: 'Bitter', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
 }
 
 code, pre, kbd, samp {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Show the TOC at lg (1024px) instead of xl (1280px).
