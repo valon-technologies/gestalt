@@ -1,12 +1,29 @@
 # Deploy
 
-Gestalt runs anywhere you can run a Docker container. The published image is
-`valontechnologies/gestaltd:latest`. See the
-[Docker Image](/reference/docker-image) reference for image details,
-environment variables, and a Docker Compose example.
+Gestalt publishes two Docker images:
 
-For Kubernetes, Gestalt publishes a [Helm chart](/deploy/helm).
+| Image | Purpose |
+| --- | --- |
+| `valontechnologies/gestaltd:latest` | The server. Runs the HTTP API, web UI, and MCP endpoint. |
+| `valontechnologies/gestalt:latest` | The CLI client. Useful in CI pipelines and containerized environments. |
 
-Any container platform that can run a Docker image on port `8080` with
-environment variables will work, including Google Cloud Run, AWS App Runner
-or ECS, Fly.io, Render, Railway, and others.
+Both images are published for `linux/amd64` and `linux/arm64`.
+
+## Production considerations
+
+**Database.** SQLite works for single-instance deployments. For multi-replica or horizontally scaled deployments, use Postgres, MySQL, or another supported datastore. See [Built-in Providers](/reference/built-in-providers) for the full list.
+
+**Secrets.** Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`, or `file`) instead of `env` in production. Gestalt config supports `secret://` references that are resolved at boot time through the configured secret manager.
+
+**TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.base_url` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
+
+**Locked startup.** For deterministic deployments, run `gestaltd init` locally to resolve plugins and generate a lock file, then bake the prepared state into a derived image. See [Docker](/deploy/docker) for the recommended production image pattern.
+
+## Deployment guides
+
+| Guide | Description |
+| --- | --- |
+| [Docker](/deploy/docker) | Run Gestalt with Docker or Docker Compose. |
+| [Helm](/deploy/helm) | Deploy to Kubernetes with the published Helm chart. |
+
+Gestalt runs on any container platform that supports a Docker image on port `8080` with environment variables, including Google Cloud Run, AWS App Runner, AWS ECS, Fly.io, Render, and Railway. Use the [Docker](/deploy/docker) guide as the base for any of these platforms.
