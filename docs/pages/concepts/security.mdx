@@ -1,8 +1,8 @@
-# Security Model
+# Security
 
-Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes. This page describes the trust boundaries, cryptographic primitives, and security-relevant configuration.
+Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes. This page describes the trust boundaries, cryptographic design, and security-relevant configuration.
 
-## Trust Boundaries
+## Trust boundaries
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -31,164 +31,48 @@ Gestalt sits between callers and upstream APIs. It authenticates users, stores e
          └────────────┘  └───────────────┘
 ```
 
-Four trust boundaries:
-
 | Boundary | What crosses it | Protection |
 | --- | --- | --- |
-| Internet → Gestalt | User requests | Platform auth (session or API token) |
-| Gestalt → upstream APIs | OAuth tokens, API keys | Credential encryption, TLS |
-| Gestalt → plugins | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
-| Operator → Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
+| Internet to Gestalt | User requests | Platform auth (session or API token) |
+| Gestalt to upstream APIs | OAuth tokens, API keys | Credential encryption, TLS |
+| Gestalt to plugins | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
+| Operator to Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
 
-## Encryption at Rest
+## Encryption at rest
 
-All integration tokens (OAuth access tokens, refresh tokens) are encrypted before storage using AES-256-GCM.
+All integration tokens are encrypted before storage using AES-256-GCM.
 
-```
-server.encryption_key
-        │
-        ▼
-   ┌─────────┐
-   │ Argon2id │  (3 iterations, 64 MiB, 4 threads)
-   │  or hex  │  (64-char hex string used directly)
-   └────┬────┘
-        │
-        ▼
-  32-byte AES key
-        │
-        ▼
-   ┌─────────┐
-   │ AES-256 │  random 12-byte nonce per encryption
-   │   GCM   │  authenticated encryption (AEAD)
-   └─────────┘
-```
+The `server.encryption_key` is the root deployment secret. If the key is a 64-character hex string, it is decoded directly as a 32-byte AES key. Otherwise, Argon2id derives a 32-byte key from the string (3 iterations, 64 MiB, 4 threads).
 
-The `server.encryption_key` is the root deployment secret. Gestalt derives all cryptographic material from it:
+Every encryption operation generates a fresh 12-byte nonce using `crypto/rand`. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
 
-- **AES-256-GCM key** for encrypting integration tokens and pending connection continuations
-- **State secret** for encrypting OAuth state parameters and PKCE verifiers
-
-If the encryption key is a 64-character hex string, it is decoded directly as a 32-byte key. Otherwise, Argon2id derives a 32-byte key from the string.
-
-Every encryption operation generates a fresh random nonce using `crypto/rand`. Ciphertexts are base64-encoded for storage. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
-
-### What is encrypted
-
-| Data | Storage |
+| Data | Storage method |
 | --- | --- |
 | OAuth access tokens | AES-256-GCM encrypted |
 | OAuth refresh tokens | AES-256-GCM encrypted |
 | Pending connection continuations | AES-256-GCM encrypted |
-| OAuth state parameters | AES-256-GCM encrypted (URL-safe encoding, 10-minute TTL) |
-| API tokens | SHA-256 hashed (one-way, not reversible) |
+| OAuth state parameters | AES-256-GCM encrypted (10-minute TTL) |
+| API tokens | SHA-256 hashed (one-way) |
 | User emails, display names | Plaintext |
-| Token metadata JSON | Plaintext |
 
-## Token Lifecycle
+## Token lifecycle
 
-### Platform Sessions
+**Platform sessions.** Users log in through the configured identity provider. Gestalt validates the callback, checks `email_verified`, and issues a session cookie. Sessions expire based on the auth provider's TTL (default 24 hours).
 
-```
-Browser ──POST /auth/login──▶ Gestalt ──redirect──▶ Identity Provider
-                                                          │
-Browser ◀──set session_token cookie──── Gestalt ◀──callback──┘
-```
+**API tokens.** Generated with 32 random bytes from `crypto/rand` and prefixed with `gst_api_`. The plaintext is returned once at creation time. Only the SHA-256 hash is stored. Default TTL is 30 days, configurable via `server.api_token_ttl`.
 
-1. User initiates login via `POST /api/v1/auth/login`
-2. Gestalt redirects to the identity provider (Google, OIDC)
-3. Identity provider redirects back to `/api/v1/auth/login/callback`
-4. Gestalt validates the callback, checks `email_verified`, and issues a session token
-5. Session token is set as an HTTP cookie (`session_token`)
+**Integration tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt automatically refreshes tokens that expire within 5 minutes.
 
-Session tokens are validated by the platform auth provider on every request.
+## Request authentication
 
-Cookie properties:
+Requests are authenticated in the following order:
 
-| Property | Value |
-| --- | --- |
-| `HttpOnly` | `true` (prevents JavaScript access) |
-| `Secure` | `true` when `server.base_url` starts with `https://`, `false` otherwise |
-| `SameSite` | `Lax` (prevents cross-site form submission, allows top-level navigation) |
-| `Path` | `/` |
-| `MaxAge` | 24 hours (configurable per auth provider) |
+1. Check for a `session_token` cookie
+2. Check for an `Authorization: Bearer` header with a `gst_api_` prefix (API token lookup via SHA-256 hash)
+3. Check for an `Authorization: Bearer` header with a provider-issued token
+4. If no valid credentials are found, return 401
 
-### API Tokens
-
-```
-POST /api/v1/tokens
-        │
-        ▼
-  Generate 32 random bytes (crypto/rand)
-  Prefix with gst_api_
-        │
-        ├──▶ Return plaintext to caller (once, never stored)
-        │
-        └──▶ SHA-256 hash → store in datastore
-```
-
-- Plaintext is returned exactly once at creation time
-- Only the SHA-256 hash is stored. Tokens cannot be recovered from the datastore
-- Default TTL: 30 days (configurable via `server.api_token_ttl`)
-- Revocable individually (`DELETE /api/v1/tokens/{id}`) or in bulk (`DELETE /api/v1/tokens`)
-
-### Integration Tokens (OAuth)
-
-```
-POST /auth/start-oauth
-        │
-        ▼
-  Build OAuth state (user ID, integration, connection, PKCE verifier)
-  Encrypt state with AES-256-GCM (10-minute TTL)
-        │
-        ▼
-  Gestalt ──redirect with encrypted state──▶ Upstream OAuth Provider
-                                                    │
-  Gestalt ◀──callback with code + encrypted state────┘
-        │
-        ▼
-  Decrypt and validate state (TTL, user ID, integration match)
-  Exchange authorization code for tokens (+ PKCE verifier if applicable)
-        │
-        ▼
-  Encrypt access + refresh tokens separately (AES-256-GCM)
-        │
-        ▼
-  Store encrypted tokens in datastore
-```
-
-- OAuth state is encrypted and time-limited (10-minute expiry) to prevent state injection attacks
-- Access and refresh tokens are encrypted separately before storage
-- Automatic refresh when the access token expires within 5 minutes
-- Refresh errors are tracked; repeated failures do not retry indefinitely
-- Tokens are keyed by `(user_id, integration, connection, instance)`
-- Plaintext tokens are held in memory only during credential resolution
-
-## Request Authentication Flow
-
-```
-Request arrives
-      │
-      ├─ Check session_token cookie
-      │      │
-      │      ├─ Valid session? ──▶ Authenticated (SourceSession)
-      │      └─ Invalid/missing
-      │
-      ├─ Check Authorization: Bearer header
-      │      │
-      │      ├─ gst_api_ prefix? ──▶ SHA-256 hash → lookup in datastore
-      │      │                              │
-      │      │                     ──▶ Authenticated (SourceAPIToken)
-      │      │
-      │      └─ Other token? ──▶ Validate with auth provider
-      │                                │
-      │                       ──▶ Authenticated (SourceSession)
-      │
-      └─ No credentials ──▶ 401 Unauthorized
-```
-
-## Security Headers
-
-Gestalt sets the following headers on every response:
+## Security headers
 
 | Header | Value |
 | --- | --- |
@@ -196,36 +80,15 @@ Gestalt sets the following headers on every response:
 | `X-Frame-Options` | `DENY` |
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains` (HTTPS only) |
 
-## Plugin Isolation
+## Plugin isolation
 
-Plugins run as separate OS processes. Communication happens over temporary Unix sockets using gRPC.
+Plugins run as separate OS processes with communication over temporary Unix sockets. Plugins cannot access the datastore, other users' credentials, or the host process memory. Only sanitized environment variables are passed to plugin processes.
 
-```
-gestaltd process
-      │
-      ├── creates /tmp/gestalt-*.sock
-      ├── sets GESTALT_PLUGIN_SOCKET env var
-      ├── launches plugin binary as child process
-      │
-      ▼
- Plugin process
-      │
-      ├── connects to socket
-      ├── receives name + config via gRPC
-      └── serves ProviderPlugin service
-```
-
-Isolation properties:
-
-- **No shared memory**: communication is message-passing over a socket
-- **No direct datastore access**: plugins cannot query the datastore or access other users' credentials
-- **Sanitized environment**: only safe variables are passed to plugin processes (`PATH`, `HOME`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_*`, plus user-configured `env`)
-- **Token passthrough**: the host resolves the caller's access token and passes it directly to the plugin in the gRPC request. Plugins receive only the token for the current invocation, not the full credential store.
-- **Process lifecycle**: plugins are terminated when `gestaltd` shuts down (SIGTERM, then SIGKILL after timeout)
+The host resolves the caller's access token and passes it to the plugin in each gRPC request. Plugins receive only the token for the current invocation.
 
 ### OS-level sandbox
 
-Plugins are automatically sandboxed when `allowed_hosts` is configured. No additional configuration is needed:
+When `allowed_hosts` is configured on a provider, the plugin is automatically sandboxed:
 
 ```yaml
 providers:
@@ -238,44 +101,26 @@ providers:
         - "*.slack.com"
 ```
 
-Without `allowed_hosts`, the plugin runs unrestricted:
+**Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 
-```yaml
-providers:
-  trusted-plugin:
-    from:
-      command: ./my-trusted-plugin
-```
+**Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the plugin's environment. The proxy checks each request's hostname against the allowlist before forwarding. Wildcards are supported (`*.example.com` matches `api.example.com`).
 
-**Filesystem restrictions:**
+**Process group.** Sandboxed plugins run in their own process group. On shutdown, `gestaltd` signals the entire group to ensure child processes are also cleaned up.
 
-On Linux, the sandbox uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) to restrict file access. Plugins can only read system libraries, SSL certificates, and DNS configuration. Writes are limited to the plugin's socket directory and its isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec` with a generated Seatbelt profile.
-
-**Network restrictions:**
-
-When `allowed_hosts` is configured, `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the plugin's environment. Plugins use standard HTTP libraries unchanged. The proxy checks each request's target hostname against the allowlist before forwarding. Wildcards are supported (`*.example.com` matches `api.example.com`). On Linux, Landlock additionally restricts TCP connections to only the proxy port.
-
-**Process group isolation:**
-
-Sandboxed plugins run in their own process group. On shutdown, `gestaltd` signals the entire group, ensuring child processes spawned by the plugin are also cleaned up.
-
-## Operator Responsibilities
-
-These configuration choices directly affect the security posture of a deployment:
+## Operator responsibilities
 
 | Setting | Impact |
 | --- | --- |
-| `server.encryption_key` | Protect this value. If compromised, all stored integration tokens can be decrypted. Use a strong random string or a 64-character hex key. Must be the same across all instances in a cluster. |
-| `auth.provider` | `none` disables all authentication. Never use in production. |
-| `server.base_url` | Must match the public URL exactly. OAuth callback URLs are derived from it. A mismatch can break auth flows or create open-redirect risks. |
-| TLS termination | Gestalt does not terminate TLS itself. Deploy behind a reverse proxy (Nginx, Envoy, cloud load balancer) that handles TLS. |
-| `secrets.provider` | Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`) or `file` in production. `env` is acceptable but secrets may appear in process listings. |
-| `datastore.provider` | Use Postgres or another SQL datastore in production. SQLite is single-writer and not suitable for multi-replica deployments. |
+| `server.encryption_key` | Root deployment secret. If compromised, all stored tokens can be decrypted. Use a strong random string or 64-character hex key. Must be the same across all instances in a cluster. |
+| `auth.provider` | `none` disables all authentication. Do not use in production. |
+| `server.base_url` | Must match the public URL exactly. OAuth callbacks are derived from it. |
+| TLS termination | Gestalt does not terminate TLS. Deploy behind a reverse proxy that handles TLS. |
+| `secrets.provider` | Use a dedicated secret manager in production. `env` is acceptable but secrets may appear in process listings. |
+| `datastore.provider` | Use Postgres or another production-grade datastore. SQLite is single-writer and not suitable for multi-replica deployments. |
 
-## Known Limitations
+## Known limitations
 
-- **No built-in key rotation**: changing `server.encryption_key` requires re-encrypting all stored tokens. There is no automated migration.
-- **No session revocation**: platform sessions cannot be explicitly invalidated. They expire based on the auth provider's TTL (default 24 hours).
-- **No built-in rate limiting**: configure rate limiting at the load balancer or reverse proxy layer.
-- **No CORS configuration**: Gestalt does not set CORS headers. Configure CORS at the reverse proxy if cross-origin browser access is needed.
-- **Database encryption is application-level**: Gestalt encrypts tokens before storage, but the database itself may store metadata in plaintext. Ensure the database has appropriate access controls and encrypted backups.
+- Changing `server.encryption_key` requires re-encrypting all stored tokens. There is no automated key rotation.
+- Platform sessions cannot be explicitly revoked. They expire based on the configured TTL.
+- Rate limiting and CORS must be configured at the reverse proxy layer.
+- Gestalt encrypts tokens at the application level, but the database may store metadata in plaintext. Ensure appropriate database access controls.

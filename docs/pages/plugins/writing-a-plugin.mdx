@@ -1,0 +1,199 @@
+# Writing a Plugin
+
+This guide walks through building a provider plugin using the Go SDK.
+
+## Prerequisites
+
+- Go 1.22 or later
+- A running `gestaltd` instance for testing
+
+## Create the project
+
+```sh
+mkdir my-plugin && cd my-plugin
+go mod init example.com/my-plugin
+go get github.com/valon-technologies/gestalt/sdk/go
+```
+
+## Implement the provider
+
+A provider plugin implements the `gestalt.Provider` interface:
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type myProvider struct {
+	greeting string
+}
+
+func (p *myProvider) Name() string           { return "my-plugin" }
+func (p *myProvider) DisplayName() string    { return "My Plugin" }
+func (p *myProvider) Description() string    { return "A custom provider plugin" }
+func (p *myProvider) ConnectionMode() gestalt.ConnectionMode {
+	return gestalt.ConnectionModeNone
+}
+
+func (p *myProvider) Catalog() *gestalt.Catalog {
+	return &gestalt.Catalog{
+		Name:        p.Name(),
+		DisplayName: p.DisplayName(),
+		Description: p.Description(),
+		Operations: []gestalt.CatalogOperation{
+			{
+				ID:          "greet",
+				Description: "Return a greeting",
+				Method:      http.MethodGet,
+				Parameters: []gestalt.CatalogParameter{
+					{
+						Name:        "name",
+						Type:        "string",
+						Description: "Name to greet",
+						Required:    true,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (p *myProvider) Execute(
+	ctx context.Context,
+	operation string,
+	params map[string]any,
+	token string,
+) (*gestalt.OperationResult, error) {
+	switch operation {
+	case "greet":
+		name, _ := params["name"].(string)
+		if name == "" {
+			name = "World"
+		}
+		body, _ := json.Marshal(map[string]string{
+			"message": fmt.Sprintf("%s, %s!", p.greeting, name),
+		})
+		return &gestalt.OperationResult{
+			Status: http.StatusOK,
+			Body:   string(body),
+		}, nil
+	default:
+		return &gestalt.OperationResult{
+			Status: http.StatusNotFound,
+			Body:   `{"error":"unknown operation"}`,
+		}, nil
+	}
+}
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	provider := &myProvider{greeting: "Hello"}
+	if err := gestalt.ServeProvider(ctx, provider); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+```
+
+## The Provider interface
+
+Every plugin must implement these methods:
+
+| Method | Purpose |
+| --- | --- |
+| `Name()` | Internal identifier for the provider. |
+| `DisplayName()` | Human-readable name shown in the UI and API. |
+| `Description()` | Brief description of what the provider does. |
+| `ConnectionMode()` | How the provider authenticates with upstream APIs. |
+| `Catalog()` | Returns the list of operations the provider supports. |
+| `Execute()` | Handles an operation invocation. Receives the operation ID, input parameters, and the caller's access token. |
+
+### Connection modes
+
+| Mode | Constant | Description |
+| --- | --- | --- |
+| None | `ConnectionModeNone` | No credential needed. |
+| User | `ConnectionModeUser` | Each user provides their own credential. |
+| Identity | `ConnectionModeIdentity` | A shared service credential is used. |
+| Either | `ConnectionModeEither` | Prefer user credentials, fall back to shared. |
+
+When the connection mode is `user` or `either`, the `token` parameter in `Execute` contains the caller's OAuth access token.
+
+## Optional interfaces
+
+Plugins can implement additional interfaces for advanced behavior:
+
+| Interface | Method | Purpose |
+| --- | --- | --- |
+| `ProviderStarter` | `Start(ctx, name, config)` | One-time initialization. Receives the provider name and the `config` block from the YAML. |
+| `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a different operation catalog based on the caller's credentials. |
+| `ConfigSchemaProvider` | `ConfigSchema()` | Return a JSON Schema string for validating the provider's config block. |
+
+### Using ProviderStarter
+
+Implement `Start` to receive configuration at boot time:
+
+```go
+func (p *myProvider) Start(
+	ctx context.Context,
+	name string,
+	config map[string]any,
+) error {
+	if g, ok := config["greeting"].(string); ok {
+		p.greeting = g
+	}
+	return nil
+}
+```
+
+The corresponding config:
+
+```yaml
+providers:
+  my-plugin:
+    from:
+      command: ./my-plugin
+    config:
+      greeting: Howdy
+```
+
+## Test locally
+
+Build the plugin and reference it from a Gestalt config:
+
+```sh
+go build -o my-plugin .
+```
+
+```yaml
+providers:
+  my-plugin:
+    display_name: My Plugin
+    from:
+      command: ./my-plugin
+    config:
+      greeting: Hello
+    mcp:
+      enabled: true
+      tool_prefix: my_
+```
+
+Start the server and invoke the plugin:
+
+```sh
+gestaltd serve --config ./config.yaml
+gestalt invoke my-plugin greet -p name=Gestalt
+```

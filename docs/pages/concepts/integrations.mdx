@@ -1,43 +1,19 @@
 # Integrations
 
-Gestalt still talks about integrations in the API and UI, but config now
-declares them under `providers:`. Each configured provider becomes one runtime
-provider that callers invoke through the shared broker.
+Each entry under `providers:` in the config defines an integration. At startup, Gestalt builds each entry into a runtime provider that can be invoked through the HTTP API, the web UI, or `/mcp`.
 
-## Provider Shape
+## Provider structure
 
-```yaml
-providers:
-  gmail:
-    display_name: Gmail
-    description: Read and send Gmail messages
-    from:
-      package: ./dist/gmail-plugin.tar.gz
-    mcp:
-      enabled: true
-      tool_prefix: gmail_
-```
+A provider entry can include any combination of the following:
 
-Each entry can combine:
+- A `from` block that references an executable plugin or packaged provider
+- One or more `connections` that define upstream authentication
+- An API surface (`surfaces.rest`, `surfaces.openapi`, `surfaces.graphql`, or `surfaces.mcp`)
+- Optional `managed_parameters`, `response_mapping`, `allowed_operations`, and `headers`
 
-- an optional `from` block for executable or packaged behavior
-- `connections`
-- one API surface under `surfaces.rest`, `surfaces.openapi`, or `surfaces.graphql`
-- an optional `surfaces.mcp`
-- optional `headers`, `managed_parameters`, `response_mapping`, and `allowed_operations`
+## Examples
 
-## The Four Main Patterns
-
-| Pattern | Use it for |
-| --- | --- |
-| Inline declarative provider | Small custom REST APIs where writing a binary would be overkill. |
-| Inline spec-backed provider | OpenAPI, GraphQL, or upstream MCP surfaces that Gestalt can load directly. |
-| Packaged provider plugin | Custom logic that belongs in code or ships as a reusable package. |
-| Hybrid provider | A packaged plugin combined with OpenAPI, GraphQL, or MCP surfaces. |
-
-## Inline Declarative Providers
-
-Inline declarative providers use `surfaces.rest`.
+### REST operations defined in YAML
 
 ```yaml
 providers:
@@ -59,12 +35,7 @@ providers:
             path: /tickets
 ```
 
-This is the simplest path when you already know the exact operations you want.
-
-## Inline Spec-Backed Providers
-
-Inline spec-backed providers load operations from OpenAPI, GraphQL, or upstream
-MCP.
+### Operations loaded from an OpenAPI spec
 
 ```yaml
 providers:
@@ -86,31 +57,31 @@ providers:
       tool_prefix: httpbin_
 ```
 
-`allowed_operations` narrows the exposed surface and can rename operations with
-`alias`.
+Use `allowed_operations` to restrict which operations are exposed and to rename them with `alias`.
 
-## Packaged Provider Plugins
-
-Packaged providers come from one of three sources:
-
-- `command`: run an executable directly
-- `package`: load a local directory, local archive, or HTTPS archive
-- `source` plus `version`: resolve a published plugin package during `init`
+### Packaged plugin
 
 ```yaml
 providers:
-  support:
-    display_name: Support
+  gmail:
+    display_name: Gmail
+    description: Read and send Gmail messages
     from:
-      package: ./dist/support-plugin.tar.gz
+      package: ./dist/gmail-plugin.tar.gz
+    mcp:
+      enabled: true
+      tool_prefix: gmail_
 ```
 
-Packaged providers carry their own manifests, auth model, and operation
-catalog.
+The three ways to reference a plugin are:
 
-## Hybrid Providers
+- `from.command`: run an executable directly (best for local development)
+- `from.package`: load a local directory, local archive, or HTTPS archive
+- `from.source` with `from.version`: resolve a published plugin during `gestaltd init`
 
-A packaged provider can also layer in spec-backed surfaces.
+### Plugin with additional API surfaces
+
+A packaged plugin can also expose spec-backed surfaces alongside its own operations:
 
 ```yaml
 providers:
@@ -137,13 +108,9 @@ providers:
       tool_prefix: support_
 ```
 
-This is useful when a plugin provides custom code while the API or MCP surface
-still comes from a spec or upstream server.
-
 ## Connections
 
-Gestalt resolves credentials through `connections.default` plus any optional
-named connections.
+Each provider defines one or more connections that control how Gestalt authenticates with the upstream API.
 
 ```yaml
 connections:
@@ -164,76 +131,46 @@ connections:
       type: mcp_oauth
 ```
 
-Rules:
+`connections.default` is the primary connection and is the only connection that may define `params` and `discovery`. Named connections (like `mcp` above) are used when different surfaces require different authentication. Each surface specifies which connection it uses via the `connection` field.
 
-- `connections.default` is the primary connection
-- only `connections.default` may define `params` and `discovery`
-- if you omit `connections.default` and keep only named connections, each
-  configured surface must set `connection`
+### Connection modes
 
-### Connection Modes
-
-| Mode | Meaning |
+| Mode | Description |
 | --- | --- |
-| `none` | No stored credential is needed. |
-| `user` | Use a user-scoped stored connection. |
-| `identity` | Use a shared service identity. |
-| `either` | Prefer user auth and fall back to the shared identity. |
+| `none` | No credential is needed. |
+| `user` | Each user authenticates individually. |
+| `identity` | A single shared service credential is used. |
+| `either` | User credentials are preferred, with fallback to the shared identity. |
 
-## Managed Parameters
+## Managed parameters
 
-`managed_parameters` inject fixed values into headers or path placeholders
-before an operation is exposed.
-
-```yaml
-providers:
-  workspace:
-    connections:
-      default:
-        mode: none
-        auth:
-          type: none
-    surfaces:
-      openapi:
-        document: ./openapi/workspace.yaml
-    managed_parameters:
-      - in: header
-        name: X-API-Version
-        value: "2026-04-01"
-      - in: path
-        name: account_id
-        value: primary
-```
-
-Path managed parameters remove the corresponding user parameter from the
-exposed operation signature.
-
-## Response Mapping
-
-`response_mapping` is available for OpenAPI and GraphQL providers when the
-upstream response needs a stable data path or pagination hints.
+`managed_parameters` inject fixed values into headers or path placeholders before an operation is exposed to callers. Path parameters that are managed are removed from the operation's input signature.
 
 ```yaml
-providers:
-  catalog:
-    connections:
-      default:
-        auth:
-          type: bearer
-    surfaces:
-      graphql:
-        url: https://api.example.com/graphql
-    response_mapping:
-      data_path: data.items
-      pagination:
-        has_more_path: pageInfo.hasNextPage
-        cursor_path: pageInfo.endCursor
+managed_parameters:
+  - in: header
+    name: X-API-Version
+    value: "2026-04-01"
+  - in: path
+    name: account_id
+    value: primary
 ```
 
-## Tool Naming On `/mcp`
+## Response mapping
 
-Use `mcp.tool_prefix` to keep tool names stable and collision-free when
-several providers expose operations with similar names.
+`response_mapping` controls how Gestalt extracts data and pagination metadata from upstream responses:
+
+```yaml
+response_mapping:
+  data_path: data.items
+  pagination:
+    has_more_path: pageInfo.hasNextPage
+    cursor_path: pageInfo.endCursor
+```
+
+## MCP tool naming
+
+Use `mcp.tool_prefix` to namespace tool names and prevent collisions when multiple providers expose operations with similar names:
 
 ```yaml
 providers:
@@ -242,12 +179,3 @@ providers:
       enabled: true
       tool_prefix: slack_
 ```
-
-## Choosing The Right Pattern
-
-- Start with inline declarative YAML for a tiny REST surface.
-- Use OpenAPI, GraphQL, or `surfaces.mcp` when the upstream already publishes a
-  discoverable surface.
-- Use packaged providers when behavior belongs in code or needs to be
-  versioned.
-- Use a hybrid provider when you want packaged logic plus spec-backed coverage.

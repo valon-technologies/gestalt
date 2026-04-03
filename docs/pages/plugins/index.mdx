@@ -1,0 +1,20 @@
+# Plugins
+
+Gestalt plugins are standalone processes that add custom provider logic to `gestaltd`. Plugins communicate with the host over gRPC on a local Unix socket, and they are started and managed automatically by the server.
+
+Plugins are the right choice when a provider needs logic that cannot be expressed with declarative YAML or a spec-backed surface, such as custom data transformations, multi-step workflows, or proprietary API protocols.
+
+## Language support
+
+Gestalt currently provides a first-party SDK for **Go** (`sdk/go`). The underlying protocol is gRPC, so plugins can be implemented in any language that supports gRPC by implementing the `ProviderPlugin` service contract defined in `sdk/proto/v1/plugin.proto`. First-party SDKs for additional languages are planned.
+
+## How plugins work
+
+When a provider entry includes a `from` block, `gestaltd` starts the plugin as a child process at boot time. The host creates a temporary Unix socket, passes the socket path to the plugin via the `GESTALT_PLUGIN_SOCKET` environment variable, and the plugin connects back to register itself. Once connected, the plugin receives its name and config, exposes its operation catalog, and begins handling invocation requests.
+
+Plugins run in process isolation. They cannot access the datastore, other users' credentials, or the host process memory. The host resolves credentials and passes only the current caller's access token to the plugin for each request.
+
+## Next steps
+
+- [Writing a Plugin](/plugins/writing-a-plugin) walks through building a provider plugin with the Go SDK.
+- [Packaging and Releasing](/plugins/packaging-and-releasing) covers how to package, version, and distribute plugins.

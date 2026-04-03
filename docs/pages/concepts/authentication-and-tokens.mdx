@@ -1,14 +1,10 @@
-# Authentication And Tokens
+# Authentication and Tokens
 
-Gestalt has three separate credential layers:
+Gestalt manages three separate credential layers: platform authentication for users of Gestalt itself, integration authentication for outbound calls to upstream APIs, and API tokens for programmatic access.
 
-- platform auth for the human caller of the server
-- integration auth for outbound calls to upstream systems
-- API tokens for programmatic access to Gestalt itself
+## Platform authentication
 
-## Platform Auth
-
-Platform auth is configured under `auth`.
+Platform auth controls who can log into the Gestalt web UI, call the HTTP API, and connect to `/mcp`. It is configured under the `auth` block:
 
 ```yaml
 auth:
@@ -19,53 +15,38 @@ auth:
     client_secret: ${OIDC_CLIENT_SECRET}
 ```
 
-Built-in platform auth providers are:
+Available providers:
 
-- `none`
-- `local`
-- `google`
-- `oidc`
+| Provider | Description |
+| --- | --- |
+| `none` | Disables authentication. Suitable for local development only. |
+| `local` | Single-user auth for development. No external identity provider required. |
+| `google` | Google OAuth 2.0. Supports `allowed_domains` to restrict access by email domain. |
+| `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
-The platform auth provider controls login to the UI, authenticated HTTP routes,
-and `/mcp`.
+## Integration authentication
 
-## Integration Auth
+Integration auth defines how Gestalt connects to upstream APIs on behalf of users. It is configured per-provider under `connections`:
 
-Integration auth lives inside `providers.*.connections`.
+| Auth type | Description |
+| --- | --- |
+| `none` | No credential is needed. Used with `mode: none` connections. |
+| `oauth2` | User-scoped or shared OAuth 2.0 flows. |
+| `bearer` | User-provided bearer tokens. |
+| `manual` | User-provided credentials with custom field definitions. |
+| `mcp_oauth` | OAuth for upstream MCP servers that implement the MCP OAuth specification. |
 
-Examples:
+OAuth flows are initiated through the HTTP API (`POST /api/v1/auth/start-oauth`) and completed via callback (`GET /api/v1/auth/callback`). Manual connections are created through `POST /api/v1/auth/connect-manual`.
 
-- `type: none` for public spec-backed surfaces that use a `mode: none`
-  connection
-- `type: oauth2` for user-scoped or shared OAuth flows
-- `type: manual` or `type: bearer` for manually entered credentials
-- `type: mcp_oauth` for upstream MCP servers that implement MCP OAuth
+## Stored connections
 
-OAuth connections are started through `POST /api/v1/auth/start-oauth` and
-completed by `GET /api/v1/auth/callback`.
+Gestalt stores integration credentials keyed by user, integration, connection name, and instance. This allows a single user to maintain multiple connections to the same integration, for example to connect to separate Jira sites or different tenant environments.
 
-Manual connections are created through `POST /api/v1/auth/connect-manual`.
+## API tokens
 
-## Stored Connections
+API tokens provide programmatic access to Gestalt. They authenticate requests to the HTTP API and `/mcp` without requiring a browser session.
 
-Gestalt stores integration credentials by:
-
-- user
-- integration
-- connection name
-- instance
-
-This lets one user keep multiple instances of the same integration, such as:
-
-- separate Jira sites
-- different tenant parameters
-- multiple named auth flows on one integration
-
-## API Tokens
-
-API tokens authenticate callers to Gestalt itself.
-
-Create them with:
+Create a token with the CLI:
 
 ```sh
 gestalt tokens create --name automation
@@ -79,29 +60,18 @@ Authorization: Bearer <session-or-api-token>
 Content-Type: application/json
 ```
 
-They can be scoped to specific integrations and are accepted through:
+Tokens are prefixed with `gst_api_` and accepted via the `Authorization: Bearer` header. The token lifetime is controlled by `server.api_token_ttl` (default: 30 days). Tokens can be scoped to specific integrations and revoked individually or in bulk.
 
-- `Authorization: Bearer gst_api_...`
-- the `gestalt` client CLI
-- authenticated calls to `/mcp`
+## Session cookies
 
-`server.api_token_ttl` controls the token lifetime.
+When platform auth is enabled, browser sessions are stored in a `session_token` cookie with `HttpOnly`, `SameSite=Lax`, and `Secure` (when `server.base_url` uses HTTPS).
 
-## Session Cookies
+## Choosing an auth strategy
 
-When platform auth is enabled, the browser session is stored in a
-`session_token` cookie.
-
-- Cookies are `HttpOnly`.
-- Cookies use `SameSite=Lax`.
-- Cookies are marked `Secure` when `server.base_url` uses `https://`.
-
-## Choosing An Auth Strategy
-
-- Use `auth.provider: none` for local development and trusted internal
-  environments.
-- Use `local` for a single-user dev server that still exercises login flows.
-- Use `google` or `oidc` for normal multi-user deployments.
-- Use OAuth integration auth when each user should bring their own account.
-- Use `identity` mode when the server should call upstreams with one shared
-  service credential.
+| Scenario | Recommended configuration |
+| --- | --- |
+| Local development | `auth.provider: none` |
+| Single-user dev server with login flows | `auth.provider: local` |
+| Multi-user deployment | `auth.provider: google` or `auth.provider: oidc` |
+| Per-user upstream access | `mode: user` on integration connections |
+| Shared service credential | `mode: identity` on integration connections |

@@ -1,48 +1,28 @@
 # Plugin Protocol
 
-Executable plugins let `gestaltd` extend integrations without compiling new code into the host binary.
+Gestalt plugins are separate processes that extend `gestaltd` with custom provider logic. The host and plugin communicate over a local Unix socket using gRPC. See [Writing a Plugin](/plugins/writing-a-plugin) for a practical guide to building one.
 
-## What A Plugin Is
+## How plugins work
 
-A plugin is a separate process started by `gestaltd`. The host and plugin communicate over a local Unix socket using the Gestalt plugin gRPC protocol.
+When `gestaltd` starts a plugin, it creates a temporary Unix socket, sets the `GESTALT_PLUGIN_SOCKET` environment variable, and launches the plugin binary as a child process. The plugin connects to the socket and registers itself over gRPC. The host then sends the plugin its configured name and config block.
 
-One plugin kind is supported:
+## Provider plugin contract
 
-| Kind | Purpose |
-| --- | --- |
-| Provider plugin | Adds a provider for `providers:`. |
+A provider plugin must:
 
-## Startup Model
+- Report metadata (name, display name, description, connection mode)
+- Expose an operation catalog
+- Execute operations when invoked
 
-When `gestaltd` starts a plugin process, it:
+A plugin may optionally:
 
-1. creates a temporary Unix socket
-2. sets `GESTALT_PLUGIN_SOCKET` for the child process
-3. launches the plugin executable
-4. dials the plugin and validates protocol compatibility
-5. sends the plugin its name and config
+- Expose a request-scoped catalog that varies based on the caller's credentials
+- Provide a JSON Schema for its config block
+- Run initialization logic at startup
 
-The public Go SDK in `sdk/go` handles this for you.
+## Config placement
 
-## Provider Plugin Contract
-
-A provider plugin is expected to:
-
-- report provider metadata such as name, display name, description, and connection mode
-- expose its discovery catalog
-- execute operations
-- optionally expose a request-scoped catalog
-- optionally expose a config schema
-- optionally run startup logic when the host sends `StartProvider`
-
-The SDK's `ProviderStarter` path receives:
-
-- the configured integration name
-- the plugin config block as a map
-
-## Config Placement
-
-Provider plugin config lives here:
+Plugin config is passed from the `config` block under the provider entry:
 
 ```yaml
 providers:
@@ -52,3 +32,9 @@ providers:
     config:
       greeting: hello
 ```
+
+The plugin receives this as a key-value map during startup.
+
+## Language support
+
+Gestalt currently provides a Go SDK for writing plugins (`sdk/go`). Support for additional languages is planned. The underlying protocol is gRPC, so plugins can be implemented in any language that supports gRPC by implementing the `ProviderPlugin` service contract defined in `sdk/proto/v1/plugin.proto`.
