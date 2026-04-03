@@ -165,7 +165,7 @@ samp,
 
 pre {
   border: 1px solid var(--valon-line);
-  border-radius: 12px;
+  border-radius: 12px !important;
   background: rgba(248, 246, 243, 0.88) !important;
   padding: 6px 0 !important;
   box-shadow: none !important;
@@ -175,13 +175,16 @@ pre code {
   display: flex !important;
   flex-direction: column !important;
   white-space: normal !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
 }
 
 pre code > span {
   white-space: pre !important;
 }
 
-code.nextra-code,
+:not(pre) > code.nextra-code,
 p code,
 li code,
 td code {
