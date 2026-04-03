@@ -15,9 +15,7 @@ type DatastoreDriverHooks struct {
 	AssertRejectsOrphanTokenInsert func(t *testing.T, ctx context.Context, ds core.Datastore)
 }
 
-// RunDatastoreDriverTests extends the base datastore conformance suite with
-// integration tests that have historically been duplicated across concrete
-// datastore backends.
+// RunDatastoreDriverTests adds shared driver-level integration coverage.
 func RunDatastoreDriverTests(t *testing.T, newStore func(t *testing.T) core.Datastore, hooks DatastoreDriverHooks) {
 	t.Helper()
 
