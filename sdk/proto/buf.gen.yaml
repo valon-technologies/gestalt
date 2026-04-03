@@ -16,15 +16,3 @@ plugins:
     out: ../go/gen
     opt:
       - paths=source_relative
-
-  # TypeScript (ts-proto generates both messages and gRPC client/server code)
-  - remote: buf.build/community/timostamm-protobuf-ts
-    out: ../typescript/gen
-    opt:
-      - long_type_string
-
-  # Python messages + gRPC stubs
-  - remote: buf.build/protocolbuffers/python
-    out: ../python/gen
-  - remote: buf.build/grpc/python
-    out: ../python/gen
