@@ -65,6 +65,10 @@ jobs:
 
       - name: Terraform Apply
         working-directory: docs/terraform
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_project_number: ${{ secrets.GCP_PROJECT_NUMBER }}
+          TF_VAR_region: ${{ env.REGION }}
         run: |
           terraform apply -auto-approve \
             -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'
