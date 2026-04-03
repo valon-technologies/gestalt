@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,8 +24,6 @@ const (
 	authTokenPrefix     = "token "
 	platformAssetPrefix = "gestalt-plugin-"
 )
-
-var errReleaseNotFound = errors.New("github plugin release not found")
 
 type platformAssetMatch int
 
@@ -80,21 +77,10 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		token = os.Getenv(envGitHubToken)
 	}
 
-	var (
-		release *releaseResponse
-		err     error
-	)
-	for _, tag := range []string{src.ReleaseTag(version), src.LegacyReleaseTag(version)} {
-		releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
+	tag := src.ReleaseTag(version)
+	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
 
-		release, err = r.fetchRelease(ctx, client, releaseURL, token, tag, src.RepoSlug())
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, errReleaseNotFound) {
-			return nil, err
-		}
-	}
+	release, err := r.fetchRelease(ctx, client, releaseURL, token, tag, src.RepoSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +120,7 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("%w: release tag %s not found for %s", errReleaseNotFound, tag, slug)
+		return nil, fmt.Errorf("release tag %s not found for %s", tag, slug)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status %d fetching release %s for %s", resp.StatusCode, tag, slug)
