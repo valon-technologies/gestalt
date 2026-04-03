@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -349,18 +350,28 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	requestedConnection := r.URL.Query().Get("_connection")
+	if requestedConnection != "" && !safeParamValue.MatchString(requestedConnection) {
+		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+		return
+	}
+	requestedInstance := r.URL.Query().Get("_instance")
+	if requestedInstance != "" && !safeParamValue.MatchString(requestedInstance) {
+		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+		return
+	}
 	p := PrincipalFromContext(r.Context())
-	var resolver tokenResolver
-	if tr, ok := s.invoker.(tokenResolver); ok {
+	var resolver invocation.TokenResolver
+	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	catalogConnection := s.catalogConnection[name]
-	if catalogConnection == "" {
-		catalogConnection = s.defaultConnection[name]
+	resolveCatalog := invocation.ResolveCatalog
+	if requestedConnection != "" || requestedInstance != "" {
+		resolveCatalog = invocation.ResolveCatalogStrict
 	}
-	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, catalogConnection)
+	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, s.catalogLookupConnection(name, requestedConnection), requestedInstance)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve catalog")
+		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cat.Operations)
@@ -404,56 +415,70 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
-		var upstreamErr *apiexec.UpstreamHTTPError
-		switch {
-		case errors.Is(err, invocation.ErrProviderNotFound):
-			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
-		case errors.Is(err, invocation.ErrOperationNotFound):
-			writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
-		case errors.Is(err, invocation.ErrNotAuthenticated):
-			writeError(w, http.StatusUnauthorized, "not authenticated")
-		case errors.Is(err, invocation.ErrScopeDenied):
-			writeError(w, http.StatusForbidden, err.Error())
-		case errors.Is(err, invocation.ErrNoToken):
-			writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
-		case errors.Is(err, invocation.ErrAmbiguousInstance):
-			writeError(w, http.StatusConflict, err.Error())
-		case errors.Is(err, invocation.ErrUserResolution):
-			writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		case errors.Is(err, invocation.ErrInternal):
-			writeError(w, http.StatusInternalServerError, "internal error")
-		case errors.Is(err, core.ErrMCPOnly):
-			writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
-		case errors.Is(err, apiexec.ErrMissingPathParam):
-			writeError(w, http.StatusBadRequest, err.Error())
-		case errors.As(err, &upstreamErr):
-			writeOperationResult(w, &core.OperationResult{
-				Status:  upstreamErr.Status,
-				Headers: upstreamErr.Headers,
-				Body:    upstreamErr.Body,
-			})
-		default:
-			if message, ok := safeOperationErrorMessage(err); ok {
-				slog.WarnContext(
-					r.Context(),
-					"operation failed with user-facing error",
-					"provider",
-					providerName,
-					"operation",
-					operationName,
-					"error",
-					err,
-				)
-				writeError(w, http.StatusBadGateway, message)
-				return
-			}
-			slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
-			writeError(w, http.StatusBadGateway, "operation failed")
-		}
+		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
 
 	writeOperationResult(w, result)
+}
+
+func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, providerName, operationName string, err error) {
+	var upstreamErr *apiexec.UpstreamHTTPError
+	switch {
+	case errors.Is(err, invocation.ErrProviderNotFound):
+		writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
+	case errors.Is(err, invocation.ErrOperationNotFound):
+		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
+	case errors.Is(err, invocation.ErrNotAuthenticated):
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+	case errors.Is(err, invocation.ErrScopeDenied):
+		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, invocation.ErrNoToken):
+		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
+	case errors.Is(err, invocation.ErrAmbiguousInstance):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, invocation.ErrUserResolution):
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+	case errors.Is(err, invocation.ErrInternal):
+		writeError(w, http.StatusInternalServerError, "internal error")
+	case errors.Is(err, core.ErrMCPOnly):
+		writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
+	case errors.Is(err, apiexec.ErrMissingPathParam):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.As(err, &upstreamErr):
+		writeOperationResult(w, &core.OperationResult{
+			Status:  upstreamErr.Status,
+			Headers: upstreamErr.Headers,
+			Body:    upstreamErr.Body,
+		})
+	default:
+		if message, ok := safeOperationErrorMessage(err); ok {
+			slog.WarnContext(
+				r.Context(),
+				"operation failed with user-facing error",
+				"provider",
+				providerName,
+				"operation",
+				operationName,
+				"error",
+				err,
+			)
+			writeError(w, http.StatusBadGateway, message)
+			return
+		}
+		slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
+		writeError(w, http.StatusBadGateway, "operation failed")
+	}
+}
+
+func (s *Server) catalogLookupConnection(providerName, explicit string) string {
+	if explicit != "" {
+		return config.ResolveConnectionAlias(explicit)
+	}
+	if conn := s.catalogConnection[providerName]; conn != "" {
+		return conn
+	}
+	return s.defaultConnection[providerName]
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {
