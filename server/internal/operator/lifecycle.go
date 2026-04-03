@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -629,7 +630,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 		if err != nil {
 			return fmt.Errorf("decode plugin config for integration %q: %w", name, err)
 		}
-		if err := applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
+		if err := l.applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 			return err
 		}
 		if manifest := intg.Plugin.ResolvedManifest; manifest != nil {
@@ -663,7 +664,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath string, cfg *config.Config, lo
 	return nil
 }
 
-func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
+func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
 	key := LockPluginKey(kind, name)
 	entry, ok := lock.Plugins[key]
 	if !ok {
@@ -682,6 +683,23 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 	}
 
 	manifestPath := resolveLockPath(paths.configDir, entry.Manifest)
+	executablePath := resolveLockPath(paths.configDir, entry.Executable)
+	needMaterialize := false
+	if entry.Source != "" {
+		if _, err := os.Stat(manifestPath); err != nil {
+			needMaterialize = true
+		}
+		if !needMaterialize && entry.Executable != "" {
+			if _, err := os.Stat(executablePath); err != nil {
+				needMaterialize = true
+			}
+		}
+		if needMaterialize {
+			if err := l.materializeLockedSourcePlugin(context.Background(), paths, kind, name, entry); err != nil {
+				return err
+			}
+		}
+	}
 	if _, err := os.Stat(manifestPath); err != nil {
 		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, manifestPath, paths.configPath)
 	}
@@ -704,7 +722,6 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 		return nil
 	}
 
-	executablePath := resolveLockPath(paths.configDir, entry.Executable)
 	if _, err := os.Stat(executablePath); err != nil {
 		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, executablePath, paths.configPath)
 	}
@@ -716,6 +733,41 @@ func applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, 
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
+	return nil
+}
+
+func (l *Lifecycle) materializeLockedSourcePlugin(ctx context.Context, paths initPaths, kind, name string, entry LockPluginEntry) error {
+	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
+		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
+	if err != nil {
+		return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, err)
+	}
+	download, err := pluginpkg.DownloadRequest(http.DefaultClient, req)
+	if err != nil {
+		return fmt.Errorf("download locked source plugin for %s %q: %w", kind, name, err)
+	}
+	defer download.Cleanup()
+	if download.SHA256Hex != entry.ArchiveSHA256 {
+		return fmt.Errorf("locked source plugin digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, entry.ArchiveSHA256)
+	}
+
+	destDir := pluginDestDir(paths, kind, name)
+	if err := os.RemoveAll(destDir); err != nil {
+		return fmt.Errorf("remove stale plugin cache for %s %q: %w", kind, name, err)
+	}
+	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	if err != nil {
+		return fmt.Errorf("install locked source plugin for %s %q: %w", kind, name, err)
+	}
+	if installed.Manifest.Source != entry.Source {
+		return fmt.Errorf("locked source plugin manifest source mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Source, entry.Source)
+	}
+	if installed.Manifest.Version != entry.Version {
+		return fmt.Errorf("locked source plugin manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
+	}
 	return nil
 }
 
