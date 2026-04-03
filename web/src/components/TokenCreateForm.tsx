@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createToken } from "@/lib/api";
+import { INPUT_CLASSES } from "@/lib/constants";
 import Button from "./Button";
 
 interface TokenCreateFormProps {
@@ -37,11 +38,11 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="mt-6 flex items-end gap-3">
+      <form onSubmit={handleSubmit} className="mt-8 flex items-end gap-3">
         <div>
           <label
             htmlFor="token-name"
-            className="block text-sm font-medium text-stone-700 dark:text-stone-300"
+            className="label-text block"
           >
             Token name
           </label>
@@ -51,7 +52,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
             type="text"
             required
             placeholder="e.g. ci-pipeline"
-            className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
+            className={`mt-2 ${INPUT_CLASSES}`}
           />
         </div>
         <Button type="submit" disabled={creating}>
@@ -60,11 +61,11 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
       </form>
 
       {plaintext && (
-        <div className="mt-4 rounded-lg border border-harvest-300 bg-harvest-50 p-4 dark:border-harvest-600 dark:bg-harvest-700/20">
-          <p className="text-sm font-medium text-harvest-700 dark:text-harvest-300">
+        <div className="mt-6 rounded-lg border border-gold-300 bg-gold-50 p-5 dark:border-gold-700 dark:bg-gold-950/30">
+          <p className="text-sm font-medium text-gold-800 dark:text-gold-300">
             Copy this token now. It will not be shown again.
           </p>
-          <code className="mt-2 block break-all rounded-md bg-stone-100 p-2 font-mono text-sm text-stone-900 dark:bg-stone-800 dark:text-stone-100">
+          <code className="mt-3 block break-all rounded-sm bg-base-white p-3 font-mono text-sm text-primary border border-alpha dark:bg-surface">
             {plaintext}
           </code>
         </div>

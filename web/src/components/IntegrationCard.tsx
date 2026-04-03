@@ -9,6 +9,7 @@ import {
   connectManualIntegration,
   disconnectIntegration,
 } from "@/lib/api";
+import { INPUT_CLASSES } from "@/lib/constants";
 import Button from "./Button";
 import { CheckCircleIcon, GearIcon, DefaultIcon } from "./icons";
 import IntegrationSettingsModal from "./IntegrationSettingsModal";
@@ -198,10 +199,10 @@ export default function IntegrationCard({
   function renderConnectionParamFields() {
     if (!integration.connection_params) return null;
     return Object.entries(integration.connection_params).map(([name, def]) => (
-      <div key={name} className="mt-2">
+      <div key={name} className="mt-3">
         <label
           htmlFor={`cp_${name}-${integration.name}`}
-          className="block text-sm font-medium text-stone-700 dark:text-stone-300"
+          className="label-text block"
         >
           {def.description || name}
         </label>
@@ -212,14 +213,14 @@ export default function IntegrationCard({
           required={def.required}
           defaultValue={def.default}
           placeholder={name}
-          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-timber-400 focus:outline-none focus:ring-2 focus:ring-timber-400/25 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-timber-500 dark:focus:ring-timber-500/25"
+          className={`mt-1.5 w-full ${INPUT_CLASSES}`}
         />
       </div>
     ));
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-5 shadow-warm">
+    <div className="rounded-lg border border-alpha bg-base-white p-6 transition-all duration-150 hover:border-alpha-strong hover:shadow-card dark:bg-surface">
       {pendingSelection && (
         <form
           ref={pendingSelectionFormRef}
@@ -236,7 +237,7 @@ export default function IntegrationCard({
       )}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-500 [&>svg]:h-5 [&>svg]:w-5 dark:bg-stone-800 dark:text-stone-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-base-100 text-muted [&>svg]:h-5 [&>svg]:w-5 dark:bg-surface-raised">
             {safeIconSVG ? (
               <div
                 dangerouslySetInnerHTML={{ __html: safeIconSVG }}
@@ -247,11 +248,11 @@ export default function IntegrationCard({
             )}
           </div>
           <div>
-            <h3 className="text-base font-heading font-semibold text-stone-900 dark:text-stone-100">
+            <h3 className="text-base font-heading font-semibold text-primary">
               {integration.display_name || integration.name}
             </h3>
             {integration.description && (
-              <p className="mt-1 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">
+              <p className="mt-1 line-clamp-2 text-sm text-muted">
                 {integration.description}
               </p>
             )}
@@ -263,7 +264,7 @@ export default function IntegrationCard({
           )}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition-all duration-150 hover:bg-alpha-5 hover:text-muted"
             aria-label={`${integration.display_name || integration.name} settings`}
           >
             <GearIcon className="h-4 w-4" />
@@ -271,12 +272,12 @@ export default function IntegrationCard({
         </div>
       </div>
       {error && !settingsOpen && (
-        <p className="mt-2 text-sm text-ember-500">{error}</p>
+        <p className="mt-3 text-sm text-ember-500">{error}</p>
       )}
       {showParamForm && (
-        <form onSubmit={handleParamSubmit} className="mt-3">
+        <form onSubmit={handleParamSubmit} className="mt-4">
           {renderConnectionParamFields()}
-          <div className="mt-3 flex gap-2">
+          <div className="mt-4 flex gap-2">
             <Button type="submit" disabled={loading}>
               {loading ? "Connecting..." : "Connect"}
             </Button>

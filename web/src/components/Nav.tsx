@@ -28,18 +28,19 @@ export default function Nav() {
   }
 
   return (
-    <nav className="border-b border-border bg-surface px-6 py-3">
-      <div className="flex items-center justify-between">
+    <nav className="border-b border-alpha px-6 py-3 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+      <div className="mx-auto max-w-5xl flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-lg font-heading font-bold text-timber-800 dark:text-timber-200">
+          <Link href="/" className="text-lg font-heading font-bold text-primary">
             Gestalt
           </Link>
-          <div className="flex gap-4">
+          <div className="flex gap-5">
             {links.map((link) => {
-              const className = `text-sm ${
-                pathname === link.href
-                  ? "font-medium text-timber-600 dark:text-timber-400"
-                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+              const isActive = pathname === link.href;
+              const className = `text-sm transition-colors duration-150 ${
+                isActive
+                  ? "text-primary font-medium"
+                  : "text-muted hover:text-secondary"
               }`;
               if (link.href === "/docs") {
                 return (
@@ -63,18 +64,18 @@ export default function Nav() {
               else if (theme === "dark") setTheme("system");
               else setTheme("light");
             }}
-            className="flex h-8 w-8 items-center justify-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-all duration-150 hover:bg-alpha-5"
             title={theme === "light" ? "Light mode" : theme === "dark" ? "Dark mode" : "System preference"}
             aria-label="Toggle theme"
           >
-            <ThemeIcon className="h-5 w-5" />
+            <ThemeIcon className="h-[18px] w-[18px]" />
           </button>
           {email && (
             <>
-              <span className="text-sm text-stone-400 dark:text-stone-500">{email}</span>
+              <span className="text-sm text-faint">{email}</span>
               <button
                 onClick={handleLogout}
-                className="text-sm text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+                className="text-sm text-muted hover:text-primary transition-colors duration-150"
               >
                 Logout
               </button>

@@ -28,39 +28,39 @@ export default function TokenTable({ tokens, onRevoked }: TokenTableProps) {
 
   if (tokens.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-stone-400 dark:text-stone-500">
+      <p className="py-12 text-center text-sm text-faint">
         No API tokens yet.
       </p>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-x-auto">
-      {error && <p className="mb-4 px-4 pt-3 text-sm text-ember-500">{error}</p>}
+    <div className="rounded-lg border border-alpha bg-base-white overflow-x-auto dark:bg-surface">
+      {error && <p className="mb-4 px-5 pt-4 text-sm text-ember-500">{error}</p>}
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border bg-surface-raised text-left text-stone-500 dark:text-stone-400">
-            <th className="px-4 pb-3 pt-3 text-xs font-medium uppercase tracking-wide">Name</th>
-            <th className="px-4 pb-3 pt-3 text-xs font-medium uppercase tracking-wide">Scopes</th>
-            <th className="px-4 pb-3 pt-3 text-xs font-medium uppercase tracking-wide">Created</th>
-            <th className="px-4 pb-3 pt-3 text-xs font-medium uppercase tracking-wide">Expires</th>
-            <th className="px-4 pb-3 pt-3 text-xs font-medium uppercase tracking-wide"></th>
+          <tr className="border-b border-alpha text-left">
+            <th className="px-5 py-3.5 label-text">Name</th>
+            <th className="px-5 py-3.5 label-text">Scopes</th>
+            <th className="px-5 py-3.5 label-text">Created</th>
+            <th className="px-5 py-3.5 label-text">Expires</th>
+            <th className="px-5 py-3.5 label-text"></th>
           </tr>
         </thead>
         <tbody>
           {tokens.map((token) => (
-            <tr key={token.id} className="border-b border-stone-200 last:border-b-0 dark:border-stone-700">
-              <td className="px-4 py-3 text-stone-900 dark:text-stone-100">{token.name}</td>
-              <td className="px-4 py-3 text-stone-500 dark:text-stone-400">{token.scopes || "all"}</td>
-              <td className="px-4 py-3 text-stone-500 dark:text-stone-400">
+            <tr key={token.id} className="border-b border-alpha last:border-b-0">
+              <td className="px-5 py-4 text-primary font-medium">{token.name}</td>
+              <td className="px-5 py-4 text-muted">{token.scopes || "all"}</td>
+              <td className="px-5 py-4 text-muted font-mono text-xs">
                 {new Date(token.created_at).toLocaleDateString()}
               </td>
-              <td className="px-4 py-3 text-stone-500 dark:text-stone-400">
+              <td className="px-5 py-4 text-muted font-mono text-xs">
                 {token.expires_at
                   ? new Date(token.expires_at).toLocaleDateString()
                   : "Never"}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-4">
                 <Button
                   variant="danger"
                   onClick={() => handleRevoke(token.id)}

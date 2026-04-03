@@ -4,20 +4,24 @@
 
 @layer base {
   :root {
-    --background: 36 33% 97%;
-    --surface: 36 40% 99%;
-    --surface-raised: 36 28% 93%;
-    --border: 33 20% 86%;
-    --foreground: 30 28% 11%;
-    --radius: 0.5rem;
+    --background: 36 28% 99%;
+    --surface: 36 33% 97%;
+    --surface-raised: 33 22% 93%;
+    --border: 30 18% 87%;
+    --foreground: 24 30% 11%;
+    --radius: 0.75rem;
+
+    --alpha-dark: 35, 24, 16;
   }
 
   .dark {
-    --background: 30 15% 7%;
-    --surface: 30 12% 10%;
-    --surface-raised: 30 10% 14%;
-    --border: 30 8% 22%;
-    --foreground: 36 20% 88%;
+    --background: 24 18% 8%;
+    --surface: 24 14% 11%;
+    --surface-raised: 24 12% 15%;
+    --border: 24 10% 20%;
+    --foreground: 33 20% 90%;
+
+    --alpha-dark: 232, 222, 212;
   }
 
   html {
@@ -25,7 +29,7 @@
   }
 
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   body {
@@ -33,6 +37,43 @@
   }
 
   dialog::backdrop {
-    background-color: rgb(28 25 23 / 0.5);
+    background-color: rgba(35, 24, 16, 0.5);
+  }
+
+  .dark dialog::backdrop {
+    background-color: rgba(10, 8, 6, 0.7);
+  }
+}
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in-up {
+      animation: none !important;
+      opacity: 1 !important;
+    }
+  }
+}
+
+@layer components {
+  .label-text {
+    @apply text-[11px] font-medium uppercase tracking-widest text-faint;
+  }
+
+  .gradient-warm {
+    background: radial-gradient(
+      140% 90% at 50% 100%,
+      #EACCB8 0%,
+      #FDFCF9 50%,
+      #F8F6F3 80%
+    );
+  }
+
+  .dark .gradient-warm {
+    background: radial-gradient(
+      140% 90% at 50% 100%,
+      #3D2808 0%,
+      #1A1410 50%,
+      #161110 80%
+    );
   }
 }

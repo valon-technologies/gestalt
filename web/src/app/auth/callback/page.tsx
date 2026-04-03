@@ -58,9 +58,9 @@ export default function AuthCallbackPage() {
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-warm text-center">
+        <div className="w-full max-w-sm rounded-lg border border-alpha bg-base-white p-8 shadow-dropdown text-center dark:bg-surface">
           <p className="text-sm text-ember-500">{error}</p>
-          <a href="/login" className="mt-4 inline-block text-sm text-timber-600 hover:underline dark:text-timber-400">
+          <a href="/login" className="mt-4 inline-block text-sm text-primary hover:underline">
             Back to login
           </a>
         </div>
@@ -70,7 +70,7 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <p className="text-sm text-stone-400 dark:text-stone-500">Completing login...</p>
+      <p className="text-sm text-faint">Completing login...</p>
     </div>
   );
 }
