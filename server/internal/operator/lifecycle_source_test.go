@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -386,7 +387,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
 	entry := lock.Plugins[LockPluginKey("integration", "gadget")]
-	pluginRoot := filepath.Join(filepath.Dir(configPath), ".gestalt", "plugins", "integration_gadget")
+	pluginRoot := filepath.Join(filepath.Dir(configPath), ".gestaltd", "plugins", "integration_gadget")
 	if err := os.RemoveAll(pluginRoot); err != nil {
 		t.Fatalf("RemoveAll plugin root: %v", err)
 	}
@@ -418,7 +419,7 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 }
 
 func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
-	t.Parallel()
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	dir := t.TempDir()
 
@@ -437,11 +438,27 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Fatalf("read archive: %v", err)
 	}
 
-	var requestCount atomic.Int64
+	var releaseCount atomic.Int64
+	var assetCount atomic.Int64
+	handlerErrs := make(chan error, 3)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount.Add(1)
 		switch r.URL.Path {
 		case releasePath:
+			releaseCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("release authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad release authorization", http.StatusBadRequest)
+				return
+			}
 			browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + expectedAssetName
 			w.Header().Set("Content-Type", "application/json")
 			resp := map[string]any{
@@ -455,6 +472,17 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 		case "/asset-dl":
+			assetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(archiveData)
 		default:
@@ -488,7 +516,13 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
 		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
 	}
 
 	if lock.Version != LockVersion {
@@ -507,6 +541,9 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}
 	if entry.ResolvedURL == "" {
 		t.Error("entry.ResolvedURL is empty")
+	}
+	if entry.ResolvedURL != srv.URL+"/asset-dl" {
+		t.Errorf("entry.ResolvedURL = %q, want %q", entry.ResolvedURL, srv.URL+"/asset-dl")
 	}
 	if entry.ArchiveSHA256 == "" {
 		t.Error("entry.ArchiveSHA256 is empty")
@@ -550,12 +587,30 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("executable content = %q, want %q", execData, testBinary)
 	}
 
-	requestsBefore := requestCount.Load()
-	_, _, err = lc.LoadForExecutionAtPath(configPath, true)
+	pluginRoot := filepath.Join(configDir, ".gestaltd", "plugins", "integration_alpha")
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+
+	releasesBefore := releaseCount.Load()
+	assetsBefore := assetCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
-	if got := requestCount.Load(); got != requestsBefore {
-		t.Errorf("server received %d requests during locked load, want 0", got-requestsBefore)
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := releaseCount.Load(); got != releasesBefore {
+		t.Errorf("release request count during locked load = %d, want %d", got, releasesBefore)
+	}
+	if got := assetCount.Load() - assetsBefore; got != 1 {
+		t.Errorf("asset request count during locked load = %d, want 1", got)
+	}
+	if cfg.Integrations["alpha"].Plugin.Command != executablePath {
+		t.Errorf("plugin command = %q, want %q", cfg.Integrations["alpha"].Plugin.Command, executablePath)
 	}
 }

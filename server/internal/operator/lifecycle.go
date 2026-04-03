@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -741,11 +742,20 @@ func (l *Lifecycle) materializeLockedSourcePlugin(ctx context.Context, paths ini
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
-	if err != nil {
-		return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, err)
+	src, parseErr := pluginsource.Parse(entry.Source)
+	var (
+		download *pluginpkg.DownloadResult
+		err      error
+	)
+	if parseErr == nil && src.Host == pluginsource.HostGitHub {
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, "")
+	} else {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, reqErr)
+		}
+		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
 	}
-	download, err := pluginpkg.DownloadRequest(http.DefaultClient, req)
 	if err != nil {
 		return fmt.Errorf("download locked source plugin for %s %q: %w", kind, name, err)
 	}
