@@ -31,7 +31,7 @@ jobs:
         working-directory: server
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
         env:
           POSTGRES_DB: postgres
           POSTGRES_USER: postgres
@@ -66,7 +66,7 @@ jobs:
         working-directory: server
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.4@sha256:da906917ca4ace3ba55538b7c2ee97a9bc865ef14a4b6920b021f0249d603f3d
         env:
           MYSQL_ROOT_PASSWORD: root
         ports:
@@ -99,7 +99,7 @@ jobs:
         working-directory: server
     services:
       mongodb:
-        image: mongo:7
+        image: mongo:7@sha256:45d9c9b48aa1b56b5e3a9f906763fe432f376abb3bc2832438022b6d2534e4fe
         ports:
           - 27017:27017
     steps:
@@ -138,7 +138,7 @@ jobs:
         working-directory: server
     services:
       dynamodb:
-        image: amazon/dynamodb-local:2.5.2
+        image: amazon/dynamodb-local:2.5.2@sha256:d7ebddeb60fa418bcda218a6c6a402a58441b2a20d54c9cb1d85fd5194341753
         ports:
           - 8000:8000
     steps:
@@ -225,7 +225,7 @@ jobs:
         working-directory: server
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: mcr.microsoft.com/mssql/server:2022-CU24-ubuntu-22.04@sha256:49b45a911dc535e9345fbfd7101a1bd8a1e190a5f29b877ef75387a061e5fcf0
         env:
           ACCEPT_EULA: Y
           MSSQL_PID: Developer
@@ -269,7 +269,7 @@ jobs:
         working-directory: server
     services:
       oracle:
-        image: gvenzl/oracle-free:23-slim-faststart
+        image: gvenzl/oracle-free:23-slim-faststart@sha256:c9803db54238b5be268c7f5916e3c5811ef106e58aeb2f1f9b690c135ed50672
         env:
           ORACLE_PASSWORD: oracle
         ports:
