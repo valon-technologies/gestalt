@@ -372,7 +372,11 @@ article.nextra-content main::before {
   order: 1;
 }
 
-table {
+article div:has(> table) {
+  width: 100%;
+}
+
+article table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
