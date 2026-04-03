@@ -21,7 +21,6 @@ COPY . .
 COPY --from=frontend /ui/out/ gestaltd/internal/webui/out/
 ARG TARGETARCH
 RUN cd gestaltd && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gestaltd ./cmd/gestaltd
-RUN mkdir /data
 
 FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 ARG GESTALT_VERSION
@@ -34,7 +33,7 @@ RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=build-binary /gestaltd /gestaltd
 RUN mkdir -p /data && chown nobody:nobody /data
 LABEL org.opencontainers.image.title="gestaltd" \
-      org.opencontainers.image.description="Self-hosted integration server for REST, GraphQL, MCP, and plugins." \
+      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
       org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
       org.opencontainers.image.url="${GESTALT_URL}" \
