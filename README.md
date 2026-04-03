@@ -1,58 +1,50 @@
 # Gestalt
 
-Gestalt is a unified API gateway for integrations. It loads a YAML config, connects to REST, GraphQL, and MCP upstreams, manages OAuth and manual credentials, and serves a single API and MCP endpoint for all configured integrations.
+Gestalt is a gateway for integrations. It loads config, resolves remote specs and packaged plugins, and serves a single HTTP and MCP surface.
 
-## Local Quickstart
+## Run
+
+Local:
 
 ```sh
 gestaltd
 ```
 
-Bare `gestaltd` auto-generates a local config, boots with `auth.provider: none` and SQLite, and starts serving. No setup needed.
-
-## Production Deployment
+Production:
 
 ```sh
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 ```
 
-`init` resolves remote provider specs, installs plugin packages, and writes a lockfile. `serve --locked` starts the server from that prepared state without fetching or mutating anything.
+`init` resolves remote state and writes a lockfile. `serve --locked` starts from that prepared state without fetching or mutating anything.
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `gestaltd` | Local dev: auto-prepares and serves. |
-| `gestaltd init --config PATH` | Production prep: resolves providers and plugins and writes lock state. |
-| `gestaltd serve --locked --config PATH` | Production runtime: serves from prepared state only. |
-| `gestaltd validate --config PATH` | CI: validates config without starting the server. |
-| `gestaltd plugin package --binary PATH --source SOURCE --output DIR` | Authoring: packages a plugin binary for distribution. |
+- `gestaltd`
+- `gestaltd init --config PATH`
+- `gestaltd serve --locked --config PATH`
+- `gestaltd validate --config PATH`
+- `gestaltd plugin package --input PATH --output PATH`
+- `gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]`
 
-## Docker
+## Plugins
 
-The published `valontechnologies/gestaltd` image:
+Versioned provider plugins are published from [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins).
 
-- exposes port `8080`
-- serves the API, embedded UI, `/health`, `/ready`, and `/mcp`
-- defaults to `serve --locked --config /etc/gestalt/config.yaml`
-- expects you to mount or bake a config file before startup
-- includes a shell, `ca-certificates`, and `curl`
+Managed installs use:
 
-```dockerfile
-FROM valontechnologies/gestaltd:latest AS init
-USER root
-COPY config.yaml /app/config.yaml
-RUN ["/gestaltd", "init", "--config", "/app/config.yaml"]
-
-FROM valontechnologies/gestaltd:latest
-COPY --from=init /app/ /app/
-CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```yaml
+plugin:
+  source: github.com/valon-technologies/gestalt-plugins/<plugin>
+  version: 0.0.1-alpha.1
 ```
+
+Use bare SemVer in config. The corresponding GitHub release tag format is `<plugin>/v<version>`.
 
 ## Documentation
 
-Full documentation is available at [docs.valon.tools](https://docs.valon.tools).
+Docs: [docs.valon.tools](https://docs.valon.tools)
 
 - [Getting Started](https://docs.valon.tools/getting-started)
 - [Configuration](https://docs.valon.tools/concepts/configuration)
