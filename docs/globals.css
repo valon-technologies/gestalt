@@ -64,6 +64,7 @@
   --valon-muted: rgba(35, 24, 16, 0.6);
   --valon-secondary: rgba(35, 24, 16, 0.8);
   --valon-gold: #e19614;
+  --valon-content-width: 46rem;
   --nextra-primary-hue: 37deg;
   --nextra-primary-saturation: 84%;
 }
@@ -75,20 +76,7 @@ html {
 
 body {
   color: var(--valon-secondary);
-  background:
-    radial-gradient(
-      200% 80% at 50% 0%,
-      rgba(246, 241, 234, 0.9) 0%,
-      rgba(243, 233, 221, 0.82) 8%,
-      rgba(241, 225, 208, 0.76) 16%,
-      rgba(238, 213, 174, 0.52) 30%,
-      rgba(234, 204, 184, 0.42) 44%,
-      rgba(232, 203, 190, 0.34) 56%,
-      rgba(237, 223, 212, 0.24) 66%,
-      rgba(244, 237, 230, 0.14) 76%,
-      transparent 88%
-    ),
-    linear-gradient(180deg, #ffffff 0%, #fdfcf9 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #fdfcf9 100%);
 }
 
 a {
@@ -229,7 +217,14 @@ footer > div {
 
 @media (min-width: 768px) {
   .nextra-sidebar-container {
+    border-right: none;
+  }
+
+  .nextra-sidebar-container > div {
     border-right: 1px solid var(--valon-line);
+    background:
+      linear-gradient(180deg, rgba(248, 246, 243, 0.7) 0%, rgba(255, 255, 255, 0.7) 100%),
+      radial-gradient(180% 80% at 50% 0%, rgba(238, 213, 174, 0.24) 0%, transparent 72%);
   }
 }
 
@@ -281,8 +276,42 @@ article.nextra-content {
 }
 
 article.nextra-content main {
+  position: relative;
+  isolation: isolate;
   max-width: 1300px !important;
   padding-top: 1.5rem !important;
+}
+
+article.nextra-content main::before {
+  content: '';
+  position: absolute;
+  top: -1rem;
+  left: -2rem;
+  right: -2rem;
+  height: 18rem;
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      200% 80% at 50% 100%,
+      rgba(246, 241, 234, 0.72) 0%,
+      rgba(243, 233, 221, 0.66) 10%,
+      rgba(241, 225, 208, 0.56) 20%,
+      rgba(238, 213, 174, 0.34) 36%,
+      rgba(237, 223, 212, 0.18) 58%,
+      transparent 86%
+    );
+  z-index: -1;
+  pointer-events: none;
+}
+
+.nextra-content main > p:first-of-type {
+  max-width: var(--valon-content-width);
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.nextra-content main > h1 + p {
+  margin-top: 1.5rem !important;
 }
 
 .nextra-breadcrumb {
@@ -296,7 +325,7 @@ article.nextra-content main {
   border-radius: 12px !important;
   background: rgba(248, 246, 243, 0.9) !important;
   box-shadow: none !important;
-  padding: 1.5rem !important;
+  padding: 2rem !important;
 }
 
 .nextra-card:hover {
@@ -339,6 +368,7 @@ tbody tr:nth-child(even) {
 th,
 td {
   border-color: var(--valon-line) !important;
+  padding: 1rem 1.25rem !important;
 }
 
 th {
@@ -354,6 +384,11 @@ footer hr {
 footer {
   background: rgba(248, 246, 243, 0.72) !important;
   border-top: 1px solid var(--valon-line);
+}
+
+:focus-visible {
+  outline: 2px solid #231810;
+  outline-offset: 2px;
 }
 
 button[title='Change theme'],
@@ -377,5 +412,25 @@ button[title='Change theme'],
   .nextra-toc {
     display: flex !important;
     flex-direction: column;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--valon-line);
+  }
+
+  article.nextra-content main::before {
+    left: -3rem;
+    right: -3rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .nextra-content main > p:first-of-type {
+    font-size: 1rem;
+    line-height: 1.375rem;
+  }
+
+  article.nextra-content main::before {
+    left: -1rem;
+    right: -1rem;
+    height: 14rem;
   }
 }

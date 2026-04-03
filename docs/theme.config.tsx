@@ -34,6 +34,7 @@ const config: DocsThemeConfig = {
       <>
         <title>{fullTitle}</title>
         <meta property="og:title" content={fullTitle} />
+        <meta name="theme-color" content="#FDFCF9" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </>
     );
