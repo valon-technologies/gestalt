@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,18 +32,22 @@ type Provider struct {
 	mp     metric.MeterProvider
 }
 
-func New(cfg yamlConfig) (*Provider, error) {
-	level := telemetryutil.ParseLevel(cfg.Level)
+func NewLogger(levelName, format string) *slog.Logger {
+	level := telemetryutil.ParseLevel(levelName)
 	opts := &slog.HandlerOptions{Level: level}
 
 	var handler slog.Handler
-	switch strings.ToLower(cfg.Format) {
+	switch strings.ToLower(format) {
 	case "json":
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	default:
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 
+	return slog.New(handler)
+}
+
+func New(cfg yamlConfig) (*Provider, error) {
 	tp := nooptrace.NewTracerProvider()
 	mp := noopmetric.NewMeterProvider()
 
@@ -51,7 +55,7 @@ func New(cfg yamlConfig) (*Provider, error) {
 	otel.SetMeterProvider(mp)
 
 	return &Provider{
-		logger: slog.New(handler),
+		logger: NewLogger(cfg.Level, cfg.Format),
 		tp:     tp,
 		mp:     mp,
 	}, nil

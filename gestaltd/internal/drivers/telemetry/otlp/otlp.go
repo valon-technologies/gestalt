@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"gopkg.in/yaml.v3"
 
@@ -270,18 +270,7 @@ func buildLogger(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*
 		return logger, lp, nil
 
 	case "stdout":
-		level := telemetryutil.ParseLevel(cfg.Logs.Level)
-		opts := &slog.HandlerOptions{Level: level}
-
-		var handler slog.Handler
-		switch strings.ToLower(cfg.Logs.Format) {
-		case "json":
-			handler = slog.NewJSONHandler(os.Stdout, opts)
-		default:
-			handler = slog.NewTextHandler(os.Stdout, opts)
-		}
-
-		return slog.New(handler), nil, nil
+		return telemetrystdout.NewLogger(cfg.Logs.Level, cfg.Logs.Format), nil, nil
 
 	default:
 		return nil, nil, fmt.Errorf(
