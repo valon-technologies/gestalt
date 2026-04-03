@@ -78,6 +78,14 @@ code, pre, kbd, samp {
   font-family: 'Geist Mono', monospace;
 }
 
+/* Card padding — Nextra only pads the title span, not the description. */
+.nextra-card {
+  padding: 1.25rem;
+}
+.nextra-card > span:last-child {
+  padding: 0.75rem 0 0;
+}
+
 /* Show the TOC at lg (1024px) instead of xl (1280px).
    Nextra hard-codes max-xl:_hidden on nav.nextra-toc.
    Higher specificity (element + two classes) overrides the theme rule. */
