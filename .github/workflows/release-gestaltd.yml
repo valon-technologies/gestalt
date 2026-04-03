@@ -101,9 +101,13 @@ jobs:
         run: |
           mkdir release
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} release/ \;
-      - uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
           files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
 
   publish-image:
     name: Publish Docker Image
