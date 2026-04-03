@@ -7,7 +7,7 @@ const seasonSerif = localFont({
     { path: "../../public/fonts/SeasonSerif_Regular.woff", weight: "400", style: "normal" },
     { path: "../../public/fonts/SeasonSerif_RegularItalic.woff", weight: "400", style: "italic" },
   ],
-  variable: "--font-heading",
+  variable: "--font-display",
 });
 
 const melangeGrotesk = localFont({
@@ -18,6 +18,7 @@ const melangeGrotesk = localFont({
     { path: "../../public/fonts/KMRMelangeGrotesk_BoldItalic.woff", weight: "700", style: "italic" },
   ],
   variable: "--font-body",
+  adjustFontFallback: false,
 });
 
 const geistMono = localFont({
