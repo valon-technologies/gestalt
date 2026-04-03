@@ -13,19 +13,9 @@ When you do not pass `--config`, `gestaltd` resolves the config path in this ord
 
 The default command `gestaltd` has one extra behavior: if no config exists anywhere in that search path, it generates `~/.gestalt/config.yaml` and starts with a local-only configuration that uses `auth.provider: none` and SQLite.
 
-## What Happens During Load
+## Config Loading
 
-Loading a config is more than YAML parsing:
-
-1. `${ENV_VAR}` placeholders are expanded first.
-2. YAML is decoded with known-field checking.
-3. Defaults are applied.
-4. Connection auth is validated against surface references.
-5. Relative paths are resolved against the directory that contains the config file.
-6. Validation runs.
-7. During bootstrap, `secret://...` values are resolved through the configured secret manager.
-
-`secret://...` resolution is intentionally later than basic config parsing. That keeps the config loader simple and lets the secret manager itself be configured normally.
+When Gestalt loads a config file, it expands `${ENV_VAR}` placeholders, applies defaults, validates the result, and resolves relative paths against the config file's directory. Later during bootstrap, `secret://...` values are resolved through the configured secret manager.
 
 ## The Top-Level Feature Sets
 

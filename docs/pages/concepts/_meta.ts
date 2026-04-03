@@ -5,8 +5,5 @@ export default {
   "authentication-and-tokens": "Authentication And Tokens",
   "mcp-binding": "MCP",
   "plugin-protocol": "Plugin Protocol",
-  "plugin-packaging": "Plugin Packaging",
-  "ui-plugins": "UI Plugins",
   security: "Security",
-  observability: "Observability",
 };
