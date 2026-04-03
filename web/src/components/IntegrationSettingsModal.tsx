@@ -278,14 +278,14 @@ export default function IntegrationSettingsModal({
       onCancel={handleCancel}
       onClose={onClose}
       onClick={handleBackdropClick}
-      className="m-auto w-full max-w-md rounded-lg border border-alpha bg-base-white p-0 shadow-dropdown dark:bg-surface"
+      className="m-auto w-full max-w-sm rounded-lg border border-alpha bg-base-white p-0 shadow-dropdown dark:bg-surface"
     >
-      <div className="p-7 md:p-8">
+      <div className="p-7">
         {view === "disconnect" ? (
           <>
             <h2
               id={headingId}
-              className="section-title text-[1.5rem]"
+              className="text-lg font-heading font-semibold text-primary"
             >
               Disconnect {displayName}?
             </h2>
@@ -320,7 +320,7 @@ export default function IntegrationSettingsModal({
           <form onSubmit={handleInstanceSubmit}>
             <h2
               id={headingId}
-              className="section-title text-[1.5rem]"
+              className="text-lg font-heading font-semibold text-primary"
             >
               Add Connection
             </h2>
@@ -368,12 +368,12 @@ export default function IntegrationSettingsModal({
         ) : (
           <>
             <div className="flex items-start justify-between">
-            <h2
-              id={headingId}
-              className="section-title text-[1.5rem]"
-            >
-              {displayName}
-            </h2>
+              <h2
+                id={headingId}
+                className="text-lg font-heading font-semibold text-primary"
+              >
+                {displayName}
+              </h2>
               <button
                 onClick={closeDialog}
                 className="rounded-md p-1.5 text-faint hover:text-muted transition-colors duration-150 hover:bg-alpha-5"
@@ -388,10 +388,7 @@ export default function IntegrationSettingsModal({
                 {integration.instances && integration.instances.length > 0 && (
                   <div className="mt-5 space-y-2">
                     {integration.instances.map((inst) => (
-                      <div
-                        key={inst.name}
-                        className="flex items-center justify-between rounded-md border border-alpha bg-alpha-5 px-4 py-3"
-                      >
+                      <div key={inst.name} className="flex items-center justify-between rounded-md border border-alpha px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <CheckCircleIcon className="h-4 w-4 text-grove-500" />
                           <div>
@@ -470,7 +467,7 @@ function TokenForm({
     <form onSubmit={onSubmit}>
       <h2
         id={headingId}
-        className="section-title text-[1.5rem]"
+        className="text-lg font-heading font-semibold text-primary"
       >
         {heading}
       </h2>

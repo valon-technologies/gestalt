@@ -19,8 +19,7 @@ export default function Nav() {
   const pathname = usePathname();
   const email = getUserEmail();
   const { theme, setTheme } = useTheme();
-  const ThemeIcon =
-    theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : SunMoonIcon;
+  const ThemeIcon = theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : SunMoonIcon;
 
   async function handleLogout() {
     await logout().catch(() => {});
@@ -29,18 +28,20 @@ export default function Nav() {
   }
 
   return (
-    <nav className="nav-shell">
-      <div className="nav-inner gap-4">
-        <div className="flex min-w-0 items-center gap-4 md:gap-8">
-          <Link href="/" className="brand-lockup shrink-0">
+    <nav className="border-b border-alpha px-6 py-3 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+      <div className="mx-auto max-w-5xl flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <Link href="/" className="text-lg font-heading font-bold text-primary">
             Gestalt
           </Link>
-          <div className="hidden items-center gap-1 md:flex">
+          <div className="flex gap-5">
             {links.map((link) => {
               const isActive = pathname === link.href;
-              const className = isActive
-                ? "nav-link-active"
-                : "nav-link px-3 py-2";
+              const className = `text-sm transition-colors duration-150 ${
+                isActive
+                  ? "text-primary font-medium"
+                  : "text-muted hover:text-secondary"
+              }`;
               if (link.href === "/docs") {
                 return (
                   <a key={link.href} href={link.href} className={className}>
@@ -56,55 +57,30 @@ export default function Nav() {
             })}
           </div>
         </div>
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => {
               if (theme === "light") setTheme("dark");
               else if (theme === "dark") setTheme("system");
               else setTheme("light");
             }}
-            className="icon-button"
-            title={
-              theme === "light"
-                ? "Light mode"
-                : theme === "dark"
-                  ? "Dark mode"
-                  : "System preference"
-            }
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-all duration-150 hover:bg-alpha-5"
+            title={theme === "light" ? "Light mode" : theme === "dark" ? "Dark mode" : "System preference"}
             aria-label="Toggle theme"
           >
             <ThemeIcon className="h-[18px] w-[18px]" />
           </button>
           {email && (
             <>
-              <span className="hidden text-sm text-faint lg:block">{email}</span>
-              <button onClick={handleLogout} className="nav-link px-3 py-2">
+              <span className="text-sm text-faint">{email}</span>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-muted hover:text-primary transition-colors duration-150"
+              >
                 Logout
               </button>
             </>
           )}
-        </div>
-      </div>
-      <div className="mx-auto flex w-full justify-center pb-3 md:hidden">
-        <div className="flex w-[min(100%,1300px)] gap-1 overflow-x-auto px-4">
-          {links.map((link) => {
-            const isActive = pathname === link.href;
-            const className = isActive
-              ? "nav-link-active"
-              : "nav-link px-3 py-2";
-            if (link.href === "/docs") {
-              return (
-                <a key={link.href} href={link.href} className={className}>
-                  {link.label}
-                </a>
-              );
-            }
-            return (
-              <Link key={link.href} href={link.href} className={className}>
-                {link.label}
-              </Link>
-            );
-          })}
         </div>
       </div>
     </nav>

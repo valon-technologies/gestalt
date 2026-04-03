@@ -38,11 +38,8 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
 
   return (
     <>
-      <form
-        onSubmit={handleSubmit}
-        className="surface-card mt-8 flex flex-col gap-4 p-6 md:flex-row md:items-end md:justify-between"
-      >
-        <div className="w-full max-w-xl">
+      <form onSubmit={handleSubmit} className="mt-8 flex items-end gap-3">
+        <div>
           <label
             htmlFor="token-name"
             className="label-text block"
@@ -58,14 +55,14 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
             className={`mt-2 ${INPUT_CLASSES}`}
           />
         </div>
-        <Button type="submit" disabled={creating} className="w-full md:w-auto">
+        <Button type="submit" disabled={creating}>
           {creating ? "Creating..." : "Create Token"}
         </Button>
       </form>
 
       {plaintext && (
         <div className="mt-6 rounded-lg border border-gold-300 bg-gold-50 p-5 dark:border-gold-700 dark:bg-gold-950/30">
-          <p className="text-sm font-bold text-gold-800 dark:text-gold-300">
+          <p className="text-sm font-medium text-gold-800 dark:text-gold-300">
             Copy this token now. It will not be shown again.
           </p>
           <code className="mt-3 block break-all rounded-sm bg-base-white p-3 font-mono text-sm text-primary border border-alpha dark:bg-surface">
