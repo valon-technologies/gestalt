@@ -19,6 +19,10 @@ provider "google" {
   project = var.dns_project_id
 }
 
+locals {
+  docs_cert_name = "toolshed-docs-cert-${replace(var.domain, ".", "-")}"
+}
+
 # ---------- Cloud Run ----------
 
 resource "google_cloud_run_v2_service" "docs" {
@@ -81,10 +85,14 @@ resource "google_compute_url_map" "docs" {
 }
 
 resource "google_compute_managed_ssl_certificate" "docs" {
-  name = "toolshed-docs-cert"
+  name = local.docs_cert_name
 
   managed {
     domains = [var.domain]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
