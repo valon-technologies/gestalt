@@ -82,7 +82,7 @@ jobs:
       - name: Install cross-compilation tools
         if: matrix.platform.cross
         run: |
-          command -v cross >/dev/null 2>&1 || cargo install cross --git https://github.com/cross-rs/cross
+          command -v cross >/dev/null 2>&1 || cargo install cross --version 0.2.5
 
       - name: Build (native)
         if: ${{ !matrix.platform.cross }}
