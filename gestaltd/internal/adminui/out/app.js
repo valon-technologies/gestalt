@@ -1,6 +1,7 @@
 (function () {
   const pollIntervalMs = 15000;
   const maxSamples = 12;
+  const sessionEmailKey = "user_email";
   const metricNames = {
     requests: "gestaltd_operation_count_total",
     errors: "gestaltd_operation_error_count_total",
@@ -45,6 +46,15 @@
       style: "percent",
       maximumFractionDigits: 1,
     }).format(value);
+  }
+
+  function escapeHTML(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
   function latencySecondsToMs(value) {
@@ -405,9 +415,9 @@
       .map((row) => {
         const errorRate = row.requests > 0 ? row.errors / row.requests : 0;
         return `
-          <div class="row">
+              <div class="row">
             <div>
-              <div class="row-name">${row.label}</div>
+              <div class="row-name">${escapeHTML(row.label)}</div>
               <div class="row-meta">${number(row.errors, 0)} errors</div>
             </div>
             <div class="row-value">
@@ -428,6 +438,9 @@
       });
 
       if (response.status === 401) {
+        try {
+          window.localStorage.removeItem(sessionEmailKey);
+        } catch {}
         window.location.href = "/login";
         return;
       }

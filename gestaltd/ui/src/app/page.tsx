@@ -113,13 +113,17 @@ export default function DashboardPage() {
               client workspace stays focused on integrations and tokens.
             </p>
             <div className="mt-5">
-              <Link
-                href="/admin"
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.location.assign("/admin/");
+                }}
                 className="inline-flex items-center gap-2 rounded-md border border-alpha px-4 py-2 text-sm font-medium text-primary transition-colors duration-150 hover:border-alpha-strong hover:bg-alpha-5"
               >
                 Open admin UI
                 <span aria-hidden="true">&rarr;</span>
-              </Link>
+              </button>
             </div>
           </section>
         </main>

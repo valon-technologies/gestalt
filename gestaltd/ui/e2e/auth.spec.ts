@@ -63,7 +63,22 @@ test.describe("Authentication", () => {
       page.getByRole("heading", { name: "Metrics moved to the admin UI" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Open admin UI" }),
+      page.getByRole("button", { name: "Open admin UI" }),
+    ).toBeVisible();
+  });
+
+  test("dashboard admin link opens the embedded admin UI", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockIntegrations(page, []);
+    await mockTokens(page, []);
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open admin UI" }).click();
+    await expect(page).toHaveURL(/\/admin\/$/);
+    await expect(
+      page.getByRole("heading", { name: "Prometheus metrics" }),
     ).toBeVisible();
   });
 
@@ -79,11 +94,6 @@ test.describe("Authentication", () => {
   });
 
   test("logout clears session and redirects to login", async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      localStorage.setItem("user_email", "test@gestalt.dev");
-    });
     await mockAuthInfo(page, {
       provider: "test-sso",
       display_name: "Test SSO",
@@ -94,9 +104,16 @@ test.describe("Authentication", () => {
       route.fulfill({ json: { status: "ok" } });
     });
 
+    await page.goto("/login");
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem("user_email", "test@gestalt.dev");
+    });
     await page.goto("/");
     await page.getByRole("button", { name: /Logout/i }).click();
     await expect(page).toHaveURL(/\/login/);
+    await expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
   });
 
   test("auth callback rejects mismatched OAuth state (CSRF protection)", async ({
@@ -137,5 +154,31 @@ test.describe("Authentication", () => {
 
     await page.goto("/");
     await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("admin metrics 401 clears session and redirects to login", async ({
+    page,
+  }) => {
+    await mockAuthInfo(page, {
+      provider: "test-sso",
+      display_name: "Test SSO",
+    });
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 401,
+        contentType: "text/plain",
+        body: "unauthorized",
+      });
+    });
+
+    await page.goto("/login");
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem("user_email", "test@gestalt.dev");
+    });
+    await page.goto("/admin/");
+    await expect(page).toHaveURL(/\/login/);
+    await expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
   });
 });

@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -41,26 +40,10 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 		return
 	}
 
-	adminHandler := stripRoutePrefix("/admin", s.adminUI)
-	r.Handle("/admin", adminHandler)
-	r.Handle("/admin/*", adminHandler)
-}
-
-func stripRoutePrefix(prefix string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, prefix)
-		if path == "" {
-			path = "/"
-		} else if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-
-		r2 := *r
-		u := *r.URL
-		u.Path = path
-		r2.URL = &u
-		next.ServeHTTP(w, &r2)
+	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
 	})
+	r.Handle("/admin/*", http.StripPrefix("/admin", s.adminUI))
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {
