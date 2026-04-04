@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
+
+var testSchemaMu sync.Mutex
 
 func testDSN(t *testing.T) string {
 	t.Helper()
@@ -73,12 +76,20 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 }
 
 func TestOracleDatastoreConformance(t *testing.T) {
+	t.Parallel()
+	testSchemaMu.Lock()
+	defer testSchemaMu.Unlock()
+
 	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
 	})
 }
 
 func TestOracleVersionSelection(t *testing.T) {
+	t.Parallel()
+	testSchemaMu.Lock()
+	defer testSchemaMu.Unlock()
+
 	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
 		SupportedVersions: supportedVersions,
 		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
