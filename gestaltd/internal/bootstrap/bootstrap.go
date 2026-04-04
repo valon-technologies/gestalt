@@ -386,6 +386,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
+		invocation.WithOperationMetrics(prepared.Telemetry.OperationMetrics()),
 	)
 	audit := core.AuditSink(invocation.NewLoggerAuditSink(prepared.Telemetry.Logger()))
 

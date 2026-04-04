@@ -160,8 +160,10 @@ func runServer(env *bootstrapEnv) error {
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
 			datastoreReadiness(result.Datastore),
 		),
-		MCPHandler: mcpHandler,
-		WebUI:      uiHandler,
+		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
+		OperationMetrics:  env.Result.Telemetry.OperationMetrics(),
+		MCPHandler:        mcpHandler,
+		WebUI:             uiHandler,
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)

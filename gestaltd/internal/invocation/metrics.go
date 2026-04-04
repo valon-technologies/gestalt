@@ -46,6 +46,7 @@ var operationMetricsOnce = sync.OnceValue(func() operationMetrics {
 
 func recordOperationMetrics(
 	ctx context.Context,
+	recorder core.OperationMetricsRecorder,
 	startedAt time.Time,
 	provider string,
 	operation string,
@@ -62,9 +63,19 @@ func recordOperationMetrics(
 	}
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
-	metrics.duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
+	duration := time.Since(startedAt)
+	metrics.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 	if failed {
 		metrics.errorCount.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if recorder != nil {
+		recorder.RecordOperationMetric(core.OperationMetricRecord{
+			RecordedAt: startedAt.Add(duration),
+			Provider:   metricAttrValue(provider),
+			Operation:  metricAttrValue(operation),
+			Duration:   duration,
+			Failed:     failed,
+		})
 	}
 }
 

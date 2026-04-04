@@ -177,14 +177,22 @@ telemetry:
   config:
     format: text
     level: info
+    service_name: gestaltd
 ```
 
 | Field | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `format` | No | `text` | `text` or `json`. |
 | `level` | No | `info` | `debug`, `info`, `warn`, or `error`. |
+| `service_name` | No | `gestaltd` | Service name attached to locally exposed metrics. |
+| `resource_attributes` | No | — | Extra resource attributes attached to local metrics. |
+| `metrics.prometheus.enabled` | No | `true` | Enables the Prometheus scrape endpoint at `/metrics`. |
+| `metrics.dashboard.enabled` | No | `true` | Enables the built-in operation dashboard data source. |
 
-Outputs structured logs to standard output. Traces and metrics use noop providers to keep terminal output clean. Default provider when `telemetry` is omitted.
+Outputs structured logs to standard output. Traces remain disabled, but metrics
+are collected locally for the default web UI and for the Prometheus-compatible
+`/metrics` endpoint. Built-in dashboard metrics use a fixed one-hour window with
+one-minute buckets. This is the default provider when `telemetry` is omitted.
 
 ### `otlp`
 
@@ -219,12 +227,17 @@ telemetry:
 | `headers` | No | — | Extra headers on every export request. |
 | `resource_attributes` | No | — | Key-value pairs attached as resource attributes. |
 | `traces.sampling_ratio` | No | `1.0` | Fraction of traces to sample, `0.0` to `1.0`. |
-| `metrics.interval` | No | `60s` | Metric export interval. |
+| `metrics.interval` | No | `60s` | OTLP metric export interval. |
+| `metrics.prometheus.enabled` | No | `true` | Enables the local Prometheus scrape endpoint at `/metrics`. |
+| `metrics.dashboard.enabled` | No | `true` | Enables the built-in operation dashboard data source. |
 | `logs.exporter` | No | `otlp` | `otlp` exports logs over OTLP, `stdout` keeps logs on standard output. |
 | `logs.level` | No | `info` | Minimum log level for the configured log exporter. |
 | `logs.format` | No | `text` | `text` or `json` when `logs.exporter` is `stdout`. |
 
-Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent).
+Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy,
+Datadog Agent) while still keeping local `/metrics` and the built-in dashboard
+available by default. The built-in dashboard remains fixed to a one-hour window
+with one-minute buckets.
 
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
@@ -250,6 +263,7 @@ telemetry:
 ```
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead.
+This also disables the built-in dashboard metrics feed and `/metrics`.
 
 ### Trace spans
 

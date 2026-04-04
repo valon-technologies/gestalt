@@ -52,6 +52,47 @@ export interface CreateTokenResponse {
   token: string;
 }
 
+export interface OperationMetricsSummary {
+  requests: number;
+  errors: number;
+  error_rate: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  throughput_rps: number;
+}
+
+export interface OperationMetricsSeriesItem {
+  start: string;
+  requests: number;
+  errors: number;
+  error_rate: number;
+  p95_latency_ms: number;
+  throughput_rps: number;
+}
+
+export interface OperationMetricsBreakdown {
+  provider: string;
+  operation?: string;
+  requests: number;
+  errors: number;
+  error_rate: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  throughput_rps: number;
+}
+
+export interface OperationMetricsOverview {
+  enabled: boolean;
+  reason?: string;
+  generated_at?: string;
+  window_seconds?: number;
+  bucket_seconds?: number;
+  summary: OperationMetricsSummary;
+  series?: OperationMetricsSeriesItem[];
+  providers?: OperationMetricsBreakdown[];
+  operations?: OperationMetricsBreakdown[];
+}
+
 export interface ConnectIntegrationResult {
   status: string;
   integration?: string;
@@ -200,18 +241,23 @@ export async function disconnectIntegration(
   if (instance) query.set("instance", instance);
   if (connection) query.set("connection", connection);
   const params = query.toString();
-  await fetchAPI(`/api/v1/integrations/${encodeURIComponent(name)}${params ? `?${params}` : ""}`, {
-    method: "DELETE",
-  });
+  await fetchAPI(
+    `/api/v1/integrations/${encodeURIComponent(name)}${params ? `?${params}` : ""}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export async function getTokens(): Promise<APIToken[]> {
   return fetchAPI("/api/v1/tokens");
 }
 
-export async function createToken(
-  name: string,
-): Promise<CreateTokenResponse> {
+export async function getOperationMetricsOverview(): Promise<OperationMetricsOverview> {
+  return fetchAPI("/api/v1/metrics/overview");
+}
+
+export async function createToken(name: string): Promise<CreateTokenResponse> {
   return fetchAPI("/api/v1/tokens", {
     method: "POST",
     body: JSON.stringify({ name }),
