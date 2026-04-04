@@ -7,8 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -21,13 +22,29 @@ type archiveTestFile struct {
 	mode int64
 }
 
+const (
+	testArtifactOS   = "linux"
+	testArtifactArch = "amd64"
+)
+
 func sha256Hex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
 }
 
-func currentArtifactPath(binary string) string {
-	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, binary))
+func artifactPathFor(osName, arch, binary string) string {
+	return filepath.ToSlash(filepath.Join("artifacts", osName, arch, binary))
+}
+
+func testArtifactPath(binary string) string {
+	return artifactPathFor(testArtifactOS, testArtifactArch, binary)
+}
+
+func unknownSiblingArtifactPath(artifactPath string) string {
+	base := path.Base(artifactPath)
+	ext := path.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return path.Join(path.Dir(artifactPath), name+"-missing"+ext)
 }
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
@@ -38,8 +55,8 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
+				OS:     testArtifactOS,
+				Arch:   testArtifactArch,
 				Path:   artifactPath,
 				SHA256: digest,
 			},
@@ -163,7 +180,7 @@ func mustWriteProviderPackageDir(t *testing.T, root, source, version, content st
 	t.Helper()
 
 	sourceDir := filepath.Join(root, "src")
-	artifactPath := currentArtifactPath("provider")
+	artifactPath := testArtifactPath("provider")
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte(content), 0755)
 
 	manifest := newProviderManifest(source, version, artifactPath, sha256Hex(content))

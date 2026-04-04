@@ -3,7 +3,6 @@ package pluginpkg
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -18,8 +17,8 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 
 		root := t.TempDir()
 		sourceDir := filepath.Join(root, "provider-json")
-		artifactPath := currentArtifactPath("provider")
-		wire := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider-json"))
+		artifactPath := testArtifactPath("provider")
+		wire := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
 		wire.IconFile = "assets/icon.svg"
 		wire.Provider.ConfigSchemaPath = "schemas/config.schema.json"
 
@@ -209,8 +208,8 @@ func TestManifestWorkflow_AllowsSourceArtifactsWithoutDigestsUntilPackaging(t *t
 
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source-plugin")
-	artifactPath := currentArtifactPath("provider")
-	wire := mustProviderManifest("github.com/acme/plugins/source-only", "0.1.0", runtime.GOOS, runtime.GOARCH, artifactPath, "")
+	artifactPath := testArtifactPath("provider")
+	wire := mustProviderManifest("github.com/acme/plugins/source-only", "0.1.0", testArtifactOS, testArtifactArch, artifactPath, "")
 	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, wire))
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("source-only"), 0o755)
 
@@ -314,9 +313,9 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		{
 			name: "entrypoint references unknown artifact",
 			buildData: func(t *testing.T, dir string) string {
-				artifactPath := currentArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
-				wire.Provider.Exec.ArtifactPath = "artifacts/linux/amd64/provider"
+				artifactPath := testArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				wire.Provider.Exec.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
 			},
@@ -325,8 +324,8 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		{
 			name: "icon file escapes package root",
 			buildData: func(t *testing.T, dir string) string {
-				artifactPath := currentArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-icon", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
+				artifactPath := testArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/bad-icon", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
 				wire.IconFile = "../icon.svg"
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
@@ -336,8 +335,8 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		{
 			name: "rejects unsupported auth type",
 			buildData: func(t *testing.T, dir string) string {
-				artifactPath := currentArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
+				artifactPath := testArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
 				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
 					"default": {
 						Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
@@ -351,8 +350,8 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		{
 			name: "rejects oauth2 auth without token url",
 			buildData: func(t *testing.T, dir string) string {
-				artifactPath := currentArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
+				artifactPath := testArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
 				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
 					"default": {
 						Auth: &pluginmanifestv1.ProviderAuth{
