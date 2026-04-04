@@ -2,7 +2,9 @@ package integration
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -56,7 +58,8 @@ func SynthesizeInputSchema(params []catalog.CatalogParameter) json.RawMessage {
 }
 
 func NormalizeType(t string) string {
-	switch strings.ToLower(t) {
+	t = strings.ToLower(strings.TrimSpace(t))
+	switch t {
 	case schemaTypeInteger, "int":
 		return schemaTypeInteger
 	case schemaTypeNumber, "float", "double":
@@ -67,9 +70,23 @@ func NormalizeType(t string) string {
 		return schemaTypeArray
 	case schemaTypeObject:
 		return schemaTypeObject
+	}
+
+	switch {
+	case strings.HasPrefix(t, schemaTypeArray+"<"), strings.HasPrefix(t, schemaTypeArray+"["):
+		return schemaTypeArray
+	case strings.HasPrefix(t, schemaTypeObject+"{"):
+		return schemaTypeObject
 	default:
 		return schemaTypeString
 	}
+}
+
+type topLevelInputSchema struct {
+	Properties map[string]struct {
+		Type string `json:"type"`
+	} `json:"properties"`
+	Required []string `json:"required"`
 }
 
 // AnnotationsFromMethod derives MCP operation annotations from an HTTP method.
@@ -98,10 +115,40 @@ func CompileSchemas(c *catalog.Catalog) {
 		if op.InputSchema == nil && len(op.Parameters) > 0 {
 			op.InputSchema = SynthesizeInputSchema(op.Parameters)
 		}
+		if len(op.Parameters) == 0 {
+			op.Parameters = parametersFromInputSchema(op.InputSchema)
+		}
 		if op.Annotations == (catalog.OperationAnnotations{}) {
 			op.Annotations = AnnotationsFromMethod(op.Method)
 		}
 	}
+}
+
+func parametersFromInputSchema(raw json.RawMessage) []catalog.CatalogParameter {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var schema topLevelInputSchema
+	if err := json.Unmarshal(raw, &schema); err != nil || len(schema.Properties) == 0 {
+		return nil
+	}
+
+	required := make(map[string]bool, len(schema.Required))
+	for _, name := range schema.Required {
+		required[name] = true
+	}
+
+	names := slices.Sorted(maps.Keys(schema.Properties))
+	params := make([]catalog.CatalogParameter, 0, len(names))
+	for _, name := range names {
+		params = append(params, catalog.CatalogParameter{
+			Name:     name,
+			Type:     NormalizeType(schema.Properties[name].Type),
+			Required: required[name],
+		})
+	}
+	return params
 }
 
 func boolPtr(v bool) *bool { return &v }

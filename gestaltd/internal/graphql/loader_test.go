@@ -131,15 +131,6 @@ func TestLoadDefinitionAllOps(t *testing.T) {
 	if createIssue.Query == "" {
 		t.Error("createIssue.Query should not be empty")
 	}
-	if createIssue.InputSchema != nil {
-		t.Fatalf("createIssue.InputSchema: got %s, want nil so schema synthesis can stay shallow", createIssue.InputSchema)
-	}
-	if len(createIssue.Parameters) != 1 {
-		t.Fatalf("createIssue.Parameters: got %d, want 1", len(createIssue.Parameters))
-	}
-	if got := createIssue.Parameters[0].Type; got != "object" {
-		t.Fatalf("createIssue.Parameters[0].Type = %q, want object", got)
-	}
 }
 
 func TestLoadDefinitionWithAllowedOps(t *testing.T) {

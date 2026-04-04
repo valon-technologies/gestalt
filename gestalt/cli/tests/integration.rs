@@ -203,6 +203,18 @@ fn cli_command(home: &Path) -> Command {
     cmd
 }
 
+fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
+    let dir = tempfile::tempdir().unwrap();
+    std::process::Command::new(env!("CARGO_BIN_EXE_gestalt"))
+        .current_dir(dir.path())
+        .env("GESTALT_API_KEY", "test-token")
+        .arg("--url")
+        .arg(server.url())
+        .args(args)
+        .output()
+        .unwrap()
+}
+
 #[test]
 fn test_list_integrations() {
     let mut server = Server::new();
@@ -349,6 +361,7 @@ fn test_list_operations_formats_parameters() {
     let mut server = Server::new();
     let mock = server
         .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .match_header("Authorization", "Bearer test-token")
         .with_status(200)
         .with_header("Content-Type", "application/json")
         .with_body(
@@ -360,15 +373,44 @@ fn test_list_operations_formats_parameters() {
                     {"name": "id", "type": "string", "location": "path", "required": true, "description": "The ID"},
                     {"name": "mode", "type": "string", "location": "query", "required": false, "description": "Mode"}
                 ]
+            },{
+                "id": "workflowStateCreate",
+                "description": "Creates a workflow state",
+                "method": "POST",
+                "parameters": [
+                    {"name": "input", "type": "object{name!, position, teamId!}", "required": true}
+                ]
+            },{
+                "id": "save_comment",
+                "description": "Create or update a comment",
+                "method": "POST",
+                "parameters": [
+                    {"name": "body", "type": "string", "required": true},
+                    {"name": "issueId", "type": "string", "required": true}
+                ]
             }]"#,
         )
         .create();
 
-    let client = create_client(&server);
-    let result = gestalt::commands::invoke::list_operations(&client, "test_svc", Format::Table);
-
+    let output = run_cli(&server, &["invoke", "test_svc"]);
     mock.assert();
-    assert!(result.is_ok());
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("id=<string> [path]"), "stdout: {stdout}");
+    assert!(stdout.contains("mode=<string> [query]"), "stdout: {stdout}");
+    assert!(stdout.contains("workflowStateCreate"), "stdout: {stdout}");
+    assert!(stdout.contains("object{name!,"), "stdout: {stdout}");
+    assert!(stdout.contains("position, teamId!}>"), "stdout: {stdout}");
+    assert!(stdout.contains("-p body=<string>"), "stdout: {stdout}",);
+    assert!(stdout.contains("issueId=<string>"), "stdout: {stdout}",);
+    assert!(
+        stdout.matches("(required)").count() >= 3,
+        "stdout: {stdout}"
+    );
 }
 
 #[test]

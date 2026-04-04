@@ -84,12 +84,37 @@ func argsToParams(schema *Schema, args []InputValue) []provider.ParameterDef {
 	for _, arg := range args {
 		params = append(params, provider.ParameterDef{
 			Name:        arg.Name,
-			Type:        graphqlTypeToSimple(schema, arg.Type),
+			Type:        graphqlParamType(schema, arg.Type),
 			Description: arg.Description,
 			Required:    arg.Type.isNonNull(),
 		})
 	}
 	return params
+}
+
+func graphqlParamType(schema *Schema, ref TypeRef) string {
+	if ref.isList() {
+		return "array"
+	}
+
+	typeName := ref.innerType().namedType()
+	ft := schema.lookupType(typeName)
+	if ft == nil || ft.Kind != KindInputObject {
+		return graphqlTypeToSimple(schema, ref)
+	}
+	if len(ft.InputFields) == 0 {
+		return "object"
+	}
+
+	fields := make([]string, 0, len(ft.InputFields))
+	for _, field := range ft.InputFields {
+		name := field.Name
+		if field.Type.isNonNull() {
+			name += "!"
+		}
+		fields = append(fields, name)
+	}
+	return "object{" + strings.Join(fields, ", ") + "}"
 }
 
 func graphqlTypeToSimple(schema *Schema, ref TypeRef) string {
