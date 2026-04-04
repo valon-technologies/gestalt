@@ -181,4 +181,34 @@ test.describe("Authentication", () => {
     await expect(page).toHaveURL(/\/login/);
     await expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
   });
+
+  test("admin metrics html fallback shows a clear unavailable message", async ({
+    page,
+  }) => {
+    await mockAuthInfo(page, {
+      provider: "test-sso",
+      display_name: "Test SSO",
+    });
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html><body>not metrics</body></html>",
+      });
+    });
+
+    await page.goto("/login");
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem("user_email", "test@gestalt.dev");
+    });
+    await page.goto("/admin/");
+    await expect(
+      page.locator("#status").getByText("Prometheus metrics are unavailable."),
+    ).toBeVisible();
+    await expect(
+      page.locator("#metrics-output").getByText("Prometheus metrics are unavailable."),
+    ).toBeVisible();
+  });
 });

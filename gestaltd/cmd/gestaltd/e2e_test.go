@@ -499,6 +499,49 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 	}
 }
 
+func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: noop
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusServiceUnavailable)
+		if !bytes.Contains(promBody, []byte("Prometheus metrics are unavailable")) {
+			t.Fatalf("expected disabled metrics message in /metrics body: %s", promBody)
+		}
+
+		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
+		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
+			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
+		}
+	})
+}
+
 func TestE2EServeLockedUsesUIPluginForClientRootAndKeepsAdminBuiltIn(t *testing.T) {
 	t.Parallel()
 

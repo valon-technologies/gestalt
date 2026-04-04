@@ -260,7 +260,8 @@ telemetry:
 ```
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead.
-This also disables `/metrics`, so the built-in admin UI has no metrics to show.
+This disables Prometheus scraping. `/metrics` returns a clear unavailable
+response, and the built-in admin UI shows that metrics are unavailable.
 
 ### Trace spans
 

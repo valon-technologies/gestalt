@@ -104,11 +104,18 @@
               return;
             }
 
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            const body = await response.text();
+
             if (!response.ok) {
-              throw new Error(`Failed to fetch /metrics (${response.status})`);
+              throw new Error(body.trim() || `Failed to fetch /metrics (${response.status})`);
             }
 
-            metricsEl.textContent = await response.text();
+            if (contentType.includes("text/html")) {
+              throw new Error("Prometheus metrics are unavailable.");
+            }
+
+            metricsEl.textContent = body;
             statusEl.className = "card status";
             statusEl.textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
           } catch (error) {

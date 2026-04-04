@@ -27,12 +27,10 @@ func (s *Server) routes() {
 func (s *Server) mountCoreRoutes(r chi.Router) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
-	if s.prometheusMetrics != nil {
-		r.Group(func(r chi.Router) {
-			r.Use(s.authMiddleware)
-			r.Handle("/metrics", s.prometheusMetrics)
-		})
-	}
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+		r.HandleFunc("/metrics", s.servePrometheusMetrics)
+	})
 }
 
 func (s *Server) mountAdminUIRoutes(r chi.Router) {
@@ -62,4 +60,12 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 		s.mountAuthRoutes(r)
 		s.mountAuthenticatedRoutes(r)
 	})
+}
+
+func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.prometheusMetrics == nil {
+		http.Error(w, "Prometheus metrics are unavailable because telemetry metrics are disabled.", http.StatusServiceUnavailable)
+		return
+	}
+	s.prometheusMetrics.ServeHTTP(w, r)
 }
