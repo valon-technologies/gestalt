@@ -44,10 +44,6 @@ pub struct OperationsCatalog {
 }
 
 impl OperationsCatalog {
-    pub fn new(operations: Vec<CatalogOperation>) -> Self {
-        Self { operations }
-    }
-
     pub fn find_operation(&self, name: &str) -> Option<&CatalogOperation> {
         self.operations.iter().find(|op| op.id == name)
     }

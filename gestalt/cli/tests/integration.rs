@@ -4,8 +4,11 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use assert_cmd::Command;
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
+use predicates::prelude::*;
+use tempfile::TempDir;
 
 fn create_client(server: &Server) -> gestalt::api::ApiClient {
     gestalt::api::ApiClient::new(&server.url(), "test-token").unwrap()
@@ -190,6 +193,16 @@ fn write_http_response(stream: &mut TcpStream, status: &str, content_type: &str,
     .unwrap();
 }
 
+fn cli_command(home: &Path) -> Command {
+    std::fs::create_dir_all(home).unwrap();
+    let mut cmd = Command::cargo_bin("gestalt").unwrap();
+    cmd.env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join("xdg-config"))
+        .env_remove(gestalt::api::ENV_API_KEY)
+        .env_remove("GESTALT_URL");
+    cmd
+}
+
 #[test]
 fn test_list_integrations() {
     let mut server = Server::new();
@@ -291,28 +304,6 @@ fn test_execute_operation() {
 
     mock.assert();
     assert_eq!(resp["results"], serde_json::json!([]));
-}
-
-#[test]
-fn test_list_integrations_table_format() {
-    let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[
-                {"name": "test_svc", "description": "A short description", "connected": true},
-                {"name": "other_svc", "description": "Another service", "connected": false}
-            ]"#,
-        )
-        .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::integrations::list(&client, Format::Table);
-
-    mock.assert();
-    assert!(result.is_ok());
 }
 
 #[test]
@@ -558,57 +549,11 @@ fn catalog_body() -> &'static str {
         "method": "POST",
         "parameters": [
             {"name": "name", "type": "string", "location": "query", "required": true},
-            {"name": "count", "type": "integer", "location": "query"}
+            {"name": "count", "type": "integer", "location": "query"},
+            {"name": "tags", "type": "array", "location": "query"}
         ],
         "transport": "rest"
     }]"#
-}
-
-#[test]
-fn test_invoke_typed_params() {
-    let mut server = Server::new();
-
-    let _catalog_mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
-
-    let invoke_mock = server
-        .mock("POST", "/api/v1/test_svc/do_thing")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"count":42,"name":"test"}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"ok": true}"#)
-        .create();
-
-    let params = vec![
-        gestalt::params::ParamEntry {
-            key: "count".to_string(),
-            value: gestalt::params::ParamValue::JsonVal(serde_json::json!(42)),
-        },
-        gestalt::params::ParamEntry {
-            key: "name".to_string(),
-            value: gestalt::params::ParamValue::StringVal("test".to_string()),
-        },
-    ];
-
-    let client = create_client(&server);
-    let result = gestalt::commands::invoke::invoke(
-        &client,
-        "test_svc",
-        "do_thing",
-        &params,
-        gestalt::commands::invoke::InvokeOptions::default(),
-        Format::Json,
-    );
-
-    invoke_mock.assert();
-    assert!(result.is_ok());
 }
 
 #[test]
@@ -673,4 +618,131 @@ fn test_describe_operation() {
 
     mock.assert();
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_cli_config_set_and_get_json() {
+    let home = TempDir::new().unwrap();
+
+    let mut set_cmd = cli_command(home.path());
+    set_cmd.args(["config", "set", "url", "localhost:9999"]);
+    set_cmd
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("url = https://localhost:9999"));
+
+    let mut get_cmd = cli_command(home.path());
+    get_cmd.args(["--format", "json", "config", "get", "url"]);
+    get_cmd.assert().success().stdout(predicate::str::contains(
+        "\"url\": \"https://localhost:9999\"",
+    ));
+}
+
+#[test]
+fn test_cli_integrations_list_table_output() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+    let mock = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
+        )
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.env("GESTALT_API_KEY", "test-token")
+        .args(["--url", &server.url(), "integrations", "list"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("GITHUB").or(predicate::str::contains("github")))
+        .stdout(predicate::str::contains("GitHub integration"))
+        .stdout(predicate::str::contains("CONNECTED").or(predicate::str::contains("connected")));
+
+    mock.assert();
+}
+
+#[test]
+fn test_cli_invoke_merges_file_params_and_selects_output() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+    let input_file = home.path().join("input.json");
+    std::fs::write(&input_file, r#"{"count":1,"name":"from-file"}"#).unwrap();
+
+    let _catalog_mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(catalog_body())
+        .create();
+
+    let invoke_mock = server
+        .mock("POST", "/api/v1/test_svc/do_thing")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"count":42,"name":"override","tags":["one","two"]}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"result":{"id":"1"}}"#)
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.env("GESTALT_API_KEY", "test-token").args([
+        "--url",
+        &server.url(),
+        "--format",
+        "json",
+        "invoke",
+        "test_svc",
+        "do_thing",
+        "-p",
+        "name=override",
+        "-p",
+        "count:=42",
+        "-p",
+        "tags=one",
+        "-p",
+        "tags=two",
+        "--input-file",
+        input_file.to_str().unwrap(),
+        "--select",
+        "result.id",
+    ]);
+    cmd.assert().success().stdout("\"1\"\n");
+
+    invoke_mock.assert();
+}
+
+#[test]
+fn test_cli_invoke_rejects_duplicate_scalar_params() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+    let _catalog_mock = server
+        .mock("GET", "/api/v1/integrations/test_svc/operations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(catalog_body())
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.env("GESTALT_API_KEY", "test-token").args([
+        "--url",
+        &server.url(),
+        "invoke",
+        "test_svc",
+        "do_thing",
+        "-p",
+        "name=first",
+        "-p",
+        "name=second",
+    ]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "parameter 'name' is not an array type but was specified multiple times",
+    ));
 }
