@@ -101,14 +101,13 @@ at `/metrics`.
 
 The Prometheus endpoint and OTLP export hang off the same broker
 instrumentation point. The embedded admin UI at `/admin` reads `/metrics`
-directly and renders a lightweight operator-facing view without introducing a
-second admin JSON API.
+directly and renders the authenticated scrape output without introducing a
+second admin JSON API or any custom aggregation layer.
 
 The admin UI intentionally stays basic:
 
-- cumulative counters and histograms from `/metrics`
-- provider and operation breakdowns derived from metric labels
-- recent throughput computed from browser-side scrape deltas
+- raw Prometheus text from `/metrics`
+- periodic browser refreshes
 - no persisted history
 - no cross-replica aggregation
 

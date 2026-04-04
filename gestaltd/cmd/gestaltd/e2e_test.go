@@ -398,9 +398,8 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
 		}
-		adminJS := getEndpointBody(t, baseURL+"/admin/app.js", http.StatusOK)
-		if !bytes.Contains(adminJS, []byte(`fetch("/metrics"`)) {
-			t.Fatalf("expected admin ui script to read /metrics: %s", adminJS)
+		if !bytes.Contains(adminBody, []byte(`fetch("/metrics"`)) {
+			t.Fatalf("expected admin ui to read /metrics directly: %s", adminBody)
 		}
 	})
 

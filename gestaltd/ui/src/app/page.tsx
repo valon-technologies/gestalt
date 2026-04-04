@@ -108,7 +108,7 @@ export default function DashboardPage() {
               Metrics moved to the admin UI
             </h2>
             <p className="mt-3 max-w-2xl text-sm text-muted">
-              Prometheus metrics and the built-in admin dashboard now live at
+              Prometheus metrics now live at
               <span className="font-mono text-primary"> /admin</span> so this
               client workspace stays focused on integrations and tokens.
             </p>
