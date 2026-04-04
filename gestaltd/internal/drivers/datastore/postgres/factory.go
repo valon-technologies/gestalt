@@ -6,6 +6,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlstore"
 )
 
-var Factory bootstrap.DatastoreFactory = sqlstore.NewVersionedDSNFactory("postgres", func(cfg sqlstore.VersionedDSNConfig, encryptionKey []byte) (core.Datastore, error) {
-	return New(cfg.DSN, cfg.Version, encryptionKey)
+var Factory bootstrap.DatastoreFactory = sqlstore.NewDSNFactory("postgres", func(dsn string, encryptionKey []byte) (core.Datastore, error) {
+	return New(dsn, encryptionKey)
 })

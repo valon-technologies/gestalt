@@ -27,14 +27,6 @@ func testDSN(t *testing.T) string {
 // Each test gets its own PostgreSQL schema so tests do not interfere with
 // each other.
 func newTestStore(t *testing.T) *Store {
-	store, err := openTestStore(t, "")
-	if err != nil {
-		t.Fatalf("openTestStore: %v", err)
-	}
-	return store
-}
-
-func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	dsn := testDSN(t)
 
@@ -42,13 +34,13 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("opening postgres for schema setup: %w", err)
+		t.Fatalf("opening postgres for schema setup: %v", err)
 	}
 
 	_, err = db.Exec(fmt.Sprintf("CREATE SCHEMA %s", schema))
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("creating schema %s: %w", schema, err)
+		t.Fatalf("creating schema %s: %v", schema, err)
 	}
 	_ = db.Close()
 
@@ -59,14 +51,14 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 	}
 	schemaDSN := dsn + sep + "search_path=" + schema
 
-	store, err := New(schemaDSN, version, coretesting.EncryptionKey(t))
+	store, err := New(schemaDSN, coretesting.EncryptionKey(t))
 	if err != nil {
 		cleanDB, cleanErr := sql.Open("pgx", dsn)
 		if cleanErr == nil {
 			_, _ = cleanDB.Exec(fmt.Sprintf("DROP SCHEMA %s CASCADE", schema))
 			_ = cleanDB.Close()
 		}
-		return nil, fmt.Errorf("New: %w", err)
+		t.Fatalf("New: %v", err)
 	}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = store.Close()
@@ -75,7 +67,7 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 			_, _ = cleanDB.Exec(fmt.Sprintf("DROP SCHEMA %s CASCADE", schema))
 			_ = cleanDB.Close()
 		}
-		return nil, fmt.Errorf("Migrate: %w", err)
+		t.Fatalf("Migrate: %v", err)
 	}
 
 	t.Cleanup(func() {
@@ -87,7 +79,7 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 		}
 	})
 
-	return store, nil
+	return store
 }
 
 func uuidNoDashes(t *testing.T) string {
@@ -132,19 +124,6 @@ func TestPostgresDatastoreConformance(t *testing.T) {
 			if err == nil {
 				t.Error("expected foreign key violation, got nil error")
 			}
-		},
-	})
-}
-
-func TestPostgresVersionSelection(t *testing.T) {
-	t.Parallel()
-	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
-		SupportedVersions: supportedVersions,
-		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
-			return openTestStore(t, version)
-		},
-		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
-			return resolveVersion(ctx, ds.(*Store).DB, requested)
 		},
 	})
 }

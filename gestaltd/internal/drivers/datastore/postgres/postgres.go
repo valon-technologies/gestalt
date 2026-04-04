@@ -74,8 +74,8 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dsn, requestedVersion string, encryptionKey []byte) (*Store, error) {
-	s, err := sqlstore.OpenVersioned("pgx", dsn, encryptionKey, dialect{}, requestedVersion, resolveVersion)
+func New(dsn string, encryptionKey []byte) (*Store, error) {
+	s, err := sqlstore.OpenVersioned("pgx", dsn, encryptionKey, dialect{}, "", resolveVersion)
 	if err != nil {
 		return nil, err
 	}

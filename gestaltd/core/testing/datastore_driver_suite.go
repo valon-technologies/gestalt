@@ -15,12 +15,6 @@ type DatastoreDriverHooks struct {
 	AssertRejectsOrphanTokenInsert func(t *testing.T, ctx context.Context, ds core.Datastore)
 }
 
-type DatastoreVersionHooks struct {
-	SupportedVersions []string
-	OpenStore         func(t *testing.T, version string) (core.Datastore, error)
-	DetectVersion     func(ctx context.Context, ds core.Datastore, requested string) (string, error)
-}
-
 // RunDatastoreDriverTests adds shared driver-level integration coverage.
 func RunDatastoreDriverTests(t *testing.T, newStore func(t *testing.T) core.Datastore, hooks DatastoreDriverHooks) {
 	t.Helper()
@@ -207,49 +201,4 @@ func RunDatastoreDriverTests(t *testing.T, newStore func(t *testing.T) core.Data
 			hooks.AssertRejectsOrphanTokenInsert(t, context.Background(), ds)
 		})
 	}
-}
-
-func RunDatastoreVersionTests(t *testing.T, hooks DatastoreVersionHooks) {
-	t.Helper()
-
-	ctx := context.Background()
-
-	autoStore, err := hooks.OpenStore(t, "auto")
-	if err != nil {
-		t.Fatalf("OpenStore(auto): %v", err)
-	}
-
-	autoVersion, err := hooks.DetectVersion(ctx, autoStore, "auto")
-	if err != nil {
-		t.Fatalf("DetectVersion(auto): %v", err)
-	}
-
-	explicitStore, err := hooks.OpenStore(t, autoVersion)
-	if err != nil {
-		t.Fatalf("OpenStore(%q): %v", autoVersion, err)
-	}
-
-	explicitVersion, err := hooks.DetectVersion(ctx, explicitStore, autoVersion)
-	if err != nil {
-		t.Fatalf("DetectVersion(%q): %v", autoVersion, err)
-	}
-	if explicitVersion != autoVersion {
-		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
-	}
-
-	for _, version := range hooks.SupportedVersions {
-		if version == autoVersion {
-			continue
-		}
-		ds, err := hooks.OpenStore(t, version)
-		if err == nil {
-			if ds != nil {
-				_ = ds.Close()
-			}
-			t.Fatalf("OpenStore(%q) succeeded against %q", version, autoVersion)
-		}
-		return
-	}
-
-	t.Fatal("SupportedVersions did not include a mismatched version to test")
 }

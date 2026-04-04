@@ -62,7 +62,7 @@ type apiTokenDoc struct {
 	UpdatedAt   time.Time  `bson:"updated_at"`
 }
 
-func New(uri, database, requestedVersion string, encryptionKey []byte) (*Store, error) {
+func New(uri, database string, encryptionKey []byte) (*Store, error) {
 	enc, err := crypto.NewAESGCM(encryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("mongodb: creating encryptor: %w", err)
@@ -78,7 +78,7 @@ func New(uri, database, requestedVersion string, encryptionKey []byte) (*Store, 
 		return nil, fmt.Errorf("mongodb: ping: %w", err)
 	}
 
-	if _, err := resolveVersion(context.Background(), client, requestedVersion); err != nil {
+	if _, err := resolveVersion(context.Background(), client, ""); err != nil {
 		_ = client.Disconnect(context.Background())
 		return nil, err
 	}

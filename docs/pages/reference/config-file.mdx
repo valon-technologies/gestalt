@@ -139,22 +139,24 @@ datastore:
 | Provider | Config fields | Purpose |
 | --- | --- | --- |
 | `sqlite` | `path` | Defaults to `./gestalt.db`. Single-node deployments. |
-| `postgres` | `dsn`, `version` | Recommended production datastore. |
+| `postgres` | `dsn` | Recommended production datastore. |
 | `mysql` | `dsn`, `version` | SQL-backed production option. |
 | `dynamodb` | `table`, `region`, `endpoint` | `table` defaults to `gestalt`. |
-| `mongodb` | `uri`, `database`, `version` | `database` defaults to `gestalt`. |
-| `oracle` | `dsn`, `version` | Enterprise SQL option. |
+| `mongodb` | `uri`, `database` | `database` defaults to `gestalt`. |
+| `oracle` | `dsn` | Enterprise SQL option. |
 | `firestore` | `project_id`, `database` | Firestore-backed deployment. |
-| `sqlserver` | `dsn`, `version` | SQL Server-backed deployment. |
+| `sqlserver` | `dsn` | SQL Server-backed deployment. |
 
-For versioned datastores, `version` defaults to `auto`, which detects the
-connected backend and validates it against the supported release series.
+Gestalt auto-detects and validates the connected backend release series for the
+versioned datastores below. Only MySQL currently uses an explicit `version`
+override because its SQL dialect changes across supported series. For the other
+datastores, a legacy `version` field is ignored for backward compatibility.
 
 - `postgres`: `15`, `16`, `17`, `18`
 - `mysql`: `8.0`, `8.4`, `9.6`
 - `mongodb`: `7`, `8`
 - `oracle`: `19c`, `26ai`
-- `sqlserver`: `2017`, `2019`, `2022`, `azure`
+- `sqlserver`: `2017`, `2019`, `2022`, Azure SQL
 
 `sqlite` uses the bundled SQLite engine, and `dynamodb` / `firestore` are
 managed services, so those providers do not accept a `version` field. The

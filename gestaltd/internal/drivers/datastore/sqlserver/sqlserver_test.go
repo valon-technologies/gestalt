@@ -3,16 +3,12 @@ package sqlserver
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
-
-var testDBMu sync.Mutex
 
 func testDSN(t *testing.T) string {
 	t.Helper()
@@ -45,56 +41,29 @@ IF OBJECT_ID('users', 'U') IS NOT NULL DROP TABLE users;
 }
 
 func newTestStore(t *testing.T) *Store {
-	store, err := openTestStore(t, "")
-	if err != nil {
-		t.Fatalf("openTestStore: %v", err)
-	}
-	return store
-}
-
-func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	dsn := testDSN(t)
 	resetTestDB(t, dsn)
 
-	store, err := New(dsn, version, coretesting.EncryptionKey(t))
+	store, err := New(dsn, coretesting.EncryptionKey(t))
 	if err != nil {
-		return nil, fmt.Errorf("New: %w", err)
+		t.Fatalf("New: %v", err)
 	}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("Migrate: %w", err)
+		t.Fatalf("Migrate: %v", err)
 	}
 
 	t.Cleanup(func() {
 		_ = store.Close()
 		resetTestDB(t, dsn)
 	})
-	return store, nil
+	return store
 }
 
 func TestSQLServerDatastoreConformance(t *testing.T) {
 	t.Parallel()
-	testDBMu.Lock()
-	defer testDBMu.Unlock()
-
 	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
-	})
-}
-
-func TestSQLServerVersionSelection(t *testing.T) {
-	t.Parallel()
-	testDBMu.Lock()
-	defer testDBMu.Unlock()
-
-	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
-		SupportedVersions: supportedVersions,
-		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
-			return openTestStore(t, version)
-		},
-		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
-			return resolveVersion(ctx, ds.(*Store).DB, requested)
-		},
 	})
 }

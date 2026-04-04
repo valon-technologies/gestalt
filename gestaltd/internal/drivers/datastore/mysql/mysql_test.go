@@ -136,15 +136,45 @@ func TestMySQLDatastoreConformance(t *testing.T) {
 
 func TestMySQLVersionSelection(t *testing.T) {
 	t.Parallel()
-	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
-		SupportedVersions: supportedVersions,
-		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
-			return openTestStore(t, version)
-		},
-		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
-			return resolveVersion(ctx, ds.(*Store).DB, requested)
-		},
-	})
+
+	autoStore, err := openTestStore(t, "auto")
+	if err != nil {
+		t.Fatalf("openTestStore(auto): %v", err)
+	}
+
+	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
+	if err != nil {
+		t.Fatalf("resolveVersion(auto): %v", err)
+	}
+
+	explicitStore, err := openTestStore(t, autoVersion)
+	if err != nil {
+		t.Fatalf("openTestStore(%q): %v", autoVersion, err)
+	}
+
+	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
+	if err != nil {
+		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
+	}
+	if explicitVersion != autoVersion {
+		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
+	}
+
+	for _, version := range supportedVersions {
+		if version == autoVersion {
+			continue
+		}
+		ds, err := openTestStore(t, version)
+		if err == nil {
+			if ds != nil {
+				_ = ds.Close()
+			}
+			t.Fatalf("openTestStore(%q) succeeded against %q", version, autoVersion)
+		}
+		return
+	}
+
+	t.Fatal("supportedVersions did not include a mismatched version to test")
 }
 
 func shortUUID() string {
