@@ -73,7 +73,6 @@ func openTestStore(t *testing.T, version string) (*Store, error) {
 }
 
 func TestOracleDatastoreConformance(t *testing.T) {
-	t.Parallel()
 	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
 	})
