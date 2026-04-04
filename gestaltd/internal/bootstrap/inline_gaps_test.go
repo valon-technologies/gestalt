@@ -16,7 +16,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -110,127 +109,56 @@ func serveOpenAPISpec(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func graphqlStringPtr(s string) *string { return &s }
-
-func testGraphQLSchema() graphqlupstream.Schema {
-	return graphqlupstream.Schema{
-		QueryType: &graphqlupstream.TypeName{Name: "Query"},
-		Types: []graphqlupstream.FullType{
-			{
-				Kind: graphqlupstream.KindObject,
-				Name: "Query",
-				Fields: []graphqlupstream.Field{
-					{
-						Name:        "teams",
-						Description: "List all teams",
-						Args: []graphqlupstream.InputValue{
-							{
-								Name: "first",
-								Type: graphqlupstream.TypeRef{
-									Kind: graphqlupstream.KindScalar,
-									Name: graphqlStringPtr("Int"),
-								},
-							},
-						},
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindObject,
-							Name: graphqlStringPtr("TeamConnection"),
-						},
-					},
-					{
-						Name:        "viewer",
-						Description: "Get the current viewer",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindObject,
-							Name: graphqlStringPtr("Viewer"),
-						},
-					},
-				},
-			},
-			{
-				Kind: graphqlupstream.KindObject,
-				Name: "TeamConnection",
-				Fields: []graphqlupstream.Field{
-					{
-						Name: "nodes",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindList,
-							OfType: &graphqlupstream.TypeRef{
-								Kind: graphqlupstream.KindObject,
-								Name: graphqlStringPtr("Team"),
-							},
-						},
-					},
-					{
-						Name: "pageInfo",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindObject,
-							Name: graphqlStringPtr("PageInfo"),
-						},
-					},
-				},
-			},
-			{
-				Kind: graphqlupstream.KindObject,
-				Name: "Team",
-				Fields: []graphqlupstream.Field{
-					{
-						Name: "id",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindScalar,
-							Name: graphqlStringPtr("ID"),
-						},
-					},
-					{
-						Name: "name",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindScalar,
-							Name: graphqlStringPtr("String"),
-						},
-					},
-				},
-			},
-			{
-				Kind: graphqlupstream.KindObject,
-				Name: "PageInfo",
-				Fields: []graphqlupstream.Field{
-					{
-						Name: "hasNextPage",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindScalar,
-							Name: graphqlStringPtr("Boolean"),
-						},
-					},
-					{
-						Name: "endCursor",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindScalar,
-							Name: graphqlStringPtr("String"),
-						},
-					},
-				},
-			},
-			{
-				Kind: graphqlupstream.KindObject,
-				Name: "Viewer",
-				Fields: []graphqlupstream.Field{
-					{
-						Name: "login",
-						Type: graphqlupstream.TypeRef{
-							Kind: graphqlupstream.KindScalar,
-							Name: graphqlStringPtr("String"),
-						},
-					},
-				},
-			},
-		},
-	}
-}
+const graphQLIntrospectionResponse = `{
+  "data": {
+    "__schema": {
+      "queryType": { "name": "Query" },
+      "types": [
+        {
+          "kind": "OBJECT",
+          "name": "Query",
+          "fields": [
+            {
+              "name": "teams",
+              "args": [
+                { "name": "first", "type": { "kind": "SCALAR", "name": "Int" } }
+              ],
+              "type": { "kind": "OBJECT", "name": "TeamConnection" }
+            }
+          ]
+        },
+        {
+          "kind": "OBJECT",
+          "name": "TeamConnection",
+          "fields": [
+            { "name": "nodes", "type": { "kind": "LIST", "ofType": { "kind": "OBJECT", "name": "Team" } } },
+            { "name": "pageInfo", "type": { "kind": "OBJECT", "name": "PageInfo" } }
+          ]
+        },
+        {
+          "kind": "OBJECT",
+          "name": "Team",
+          "fields": [
+            { "name": "id", "type": { "kind": "SCALAR", "name": "ID" } },
+            { "name": "name", "type": { "kind": "SCALAR", "name": "String" } }
+          ]
+        },
+        {
+          "kind": "OBJECT",
+          "name": "PageInfo",
+          "fields": [
+            { "name": "hasNextPage", "type": { "kind": "SCALAR", "name": "Boolean" } },
+            { "name": "endCursor", "type": { "kind": "SCALAR", "name": "String" } }
+          ]
+        }
+      ]
+    }
+  }
+}`
 
 func serveGraphQLBackend(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	schema := testGraphQLSchema()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -246,11 +174,8 @@ func serveGraphQLBackend(t *testing.T) *httptest.Server {
 
 		switch {
 		case strings.Contains(body.Query, "__schema"):
-			writeTestJSON(w, map[string]any{
-				"data": map[string]any{
-					"__schema": schema,
-				},
-			})
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(graphQLIntrospectionResponse))
 		case strings.Contains(body.Query, "teams"):
 			if !strings.Contains(body.Query, "$first: Int") {
 				t.Fatalf("query missing variable declaration: %q", body.Query)
