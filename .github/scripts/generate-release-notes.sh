@@ -3,9 +3,17 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <artifact> <current-tag> <output-file>" >&2
+  echo "usage: $0 <tag-glob> <current-tag> <output-file> <path-filter> [<path-filter> ...]" >&2
   exit 1
 }
+
+tag_glob=${1:-}
+current_tag=${2:-}
+output_file=${3:-}
+shift 3
+path_filters=("$@")
+
+[[ -n "$tag_glob" && -n "$current_tag" && -n "$output_file" && ${#path_filters[@]} -gt 0 ]] || usage
 
 join_by() {
   local separator=$1
@@ -21,44 +29,26 @@ join_by() {
   done
 }
 
-artifact=${1:-}
-current_tag=${2:-}
-output_file=${3:-}
-
-[[ -n "$artifact" && -n "$current_tag" && -n "$output_file" ]] || usage
-
-case "$artifact" in
-  gestalt)
-    pathspecs=("gestalt")
-    ;;
-  gestaltd)
-    pathspecs=("gestaltd")
-    ;;
-  *)
-    echo "unsupported artifact: $artifact" >&2
-    exit 1
-    ;;
-esac
-
 if ! git rev-parse --verify --quiet "refs/tags/$current_tag" >/dev/null; then
   echo "tag not found: $current_tag" >&2
   exit 1
 fi
 
 previous_tag=""
-if previous_tag=$(git describe --tags --abbrev=0 --match "${artifact}/v*" "${current_tag}^" 2>/dev/null); then
+if previous_tag=$(git describe --tags --abbrev=0 --match "$tag_glob" "${current_tag}^" 2>/dev/null); then
   range="${previous_tag}..${current_tag}"
 else
   previous_tag=""
   range="$current_tag"
 fi
 
-path_filter_label=$(join_by ', ' "${pathspecs[@]}")
 commits=()
 while IFS=$'\t' read -r sha subject; do
   [[ -n "$sha" ]] || continue
   commits+=("${sha}"$'\t'"${subject}")
-done < <(git log --reverse --first-parent --format='%H%x09%s' "$range" -- "${pathspecs[@]}")
+done < <(git log --reverse --first-parent --format='%H%x09%s' "$range" -- "${path_filters[@]}")
+
+path_filter_label=$(join_by ', ' "${path_filters[@]}")
 
 {
   printf '## Changes\n\n'
@@ -66,7 +56,7 @@ done < <(git log --reverse --first-parent --format='%H%x09%s' "$range" -- "${pat
   if [[ -n "$previous_tag" ]]; then
     printf 'Scoped to `%s` changes since `%s`.\n\n' "$path_filter_label" "$previous_tag"
   else
-    printf 'Scoped to `%s` changes in the first `%s` release.\n\n' "$path_filter_label" "$artifact"
+    printf 'Scoped to `%s` changes in the first release matching `%s`.\n\n' "$path_filter_label" "$tag_glob"
   fi
 
   if [[ ${#commits[@]} -eq 0 ]]; then
