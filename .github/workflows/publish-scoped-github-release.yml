@@ -7,8 +7,8 @@ on:
         description: Tag glob used to find the previous release tag.
         required: true
         type: string
-      path-filter:
-        description: Path filter used to scope release notes.
+      path-filters:
+        description: Newline-delimited path filters used to scope release notes.
         required: true
         type: string
       download-artifact-pattern:
@@ -37,12 +37,20 @@ jobs:
           path: release
           merge-multiple: true
       - name: Generate scoped release notes
+        env:
+          PATH_FILTERS: ${{ inputs.path-filters }}
         run: |
+          path_filters=()
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            path_filters+=("$path")
+          done <<< "$PATH_FILTERS"
+
           .github/scripts/generate-release-notes.sh \
             "${{ inputs.tag-glob }}" \
-            "${{ inputs.path-filter }}" \
             "${{ github.ref_name }}" \
-            release-notes.md
+            release-notes.md \
+            "${path_filters[@]}"
       - name: Create GitHub Release with assets
         if: ${{ inputs.download-artifact-pattern != '' }}
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
