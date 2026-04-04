@@ -90,30 +90,14 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Attach to Release
+    name: Publish Release
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 0
-      - name: Generate scoped release notes
-        run: .github/scripts/generate-release-notes.sh gestaltd "${{ github.ref_name }}" release-notes.md
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          path: artifacts
-      - name: Flatten artifacts
-        run: |
-          mkdir release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} release/ \;
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
-        with:
-          files: release/*
-          body_path: release-notes.md
-          draft: false
-          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+    uses: ./.github/workflows/publish-scoped-github-release.yml
+    with:
+      tag-glob: 'gestaltd/v*'
+      path-filters: |
+        gestaltd
+      download-artifact-pattern: 'gestaltd-*'
 
   publish-image:
     name: Publish Docker Image
