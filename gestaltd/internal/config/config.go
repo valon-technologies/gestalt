@@ -3,8 +3,10 @@ package config
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -174,33 +176,13 @@ func (p *PluginDef) DeclaresMCP() bool {
 	return provider.MCP || provider.IsSpecLoaded() || len(provider.Operations) > 0
 }
 
-type InlineOperationDef struct {
-	Name        string                 `yaml:"name"`
-	Description string                 `yaml:"description"`
-	Method      string                 `yaml:"method"`
-	Path        string                 `yaml:"path"`
-	Parameters  []InlineOperationParam `yaml:"parameters"`
-}
-
-type InlineOperationParam struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	In          string `yaml:"in"`
-	Description string `yaml:"description"`
-	Required    bool   `yaml:"required"`
-}
-
-type ResponseMappingDef struct {
-	DataPath   string             `yaml:"data_path"`
-	Pagination *PaginationMapping `yaml:"pagination"`
-}
+type InlineOperationDef = pluginmanifestv1.ProviderOperation
+type InlineOperationParam = pluginmanifestv1.ProviderParameter
 
 type ManagedParameterDef = pluginmanifestv1.ManagedParameter
 
-type PaginationMapping struct {
-	HasMorePath string `yaml:"has_more_path"`
-	CursorPath  string `yaml:"cursor_path"`
-}
+type ResponseMappingDef = pluginmanifestv1.ManifestResponseMapping
+type PaginationMapping = pluginmanifestv1.ManifestPaginationMapping
 
 type SecretsConfig struct {
 	Provider string    `yaml:"provider"`
@@ -264,22 +246,13 @@ type ConnectionAuthDef struct {
 	AuthMapping         *AuthMappingDef      `yaml:"auth_mapping"`
 }
 
-type CredentialFieldDef struct {
-	Name        string `yaml:"name"`
-	Label       string `yaml:"label"`
-	Description string `yaml:"description"`
-	HelpURL     string `yaml:"help_url"`
-}
+type CredentialFieldDef = pluginmanifestv1.CredentialField
 
 type AuthMappingDef struct {
 	Headers map[string]string `yaml:"headers"`
 }
 
-type ConnectionParamDef struct {
-	Required    bool   `yaml:"required"`
-	Description string `yaml:"description"`
-	From        string `yaml:"from"`
-}
+type ConnectionParamDef = pluginmanifestv1.ProviderConnectionParam
 
 // ResolveConnectionAlias maps the user-facing "plugin" alias to the
 // internal PluginConnectionName. All other names pass through unchanged.
@@ -394,7 +367,7 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	}
 	MergeConnectionAuth(&dst.Auth, src.Auth)
 	if len(src.ConnectionParams) > 0 {
-		dst.ConnectionParams = src.ConnectionParams
+		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	}
 }
 
@@ -410,27 +383,17 @@ func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) Connec
 		ClientSecret:        auth.ClientSecret,
 		ClientAuth:          auth.ClientAuth,
 		TokenExchange:       auth.TokenExchange,
-		Scopes:              auth.Scopes,
+		Scopes:              slices.Clone(auth.Scopes),
 		ScopeParam:          auth.ScopeParam,
 		ScopeSeparator:      auth.ScopeSeparator,
 		PKCE:                auth.PKCE,
-		AuthorizationParams: auth.AuthorizationParams,
-		TokenParams:         auth.TokenParams,
-		RefreshParams:       auth.RefreshParams,
+		AuthorizationParams: maps.Clone(auth.AuthorizationParams),
+		TokenParams:         maps.Clone(auth.TokenParams),
+		RefreshParams:       maps.Clone(auth.RefreshParams),
 		AcceptHeader:        auth.AcceptHeader,
 		AccessTokenPath:     auth.AccessTokenPath,
-		TokenMetadata:       auth.TokenMetadata,
-	}
-	if len(auth.Credentials) > 0 {
-		out.Credentials = make([]CredentialFieldDef, len(auth.Credentials))
-		for i, field := range auth.Credentials {
-			out.Credentials[i] = CredentialFieldDef{
-				Name:        field.Name,
-				Label:       field.Label,
-				Description: field.Description,
-				HelpURL:     field.HelpURL,
-			}
-		}
+		TokenMetadata:       slices.Clone(auth.TokenMetadata),
+		Credentials:         slices.Clone(auth.Credentials),
 	}
 	return out
 }
@@ -485,28 +448,7 @@ func EffectiveNamedConnectionDef(plugin *PluginDef, manifestProvider *pluginmani
 }
 
 // OperationOverride holds optional alias and description for an allowed operation.
-type OperationOverride struct {
-	Alias       string `yaml:"alias" json:"alias,omitempty"`
-	Description string `yaml:"description" json:"description,omitempty"`
-}
-
-func OperationOverridesFromManifest(overrides map[string]*pluginmanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
-	if overrides == nil {
-		return nil
-	}
-	result := make(map[string]*OperationOverride, len(overrides))
-	for name, override := range overrides {
-		if override == nil {
-			result[name] = nil
-			continue
-		}
-		result[name] = &OperationOverride{
-			Alias:       override.Alias,
-			Description: override.Description,
-		}
-	}
-	return result
-}
+type OperationOverride = pluginmanifestv1.ManifestOperationOverride
 
 func Load(path string) (*Config, error) {
 	return loadWithLookup(path, os.LookupEnv, false)

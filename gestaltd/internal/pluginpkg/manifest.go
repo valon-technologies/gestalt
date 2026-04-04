@@ -375,15 +375,6 @@ func encodeManifestYAML(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 	return data, nil
 }
 
-func Kinds(manifest *pluginmanifestv1.Manifest) []string {
-	if manifest == nil {
-		return nil
-	}
-	out := append([]string(nil), manifest.Kinds...)
-	slices.Sort(out)
-	return out
-}
-
 func ManifestEqual(a, b *pluginmanifestv1.Manifest) bool {
 	if a == nil || b == nil {
 		return a == b

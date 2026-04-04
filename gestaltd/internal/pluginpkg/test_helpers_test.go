@@ -5,12 +5,14 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 type archiveTestFile struct {
@@ -68,6 +70,55 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 	}
 	mustWriteFile(t, filepath.Join(dir, ManifestFile), data, 0644)
 	return data
+}
+
+func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *manifestWire {
+	return &manifestWire{
+		Source:  source,
+		Version: version,
+		Provider: &providerManifestWire{
+			Exec:     &providerExecWire{ArtifactPath: artifactPath},
+			Surfaces: providerManifestSurfacesWire{},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     osName,
+				Arch:   arch,
+				Path:   artifactPath,
+				SHA256: sha,
+			},
+		},
+	}
+}
+
+func mustManifestJSON(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	return mustManifestJSONBytes(wire)
+}
+
+func mustManifestYAML(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	data, err := yaml.Marshal(wire)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	return data
+}
+
+func mustManifestJSONBytes(wire *manifestWire) []byte {
+	data, err := json.MarshalIndent(wire, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return append(data, '\n')
+}
+
+func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	mustWriteFile(t, path, data, 0644)
+	return path
 }
 
 func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFile) {
