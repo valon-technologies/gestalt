@@ -11,6 +11,7 @@ import (
 type yamlConfig struct {
 	URI      string `yaml:"uri"`
 	Database string `yaml:"database"`
+	Version  string `yaml:"version"`
 }
 
 const defaultDatabase = "gestalt"
@@ -23,5 +24,5 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 	if cfg.Database == "" {
 		cfg.Database = defaultDatabase
 	}
-	return New(cfg.URI, cfg.Database, deps.EncryptionKey)
+	return New(cfg.URI, cfg.Database, cfg.Version, deps.EncryptionKey)
 }

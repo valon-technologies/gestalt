@@ -2,12 +2,14 @@ package sqlserver
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
 	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/versioning"
 )
 
 const (
@@ -17,6 +19,8 @@ const (
 	errUniqueKeyViolation   = 2627
 	errUniqueIndexViolation = 2601
 )
+
+var supportedVersions = []string{"2017", "2019", "2022", "azure"}
 
 // dialect implements sqlstore.Dialect for SQL Server.
 type dialect struct{}
@@ -82,12 +86,48 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dsn string, encryptionKey []byte) (*Store, error) {
+func New(dsn, requestedVersion string, encryptionKey []byte) (*Store, error) {
 	s, err := sqlstore.Open(driverName, dsn, encryptionKey, dialect{})
 	if err != nil {
 		return nil, err
 	}
+
+	if _, err := resolveVersion(context.Background(), s.DB, requestedVersion); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 	return &Store{Store: s}, nil
+}
+
+func resolveVersion(ctx context.Context, db *sql.DB, requested string) (string, error) {
+	return versioning.Resolve(ctx, driverName, requested, supportedVersions, func(ctx context.Context) (string, string, error) {
+		var raw string
+		var engineEdition int
+		if err := db.QueryRowContext(ctx, "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)), CAST(SERVERPROPERTY('EngineEdition') AS INT)").Scan(&raw, &engineEdition); err != nil {
+			return "", "", fmt.Errorf("%s: detecting version: %w", driverName, err)
+		}
+
+		var major int
+		if _, err := fmt.Sscanf(raw, "%d", &major); err != nil {
+			return "", raw, fmt.Errorf("%s: parsing server version %q: %w", driverName, raw, err)
+		}
+		if engineEdition == 5 || engineEdition == 8 {
+			return "azure", raw, nil
+		}
+
+		switch major {
+		case 13:
+			return "2016", raw, nil
+		case 14:
+			return "2017", raw, nil
+		case 15:
+			return "2019", raw, nil
+		case 16:
+			return "2022", raw, nil
+		default:
+			return fmt.Sprintf("major-%d", major), raw, nil
+		}
+	})
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

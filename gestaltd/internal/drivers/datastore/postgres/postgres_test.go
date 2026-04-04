@@ -27,6 +27,10 @@ func testDSN(t *testing.T) string {
 // Each test gets its own PostgreSQL schema so tests do not interfere with
 // each other.
 func newTestStore(t *testing.T) *Store {
+	return newTestStoreWithVersion(t, "")
+}
+
+func newTestStoreWithVersion(t *testing.T, version string) *Store {
 	t.Helper()
 	dsn := testDSN(t)
 
@@ -51,7 +55,7 @@ func newTestStore(t *testing.T) *Store {
 	}
 	schemaDSN := dsn + sep + "search_path=" + schema
 
-	store, err := New(schemaDSN, coretesting.EncryptionKey(t))
+	store, err := New(schemaDSN, version, coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -116,4 +120,34 @@ func TestPostgresDatastoreConformance(t *testing.T) {
 			}
 		},
 	})
+}
+
+func TestPostgresVersionSelection(t *testing.T) {
+	t.Parallel()
+
+	autoStore := newTestStoreWithVersion(t, "auto")
+	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
+	if err != nil {
+		t.Fatalf("resolveVersion(auto): %v", err)
+	}
+
+	explicitStore := newTestStoreWithVersion(t, autoVersion)
+	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
+	if err != nil {
+		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
+	}
+	if explicitVersion != autoVersion {
+		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
+	}
+
+	dsn := testDSN(t)
+	for _, version := range supportedVersions {
+		if version == autoVersion {
+			continue
+		}
+		if _, err := New(dsn, version, coretesting.EncryptionKey(t)); err == nil {
+			t.Fatalf("New(%q) succeeded against %q", version, autoVersion)
+		}
+		return
+	}
 }

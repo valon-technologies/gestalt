@@ -41,11 +41,15 @@ IF OBJECT_ID('users', 'U') IS NOT NULL DROP TABLE users;
 }
 
 func newTestStore(t *testing.T) *Store {
+	return newTestStoreWithVersion(t, "")
+}
+
+func newTestStoreWithVersion(t *testing.T, version string) *Store {
 	t.Helper()
 	dsn := testDSN(t)
 	resetTestDB(t, dsn)
 
-	store, err := New(dsn, coretesting.EncryptionKey(t))
+	store, err := New(dsn, version, coretesting.EncryptionKey(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -66,4 +70,34 @@ func TestSQLServerDatastoreConformance(t *testing.T) {
 	coretesting.RunDatastoreTests(t, func(t *testing.T) core.Datastore {
 		return newTestStore(t)
 	})
+}
+
+func TestSQLServerVersionSelection(t *testing.T) {
+	t.Parallel()
+
+	autoStore := newTestStoreWithVersion(t, "auto")
+	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
+	if err != nil {
+		t.Fatalf("resolveVersion(auto): %v", err)
+	}
+
+	explicitStore := newTestStoreWithVersion(t, autoVersion)
+	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
+	if err != nil {
+		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
+	}
+	if explicitVersion != autoVersion {
+		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
+	}
+
+	dsn := testDSN(t)
+	for _, version := range supportedVersions {
+		if version == autoVersion {
+			continue
+		}
+		if _, err := New(dsn, version, coretesting.EncryptionKey(t)); err == nil {
+			t.Fatalf("New(%q) succeeded against %q", version, autoVersion)
+		}
+		return
+	}
 }

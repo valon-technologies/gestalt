@@ -2,11 +2,13 @@ package oracle
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/versioning"
 
 	_ "github.com/sijms/go-ora/v2" // register database/sql driver
 )
@@ -14,7 +16,10 @@ import (
 const (
 	oraUniqueViolation    = "ORA-00001"
 	oracleEmptyConnection = "__GESTALT_EMPTY_CONNECTION__"
+	providerName          = "oracle"
 )
+
+var supportedVersions = []string{"19c", "26ai"}
 
 // dialect implements sqlstore.Dialect for Oracle.
 type dialect struct{}
@@ -97,12 +102,42 @@ type Store struct {
 
 var _ core.Datastore = (*Store)(nil)
 
-func New(dsn string, encryptionKey []byte) (*Store, error) {
-	s, err := sqlstore.Open("oracle", dsn, encryptionKey, dialect{})
+func New(dsn, requestedVersion string, encryptionKey []byte) (*Store, error) {
+	s, err := sqlstore.Open(providerName, dsn, encryptionKey, dialect{})
 	if err != nil {
 		return nil, err
 	}
+
+	if _, err := resolveVersion(context.Background(), s.DB, requestedVersion); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 	return &Store{Store: s}, nil
+}
+
+func resolveVersion(ctx context.Context, db *sql.DB, requested string) (string, error) {
+	return versioning.Resolve(ctx, providerName, requested, supportedVersions, func(ctx context.Context) (string, string, error) {
+		var raw string
+		if err := db.QueryRowContext(ctx, "SELECT version FROM product_component_version WHERE product LIKE 'Oracle Database%'").Scan(&raw); err != nil {
+			return "", "", fmt.Errorf("%s: detecting version: %w", providerName, err)
+		}
+
+		var major int
+		if _, err := fmt.Sscanf(raw, "%d", &major); err != nil {
+			return "", raw, fmt.Errorf("%s: parsing server version %q: %w", providerName, raw, err)
+		}
+
+		switch major {
+		case 19:
+			return "19c", raw, nil
+		case 23:
+			return "23ai", raw, nil
+		case 26:
+			return "26ai", raw, nil
+		default:
+			return fmt.Sprintf("major-%d", major), raw, nil
+		}
+	})
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

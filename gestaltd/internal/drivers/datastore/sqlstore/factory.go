@@ -8,16 +8,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type dsnConfig struct {
-	DSN string `yaml:"dsn"`
+type VersionedDSNConfig struct {
+	DSN     string `yaml:"dsn"`
+	Version string `yaml:"version"`
 }
 
 func NewDSNFactory(name string, newStore func(dsn string, encryptionKey []byte) (core.Datastore, error)) bootstrap.DatastoreFactory {
+	return NewVersionedDSNFactory(name, func(cfg VersionedDSNConfig, encryptionKey []byte) (core.Datastore, error) {
+		return newStore(cfg.DSN, encryptionKey)
+	})
+}
+
+func NewVersionedDSNFactory(name string, newStore func(cfg VersionedDSNConfig, encryptionKey []byte) (core.Datastore, error)) bootstrap.DatastoreFactory {
 	return func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
-		var cfg dsnConfig
+		var cfg VersionedDSNConfig
 		if err := node.Decode(&cfg); err != nil {
 			return nil, fmt.Errorf("%s: parsing config: %w", name, err)
 		}
-		return newStore(cfg.DSN, deps.EncryptionKey)
+		return newStore(cfg, deps.EncryptionKey)
 	}
 }
