@@ -100,8 +100,16 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start gestaltd: %v", err)
 	}
+	stopped := false
+	t.Cleanup(func() {
+		if !stopped {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		}
+	})
 
 	waitForFile(t, configPath, 20*time.Second)
+	stopped = true
 	_ = cmd.Process.Signal(os.Interrupt)
 	_ = cmd.Wait()
 
