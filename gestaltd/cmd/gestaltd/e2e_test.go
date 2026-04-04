@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -41,12 +42,12 @@ func TestE2EInitArchiveAndValidate(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -159,12 +160,12 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -173,8 +174,8 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 	}
 }
 
-func TestE2EInitHTTPSPackage(t *testing.T) { //nolint:paralleltest // mutates http.DefaultTransport
-
+//nolint:paralleltest // Uses a process-wide HTTP transport override so the TLS package fetch trusts the test server.
+func TestE2EInitHTTPSPackage(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
@@ -196,12 +197,12 @@ func TestE2EInitHTTPSPackage(t *testing.T) { //nolint:paralleltest // mutates ht
 		t.Fatalf("run init: %v", err)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -253,7 +254,7 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(deployDir, initLockfileName)
+	lockPath := filepath.Join(deployDir, operator.InitLockfileName)
 	t.Cleanup(func() {
 		_ = os.Chmod(deployDir, 0o755)
 		_ = os.Chmod(cfgPath, 0o644)
@@ -681,7 +682,7 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	}
 
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", 0)
-	lockPath := filepath.Join(dir, initLockfileName)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
 
 	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
@@ -1217,7 +1218,7 @@ func copyFile(src, dst string) error {
 }
 
 func fileSHA256(path string) (string, error) {
-	return fileSHA256Hex(path)
+	return pluginpkg.FileSHA256(path)
 }
 
 func writeE2EConfig(t *testing.T, dir, packageRef string, port int) string {
@@ -1464,12 +1465,12 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -1521,6 +1522,20 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 	}
 	if containsString(ids, "gmail.users.labels.list") {
 		t.Fatalf("operation ids = %v, did not expect disallowed raw spec operation", ids)
+	}
+
+	toolNames := listMCPTools(t, baseURL)
+	for _, want := range []string{
+		"example_echo",
+		"example_messages.list",
+		"example_getProfile",
+	} {
+		if !containsString(toolNames, want) {
+			t.Fatalf("mcp tool names = %v, want %s", toolNames, want)
+		}
+	}
+	if containsString(toolNames, "example_gmail.users.labels.list") {
+		t.Fatalf("mcp tool names = %v, did not expect disallowed raw spec tool", toolNames)
 	}
 }
 
@@ -1723,4 +1738,85 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func listMCPTools(t *testing.T, baseURL string) []string {
+	t.Helper()
+
+	status, resp := mcpJSONRPC(t, baseURL, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize: expected 200, got %d", status)
+	}
+	if _, ok := resp["result"].(map[string]any); !ok {
+		t.Fatalf("initialize: expected result object, got %v", resp)
+	}
+
+	status, resp = mcpJSONRPC(t, baseURL, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list: expected 200, got %d", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/list: expected result object, got %v", resp)
+	}
+	rawTools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools/list: expected tools array, got %v", result)
+	}
+
+	toolNames := make([]string, 0, len(rawTools))
+	for _, rawTool := range rawTools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			t.Fatalf("tools/list: expected tool object, got %T", rawTool)
+		}
+		name, ok := tool["name"].(string)
+		if !ok {
+			t.Fatalf("tools/list: expected string tool name, got %v", tool)
+		}
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+	return toolNames
+}
+
+func mcpJSONRPC(t *testing.T, baseURL string, body map[string]any) (int, map[string]any) {
+	t.Helper()
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal mcp body: %v", err)
+	}
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read /mcp response: %v", err)
+	}
+
+	var result map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &result); err != nil {
+			t.Fatalf("decode /mcp response: %v\nbody: %s", err, raw)
+		}
+	}
+	return resp.StatusCode, result
 }

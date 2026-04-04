@@ -8,116 +8,113 @@ import (
 	"testing"
 )
 
-func TestRun_ValidateWithMissingConfig(t *testing.T) {
+func TestE2ECLIHelp(t *testing.T) {
 	t.Parallel()
 
-	err := run([]string{"validate", "--config", "nonexistent.yaml"})
-	if err == nil {
-		t.Fatal("expected error for missing config file")
+	cases := []struct {
+		name      string
+		args      []string
+		wantParts []string
+		notWant   []string
+	}{
+		{
+			name:      "root",
+			args:      []string{"--help"},
+			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd plugin <command> [flags]", "gestaltd serve", "--locked"},
+			notWant:   []string{"gestaltd bundle", "gestaltd dev"},
+		},
+		{
+			name:      "validate",
+			args:      []string{"validate", "--help"},
+			wantParts: []string{"gestaltd validate"},
+		},
+		{
+			name:      "init",
+			args:      []string{"init", "--help"},
+			wantParts: []string{"gestaltd init"},
+		},
+		{
+			name:      "plugin",
+			args:      []string{"plugin", "--help"},
+			wantParts: []string{"gestaltd plugin <command> [flags]"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			if err != nil {
+				t.Fatalf("gestaltd %s: %v\n%s", strings.Join(tc.args, " "), err, out)
+			}
+			for _, want := range tc.wantParts {
+				if !strings.Contains(string(out), want) {
+					t.Fatalf("expected output to contain %q, got: %s", want, out)
+				}
+			}
+			for _, notWant := range tc.notWant {
+				if strings.Contains(string(out), notWant) {
+					t.Fatalf("expected output to omit %q, got: %s", notWant, out)
+				}
+			}
+		})
 	}
 }
 
-func TestRun_UnknownFlag(t *testing.T) {
+func TestE2ECLIRejectsBadArgs(t *testing.T) {
 	t.Parallel()
 
-	err := run([]string{"--bogus"})
-	if err == nil {
-		t.Fatal("expected error for unknown flag")
+	cases := []struct {
+		name     string
+		args     []string
+		wantPart string
+	}{
+		{
+			name:     "unknown flag",
+			args:     []string{"--bogus"},
+			wantPart: "flag provided but not defined",
+		},
+		{
+			name:     "top level trailing args",
+			args:     []string{"--config", "foo.yaml", "extra"},
+			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "serve trailing args",
+			args:     []string{"serve", "--config", "foo.yaml", "extra"},
+			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "validate trailing args",
+			args:     []string{"validate", "--config", "foo.yaml", "extra"},
+			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "missing validate config",
+			args:     []string{"validate", "--config", "nonexistent.yaml"},
+			wantPart: "nonexistent.yaml",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected gestaltd %s to fail, output: %s", strings.Join(tc.args, " "), out)
+			}
+			if !strings.Contains(string(out), tc.wantPart) {
+				t.Fatalf("expected output to contain %q, got: %s", tc.wantPart, out)
+			}
+		})
 	}
 }
 
-func TestGestaltd_HelpExitsCleanly(t *testing.T) {
-	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "--help")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0 for --help, got error: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "gestaltd validate") {
-		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
-	}
-	if !strings.Contains(string(out), "gestaltd init") {
-		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
-	}
-	if strings.Contains(string(out), "gestaltd bundle") {
-		t.Fatalf("expected bundle to be removed from usage, got: %s", out)
-	}
-	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
-		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
-	}
-	if !strings.Contains(string(out), "gestaltd serve") {
-		t.Fatalf("expected usage output containing 'gestaltd serve', got: %s", out)
-	}
-	if strings.Contains(string(out), "gestaltd dev") {
-		t.Fatalf("expected dev to be removed from usage, got: %s", out)
-	}
-	if !strings.Contains(string(out), "--locked") {
-		t.Fatalf("expected usage output containing '--locked', got: %s", out)
-	}
-}
-
-func TestGestaltdValidateHelpExitsCleanly(t *testing.T) {
-	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "validate", "--help")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0 for 'validate --help', got error: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "gestaltd validate") {
-		t.Fatalf("expected usage output containing 'gestaltd validate', got: %s", out)
-	}
-}
-
-func TestGestaltdInitHelpExitsCleanly(t *testing.T) {
-	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "init", "--help")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0 for 'init --help', got error: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "gestaltd init") {
-		t.Fatalf("expected usage output containing 'gestaltd init', got: %s", out)
-	}
-}
-
-func TestGestaltdPluginHelpExitsCleanly(t *testing.T) {
-	t.Parallel()
-	cmd := exec.Command("go", "run", ".", "plugin", "--help")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0 for 'plugin --help', got error: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
-		t.Fatalf("expected usage output containing 'gestaltd plugin <command> [flags]', got: %s", out)
-	}
-}
-
-func TestRun_ServeRejectsTrailingArgs(t *testing.T) {
-	t.Parallel()
-	err := run([]string{"serve", "--config", "foo.yaml", "extra"})
-	if err == nil {
-		t.Fatal("expected error for trailing arguments")
-	}
-}
-
-func TestRun_RejectsTrailingArgs(t *testing.T) {
-	t.Parallel()
-	err := run([]string{"--config", "foo.yaml", "extra"})
-	if err == nil {
-		t.Fatal("expected error for trailing arguments")
-	}
-}
-
-func TestRun_ValidateRejectsTrailingArgs(t *testing.T) {
-	t.Parallel()
-
-	err := run([]string{"validate", "--config", "foo.yaml", "extra"})
-	if err == nil {
-		t.Fatal("expected error for trailing arguments")
-	}
-}
-
-func TestRun_ValidateWithStrictProviderErrors(t *testing.T) {
+func TestE2ECLIValidateWithStrictProviderErrors(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -142,11 +139,11 @@ providers:
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	err := run([]string{"validate", "--config", cfgPath})
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), `plugin.command, plugin.package, or plugin.source is required`) {
-		t.Fatalf("expected provider-source validation error, got: %v", err)
+	if !strings.Contains(string(out), `plugin.command, plugin.package, or plugin.source is required`) {
+		t.Fatalf("expected provider-source validation error, got: %s", out)
 	}
 }

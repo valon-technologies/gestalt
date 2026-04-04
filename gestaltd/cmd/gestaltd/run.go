@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -92,8 +93,8 @@ func runStartCommand(name string, usage func(io.Writer), args []string, locked b
 	if autoGenerate && *configPath == "" {
 		resolved := resolveConfigPath("")
 		if _, err := os.Stat(resolved); os.IsNotExist(err) {
-			if p := defaultLocalConfigPath(); p != "" {
-				generated, genErr := generateDefaultConfig(filepath.Dir(p))
+			if p := operator.DefaultLocalConfigPath(); p != "" {
+				generated, genErr := operator.GenerateDefaultConfig(filepath.Dir(p))
 				if genErr == nil {
 					*configPath = generated
 				}
@@ -357,10 +358,6 @@ func runValidate(args []string) error {
 	}
 
 	return validateConfigWithArtifactsDir(*configPath, *artifactsDir)
-}
-
-func validateConfig(configFlag string) error {
-	return validateConfigWithArtifactsDir(configFlag, "")
 }
 
 func validateConfigWithArtifactsDir(configFlag, artifactsDir string) error {

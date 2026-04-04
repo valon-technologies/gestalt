@@ -1,23 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"errors"
-	"flag"
-	"io"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
-
-var stdoutMu sync.Mutex
 
 const (
 	releaseTestPluginName      = "release-test"
@@ -42,8 +37,7 @@ const (
 func TestRun_PluginHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 
-	cmd := exec.Command("go", "run", ".", "plugin", "--help")
-	out, err := cmd.CombinedOutput()
+	out, err := runPluginCommandResult("", "--help")
 	if err != nil {
 		t.Fatalf("expected exit 0 for 'plugin --help', got error: %v\noutput: %s", err, out)
 	}
@@ -63,8 +57,7 @@ func TestRun_PluginHelpExitsCleanly(t *testing.T) {
 func TestRun_PluginPackageHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 
-	cmd := exec.Command("go", "run", ".", "plugin", "package", "--help")
-	out, err := cmd.CombinedOutput()
+	out, err := runPluginCommandResult("", "package", "--help")
 	if err != nil {
 		t.Fatalf("expected exit 0 for 'plugin package --help', got error: %v\noutput: %s", err, out)
 	}
@@ -79,8 +72,7 @@ func TestRun_PluginPackageHelpExitsCleanly(t *testing.T) {
 func TestRun_PluginReleaseHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 
-	cmd := exec.Command("go", "run", ".", "plugin", "release", "--help")
-	out, err := cmd.CombinedOutput()
+	out, err := runPluginCommandResult("", "release", "--help")
 	if err != nil {
 		t.Fatalf("expected exit 0 for 'plugin release --help', got error: %v\noutput: %s", err, out)
 	}
@@ -92,39 +84,46 @@ func TestRun_PluginReleaseHelpExitsCleanly(t *testing.T) {
 func TestRun_PluginRootReturnsHelpWhenNoSubcommandProvided(t *testing.T) {
 	t.Parallel()
 
-	err := run([]string{"plugin"})
-	if !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("expected flag.ErrHelp, got: %v", err)
+	out, err := runPluginCommandResult("")
+	if err != nil {
+		t.Fatalf("expected exit 0 for 'plugin', got error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
+		t.Fatalf("expected plugin usage output, got: %s", out)
 	}
 }
 
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
 func TestRun_PluginPackageCreatesArchive(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	src := newPluginPackageFixture(t, dir)
 	outPath := filepath.Join(dir, "testowner-provider-0.1.0.tar.gz")
 
-	output := captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--input", src, "--output", outPath})
-	})
+	output, err := runPluginCommandResult("", "package", "--input", src, "--output", outPath)
+	if err != nil {
+		t.Fatalf("plugin package failed: %v\n%s", err, output)
+	}
 
 	if _, err := os.Stat(outPath); err != nil {
 		t.Fatalf("expected package archive to exist: %v", err)
 	}
-	if !strings.Contains(output, "packaged") {
+	if !strings.Contains(string(output), "packaged") {
 		t.Fatalf("expected package output, got: %q", output)
 	}
 }
 
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
 func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	src := newPluginPackageFixture(t, dir)
 	outPath := filepath.Join(dir, "output-dir")
 
-	output := captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--input", src, "--output", outPath})
-	})
+	output, err := runPluginCommandResult("", "package", "--input", src, "--output", outPath)
+	if err != nil {
+		t.Fatalf("plugin package failed: %v\n%s", err, output)
+	}
 
 	info, err := os.Stat(outPath)
 	if err != nil {
@@ -148,13 +147,14 @@ func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
 	if string(data) != "provider" {
 		t.Fatalf("unexpected artifact content: %q", data)
 	}
-	if !strings.Contains(output, "packaged") {
+	if !strings.Contains(string(output), "packaged") {
 		t.Fatalf("expected packaged output, got: %q", output)
 	}
 }
 
-//nolint:paralleltest // Swaps os.Stdout via captureStdout.
 func TestRun_PluginPackageAcceptsYAMLManifestInput(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	src := newPluginPackageFixture(t, dir)
 	manifestPath, manifest := readManifestFromDir(t, src)
@@ -166,15 +166,16 @@ func TestRun_PluginPackageAcceptsYAMLManifestInput(t *testing.T) {
 	inputPath := filepath.Join(src, "plugin.yaml")
 	outPath := filepath.Join(dir, "output-dir")
 
-	output := captureStdout(t, func() error {
-		return run([]string{"plugin", "package", "--input", inputPath, "--output", outPath})
-	})
+	output, err := runPluginCommandResult("", "package", "--input", inputPath, "--output", outPath)
+	if err != nil {
+		t.Fatalf("plugin package failed: %v\n%s", err, output)
+	}
 
 	packagedManifestPath, _ := readManifestFromDir(t, outPath)
 	if filepath.Base(packagedManifestPath) != "plugin.yaml" {
 		t.Fatalf("packaged manifest = %q, want plugin.yaml", filepath.Base(packagedManifestPath))
 	}
-	if !strings.Contains(output, "packaged") {
+	if !strings.Contains(string(output), "packaged") {
 		t.Fatalf("expected packaged output, got: %q", output)
 	}
 }
@@ -186,12 +187,12 @@ func TestRun_PluginPackageRejectsOutputInsideInput(t *testing.T) {
 	src := newPluginPackageFixture(t, dir)
 	outPath := filepath.Join(src, "dist")
 
-	err := run([]string{"plugin", "package", "--input", src, "--output", outPath})
+	out, err := runPluginCommandResult("", "package", "--input", src, "--output", outPath)
 	if err == nil {
 		t.Fatal("expected error when output is inside input")
 	}
-	if !strings.Contains(err.Error(), "must not be inside source") {
-		t.Fatalf("unexpected error: %v", err)
+	if !strings.Contains(string(out), "must not be inside source") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
@@ -202,36 +203,37 @@ func TestRun_PluginPackageRejectsArchiveOutputInsideInput(t *testing.T) {
 	src := newPluginPackageFixture(t, dir)
 	outPath := filepath.Join(src, "testowner-provider-0.1.0.tar.gz")
 
-	err := run([]string{"plugin", "package", "--input", src, "--output", outPath})
+	out, err := runPluginCommandResult("", "package", "--input", src, "--output", outPath)
 	if err == nil {
 		t.Fatal("expected error when archive output is inside input")
 	}
-	if !strings.Contains(err.Error(), "must not be inside source") {
-		t.Fatalf("unexpected error: %v", err)
+	if !strings.Contains(string(out), "must not be inside source") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
 func TestRun_PluginRejectsUnknownSubcommand(t *testing.T) {
 	t.Parallel()
 
-	err := run([]string{"plugin", "bogus"})
+	out, err := runPluginCommandResult("", "bogus")
 	if err == nil {
 		t.Fatal("expected error for unknown plugin subcommand")
 	}
-	if !strings.Contains(err.Error(), `unknown plugin command "bogus"`) {
-		t.Fatalf("unexpected error: %v", err)
+	if !strings.Contains(string(out), "unknown plugin command") || !strings.Contains(string(out), "bogus") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
 func TestRun_PluginReleaseRequiresVersion(t *testing.T) {
 	t.Parallel()
 
-	err := run([]string{"plugin", "release"})
+	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
+	out, err := runPluginCommandResult(pluginDir, "release")
 	if err == nil {
 		t.Fatal("expected error when --version missing")
 	}
-	if !strings.Contains(err.Error(), "--version is required") {
-		t.Fatalf("unexpected error: %v", err)
+	if !strings.Contains(string(out), "--version is required") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
@@ -460,6 +462,43 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 		"out/index.html",
 		"out/static/app.js",
 	} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
+	}
+}
+
+func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := filepath.Join(t.TempDir(), "webui-overlap")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/webui-overlap",
+		Version:     "0.0.1",
+		DisplayName: "WebUI Overlap",
+		IconFile:    "out/icon.svg",
+		Kinds:       []string{pluginmanifestv1.KindWebUI},
+		WebUI: &pluginmanifestv1.WebUIMetadata{
+			AssetRoot: "out",
+		},
+	})
+	writeTestFile(t, pluginDir, "out/icon.svg", []byte("<svg></svg>\n"), 0o644)
+	writeTestFile(t, pluginDir, "out/index.html", []byte("<html></html>\n"), 0o644)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.3-overlap.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-webui-overlap_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	for _, rel := range []string{"out/icon.svg", "out/index.html"} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)
 		}
@@ -1380,11 +1419,15 @@ func runPluginReleaseCommand(t *testing.T, pluginDir string, args ...string) str
 	return string(out)
 }
 
-func runPluginReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
-	cmdArgs := append([]string{"plugin", "release"}, args...)
+func runPluginCommandResult(pluginDir string, args ...string) ([]byte, error) {
+	cmdArgs := append([]string{"plugin"}, args...)
 	cmd := exec.Command(gestaltdBin, cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()
+}
+
+func runPluginReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
+	return runPluginCommandResult(pluginDir, append([]string{"release"}, args...)...)
 }
 
 func extractReleasedArchive(t *testing.T, outputDir, archiveName string) string {
@@ -1481,36 +1524,7 @@ func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode)
 	}
 }
 
-func captureStdout(t *testing.T, fn func() error) string {
-	t.Helper()
-
-	stdoutMu.Lock()
-	defer stdoutMu.Unlock()
-
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stdout = w
-
-	runErr := fn()
-
-	_ = w.Close()
-	os.Stdout = orig
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("copy stdout: %v", err)
-	}
-	_ = r.Close()
-
-	if runErr != nil {
-		t.Fatalf("run: %v", runErr)
-	}
-	return buf.String()
-}
-
 func sha256HexForTest(value string) string {
-	return sha256HexForPrepareTest(value)
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
