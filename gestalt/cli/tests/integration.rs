@@ -1,8 +1,193 @@
+use std::ffi::OsString;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::Path;
+use std::sync::{Arc, Mutex, OnceLock};
+
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
 
 fn create_client(server: &Server) -> gestalt::api::ApiClient {
     gestalt::api::ApiClient::new(&server.url(), "test-token").unwrap()
+}
+
+fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
+
+struct EnvGuard(Vec<(&'static str, Option<OsString>)>);
+
+impl EnvGuard {
+    fn new(config_root: &Path) -> Self {
+        let saved = vec![
+            ("HOME", std::env::var_os("HOME")),
+            ("XDG_CONFIG_HOME", std::env::var_os("XDG_CONFIG_HOME")),
+            (
+                gestalt::api::ENV_API_KEY,
+                std::env::var_os(gestalt::api::ENV_API_KEY),
+            ),
+        ];
+        unsafe {
+            std::env::set_var("HOME", config_root);
+            std::env::set_var("XDG_CONFIG_HOME", config_root);
+            std::env::remove_var(gestalt::api::ENV_API_KEY);
+        }
+        Self(saved)
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.0.drain(..) {
+            unsafe {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct LoginFlowState {
+    callback_port: Option<u16>,
+    expected_state: Option<String>,
+    browser_response_html: Option<String>,
+}
+
+struct HttpRequest {
+    method: String,
+    target: String,
+    body: Vec<u8>,
+}
+
+struct LoginServer {
+    base_url: String,
+    state: Arc<Mutex<LoginFlowState>>,
+    handle: std::thread::JoinHandle<()>,
+}
+
+fn spawn_login_server() -> LoginServer {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let state = Arc::new(Mutex::new(LoginFlowState::default()));
+    let server_state = Arc::clone(&state);
+    let server_url = base_url.clone();
+    let handle = std::thread::spawn(move || {
+        let mut workers = Vec::new();
+        for _ in 0..3 {
+            let (stream, _) = listener.accept().unwrap();
+            let state = Arc::clone(&server_state);
+            let base_url = server_url.clone();
+            workers.push(std::thread::spawn(move || {
+                handle_login_request(stream, state, &base_url);
+            }));
+        }
+        for worker in workers {
+            worker.join().unwrap();
+        }
+    });
+    LoginServer {
+        base_url,
+        state,
+        handle,
+    }
+}
+
+fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>, base_url: &str) {
+    let request = read_http_request(&mut stream);
+    match (request.method.as_str(), request.target.as_str()) {
+        ("POST", "/api/v1/auth/login") => {
+            let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            let mut state = state.lock().unwrap();
+            state.callback_port = Some(body["callback_port"].as_u64().unwrap() as u16);
+            state.expected_state = Some(body["state"].as_str().unwrap().to_string());
+            write_http_response(
+                &mut stream,
+                "200 OK",
+                "application/json",
+                &format!(r#"{{"url":"{base_url}/browser-login"}}"#),
+            );
+        }
+        ("GET", "/browser-login") => {
+            let (callback_port, expected_state) = {
+                let state = state.lock().unwrap();
+                (
+                    state.callback_port.expect("missing callback port"),
+                    state.expected_state.clone().expect("missing state"),
+                )
+            };
+            let callback_url =
+                format!("http://127.0.0.1:{callback_port}/?code=test-code&state={expected_state}");
+            let html = reqwest::blocking::get(callback_url)
+                .unwrap()
+                .text()
+                .unwrap();
+            state.lock().unwrap().browser_response_html = Some(html);
+            write_http_response(&mut stream, "200 OK", "text/plain", "ok");
+        }
+        ("GET", target) if target.starts_with("/api/v1/auth/login/callback?") => {
+            let url = url::Url::parse(&format!("http://localhost{target}")).unwrap();
+            let params = url
+                .query_pairs()
+                .collect::<std::collections::HashMap<_, _>>();
+            let expected_state = state.lock().unwrap().expected_state.clone().unwrap();
+            assert_eq!(params.get("code").map(|v| v.as_ref()), Some("test-code"));
+            assert_eq!(params.get("cli").map(|v| v.as_ref()), Some("1"));
+            assert_eq!(
+                params.get("state").map(|v| v.as_ref()),
+                Some(expected_state.as_str())
+            );
+            write_http_response(
+                &mut stream,
+                "200 OK",
+                "application/json",
+                r#"{"token":"cli-secret","id":"tok-123"}"#,
+            );
+        }
+        _ => panic!("unexpected request: {} {}", request.method, request.target),
+    }
+}
+
+fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
+    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line).unwrap();
+
+    let mut content_length = 0usize;
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        if line == "\r\n" {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("Content-Length")
+        {
+            content_length = value.trim().parse().unwrap();
+        }
+    }
+
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body).unwrap();
+
+    let mut parts = request_line.split_whitespace();
+    HttpRequest {
+        method: parts.next().unwrap().to_string(),
+        target: parts.next().unwrap().to_string(),
+        body,
+    }
+}
+
+fn write_http_response(stream: &mut TcpStream, status: &str, content_type: &str, body: &str) {
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
 }
 
 #[test]
@@ -256,6 +441,57 @@ fn test_start_oauth() {
     mock.assert();
     assert_eq!(resp["url"], "https://example.com/oauth");
     assert_eq!(resp["state"], "abc123");
+}
+
+#[test]
+fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
+    let _lock = env_lock();
+    let tempdir = tempfile::tempdir().unwrap();
+    let _env = EnvGuard::new(tempdir.path());
+    let server = spawn_login_server();
+    let browser = Arc::new(Mutex::new(None));
+    let browser_handle = Arc::clone(&browser);
+
+    gestalt::commands::auth::login_with_browser_opener(Some(&server.base_url), |url| {
+        let url = url.to_string();
+        *browser_handle.lock().unwrap() = Some(std::thread::spawn(move || {
+            reqwest::blocking::get(url).unwrap();
+        }));
+        Ok(())
+    })
+    .unwrap();
+
+    let LoginServer {
+        base_url,
+        state,
+        handle,
+    } = server;
+    browser
+        .lock()
+        .unwrap()
+        .take()
+        .expect("browser thread missing")
+        .join()
+        .unwrap();
+    handle.join().unwrap();
+
+    let html = state.lock().unwrap().browser_response_html.clone().unwrap();
+    assert!(html.contains("<small>Gestalt</small>"));
+    assert!(html.contains("Login successful"));
+    assert!(html.contains("radial-gradient(140% 90% at 50% 100%"));
+    assert!(!html.contains("Gestalt CLI"));
+    assert!(!html.contains("CLI login complete"));
+    assert!(!html.contains("class=\"pill\""));
+
+    let credentials_path = dirs::config_dir()
+        .unwrap()
+        .join("gestalt")
+        .join("credentials.json");
+    let credentials: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();
+    assert_eq!(credentials["api_url"], base_url);
+    assert_eq!(credentials["api_token"], "cli-secret");
+    assert_eq!(credentials["api_token_id"], "tok-123");
 }
 
 #[test]

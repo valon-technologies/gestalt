@@ -6,7 +6,49 @@ use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
 use crate::output::{self, Format};
 
+const BROWSER_RESPONSE_PAGE: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <style>
+    :root { color-scheme: light dark; --surface: #fff; --border: #ece4dd; --fg: #231810; --muted: #5c543c; --warm: radial-gradient(140% 90% at 50% 100%, #EACCB8 0%, #FDFCF9 50%, #F8F6F3 80%); }
+    @media (prefers-color-scheme: dark) { :root { --surface: #20190f; --border: #31231b; --fg: #f3ede6; --muted: #dcd2c6; --warm: radial-gradient(140% 90% at 50% 100%, #3D2808 0%, #1A1410 50%, #161110 80%); } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--warm); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(100%, 440px); padding: 28px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 40px rgba(35, 24, 16, 0.12); }
+    small { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    h1 { margin: 16px 0 0; font: 700 clamp(2rem, 4vw, 2.35rem) / 1.05 Georgia, "Times New Roman", serif; letter-spacing: -0.03em; }
+    p { margin: 12px 0 0; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <small>Gestalt</small>
+    <h1 id="title"></h1>
+    <p id="detail"></p>
+  </main>
+  <script>
+    const data = __DATA__;
+    document.title = `${data.title} - Gestalt`;
+    document.getElementById('title').textContent = data.title;
+    document.getElementById('detail').textContent = data.detail;
+  </script>
+</body>
+</html>
+"#;
+
 pub fn login(url_override: Option<&str>) -> Result<()> {
+    login_with_browser_opener(url_override, |url| {
+        open::that(url).map(|_| ()).map_err(Into::into)
+    })
+}
+
+pub fn login_with_browser_opener<F>(url_override: Option<&str>, open_browser: F) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
     if api::env_api_key_is_set() {
         bail!(
             "{} is set in your environment and takes priority over stored CLI credentials. \
@@ -20,7 +62,6 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").context("failed to bind callback listener")?;
     let port = listener.local_addr()?.port();
-
     let state = random_hex_string();
 
     let login_url = format!("{}/api/v1/auth/login", base_url);
@@ -49,15 +90,13 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
     let body: serde_json::Value = resp
         .json()
         .with_context(|| format!("server at {} returned non-JSON response", base_url))?;
-
     let url = body["url"]
         .as_str()
         .context("login response missing 'url' field")?;
 
     eprintln!("Opening browser for authentication...");
     eprintln!("If the browser doesn't open, visit: {}", url);
-
-    if open::that(url).is_err() {
+    if open_browser(url).is_err() {
         eprintln!("Could not open browser automatically.");
     }
 
@@ -84,14 +123,17 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         .nth(1)
         .and_then(|path| url::Url::parse(&format!("http://localhost{}", path)).ok())
         .context("failed to parse callback request")?;
-
     let callback_state = callback_params
         .query_pairs()
         .find(|(k, _)| k == "state")
         .map(|(_, v)| v.into_owned());
     if callback_state.as_deref() != Some(&state) {
-        let _ = send_browser_response(&stream, "Login failed: state mismatch.");
-        bail!("OAuth state mismatch — possible CSRF attack");
+        let _ = send_browser_response(
+            &stream,
+            "Login failed",
+            "The callback state did not match. Check the terminal for details.",
+        );
+        bail!("OAuth state mismatch - possible CSRF attack");
     }
 
     let code = callback_params
@@ -112,11 +154,14 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         .get(callback_url.as_str())
         .send()
         .context("failed to exchange authorization code")?;
-
     let callback_status = callback_resp.status();
     if !callback_status.is_success() {
         let text = callback_resp.text().unwrap_or_default();
-        let _ = send_browser_response(&stream, "Login failed. Check the terminal for details.");
+        let _ = send_browser_response(
+            &stream,
+            "Login failed",
+            "The browser flow finished, but the CLI could not exchange the code. Check the terminal for details.",
+        );
         bail!(
             "code exchange failed (HTTP {}): {}",
             callback_status.as_u16(),
@@ -141,16 +186,32 @@ pub fn login(url_override: Option<&str>) -> Result<()> {
         api_token_id: api_token_id.to_string(),
     })?;
 
-    let _ = send_browser_response(&stream, "Login successful! You can close this tab.");
+    let _ = send_browser_response(&stream, "Login successful", "You can close this tab.");
     output::print_success("Logged in successfully. Stored CLI API token.");
     Ok(())
 }
 
-fn send_browser_response(stream: &std::net::TcpStream, message: &str) -> std::io::Result<()> {
-    let html = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>{message}</h1></body></html>"
+fn send_browser_response(
+    stream: &std::net::TcpStream,
+    title: &str,
+    detail: &str,
+) -> std::io::Result<()> {
+    let html = build_browser_response_html(title, detail);
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
+        html.len(),
+        html
     );
-    (&*stream).write_all(html.as_bytes())
+    (&*stream).write_all(response.as_bytes())
+}
+
+fn build_browser_response_html(title: &str, detail: &str) -> String {
+    let data = serde_json::json!({
+        "detail": detail,
+        "title": title,
+    });
+    let data = data.to_string().replace('<', "\\u003c");
+    BROWSER_RESPONSE_PAGE.replace("__DATA__", &data)
 }
 
 pub fn logout() -> Result<()> {
