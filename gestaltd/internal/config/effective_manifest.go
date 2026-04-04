@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -35,7 +36,7 @@ func EffectiveManifestBackedInputs(name string, plugin *PluginDef) (*pluginmanif
 
 	allowedOperations := plugin.AllowedOperations
 	if allowedOperations == nil {
-		allowedOperations = OperationOverridesFromManifest(manifest.Provider.AllowedOperations)
+		allowedOperations = maps.Clone(manifest.Provider.AllowedOperations)
 	}
 
 	return manifest, allowedOperations, nil
@@ -81,28 +82,12 @@ func MergedProviderManagedParameters(manifestProvider *pluginmanifestv1.Provider
 
 func MergedProviderResponseMapping(manifestProvider *pluginmanifestv1.Provider, plugin *PluginDef) *pluginmanifestv1.ManifestResponseMapping {
 	if plugin != nil && plugin.ResponseMapping != nil {
-		return responseMappingToManifest(plugin.ResponseMapping)
+		return plugin.ResponseMapping
 	}
 	if manifestProvider == nil {
 		return nil
 	}
 	return manifestProvider.ResponseMapping
-}
-
-func responseMappingToManifest(mapping *ResponseMappingDef) *pluginmanifestv1.ManifestResponseMapping {
-	if mapping == nil {
-		return nil
-	}
-	out := &pluginmanifestv1.ManifestResponseMapping{
-		DataPath: mapping.DataPath,
-	}
-	if mapping.Pagination != nil {
-		out.Pagination = &pluginmanifestv1.ManifestPaginationMapping{
-			HasMorePath: mapping.Pagination.HasMorePath,
-			CursorPath:  mapping.Pagination.CursorPath,
-		}
-	}
-	return out
 }
 
 func mergedManifestProviderAuth(base *pluginmanifestv1.ProviderAuth, override *ConnectionAuthDef) *pluginmanifestv1.ProviderAuth {
@@ -179,9 +164,9 @@ func mergedProviderConnectionParams(manifestProvider *pluginmanifestv1.Provider,
 		return manifestProvider.ConnectionParams
 	}
 
-	merged := make(map[string]pluginmanifestv1.ProviderConnectionParam, len(manifestProvider.ConnectionParams)+len(plugin.ConnectionParams))
-	for name, param := range manifestProvider.ConnectionParams {
-		merged[name] = param
+	merged := maps.Clone(manifestProvider.ConnectionParams)
+	if merged == nil {
+		merged = make(map[string]pluginmanifestv1.ProviderConnectionParam, len(plugin.ConnectionParams))
 	}
 	for name, override := range plugin.ConnectionParams {
 		param := merged[name]

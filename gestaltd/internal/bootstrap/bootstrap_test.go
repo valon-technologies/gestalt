@@ -183,6 +183,51 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("allows local connection params when manifest omits them", func(t *testing.T) {
+		t.Parallel()
+
+		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Reports API"},
+				"servers": []any{map[string]string{"url": "https://api.example.test"}},
+				"paths": map[string]any{
+					"/reports": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_reports",
+							"summary":     "List reports",
+						},
+					},
+				},
+			})
+		}))
+		testutil.CloseOnCleanup(t, specSrv)
+
+		plugin := &config.PluginDef{
+			Source:        "github.com/acme/plugins/reports",
+			Version:       "1.0.0",
+			IsDeclarative: true,
+			ConnectionParams: map[string]config.ConnectionParamDef{
+				"tenant": {Required: true},
+			},
+			ResolvedManifest: &pluginmanifestv1.Manifest{
+				Kinds: []string{pluginmanifestv1.KindProvider},
+				Provider: &pluginmanifestv1.Provider{
+					OpenAPI: specSrv.URL,
+				},
+			},
+		}
+
+		cfg := validConfig()
+		cfg.Integrations["reports"] = config.IntegrationDef{
+			Plugin: plugin,
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
 	t.Run("rejects undeclared resolved manifest connection override", func(t *testing.T) {
 		t.Parallel()
 

@@ -46,6 +46,7 @@ properties:
 
 			dir := t.TempDir()
 			manifestPath := filepath.Join(dir, ManifestFile)
+			artifactPath := testArtifactPath("provider")
 			if err := os.MkdirAll(filepath.Join(dir, "schemas"), 0755); err != nil {
 				t.Fatalf("MkdirAll: %v", err)
 			}
@@ -61,14 +62,14 @@ properties:
 				},
 				Artifacts: []pluginmanifestv1.Artifact{
 					{
-						OS:     "darwin",
-						Arch:   "arm64",
-						Path:   "artifacts/darwin/arm64/provider",
+						OS:     testArtifactOS,
+						Arch:   testArtifactArch,
+						Path:   artifactPath,
 						SHA256: sha256Hex("provider"),
 					},
 				},
 				Entrypoints: pluginmanifestv1.Entrypoints{
-					Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/darwin/arm64/provider"},
+					Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 				},
 			}
 			data, err := EncodeManifest(manifest)

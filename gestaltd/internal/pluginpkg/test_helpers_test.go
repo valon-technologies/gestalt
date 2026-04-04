@@ -5,12 +5,15 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 type archiveTestFile struct {
@@ -19,13 +22,29 @@ type archiveTestFile struct {
 	mode int64
 }
 
+const (
+	testArtifactOS   = "linux"
+	testArtifactArch = "amd64"
+)
+
 func sha256Hex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
 }
 
-func currentArtifactPath(binary string) string {
-	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, binary))
+func artifactPathFor(osName, arch, binary string) string {
+	return filepath.ToSlash(filepath.Join("artifacts", osName, arch, binary))
+}
+
+func testArtifactPath(binary string) string {
+	return artifactPathFor(testArtifactOS, testArtifactArch, binary)
+}
+
+func unknownSiblingArtifactPath(artifactPath string) string {
+	base := path.Base(artifactPath)
+	ext := path.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return path.Join(path.Dir(artifactPath), name+"-missing"+ext)
 }
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
@@ -36,8 +55,8 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
+				OS:     testArtifactOS,
+				Arch:   testArtifactArch,
 				Path:   artifactPath,
 				SHA256: digest,
 			},
@@ -68,6 +87,55 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 	}
 	mustWriteFile(t, filepath.Join(dir, ManifestFile), data, 0644)
 	return data
+}
+
+func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *manifestWire {
+	return &manifestWire{
+		Source:  source,
+		Version: version,
+		Provider: &providerManifestWire{
+			Exec:     &providerExecWire{ArtifactPath: artifactPath},
+			Surfaces: providerManifestSurfacesWire{},
+		},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     osName,
+				Arch:   arch,
+				Path:   artifactPath,
+				SHA256: sha,
+			},
+		},
+	}
+}
+
+func mustManifestJSON(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	return mustManifestJSONBytes(wire)
+}
+
+func mustManifestYAML(t *testing.T, wire *manifestWire) []byte {
+	t.Helper()
+	data, err := yaml.Marshal(wire)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	return data
+}
+
+func mustManifestJSONBytes(wire *manifestWire) []byte {
+	data, err := json.MarshalIndent(wire, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return append(data, '\n')
+}
+
+func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	mustWriteFile(t, path, data, 0644)
+	return path
 }
 
 func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFile) {
@@ -112,7 +180,7 @@ func mustWriteProviderPackageDir(t *testing.T, root, source, version, content st
 	t.Helper()
 
 	sourceDir := filepath.Join(root, "src")
-	artifactPath := currentArtifactPath("provider")
+	artifactPath := testArtifactPath("provider")
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte(content), 0755)
 
 	manifest := newProviderManifest(source, version, artifactPath, sha256Hex(content))

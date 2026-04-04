@@ -67,13 +67,14 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
-	if err := os.MkdirAll(filepath.Join(src, "artifacts", "darwin", "arm64"), 0755); err != nil {
+	artifactPath := testArtifactPath("provider")
+	if err := os.MkdirAll(filepath.Join(src, filepath.Dir(filepath.FromSlash(artifactPath))), 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "artifacts", "darwin", "arm64", "provider"), []byte("provider"), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(src, filepath.FromSlash(artifactPath)), []byte("provider"), 0755); err != nil {
 		t.Fatalf("WriteFile(provider): %v", err)
 	}
-	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", "darwin", "arm64", "artifacts/darwin/arm64/provider", sha256Hex("provider")))
+	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider")))
 	if err := os.WriteFile(filepath.Join(src, ManifestFile), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
