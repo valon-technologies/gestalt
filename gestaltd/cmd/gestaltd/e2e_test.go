@@ -1523,6 +1523,20 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 	if containsString(ids, "gmail.users.labels.list") {
 		t.Fatalf("operation ids = %v, did not expect disallowed raw spec operation", ids)
 	}
+
+	toolNames := listMCPTools(t, baseURL)
+	for _, want := range []string{
+		"example_echo",
+		"example_messages.list",
+		"example_getProfile",
+	} {
+		if !containsString(toolNames, want) {
+			t.Fatalf("mcp tool names = %v, want %s", toolNames, want)
+		}
+	}
+	if containsString(toolNames, "example_gmail.users.labels.list") {
+		t.Fatalf("mcp tool names = %v, did not expect disallowed raw spec tool", toolNames)
+	}
 }
 
 func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef string, port int) string {
@@ -1647,4 +1661,85 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func listMCPTools(t *testing.T, baseURL string) []string {
+	t.Helper()
+
+	status, resp := mcpJSONRPC(t, baseURL, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize: expected 200, got %d", status)
+	}
+	if _, ok := resp["result"].(map[string]any); !ok {
+		t.Fatalf("initialize: expected result object, got %v", resp)
+	}
+
+	status, resp = mcpJSONRPC(t, baseURL, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list: expected 200, got %d", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/list: expected result object, got %v", resp)
+	}
+	rawTools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools/list: expected tools array, got %v", result)
+	}
+
+	toolNames := make([]string, 0, len(rawTools))
+	for _, rawTool := range rawTools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			t.Fatalf("tools/list: expected tool object, got %T", rawTool)
+		}
+		name, ok := tool["name"].(string)
+		if !ok {
+			t.Fatalf("tools/list: expected string tool name, got %v", tool)
+		}
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+	return toolNames
+}
+
+func mcpJSONRPC(t *testing.T, baseURL string, body map[string]any) (int, map[string]any) {
+	t.Helper()
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal mcp body: %v", err)
+	}
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read /mcp response: %v", err)
+	}
+
+	var result map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &result); err != nil {
+			t.Fatalf("decode /mcp response: %v\nbody: %s", err, raw)
+		}
+	}
+	return resp.StatusCode, result
 }
