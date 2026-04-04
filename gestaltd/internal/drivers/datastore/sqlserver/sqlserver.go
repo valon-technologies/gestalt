@@ -20,7 +20,7 @@ const (
 	errUniqueIndexViolation = 2601
 )
 
-var supportedVersions = []string{"2017", "2019", "2022", "azure"}
+var supportedVersions = []string{"2017", "2019", "2022"}
 
 // dialect implements sqlstore.Dialect for SQL Server.
 type dialect struct{}

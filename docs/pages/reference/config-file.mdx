@@ -156,12 +156,12 @@ datastores, a legacy `version` field is ignored for backward compatibility.
 - `mysql`: `8.0`, `8.4`, `9.6`
 - `mongodb`: `7`, `8`
 - `oracle`: `19c`, `26ai`
-- `sqlserver`: `2017`, `2019`, `2022`, Azure SQL
+- `sqlserver`: `2017`, `2019`, `2022`
 
 `sqlite` uses the bundled SQLite engine, and `dynamodb` / `firestore` are
 managed services, so those providers do not accept a `version` field. The
-`sqlserver` datastore targets SQL Server, Azure SQL Database, and Azure SQL
-Managed Instance; Synapse and Fabric are not supported.
+`sqlserver` datastore targets SQL Server 2017, 2019, and 2022. Azure SQL
+Database, Azure SQL Managed Instance, Synapse, and Fabric are not supported.
 
 ## `secrets`
 
