@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/oauthdelegator"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 )
 
@@ -33,14 +34,6 @@ type AuthHandler interface {
 // UpstreamAuth adapts *oauth.UpstreamHandler to the AuthHandler interface.
 type UpstreamAuth struct {
 	Handler *oauth.UpstreamHandler
-}
-
-type oauthStarter interface {
-	StartOAuth(state string, scopes []string) (authURL string, verifier string)
-}
-
-type oauthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
 }
 
 func (u UpstreamAuth) AuthorizationURL(state string, scopes []string) string {
@@ -157,30 +150,20 @@ func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {
 	return b.DiscoveryDef
 }
 
+func (b *Base) authDelegator() oauthdelegator.Delegator {
+	return oauthdelegator.Delegator{Target: b.Auth}
+}
+
 func (b *Base) TokenURL() string {
-	type tokenURLer interface{ TokenURL() string }
-	if tu, ok := b.Auth.(tokenURLer); ok {
-		return tu.TokenURL()
-	}
-	return ""
+	return b.authDelegator().TokenURL()
 }
 
 func (b *Base) AuthorizationBaseURL() string {
-	type authBaseURLer interface{ AuthorizationBaseURL() string }
-	if abu, ok := b.Auth.(authBaseURLer); ok {
-		return abu.AuthorizationBaseURL()
-	}
-	return ""
+	return b.authDelegator().AuthorizationBaseURL()
 }
 
 func (b *Base) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	type overrider interface {
-		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-	}
-	if ov, ok := b.Auth.(overrider); ok {
-		return ov.StartOAuthWithOverride(authBaseURL, state, scopes)
-	}
-	return b.Auth.AuthorizationURL(state, scopes), ""
+	return b.authDelegator().StartOAuthWithOverride(authBaseURL, state, scopes)
 }
 
 func (b *Base) SetCatalog(c *catalog.Catalog) { b.catalog = c }
@@ -192,10 +175,7 @@ func (b *Base) AuthorizationURL(state string, scopes []string) string {
 }
 
 func (b *Base) StartOAuth(state string, scopes []string) (string, string) {
-	if starter, ok := b.Auth.(oauthStarter); ok {
-		return starter.StartOAuth(state, scopes)
-	}
-	return b.Auth.AuthorizationURL(state, scopes), ""
+	return b.authDelegator().StartOAuth(state, scopes)
 }
 
 func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
@@ -203,10 +183,7 @@ func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.TokenRespon
 }
 
 func (b *Base) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	if exchanger, ok := b.Auth.(oauthVerifierExchanger); ok {
-		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
-	}
-	return b.Auth.ExchangeCode(ctx, code)
+	return b.authDelegator().ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
 }
 
 func (b *Base) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
@@ -214,13 +191,7 @@ func (b *Base) RefreshToken(ctx context.Context, refreshToken string) (*core.Tok
 }
 
 func (b *Base) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	type refresher interface {
-		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-	}
-	if r, ok := b.Auth.(refresher); ok {
-		return r.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
-	}
-	return b.Auth.RefreshToken(ctx, refreshToken)
+	return b.authDelegator().RefreshTokenWithURL(ctx, refreshToken, tokenURL)
 }
 
 func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
@@ -242,6 +213,25 @@ func (b *Base) httpClient() *http.Client {
 	return &http.Client{Timeout: 10 * time.Second}
 }
 
+type requestCredential struct {
+	Token        string
+	AuthHeader   string
+	ExtraHeaders []egress.HeaderMutation
+}
+
+func (b *Base) requestCredential(token string) (requestCredential, error) {
+	auth, err := b.materializeCredential(token)
+	if err != nil {
+		return requestCredential{}, err
+	}
+	reqToken, authHeader := b.requestAuthFields(token, auth)
+	return requestCredential{
+		Token:        reqToken,
+		AuthHeader:   authHeader,
+		ExtraHeaders: auth.Headers,
+	}, nil
+}
+
 func (b *Base) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	if b.ExecuteFunc != nil {
 		return b.ExecuteFunc(ctx, operation, params, token)
@@ -259,15 +249,18 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 
 func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
+	cred, err := b.requestCredential(token)
+	if err != nil {
+		return nil, err
+	}
 
 	gqlReq := apiexec.GraphQLRequest{
 		URL:           gqlURL,
 		Query:         query,
 		Variables:     params,
-		CustomHeaders: headers,
-	}
-	if err := b.applyGraphQLAuth(&gqlReq, token); err != nil {
-		return nil, err
+		Token:         cred.Token,
+		AuthHeader:    cred.AuthHeader,
+		CustomHeaders: egress.ApplyHeaderMutations(headers, cred.ExtraHeaders),
 	}
 
 	resolved, err := b.resolveGraphQLEgress(ctx, operation, gqlReq)
@@ -300,36 +293,6 @@ func (b *Base) egressAuthStyle() egress.AuthStyle {
 
 func (b *Base) materializeCredential(token string) (egress.CredentialMaterialization, error) {
 	return egress.MaterializeCredential(token, b.egressAuthStyle(), b.TokenParser)
-}
-
-func (b *Base) applyAuth(req *apiexec.Request, token string) error {
-	auth, err := b.materializeCredential(token)
-	if err != nil {
-		return err
-	}
-	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
-	for _, header := range auth.Headers {
-		if req.CustomHeaders == nil {
-			req.CustomHeaders = make(map[string]string)
-		}
-		req.CustomHeaders[header.Name] = header.Value
-	}
-	return nil
-}
-
-func (b *Base) applyGraphQLAuth(req *apiexec.GraphQLRequest, token string) error {
-	auth, err := b.materializeCredential(token)
-	if err != nil {
-		return err
-	}
-	req.Token, req.AuthHeader = b.requestAuthFields(token, auth)
-	for _, header := range auth.Headers {
-		if req.CustomHeaders == nil {
-			req.CustomHeaders = make(map[string]string)
-		}
-		req.CustomHeaders[header.Name] = header.Value
-	}
-	return nil
 }
 
 func (b *Base) requestAuthFields(token string, auth egress.CredentialMaterialization) (string, string) {

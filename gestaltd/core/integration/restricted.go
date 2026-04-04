@@ -6,7 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/oauthdelegator"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations,
@@ -69,12 +69,12 @@ func NewRestricted(inner core.Provider, ops map[string]string, opts ...Restricte
 	if scp, ok := inner.(core.SessionCatalogProvider); ok {
 		rs := &restrictedSession{Restricted: r, scp: scp}
 		if oauth, ok := inner.(core.OAuthProvider); ok {
-			return &restrictedOAuth{Restricted: rs.Restricted, oauth: oauth, session: rs}
+			return &restrictedOAuth{Restricted: rs.Restricted, Delegator: oauthdelegator.Delegator{Target: oauth}, session: rs}
 		}
 		return rs
 	}
 	if oauth, ok := inner.(core.OAuthProvider); ok {
-		return &restrictedOAuth{Restricted: r, oauth: oauth}
+		return &restrictedOAuth{Restricted: r, Delegator: oauthdelegator.Delegator{Target: oauth}}
 	}
 	return r
 }
@@ -177,7 +177,7 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 // to the inner OAuthProvider.
 type restrictedOAuth struct {
 	*Restricted
-	oauth   core.OAuthProvider
+	oauthdelegator.Delegator
 	session *restrictedSession
 }
 
@@ -186,75 +186,6 @@ func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (
 		return r.session.CatalogForRequest(ctx, token)
 	}
 	return nil, nil
-}
-
-func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string {
-	return r.oauth.AuthorizationURL(state, scopes)
-}
-
-func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return r.oauth.ExchangeCode(ctx, code)
-}
-
-func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return r.oauth.RefreshToken(ctx, refreshToken)
-}
-
-func (r *restrictedOAuth) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	type refresher interface {
-		RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-	}
-	if rw, ok := r.oauth.(refresher); ok {
-		return rw.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
-	}
-	return r.oauth.RefreshToken(ctx, refreshToken)
-}
-
-type restrictedOAuthVerifierExchanger interface {
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-}
-
-func (r *restrictedOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	if exchanger, ok := r.oauth.(restrictedOAuthVerifierExchanger); ok {
-		return exchanger.ExchangeCodeWithVerifier(ctx, code, verifier, extraOpts...)
-	}
-	return r.oauth.ExchangeCode(ctx, code)
-}
-
-func (r *restrictedOAuth) TokenURL() string {
-	type tokenURLer interface{ TokenURL() string }
-	if tu, ok := r.oauth.(tokenURLer); ok {
-		return tu.TokenURL()
-	}
-	return ""
-}
-
-func (r *restrictedOAuth) AuthorizationBaseURL() string {
-	type authBaseURLer interface{ AuthorizationBaseURL() string }
-	if abu, ok := r.oauth.(authBaseURLer); ok {
-		return abu.AuthorizationBaseURL()
-	}
-	return ""
-}
-
-func (r *restrictedOAuth) StartOAuth(state string, scopes []string) (string, string) {
-	type starter interface {
-		StartOAuth(state string, scopes []string) (string, string)
-	}
-	if s, ok := r.oauth.(starter); ok {
-		return s.StartOAuth(state, scopes)
-	}
-	return r.oauth.AuthorizationURL(state, scopes), ""
-}
-
-func (r *restrictedOAuth) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	type overrider interface {
-		StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-	}
-	if ov, ok := r.oauth.(overrider); ok {
-		return ov.StartOAuthWithOverride(authBaseURL, state, scopes)
-	}
-	return r.oauth.AuthorizationURL(state, scopes), ""
 }
 
 func (r *Restricted) AuthTypes() []string {

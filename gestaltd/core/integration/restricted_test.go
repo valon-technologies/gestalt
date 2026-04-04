@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/oauth"
 )
 
 // stubWithOps extends StubIntegration with concrete operations.
@@ -182,16 +183,18 @@ func TestDelegationMethods(t *testing.T) {
 	t.Parallel()
 
 	exchangeResp := &core.TokenResponse{AccessToken: "abc"}
-	inner := &stubWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:    "my-integration",
-			DN:   "My Integration",
-			Desc: "A test integration",
-			ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
-				return exchangeResp, nil
+	inner := &stubExtendedOAuth{
+		stubWithOps: stubWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:    "my-integration",
+				DN:   "My Integration",
+				Desc: "A test integration",
+				ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
+					return exchangeResp, nil
+				},
 			},
+			ops: sampleOps(),
 		},
-		ops: sampleOps(),
 	}
 
 	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
@@ -206,9 +209,9 @@ func TestDelegationMethods(t *testing.T) {
 		t.Errorf("Description: got %q, want %q", got, "A test integration")
 	}
 
-	oauthR, ok := r.(core.OAuthProvider)
+	oauthR, ok := r.(extendedOAuthProvider)
 	if !ok {
-		t.Fatal("expected restricted wrapper to implement OAuthProvider")
+		t.Fatal("expected restricted wrapper to implement extended OAuth provider")
 	}
 
 	if got := oauthR.AuthorizationURL("state", []string{"read"}); got != "" {
@@ -230,6 +233,39 @@ func TestDelegationMethods(t *testing.T) {
 	if refreshTok != nil {
 		t.Errorf("RefreshToken: got %+v, want nil", refreshTok)
 	}
+
+	authURL, verifier := oauthR.StartOAuth("state", []string{"read"})
+	if authURL != "https://example.com/start?state=state" || verifier != "pkce-verifier" {
+		t.Errorf("StartOAuth: got (%q, %q)", authURL, verifier)
+	}
+
+	overrideURL, overrideVerifier := oauthR.StartOAuthWithOverride("https://override.example/authorize", "state", []string{"read"})
+	if overrideURL != "https://override.example/authorize?state=state" || overrideVerifier != "override-verifier" {
+		t.Errorf("StartOAuthWithOverride: got (%q, %q)", overrideURL, overrideVerifier)
+	}
+
+	if got := oauthR.TokenURL(); got != "https://example.com/token" {
+		t.Errorf("TokenURL: got %q, want %q", got, "https://example.com/token")
+	}
+	if got := oauthR.AuthorizationBaseURL(); got != "https://example.com/authorize" {
+		t.Errorf("AuthorizationBaseURL: got %q, want %q", got, "https://example.com/authorize")
+	}
+
+	tokWithVerifier, err := oauthR.ExchangeCodeWithVerifier(context.Background(), "code", "pkce-verifier")
+	if err != nil {
+		t.Fatalf("ExchangeCodeWithVerifier: %v", err)
+	}
+	if got := tokWithVerifier.AccessToken; got != "code:pkce-verifier" {
+		t.Errorf("ExchangeCodeWithVerifier: got %q, want %q", got, "code:pkce-verifier")
+	}
+
+	refreshWithURL, err := oauthR.RefreshTokenWithURL(context.Background(), "refresh", "https://override.example/token")
+	if err != nil {
+		t.Fatalf("RefreshTokenWithURL: %v", err)
+	}
+	if got := refreshWithURL.AccessToken; got != "refresh@https://override.example/token" {
+		t.Errorf("RefreshTokenWithURL: got %q, want %q", got, "refresh@https://override.example/token")
+	}
 }
 
 type stubCatalogProvider struct {
@@ -238,6 +274,44 @@ type stubCatalogProvider struct {
 }
 
 func (s *stubCatalogProvider) Catalog() *catalog.Catalog { return s.cat }
+
+type extendedOAuthProvider interface {
+	core.OAuthProvider
+	StartOAuth(state string, scopes []string) (string, string)
+	StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	TokenURL() string
+	AuthorizationBaseURL() string
+}
+
+type stubExtendedOAuth struct {
+	stubWithOps
+}
+
+func (s *stubExtendedOAuth) StartOAuth(state string, _ []string) (string, string) {
+	return "https://example.com/start?state=" + state, "pkce-verifier"
+}
+
+func (s *stubExtendedOAuth) StartOAuthWithOverride(authBaseURL, state string, _ []string) (string, string) {
+	return authBaseURL + "?state=" + state, "override-verifier"
+}
+
+func (s *stubExtendedOAuth) ExchangeCodeWithVerifier(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	return &core.TokenResponse{AccessToken: code + ":" + verifier}, nil
+}
+
+func (s *stubExtendedOAuth) RefreshTokenWithURL(_ context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	return &core.TokenResponse{AccessToken: refreshToken + "@" + tokenURL}, nil
+}
+
+func (s *stubExtendedOAuth) TokenURL() string {
+	return "https://example.com/token"
+}
+
+func (s *stubExtendedOAuth) AuthorizationBaseURL() string {
+	return "https://example.com/authorize"
+}
 
 func TestCatalogFiltersOperations(t *testing.T) {
 	t.Parallel()

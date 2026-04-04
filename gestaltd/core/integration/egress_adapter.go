@@ -34,6 +34,10 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		}
 		headers[k] = v
 	}
+	cred, err := b.requestCredential(token)
+	if err != nil {
+		return nil, err
+	}
 
 	req := apiexec.Request{
 		Method:        method,
@@ -41,12 +45,10 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		Path:          catOp.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
-		CustomHeaders: headers,
+		Token:         cred.Token,
+		AuthHeader:    cred.AuthHeader,
+		CustomHeaders: egress.ApplyHeaderMutations(headers, cred.ExtraHeaders),
 		CheckResponse: b.CheckResponse,
-	}
-
-	if err := b.applyAuth(&req, token); err != nil {
-		return nil, err
 	}
 
 	resolved, err := b.resolveEgress(ctx, operation, req)
