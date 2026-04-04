@@ -210,7 +210,8 @@ fn build_browser_response_html(title: &str, detail: &str) -> String {
         "detail": detail,
         "title": title,
     });
-    BROWSER_RESPONSE_PAGE.replace("__DATA__", &data.to_string())
+    let data = data.to_string().replace('<', "\\u003c");
+    BROWSER_RESPONSE_PAGE.replace("__DATA__", &data)
 }
 
 pub fn logout() -> Result<()> {
