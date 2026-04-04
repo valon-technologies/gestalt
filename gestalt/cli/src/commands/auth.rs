@@ -189,7 +189,7 @@ where
     let _ = send_browser_response(
         &stream,
         "Login successful",
-        "You can close this tab and return to the CLI.",
+        "You can close this tab.",
     );
     output::print_success("Logged in successfully. Stored CLI API token.");
     Ok(())
