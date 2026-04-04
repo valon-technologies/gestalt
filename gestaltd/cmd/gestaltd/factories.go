@@ -33,6 +33,7 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
 type bootstrapEnv struct {
@@ -42,10 +43,6 @@ type bootstrapEnv struct {
 	Result *bootstrap.Result
 
 	prevLogger *slog.Logger
-}
-
-func setupBootstrap(configFlag string, locked bool) (*bootstrapEnv, error) {
-	return setupBootstrapWithArtifactsDir(configFlag, "", locked)
 }
 
 func setupBootstrapWithArtifactsDir(configFlag, artifactsDir string, locked bool) (*bootstrapEnv, error) {
@@ -139,7 +136,7 @@ func resolveConfigPath(flagValue string) string {
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
 	}
-	for _, p := range localConfigPaths() {
+	for _, p := range operator.LocalConfigPaths() {
 		if p == "" {
 			continue
 		}

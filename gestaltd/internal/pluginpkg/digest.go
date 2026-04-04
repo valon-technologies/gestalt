@@ -12,11 +12,15 @@ import (
 )
 
 func ArchiveDigest(archivePath string) (string, error) {
-	sum, err := fileSHA256(archivePath)
+	sum, err := FileSHA256(archivePath)
 	if err != nil {
 		return "", fmt.Errorf("digest archive: %w", err)
 	}
 	return sum, nil
+}
+
+func FileSHA256(path string) (string, error) {
+	return fileSHA256(path)
 }
 
 func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (string, error) {
@@ -30,14 +34,14 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 	if err != nil {
 		return "", fmt.Errorf("digest manifest: %w", err)
 	}
-	manifestSum, err := fileSHA256(manifestPath)
+	manifestSum, err := FileSHA256(manifestPath)
 	if err != nil {
 		return "", fmt.Errorf("digest manifest: %w", err)
 	}
 	digests = append(digests, manifestSum)
 
 	for _, artifact := range manifest.Artifacts {
-		sum, err := fileSHA256(filepath.Join(dirPath, filepath.FromSlash(artifact.Path)))
+		sum, err := FileSHA256(filepath.Join(dirPath, filepath.FromSlash(artifact.Path)))
 		if err != nil {
 			return "", fmt.Errorf("digest artifact %s: %w", artifact.Path, err)
 		}
@@ -45,7 +49,7 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 	}
 
 	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
-		sum, err := fileSHA256(filepath.Join(dirPath, filepath.FromSlash(manifest.Provider.ConfigSchemaPath)))
+		sum, err := FileSHA256(filepath.Join(dirPath, filepath.FromSlash(manifest.Provider.ConfigSchemaPath)))
 		if err != nil {
 			return "", fmt.Errorf("digest provider config schema: %w", err)
 		}
@@ -58,7 +62,7 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 			if err != nil || d.IsDir() {
 				return err
 			}
-			sum, err := fileSHA256(path)
+			sum, err := FileSHA256(path)
 			if err != nil {
 				return fmt.Errorf("digest asset %s: %w", path, err)
 			}

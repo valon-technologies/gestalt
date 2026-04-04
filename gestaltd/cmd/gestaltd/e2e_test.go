@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -41,12 +43,12 @@ func TestE2EInitArchiveAndValidate(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -159,12 +161,12 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -173,8 +175,7 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 	}
 }
 
-func TestE2EInitHTTPSPackage(t *testing.T) { //nolint:paralleltest // mutates http.DefaultTransport
-
+func TestE2EInitHTTPSPackage(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 	archivePath := filepath.Join(dir, "plugin.tar.gz")
@@ -196,12 +197,12 @@ func TestE2EInitHTTPSPackage(t *testing.T) { //nolint:paralleltest // mutates ht
 		t.Fatalf("run init: %v", err)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
@@ -253,7 +254,7 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(deployDir, initLockfileName)
+	lockPath := filepath.Join(deployDir, operator.InitLockfileName)
 	t.Cleanup(func() {
 		_ = os.Chmod(deployDir, 0o755)
 		_ = os.Chmod(cfgPath, 0o644)
@@ -681,7 +682,7 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	}
 
 	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", 0)
-	lockPath := filepath.Join(dir, initLockfileName)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
 
 	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
@@ -1217,7 +1218,7 @@ func copyFile(src, dst string) error {
 }
 
 func fileSHA256(path string) (string, error) {
-	return fileSHA256Hex(path)
+	return pluginpkg.FileSHA256(path)
 }
 
 func writeE2EConfig(t *testing.T, dir, packageRef string, port int) string {
@@ -1464,12 +1465,12 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	lockPath := filepath.Join(dir, initLockfileName)
-	lock, err := readLockfile(lockPath)
+	lockPath := filepath.Join(dir, operator.InitLockfileName)
+	lock, err := operator.ReadLockfile(lockPath)
 	if err != nil {
-		t.Fatalf("readLockfile: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Plugins[lockPluginKey("integration", "example")]
+	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
 	if !ok {
 		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
 	}
