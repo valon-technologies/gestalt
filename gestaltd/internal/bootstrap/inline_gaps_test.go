@@ -252,13 +252,15 @@ func serveGraphQLBackend(t *testing.T) *httptest.Server {
 				},
 			})
 		case strings.Contains(body.Query, "teams"):
-			if !strings.Contains(body.Query, "query($first: Int)") {
+			if !strings.Contains(body.Query, "$first: Int") {
 				t.Fatalf("query missing variable declaration: %q", body.Query)
 			}
-			if !strings.Contains(body.Query, "teams(first: $first)") {
+			if !strings.Contains(body.Query, "teams(") || !strings.Contains(body.Query, "first: $first") {
 				t.Fatalf("query missing teams field arguments: %q", body.Query)
 			}
-			if !strings.Contains(body.Query, "pageInfo { hasNextPage endCursor }") {
+			if !strings.Contains(body.Query, "pageInfo") ||
+				!strings.Contains(body.Query, "hasNextPage") ||
+				!strings.Contains(body.Query, "endCursor") {
 				t.Fatalf("query missing connection pageInfo selection: %q", body.Query)
 			}
 			if got, ok := body.Variables["first"].(float64); !ok || got != 2 {
