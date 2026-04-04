@@ -66,21 +66,26 @@ func newTestDatabase(t *testing.T) string {
 }
 
 func newTestStore(t *testing.T) *Store {
-	return newTestStoreWithVersion(t, "")
+	store, err := openTestStore(t, "")
+	if err != nil {
+		t.Fatalf("openTestStore: %v", err)
+	}
+	return store
 }
 
-func newTestStoreWithVersion(t *testing.T, version string) *Store {
+func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	dsn := newTestDatabase(t)
 	store, err := New(dsn, version, coretesting.EncryptionKey(t))
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		return nil, fmt.Errorf("New: %w", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
+		_ = store.Close()
+		return nil, fmt.Errorf("Migrate: %w", err)
 	}
-	return store
+	return store, nil
 }
 
 func TestMySQLDatastoreConformance(t *testing.T) {
@@ -131,43 +136,15 @@ func TestMySQLDatastoreConformance(t *testing.T) {
 
 func TestMySQLVersionSelection(t *testing.T) {
 	t.Parallel()
-
-	dsn := newTestDatabase(t)
-
-	autoStore, err := New(dsn, "auto", coretesting.EncryptionKey(t))
-	if err != nil {
-		t.Fatalf("New(auto): %v", err)
-	}
-	t.Cleanup(func() { _ = autoStore.Close() })
-
-	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
-	if err != nil {
-		t.Fatalf("resolveVersion(auto): %v", err)
-	}
-
-	explicitStore, err := New(dsn, autoVersion, coretesting.EncryptionKey(t))
-	if err != nil {
-		t.Fatalf("New(%q): %v", autoVersion, err)
-	}
-	t.Cleanup(func() { _ = explicitStore.Close() })
-
-	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
-	if err != nil {
-		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
-	}
-	if explicitVersion != autoVersion {
-		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
-	}
-
-	for _, version := range supportedVersions {
-		if version == autoVersion {
-			continue
-		}
-		if _, err := New(dsn, version, coretesting.EncryptionKey(t)); err == nil {
-			t.Fatalf("New(%q) succeeded against %q", version, autoVersion)
-		}
-		return
-	}
+	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
+		SupportedVersions: supportedVersions,
+		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
+			return openTestStore(t, version)
+		},
+		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
+			return resolveVersion(ctx, ds.(*Store).DB, requested)
+		},
+	})
 }
 
 func shortUUID() string {

@@ -103,13 +103,8 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 
 func New(dsn, requestedVersion string, encryptionKey []byte) (*Store, error) {
-	s, err := sqlstore.Open(providerName, dsn, encryptionKey, dialect{})
+	s, err := sqlstore.OpenVersioned(providerName, dsn, encryptionKey, dialect{}, requestedVersion, resolveVersion)
 	if err != nil {
-		return nil, err
-	}
-
-	if _, err := resolveVersion(context.Background(), s.DB, requestedVersion); err != nil {
-		_ = s.Close()
 		return nil, err
 	}
 	return &Store{Store: s}, nil

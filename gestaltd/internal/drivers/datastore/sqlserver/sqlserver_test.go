@@ -3,6 +3,7 @@ package sqlserver
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
@@ -41,28 +42,32 @@ IF OBJECT_ID('users', 'U') IS NOT NULL DROP TABLE users;
 }
 
 func newTestStore(t *testing.T) *Store {
-	return newTestStoreWithVersion(t, "")
+	store, err := openTestStore(t, "")
+	if err != nil {
+		t.Fatalf("openTestStore: %v", err)
+	}
+	return store
 }
 
-func newTestStoreWithVersion(t *testing.T, version string) *Store {
+func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	dsn := testDSN(t)
 	resetTestDB(t, dsn)
 
 	store, err := New(dsn, version, coretesting.EncryptionKey(t))
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		return nil, fmt.Errorf("New: %w", err)
 	}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = store.Close()
-		t.Fatalf("Migrate: %v", err)
+		return nil, fmt.Errorf("Migrate: %w", err)
 	}
 
 	t.Cleanup(func() {
 		_ = store.Close()
 		resetTestDB(t, dsn)
 	})
-	return store
+	return store, nil
 }
 
 func TestSQLServerDatastoreConformance(t *testing.T) {
@@ -74,30 +79,13 @@ func TestSQLServerDatastoreConformance(t *testing.T) {
 
 func TestSQLServerVersionSelection(t *testing.T) {
 	t.Parallel()
-
-	autoStore := newTestStoreWithVersion(t, "auto")
-	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
-	if err != nil {
-		t.Fatalf("resolveVersion(auto): %v", err)
-	}
-
-	explicitStore := newTestStoreWithVersion(t, autoVersion)
-	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
-	if err != nil {
-		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
-	}
-	if explicitVersion != autoVersion {
-		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
-	}
-
-	dsn := testDSN(t)
-	for _, version := range supportedVersions {
-		if version == autoVersion {
-			continue
-		}
-		if _, err := New(dsn, version, coretesting.EncryptionKey(t)); err == nil {
-			t.Fatalf("New(%q) succeeded against %q", version, autoVersion)
-		}
-		return
-	}
+	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
+		SupportedVersions: supportedVersions,
+		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
+			return openTestStore(t, version)
+		},
+		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
+			return resolveVersion(ctx, ds.(*Store).DB, requested)
+		},
+	})
 }

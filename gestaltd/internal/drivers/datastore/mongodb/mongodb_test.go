@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -20,21 +21,25 @@ func testURI(t *testing.T) string {
 }
 
 func newTestStore(t *testing.T) *Store {
-	return newTestStoreWithVersion(t, "")
+	store, err := openTestStore(t, "")
+	if err != nil {
+		t.Fatalf("openTestStore: %v", err)
+	}
+	return store
 }
 
-func newTestStoreWithVersion(t *testing.T, version string) *Store {
+func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	uri := testURI(t)
 	database := "gestalt_test_" + uuid.NewString()
 
 	store, err := New(uri, database, version, coretesting.EncryptionKey(t))
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		return nil, fmt.Errorf("New: %w", err)
 	}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = store.Close()
-		t.Fatalf("Migrate: %v", err)
+		return nil, fmt.Errorf("Migrate: %w", err)
 	}
 
 	t.Cleanup(func() {
@@ -42,7 +47,7 @@ func newTestStoreWithVersion(t *testing.T, version string) *Store {
 		_ = store.Close()
 	})
 
-	return store
+	return store, nil
 }
 
 func TestMongoDBDatastoreConformance(t *testing.T) {
@@ -54,30 +59,13 @@ func TestMongoDBDatastoreConformance(t *testing.T) {
 
 func TestMongoDBVersionSelection(t *testing.T) {
 	t.Parallel()
-
-	autoStore := newTestStoreWithVersion(t, "auto")
-	autoVersion, err := resolveVersion(context.Background(), autoStore.client, "auto")
-	if err != nil {
-		t.Fatalf("resolveVersion(auto): %v", err)
-	}
-
-	explicitStore := newTestStoreWithVersion(t, autoVersion)
-	explicitVersion, err := resolveVersion(context.Background(), explicitStore.client, autoVersion)
-	if err != nil {
-		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
-	}
-	if explicitVersion != autoVersion {
-		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
-	}
-
-	uri := testURI(t)
-	for _, version := range supportedVersions {
-		if version == autoVersion {
-			continue
-		}
-		if _, err := New(uri, "gestalt_test_"+uuid.NewString(), version, coretesting.EncryptionKey(t)); err == nil {
-			t.Fatalf("New(%q) succeeded against %q", version, autoVersion)
-		}
-		return
-	}
+	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
+		SupportedVersions: supportedVersions,
+		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
+			return openTestStore(t, version)
+		},
+		DetectVersion: func(ctx context.Context, ds core.Datastore, requested string) (string, error) {
+			return resolveVersion(ctx, ds.(*Store).client, requested)
+		},
+	})
 }
