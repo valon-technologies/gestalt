@@ -113,7 +113,18 @@ func New(dsn, requestedVersion string, encryptionKey []byte) (*Store, error) {
 func resolveVersion(ctx context.Context, db *sql.DB, requested string) (string, error) {
 	return versioning.Resolve(ctx, providerName, requested, supportedVersions, func(ctx context.Context) (string, string, error) {
 		var raw string
-		if err := db.QueryRowContext(ctx, "SELECT version FROM product_component_version WHERE product LIKE 'Oracle Database%'").Scan(&raw); err != nil {
+		queries := []string{
+			"SELECT version_full FROM v$instance",
+			"SELECT version FROM v$instance",
+		}
+		var err error
+		for _, query := range queries {
+			err = db.QueryRowContext(ctx, query).Scan(&raw)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
 			return "", "", fmt.Errorf("%s: detecting version: %w", providerName, err)
 		}
 

@@ -80,7 +80,6 @@ func TestOracleDatastoreConformance(t *testing.T) {
 }
 
 func TestOracleVersionSelection(t *testing.T) {
-	t.Parallel()
 	coretesting.RunDatastoreVersionTests(t, coretesting.DatastoreVersionHooks{
 		SupportedVersions: supportedVersions,
 		OpenStore: func(t *testing.T, version string) (core.Datastore, error) {
