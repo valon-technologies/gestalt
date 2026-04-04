@@ -6,7 +6,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/oauthdelegator"
 )
 
 // Restricted wraps a Provider to expose only a subset of its operations,
@@ -69,12 +68,12 @@ func NewRestricted(inner core.Provider, ops map[string]string, opts ...Restricte
 	if scp, ok := inner.(core.SessionCatalogProvider); ok {
 		rs := &restrictedSession{Restricted: r, scp: scp}
 		if oauth, ok := inner.(core.OAuthProvider); ok {
-			return &restrictedOAuth{Restricted: rs.Restricted, Delegator: oauthdelegator.Delegator{Target: oauth}, session: rs}
+			return &restrictedOAuth{Restricted: rs.Restricted, inner: oauth, session: rs}
 		}
 		return rs
 	}
 	if oauth, ok := inner.(core.OAuthProvider); ok {
-		return &restrictedOAuth{Restricted: r, Delegator: oauthdelegator.Delegator{Target: oauth}}
+		return &restrictedOAuth{Restricted: r, inner: oauth}
 	}
 	return r
 }
@@ -177,8 +176,20 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 // to the inner OAuthProvider.
 type restrictedOAuth struct {
 	*Restricted
-	oauthdelegator.Delegator
+	inner   core.OAuthProvider
 	session *restrictedSession
+}
+
+func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string {
+	return r.inner.AuthorizationURL(state, scopes)
+}
+
+func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return r.inner.ExchangeCode(ctx, code)
+}
+
+func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return r.inner.RefreshToken(ctx, refreshToken)
 }
 
 func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {

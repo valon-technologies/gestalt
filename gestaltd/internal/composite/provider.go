@@ -7,7 +7,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/oauthdelegator"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -43,7 +42,7 @@ func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
 		mcp:  mcpUp,
 	}
 	if oauthProv, ok := apiProv.(core.OAuthProvider); ok {
-		return &oauthProvider{Provider: p, Delegator: oauthdelegator.Delegator{Target: oauthProv}}
+		return &oauthProvider{Provider: p, auth: oauthProv}
 	}
 	return p
 }
@@ -128,7 +127,19 @@ func (p *Provider) Close() error {
 
 type oauthProvider struct {
 	*Provider
-	oauthdelegator.Delegator
+	auth core.OAuthProvider
+}
+
+func (p *oauthProvider) AuthorizationURL(state string, scopes []string) string {
+	return p.auth.AuthorizationURL(state, scopes)
+}
+
+func (p *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.auth.ExchangeCode(ctx, code)
+}
+
+func (p *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.auth.RefreshToken(ctx, refreshToken)
 }
 
 func (p *Provider) buildCatalog() *catalog.Catalog {

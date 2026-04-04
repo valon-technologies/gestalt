@@ -34,10 +34,12 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		}
 		headers[k] = v
 	}
-	cred, err := b.requestCredential(token)
+	credential, err := b.materializeCredential(token)
 	if err != nil {
 		return nil, err
 	}
+	headers = egress.ApplyHeaderMutations(headers, credential.Headers)
+	authCredential := egress.CredentialMaterialization{Authorization: credential.Authorization}
 
 	req := apiexec.Request{
 		Method:        method,
@@ -45,23 +47,23 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		Path:          catOp.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
-		Token:         cred.Token,
-		AuthHeader:    cred.AuthHeader,
-		CustomHeaders: egress.ApplyHeaderMutations(headers, cred.ExtraHeaders),
+		AuthHeader:    authCredential.Authorization,
+		CustomHeaders: headers,
 		CheckResponse: b.CheckResponse,
 	}
 
-	resolved, err := b.resolveEgress(ctx, operation, req)
+	resolved, err := b.resolveEgress(ctx, operation, req, authCredential)
 	if err != nil {
 		return nil, err
 	}
+	req.AuthHeader = resolved.Credential.Authorization
 	req.CustomHeaders = maps.Clone(resolved.Headers)
 
 	if pgn, ok := b.Pagination[operation]; ok {
-		return apiexec.DoPaginatedWithExecutor(ctx, b.httpClient(), req, pgn, executeEgressHTTP)
+		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
 	}
 
-	result, err := executeEgressHTTP(ctx, b.httpClient(), req)
+	result, err := apiexec.Do(ctx, b.httpClient(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +75,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	return result, nil
 }
 
-func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.Request) (egress.Resolution, error) {
+func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.Request, credential egress.CredentialMaterialization) (egress.Resolution, error) {
 	resolver := egress.Resolver{}
 	if b.EgressResolver != nil {
 		resolver = *b.EgressResolver
@@ -87,11 +89,11 @@ func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.
 			Path:      apiexec.ExpandedPathWithQuery(req.Method, req.Path, req.Params, req.QueryParams),
 		},
 		Headers:    maps.Clone(req.CustomHeaders),
-		Credential: credentialFromAPIRequest(req),
+		Credential: credential,
 	})
 }
 
-func (b *Base) resolveGraphQLEgress(ctx context.Context, operation string, req apiexec.GraphQLRequest) (egress.Resolution, error) {
+func (b *Base) resolveGraphQLEgress(ctx context.Context, operation string, req apiexec.GraphQLRequest, credential egress.CredentialMaterialization) (egress.Resolution, error) {
 	resolver := egress.Resolver{}
 	if b.EgressResolver != nil {
 		resolver = *b.EgressResolver
@@ -111,50 +113,8 @@ func (b *Base) resolveGraphQLEgress(ctx context.Context, operation string, req a
 			Path:      parsed.Path,
 		},
 		Headers:    maps.Clone(req.CustomHeaders),
-		Credential: credentialFromGraphQLRequest(req),
+		Credential: credential,
 	})
-}
-
-func credentialFromAuth(token, authHeader string) egress.CredentialMaterialization {
-	switch {
-	case authHeader != "":
-		return egress.CredentialMaterialization{Authorization: authHeader}
-	case token != "":
-		return egress.CredentialMaterialization{Authorization: core.BearerScheme + token}
-	default:
-		return egress.CredentialMaterialization{}
-	}
-}
-
-func credentialFromAPIRequest(req apiexec.Request) egress.CredentialMaterialization {
-	return credentialFromAuth(req.Token, req.AuthHeader)
-}
-
-func credentialFromGraphQLRequest(req apiexec.GraphQLRequest) egress.CredentialMaterialization {
-	return credentialFromAuth(req.Token, req.AuthHeader)
-}
-
-func executeEgressHTTP(ctx context.Context, client *http.Client, req apiexec.Request) (*core.OperationResult, error) {
-	return egress.ExecuteHTTP(ctx, client, egressRequestFromAPIExec(req))
-}
-
-func egressRequestFromAPIExec(req apiexec.Request) egress.HTTPRequestSpec {
-	return egress.HTTPRequestSpec{
-		Target: egress.Target{
-			Method: req.Method,
-			Path:   req.Path,
-		},
-		BaseURL:     req.BaseURL,
-		Params:      req.Params,
-		QueryParams: req.QueryParams,
-		Headers:     maps.Clone(req.CustomHeaders),
-		Body:        req.Body,
-		ContentType: req.ContentType,
-		Check:       req.CheckResponse,
-		MaxRetries:  req.MaxRetries,
-		NoRetry:     req.NoRetry,
-		Credential:  credentialFromAPIRequest(req),
-	}
 }
 
 func findCatalogOp(cat *catalog.Catalog, id string) *catalog.CatalogOperation {
