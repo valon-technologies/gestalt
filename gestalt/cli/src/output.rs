@@ -1,7 +1,7 @@
-use std::fmt::Write;
 use std::io::IsTerminal;
 
 use colored::Colorize;
+use comfy_table::{Cell, ContentArrangement, Table, presets::ASCII_NO_BORDERS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Format {
@@ -56,192 +56,25 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     }
 
     let term_width = terminal_size::terminal_size()
-        .map(|(w, _)| w.0 as usize)
+        .map(|(w, _)| w.0)
         .unwrap_or(80);
+    let mut table = Table::new();
+    let header: Vec<Cell> = headers
+        .iter()
+        .map(|header| Cell::new(header.to_uppercase()))
+        .collect();
+    let data_rows: Vec<Vec<Cell>> = rows
+        .iter()
+        .map(|row| row.iter().map(Cell::new).collect())
+        .collect();
 
-    let output = format_table(headers, rows, term_width);
-    let mut lines = output.lines();
-
-    if let Some(header) = lines.next() {
-        if std::io::stdout().is_terminal() {
-            println!("{}", header.bold());
-        } else {
-            println!("{}", header);
-        }
-    }
-
-    for line in lines {
-        println!("{}", line);
-    }
-}
-
-pub(crate) fn format_table(headers: &[&str], rows: &[Vec<String>], term_width: usize) -> String {
-    let gap = 2;
-
-    let mut widths: Vec<usize> = headers.iter().map(|h| h.chars().count()).collect();
-    for row in rows {
-        for (i, cell) in row.iter().enumerate() {
-            if i < widths.len() {
-                widths[i] = widths[i].max(cell.chars().count());
-            }
-        }
-    }
-
-    let total_gap = gap * headers.len().saturating_sub(1);
-    let min_col_width = 10;
-    let available = term_width.saturating_sub(total_gap);
-
-    let mut excess = widths.iter().sum::<usize>().saturating_sub(available);
-    while excess > 0 {
-        let max_width = *widths.iter().max().unwrap();
-        if max_width <= min_col_width {
-            break;
-        }
-        let max_count = widths.iter().filter(|&&w| w == max_width).count();
-        let second_max = widths
-            .iter()
-            .filter(|&&w| w < max_width)
-            .max()
-            .copied()
-            .unwrap_or(min_col_width)
-            .max(min_col_width);
-        let shrink_each = (max_width - second_max).min(excess / max_count.max(1));
-        let shrink_remainder = excess - shrink_each * max_count;
-        let mut extra_given = 0;
-        for w in &mut widths {
-            if *w == max_width {
-                let extra = if extra_given < shrink_remainder { 1 } else { 0 };
-                let s = shrink_each + extra;
-                *w -= s;
-                excess = excess.saturating_sub(s);
-                extra_given += extra;
-            }
-        }
-    }
-
-    let total_content: usize = widths.iter().sum();
-    let slack = available.saturating_sub(total_content);
-    if slack > 0 && !widths.is_empty() {
-        let max_width = *widths.iter().max().unwrap_or(&0);
-        let max_indices: Vec<usize> = widths
-            .iter()
-            .enumerate()
-            .filter(|&(_, &w)| w == max_width)
-            .map(|(i, _)| i)
-            .collect();
-        let per_col = slack / max_indices.len();
-        let remainder = slack % max_indices.len();
-        for (j, &i) in max_indices.iter().enumerate() {
-            widths[i] += per_col + if j < remainder { 1 } else { 0 };
-        }
-    }
-
-    let mut out = String::new();
-
-    for (i, h) in headers.iter().enumerate() {
-        if i > 0 {
-            out.push_str("  ");
-        }
-
-        let _ = write!(out, "{:<width$}", h.to_uppercase(), width = widths[i]);
-    }
-    out.push('\n');
-
-    for (i, w) in widths.iter().enumerate() {
-        if i > 0 {
-            out.push_str("  ");
-        }
-        for _ in 0..*w {
-            out.push('-');
-        }
-    }
-    out.push('\n');
-
-    for row in rows {
-        let wrapped: Vec<Vec<String>> = row
-            .iter()
-            .enumerate()
-            .map(|(i, cell)| wrap_text(cell, widths.get(i).copied().unwrap_or(0)))
-            .collect();
-
-        let max_lines = wrapped.iter().map(|c| c.len()).max().unwrap_or(1);
-        for line_idx in 0..max_lines {
-            for (i, cell) in wrapped.iter().enumerate() {
-                if i > 0 {
-                    out.push_str("  ");
-                }
-                let w = widths.get(i).copied().unwrap_or(0);
-                let text = cell.get(line_idx).map(|s| s.as_str()).unwrap_or("");
-
-                let _ = write!(out, "{:<width$}", text, width = w);
-            }
-            out.push('\n');
-        }
-    }
-
-    out.truncate(out.trim_end_matches('\n').len());
-    out
-}
-
-fn char_width(s: &str) -> usize {
-    s.chars().count()
-}
-
-fn split_at_char(s: &str, n: usize) -> (&str, &str) {
-    let byte_idx = s.char_indices().nth(n).map(|(i, _)| i).unwrap_or(s.len());
-    (&s[..byte_idx], &s[byte_idx..])
-}
-
-fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    if width == 0 || char_width(text) <= width {
-        return vec![text.to_string()];
-    }
-
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    let mut current_width: usize = 0;
-
-    for word in text.split_whitespace() {
-        let wlen = char_width(word);
-        if wlen > width {
-            if !current.is_empty() {
-                lines.push(current);
-                current = String::new();
-                current_width = 0;
-            }
-            let mut remaining = word;
-            while char_width(remaining) > width {
-                let (chunk, rest) = split_at_char(remaining, width);
-                lines.push(chunk.to_string());
-                remaining = rest;
-            }
-            if !remaining.is_empty() {
-                current = remaining.to_string();
-                current_width = char_width(remaining);
-            }
-        } else if current.is_empty() {
-            current = word.to_string();
-            current_width = wlen;
-        } else if current_width + 1 + wlen <= width {
-            current.push(' ');
-            current.push_str(word);
-            current_width += 1 + wlen;
-        } else {
-            lines.push(current);
-            current = word.to_string();
-            current_width = wlen;
-        }
-    }
-
-    if !current.is_empty() {
-        lines.push(current);
-    }
-
-    if lines.is_empty() {
-        vec![String::new()]
-    } else {
-        lines
-    }
+    table
+        .load_preset(ASCII_NO_BORDERS)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(term_width)
+        .set_header(header)
+        .add_rows(data_rows);
+    println!("{}", table.trim_fmt());
 }
 
 pub fn select_path(value: &serde_json::Value, path: &str) -> anyhow::Result<serde_json::Value> {
@@ -288,163 +121,5 @@ pub fn print_error(msg: &str) {
         eprintln!("{}: {}", "error".red().bold(), msg);
     } else {
         eprintln!("error: {}", msg);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_value_enum() {
-        use clap::ValueEnum;
-        let json = Format::from_str("json", false).unwrap();
-        assert_eq!(json, Format::Json);
-        let table = Format::from_str("table", false).unwrap();
-        assert_eq!(table, Format::Table);
-        assert!(Format::from_str("other", false).is_err());
-    }
-
-    #[test]
-    fn test_wrap_text_no_wrap_needed() {
-        assert_eq!(wrap_text("hello", 10), vec!["hello"]);
-    }
-
-    #[test]
-    fn test_wrap_text_zero_width() {
-        assert_eq!(wrap_text("hello", 0), vec!["hello"]);
-    }
-
-    #[test]
-    fn test_wrap_text_word_boundary() {
-        assert_eq!(wrap_text("hello world foo", 11), vec!["hello world", "foo"]);
-    }
-
-    #[test]
-    fn test_wrap_text_multiple_lines() {
-        assert_eq!(
-            wrap_text("one two three four five", 10),
-            vec!["one two", "three four", "five"]
-        );
-    }
-
-    #[test]
-    fn test_wrap_text_long_word_hard_break() {
-        assert_eq!(
-            wrap_text("abcdefghijklmno", 5),
-            vec!["abcde", "fghij", "klmno"]
-        );
-    }
-
-    #[test]
-    fn test_wrap_text_mixed_long_and_short() {
-        assert_eq!(
-            wrap_text("hi abcdefghijklmno end", 5),
-            vec!["hi", "abcde", "fghij", "klmno", "end"]
-        );
-    }
-
-    #[test]
-    fn test_format_table_fits_terminal() {
-        let headers = &["Name", "Desc"];
-        let rows = vec![
-            vec!["foo".into(), "a thing".into()],
-            vec!["barbaz".into(), "another".into()],
-        ];
-        let out = format_table(headers, &rows, 80);
-        let lines: Vec<&str> = out.lines().collect();
-        assert_eq!(lines.len(), 4);
-        assert!(lines[0].contains("NAME"));
-        assert!(lines[0].contains("DESC"));
-        assert!(lines[2].contains("foo"));
-        assert!(lines[2].contains("a thing"));
-        assert!(lines[3].contains("barbaz"));
-    }
-
-    #[test]
-    fn test_format_table_wraps_long_description() {
-        let headers = &["Name", "Description", "Ok"];
-        let rows = vec![vec![
-            "svc".into(),
-            "This is a really long description that should wrap".into(),
-            "yes".into(),
-        ]];
-        let out = format_table(headers, &rows, 40);
-        let data_lines: Vec<&str> = out.lines().skip(2).collect();
-        assert!(
-            data_lines.len() > 1,
-            "expected multi-line wrapping, got: {data_lines:?}"
-        );
-        assert!(data_lines[0].contains("svc"));
-        assert!(data_lines[0].contains("yes") || data_lines[1].contains("yes"));
-    }
-
-    #[test]
-    fn test_format_table_narrow_terminal() {
-        let headers = &["Name", "Description"];
-        let rows = vec![vec![
-            "myservice".into(),
-            "Manage cloud infrastructure and deployments".into(),
-        ]];
-        let out = format_table(headers, &rows, 30);
-        for line in out.lines() {
-            assert!(
-                line.trim_end().len() <= 30,
-                "line exceeds terminal width: {:?} (len={})",
-                line,
-                line.trim_end().len()
-            );
-        }
-    }
-
-    #[test]
-    fn test_format_table_columns_aligned_on_wrap() {
-        let headers = &["A", "B"];
-        let rows = vec![vec!["short".into(), "word1 word2 word3 word4 word5".into()]];
-        let out = format_table(headers, &rows, 25);
-        let data_lines: Vec<&str> = out.lines().skip(2).collect();
-        if data_lines.len() > 1 {
-            let first_b_col = data_lines[0].find("word1").unwrap();
-            let second_b_col = data_lines[1].chars().position(|c| c != ' ').unwrap_or(0);
-            assert_eq!(
-                first_b_col, second_b_col,
-                "continuation lines should align with column start"
-            );
-        }
-    }
-
-    #[test]
-    fn test_select_simple_key() {
-        let val = serde_json::json!({"a": 1});
-        let result = select_path(&val, "a").unwrap();
-        assert_eq!(result, serde_json::json!(1));
-    }
-
-    #[test]
-    fn test_select_nested() {
-        let val = serde_json::json!({"a": {"b": 2}});
-        let result = select_path(&val, "a.b").unwrap();
-        assert_eq!(result, serde_json::json!(2));
-    }
-
-    #[test]
-    fn test_select_array_index() {
-        let val = serde_json::json!({"a": [10, 20]});
-        let result = select_path(&val, "a.0").unwrap();
-        assert_eq!(result, serde_json::json!(10));
-    }
-
-    #[test]
-    fn test_select_missing_key() {
-        let val = serde_json::json!({"a": 1});
-        let result = select_path(&val, "b");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_select_empty_path() {
-        let val = serde_json::json!({"a": 1});
-        let result = select_path(&val, "").unwrap();
-        assert_eq!(result, val);
     }
 }

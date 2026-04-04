@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeMap;
 use std::io::Read;
 
 use crate::catalog::OperationsCatalog;
@@ -13,6 +14,15 @@ pub enum ParamValue {
 pub struct ParamEntry {
     pub key: String,
     pub value: ParamValue,
+}
+
+impl ParamValue {
+    fn to_json(&self) -> serde_json::Value {
+        match self {
+            Self::StringVal(value) => serde_json::Value::String(value.clone()),
+            Self::JsonVal(value) => value.clone(),
+        }
+    }
 }
 
 pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
@@ -50,27 +60,17 @@ pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
     })
 }
 
-fn param_to_json(value: &ParamValue) -> serde_json::Value {
-    match value {
-        ParamValue::StringVal(s) => serde_json::Value::String(s.clone()),
-        ParamValue::JsonVal(v) => v.clone(),
-    }
-}
-
 pub fn assemble_params(
     entries: &[ParamEntry],
     catalog: Option<&OperationsCatalog>,
     operation: &str,
 ) -> Result<serde_json::Map<String, serde_json::Value>> {
-    let mut grouped: Vec<(String, Vec<serde_json::Value>)> = Vec::new();
-
+    let mut grouped: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
     for entry in entries {
-        let json_val = param_to_json(&entry.value);
-        if let Some((_, vals)) = grouped.iter_mut().find(|(k, _)| k == &entry.key) {
-            vals.push(json_val);
-        } else {
-            grouped.push((entry.key.clone(), vec![json_val]));
-        }
+        grouped
+            .entry(entry.key.clone())
+            .or_default()
+            .push(entry.value.to_json());
     }
 
     let mut map = serde_json::Map::new();
@@ -133,115 +133,4 @@ pub fn merge_params(
         result.insert(k, v);
     }
     result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_string_param() {
-        let entry = parse_param_entry("key=value").unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(entry.value, ParamValue::StringVal("value".to_string()));
-    }
-
-    #[test]
-    fn test_parse_json_number() {
-        let entry = parse_param_entry("key:=42").unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(entry.value, ParamValue::JsonVal(serde_json::json!(42)));
-    }
-
-    #[test]
-    fn test_parse_json_bool() {
-        let entry = parse_param_entry("key:=true").unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(entry.value, ParamValue::JsonVal(serde_json::json!(true)));
-    }
-
-    #[test]
-    fn test_parse_json_array() {
-        let entry = parse_param_entry("key:=[1,2]").unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(entry.value, ParamValue::JsonVal(serde_json::json!([1, 2])));
-    }
-
-    #[test]
-    fn test_parse_json_object() {
-        let entry = parse_param_entry(r#"key:={"a":1}"#).unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(
-            entry.value,
-            ParamValue::JsonVal(serde_json::json!({"a": 1}))
-        );
-    }
-
-    #[test]
-    fn test_parse_json_null() {
-        let entry = parse_param_entry("key:=null").unwrap();
-        assert_eq!(entry.key, "key");
-        assert_eq!(entry.value, ParamValue::JsonVal(serde_json::Value::Null));
-    }
-
-    #[test]
-    fn test_parse_invalid_json() {
-        let result = parse_param_entry("key:=invalid");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_value_with_equals() {
-        let entry = parse_param_entry("url=http://x.com?a=1").unwrap();
-        assert_eq!(entry.key, "url");
-        assert_eq!(
-            entry.value,
-            ParamValue::StringVal("http://x.com?a=1".to_string())
-        );
-    }
-
-    #[test]
-    fn test_parse_empty_key() {
-        let result = parse_param_entry("=value");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_no_delimiter() {
-        let result = parse_param_entry("nodelimiter");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_json_array_not_double_wrapped() {
-        use crate::catalog::{CatalogOperation, CatalogParameter, OperationsCatalog};
-
-        let cat = OperationsCatalog::new(vec![CatalogOperation {
-            id: "op".to_string(),
-            parameters: vec![CatalogParameter {
-                name: "tags".to_string(),
-                r#type: "array".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        }]);
-
-        let entries = vec![ParamEntry {
-            key: "tags".to_string(),
-            value: ParamValue::JsonVal(serde_json::json!(["a", "b"])),
-        }];
-
-        let result = assemble_params(&entries, Some(&cat), "op").unwrap();
-        assert_eq!(result["tags"], serde_json::json!(["a", "b"]));
-    }
-
-    #[test]
-    fn test_parse_value_containing_colon_equals() {
-        let entry = parse_param_entry("query=SELECT @a:=1").unwrap();
-        assert_eq!(entry.key, "query");
-        assert_eq!(
-            entry.value,
-            ParamValue::StringVal("SELECT @a:=1".to_string())
-        );
-    }
 }

@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, bail};
+use reqwest::Method;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
+use serde::Serialize;
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -118,40 +120,18 @@ impl ApiClient {
     }
 
     pub fn get(&self, path: &str) -> Result<serde_json::Value> {
-        let url = format!("{}{}", self.base_url, path);
-        let resp = self
-            .client
-            .get(&url)
-            .bearer_auth(&self.token)
-            .send()
-            .with_context(|| format!("request to {} failed", url))?;
-
-        self.handle_response(resp)
+        self.send(Method::GET, path)
     }
 
-    pub fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
-        let url = format!("{}{}", self.base_url, path);
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.token)
-            .json(body)
-            .send()
-            .with_context(|| format!("request to {} failed", url))?;
-
-        self.handle_response(resp)
+    pub fn post<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_json(Method::POST, path, body)
     }
 
     pub fn delete(&self, path: &str) -> Result<serde_json::Value> {
-        let url = format!("{}{}", self.base_url, path);
-        let resp = self
-            .client
-            .delete(&url)
-            .bearer_auth(&self.token)
-            .send()
-            .with_context(|| format!("request to {} failed", url))?;
-
-        self.handle_response(resp)
+        self.send(Method::DELETE, path)
     }
 
     pub fn create_api_token(&self, name: &str) -> Result<serde_json::Value> {
@@ -160,6 +140,38 @@ impl ApiClient {
 
     pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {
         self.delete(&format!("/api/v1/tokens/{id}"))
+    }
+
+    fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {
+        self.send_request(method, path, None::<&serde_json::Value>)
+    }
+
+    fn send_json<T>(&self, method: Method, path: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_request(method, path, Some(body))
+    }
+
+    fn send_request<T>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&T>,
+    ) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        let url = format!("{}{}", self.base_url, path);
+        let request = self.client.request(method, &url).bearer_auth(&self.token);
+        let request = match body {
+            Some(body) => request.json(body),
+            None => request,
+        };
+        let resp = request
+            .send()
+            .with_context(|| format!("request to {} failed", url))?;
+        self.handle_response(resp)
     }
 
     fn handle_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {

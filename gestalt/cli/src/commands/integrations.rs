@@ -64,13 +64,15 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let body = serde_json::to_value(StartOAuthRequest {
-        integration: name,
-        connection,
-        instance,
-    })?;
     let resp = client
-        .post("/api/v1/auth/start-oauth", &body)
+        .post(
+            "/api/v1/auth/start-oauth",
+            &StartOAuthRequest {
+                integration: name,
+                connection,
+                instance,
+            },
+        )
         .context("failed to start OAuth flow")?;
 
     let url = resp["url"]
