@@ -40,7 +40,7 @@ Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or Grap
 
 | Path | Description |
 | --- | --- |
-| [`gestaltd`](./gestaltd) | The Go server daemon. Loads config, serves the HTTP API, MCP surface, and embedded web UI. |
+| [`gestaltd`](./gestaltd) | The Go server daemon. Loads config, serves the HTTP API, MCP surface, the client UI, and the built-in admin UI. |
 | [`gestalt`](./gestalt) | The Rust CLI client. Connects to a running `gestaltd` instance for authentication and operations. |
 | [`sdk`](./sdk) | Shared SDKs and plugin manifest definitions. |
 | [`docs`](./docs) | The documentation site. |

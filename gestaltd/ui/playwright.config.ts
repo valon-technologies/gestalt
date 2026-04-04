@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL;
-const webPort = Number(process.env.WEB_PORT) || 3000;
+const apiPort = Number(process.env.API_PORT) || 8080;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,7 +18,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: baseURL || `http://localhost:${webPort}`,
+    baseURL: baseURL || `http://localhost:${apiPort}`,
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -41,10 +41,10 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: `npm run dev -- --port ${webPort}`,
-          url: `http://localhost:${webPort}`,
+          command: "./dev.sh",
+          url: `http://localhost:${apiPort}`,
           reuseExistingServer: !process.env.CI,
-          timeout: 30000,
+          timeout: 120000,
           stdout: "ignore",
           stderr: "pipe",
         },

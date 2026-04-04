@@ -2,66 +2,48 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  getIntegrations,
-  getOperationMetricsOverview,
-  getTokens,
-  type OperationMetricsOverview,
-} from "@/lib/api";
+import { getIntegrations, getTokens } from "@/lib/api";
 import Nav from "@/components/Nav";
 import AuthGuard from "@/components/AuthGuard";
-import DashboardMetrics from "@/components/DashboardMetrics";
 
 export default function DashboardPage() {
   const [data, setData] = useState<{
     integrations: number | null;
     tokens: number | null;
-    metrics: OperationMetricsOverview | null;
     error: string | null;
-    metricsError: string | null;
   }>({
     integrations: null,
     tokens: null,
-    metrics: null,
     error: null,
-    metricsError: null,
   });
 
   useEffect(() => {
     let active = true;
 
-    Promise.allSettled([
-      getIntegrations(),
-      getTokens(),
-      getOperationMetricsOverview(),
-    ]).then(([integrationsResult, tokensResult, metricsResult]) => {
-      if (!active) return;
+    Promise.allSettled([getIntegrations(), getTokens()]).then(
+      ([integrationsResult, tokensResult]) => {
+        if (!active) return;
 
-      const error =
-        integrationsResult.status === "rejected"
-          ? errorMessage(integrationsResult.reason)
-          : tokensResult.status === "rejected"
-            ? errorMessage(tokensResult.reason)
-            : null;
+        const error =
+          integrationsResult.status === "rejected"
+            ? errorMessage(integrationsResult.reason)
+            : tokensResult.status === "rejected"
+              ? errorMessage(tokensResult.reason)
+              : null;
 
-      setData({
-        integrations:
-          integrationsResult.status === "fulfilled"
-            ? integrationsResult.value.length
-            : null,
-        tokens:
-          tokensResult.status === "fulfilled"
-            ? tokensResult.value.length
-            : null,
-        metrics:
-          metricsResult.status === "fulfilled" ? metricsResult.value : null,
-        error,
-        metricsError:
-          metricsResult.status === "rejected"
-            ? errorMessage(metricsResult.reason)
-            : null,
-      });
-    });
+        setData({
+          integrations:
+            integrationsResult.status === "fulfilled"
+              ? integrationsResult.value.length
+              : null,
+          tokens:
+            tokensResult.status === "fulfilled"
+              ? tokensResult.value.length
+              : null,
+          error,
+        });
+      },
+    );
 
     return () => {
       active = false;
@@ -79,7 +61,7 @@ export default function DashboardPage() {
               Dashboard
             </h1>
             <p className="mt-2 text-sm text-muted">
-              Your Gestalt overview at a glance.
+              Manage the client-facing integration workspace from one place.
             </p>
           </div>
 
@@ -120,7 +102,26 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <DashboardMetrics metrics={data.metrics} error={data.metricsError} />
+          <section className="mt-10 rounded-lg border border-alpha bg-base-100 p-8 shadow-card dark:bg-surface animate-fade-in-up [animation-delay:120ms]">
+            <span className="label-text">Admin</span>
+            <h2 className="mt-2 text-xl font-heading font-bold text-primary">
+              Metrics moved to the admin UI
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm text-muted">
+              Prometheus metrics and the built-in admin dashboard now live at
+              <span className="font-mono text-primary"> /admin</span> so this
+              client workspace stays focused on integrations and tokens.
+            </p>
+            <div className="mt-5">
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-2 rounded-md border border-alpha px-4 py-2 text-sm font-medium text-primary transition-colors duration-150 hover:border-alpha-strong hover:bg-alpha-5"
+              >
+                Open admin UI
+                <span aria-hidden="true">&rarr;</span>
+              </Link>
+            </div>
+          </section>
         </main>
       </div>
     </AuthGuard>

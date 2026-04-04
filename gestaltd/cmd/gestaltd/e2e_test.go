@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -387,29 +386,21 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 
 		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
 
-		overview := waitForOperationMetricsOverview(t, baseURL, 5*time.Second)
-		if !overview.Enabled {
-			t.Fatalf("expected built-in metrics overview to be enabled: %+v", overview)
-		}
-		if overview.Summary.Requests == 0 {
-			t.Fatalf("expected overview request count > 0: %+v", overview.Summary)
-		}
-		if overview.Summary.Errors == 0 {
-			t.Fatalf("expected overview error count > 0: %+v", overview.Summary)
-		}
-		if overview.WindowSeconds != 3600 || overview.BucketSeconds != 60 {
-			t.Fatalf("expected fixed 1h/60s built-in metrics window, got %+v", overview)
-		}
-		if overview.Summary.ThroughputRPS <= 0.01 {
-			t.Fatalf("expected summary throughput to use active data span, got %+v", overview.Summary)
-		}
-
 		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusOK)
 		if !bytes.Contains(promBody, []byte("gestaltd_operation_count_total")) {
 			t.Fatalf("expected prometheus counter in /metrics body: %s", promBody)
 		}
 		if !bytes.Contains(promBody, []byte("gestaltd_operation_duration_seconds_bucket")) {
 			t.Fatalf("expected prometheus histogram in /metrics body: %s", promBody)
+		}
+
+		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
+		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
+			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
+		}
+		adminJS := getEndpointBody(t, baseURL+"/admin/app.js", http.StatusOK)
+		if !bytes.Contains(adminJS, []byte(`fetch("/metrics"`)) {
+			t.Fatalf("expected admin ui script to read /metrics: %s", adminJS)
 		}
 	})
 
@@ -455,7 +446,7 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 }
 
-func TestE2EInitServeLockedStdoutExposesPrometheusAndDashboardMetricsByDefault(t *testing.T) {
+func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -490,29 +481,6 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndDashboardMetricsByDefault(t
 		invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
 		invokeExampleOperation(t, baseURL, "nope", `{}`, http.StatusNotFound)
 
-		overview := waitForOperationMetricsOverview(t, baseURL, 5*time.Second)
-		if !overview.Enabled {
-			t.Fatalf("expected built-in metrics overview to be enabled: %+v", overview)
-		}
-		if overview.Summary.Requests == 0 {
-			t.Fatalf("expected overview request count > 0: %+v", overview.Summary)
-		}
-		if overview.Summary.Errors == 0 {
-			t.Fatalf("expected overview error count > 0: %+v", overview.Summary)
-		}
-		if overview.WindowSeconds != 3600 || overview.BucketSeconds != 60 {
-			t.Fatalf("expected fixed 1h/60s built-in metrics window, got %+v", overview)
-		}
-		if overview.Summary.ThroughputRPS <= 0.01 {
-			t.Fatalf("expected summary throughput to use active data span, got %+v", overview.Summary)
-		}
-		if len(overview.Providers) == 0 || overview.Providers[0].Provider != "example" {
-			t.Fatalf("expected provider breakdown for example: %+v", overview.Providers)
-		}
-		if overview.Providers[0].ThroughputRPS <= 0.01 {
-			t.Fatalf("expected provider throughput to use active data span, got %+v", overview.Providers[0])
-		}
-
 		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusOK)
 		if !bytes.Contains(promBody, []byte("gestaltd_operation_count_total")) {
 			t.Fatalf("expected prometheus counter in /metrics body: %s", promBody)
@@ -520,11 +488,73 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndDashboardMetricsByDefault(t
 		if !bytes.Contains(promBody, []byte(`gestalt_provider="example"`)) {
 			t.Fatalf("expected provider label in /metrics body: %s", promBody)
 		}
+
+		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
+		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
+			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
+		}
 	})
 
 	if !strings.Contains(stdout, `"msg":"audit"`) {
 		t.Fatalf("expected audit log in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
+}
+
+func TestE2EServeLockedUsesUIPluginForClientRootAndKeepsAdminBuiltIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	providerPluginDir := setupPluginDir(t, dir)
+	providerArchivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(providerPluginDir, providerArchivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir provider: %v", err)
+	}
+
+	uiPluginDir := newWebUIReleaseFixture(t, dir)
+	if err := os.WriteFile(
+		filepath.Join(uiPluginDir, webUITestAssetRoot, "index.html"),
+		[]byte("<html><body>custom client ui</body></html>\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write ui plugin index: %v", err)
+	}
+	uiArchivePath := filepath.Join(dir, "client-ui.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(uiPluginDir, uiArchivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir ui: %v", err)
+	}
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`
+ui:
+  plugin:
+    package: client-ui.tar.gz
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write ui plugin config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		rootBody := getEndpointBody(t, baseURL+"/", http.StatusOK)
+		if !bytes.Contains(rootBody, []byte("custom client ui")) {
+			t.Fatalf("expected ui.plugin assets at root: %s", rootBody)
+		}
+
+		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
+		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
+			t.Fatalf("expected built-in admin UI at /admin: %s", adminBody)
+		}
+	})
 }
 
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
@@ -1275,25 +1305,6 @@ func getEndpointBody(t *testing.T, url string, wantStatus int) []byte {
 		t.Fatalf("GET %s returned %d, want %d: %s", url, resp.StatusCode, wantStatus, body)
 	}
 	return body
-}
-
-func waitForOperationMetricsOverview(t *testing.T, baseURL string, timeout time.Duration) core.OperationMetricsOverview {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		body := getEndpointBody(t, baseURL+"/api/v1/metrics/overview", http.StatusOK)
-		var overview core.OperationMetricsOverview
-		if err := json.Unmarshal(body, &overview); err != nil {
-			t.Fatalf("unmarshal metrics overview: %v\nbody: %s", err, body)
-		}
-		if overview.Enabled && overview.Summary.Requests > 0 {
-			return overview
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("metrics overview did not report requests within %s", timeout)
-	return core.OperationMetricsOverview{}
 }
 
 func requireMetricPayload(t *testing.T, exports [][]byte, stdout, stderr string, parts ...string) {

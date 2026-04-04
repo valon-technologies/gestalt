@@ -1,8 +1,7 @@
 # Observability
 
-Gestalt ships with structured logging, health endpoints, readiness checks,
-built-in operation metrics, a Prometheus scrape endpoint, and optional
-OpenTelemetry export.
+Gestalt ships with structured logging, health endpoints, readiness checks, a
+Prometheus scrape endpoint, and optional OpenTelemetry export.
 
 ## Health Endpoints
 
@@ -22,9 +21,8 @@ telemetry:
 
 That gives you structured logs without external collectors.
 
-By default, `stdout` also keeps a local in-process metric store for the web UI
-dashboard and exposes a Prometheus-compatible `/metrics` endpoint. Traces remain
-disabled unless you switch to `telemetry.provider: otlp`.
+By default, `stdout` also exposes a Prometheus-compatible `/metrics` endpoint.
+Traces remain disabled unless you switch to `telemetry.provider: otlp`.
 
 ## OTLP Export
 
@@ -56,7 +54,6 @@ Supported OTLP config includes:
 - trace sampling
 - metric export interval
 - Prometheus enablement
-- built-in dashboard enablement
 - log level
 
 If you want traces and metrics in OTLP but want application logs to remain on
@@ -102,33 +99,20 @@ at `/metrics`.
   locally unless you disable the Prometheus bridge.
 - `telemetry.provider: noop` disables `/metrics`.
 
-The Prometheus endpoint, OTLP export, and the built-in dashboard all hang off
-the same broker instrumentation point. The built-in dashboard keeps its own
-local in-memory rollups; you do not need separate instrumentation for each
-sink.
+The Prometheus endpoint and OTLP export hang off the same broker
+instrumentation point. The embedded admin UI at `/admin` reads `/metrics`
+directly and renders a lightweight operator-facing view without introducing a
+second admin JSON API.
 
-## Built-In Dashboard Metrics
+The admin UI intentionally stays basic:
 
-The default web UI reads a compact authenticated JSON payload from
-`/api/v1/metrics/overview` and renders a lightweight dashboard for recent
-operation activity.
-
-By default it shows:
-
-- rolling request and error volume
-- latency summaries from `gestaltd.operation.duration`
-- recent bucket activity
-- top providers and operations
-
-This dashboard is intentionally basic:
-
-- fixed one-hour window
-- fixed one-minute buckets
-- process-local in-memory data
-- reset on restart
+- cumulative counters and histograms from `/metrics`
+- provider and operation breakdowns derived from metric labels
+- recent throughput computed from browser-side scrape deltas
+- no persisted history
 - no cross-replica aggregation
 
-It is designed for built-in product visibility, not as a replacement for a
+It is designed for built-in operator visibility, not as a replacement for a
 full observability backend.
 
 ## What Gets Logged

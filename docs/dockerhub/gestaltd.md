@@ -3,7 +3,8 @@
 `gestaltd` is a platform for self-hostable, configurable integrations and tooling. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
 
 - an HTTP API
-- an embedded web UI
+- a client UI at `/`
+- a built-in admin UI at `/admin`
 - `/health` and `/ready` endpoints
 - an `/mcp` endpoint when providers expose tools
 - support for REST, GraphQL, MCP, and packaged plugins
@@ -154,7 +155,8 @@ The container exposes:
 - `GET /health` for liveness
 - `GET /ready` for readiness
 
-The embedded web UI is served from `/` on the same port.
+The client UI is served from `/` on the same port, and the built-in admin UI is
+served from `/admin`.
 
 ## SQLite and `/data`
 

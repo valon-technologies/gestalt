@@ -6,16 +6,14 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/valon-technologies/gestalt/server/core"
 	prometheusexporter "go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 type Result struct {
-	MeterProvider    *sdkmetric.MeterProvider
-	Prometheus       http.Handler
-	OperationMetrics core.OperationMetrics
+	MeterProvider *sdkmetric.MeterProvider
+	Prometheus    http.Handler
 }
 
 func Build(res *resource.Resource, cfg Config, extraReaders ...sdkmetric.Reader) (*Result, error) {
@@ -42,19 +40,13 @@ func Build(res *resource.Resource, cfg Config, extraReaders ...sdkmetric.Reader)
 		promHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	}
 
-	var opMetrics core.OperationMetrics
-	if settings.dashboardEnabled {
-		opMetrics = newOperationStore()
-	}
-
 	opts := []sdkmetric.Option{sdkmetric.WithResource(res)}
 	for _, reader := range readers {
 		opts = append(opts, sdkmetric.WithReader(reader))
 	}
 
 	return &Result{
-		MeterProvider:    sdkmetric.NewMeterProvider(opts...),
-		Prometheus:       promHandler,
-		OperationMetrics: opMetrics,
+		MeterProvider: sdkmetric.NewMeterProvider(opts...),
+		Prometheus:    promHandler,
 	}, nil
 }

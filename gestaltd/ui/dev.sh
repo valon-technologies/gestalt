@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Frontend hot-reload development script.
+# Client UI development script.
 #
-# Starts gestaltd and the Next.js dev server together so frontend
-# changes are reflected immediately without rebuilding.
+# Builds the client UI export and serves it through gestaltd so local
+# development matches production routing and packaging.
 #
 # Usage:
 #   ./dev.sh [config.yaml]
@@ -10,14 +10,13 @@
 # Examples:
 #   ./dev.sh                              # auto-generates ~/.gestalt/config.yaml
 #   ./dev.sh gestalt.local.yaml           # custom config
-#   API_PORT=9090 WEB_PORT=4000 ./dev.sh  # custom ports
+#   API_PORT=9090 ./dev.sh                # custom port
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GESTALTD_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-8080}"
 
 RED='\033[0;31m'
@@ -34,9 +33,6 @@ err()   { echo -e "${RED}==> $1${NC}" >&2; }
 cleanup() {
     if [[ -n "${API_PID:-}" ]]; then
         kill "$API_PID" 2>/dev/null || true
-    fi
-    if [[ -n "${WEB_PID:-}" ]]; then
-        kill "$WEB_PID" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -102,12 +98,16 @@ fi
 if [[ -n "$CONFIG" ]]; then
     info "Config: $CONFIG"
 fi
+info "Building client UI export..."
+npm run build
+
 info "Starting Go API server on port $API_PORT..."
-warn "Dev mode — use 'Dev Login' on the login page (no Google OAuth needed)."
+warn "Dev mode - use 'Dev Login' on the login page (no Google OAuth needed)."
+warn "Client UI is served by gestaltd from $SCRIPT_DIR/out. Re-run this script after UI changes."
 if [[ -n "$CONFIG" ]]; then
-    (cd "$GESTALTD_DIR" && go run ./cmd/gestaltd --config "$CONFIG") &
+    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" go run ./cmd/gestaltd --config "$CONFIG") &
 else
-    (cd "$GESTALTD_DIR" && go run ./cmd/gestaltd) &
+    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" go run ./cmd/gestaltd) &
 fi
 API_PID=$!
 
@@ -130,12 +130,7 @@ if [[ "$API_READY" != "true" ]]; then
     exit 1
 fi
 
-info "Starting Next.js dev server on port $WEB_PORT (hot reload)..."
-info "API: http://localhost:$API_PORT  Web: http://localhost:$WEB_PORT"
-NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" \
-    npx next dev --port "$WEB_PORT" &
-WEB_PID=$!
-
-ok "Ready: http://localhost:$WEB_PORT"
+info "API: http://localhost:$API_PORT"
+ok "Ready: http://localhost:$API_PORT"
 echo ""
 wait

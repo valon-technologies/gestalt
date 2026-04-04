@@ -3,7 +3,8 @@
   "version": "0.0.1-alpha.1",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "./dev.sh",
+    "dev:next": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

@@ -118,17 +118,6 @@ type testOAuthHandler struct {
 	tokenURLVal              string
 }
 
-type stubOperationMetricsReader struct {
-	overviewFn func(context.Context) (*core.OperationMetricsOverview, error)
-}
-
-func (s *stubOperationMetricsReader) Overview(ctx context.Context) (*core.OperationMetricsOverview, error) {
-	if s.overviewFn != nil {
-		return s.overviewFn(ctx)
-	}
-	return &core.OperationMetricsOverview{}, nil
-}
-
 func (h *testOAuthHandler) AuthorizationURL(state string, scopes []string) string {
 	if h.authorizationURLFn != nil {
 		return h.authorizationURLFn(state, scopes)
@@ -611,14 +600,6 @@ func TestMetricsEndpointsRequireAuth(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 			_, _ = w.Write([]byte("gestaltd_operation_count_total 1\n"))
 		})
-		cfg.OperationMetrics = &stubOperationMetricsReader{
-			overviewFn: func(context.Context) (*core.OperationMetricsOverview, error) {
-				return &core.OperationMetricsOverview{
-					Enabled: true,
-					Summary: core.OperationMetricsSummary{Requests: 1},
-				}, nil
-			},
-		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -629,15 +610,6 @@ func TestMetricsEndpointsRequireAuth(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for unauthenticated /metrics, got %d", resp.StatusCode)
-	}
-
-	resp, err = http.Get(ts.URL + "/api/v1/metrics/overview")
-	if err != nil {
-		t.Fatalf("GET /api/v1/metrics/overview: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for unauthenticated overview, got %d", resp.StatusCode)
 	}
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/metrics", nil)
@@ -653,25 +625,6 @@ func TestMetricsEndpointsRequireAuth(t *testing.T) {
 	}
 	if !bytes.Contains(body, []byte("gestaltd_operation_count_total")) {
 		t.Fatalf("expected prometheus metric in body, got %s", body)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/metrics/overview", nil)
-	req.Header.Set("Authorization", "Bearer "+plaintext)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("authenticated GET /api/v1/metrics/overview: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200 for authenticated overview, got %d: %s", resp.StatusCode, body)
-	}
-	var overview core.OperationMetricsOverview
-	if err := json.NewDecoder(resp.Body).Decode(&overview); err != nil {
-		t.Fatalf("decode overview: %v", err)
-	}
-	if !overview.Enabled || overview.Summary.Requests != 1 {
-		t.Fatalf("unexpected overview: %+v", overview)
 	}
 }
 

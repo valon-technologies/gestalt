@@ -187,12 +187,11 @@ telemetry:
 | `service_name` | No | `gestaltd` | Service name attached to locally exposed metrics. |
 | `resource_attributes` | No | — | Extra resource attributes attached to local metrics. |
 | `metrics.prometheus.enabled` | No | `true` | Enables the Prometheus scrape endpoint at `/metrics`. |
-| `metrics.dashboard.enabled` | No | `true` | Enables the built-in operation dashboard data source. |
 
 Outputs structured logs to standard output. Traces remain disabled, but metrics
-are collected locally for the default web UI and for the Prometheus-compatible
-`/metrics` endpoint. Built-in dashboard metrics use a fixed one-hour window with
-one-minute buckets. This is the default provider when `telemetry` is omitted.
+are collected locally and exposed through the Prometheus-compatible `/metrics`
+endpoint. The built-in admin UI at `/admin` reads that same scrape surface.
+This is the default provider when `telemetry` is omitted.
 
 ### `otlp`
 
@@ -229,15 +228,13 @@ telemetry:
 | `traces.sampling_ratio` | No | `1.0` | Fraction of traces to sample, `0.0` to `1.0`. |
 | `metrics.interval` | No | `60s` | OTLP metric export interval. |
 | `metrics.prometheus.enabled` | No | `true` | Enables the local Prometheus scrape endpoint at `/metrics`. |
-| `metrics.dashboard.enabled` | No | `true` | Enables the built-in operation dashboard data source. |
 | `logs.exporter` | No | `otlp` | `otlp` exports logs over OTLP, `stdout` keeps logs on standard output. |
 | `logs.level` | No | `info` | Minimum log level for the configured log exporter. |
 | `logs.format` | No | `text` | `text` or `json` when `logs.exporter` is `stdout`. |
 
 Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy,
-Datadog Agent) while still keeping local `/metrics` and the built-in dashboard
-available by default. The built-in dashboard remains fixed to a one-hour window
-with one-minute buckets.
+Datadog Agent) while still keeping local `/metrics` available by default. The
+built-in admin UI at `/admin` reads that same local scrape surface.
 
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
@@ -263,7 +260,7 @@ telemetry:
 ```
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead.
-This also disables the built-in dashboard metrics feed and `/metrics`.
+This also disables `/metrics`, so the built-in admin UI has no metrics to show.
 
 ### Trace spans
 
@@ -636,7 +633,10 @@ ui:
 | `plugin.source` | Managed plugin source address. Requires `version`. |
 | `plugin.version` | Required with `source`. Must be valid SemVer without leading `v`. |
 
-When `ui` is omitted, `gestaltd` serves the embedded frontend. When `ui.plugin` is configured, the plugin's assets are served instead. See [UI Plugins](/reference/ui-plugins) for the full workflow.
+When `ui` is omitted, `gestaltd` serves the built-in client UI at `/`. When
+`ui.plugin` is configured, the plugin's assets replace that client UI at `/`.
+The built-in admin UI remains available at `/admin`. See
+[UI Plugins](/reference/ui-plugins) for the full workflow.
 
 ## Validation Rules
 

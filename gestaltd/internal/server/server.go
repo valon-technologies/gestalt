@@ -42,9 +42,9 @@ type Server struct {
 	now                func() time.Time
 	readiness          ReadinessChecker
 	prometheusMetrics  http.Handler
-	operationMetrics   core.OperationMetricsReader
 	mcpHandler         http.Handler
-	webUI              http.Handler
+	clientUI           http.Handler
+	adminUI            http.Handler
 }
 
 type Config struct {
@@ -62,9 +62,9 @@ type Config struct {
 	Now               func() time.Time
 	Readiness         ReadinessChecker
 	PrometheusMetrics http.Handler
-	OperationMetrics  core.OperationMetricsReader
 	MCPHandler        http.Handler
-	WebUI             http.Handler
+	ClientUI          http.Handler
+	AdminUI           http.Handler
 }
 
 func New(cfg Config) (*Server, error) {
@@ -116,9 +116,9 @@ func New(cfg Config) (*Server, error) {
 		now:               now,
 		readiness:         cfg.Readiness,
 		prometheusMetrics: cfg.PrometheusMetrics,
-		operationMetrics:  cfg.OperationMetrics,
 		mcpHandler:        cfg.MCPHandler,
-		webUI:             cfg.WebUI,
+		clientUI:          cfg.ClientUI,
+		adminUI:           cfg.AdminUI,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

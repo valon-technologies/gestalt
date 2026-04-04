@@ -1,6 +1,6 @@
-// Package webui serves the embedded frontend static assets.
+// Package webui serves the client UI static assets.
 //
-// Build the frontend before go build:
+// Build the client UI before go build:
 //
 //	cd gestaltd/ui && npm run build
 //	cp -r gestaltd/ui/out gestaltd/internal/webui/out
@@ -47,8 +47,8 @@ func NewHandler(root fs.FS) http.Handler {
 	})
 }
 
-func EmbeddedHandler() http.Handler {
-	sub, err := fs.Sub(assets, "out")
+func SubdirHandler(root fs.FS, dir string) http.Handler {
+	sub, err := fs.Sub(root, dir)
 	if err != nil {
 		return nil
 	}
@@ -56,6 +56,10 @@ func EmbeddedHandler() http.Handler {
 		return nil
 	}
 	return NewHandler(sub)
+}
+
+func EmbeddedHandler() http.Handler {
+	return SubdirHandler(assets, "out")
 }
 
 func DirHandler(path string) (http.Handler, error) {

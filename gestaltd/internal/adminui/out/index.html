@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gestalt Admin</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h1>Prometheus metrics</h1>
+          <p class="lede">
+            Scrape-oriented metrics exposed by <code>/metrics</code>, rendered
+            directly in the embedded admin UI.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="button" href="/">Client UI</a>
+          <a class="button button-secondary" href="/metrics" target="_blank" rel="noreferrer">Open Raw /metrics</a>
+        </div>
+      </header>
+
+      <section class="status" id="status">
+        Loading metrics...
+      </section>
+
+      <section class="grid summary-grid" id="summary"></section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Live</p>
+            <h2>Recent Throughput</h2>
+          </div>
+          <p class="meta" id="throughput-detail">Waiting for a second scrape...</p>
+        </div>
+        <div class="chart-card">
+          <div class="bars" id="bars"></div>
+          <div class="chart-axis">
+            <span id="bars-start">Now</span>
+            <span id="bars-end">Now</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid breakdown-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Breakdown</p>
+              <h2>Top Providers</h2>
+            </div>
+            <p class="meta">Lifetime totals</p>
+          </div>
+          <div class="rows" id="providers"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Breakdown</p>
+              <h2>Top Operations</h2>
+            </div>
+            <p class="meta">Lifetime totals</p>
+          </div>
+          <div class="rows" id="operations"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/admin/app.js"></script>
+  </body>
+</html>

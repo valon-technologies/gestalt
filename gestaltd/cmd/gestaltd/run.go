@@ -15,6 +15,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/internal/adminui"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -127,9 +128,9 @@ func runServer(env *bootstrapEnv) error {
 		)
 	}
 
-	uiHandler, err := resolveUIHandler(env.Config)
+	clientUI, adminUI, err := resolveUIHandlers(env.Config)
 	if err != nil {
-		return fmt.Errorf("resolving ui handler: %w", err)
+		return fmt.Errorf("resolving ui handlers: %w", err)
 	}
 
 	mcpSlot := &lateHandler{}
@@ -161,9 +162,9 @@ func runServer(env *bootstrapEnv) error {
 			datastoreReadiness(result.Datastore),
 		),
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
-		OperationMetrics:  env.Result.Telemetry.OperationMetrics(),
 		MCPHandler:        mcpHandler,
-		WebUI:             uiHandler,
+		ClientUI:          clientUI,
+		AdminUI:           adminUI,
 	})
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
@@ -223,7 +224,27 @@ func runServer(env *bootstrapEnv) error {
 	return nil
 }
 
-func resolveUIHandler(cfg *config.Config) (http.Handler, error) {
+const (
+	clientUIDirEnv = "GESTALTD_CLIENT_UI_DIR"
+	adminUIDirEnv  = "GESTALTD_ADMIN_UI_DIR"
+)
+
+func resolveUIHandlers(cfg *config.Config) (http.Handler, http.Handler, error) {
+	clientUI, err := resolveClientUIHandler(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	adminUI, err := resolveAdminUIHandler()
+	if err != nil {
+		return nil, nil, err
+	}
+	return clientUI, adminUI, nil
+}
+
+func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
+	if dir := strings.TrimSpace(os.Getenv(clientUIDirEnv)); dir != "" {
+		return webui.DirHandler(dir)
+	}
 	if cfg.UI.Plugin == nil {
 		return webui.EmbeddedHandler(), nil
 	}
@@ -231,6 +252,17 @@ func resolveUIHandler(cfg *config.Config) (http.Handler, error) {
 		return webui.DirHandler(cfg.UI.Plugin.ResolvedAssetRoot)
 	}
 	return nil, fmt.Errorf("ui plugin configured but asset root not resolved")
+}
+
+func resolveAdminUIHandler() (http.Handler, error) {
+	if dir := strings.TrimSpace(os.Getenv(adminUIDirEnv)); dir != "" {
+		return webui.DirHandler(dir)
+	}
+	handler := adminui.EmbeddedHandler()
+	if handler == nil {
+		return nil, fmt.Errorf("embedded admin ui assets not found")
+	}
+	return handler, nil
 }
 
 type mcpSurface struct {
