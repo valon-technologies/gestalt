@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -175,6 +174,7 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Uses a process-wide HTTP transport override so the TLS package fetch trusts the test server.
 func TestE2EInitHTTPSPackage(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)

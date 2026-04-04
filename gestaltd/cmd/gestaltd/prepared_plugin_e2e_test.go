@@ -89,6 +89,8 @@ func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
 }
 
 func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
+	t.Parallel()
+
 	homeDir := filepath.Join(t.TempDir(), "home:with#special")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
 
@@ -195,7 +197,9 @@ func writePreparedPackageConfig(t *testing.T, dir, packagePath string, pluginCon
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			configBlock.WriteString(fmt.Sprintf("      %s: %q\n", key, pluginConfig[key]))
+			if _, err := fmt.Fprintf(&configBlock, "      %s: %q\n", key, pluginConfig[key]); err != nil {
+				t.Fatalf("write plugin config block: %v", err)
+			}
 		}
 	}
 
