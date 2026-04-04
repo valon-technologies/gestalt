@@ -1,0 +1,60 @@
+name: Publish Scoped GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      tag-glob:
+        description: Tag glob used to find the previous release tag.
+        required: true
+        type: string
+      path-filter:
+        description: Path filter used to scope release notes.
+        required: true
+        type: string
+      download-artifact-pattern:
+        description: Optional artifact name pattern to download and attach to the release.
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Download release artifacts
+        if: ${{ inputs.download-artifact-pattern != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ${{ inputs.download-artifact-pattern }}
+          path: release
+          merge-multiple: true
+      - name: Generate scoped release notes
+        run: |
+          .github/scripts/generate-release-notes.sh \
+            "${{ inputs.tag-glob }}" \
+            "${{ inputs.path-filter }}" \
+            "${{ github.ref_name }}" \
+            release-notes.md
+      - name: Create GitHub Release with assets
+        if: ${{ inputs.download-artifact-pattern != '' }}
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          files: release/*
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+      - name: Create GitHub Release
+        if: ${{ inputs.download-artifact-pattern == '' }}
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
