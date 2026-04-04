@@ -16,6 +16,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	graphqlupstream "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -104,6 +105,182 @@ func serveOpenAPISpec(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(spec)
+	}))
+	testutil.CloseOnCleanup(t, srv)
+	return srv
+}
+
+func graphqlStringPtr(s string) *string { return &s }
+
+func testGraphQLSchema() graphqlupstream.Schema {
+	return graphqlupstream.Schema{
+		QueryType: &graphqlupstream.TypeName{Name: "Query"},
+		Types: []graphqlupstream.FullType{
+			{
+				Kind: graphqlupstream.KindObject,
+				Name: "Query",
+				Fields: []graphqlupstream.Field{
+					{
+						Name:        "teams",
+						Description: "List all teams",
+						Args: []graphqlupstream.InputValue{
+							{
+								Name: "first",
+								Type: graphqlupstream.TypeRef{
+									Kind: graphqlupstream.KindScalar,
+									Name: graphqlStringPtr("Int"),
+								},
+							},
+						},
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindObject,
+							Name: graphqlStringPtr("TeamConnection"),
+						},
+					},
+					{
+						Name:        "viewer",
+						Description: "Get the current viewer",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindObject,
+							Name: graphqlStringPtr("Viewer"),
+						},
+					},
+				},
+			},
+			{
+				Kind: graphqlupstream.KindObject,
+				Name: "TeamConnection",
+				Fields: []graphqlupstream.Field{
+					{
+						Name: "nodes",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindList,
+							OfType: &graphqlupstream.TypeRef{
+								Kind: graphqlupstream.KindObject,
+								Name: graphqlStringPtr("Team"),
+							},
+						},
+					},
+					{
+						Name: "pageInfo",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindObject,
+							Name: graphqlStringPtr("PageInfo"),
+						},
+					},
+				},
+			},
+			{
+				Kind: graphqlupstream.KindObject,
+				Name: "Team",
+				Fields: []graphqlupstream.Field{
+					{
+						Name: "id",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindScalar,
+							Name: graphqlStringPtr("ID"),
+						},
+					},
+					{
+						Name: "name",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindScalar,
+							Name: graphqlStringPtr("String"),
+						},
+					},
+				},
+			},
+			{
+				Kind: graphqlupstream.KindObject,
+				Name: "PageInfo",
+				Fields: []graphqlupstream.Field{
+					{
+						Name: "hasNextPage",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindScalar,
+							Name: graphqlStringPtr("Boolean"),
+						},
+					},
+					{
+						Name: "endCursor",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindScalar,
+							Name: graphqlStringPtr("String"),
+						},
+					},
+				},
+			},
+			{
+				Kind: graphqlupstream.KindObject,
+				Name: "Viewer",
+				Fields: []graphqlupstream.Field{
+					{
+						Name: "login",
+						Type: graphqlupstream.TypeRef{
+							Kind: graphqlupstream.KindScalar,
+							Name: graphqlStringPtr("String"),
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func serveGraphQLBackend(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	schema := testGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+
+		var body struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("Decode GraphQL request: %v", err)
+		}
+
+		switch {
+		case strings.Contains(body.Query, "__schema"):
+			writeTestJSON(w, map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+		case strings.Contains(body.Query, "teams"):
+			if !strings.Contains(body.Query, "query($first: Int)") {
+				t.Fatalf("query missing variable declaration: %q", body.Query)
+			}
+			if !strings.Contains(body.Query, "teams(first: $first)") {
+				t.Fatalf("query missing teams field arguments: %q", body.Query)
+			}
+			if !strings.Contains(body.Query, "pageInfo { hasNextPage endCursor }") {
+				t.Fatalf("query missing connection pageInfo selection: %q", body.Query)
+			}
+			if got, ok := body.Variables["first"].(float64); !ok || got != 2 {
+				t.Fatalf("first variable = %#v, want 2", body.Variables["first"])
+			}
+			writeTestJSON(w, map[string]any{
+				"data": map[string]any{
+					"teams": map[string]any{
+						"nodes": []any{
+							map[string]any{"id": "team-1", "name": "Platform"},
+							map[string]any{"id": "team-2", "name": "Infra"},
+						},
+						"pageInfo": map[string]any{
+							"hasNextPage": true,
+							"endCursor":   "cursor-2",
+						},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected graphql query: %q", body.Query)
+		}
 	}))
 	testutil.CloseOnCleanup(t, srv)
 	return srv
@@ -742,6 +919,81 @@ func TestInlineResponseMapping(t *testing.T) {
 			}
 			t.Fatalf("expected %q operation to be present", tc.wantOperationID)
 		})
+	}
+}
+
+func TestInlineGraphQL_AllowedOperationsAndExecution(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	graphQLSrv := serveGraphQLBackend(t)
+
+	prov := bootstrapInlineProvider(t, "graphql", &config.PluginDef{
+		GraphQLURL: graphQLSrv.URL,
+		AllowedOperations: map[string]*config.OperationOverride{
+			"teams": {
+				Alias:       "list_teams",
+				Description: "List teams through bootstrap",
+			},
+		},
+	})
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if len(cat.Operations) != 1 {
+		t.Fatalf("operations = %d, want 1", len(cat.Operations))
+	}
+
+	op := cat.Operations[0]
+	if op.ID != "list_teams" {
+		t.Fatalf("operation ID = %q, want %q", op.ID, "list_teams")
+	}
+	if op.Transport != "graphql" {
+		t.Fatalf("transport = %q, want %q", op.Transport, "graphql")
+	}
+	if op.Description != "List teams through bootstrap" {
+		t.Fatalf("description = %q, want %q", op.Description, "List teams through bootstrap")
+	}
+
+	result, err := prov.Execute(ctx, "list_teams", map[string]any{"first": 2}, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	teams, ok := body["teams"].(map[string]any)
+	if !ok {
+		t.Fatalf("teams payload missing: %v", body)
+	}
+	nodes, ok := teams["nodes"].([]any)
+	if !ok {
+		t.Fatalf("teams.nodes missing: %v", teams)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("teams.nodes length = %d, want 2", len(nodes))
+	}
+	if first := nodes[0].(map[string]any)["name"]; first != "Platform" {
+		t.Fatalf("first team name = %v, want %q", first, "Platform")
+	}
+
+	pageInfo, ok := teams["pageInfo"].(map[string]any)
+	if !ok {
+		t.Fatalf("pageInfo missing: %v", teams)
+	}
+	if pageInfo["hasNextPage"] != true {
+		t.Fatalf("hasNextPage = %v, want true", pageInfo["hasNextPage"])
+	}
+	if pageInfo["endCursor"] != "cursor-2" {
+		t.Fatalf("endCursor = %v, want %q", pageInfo["endCursor"], "cursor-2")
 	}
 }
 
