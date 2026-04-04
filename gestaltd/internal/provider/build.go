@@ -274,7 +274,7 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 	if err != nil {
 		return nil, err
 	}
-	return coreintegration.NewUpstreamAuth(upstream), nil
+	return coreintegration.UpstreamAuth{Handler: upstream}, nil
 }
 
 // BuildOAuthUpstream creates an oauth.UpstreamHandler from a provider

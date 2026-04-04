@@ -33,11 +33,43 @@ type AuthHandler interface {
 
 // UpstreamAuth adapts *oauth.UpstreamHandler to the AuthHandler interface.
 type UpstreamAuth struct {
-	oauthdelegator.UpstreamAdapter
+	Handler *oauth.UpstreamHandler
 }
 
-func NewUpstreamAuth(handler *oauth.UpstreamHandler) UpstreamAuth {
-	return UpstreamAuth{UpstreamAdapter: oauthdelegator.NewUpstreamAdapter(handler)}
+func (u UpstreamAuth) AuthorizationURL(state string, scopes []string) string {
+	return u.Handler.AuthorizationURL(state, scopes)
+}
+
+func (u UpstreamAuth) StartOAuth(state string, scopes []string) (string, string) {
+	return u.Handler.AuthorizationURLWithPKCE(state, scopes)
+}
+
+func (u UpstreamAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return u.Handler.ExchangeCode(ctx, code)
+}
+
+func (u UpstreamAuth) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+	var opts []oauth.ExchangeOption
+	if verifier != "" {
+		opts = append(opts, oauth.WithPKCEVerifier(verifier))
+	}
+	opts = append(opts, extraOpts...)
+	return u.Handler.ExchangeCode(ctx, code, opts...)
+}
+
+func (u UpstreamAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return u.Handler.RefreshToken(ctx, refreshToken)
+}
+
+func (u UpstreamAuth) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	return u.Handler.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
+}
+
+func (u UpstreamAuth) TokenURL() string             { return u.Handler.TokenURL() }
+func (u UpstreamAuth) AuthorizationBaseURL() string { return u.Handler.AuthorizationBaseURL() }
+
+func (u UpstreamAuth) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
+	return u.Handler.AuthorizationURLWithOverride(authBaseURL, state, scopes)
 }
 
 type AuthStyle int
