@@ -22,6 +22,14 @@ jobs:
         with:
           go-version-file: sdk/go/go.mod
           cache-dependency-path: sdk/go/go.sum
+      - name: Install Buf
+        working-directory: .
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Verify generated Go SDK stubs
+        working-directory: .
+        run: sdk/proto/check-go-sdk-sync.sh
       - name: Run Go SDK tests
         run: go test ./...
 

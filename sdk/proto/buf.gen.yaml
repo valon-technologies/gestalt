@@ -6,13 +6,13 @@ managed:
       value: github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto
 plugins:
   # Go messages
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.11
     out: ../go/gen
     opt:
       - paths=source_relative
 
   # Go gRPC stubs
-  - remote: buf.build/grpc/go
+  - remote: buf.build/grpc/go:v1.6.1
     out: ../go/gen
     opt:
       - paths=source_relative

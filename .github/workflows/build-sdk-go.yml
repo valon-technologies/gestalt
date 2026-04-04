@@ -1,0 +1,55 @@
+name: Build Go SDK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
+      - '.github/workflows/build-sdk-go.yml'
+      - '.github/workflows/release-sdk.yml'
+  pull_request:
+    paths:
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
+      - '.github/workflows/build-sdk-go.yml'
+      - '.github/workflows/release-sdk.yml'
+
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Go SDK Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sdk/go
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Run Go SDK tests
+        run: go test ./...
+
+  proto-sync:
+    name: Go SDK Proto Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Install Buf
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Verify generated Go SDK stubs
+        run: sdk/proto/check-go-sdk-sync.sh
