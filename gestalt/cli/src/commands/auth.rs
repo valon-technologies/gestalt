@@ -186,11 +186,7 @@ where
         api_token_id: api_token_id.to_string(),
     })?;
 
-    let _ = send_browser_response(
-        &stream,
-        "Login successful",
-        "You can close this tab.",
-    );
+    let _ = send_browser_response(&stream, "Login successful", "You can close this tab.");
     output::print_success("Logged in successfully. Stored CLI API token.");
     Ok(())
 }
