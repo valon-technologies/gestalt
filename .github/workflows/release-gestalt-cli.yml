@@ -27,7 +27,8 @@ jobs:
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
       tag-glob: 'gestalt/v*'
-      path-filter: 'gestalt'
+      path-filters: |
+        gestalt
       download-artifact-pattern: 'gestalt-*'
 
   publish-image:

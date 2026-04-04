@@ -95,7 +95,8 @@ jobs:
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
       tag-glob: 'gestaltd/v*'
-      path-filter: 'gestaltd'
+      path-filters: |
+        gestaltd
       download-artifact-pattern: 'gestaltd-*'
 
   publish-image:
