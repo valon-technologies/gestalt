@@ -1524,6 +1524,83 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 	}
 }
 
+func TestE2EGraphQLOperationsExposeDisplayReadyParameters(t *testing.T) {
+	t.Parallel()
+
+	schemaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"__schema":{"queryType":{"name":"Query"},"mutationType":{"name":"Mutation"},"types":[{"kind":"OBJECT","name":"Query","description":"","fields":[],"inputFields":null,"enumValues":null},{"kind":"OBJECT","name":"Mutation","description":"","fields":[{"name":"createIssue","description":"Create an issue","args":[{"name":"input","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"INPUT_OBJECT","name":"CreateIssueInput","ofType":null}},"defaultValue":null}],"type":{"kind":"OBJECT","name":"IssuePayload","ofType":null}}],"inputFields":null,"enumValues":null},{"kind":"INPUT_OBJECT","name":"CreateIssueInput","description":"","fields":null,"inputFields":[{"name":"title","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"defaultValue":null},{"name":"teamId","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"defaultValue":null},{"name":"priority","description":"","type":{"kind":"ENUM","name":"IssuePriority","ofType":null},"defaultValue":null}],"enumValues":null},{"kind":"ENUM","name":"IssuePriority","description":"","fields":null,"inputFields":null,"enumValues":[{"name":"low","description":""},{"name":"high","description":""}]},{"kind":"OBJECT","name":"IssuePayload","description":"","fields":[{"name":"success","description":"","args":[],"type":{"kind":"SCALAR","name":"Boolean","ofType":null}}],"inputFields":null,"enumValues":null}]}}}`)
+	}))
+	defer schemaSrv.Close()
+
+	dir := t.TempDir()
+	port := allocateTestPort(t)
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  port: %d
+  encryption_key: test-graphql-key
+providers:
+  example:
+    surfaces:
+      graphql:
+        url: %s
+`, filepath.Join(dir, "gestalt.db"), port, schemaSrv.URL)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start serve: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(os.Interrupt)
+		_ = cmd.Wait()
+	})
+
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	waitForReady(t, baseURL, 30*time.Second)
+
+	var ops []struct {
+		ID         string `json:"id"`
+		Parameters []struct {
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Required bool   `json:"required"`
+		} `json:"parameters"`
+	}
+	if err := json.Unmarshal(getEndpointBody(t, baseURL+"/api/v1/integrations/example/operations", http.StatusOK), &ops); err != nil {
+		t.Fatalf("decode operations: %v", err)
+	}
+
+	var createIssueParams []struct {
+		Name     string `json:"name"`
+		Type     string `json:"type"`
+		Required bool   `json:"required"`
+	}
+	for _, op := range ops {
+		if op.ID != "createIssue" {
+			continue
+		}
+		createIssueParams = op.Parameters
+		break
+	}
+	if len(createIssueParams) != 1 {
+		t.Fatalf("createIssue parameters = %+v, want 1", createIssueParams)
+	}
+	if createIssueParams[0].Name != "input" || createIssueParams[0].Type != "object{title!, teamId!, priority}" || !createIssueParams[0].Required {
+		t.Fatalf("createIssue parameter = %+v", createIssueParams[0])
+	}
+}
+
 func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef string, port int) string {
 	t.Helper()
 

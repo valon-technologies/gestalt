@@ -1311,7 +1311,21 @@ func TestListOperations(t *testing.T) {
 		catalog: &catalog.Catalog{
 			Name: "test-int",
 			Operations: []catalog.CatalogOperation{
-				{ID: "do_thing", Description: "Do a thing", Method: http.MethodGet, Path: "/do-thing"},
+				{
+					ID:          "save_comment",
+					Description: "Create or update a comment",
+					Method:      http.MethodPost,
+					InputSchema: json.RawMessage(`{
+						"type":"object",
+						"properties":{
+							"body":{"type":"string"},
+							"displayObject":{"type":"object{title!, teamId!}"},
+							"issueId":{"type":"string"}
+							,"notActuallyBoolean":{"type":"booleans"}
+						},
+						"required":["body","displayObject","issueId"]
+					}`),
+				},
 			},
 		},
 	}
@@ -1336,7 +1350,14 @@ func TestListOperations(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var ops []map[string]any
+	var ops []struct {
+		ID         string `json:"id"`
+		Parameters []struct {
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Required bool   `json:"required"`
+		} `json:"parameters"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		_ = resp.Body.Close()
 		t.Fatalf("decoding response: %v", err)
@@ -1345,14 +1366,31 @@ func TestListOperations(t *testing.T) {
 	if len(ops) != 1 {
 		t.Fatalf("expected 1 operation, got %d", len(ops))
 	}
-	if _, ok := ops[0]["id"]; !ok {
-		t.Fatal("expected camelCase 'id' key in response")
+	if ops[0].ID != "save_comment" {
+		t.Fatalf("expected save_comment, got %+v", ops)
 	}
-	if _, ok := ops[0]["Name"]; ok {
-		t.Fatal("expected camelCase keys, found PascalCase 'Name'")
+	if len(ops[0].Parameters) != 4 {
+		t.Fatalf("save_comment parameters = %+v, want 4", ops[0].Parameters)
 	}
-	if ops[0]["id"] != "do_thing" {
-		t.Fatalf("expected id 'do_thing', got %v", ops[0]["id"])
+	paramsByName := make(map[string]struct {
+		Name     string `json:"name"`
+		Type     string `json:"type"`
+		Required bool   `json:"required"`
+	}, len(ops[0].Parameters))
+	for _, param := range ops[0].Parameters {
+		paramsByName[param.Name] = param
+	}
+	if got := paramsByName["body"]; got.Type != "string" || !got.Required {
+		t.Fatalf("body param = %+v", got)
+	}
+	if got := paramsByName["displayObject"]; got.Type != "object" || !got.Required {
+		t.Fatalf("displayObject param = %+v", got)
+	}
+	if got := paramsByName["issueId"]; got.Type != "string" || !got.Required {
+		t.Fatalf("issueId param = %+v", got)
+	}
+	if got := paramsByName["notActuallyBoolean"]; got.Type != "string" || got.Required {
+		t.Fatalf("notActuallyBoolean param = %+v", got)
 	}
 }
 
