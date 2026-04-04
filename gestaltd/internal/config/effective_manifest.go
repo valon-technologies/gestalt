@@ -165,6 +165,9 @@ func mergedProviderConnectionParams(manifestProvider *pluginmanifestv1.Provider,
 	}
 
 	merged := maps.Clone(manifestProvider.ConnectionParams)
+	if merged == nil {
+		merged = make(map[string]pluginmanifestv1.ProviderConnectionParam, len(plugin.ConnectionParams))
+	}
 	for name, override := range plugin.ConnectionParams {
 		param := merged[name]
 		param.Required = override.Required

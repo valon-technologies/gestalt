@@ -333,6 +333,87 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			},
 			wantError: "icon_file must stay within the package",
 		},
+		{
+			name: "rejects unsupported auth type",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := currentArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
+				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+					"default": {
+						Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
+					},
+				}
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+			},
+			wantError: "value must be one of 'oauth2', 'mcp_oauth', 'bearer', 'manual', 'none'",
+		},
+		{
+			name: "rejects oauth2 auth without token url",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := currentArtifactPath("provider")
+				wire := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", runtime.GOOS, runtime.GOARCH, artifactPath, sha256Hex("provider"))
+				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+					"default": {
+						Auth: &pluginmanifestv1.ProviderAuth{
+							Type:             pluginmanifestv1.AuthTypeOAuth2,
+							AuthorizationURL: "https://auth.example.com/authorize",
+						},
+					},
+				}
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+			},
+			wantError: "missing property 'token_url'",
+		},
+		{
+			name: "rejects duplicate declarative operation names",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, &manifestWire{
+					Source:  "github.com/acme/plugins/duplicate-ops",
+					Version: "1.0.0",
+					Provider: &providerManifestWire{
+						Surfaces: providerManifestSurfacesWire{
+							REST: &providerManifestRESTSurfaceWire{
+								BaseURL: "https://api.example.com",
+								Operations: []pluginmanifestv1.ProviderOperation{
+									{Name: "list_items", Method: "GET", Path: "/items"},
+									{Name: "list_items", Method: "POST", Path: "/items"},
+								},
+							},
+						},
+					},
+				}))
+			},
+			wantError: `duplicate operation name "list_items"`,
+		},
+		{
+			name: "rejects orphaned path parameters",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, &manifestWire{
+					Source:  "github.com/acme/plugins/orphaned-path-param",
+					Version: "1.0.0",
+					Provider: &providerManifestWire{
+						Surfaces: providerManifestSurfacesWire{
+							REST: &providerManifestRESTSurfaceWire{
+								BaseURL: "https://api.example.com",
+								Operations: []pluginmanifestv1.ProviderOperation{
+									{
+										Name:   "get_item",
+										Method: "GET",
+										Path:   "/items",
+										Parameters: []pluginmanifestv1.ProviderParameter{
+											{Name: "id", Type: "string", In: "path"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}))
+			},
+			wantError: `declared as path param but "/items" has no {id} placeholder`,
+		},
 	}
 
 	for _, tc := range tests {
