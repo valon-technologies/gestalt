@@ -126,8 +126,6 @@ func resolveVersion(ctx context.Context, db *sql.DB, requested string) (string, 
 		case 19:
 			return "19c", raw, nil
 		case 23:
-			return "23ai", raw, nil
-		case 26:
 			return "26ai", raw, nil
 		default:
 			return fmt.Sprintf("major-%d", major), raw, nil

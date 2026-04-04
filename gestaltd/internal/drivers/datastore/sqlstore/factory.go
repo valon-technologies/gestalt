@@ -13,12 +13,6 @@ type VersionedDSNConfig struct {
 	Version string `yaml:"version"`
 }
 
-func NewDSNFactory(name string, newStore func(dsn string, encryptionKey []byte) (core.Datastore, error)) bootstrap.DatastoreFactory {
-	return NewVersionedDSNFactory(name, func(cfg VersionedDSNConfig, encryptionKey []byte) (core.Datastore, error) {
-		return newStore(cfg.DSN, encryptionKey)
-	})
-}
-
 func NewVersionedDSNFactory(name string, newStore func(cfg VersionedDSNConfig, encryptionKey []byte) (core.Datastore, error)) bootstrap.DatastoreFactory {
 	return func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
 		var cfg VersionedDSNConfig
