@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -464,6 +465,23 @@ func cloneManifest(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Manif
 	return &cloned, nil
 }
 
+func copyReleaseDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		return copyReleaseFile(path, target)
+	})
+}
+
 func copyReleaseFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -520,7 +538,7 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 
 		dstPath := filepath.Join(stagingDir, filepath.FromSlash(cleanRel))
 		if info.IsDir() {
-			if err := os.CopyFS(dstPath, os.DirFS(srcPath)); err != nil {
+			if err := copyReleaseDir(srcPath, dstPath); err != nil {
 				return fmt.Errorf("copy support directory %s: %w", rel, err)
 			}
 			return nil

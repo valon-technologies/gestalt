@@ -468,6 +468,43 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := filepath.Join(t.TempDir(), "webui-overlap")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/webui-overlap",
+		Version:     "0.0.1",
+		DisplayName: "WebUI Overlap",
+		IconFile:    "out/icon.svg",
+		Kinds:       []string{pluginmanifestv1.KindWebUI},
+		WebUI: &pluginmanifestv1.WebUIMetadata{
+			AssetRoot: "out",
+		},
+	})
+	writeTestFile(t, pluginDir, "out/icon.svg", []byte("<svg></svg>\n"), 0o644)
+	writeTestFile(t, pluginDir, "out/index.html", []byte("<html></html>\n"), 0o644)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.3-overlap.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-webui-overlap_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	for _, rel := range []string{"out/icon.svg", "out/index.html"} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
+	}
+}
+
 func TestRun_PluginReleaseTreatsGoModWithoutCmdAsDeclarative(t *testing.T) {
 	t.Parallel()
 
