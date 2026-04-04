@@ -31,11 +31,10 @@ type yamlConfig struct {
 }
 
 type Provider struct {
-	logger           *slog.Logger
-	tp               trace.TracerProvider
-	mp               metric.MeterProvider
-	prometheus       http.Handler
-	operationMetrics core.OperationMetrics
+	logger     *slog.Logger
+	tp         trace.TracerProvider
+	mp         metric.MeterProvider
+	prometheus http.Handler
 }
 
 func NewLogger(levelName, format string) *slog.Logger {
@@ -67,19 +66,17 @@ func New(cfg yamlConfig) (*Provider, error) {
 	otel.SetMeterProvider(metrics.MeterProvider)
 
 	return &Provider{
-		logger:           NewLogger(cfg.Level, cfg.Format),
-		tp:               tp,
-		mp:               metrics.MeterProvider,
-		prometheus:       metrics.Prometheus,
-		operationMetrics: metrics.OperationMetrics,
+		logger:     NewLogger(cfg.Level, cfg.Format),
+		tp:         tp,
+		mp:         metrics.MeterProvider,
+		prometheus: metrics.Prometheus,
 	}, nil
 }
 
-func (p *Provider) Logger() *slog.Logger                    { return p.logger }
-func (p *Provider) TracerProvider() trace.TracerProvider    { return p.tp }
-func (p *Provider) MeterProvider() metric.MeterProvider     { return p.mp }
-func (p *Provider) PrometheusHandler() http.Handler         { return p.prometheus }
-func (p *Provider) OperationMetrics() core.OperationMetrics { return p.operationMetrics }
+func (p *Provider) Logger() *slog.Logger                 { return p.logger }
+func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
+func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
+func (p *Provider) PrometheusHandler() http.Handler      { return p.prometheus }
 
 func (p *Provider) Shutdown(ctx context.Context) error {
 	if shutdowner, ok := p.mp.(interface{ Shutdown(context.Context) error }); ok {

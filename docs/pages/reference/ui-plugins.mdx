@@ -1,7 +1,11 @@
 # UI Plugins
 
-Gestalt serves an embedded web app by default. You can replace it with a
-packaged UI bundle under `ui.plugin`.
+Gestalt serves two web surfaces from the same `gestaltd` process:
+
+- the client UI at `/`
+- the built-in admin UI at `/admin`
+
+`ui.plugin` replaces only the client UI. The admin UI remains built in.
 
 ## Config Shape
 
@@ -37,5 +41,6 @@ webui:
 ## Runtime Behavior
 
 - `gestaltd init` prepares the UI package and records it in lock state.
-- `gestaltd serve --locked` serves the prepared asset root.
-- If `ui.plugin` is omitted, Gestalt falls back to the built-in UI.
+- `gestaltd serve --locked` serves the prepared asset root at `/`.
+- If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI.
+- The built-in admin UI remains available at `/admin`.

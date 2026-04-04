@@ -54,7 +54,6 @@ type tracesConfig struct {
 type metricsConfig struct {
 	Interval   string                           `yaml:"interval"`
 	Prometheus metricspipeline.PrometheusConfig `yaml:"prometheus"`
-	Dashboard  metricspipeline.DashboardConfig  `yaml:"dashboard"`
 }
 
 type logsConfig struct {
@@ -73,12 +72,11 @@ const (
 )
 
 type Provider struct {
-	logger           *slog.Logger
-	tp               *sdktrace.TracerProvider
-	mp               *sdkmetric.MeterProvider
-	lp               *sdklog.LoggerProvider
-	prometheus       http.Handler
-	operationMetrics core.OperationMetrics
+	logger     *slog.Logger
+	tp         *sdktrace.TracerProvider
+	mp         *sdkmetric.MeterProvider
+	lp         *sdklog.LoggerProvider
+	prometheus http.Handler
 }
 
 func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
@@ -114,20 +112,18 @@ func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 	otel.SetMeterProvider(metrics.MeterProvider)
 
 	return &Provider{
-		logger:           logger,
-		tp:               tp,
-		mp:               metrics.MeterProvider,
-		lp:               lp,
-		prometheus:       metrics.Prometheus,
-		operationMetrics: metrics.OperationMetrics,
+		logger:     logger,
+		tp:         tp,
+		mp:         metrics.MeterProvider,
+		lp:         lp,
+		prometheus: metrics.Prometheus,
 	}, nil
 }
 
-func (p *Provider) Logger() *slog.Logger                    { return p.logger }
-func (p *Provider) TracerProvider() trace.TracerProvider    { return p.tp }
-func (p *Provider) MeterProvider() metric.MeterProvider     { return p.mp }
-func (p *Provider) PrometheusHandler() http.Handler         { return p.prometheus }
-func (p *Provider) OperationMetrics() core.OperationMetrics { return p.operationMetrics }
+func (p *Provider) Logger() *slog.Logger                 { return p.logger }
+func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
+func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
+func (p *Provider) PrometheusHandler() http.Handler      { return p.prometheus }
 
 func (p *Provider) Shutdown(ctx context.Context) error {
 	tpErr := p.tp.Shutdown(ctx)
@@ -248,7 +244,6 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 	reader := sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(interval))
 	return metricspipeline.Build(res, metricspipeline.Config{
 		Prometheus: cfg.Metrics.Prometheus,
-		Dashboard:  cfg.Metrics.Dashboard,
 	}, reader)
 }
 

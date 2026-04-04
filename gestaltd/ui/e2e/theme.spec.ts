@@ -2,9 +2,7 @@ import {
   test,
   expect,
   mockIntegrations,
-  mockMetricsOverview,
   mockTokens,
-  sampleMetricsOverview,
 } from "./fixtures";
 
 test.describe("Theme", () => {
@@ -17,7 +15,6 @@ test.describe("Theme", () => {
     });
     await mockIntegrations(page, []);
     await mockTokens(page, []);
-    await mockMetricsOverview(page, sampleMetricsOverview);
 
     await page.goto("/");
 

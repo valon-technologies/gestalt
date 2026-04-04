@@ -89,7 +89,6 @@ type Broker struct {
 	connMapper     ConnectionMapper
 	mcpMapper      ConnectionMapper
 	connectionAuth RefresherResolver
-	opMetrics      core.OperationMetricsRecorder
 	refreshGroup   singleflight.Group
 }
 
@@ -105,10 +104,6 @@ func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
-}
-
-func WithOperationMetrics(r core.OperationMetricsRecorder) BrokerOption {
-	return func(b *Broker) { b.opMetrics = r }
 }
 
 func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore, opts ...BrokerOption) *Broker {
@@ -153,7 +148,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	defer func() {
 		recordOperationMetrics(
 			ctx,
-			b.opMetrics,
 			startedAt,
 			metricProvider,
 			metricOperation,

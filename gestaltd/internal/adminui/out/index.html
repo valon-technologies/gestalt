@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gestalt Admin</title>
+    <style>
+      body {
+        margin: 0;
+        font: 16px/1.5 system-ui, sans-serif;
+        background: #f6f4ef;
+        color: #251c11;
+      }
+
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px 40px;
+      }
+
+      .card,
+      pre {
+        border: 1px solid #d9cfbf;
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 2rem;
+        line-height: 1.1;
+      }
+
+      .actions {
+        margin-top: 16px;
+      }
+
+      .actions a {
+        display: inline-flex;
+        margin-right: 12px;
+        color: #704214;
+        text-decoration: none;
+      }
+
+      .status {
+        margin-top: 16px;
+        padding: 12px 16px;
+      }
+
+      .status.error {
+        color: #b94b42;
+      }
+
+      pre {
+        margin: 16px 0 0;
+        padding: 16px;
+        overflow: auto;
+        min-height: 360px;
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>Prometheus metrics</h1>
+        <p>
+          The built-in admin UI stays basic. It reads the authenticated
+          <code>/metrics</code> scrape surface directly and shows the raw
+          output.
+        </p>
+        <div class="actions">
+          <a href="/">Client UI</a>
+          <a href="/metrics" target="_blank" rel="noreferrer">Open raw /metrics</a>
+        </div>
+      </section>
+
+      <section class="card status" id="status">Loading /metrics...</section>
+      <pre id="metrics-output">Loading /metrics...</pre>
+    </main>
+    <script>
+      (function () {
+        const statusEl = document.getElementById("status");
+        const metricsEl = document.getElementById("metrics-output");
+
+        async function refresh() {
+          try {
+            const response = await fetch("/metrics", {
+              credentials: "include",
+              headers: { Accept: "text/plain" },
+            });
+
+            if (response.status === 401) {
+              try {
+                window.localStorage.removeItem("user_email");
+              } catch {}
+              window.location.replace("/login");
+              return;
+            }
+
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            const body = await response.text();
+
+            if (!response.ok) {
+              throw new Error(body.trim() || `Failed to fetch /metrics (${response.status})`);
+            }
+
+            if (contentType.includes("text/html")) {
+              throw new Error("Prometheus metrics are unavailable.");
+            }
+
+            metricsEl.textContent = body;
+            statusEl.className = "card status";
+            statusEl.textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Failed to load Prometheus metrics";
+            metricsEl.textContent = message;
+            statusEl.className = "card status error";
+            statusEl.textContent = message;
+          }
+        }
+
+        refresh();
+        window.setInterval(refresh, 15000);
+      })();
+    </script>
+  </body>
+</html>

@@ -14,6 +14,5 @@ type TelemetryProvider interface {
 	TracerProvider() trace.TracerProvider
 	MeterProvider() metric.MeterProvider
 	PrometheusHandler() http.Handler
-	OperationMetrics() OperationMetrics
 	Shutdown(ctx context.Context) error
 }

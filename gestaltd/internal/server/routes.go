@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,21 +17,31 @@ func (s *Server) routes() {
 	s.mountCoreRoutes(r)
 	s.mountMCPRoutes(r)
 	s.mountAPIRoutes(r)
+	s.mountAdminUIRoutes(r)
 
-	if s.webUI != nil {
-		r.NotFound(s.webUI.ServeHTTP)
+	if s.clientUI != nil {
+		r.NotFound(s.clientUI.ServeHTTP)
 	}
 }
 
 func (s *Server) mountCoreRoutes(r chi.Router) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
-	if s.prometheusMetrics != nil {
-		r.Group(func(r chi.Router) {
-			r.Use(s.authMiddleware)
-			r.Handle("/metrics", s.prometheusMetrics)
-		})
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+		r.HandleFunc("/metrics", s.servePrometheusMetrics)
+	})
+}
+
+func (s *Server) mountAdminUIRoutes(r chi.Router) {
+	if s.adminUI == nil {
+		return
 	}
+
+	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+	})
+	r.Handle("/admin/*", http.StripPrefix("/admin", s.adminUI))
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {
@@ -49,4 +60,12 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 		s.mountAuthRoutes(r)
 		s.mountAuthenticatedRoutes(r)
 	})
+}
+
+func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.prometheusMetrics == nil {
+		http.Error(w, "Prometheus metrics are unavailable because telemetry metrics are disabled.", http.StatusServiceUnavailable)
+		return
+	}
+	s.prometheusMetrics.ServeHTTP(w, r)
 }

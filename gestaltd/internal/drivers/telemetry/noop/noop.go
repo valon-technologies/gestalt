@@ -35,10 +35,7 @@ func (p *Provider) Logger() *slog.Logger                 { return p.logger }
 func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
 func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 func (p *Provider) PrometheusHandler() http.Handler      { return nil }
-func (p *Provider) OperationMetrics() core.OperationMetrics {
-	return nil
-}
-func (p *Provider) Shutdown(context.Context) error { return nil }
+func (p *Provider) Shutdown(context.Context) error       { return nil }
 
 var Factory bootstrap.TelemetryFactory = func(yaml.Node) (core.TelemetryProvider, error) {
 	return New(), nil
