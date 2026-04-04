@@ -9,8 +9,35 @@ permissions:
   contents: write
 
 jobs:
+  validate-go-sdk:
+    name: Validate Go SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Run Go SDK tests
+        run: go test ./...
+
   release-go-sdk:
-    name: Release Go SDK
+    name: Publish Release
+    needs: validate-go-sdk
+    uses: ./.github/workflows/publish-scoped-github-release.yml
+    with:
+      tag-glob: 'sdk/go/v*'
+      path-filters: |
+        sdk/go
+        sdk/proto
+
+  warm-go-sdk-module-proxy:
+    name: Warm Go Module Proxy
+    needs: release-go-sdk
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
