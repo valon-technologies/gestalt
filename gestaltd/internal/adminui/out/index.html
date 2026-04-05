@@ -174,6 +174,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .panel-wide {
+        grid-column: 1 / -1;
+      }
+
       .metric-value {
         margin-top: 14px;
         font-size: 2rem;
@@ -182,6 +186,27 @@
 
       .metric-note {
         font-size: 0.92rem;
+      }
+
+      .chart {
+        margin-top: 18px;
+        min-height: 240px;
+      }
+
+      .chart[data-chart-state="empty"] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 240px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--surface-raised) 40%, transparent);
+        padding: 20px;
+        text-align: center;
+      }
+
+      .chart-caption {
+        margin-top: 12px;
       }
 
       .bar-list {
@@ -307,22 +332,45 @@
 
       <section class="panel-grid">
         <article class="card panel-card">
+          <span class="label-text">Recent activity</span>
+          <h2>Requests and failures</h2>
+          <div class="chart" id="activity-chart" data-chart-state="empty"></div>
+          <p class="metric-note chart-caption">
+            Derived from consecutive authenticated <code>/metrics</code> scrapes.
+          </p>
+        </article>
+
+        <article class="card panel-card">
+          <span class="label-text">Latency</span>
+          <h2>Average and p95</h2>
+          <div class="chart" id="latency-chart" data-chart-state="empty"></div>
+          <p class="metric-note chart-caption">
+            Estimated from the current Prometheus histogram totals for this process.
+          </p>
+        </article>
+
+        <article class="card panel-card panel-wide">
           <span class="label-text">Current distribution</span>
           <h2>Top providers</h2>
+          <div class="chart" id="provider-chart" data-chart-state="empty"></div>
           <div class="bar-list" id="provider-bars"></div>
         </article>
 
-        <details class="card">
+        <details class="card panel-wide">
           <summary>Raw Prometheus output</summary>
           <pre id="metrics-output">Loading metrics...</pre>
         </details>
       </section>
     </main>
-
+    <script src="./echarts.simple.min.js"></script>
     <script>
       (function () {
         const METRIC_LINE =
           /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
+        const REFRESH_INTERVAL_MS = 15000;
+        const HISTORY_LIMIT = Math.ceil((60 * 60 * 1000) / REFRESH_INTERVAL_MS);
+        const charts = {};
+        const history = [];
 
         function byId(id) {
           return document.getElementById(id);
@@ -349,6 +397,16 @@
 
         function formatPercent(value) {
           return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 1 : 2)}%` : "--";
+        }
+
+        function formatPerMinute(value) {
+          return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 0 : 1)}/min` : "--";
+        }
+
+        function formatMilliseconds(value) {
+          return Number.isFinite(value)
+            ? `${value.toFixed(value >= 100 ? 0 : 1)} ms`
+            : "--";
         }
 
         function parseLabels(raw) {
@@ -400,6 +458,8 @@
             errors: 0,
             durationSum: 0,
             durationCount: 0,
+            avgLatencySeconds: NaN,
+            p95LatencySeconds: NaN,
             buckets: new Map(),
             providers: new Map(),
           };
@@ -442,18 +502,13 @@
             }
           }
 
+          snapshot.avgLatencySeconds =
+            snapshot.durationCount > 0 ? snapshot.durationSum / snapshot.durationCount : NaN;
+          snapshot.p95LatencySeconds = percentileFromBuckets(snapshot.buckets, 0.95);
           snapshot.providers = Array.from(snapshot.providers.values()).sort(function (left, right) {
             return right.requests - left.requests;
           });
           return snapshot;
-        }
-
-        function clearDashboard(message) {
-          byId("summary-requests").textContent = "--";
-          byId("summary-errors").textContent = "--";
-          byId("summary-avg-latency").textContent = "--";
-          byId("summary-p95-latency").textContent = "--";
-          renderMessage(byId("provider-bars"), message);
         }
 
         function renderMessage(container, message) {
@@ -495,6 +550,249 @@
           }
         }
 
+        function setChartMessage(id, message) {
+          const chart = charts[id];
+          if (chart && !chart.isDisposed()) {
+            chart.dispose();
+          }
+          delete charts[id];
+          const container = byId(id);
+          container.dataset.chartState = "empty";
+          renderMessage(container, message);
+        }
+
+        function ensureChart(id) {
+          if (!window.echarts) {
+            setChartMessage(id, "ECharts failed to load.");
+            return null;
+          }
+          if (charts[id] && !charts[id].isDisposed()) {
+            return charts[id];
+          }
+          const container = byId(id);
+          container.textContent = "";
+          container.dataset.chartState = "ready";
+          charts[id] = window.echarts.init(container, null, { renderer: "canvas" });
+          return charts[id];
+        }
+
+        function theme() {
+          const styles = window.getComputedStyle(document.documentElement);
+          return {
+            brand: styles.getPropertyValue("--brand").trim(),
+            brandSoft: styles.getPropertyValue("--brand-soft").trim(),
+            border: styles.getPropertyValue("--border").trim(),
+            foreground: styles.getPropertyValue("--foreground").trim(),
+            muted: styles.getPropertyValue("--muted").trim(),
+            faint: styles.getPropertyValue("--faint").trim(),
+            danger: styles.getPropertyValue("--danger").trim(),
+            success: styles.getPropertyValue("--success").trim(),
+            surfaceRaised: styles.getPropertyValue("--surface-raised").trim(),
+          };
+        }
+
+        function positiveDelta(current, previous) {
+          if (!Number.isFinite(current)) return 0;
+          if (!Number.isFinite(previous)) return current;
+          return current >= previous ? current - previous : current;
+        }
+
+        function recordHistory(snapshot) {
+          const now = Date.now();
+          const previous = history[history.length - 1];
+          const elapsedSeconds = previous ? Math.max((now - previous.timestamp) / 1000, 1) : 1;
+
+          history.push({
+            timestamp: now,
+            requests: (positiveDelta(snapshot.requests, previous && previous.requestsTotal) / elapsedSeconds) * 60,
+            errors: (positiveDelta(snapshot.errors, previous && previous.errorsTotal) / elapsedSeconds) * 60,
+            avgLatencyMs: Number.isFinite(snapshot.avgLatencySeconds)
+              ? snapshot.avgLatencySeconds * 1000
+              : null,
+            p95LatencyMs: Number.isFinite(snapshot.p95LatencySeconds)
+              ? snapshot.p95LatencySeconds * 1000
+              : null,
+            requestsTotal: snapshot.requests,
+            errorsTotal: snapshot.errors,
+          });
+
+          while (history.length > HISTORY_LIMIT) {
+            history.shift();
+          }
+        }
+
+        function lineSeries(name, key, extra) {
+          return Object.assign(
+            {
+              name,
+              type: "line",
+              smooth: true,
+              showSymbol: false,
+              lineStyle: { width: 2 },
+              data: history.map(function (entry) {
+                return [entry.timestamp, entry[key]];
+              }),
+            },
+            extra || {},
+          );
+        }
+
+        function renderTimeChart(id, series, colors, formatter) {
+          const chart = ensureChart(id);
+          if (!chart) return;
+
+          const colorsByTheme = theme();
+          chart.setOption(
+            {
+              animation: false,
+              aria: { enabled: true },
+              color: colors.map(function (name) {
+                return colorsByTheme[name];
+              }),
+              grid: { left: 48, right: 18, top: 42, bottom: 24 },
+              legend: {
+                top: 8,
+                textStyle: { color: colorsByTheme.muted },
+                itemWidth: 10,
+                itemHeight: 10,
+              },
+              tooltip: {
+                trigger: "axis",
+                backgroundColor: colorsByTheme.surfaceRaised,
+                borderColor: colorsByTheme.border,
+                textStyle: { color: colorsByTheme.foreground },
+                valueFormatter: formatter,
+              },
+              xAxis: {
+                type: "time",
+                axisLine: { lineStyle: { color: colorsByTheme.border } },
+                axisLabel: {
+                  color: colorsByTheme.faint,
+                  formatter: function (value) {
+                    return new Date(value).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
+                  },
+                },
+                splitLine: { show: false },
+              },
+              yAxis: {
+                type: "value",
+                axisLine: { show: false },
+                axisLabel: { color: colorsByTheme.faint, formatter },
+                splitLine: { lineStyle: { color: colorsByTheme.border } },
+              },
+              series,
+            },
+            true,
+          );
+        }
+
+        function renderProviderChart(items) {
+          if (items.length === 0) {
+            setChartMessage("provider-chart", "No operation metrics have been emitted yet.");
+            return;
+          }
+
+          const chart = ensureChart("provider-chart");
+          if (!chart) return;
+
+          const top = items.slice(0, 5);
+          const colors = theme();
+          chart.setOption(
+            {
+              animation: false,
+              aria: { enabled: true },
+              grid: { left: 140, right: 20, top: 20, bottom: 20 },
+              tooltip: {
+                trigger: "axis",
+                axisPointer: { type: "shadow" },
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                textStyle: { color: colors.foreground },
+                formatter: function (params) {
+                  const item = top[params[0].dataIndex];
+                  return `${item.label}<br>${formatCount(item.requests)} requests<br>${formatCount(item.errors)} errors`;
+                },
+              },
+              xAxis: {
+                type: "value",
+                axisLine: { show: false },
+                axisLabel: { color: colors.faint },
+                splitLine: { lineStyle: { color: colors.border } },
+              },
+              yAxis: {
+                type: "category",
+                inverse: true,
+                data: top.map(function (item) {
+                  return item.label;
+                }),
+                axisLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { color: colors.foreground },
+              },
+              series: [
+                {
+                  type: "bar",
+                  data: top.map(function (item) {
+                    return item.requests;
+                  }),
+                  barWidth: 20,
+                  itemStyle: {
+                    borderRadius: [0, 999, 999, 0],
+                    color: colors.brand,
+                  },
+                  label: {
+                    show: true,
+                    position: "right",
+                    color: colors.muted,
+                    formatter: function (params) {
+                      return formatCount(Number(params.value));
+                    },
+                  },
+                },
+              ],
+            },
+            true,
+          );
+        }
+
+        function clearDashboard(message) {
+          byId("summary-requests").textContent = "--";
+          byId("summary-errors").textContent = "--";
+          byId("summary-avg-latency").textContent = "--";
+          byId("summary-p95-latency").textContent = "--";
+          setChartMessage("activity-chart", message);
+          setChartMessage("latency-chart", message);
+          setChartMessage("provider-chart", message);
+          renderMessage(byId("provider-bars"), message);
+        }
+
+        function renderCharts(snapshot) {
+          renderTimeChart(
+            "activity-chart",
+            [
+              lineSeries("Requests/min", "requests", { areaStyle: { opacity: 0.12 } }),
+              lineSeries("Errors/min", "errors"),
+            ],
+            ["brand", "danger"],
+            function (value) {
+              return formatPerMinute(Number(value));
+            },
+          );
+          renderTimeChart(
+            "latency-chart",
+            [lineSeries("Average", "avgLatencyMs"), lineSeries("P95", "p95LatencyMs")],
+            ["success", "brandSoft"],
+            function (value) {
+              return formatMilliseconds(Number(value));
+            },
+          );
+          renderProviderChart(snapshot.providers);
+          renderProviders(snapshot.providers);
+        }
+
         async function refresh() {
           try {
             const response = await fetch("/metrics", {
@@ -521,16 +819,13 @@
             }
 
             const snapshot = parseMetrics(body);
+            recordHistory(snapshot);
             byId("metrics-output").textContent = body;
             byId("summary-requests").textContent = formatCount(snapshot.requests);
             byId("summary-errors").textContent = formatCount(snapshot.errors);
-            byId("summary-avg-latency").textContent = formatDuration(
-              snapshot.durationCount > 0 ? snapshot.durationSum / snapshot.durationCount : NaN,
-            );
-            byId("summary-p95-latency").textContent = formatDuration(
-              percentileFromBuckets(snapshot.buckets, 0.95),
-            );
-            renderProviders(snapshot.providers);
+            byId("summary-avg-latency").textContent = formatDuration(snapshot.avgLatencySeconds);
+            byId("summary-p95-latency").textContent = formatDuration(snapshot.p95LatencySeconds);
+            renderCharts(snapshot);
             setStatus(`Last refreshed ${new Date().toLocaleTimeString()}`, "ok");
           } catch (error) {
             const message =
@@ -543,7 +838,12 @@
 
         clearDashboard("Loading metrics...");
         refresh();
-        window.setInterval(refresh, 15000);
+        window.setInterval(refresh, REFRESH_INTERVAL_MS);
+        window.addEventListener("resize", function () {
+          Object.values(charts).forEach(function (chart) {
+            chart.resize();
+          });
+        });
       })();
     </script>
   </body>

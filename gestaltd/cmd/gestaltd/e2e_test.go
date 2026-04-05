@@ -399,11 +399,17 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("Requests and failures")) {
+			t.Fatalf("expected activity graph section in embedded admin UI: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("Average and p95")) {
+			t.Fatalf("expected latency graph section in embedded admin UI: %s", adminBody)
+		}
 		if !bytes.Contains(adminBody, []byte("Top providers")) {
 			t.Fatalf("expected graph sections in embedded admin UI: %s", adminBody)
 		}
-		if !bytes.Contains(adminBody, []byte(`fetch("/metrics"`)) {
-			t.Fatalf("expected admin ui to read /metrics directly: %s", adminBody)
+		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 	})
 
@@ -496,8 +502,14 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("Requests and failures")) {
+			t.Fatalf("expected activity graph section in embedded admin UI: %s", adminBody)
+		}
 		if !bytes.Contains(adminBody, []byte("Top providers")) {
 			t.Fatalf("expected provider chart section in embedded admin UI: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 	})
 
@@ -545,6 +557,9 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 	})
 }
@@ -602,6 +617,9 @@ ui:
 		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected built-in admin UI at /admin: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+			t.Fatalf("expected built-in admin UI to include echarts asset: %s", adminBody)
 		}
 	})
 }

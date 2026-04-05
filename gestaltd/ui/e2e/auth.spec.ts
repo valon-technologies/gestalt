@@ -112,6 +112,21 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     ).toBeVisible();
     await expect(page.locator("#summary-requests")).toHaveText("45");
     await expect(page.locator("#summary-errors")).toHaveText("3");
+    await expect(page.locator("#activity-chart")).toHaveAttribute(
+      "data-chart-state",
+      "ready",
+    );
+    await expect(page.locator("#latency-chart")).toHaveAttribute(
+      "data-chart-state",
+      "ready",
+    );
+    await expect(page.locator("#provider-chart")).toHaveAttribute(
+      "data-chart-state",
+      "ready",
+    );
+    await expect(page.locator("#activity-chart canvas")).toHaveCount(1);
+    await expect(page.locator("#latency-chart canvas")).toHaveCount(1);
+    await expect(page.locator("#provider-chart canvas")).toHaveCount(1);
     await expect(page.getByText("Top providers")).toBeVisible();
     await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
     await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
@@ -255,6 +270,9 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     await expect(
       page.locator("#status").getByText("Prometheus metrics are unavailable."),
     ).toBeVisible();
+    await expect(page.locator("#activity-chart")).toHaveAttribute("data-chart-state", "empty");
+    await expect(page.locator("#latency-chart")).toHaveAttribute("data-chart-state", "empty");
+    await expect(page.locator("#provider-chart")).toHaveAttribute("data-chart-state", "empty");
     await expect(page.locator("#metrics-output")).toHaveText(
       "Prometheus metrics are unavailable.",
     );
