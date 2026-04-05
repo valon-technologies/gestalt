@@ -182,16 +182,22 @@ func TestDelegationMethods(t *testing.T) {
 	t.Parallel()
 
 	exchangeResp := &core.TokenResponse{AccessToken: "abc"}
-	inner := &stubWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:    "my-integration",
-			DN:   "My Integration",
-			Desc: "A test integration",
-			ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
-				return exchangeResp, nil
+	refreshResp := &core.TokenResponse{AccessToken: "refresh-abc"}
+	inner := &stubOAuth{
+		stubWithOps: stubWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:    "my-integration",
+				DN:   "My Integration",
+				Desc: "A test integration",
+				ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
+					return exchangeResp, nil
+				},
 			},
+			ops: sampleOps(),
 		},
-		ops: sampleOps(),
+	}
+	inner.refreshTokenFn = func(context.Context, string) (*core.TokenResponse, error) {
+		return refreshResp, nil
 	}
 
 	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
@@ -208,11 +214,11 @@ func TestDelegationMethods(t *testing.T) {
 
 	oauthR, ok := r.(core.OAuthProvider)
 	if !ok {
-		t.Fatal("expected restricted wrapper to implement OAuthProvider")
+		t.Fatal("expected restricted wrapper to implement core OAuth provider")
 	}
 
-	if got := oauthR.AuthorizationURL("state", []string{"read"}); got != "" {
-		t.Errorf("AuthorizationURL: got %q, want empty", got)
+	if got := oauthR.AuthorizationURL("state", []string{"read"}); got != "https://example.com/start?state=state" {
+		t.Errorf("AuthorizationURL: got %q", got)
 	}
 
 	tok, err := oauthR.ExchangeCode(context.Background(), "code")
@@ -227,8 +233,8 @@ func TestDelegationMethods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RefreshToken: %v", err)
 	}
-	if refreshTok != nil {
-		t.Errorf("RefreshToken: got %+v, want nil", refreshTok)
+	if refreshTok != refreshResp {
+		t.Errorf("RefreshToken: got %+v, want %+v", refreshTok, refreshResp)
 	}
 }
 
@@ -238,6 +244,22 @@ type stubCatalogProvider struct {
 }
 
 func (s *stubCatalogProvider) Catalog() *catalog.Catalog { return s.cat }
+
+type stubOAuth struct {
+	stubWithOps
+	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)
+}
+
+func (s *stubOAuth) AuthorizationURL(state string, _ []string) string {
+	return "https://example.com/start?state=" + state
+}
+
+func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	if s.refreshTokenFn != nil {
+		return s.refreshTokenFn(ctx, refreshToken)
+	}
+	return nil, nil
+}
 
 func TestCatalogFiltersOperations(t *testing.T) {
 	t.Parallel()

@@ -46,31 +46,31 @@ type OAuthHandler interface {
 
 // upstreamHandlerAdapter wraps an oauth.UpstreamHandler to satisfy OAuthHandler.
 type upstreamHandlerAdapter struct {
-	h *oauth.UpstreamHandler
+	*oauth.UpstreamHandler
 }
 
 // WrapUpstreamHandler adapts an oauth.UpstreamHandler to the OAuthHandler
 // interface. The adapter maps StartOAuth to AuthorizationURLWithPKCE and
 // ExchangeCodeWithVerifier to ExchangeCode with option injection.
 func WrapUpstreamHandler(h *oauth.UpstreamHandler) OAuthHandler {
-	return &upstreamHandlerAdapter{h: h}
+	return &upstreamHandlerAdapter{UpstreamHandler: h}
 }
 
 func (a *upstreamHandlerAdapter) AuthorizationURL(state string, scopes []string) string {
-	url, _ := a.h.AuthorizationURLWithPKCE(state, scopes)
+	url, _ := a.AuthorizationURLWithPKCE(state, scopes)
 	return url
 }
 
 func (a *upstreamHandlerAdapter) StartOAuth(state string, scopes []string) (string, string) {
-	return a.h.AuthorizationURLWithPKCE(state, scopes)
+	return a.AuthorizationURLWithPKCE(state, scopes)
 }
 
 func (a *upstreamHandlerAdapter) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	return a.h.AuthorizationURLWithOverride(authBaseURL, state, scopes)
+	return a.AuthorizationURLWithOverride(authBaseURL, state, scopes)
 }
 
 func (a *upstreamHandlerAdapter) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return a.h.ExchangeCode(ctx, code)
+	return a.UpstreamHandler.ExchangeCode(ctx, code)
 }
 
 func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
@@ -79,19 +79,8 @@ func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, c
 		opts = append(opts, oauth.WithPKCEVerifier(verifier))
 	}
 	opts = append(opts, extraOpts...)
-	return a.h.ExchangeCode(ctx, code, opts...)
+	return a.UpstreamHandler.ExchangeCode(ctx, code, opts...)
 }
-
-func (a *upstreamHandlerAdapter) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return a.h.RefreshToken(ctx, refreshToken)
-}
-
-func (a *upstreamHandlerAdapter) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	return a.h.RefreshTokenWithURL(ctx, refreshToken, tokenURL)
-}
-
-func (a *upstreamHandlerAdapter) AuthorizationBaseURL() string { return a.h.AuthorizationBaseURL() }
-func (a *upstreamHandlerAdapter) TokenURL() string             { return a.h.TokenURL() }
 
 // ProviderBuildResult carries the constructed provider and an OAuth handler
 // for each named connection that uses oauth2 or mcp_oauth auth.
