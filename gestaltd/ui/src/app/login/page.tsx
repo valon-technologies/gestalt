@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setUserEmail } from "@/lib/auth";
-import { NONE_PROVIDER, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
+import { DOCS_PATH, NONE_PROVIDER, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
@@ -56,12 +57,12 @@ export default function LoginPage() {
             </p>
             <p className="mt-2 text-sm text-muted">
               Or read the{" "}
-              <a
-                href="/docs"
+              <Link
+                href={DOCS_PATH}
                 className="font-medium text-muted hover:text-primary transition-colors duration-150 underline underline-offset-2 decoration-base-300 dark:decoration-base-600"
               >
                 documentation
-              </a>
+              </Link>
               .
             </p>
           </div>
