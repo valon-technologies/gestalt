@@ -360,10 +360,10 @@
           const matcher = /([^=,]+)="((?:\\.|[^"])*)"/g;
           let match;
           while ((match = matcher.exec(source)) !== null) {
-            labels[match[1]] = match[2]
-              .replace(/\\\\/g, "\\")
-              .replace(/\\"/g, '"')
-              .replace(/\\n/g, "\n");
+            labels[match[1]] = match[2].replace(/\\([\\n"])/g, function (_, escaped) {
+              if (escaped === "n") return "\n";
+              return escaped;
+            });
           }
           return labels;
         }

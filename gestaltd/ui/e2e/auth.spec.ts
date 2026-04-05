@@ -75,12 +75,20 @@ test.describe("Authentication", () => {
 # TYPE target_info gauge
 target_info{service_name="gestaltd"} 1
 # TYPE gestaltd_operation_count_total counter
+gestaltd_operation_count_total{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 25
 gestaltd_operation_count_total{gestalt_provider="example",gestalt_operation="echo"} 12
 gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 8
 # TYPE gestaltd_operation_error_count_total counter
+gestaltd_operation_error_count_total{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 0
 gestaltd_operation_error_count_total{gestalt_provider="example",gestalt_operation="echo"} 2
 gestaltd_operation_error_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 1
 # TYPE gestaltd_operation_duration_seconds histogram
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="0.1"} 4
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="0.5"} 18
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="1"} 25
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="+Inf"} 25
+gestaltd_operation_duration_seconds_sum{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 6.25
+gestaltd_operation_duration_seconds_count{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 25
 gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.1"} 3
 gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.5"} 10
 gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="1"} 12
@@ -102,9 +110,11 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     await expect(
       page.getByRole("heading", { name: "Prometheus metrics" }),
     ).toBeVisible();
-    await expect(page.locator("#summary-requests")).toHaveText("20");
+    await expect(page.locator("#summary-requests")).toHaveText("45");
     await expect(page.locator("#summary-errors")).toHaveText("3");
     await expect(page.getByText("Top providers")).toBeVisible();
+    await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
+    await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
     await expect(page.locator("#provider-bars")).toContainText("example");
     await expect(page.locator("#provider-bars")).not.toContainText("unknown");
   });
