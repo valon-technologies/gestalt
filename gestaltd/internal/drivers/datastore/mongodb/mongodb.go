@@ -10,10 +10,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/versioning"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+const providerName = "mongodb"
+
+var supportedVersions = []string{"7", "8"}
 
 type Store struct {
 	client *mongo.Client
@@ -73,11 +78,33 @@ func New(uri, database string, encryptionKey []byte) (*Store, error) {
 		return nil, fmt.Errorf("mongodb: ping: %w", err)
 	}
 
+	if _, err := resolveVersion(context.Background(), client, ""); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, err
+	}
+
 	return &Store{
 		client: client,
 		db:     client.Database(database),
 		enc:    enc,
 	}, nil
+}
+
+func resolveVersion(ctx context.Context, client *mongo.Client, requested string) (string, error) {
+	return versioning.Resolve(ctx, providerName, requested, supportedVersions, func(ctx context.Context) (string, string, error) {
+		var buildInfo struct {
+			Version string `bson:"version"`
+		}
+		if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&buildInfo); err != nil {
+			return "", "", fmt.Errorf("%s: detecting version: %w", providerName, err)
+		}
+
+		var major int
+		if _, err := fmt.Sscanf(buildInfo.Version, "%d", &major); err != nil {
+			return "", buildInfo.Version, fmt.Errorf("%s: parsing server version %q: %w", providerName, buildInfo.Version, err)
+		}
+		return fmt.Sprintf("%d", major), buildInfo.Version, nil
+	})
 }
 
 func (s *Store) Ping(ctx context.Context) error {

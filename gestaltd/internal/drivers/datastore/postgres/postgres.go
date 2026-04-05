@@ -2,15 +2,22 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlstore"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/versioning"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // register database/sql driver
 )
+
+const providerName = "postgres"
+
+var supportedVersions = []string{"15", "16", "17", "18"}
 
 // dialect implements sqlstore.Dialect for PostgreSQL.
 type dialect struct{}
@@ -68,11 +75,25 @@ type Store struct {
 var _ core.Datastore = (*Store)(nil)
 
 func New(dsn string, encryptionKey []byte) (*Store, error) {
-	s, err := sqlstore.Open("pgx", dsn, encryptionKey, dialect{})
+	s, err := sqlstore.OpenVersioned("pgx", dsn, encryptionKey, dialect{}, "", resolveVersion)
 	if err != nil {
 		return nil, err
 	}
 	return &Store{Store: s}, nil
+}
+
+func resolveVersion(ctx context.Context, db *sql.DB, requested string) (string, error) {
+	return versioning.Resolve(ctx, providerName, requested, supportedVersions, func(ctx context.Context) (string, string, error) {
+		var raw string
+		if err := db.QueryRowContext(ctx, "SHOW server_version_num").Scan(&raw); err != nil {
+			return "", "", fmt.Errorf("%s: detecting version: %w", providerName, err)
+		}
+		versionNum, err := strconv.Atoi(raw)
+		if err != nil {
+			return "", raw, fmt.Errorf("%s: parsing server_version_num %q: %w", providerName, raw, err)
+		}
+		return strconv.Itoa(versionNum / 10000), raw, nil
+	})
 }
 
 func (s *Store) Migrate(ctx context.Context) error {

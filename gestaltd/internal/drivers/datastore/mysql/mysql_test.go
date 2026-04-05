@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"gopkg.in/yaml.v3"
 )
 
 func testDSN(t *testing.T) string {
@@ -64,17 +66,26 @@ func newTestDatabase(t *testing.T) string {
 }
 
 func newTestStore(t *testing.T) *Store {
+	store, err := openTestStore(t, "")
+	if err != nil {
+		t.Fatalf("openTestStore: %v", err)
+	}
+	return store
+}
+
+func openTestStore(t *testing.T, version string) (*Store, error) {
 	t.Helper()
 	dsn := newTestDatabase(t)
-	store, err := New(dsn, coretesting.EncryptionKey(t))
+	store, err := New(dsn, version, coretesting.EncryptionKey(t))
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		return nil, fmt.Errorf("New: %w", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
+		_ = store.Close()
+		return nil, fmt.Errorf("Migrate: %w", err)
 	}
-	return store
+	return store, nil
 }
 
 func TestMySQLDatastoreConformance(t *testing.T) {
@@ -123,6 +134,99 @@ func TestMySQLDatastoreConformance(t *testing.T) {
 	})
 }
 
+func TestMySQLVersionSelection(t *testing.T) {
+	t.Parallel()
+
+	autoStore, err := openTestStore(t, "auto")
+	if err != nil {
+		t.Fatalf("openTestStore(auto): %v", err)
+	}
+
+	autoVersion, err := resolveVersion(context.Background(), autoStore.DB, "auto")
+	if err != nil {
+		t.Fatalf("resolveVersion(auto): %v", err)
+	}
+
+	explicitStore, err := openTestStore(t, autoVersion)
+	if err != nil {
+		t.Fatalf("openTestStore(%q): %v", autoVersion, err)
+	}
+
+	explicitVersion, err := resolveVersion(context.Background(), explicitStore.DB, autoVersion)
+	if err != nil {
+		t.Fatalf("resolveVersion(%q): %v", autoVersion, err)
+	}
+	if explicitVersion != autoVersion {
+		t.Fatalf("resolved version = %q, want %q", explicitVersion, autoVersion)
+	}
+
+	for _, version := range supportedVersions {
+		if version == autoVersion {
+			continue
+		}
+		ds, err := openTestStore(t, version)
+		if err == nil {
+			if ds != nil {
+				_ = ds.Close()
+			}
+			t.Fatalf("openTestStore(%q) succeeded against %q", version, autoVersion)
+		}
+		return
+	}
+
+	t.Fatal("supportedVersions did not include a mismatched version to test")
+}
+
 func shortUUID() string {
 	return uuid.NewString()[:8]
+}
+
+func decodeFactoryConfig(t *testing.T, src string) yaml.Node {
+	t.Helper()
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if len(doc.Content) != 1 {
+		t.Fatalf("unexpected yaml document shape: %#v", doc)
+	}
+	return *doc.Content[0]
+}
+
+func TestMySQLFactoryVersionSelection(t *testing.T) {
+	t.Parallel()
+
+	dsn := newTestDatabase(t)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	version, err := resolveVersion(context.Background(), db, "auto")
+	if err != nil {
+		t.Fatalf("resolveVersion(auto): %v", err)
+	}
+
+	node := decodeFactoryConfig(t, fmt.Sprintf("dsn: %q\nversion: %q\n", dsn, version))
+	ds, err := Factory(node, bootstrap.Deps{EncryptionKey: coretesting.EncryptionKey(t)})
+	if err != nil {
+		t.Fatalf("Factory(version=%q): %v", version, err)
+	}
+	t.Cleanup(func() { _ = ds.Close() })
+	if err := ds.Migrate(context.Background()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	for _, candidate := range supportedVersions {
+		if candidate == version {
+			continue
+		}
+		node := decodeFactoryConfig(t, fmt.Sprintf("dsn: %q\nversion: %q\n", dsn, candidate))
+		if _, err := Factory(node, bootstrap.Deps{EncryptionKey: coretesting.EncryptionKey(t)}); err == nil {
+			t.Fatalf("Factory(version=%q) succeeded against %q", candidate, version)
+		}
+		return
+	}
 }

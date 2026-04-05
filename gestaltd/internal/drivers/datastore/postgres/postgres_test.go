@@ -53,10 +53,20 @@ func newTestStore(t *testing.T) *Store {
 
 	store, err := New(schemaDSN, coretesting.EncryptionKey(t))
 	if err != nil {
+		cleanDB, cleanErr := sql.Open("pgx", dsn)
+		if cleanErr == nil {
+			_, _ = cleanDB.Exec(fmt.Sprintf("DROP SCHEMA %s CASCADE", schema))
+			_ = cleanDB.Close()
+		}
 		t.Fatalf("New: %v", err)
 	}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = store.Close()
+		cleanDB, cleanErr := sql.Open("pgx", dsn)
+		if cleanErr == nil {
+			_, _ = cleanDB.Exec(fmt.Sprintf("DROP SCHEMA %s CASCADE", schema))
+			_ = cleanDB.Close()
+		}
 		t.Fatalf("Migrate: %v", err)
 	}
 

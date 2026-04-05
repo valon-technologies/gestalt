@@ -27,6 +27,18 @@ func OpenDB(db *sql.DB, driverName string, encryptionKey []byte, d Dialect) (*St
 	return openDB(db, driverName, encryptionKey, d)
 }
 
+func OpenVersioned(driverName, dsn string, encryptionKey []byte, d Dialect, requestedVersion string, resolve func(context.Context, *sql.DB, string) (string, error)) (*Store, error) {
+	s, err := Open(driverName, dsn, encryptionKey, d)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := resolve(context.Background(), s.DB, requestedVersion); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
 func openDB(db *sql.DB, name string, encryptionKey []byte, d Dialect) (*Store, error) {
 	db.SetMaxOpenConns(DefaultMaxOpenConns)
 	db.SetMaxIdleConns(DefaultMaxIdleConns)
