@@ -33,6 +33,13 @@ go test ./...
 cd ../gestalt
 cargo test
 
+cd ../sdk/go
+go test ./...
+
+cd ../proto
+./update-go-sdk.sh
+./check-go-sdk-sync.sh
+
 cd ../gestaltd/ui
 npm ci
 npm run typecheck
@@ -54,6 +61,14 @@ Release workflows use scoped tags:
 - Plugins: `plugin/<plugin>/v<version>`
 
 Keep the bare semantic version aligned across artifacts when they are meant to ship together.
+
+If you change `sdk/proto`, regenerate and verify the checked-in Go stubs before sending a PR:
+
+```sh
+cd sdk/proto
+./update-go-sdk.sh
+./check-go-sdk-sync.sh
+```
 
 ## Adding New Built-Ins
 
