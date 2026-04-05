@@ -74,6 +74,10 @@ func (p *manualOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
 	return sdkgestalt.ConnectionModeIdentity
 }
 
+func (p *manualOnlySDKProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
+	return nil
+}
+
 func (p *manualOnlySDKProvider) Catalog() *sdkgestalt.Catalog {
 	return &sdkgestalt.Catalog{
 		Name:        "manual-only",

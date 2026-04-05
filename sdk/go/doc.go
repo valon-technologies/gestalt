@@ -17,6 +17,9 @@
 //	func (p *MyProvider) ConnectionMode() gestalt.ConnectionMode {
 //		return gestalt.ConnectionModeNone
 //	}
+//	func (p *MyProvider) Configure(ctx context.Context, name string, config map[string]any) error {
+//		return nil
+//	}
 //
 //	func (p *MyProvider) Catalog() *gestalt.Catalog {
 //		return &gestalt.Catalog{

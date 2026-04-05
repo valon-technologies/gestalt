@@ -25,7 +25,10 @@ func (p *stubProvider) Name() string                           { return p.name }
 func (p *stubProvider) DisplayName() string                    { return p.displayName }
 func (p *stubProvider) Description() string                    { return p.description }
 func (p *stubProvider) ConnectionMode() gestalt.ConnectionMode { return p.connMode }
-func (p *stubProvider) Catalog() *gestalt.Catalog              { return p.catalog }
+func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
+	return nil
+}
+func (p *stubProvider) Catalog() *gestalt.Catalog { return p.catalog }
 
 func (p *stubProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
 	return &gestalt.OperationResult{
@@ -36,22 +39,15 @@ func (p *stubProvider) Execute(_ context.Context, operation string, params map[s
 
 type startableStubProvider struct {
 	stubProvider
-	startName   string
-	startConfig map[string]any
+	name   string
+	config map[string]any
 }
 
-func (p *startableStubProvider) Start(_ context.Context, name string, config map[string]any) error {
-	p.startName = name
-	p.startConfig = config
+func (p *startableStubProvider) Configure(_ context.Context, name string, config map[string]any) error {
+	p.name = name
+	p.config = config
 	return nil
 }
-
-type schemaStubProvider struct {
-	stubProvider
-	schemaDocument string
-}
-
-func (p *schemaStubProvider) ConfigSchema() string { return p.schemaDocument }
 
 type manualAuthStubProvider struct {
 	stubProvider
@@ -249,57 +245,11 @@ func TestProviderServerStartProvider(t *testing.T) {
 	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
 		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
-	if prov.startName != "my-instance" {
-		t.Errorf("startName = %q, want %q", prov.startName, "my-instance")
+	if prov.name != "my-instance" {
+		t.Errorf("name = %q, want %q", prov.name, "my-instance")
 	}
-	if prov.startConfig["key"] != "val" {
-		t.Errorf("startConfig[key] = %v, want %q", prov.startConfig["key"], "val")
-	}
-}
-
-func TestProviderServerStartProviderNoOp(t *testing.T) {
-	t.Parallel()
-
-	prov := &stubProvider{
-		name:     "test-provider",
-		connMode: gestalt.ConnectionModeNone,
-	}
-
-	client := newProviderPluginClient(t, prov)
-	ctx := context.Background()
-
-	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
-		Name:            "my-instance",
-		ProtocolVersion: proto.CurrentProtocolVersion,
-	})
-	if err != nil {
-		t.Fatalf("StartProvider: %v", err)
-	}
-	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-}
-
-func TestProviderServerConfigSchema(t *testing.T) {
-	t.Parallel()
-
-	prov := &schemaStubProvider{
-		stubProvider: stubProvider{
-			name:     "test-provider",
-			connMode: gestalt.ConnectionModeNone,
-		},
-		schemaDocument: `{"type":"object"}`,
-	}
-
-	client := newProviderPluginClient(t, prov)
-	ctx := context.Background()
-
-	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if meta.GetConfigSchema() != `{"type":"object"}` {
-		t.Errorf("ConfigSchema = %q, want %q", meta.GetConfigSchema(), `{"type":"object"}`)
+	if prov.config["key"] != "val" {
+		t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
 	}
 }
 

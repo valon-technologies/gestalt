@@ -10,13 +10,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// ConfigSchemaProvider is an optional interface a [Provider] can implement
-// to declare a schema document for the provider-level configuration it accepts.
-// The document is validated as JSON Schema and may be encoded as JSON or YAML.
-type ConfigSchemaProvider interface {
-	ConfigSchema() string
-}
-
 // ProviderServer adapts a [Provider] implementation to the gRPC
 // ProviderPlugin service. Most plugin authors should use [ServeProvider]
 // instead of constructing this directly.
@@ -35,10 +28,12 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if starter, ok := s.provider.(ProviderStarter); ok {
-		if err := starter.Start(ctx, req.GetName(), mapFromStruct(req.GetConfig())); err != nil {
-			return nil, status.Errorf(codes.Unknown, "start provider: %v", err)
-		}
+	config := mapFromStruct(req.GetConfig())
+	if config == nil {
+		config = map[string]any{}
+	}
+	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
+		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
 	return &proto.StartProviderResponse{
 		ProtocolVersion: proto.CurrentProtocolVersion,
@@ -54,10 +49,6 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
 	}
-	var configSchema string
-	if csp, ok := s.provider.(ConfigSchemaProvider); ok {
-		configSchema = csp.ConfigSchema()
-	}
 	return &proto.ProviderMetadata{
 		Name:                   s.provider.Name(),
 		DisplayName:            s.provider.DisplayName(),
@@ -66,7 +57,6 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 		ConnectionParams:       connParams,
 		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
-		ConfigSchema:           configSchema,
 		AuthTypes:              authTypes(s.provider),
 	}, nil
 }

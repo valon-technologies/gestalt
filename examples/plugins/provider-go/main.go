@@ -25,6 +25,13 @@ func (p *exampleProvider) Description() string {
 func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
 	return gestalt.ConnectionModeNone
 }
+func (p *exampleProvider) Configure(_ context.Context, name string, config map[string]any) error {
+	p.startedName = name
+	if g, ok := config["greeting"].(string); ok {
+		p.greeting = g
+	}
+	return nil
+}
 
 func (p *exampleProvider) Catalog() *gestalt.Catalog {
 	return &gestalt.Catalog{
@@ -83,14 +90,6 @@ func (p *exampleProvider) Execute(_ context.Context, operation string, params ma
 	default:
 		return &gestalt.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
-}
-
-func (p *exampleProvider) Start(_ context.Context, name string, config map[string]any) error {
-	p.startedName = name
-	if g, ok := config["greeting"].(string); ok {
-		p.greeting = g
-	}
-	return nil
 }
 
 func main() {

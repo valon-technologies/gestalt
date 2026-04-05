@@ -34,7 +34,6 @@ message ProviderMetadata {
   string static_catalog_json = 7;
   bool supports_session_catalog = 8;
   bool supports_post_connect = 9;
-  string config_schema = 10;
   int32 min_protocol_version = 11;
   int32 max_protocol_version = 12;
 }
