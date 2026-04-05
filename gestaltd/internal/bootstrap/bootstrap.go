@@ -21,7 +21,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,8 +91,11 @@ func (a *upstreamHandlerAdapter) TokenURL() string             { return a.h.Toke
 // ProviderBuildResult carries the constructed provider and an OAuth handler
 // for each named connection that uses oauth2 or mcp_oauth auth.
 type ProviderBuildResult struct {
-	Provider       core.Provider
-	ConnectionAuth map[string]OAuthHandler
+	Provider          core.Provider
+	ConnectionAuth    map[string]OAuthHandler
+	DefaultConnection string
+	APIConnection     string
+	MCPConnection     string
 }
 
 type providerMetadata struct {
@@ -118,21 +120,6 @@ func resolveProviderMetadata(intg config.IntegrationDef) providerMetadata {
 	}
 	meta.iconSVG = svg
 	return meta
-}
-
-func (m providerMetadata) applyToDefinition(def *provider.Definition) {
-	if def == nil {
-		return
-	}
-	if m.displayName != "" {
-		def.DisplayName = m.displayName
-	}
-	if m.description != "" {
-		def.Description = m.description
-	}
-	if m.iconSVG != "" {
-		def.IconSVG = m.iconSVG
-	}
 }
 
 func (m providerMetadata) displayNameOr(v string) string {
@@ -195,6 +182,7 @@ type Result struct {
 	Datastore        core.Datastore
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
+	ConnectionMaps   ConnectionMaps
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
@@ -362,7 +350,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
+	providers, connMaps, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
 	}
@@ -374,10 +362,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	connMaps, err := BuildConnectionMaps(cfg)
-	if err != nil {
-		return nil, err
-	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
@@ -393,6 +377,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Datastore:        prepared.Datastore,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
+		ConnectionMaps:   connMaps,
 		ConnectionAuth:   connAuthResolver,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,
@@ -654,17 +639,22 @@ func (l *lazyRegStore) get() mcpoauth.RegistrationStore {
 	return l.store
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], ConnectionMaps, <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex
+	connMaps := ConnectionMaps{
+		DefaultConnection: make(map[string]string, len(cfg.Integrations)),
+		APIConnection:     make(map[string]string, len(cfg.Integrations)),
+		MCPConnection:     make(map[string]string, len(cfg.Integrations)),
+	}
 	regStore := &lazyRegStore{deps: deps}
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, ConnectionMaps{}, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
@@ -672,7 +662,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	ready := make(chan struct{})
 	if len(cfg.Integrations) == 0 {
 		close(ready)
-		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
+		return &reg.Providers, connMaps, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
 	}
 
 	var wg sync.WaitGroup
@@ -691,11 +681,14 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 				slog.Warn("registering provider failed", "provider", name, "error", err)
 				return
 			}
+			connMu.Lock()
 			if len(result.ConnectionAuth) > 0 {
-				connMu.Lock()
 				connAuth[name] = result.ConnectionAuth
-				connMu.Unlock()
 			}
+			connMaps.DefaultConnection[name] = result.DefaultConnection
+			connMaps.APIConnection[name] = result.APIConnection
+			connMaps.MCPConnection[name] = result.MCPConnection
+			connMu.Unlock()
 			slog.Info("loaded provider", "provider", name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}()
 	}
@@ -709,44 +702,31 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		<-ready
 		return connAuth
 	}
-	return &reg.Providers, ready, resolver, nil
+	return &reg.Providers, connMaps, ready, resolver, nil
 }
 
 func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	if intg.Plugin == nil {
-		return nil, fmt.Errorf("integration %q has no plugin defined", name)
-	}
-
-	meta := resolveProviderMetadata(intg)
-	pluginConfig, err := config.NodeToMap(intg.Plugin.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
-	}
-
-	if !intg.Plugin.IsInline() && !intg.Plugin.IsDeclarative {
-		return buildExternalPluginProvider(ctx, name, intg, pluginConfig, meta, deps, regStore)
-	}
-
-	manifest, allowedOperations, err := config.EffectiveManifestBackedInputs(name, intg.Plugin)
+	compiled, err := compileIntegration(name, intg)
 	if err != nil {
 		return nil, err
 	}
-	if manifest == nil {
-		return nil, fmt.Errorf("declarative provider %q has no resolved manifest", name)
+
+	if compiled.hasExecutableEntrypoint {
+		return buildExternalPluginProvider(ctx, compiled, deps, regStore)
 	}
-	if manifest.Provider.IsSpecLoaded() {
-		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, regStore, allowedOperations)
+	if compiled.manifestProvider.IsSpecLoaded() {
+		return buildSpecLoadedProvider(ctx, compiled, deps, regStore)
 	}
 
-	declarative, err := newDeclarativeProvider(manifest, meta)
+	declarative, err := newDeclarativeProvider(compiled.manifest, compiled.meta)
 	if err != nil {
-		return nil, fmt.Errorf("create provider %q: %w", name, err)
+		return nil, fmt.Errorf("create provider %q: %w", compiled.name, err)
 	}
-	prov, err := applyAllowedOperations(name, allowedOperations, declarative)
+	prov, err := applyAllowedOperations(compiled.name, compiled.allowedOperations, declarative)
 	if err != nil {
 		return nil, err
 	}
-	return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, nil, deps, regStore)
+	return compiled.newProviderBuildResult(prov, nil, deps, regStore)
 }
 
 func applyAllowedOperations(name string, allowedOperations map[string]*config.OperationOverride, pluginProv core.Provider) (core.Provider, error) {
@@ -770,18 +750,18 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, compiled *compiledIntegration) (core.Provider, error) {
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
-		Command:      intg.Plugin.Command,
-		Args:         intg.Plugin.Args,
-		Env:          intg.Plugin.Env,
-		Name:         name,
-		DisplayName:  meta.displayName,
-		Description:  meta.description,
-		IconSVG:      meta.iconSVG,
-		Config:       pluginConfig,
-		AllowedHosts: intg.Plugin.AllowedHosts,
-		HostBinary:   intg.Plugin.HostBinary,
+		Command:      compiled.intg.Plugin.Command,
+		Args:         compiled.intg.Plugin.Args,
+		Env:          compiled.intg.Plugin.Env,
+		Name:         compiled.name,
+		DisplayName:  compiled.meta.displayName,
+		Description:  compiled.meta.description,
+		IconSVG:      compiled.meta.iconSVG,
+		Config:       compiled.pluginConfig,
+		AllowedHosts: compiled.intg.Plugin.AllowedHosts,
+		HostBinary:   compiled.intg.Plugin.HostBinary,
 	})
 	if err != nil {
 		return nil, err
@@ -880,23 +860,6 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoau
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,
 	})
-}
-
-func applyProviderResponseMapping(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef) {
-	responseMapping := config.MergedProviderResponseMapping(manifestProvider, plugin)
-	if responseMapping == nil {
-		return
-	}
-	rm := &provider.ResponseMappingDef{
-		DataPath: responseMapping.DataPath,
-	}
-	if responseMapping.Pagination != nil {
-		rm.Pagination = &provider.PaginationMappingDef{
-			HasMorePath: responseMapping.Pagination.HasMorePath,
-			CursorPath:  responseMapping.Pagination.CursorPath,
-		}
-	}
-	def.ResponseMapping = rm
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {

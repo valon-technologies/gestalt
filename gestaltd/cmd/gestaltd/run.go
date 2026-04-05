@@ -112,12 +112,7 @@ func runServer(env *bootstrapEnv) error {
 
 	result := env.Result
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
-	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
-	if err != nil {
-		return err
-	}
-
-	mcpSurface := buildMCPSurface(env.Config, connMaps)
+	mcpSurface := buildMCPSurface(env.Config, result.ConnectionMaps)
 
 	if env.Config.Server.BaseURL != "" {
 		slog.Info("gestaltd base URL configured",
@@ -149,8 +144,8 @@ func runServer(env *bootstrapEnv) error {
 		Datastore:         result.Datastore,
 		Providers:         result.Providers,
 		Invoker:           httpInvoker,
-		DefaultConnection: connMaps.DefaultConnection,
-		CatalogConnection: connMaps.MCPConnection,
+		DefaultConnection: result.ConnectionMaps.DefaultConnection,
+		CatalogConnection: result.ConnectionMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
 		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
