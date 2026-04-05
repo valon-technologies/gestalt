@@ -174,6 +174,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .panel-wide {
+        grid-column: 1 / -1;
+      }
+
       .metric-value {
         margin-top: 14px;
         font-size: 2rem;
@@ -182,6 +186,27 @@
 
       .metric-note {
         font-size: 0.92rem;
+      }
+
+      .chart {
+        margin-top: 18px;
+        min-height: 240px;
+      }
+
+      .chart[data-chart-state="empty"] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 240px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--surface-raised) 40%, transparent);
+        padding: 20px;
+        text-align: center;
+      }
+
+      .chart-caption {
+        margin-top: 12px;
       }
 
       .bar-list {
@@ -307,244 +332,37 @@
 
       <section class="panel-grid">
         <article class="card panel-card">
+          <span class="label-text">Recent activity</span>
+          <h2>Requests and failures</h2>
+          <div class="chart" id="activity-chart" data-chart-state="empty"></div>
+          <p class="metric-note chart-caption">
+            Derived from consecutive authenticated <code>/metrics</code> scrapes.
+          </p>
+        </article>
+
+        <article class="card panel-card">
+          <span class="label-text">Latency</span>
+          <h2>Average and p95</h2>
+          <div class="chart" id="latency-chart" data-chart-state="empty"></div>
+          <p class="metric-note chart-caption">
+            Estimated from the current Prometheus histogram totals for this process.
+          </p>
+        </article>
+
+        <article class="card panel-card panel-wide">
           <span class="label-text">Current distribution</span>
           <h2>Top providers</h2>
+          <div class="chart" id="provider-chart" data-chart-state="empty"></div>
           <div class="bar-list" id="provider-bars"></div>
         </article>
 
-        <details class="card">
+        <details class="card panel-wide">
           <summary>Raw Prometheus output</summary>
           <pre id="metrics-output">Loading metrics...</pre>
         </details>
       </section>
     </main>
-
-    <script>
-      (function () {
-        const METRIC_LINE =
-          /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
-
-        function byId(id) {
-          return document.getElementById(id);
-        }
-
-        function setStatus(message, kind) {
-          byId("status").className = kind ? `status ${kind}` : "status";
-          byId("status").textContent = message;
-        }
-
-        function formatCount(value) {
-          return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-            Number.isFinite(value) ? value : 0,
-          );
-        }
-
-        function formatDuration(seconds) {
-          if (!Number.isFinite(seconds) || seconds < 0) return "--";
-          const ms = seconds * 1000;
-          return ms < 1000
-            ? `${ms.toFixed(ms >= 100 ? 0 : 1)} ms`
-            : `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
-        }
-
-        function formatPercent(value) {
-          return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 1 : 2)}%` : "--";
-        }
-
-        function parseLabels(raw) {
-          const source =
-            raw && raw[0] === "{" && raw[raw.length - 1] === "}"
-              ? raw.slice(1, -1)
-              : raw || "";
-          const labels = {};
-          const matcher = /([^=,]+)="((?:\\.|[^"])*)"/g;
-          let match;
-          while ((match = matcher.exec(source)) !== null) {
-            labels[match[1]] = match[2].replace(/\\([\\n"])/g, function (_, escaped) {
-              if (escaped === "n") return "\n";
-              return escaped;
-            });
-          }
-          return labels;
-        }
-
-        function percentileFromBuckets(buckets, quantile) {
-          const points = Array.from(buckets.entries())
-            .map(function (entry) {
-              return [entry[0] === "+Inf" ? Number.POSITIVE_INFINITY : Number(entry[0]), entry[1]];
-            })
-            .filter(function (entry) {
-              return Number.isFinite(entry[1]) && !Number.isNaN(entry[0]);
-            })
-            .sort(function (left, right) {
-              return left[0] - right[0];
-            });
-
-          if (points.length === 0) return NaN;
-
-          const total = points[points.length - 1][1];
-          if (!Number.isFinite(total) || total <= 0) return NaN;
-
-          const target = total * quantile;
-          let lastFinite = NaN;
-          for (const point of points) {
-            if (Number.isFinite(point[0])) lastFinite = point[0];
-            if (point[1] >= target) return Number.isFinite(point[0]) ? point[0] : lastFinite;
-          }
-          return lastFinite;
-        }
-
-        function parseMetrics(text) {
-          const snapshot = {
-            requests: 0,
-            errors: 0,
-            durationSum: 0,
-            durationCount: 0,
-            buckets: new Map(),
-            providers: new Map(),
-          };
-
-          for (const rawLine of text.split("\n")) {
-            const line = rawLine.trim();
-            if (!line || line.startsWith("#")) continue;
-
-            const match = line.match(METRIC_LINE);
-            if (!match) continue;
-
-            const metric = match[1];
-            const labels = parseLabels(match[2] || "");
-            const value = Number(match[3]);
-            if (!Number.isFinite(value)) continue;
-
-            if (metric === "gestaltd_operation_count_total") {
-              const provider = labels.gestalt_provider || "unknown";
-              if (!snapshot.providers.has(provider)) {
-                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
-              }
-              const row = snapshot.providers.get(provider);
-              snapshot.requests += value;
-              row.requests += value;
-            } else if (metric === "gestaltd_operation_error_count_total") {
-              const provider = labels.gestalt_provider || "unknown";
-              if (!snapshot.providers.has(provider)) {
-                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
-              }
-              const row = snapshot.providers.get(provider);
-              snapshot.errors += value;
-              row.errors += value;
-            } else if (metric === "gestaltd_operation_duration_seconds_sum") {
-              snapshot.durationSum += value;
-            } else if (metric === "gestaltd_operation_duration_seconds_count") {
-              snapshot.durationCount += value;
-            } else if (metric === "gestaltd_operation_duration_seconds_bucket") {
-              const le = labels.le || "+Inf";
-              snapshot.buckets.set(le, (snapshot.buckets.get(le) || 0) + value);
-            }
-          }
-
-          snapshot.providers = Array.from(snapshot.providers.values()).sort(function (left, right) {
-            return right.requests - left.requests;
-          });
-          return snapshot;
-        }
-
-        function clearDashboard(message) {
-          byId("summary-requests").textContent = "--";
-          byId("summary-errors").textContent = "--";
-          byId("summary-avg-latency").textContent = "--";
-          byId("summary-p95-latency").textContent = "--";
-          renderMessage(byId("provider-bars"), message);
-        }
-
-        function renderMessage(container, message) {
-          container.textContent = "";
-          const note = document.createElement("p");
-          note.className = "metric-note";
-          note.textContent = message;
-          container.appendChild(note);
-        }
-
-        function renderProviders(items) {
-          const container = byId("provider-bars");
-          if (items.length === 0) {
-            renderMessage(container, "No operation metrics have been emitted yet.");
-            return;
-          }
-
-          const top = items.slice(0, 5);
-          const peak = Math.max.apply(
-            null,
-            top.map(function (item) {
-              return item.requests;
-            }).concat(0),
-          );
-
-          container.textContent = "";
-          for (const item of top) {
-            const row = document.createElement("div");
-            row.innerHTML =
-              '<div class="bar-copy"><span class="bar-name"></span><span class="bar-value"></span></div>' +
-              '<div class="bar-track"><div class="bar-fill"></div></div><div class="bar-meta"></div>';
-            row.querySelector(".bar-name").textContent = item.label;
-            row.querySelector(".bar-value").textContent = `${formatCount(item.requests)} requests`;
-            row.querySelector(".bar-fill").style.width = `${peak > 0 ? (item.requests / peak) * 100 : 0}%`;
-            row.querySelector(".bar-meta").textContent =
-              `${formatCount(item.errors)} errors · ` +
-              `${formatPercent(item.requests > 0 ? (item.errors / item.requests) * 100 : 0)}`;
-            container.appendChild(row);
-          }
-        }
-
-        async function refresh() {
-          try {
-            const response = await fetch("/metrics", {
-              credentials: "include",
-              headers: { Accept: "text/plain" },
-            });
-
-            if (response.status === 401) {
-              try {
-                window.localStorage.removeItem("user_email");
-              } catch {}
-              window.location.replace("/login");
-              return;
-            }
-
-            const contentType = (response.headers.get("content-type") || "").toLowerCase();
-            const body = await response.text();
-
-            if (!response.ok) {
-              throw new Error(body.trim() || `Failed to fetch /metrics (${response.status})`);
-            }
-            if (contentType.includes("text/html")) {
-              throw new Error("Prometheus metrics are unavailable.");
-            }
-
-            const snapshot = parseMetrics(body);
-            byId("metrics-output").textContent = body;
-            byId("summary-requests").textContent = formatCount(snapshot.requests);
-            byId("summary-errors").textContent = formatCount(snapshot.errors);
-            byId("summary-avg-latency").textContent = formatDuration(
-              snapshot.durationCount > 0 ? snapshot.durationSum / snapshot.durationCount : NaN,
-            );
-            byId("summary-p95-latency").textContent = formatDuration(
-              percentileFromBuckets(snapshot.buckets, 0.95),
-            );
-            renderProviders(snapshot.providers);
-            setStatus(`Last refreshed ${new Date().toLocaleTimeString()}`, "ok");
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : "Failed to load Prometheus metrics";
-            byId("metrics-output").textContent = message;
-            clearDashboard(message);
-            setStatus(message, "error");
-          }
-        }
-
-        clearDashboard("Loading metrics...");
-        refresh();
-        window.setInterval(refresh, 15000);
-      })();
-    </script>
+    <script src="./echarts.simple.min.js"></script>
+    <script src="./admin.js"></script>
   </body>
 </html>
