@@ -19,11 +19,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeProvider(ctx, &stubProvider{
-			name:        "test-provider",
-			displayName: "Test Provider",
-			connMode:    gestalt.ConnectionModeEither,
-		})
+		errCh <- gestalt.ServeProvider(ctx, &stubProvider{})
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -40,7 +36,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
 	}
-	if meta.GetName() != "test-provider" || meta.GetConnectionMode() != proto.ConnectionMode_CONNECTION_MODE_EITHER {
+	if meta.GetSupportsSessionCatalog() {
 		t.Fatalf("unexpected metadata: %+v", meta)
 	}
 }

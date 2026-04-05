@@ -17,51 +17,12 @@ type exampleProvider struct {
 	startedName string
 }
 
-func (p *exampleProvider) Name() string        { return "example" }
-func (p *exampleProvider) DisplayName() string { return "Example Provider" }
-func (p *exampleProvider) Description() string {
-	return "A minimal example provider built with the public SDK"
-}
-func (p *exampleProvider) ConnectionMode() gestalt.ConnectionMode {
-	return gestalt.ConnectionModeNone
-}
 func (p *exampleProvider) Configure(_ context.Context, name string, config map[string]any) error {
 	p.startedName = name
 	if g, ok := config["greeting"].(string); ok {
 		p.greeting = g
 	}
 	return nil
-}
-
-func (p *exampleProvider) Catalog() *gestalt.Catalog {
-	return &gestalt.Catalog{
-		Name:        p.Name(),
-		DisplayName: p.DisplayName(),
-		Description: p.Description(),
-		Operations: []gestalt.CatalogOperation{
-			{
-				ID:          "greet",
-				Description: "Return a greeting message",
-				Method:      http.MethodGet,
-				Parameters: []gestalt.CatalogParameter{
-					{Name: "name", Type: "string", Description: "Name to greet", Required: true},
-				},
-			},
-			{
-				ID:          "echo",
-				Description: "Echo back the input",
-				Method:      http.MethodPost,
-				Parameters: []gestalt.CatalogParameter{
-					{Name: "message", Type: "string", Description: "Message to echo", Required: true},
-				},
-			},
-			{
-				ID:          "status",
-				Description: "Return provider startup state",
-				Method:      http.MethodGet,
-			},
-		},
-	}
 }
 
 func (p *exampleProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {

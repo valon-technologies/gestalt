@@ -27,7 +27,7 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -46,6 +46,9 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
 	}
 	return srcDir
 }

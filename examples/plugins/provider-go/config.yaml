@@ -16,5 +16,6 @@ integrations:
   example:
     plugin:
       command: ./provider-go
+      manifest: ./plugin.yaml
       config:
         greeting: "Hello from example plugin"

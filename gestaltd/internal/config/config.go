@@ -93,12 +93,13 @@ type EgressCredentialGrant struct {
 }
 
 type PluginDef struct {
-	Command string            `yaml:"command"`
-	Package string            `yaml:"package"`
-	Source  string            `yaml:"source"`
-	Version string            `yaml:"version"`
-	Args    []string          `yaml:"args"`
-	Env     map[string]string `yaml:"env"`
+	Command  string            `yaml:"command"`
+	Manifest string            `yaml:"manifest"`
+	Package  string            `yaml:"package"`
+	Source   string            `yaml:"source"`
+	Version  string            `yaml:"version"`
+	Args     []string          `yaml:"args"`
+	Env      map[string]string `yaml:"env"`
 
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
@@ -137,7 +138,7 @@ func (p *PluginDef) IsInline() bool {
 	if p == nil {
 		return false
 	}
-	if p.Source != "" || p.Package != "" || p.Command != "" {
+	if p.Source != "" || p.Package != "" || p.Command != "" || p.Manifest != "" {
 		return false
 	}
 	return p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "" || len(p.Operations) > 0 ||
@@ -402,6 +403,9 @@ func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginman
 	conn := ConnectionDef{}
 	if manifestProvider != nil {
 		conn.Mode = manifestProvider.ConnectionMode
+		if len(manifestProvider.ConnectionParams) > 0 {
+			conn.ConnectionParams = maps.Clone(manifestProvider.ConnectionParams)
+		}
 		if manifestProvider.Auth != nil {
 			MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestProvider.Auth))
 		}
@@ -1015,6 +1019,15 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if plugin.Command == "" && len(plugin.Args) > 0 {
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	}
+	if plugin.Command != "" && plugin.Manifest == "" && !plugin.HasResolvedManifest() {
+		return fmt.Errorf("config validation: %s %q plugin.manifest is required when plugin.command is set", kind, name)
+	}
+	if plugin.Manifest != "" && plugin.Command == "" {
+		return fmt.Errorf("config validation: %s %q plugin.manifest is only valid with plugin.command", kind, name)
+	}
+	if plugin.Manifest != "" && (plugin.Package != "" || plugin.Source != "") {
+		return fmt.Errorf("config validation: %s %q plugin.manifest cannot be combined with plugin.package or plugin.source", kind, name)
+	}
 	if strings.HasPrefix(plugin.Package, "http://") {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
@@ -1076,6 +1089,12 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		supported bool
 		reason    string
 	}{
+		{
+			field:     "plugin.manifest",
+			present:   plugin.Manifest != "",
+			supported: plugin.Command != "",
+			reason:    "is only valid when the plugin runs from a local command; remove plugin.manifest or configure plugin.command",
+		},
 		{
 			field:     "plugin.env",
 			present:   len(plugin.Env) > 0,

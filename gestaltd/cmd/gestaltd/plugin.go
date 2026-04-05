@@ -563,6 +563,9 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 		if err := copyPath(manifest.Provider.ConfigSchemaPath, false); err != nil {
 			return err
 		}
+		if err := copyPath(manifest.Provider.StaticCatalogPath, false); err != nil {
+			return err
+		}
 		if err := copyMaybeLocalPath(manifest.Provider.OpenAPI, false); err != nil {
 			return err
 		}

@@ -26,6 +26,10 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 		provider.OpenAPI = resolved
 		changed = true
 	}
+	if resolved := resolve(provider.StaticCatalogPath); resolved != provider.StaticCatalogPath {
+		provider.StaticCatalogPath = resolved
+		changed = true
+	}
 	if resolved := resolve(provider.GraphQLURL); resolved != provider.GraphQLURL {
 		provider.GraphQLURL = resolved
 		changed = true

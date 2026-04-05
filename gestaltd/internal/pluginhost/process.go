@@ -30,10 +30,7 @@ type ExecConfig struct {
 	Command      string
 	Args         []string
 	Env          map[string]string
-	Name         string
-	DisplayName  string
-	Description  string
-	IconSVG      string
+	StaticSpec   StaticProviderSpec
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
@@ -63,10 +60,9 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 	prov, err := NewRemoteProvider(
 		ctx,
 		client,
-		cfg.Name,
+		cfg.StaticSpec,
 		cfg.Config,
 		WithCloser(proc),
-		WithMetadataOverrides(cfg.DisplayName, cfg.Description, cfg.IconSVG),
 	)
 	if err != nil {
 		_ = proc.Close()

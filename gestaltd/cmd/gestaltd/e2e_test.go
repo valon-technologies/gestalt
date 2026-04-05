@@ -927,6 +927,7 @@ surfaces:
 			name: "headers unsupported without declarative ops or spec surface",
 			pluginYAML: `from:
   command: /tmp/provider
+  manifest: /tmp/plugin.yaml
 headers:
   x-test: value`,
 			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
@@ -935,6 +936,7 @@ headers:
 			name: "managed parameters unsupported without api surface",
 			pluginYAML: `from:
   command: /tmp/provider
+  manifest: /tmp/plugin.yaml
 managed_parameters:
   - in: header
     name: x-version
@@ -1192,6 +1194,9 @@ func writeManifest(t *testing.T, pluginDir, version string) {
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
+	if manifest.Provider != nil && manifest.Entrypoints.Provider != nil && manifest.Provider.StaticCatalogPath == "" {
+		manifest.Provider.StaticCatalogPath = "catalog.yaml"
+	}
 
 	data, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
@@ -1199,6 +1204,11 @@ func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv
 	}
 	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
+	}
+	if manifest.Provider != nil && manifest.Provider.StaticCatalogPath != "" {
+		if err := os.WriteFile(filepath.Join(pluginDir, filepath.FromSlash(manifest.Provider.StaticCatalogPath)), []byte("name: provider\noperations:\n  - id: greet\n    method: GET\n  - id: echo\n    method: POST\n  - id: status\n    method: GET\n"), 0o644); err != nil {
+			t.Fatalf("write catalog: %v", err)
+		}
 	}
 }
 
@@ -1738,13 +1748,7 @@ paths:
 			},
 		},
 	}
-	data, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
+	writeManifestFile(t, pluginDir, manifest)
 
 	return pluginDir
 }

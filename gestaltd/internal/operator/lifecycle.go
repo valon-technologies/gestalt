@@ -656,15 +656,21 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
-		if !intg.Plugin.HasManagedArtifacts() {
-			continue
-		}
 		configMap, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return fmt.Errorf("decode plugin config for integration %q: %w", name, err)
 		}
-		if err := l.applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
-			return err
+		switch {
+		case intg.Plugin.HasManagedArtifacts():
+			if err := l.applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
+				return err
+			}
+		case intg.Plugin.Manifest != "":
+			if err := applyLocalPluginManifest(paths, "integration", name, intg.Plugin, configMap); err != nil {
+				return err
+			}
+		default:
+			continue
 		}
 		if manifest := intg.Plugin.ResolvedManifest; manifest != nil {
 			intg.DisplayName = cmp.Or(intg.DisplayName, manifest.DisplayName)
@@ -695,6 +701,26 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 	}
 
 	return nil
+}
+
+func applyLocalPluginManifest(paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
+	if plugin == nil || plugin.Manifest == "" {
+		return nil
+	}
+
+	manifestPath := plugin.Manifest
+	if !filepath.IsAbs(manifestPath) {
+		manifestPath = filepath.Join(paths.configDir, plugin.Manifest)
+	}
+	if _, err := os.Stat(manifestPath); err != nil {
+		return fmt.Errorf("manifest for %s %q not found at %s: %w", kind, name, manifestPath, err)
+	}
+
+	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read manifest for %s %q: %w", kind, name, err)
+	}
+	return bindResolvedManifest(kind, name, plugin, manifestPath, manifest, configMap)
 }
 
 func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
@@ -741,17 +767,10 @@ func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 	}
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, manifestKind(kind), configMap); err != nil {
-		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	if err := bindResolvedManifest(kind, name, plugin, manifestPath, manifest, configMap); err != nil {
+		return err
 	}
-
-	resolvePluginIcon(manifest, manifestPath, plugin)
-
-	plugin.ResolvedManifestPath = manifestPath
-	plugin.ResolvedManifest = manifest
-	if kind == "integration" && manifest.IsDeclarativeOnlyProvider() {
-		plugin.IsDeclarative = true
+	if kind == "integration" && plugin.IsDeclarative {
 		return nil
 	}
 
@@ -766,6 +785,18 @@ func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind
 
 	plugin.Command = executablePath
 	plugin.Args = append([]string(nil), args...)
+	return nil
+}
+
+func bindResolvedManifest(kind, name string, plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, manifestKind(kind), configMap); err != nil {
+		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
+	resolvePluginIcon(manifest, manifestPath, plugin)
+	plugin.ResolvedManifestPath = manifestPath
+	plugin.ResolvedManifest = manifest
+	plugin.IsDeclarative = kind == "integration" && manifest.IsDeclarativeOnlyProvider()
 	return nil
 }
 

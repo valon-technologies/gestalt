@@ -78,6 +78,7 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, ManifestFile), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
+	mustWriteFile(t, filepath.Join(src, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 
 	archivePath := filepath.Join(dir, "acme-provider-0.1.0.tar.gz")
 	if err := CreatePackageFromDir(src, archivePath); err != nil {

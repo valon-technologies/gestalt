@@ -1075,7 +1075,8 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 		Version: "0.1.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			ConfigSchemaPath: "schemas/config.schema.json",
+			StaticCatalogPath: "catalog.yaml",
+			ConfigSchemaPath:  "schemas/config.schema.json",
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -1097,6 +1098,9 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	}
 	if err := os.WriteFile(filepath.Join(src, "plugin.json"), manifestData, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(catalog.yaml): %v", err)
 	}
 	return src
 }
@@ -1480,6 +1484,9 @@ func writeReleaseTestManifest(t *testing.T, dir string, manifest *pluginmanifest
 
 func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
+	if manifest.Provider != nil && manifest.Entrypoints.Provider != nil && manifest.Provider.StaticCatalogPath == "" {
+		manifest.Provider.StaticCatalogPath = "catalog.yaml"
+	}
 
 	populateMissingArtifactDigests(t, dir, manifest)
 	data, err := encodeTestManifestFormat(manifest, pluginpkg.ManifestFormatFromPath(manifestFile))
@@ -1487,6 +1494,9 @@ func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, mani
 		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
 	}
 	writeTestFile(t, dir, manifestFile, data, 0644)
+	if manifest.Provider != nil && manifest.Provider.StaticCatalogPath != "" {
+		writeTestFile(t, dir, manifest.Provider.StaticCatalogPath, []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
+	}
 }
 
 func populateMissingArtifactDigests(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {

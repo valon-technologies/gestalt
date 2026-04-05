@@ -52,7 +52,7 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     testArtifactOS,
@@ -86,6 +86,7 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 		t.Fatalf("EncodeManifest: %v", err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ManifestFile), data, 0644)
+	mustWriteStaticCatalog(t, dir, manifest)
 	return data
 }
 
@@ -94,8 +95,9 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 		Source:  source,
 		Version: version,
 		Provider: &providerManifestWire{
-			Exec:     &providerExecWire{ArtifactPath: artifactPath},
-			Surfaces: providerManifestSurfacesWire{},
+			Exec:              &providerExecWire{ArtifactPath: artifactPath},
+			StaticCatalogPath: "catalog.yaml",
+			Surfaces:          providerManifestSurfacesWire{},
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -135,7 +137,24 @@ func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
 
 	path := filepath.Join(dir, name)
 	mustWriteFile(t, path, data, 0644)
+	format := ManifestFormatJSON
+	if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+		format = ManifestFormatYAML
+	}
+	manifest, err := DecodeManifestFormat(data, format)
+	if err != nil {
+		return path
+	}
+	mustWriteStaticCatalog(t, dir, manifest)
 	return path
+}
+
+func mustWriteStaticCatalog(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
+	t.Helper()
+	if manifest == nil || manifest.Provider == nil || manifest.Provider.StaticCatalogPath == "" {
+		return
+	}
+	mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(manifest.Provider.StaticCatalogPath)), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 }
 
 func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFile) {
