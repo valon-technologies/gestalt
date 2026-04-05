@@ -59,27 +59,64 @@ test.describe("Authentication", () => {
     await expect(
       page.getByRole("link", { name: "API Tokens", exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Metrics moved to the admin UI" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Open admin UI" }),
-    ).toBeVisible();
   });
 
-  test("dashboard admin link opens the embedded admin UI", async ({
+  test("authenticated user can open the embedded admin UI directly", async ({
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, []);
     await mockTokens(page, []);
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        body: `
+# TYPE target_info gauge
+target_info{service_name="gestaltd"} 1
+# TYPE gestaltd_operation_count_total counter
+gestaltd_operation_count_total{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 25
+gestaltd_operation_count_total{gestalt_provider="example",gestalt_operation="echo"} 12
+gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 8
+# TYPE gestaltd_operation_error_count_total counter
+gestaltd_operation_error_count_total{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 0
+gestaltd_operation_error_count_total{gestalt_provider="example",gestalt_operation="echo"} 2
+gestaltd_operation_error_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 1
+# TYPE gestaltd_operation_duration_seconds histogram
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="0.1"} 4
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="0.5"} 18
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="1"} 25
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slash\\\\nname",gestalt_operation="escaped",le="+Inf"} 25
+gestaltd_operation_duration_seconds_sum{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 6.25
+gestaltd_operation_duration_seconds_count{gestalt_provider="slash\\\\nname",gestalt_operation="escaped"} 25
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.1"} 3
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.5"} 10
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="1"} 12
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="+Inf"} 12
+gestaltd_operation_duration_seconds_sum{gestalt_provider="example",gestalt_operation="echo"} 3.6
+gestaltd_operation_duration_seconds_count{gestalt_provider="example",gestalt_operation="echo"} 12
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="0.1"} 2
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="0.5"} 7
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="1"} 8
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="+Inf"} 8
+gestaltd_operation_duration_seconds_sum{gestalt_provider="slack",gestalt_operation="messages.list"} 2.4
+gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_operation="messages.list"} 8
+`.trim(),
+      });
+    });
 
-    await page.goto("/");
-    await page.getByRole("button", { name: "Open admin UI" }).click();
+    await page.goto("/admin/");
     await expect(page).toHaveURL(/\/admin\/$/);
     await expect(
       page.getByRole("heading", { name: "Prometheus metrics" }),
     ).toBeVisible();
+    await expect(page.locator("#summary-requests")).toHaveText("45");
+    await expect(page.locator("#summary-errors")).toHaveText("3");
+    await expect(page.getByText("Top providers")).toBeVisible();
+    await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
+    await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
+    await expect(page.locator("#provider-bars")).toContainText("example");
+    await expect(page.locator("#provider-bars")).not.toContainText("unknown");
   });
 
   test("authenticated user on /login is redirected to dashboard", async ({
@@ -170,6 +207,16 @@ test.describe("Authentication", () => {
         body: "unauthorized",
       });
     });
+    await page.addInitScript(() => {
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key: string) {
+        if (key === "user_email") {
+          window.name = "storage-blocked";
+          throw new Error("storage blocked");
+        }
+        return originalRemoveItem.call(this, key);
+      };
+    });
 
     await page.goto("/login");
     await page.evaluate(() => {
@@ -178,8 +225,9 @@ test.describe("Authentication", () => {
       localStorage.setItem("user_email", "test@gestalt.dev");
     });
     await page.goto("/admin/");
-    await expect(page).toHaveURL(/\/login/);
-    await expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
+    await page.waitForURL(/\/login/);
+    await page.waitForLoadState("domcontentloaded");
+    await expect(await page.evaluate(() => window.name)).toBe("storage-blocked");
   });
 
   test("admin metrics html fallback shows a clear unavailable message", async ({
@@ -207,8 +255,43 @@ test.describe("Authentication", () => {
     await expect(
       page.locator("#status").getByText("Prometheus metrics are unavailable."),
     ).toBeVisible();
-    await expect(
-      page.locator("#metrics-output").getByText("Prometheus metrics are unavailable."),
-    ).toBeVisible();
+    await expect(page.locator("#metrics-output")).toHaveText(
+      "Prometheus metrics are unavailable.",
+    );
+  });
+
+  test("admin metrics error body is rendered as text, not injected as HTML", async ({
+    page,
+  }) => {
+    await mockAuthInfo(page, {
+      provider: "test-sso",
+      display_name: "Test SSO",
+    });
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 503,
+        contentType: "text/plain",
+        body: `<img src=x onerror="window.__gestaltXss=1">metrics unavailable`,
+      });
+    });
+
+    await page.goto("/login");
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem("user_email", "test@gestalt.dev");
+      delete window.__gestaltXss;
+    });
+    await page.goto("/admin/");
+    await expect(page.locator("#status")).toContainText("metrics unavailable");
+    await expect(page.locator("#provider-bars")).toContainText(
+      `<img src=x onerror="window.__gestaltXss=1">metrics unavailable`,
+    );
+    await expect(page.locator("#provider-bars img")).toHaveCount(0);
+    const xssMarker = await page.evaluate(() => {
+      const scope = window as Window & { __gestaltXss?: number };
+      return scope.__gestaltXss ?? null;
+    });
+    expect(xssMarker).toBeNull();
   });
 });
