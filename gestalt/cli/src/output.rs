@@ -1,4 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::io::IsTerminal;
 
 use colored::Colorize;
@@ -17,111 +16,54 @@ pub fn print_json(value: &serde_json::Value) {
 
 pub fn print_json_table(value: &serde_json::Value) {
     match value {
-        serde_json::Value::Array(arr) => print_json_array_table(arr),
-        serde_json::Value::Object(obj) => print_json_object_table(obj),
+        serde_json::Value::Array(arr) => {
+            let rows: Vec<serde_json::Value> = arr.iter().map(flatten_table_object).collect();
+            let Some(first) = rows.first().and_then(|v| v.as_object()) else {
+                print_json(value);
+                return;
+            };
+            let headers: Vec<&str> = first.keys().map(|k| k.as_str()).collect();
+            let rows: Vec<Vec<String>> = rows
+                .iter()
+                .filter_map(|v| v.as_object())
+                .map(|obj| headers.iter().map(|h| value_to_cell(obj.get(*h))).collect())
+                .collect();
+            print_table(&headers, &rows);
+        }
+        serde_json::Value::Object(obj) => {
+            if let Some((array_key, arr)) = single_array_field(obj) {
+                println!("{}", array_key.to_uppercase());
+                print_json_table(&serde_json::Value::Array(
+                    arr.iter().map(flatten_table_object).collect(),
+                ));
+
+                let rows: Vec<Vec<String>> = obj
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != array_key)
+                    .map(|(key, value)| vec![key.clone(), value_to_cell(Some(value))])
+                    .collect();
+                if !rows.is_empty() {
+                    println!();
+                    println!("METADATA");
+                    print_table(&["key", "value"], &rows);
+                }
+                return;
+            }
+
+            let headers = vec!["key", "value"];
+            let rows: Vec<Vec<String>> = obj
+                .iter()
+                .map(|(k, v)| vec![k.clone(), value_to_cell(Some(v))])
+                .collect();
+            print_table(&headers, &rows);
+        }
         _ => print_json(value),
     }
 }
 
-fn print_json_array_table(arr: &[serde_json::Value]) {
-    if arr.is_empty() {
-        println!("No results.");
-        return;
-    }
-
-    if arr.iter().all(|value| value.is_object()) {
-        let flattened_rows: Vec<BTreeMap<String, String>> = arr
-            .iter()
-            .map(|value| flatten_object(value.as_object().expect("checked object")))
-            .collect();
-        let headers: Vec<String> = flattened_rows
-            .iter()
-            .flat_map(|row| row.keys().cloned())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
-        let display_headers = unique_header_suffixes(&headers);
-        let header_refs: Vec<&str> = display_headers.iter().map(String::as_str).collect();
-        let rows: Vec<Vec<String>> = flattened_rows
-            .iter()
-            .map(|row| {
-                headers
-                    .iter()
-                    .map(|header| row.get(header).cloned().unwrap_or_default())
-                    .collect()
-            })
-            .collect();
-        print_table(&header_refs, &rows);
-        return;
-    }
-
-    if arr
-        .iter()
-        .all(|value| !value.is_object() && !value.is_array())
-    {
-        let rows: Vec<Vec<String>> = arr
-            .iter()
-            .map(|value| vec![value_to_cell(Some(value))])
-            .collect();
-        print_table(&["value"], &rows);
-        return;
-    }
-
-    print_json(&serde_json::Value::Array(arr.to_vec()));
-}
-
-fn unique_header_suffixes(paths: &[String]) -> Vec<String> {
-    paths
-        .iter()
-        .enumerate()
-        .map(|(index, path)| shortest_unique_suffix(paths, index).unwrap_or_else(|| path.clone()))
-        .collect()
-}
-
-fn shortest_unique_suffix(paths: &[String], index: usize) -> Option<String> {
-    let target_parts: Vec<&str> = paths[index].split('.').collect();
-    for suffix_len in 1..=target_parts.len() {
-        let suffix = &target_parts[target_parts.len() - suffix_len..];
-        let is_unique = paths.iter().enumerate().all(|(other_index, other_path)| {
-            other_index == index || !path_has_suffix(other_path, suffix)
-        });
-        if is_unique {
-            return Some(suffix.join("."));
-        }
-    }
-    None
-}
-
-fn path_has_suffix(path: &str, suffix: &[&str]) -> bool {
-    let parts: Vec<&str> = path.split('.').collect();
-    parts.len() >= suffix.len() && parts[parts.len() - suffix.len()..] == *suffix
-}
-
-fn print_json_object_table(obj: &serde_json::Map<String, serde_json::Value>) {
-    if let Some((array_key, arr)) = single_array_field(obj) {
-        println!("{}", array_key.to_uppercase());
-        print_json_array_table(arr);
-
-        let metadata_rows = object_to_key_value_rows(
-            obj.iter()
-                .filter(|(key, _)| key.as_str() != array_key)
-                .map(|(key, value)| (key.as_str(), value)),
-        );
-        if !metadata_rows.is_empty() {
-            println!();
-            println!("METADATA");
-            print_table(&["key", "value"], &metadata_rows);
-        }
-        return;
-    }
-
-    let rows = object_to_key_value_rows(obj.iter().map(|(key, value)| (key.as_str(), value)));
-    print_table(&["key", "value"], &rows);
-}
-
-fn single_array_field<'a>(
-    obj: &'a serde_json::Map<String, serde_json::Value>,
-) -> Option<(&'a str, &'a Vec<serde_json::Value>)> {
+fn single_array_field(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(&str, &Vec<serde_json::Value>)> {
     let mut array_fields = obj
         .iter()
         .filter_map(|(key, value)| value.as_array().map(|arr| (key.as_str(), arr)));
@@ -132,44 +74,23 @@ fn single_array_field<'a>(
     Some(first)
 }
 
-fn flatten_object(obj: &serde_json::Map<String, serde_json::Value>) -> BTreeMap<String, String> {
-    let mut flattened = BTreeMap::new();
-    for (key, value) in obj {
-        flatten_value(key, value, &mut flattened);
-    }
-    flattened
-}
-
-fn object_to_key_value_rows<'a>(
-    entries: impl IntoIterator<Item = (&'a str, &'a serde_json::Value)>,
-) -> Vec<Vec<String>> {
-    let mut flattened = BTreeMap::new();
-    for (key, value) in entries {
-        flatten_value(key, value, &mut flattened);
-    }
-    flattened
-        .into_iter()
-        .map(|(key, value)| vec![key, value])
-        .collect()
-}
-
-fn flatten_value(path: &str, value: &serde_json::Value, out: &mut BTreeMap<String, String>) {
-    match value {
-        serde_json::Value::Object(map) => {
-            if map.is_empty() {
-                out.insert(path.to_string(), "{}".to_string());
-                return;
-            }
-
-            for (key, nested_value) in map {
-                let nested_path = format!("{path}.{key}");
-                flatten_value(&nested_path, nested_value, out);
-            }
-        }
-        _ => {
-            out.insert(path.to_string(), value_to_cell(Some(value)));
-        }
-    }
+fn flatten_table_object(value: &serde_json::Value) -> serde_json::Value {
+    let serde_json::Value::Object(obj) = value else {
+        return value.clone();
+    };
+    serde_json::Value::Object(
+        obj.iter()
+            .flat_map(|(key, value)| match value {
+                serde_json::Value::Object(nested) if !nested.is_empty() => nested
+                    .iter()
+                    .map(|(nested_key, nested_value)| {
+                        (format!("{key}.{nested_key}"), nested_value.clone())
+                    })
+                    .collect::<Vec<_>>(),
+                _ => vec![(key.clone(), value.clone())],
+            })
+            .collect(),
+    )
 }
 
 fn value_to_cell(v: Option<&serde_json::Value>) -> String {
@@ -193,7 +114,7 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
                 .ok()
                 .and_then(|width| width.parse::<u16>().ok())
         })
-        .unwrap_or(120);
+        .unwrap_or(160);
     let mut table = Table::new();
     let header: Vec<Cell> = headers
         .iter()
