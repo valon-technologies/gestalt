@@ -23,8 +23,9 @@ const (
 )
 
 // Provider is the core interface that every provider plugin must implement.
-// It declares metadata about the provider, provides the discovery catalog,
-// and executes individual operations when called by the host.
+// It declares metadata about the provider, receives provider-level startup
+// configuration, provides the discovery catalog, and executes individual
+// operations when called by the host.
 //
 // The token argument to Execute is a user OAuth token supplied by the host
 // when [ConnectionMode] is [ConnectionModeUser] or [ConnectionModeEither].
@@ -33,19 +34,13 @@ type Provider interface {
 	DisplayName() string
 	Description() string
 	ConnectionMode() ConnectionMode
+	Configure(ctx context.Context, name string, config map[string]any) error
 	Catalog() *Catalog
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
 type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
-}
-
-// ProviderStarter is an optional interface that a [Provider] can implement
-// to receive one-time initialization when the host starts the plugin. The
-// config map contains provider-level configuration set in the plugin manifest.
-type ProviderStarter interface {
-	Start(ctx context.Context, name string, config map[string]any) error
 }
 
 type Catalog struct {

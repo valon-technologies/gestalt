@@ -1318,6 +1318,18 @@ func serveLockedAndInvokeExampleEcho(t *testing.T, cfgPath string, port int, art
 		if result["echo"] != "hello" {
 			t.Fatalf("expected echo=hello, got %v", result)
 		}
+
+		body = invokeExampleOperation(t, baseURL, "status", `{}`, http.StatusOK)
+		result = map[string]any{}
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal status: %v\nbody: %s", err, body)
+		}
+		if result["name"] != "example" {
+			t.Fatalf("expected configured name=example, got %v", result)
+		}
+		if result["greeting"] != "" {
+			t.Fatalf("expected empty greeting without provider config, got %v", result)
+		}
 	})
 }
 

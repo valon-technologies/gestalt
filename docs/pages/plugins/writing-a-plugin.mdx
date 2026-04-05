@@ -44,6 +44,16 @@ func (p *myProvider) Description() string    { return "A custom provider plugin"
 func (p *myProvider) ConnectionMode() gestalt.ConnectionMode {
 	return gestalt.ConnectionModeNone
 }
+func (p *myProvider) Configure(
+	ctx context.Context,
+	name string,
+	config map[string]any,
+) error {
+	if g, ok := config["greeting"].(string); ok {
+		p.greeting = g
+	}
+	return nil
+}
 
 func (p *myProvider) Catalog() *gestalt.Catalog {
 	return &gestalt.Catalog{
@@ -118,6 +128,7 @@ Every plugin must implement these methods:
 | `DisplayName()` | Human-readable name shown in the UI and API. |
 | `Description()` | Brief description of what the provider does. |
 | `ConnectionMode()` | How the provider authenticates with upstream APIs. |
+| `Configure()` | One-time startup hook. Receives the provider name and the `config` block from the YAML. |
 | `Catalog()` | Returns the list of operations the provider supports. |
 | `Execute()` | Handles an operation invocation. Receives the operation ID, input parameters, and the caller's access token. |
 
@@ -138,16 +149,16 @@ Plugins can implement additional interfaces for advanced behavior:
 
 | Interface | Method | Purpose |
 | --- | --- | --- |
-| `ProviderStarter` | `Start(ctx, name, config)` | One-time initialization. Receives the provider name and the `config` block from the YAML. |
 | `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a different operation catalog based on the caller's credentials. |
-| `ConfigSchemaProvider` | `ConfigSchema()` | Return a JSON Schema string for validating the provider's config block. |
 
-### Using ProviderStarter
+Provider config schemas belong in the manifest via `provider.config_schema_path`, not in the Go provider interface.
 
-Implement `Start` to receive configuration at boot time:
+### Using Configure
+
+Implement `Configure` to receive configuration at boot time:
 
 ```go
-func (p *myProvider) Start(
+func (p *myProvider) Configure(
 	ctx context.Context,
 	name string,
 	config map[string]any,

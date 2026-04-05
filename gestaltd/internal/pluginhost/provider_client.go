@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"slices"
 	"time"
 
@@ -60,16 +59,6 @@ func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, n
 	meta, err := getMetadataWithRetry(ctx, client)
 	if err != nil {
 		return nil, err
-	}
-	if schemaText := meta.GetConfigSchema(); schemaText != "" {
-		slog.Warn("validating plugin config requires executing plugin binary", "plugin", name)
-		validationTarget := config
-		if validationTarget == nil {
-			validationTarget = map[string]any{}
-		}
-		if err := validateConfigSchema(validationTarget, schemaText); err != nil {
-			return nil, err
-		}
 	}
 	if err := callStartProvider(ctx, client, name, config); err != nil {
 		return nil, err

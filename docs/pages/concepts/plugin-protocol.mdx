@@ -11,14 +11,13 @@ When `gestaltd` starts a plugin, it creates a temporary Unix socket, sets the `G
 A provider plugin must:
 
 - Report metadata (name, display name, description, connection mode)
+- Accept its configured provider name and config block during startup
 - Expose an operation catalog
 - Execute operations when invoked
 
 A plugin may optionally:
 
 - Expose a request-scoped catalog that varies based on the caller's credentials
-- Provide a JSON Schema for its config block
-- Run initialization logic at startup
 
 ## Config placement
 
@@ -33,7 +32,7 @@ providers:
       greeting: hello
 ```
 
-The plugin receives this as a key-value map during startup.
+The plugin receives this as a key-value map during startup. If the packaged plugin needs config validation, declare it in the manifest with `provider.config_schema_path`.
 
 ## Language support
 
