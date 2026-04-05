@@ -72,6 +72,8 @@ test.describe("Authentication", () => {
         status: 200,
         contentType: "text/plain",
         body: `
+# TYPE target_info gauge
+target_info{service_name="gestaltd"} 1
 # TYPE gestaltd_operation_count_total counter
 gestaltd_operation_count_total{gestalt_provider="example",gestalt_operation="echo"} 12
 gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 8
@@ -104,6 +106,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     await expect(page.locator("#summary-errors")).toHaveText("3");
     await expect(page.getByText("Top providers")).toBeVisible();
     await expect(page.locator("#provider-bars")).toContainText("example");
+    await expect(page.locator("#provider-bars")).not.toContainText("unknown");
   });
 
   test("authenticated user on /login is redirected to dashboard", async ({
@@ -194,6 +197,16 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
         body: "unauthorized",
       });
     });
+    await page.addInitScript(() => {
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key: string) {
+        if (key === "user_email") {
+          window.name = "storage-blocked";
+          throw new Error("storage blocked");
+        }
+        return originalRemoveItem.call(this, key);
+      };
+    });
 
     await page.goto("/login");
     await page.evaluate(() => {
@@ -202,8 +215,9 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
       localStorage.setItem("user_email", "test@gestalt.dev");
     });
     await page.goto("/admin/");
-    await expect(page).toHaveURL(/\/login/);
-    await expect(await page.evaluate(() => localStorage.getItem("user_email"))).toBeNull();
+    await page.waitForURL(/\/login/);
+    await page.waitForLoadState("domcontentloaded");
+    await expect(await page.evaluate(() => window.name)).toBe("storage-blocked");
   });
 
   test("admin metrics html fallback shows a clear unavailable message", async ({

@@ -416,16 +416,20 @@
             const value = Number(match[3]);
             if (!Number.isFinite(value)) continue;
 
-            const provider = labels.gestalt_provider || "unknown";
-            if (!snapshot.providers.has(provider)) {
-              snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
-            }
-            const row = snapshot.providers.get(provider);
-
             if (metric === "gestaltd_operation_count_total") {
+              const provider = labels.gestalt_provider || "unknown";
+              if (!snapshot.providers.has(provider)) {
+                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
+              }
+              const row = snapshot.providers.get(provider);
               snapshot.requests += value;
               row.requests += value;
             } else if (metric === "gestaltd_operation_error_count_total") {
+              const provider = labels.gestalt_provider || "unknown";
+              if (!snapshot.providers.has(provider)) {
+                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
+              }
+              const row = snapshot.providers.get(provider);
               snapshot.errors += value;
               row.errors += value;
             } else if (metric === "gestaltd_operation_duration_seconds_sum") {
@@ -499,7 +503,9 @@
             });
 
             if (response.status === 401) {
-              window.localStorage.removeItem("user_email");
+              try {
+                window.localStorage.removeItem("user_email");
+              } catch {}
               window.location.replace("/login");
               return;
             }
