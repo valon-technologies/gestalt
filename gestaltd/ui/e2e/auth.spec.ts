@@ -235,4 +235,39 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
       "Prometheus metrics are unavailable.",
     );
   });
+
+  test("admin metrics error body is rendered as text, not injected as HTML", async ({
+    page,
+  }) => {
+    await mockAuthInfo(page, {
+      provider: "test-sso",
+      display_name: "Test SSO",
+    });
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 503,
+        contentType: "text/plain",
+        body: `<img src=x onerror="window.__gestaltXss=1">metrics unavailable`,
+      });
+    });
+
+    await page.goto("/login");
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem("user_email", "test@gestalt.dev");
+      delete window.__gestaltXss;
+    });
+    await page.goto("/admin/");
+    await expect(page.locator("#status")).toContainText("metrics unavailable");
+    await expect(page.locator("#provider-bars")).toContainText(
+      `<img src=x onerror="window.__gestaltXss=1">metrics unavailable`,
+    );
+    await expect(page.locator("#provider-bars img")).toHaveCount(0);
+    const xssMarker = await page.evaluate(() => {
+      const scope = window as Window & { __gestaltXss?: number };
+      return scope.__gestaltXss ?? null;
+    });
+    expect(xssMarker).toBeNull();
+  });
 });

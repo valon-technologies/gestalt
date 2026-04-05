@@ -449,13 +449,21 @@
           byId("summary-errors").textContent = "--";
           byId("summary-avg-latency").textContent = "--";
           byId("summary-p95-latency").textContent = "--";
-          byId("provider-bars").innerHTML = `<p class="metric-note">${message}</p>`;
+          renderMessage(byId("provider-bars"), message);
+        }
+
+        function renderMessage(container, message) {
+          container.textContent = "";
+          const note = document.createElement("p");
+          note.className = "metric-note";
+          note.textContent = message;
+          container.appendChild(note);
         }
 
         function renderProviders(items) {
           const container = byId("provider-bars");
           if (items.length === 0) {
-            container.innerHTML = '<p class="metric-note">No operation metrics have been emitted yet.</p>';
+            renderMessage(container, "No operation metrics have been emitted yet.");
             return;
           }
 
