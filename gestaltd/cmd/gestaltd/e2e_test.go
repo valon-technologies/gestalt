@@ -411,9 +411,6 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
-		if !bytes.Contains(adminBody, []byte("admin.js")) {
-			t.Fatalf("expected admin ui to include admin script: %s", adminBody)
-		}
 	})
 
 	if traceRequests.Load() == 0 {

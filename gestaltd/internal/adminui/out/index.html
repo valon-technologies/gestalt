@@ -363,6 +363,488 @@
       </section>
     </main>
     <script src="./echarts.simple.min.js"></script>
-    <script src="./admin.js"></script>
+    <script>
+      (function () {
+        const METRIC_LINE =
+          /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
+        const REFRESH_INTERVAL_MS = 15000;
+        const HISTORY_LIMIT = Math.ceil((60 * 60 * 1000) / REFRESH_INTERVAL_MS);
+        const charts = {};
+        const history = [];
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        function setStatus(message, kind) {
+          byId("status").className = kind ? `status ${kind}` : "status";
+          byId("status").textContent = message;
+        }
+
+        function formatCount(value) {
+          return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+            Number.isFinite(value) ? value : 0,
+          );
+        }
+
+        function formatDuration(seconds) {
+          if (!Number.isFinite(seconds) || seconds < 0) return "--";
+          const ms = seconds * 1000;
+          return ms < 1000
+            ? `${ms.toFixed(ms >= 100 ? 0 : 1)} ms`
+            : `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
+        }
+
+        function formatPercent(value) {
+          return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 1 : 2)}%` : "--";
+        }
+
+        function formatPerMinute(value) {
+          return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 0 : 1)}/min` : "--";
+        }
+
+        function formatMilliseconds(value) {
+          return Number.isFinite(value)
+            ? `${value.toFixed(value >= 100 ? 0 : 1)} ms`
+            : "--";
+        }
+
+        function parseLabels(raw) {
+          const source =
+            raw && raw[0] === "{" && raw[raw.length - 1] === "}"
+              ? raw.slice(1, -1)
+              : raw || "";
+          const labels = {};
+          const matcher = /([^=,]+)="((?:\\.|[^"])*)"/g;
+          let match;
+          while ((match = matcher.exec(source)) !== null) {
+            labels[match[1]] = match[2].replace(/\\([\\n"])/g, function (_, escaped) {
+              if (escaped === "n") return "\n";
+              return escaped;
+            });
+          }
+          return labels;
+        }
+
+        function percentileFromBuckets(buckets, quantile) {
+          const points = Array.from(buckets.entries())
+            .map(function (entry) {
+              return [entry[0] === "+Inf" ? Number.POSITIVE_INFINITY : Number(entry[0]), entry[1]];
+            })
+            .filter(function (entry) {
+              return Number.isFinite(entry[1]) && !Number.isNaN(entry[0]);
+            })
+            .sort(function (left, right) {
+              return left[0] - right[0];
+            });
+
+          if (points.length === 0) return NaN;
+
+          const total = points[points.length - 1][1];
+          if (!Number.isFinite(total) || total <= 0) return NaN;
+
+          const target = total * quantile;
+          let lastFinite = NaN;
+          for (const point of points) {
+            if (Number.isFinite(point[0])) lastFinite = point[0];
+            if (point[1] >= target) return Number.isFinite(point[0]) ? point[0] : lastFinite;
+          }
+          return lastFinite;
+        }
+
+        function parseMetrics(text) {
+          const snapshot = {
+            requests: 0,
+            errors: 0,
+            durationSum: 0,
+            durationCount: 0,
+            avgLatencySeconds: NaN,
+            p95LatencySeconds: NaN,
+            buckets: new Map(),
+            providers: new Map(),
+          };
+
+          for (const rawLine of text.split("\n")) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) continue;
+
+            const match = line.match(METRIC_LINE);
+            if (!match) continue;
+
+            const metric = match[1];
+            const labels = parseLabels(match[2] || "");
+            const value = Number(match[3]);
+            if (!Number.isFinite(value)) continue;
+
+            if (metric === "gestaltd_operation_count_total") {
+              const provider = labels.gestalt_provider || "unknown";
+              if (!snapshot.providers.has(provider)) {
+                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
+              }
+              const row = snapshot.providers.get(provider);
+              snapshot.requests += value;
+              row.requests += value;
+            } else if (metric === "gestaltd_operation_error_count_total") {
+              const provider = labels.gestalt_provider || "unknown";
+              if (!snapshot.providers.has(provider)) {
+                snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
+              }
+              const row = snapshot.providers.get(provider);
+              snapshot.errors += value;
+              row.errors += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_sum") {
+              snapshot.durationSum += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_count") {
+              snapshot.durationCount += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_bucket") {
+              const le = labels.le || "+Inf";
+              snapshot.buckets.set(le, (snapshot.buckets.get(le) || 0) + value);
+            }
+          }
+
+          snapshot.avgLatencySeconds =
+            snapshot.durationCount > 0 ? snapshot.durationSum / snapshot.durationCount : NaN;
+          snapshot.p95LatencySeconds = percentileFromBuckets(snapshot.buckets, 0.95);
+          snapshot.providers = Array.from(snapshot.providers.values()).sort(function (left, right) {
+            return right.requests - left.requests;
+          });
+          return snapshot;
+        }
+
+        function renderMessage(container, message) {
+          container.textContent = "";
+          const note = document.createElement("p");
+          note.className = "metric-note";
+          note.textContent = message;
+          container.appendChild(note);
+        }
+
+        function renderProviders(items) {
+          const container = byId("provider-bars");
+          if (items.length === 0) {
+            renderMessage(container, "No operation metrics have been emitted yet.");
+            return;
+          }
+
+          const top = items.slice(0, 5);
+          const peak = Math.max.apply(
+            null,
+            top.map(function (item) {
+              return item.requests;
+            }).concat(0),
+          );
+
+          container.textContent = "";
+          for (const item of top) {
+            const row = document.createElement("div");
+            row.innerHTML =
+              '<div class="bar-copy"><span class="bar-name"></span><span class="bar-value"></span></div>' +
+              '<div class="bar-track"><div class="bar-fill"></div></div><div class="bar-meta"></div>';
+            row.querySelector(".bar-name").textContent = item.label;
+            row.querySelector(".bar-value").textContent = `${formatCount(item.requests)} requests`;
+            row.querySelector(".bar-fill").style.width = `${peak > 0 ? (item.requests / peak) * 100 : 0}%`;
+            row.querySelector(".bar-meta").textContent =
+              `${formatCount(item.errors)} errors · ` +
+              `${formatPercent(item.requests > 0 ? (item.errors / item.requests) * 100 : 0)}`;
+            container.appendChild(row);
+          }
+        }
+
+        function setChartMessage(id, message) {
+          const chart = charts[id];
+          if (chart && !chart.isDisposed()) {
+            chart.dispose();
+          }
+          delete charts[id];
+          const container = byId(id);
+          container.dataset.chartState = "empty";
+          renderMessage(container, message);
+        }
+
+        function ensureChart(id) {
+          if (!window.echarts) {
+            setChartMessage(id, "ECharts failed to load.");
+            return null;
+          }
+          if (charts[id] && !charts[id].isDisposed()) {
+            return charts[id];
+          }
+          const container = byId(id);
+          container.textContent = "";
+          container.dataset.chartState = "ready";
+          charts[id] = window.echarts.init(container, null, { renderer: "canvas" });
+          return charts[id];
+        }
+
+        function theme() {
+          const styles = window.getComputedStyle(document.documentElement);
+          return {
+            brand: styles.getPropertyValue("--brand").trim(),
+            brandSoft: styles.getPropertyValue("--brand-soft").trim(),
+            border: styles.getPropertyValue("--border").trim(),
+            foreground: styles.getPropertyValue("--foreground").trim(),
+            muted: styles.getPropertyValue("--muted").trim(),
+            faint: styles.getPropertyValue("--faint").trim(),
+            danger: styles.getPropertyValue("--danger").trim(),
+            success: styles.getPropertyValue("--success").trim(),
+            surfaceRaised: styles.getPropertyValue("--surface-raised").trim(),
+          };
+        }
+
+        function positiveDelta(current, previous) {
+          if (!Number.isFinite(current)) return 0;
+          if (!Number.isFinite(previous)) return current;
+          return current >= previous ? current - previous : current;
+        }
+
+        function recordHistory(snapshot) {
+          const now = Date.now();
+          const previous = history[history.length - 1];
+          const elapsedSeconds = previous ? Math.max((now - previous.timestamp) / 1000, 1) : 1;
+
+          history.push({
+            timestamp: now,
+            requests: (positiveDelta(snapshot.requests, previous && previous.requestsTotal) / elapsedSeconds) * 60,
+            errors: (positiveDelta(snapshot.errors, previous && previous.errorsTotal) / elapsedSeconds) * 60,
+            avgLatencyMs: Number.isFinite(snapshot.avgLatencySeconds)
+              ? snapshot.avgLatencySeconds * 1000
+              : null,
+            p95LatencyMs: Number.isFinite(snapshot.p95LatencySeconds)
+              ? snapshot.p95LatencySeconds * 1000
+              : null,
+            requestsTotal: snapshot.requests,
+            errorsTotal: snapshot.errors,
+          });
+
+          while (history.length > HISTORY_LIMIT) {
+            history.shift();
+          }
+        }
+
+        function lineSeries(name, key, extra) {
+          return Object.assign(
+            {
+              name,
+              type: "line",
+              smooth: true,
+              showSymbol: false,
+              lineStyle: { width: 2 },
+              data: history.map(function (entry) {
+                return [entry.timestamp, entry[key]];
+              }),
+            },
+            extra || {},
+          );
+        }
+
+        function renderTimeChart(id, series, colors, formatter) {
+          const chart = ensureChart(id);
+          if (!chart) return;
+
+          const colorsByTheme = theme();
+          chart.setOption(
+            {
+              animation: false,
+              aria: { enabled: true },
+              color: colors.map(function (name) {
+                return colorsByTheme[name];
+              }),
+              grid: { left: 48, right: 18, top: 42, bottom: 24 },
+              legend: {
+                top: 8,
+                textStyle: { color: colorsByTheme.muted },
+                itemWidth: 10,
+                itemHeight: 10,
+              },
+              tooltip: {
+                trigger: "axis",
+                backgroundColor: colorsByTheme.surfaceRaised,
+                borderColor: colorsByTheme.border,
+                textStyle: { color: colorsByTheme.foreground },
+                valueFormatter: formatter,
+              },
+              xAxis: {
+                type: "time",
+                axisLine: { lineStyle: { color: colorsByTheme.border } },
+                axisLabel: {
+                  color: colorsByTheme.faint,
+                  formatter: function (value) {
+                    return new Date(value).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
+                  },
+                },
+                splitLine: { show: false },
+              },
+              yAxis: {
+                type: "value",
+                axisLine: { show: false },
+                axisLabel: { color: colorsByTheme.faint, formatter },
+                splitLine: { lineStyle: { color: colorsByTheme.border } },
+              },
+              series,
+            },
+            true,
+          );
+        }
+
+        function renderProviderChart(items) {
+          if (items.length === 0) {
+            setChartMessage("provider-chart", "No operation metrics have been emitted yet.");
+            return;
+          }
+
+          const chart = ensureChart("provider-chart");
+          if (!chart) return;
+
+          const top = items.slice(0, 5);
+          const colors = theme();
+          chart.setOption(
+            {
+              animation: false,
+              aria: { enabled: true },
+              grid: { left: 140, right: 20, top: 20, bottom: 20 },
+              tooltip: {
+                trigger: "axis",
+                axisPointer: { type: "shadow" },
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                textStyle: { color: colors.foreground },
+                formatter: function (params) {
+                  const item = top[params[0].dataIndex];
+                  return `${item.label}<br>${formatCount(item.requests)} requests<br>${formatCount(item.errors)} errors`;
+                },
+              },
+              xAxis: {
+                type: "value",
+                axisLine: { show: false },
+                axisLabel: { color: colors.faint },
+                splitLine: { lineStyle: { color: colors.border } },
+              },
+              yAxis: {
+                type: "category",
+                inverse: true,
+                data: top.map(function (item) {
+                  return item.label;
+                }),
+                axisLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { color: colors.foreground },
+              },
+              series: [
+                {
+                  type: "bar",
+                  data: top.map(function (item) {
+                    return item.requests;
+                  }),
+                  barWidth: 20,
+                  itemStyle: {
+                    borderRadius: [0, 999, 999, 0],
+                    color: colors.brand,
+                  },
+                  label: {
+                    show: true,
+                    position: "right",
+                    color: colors.muted,
+                    formatter: function (params) {
+                      return formatCount(Number(params.value));
+                    },
+                  },
+                },
+              ],
+            },
+            true,
+          );
+        }
+
+        function clearDashboard(message) {
+          byId("summary-requests").textContent = "--";
+          byId("summary-errors").textContent = "--";
+          byId("summary-avg-latency").textContent = "--";
+          byId("summary-p95-latency").textContent = "--";
+          setChartMessage("activity-chart", message);
+          setChartMessage("latency-chart", message);
+          setChartMessage("provider-chart", message);
+          renderMessage(byId("provider-bars"), message);
+        }
+
+        function renderCharts(snapshot) {
+          renderTimeChart(
+            "activity-chart",
+            [
+              lineSeries("Requests/min", "requests", { areaStyle: { opacity: 0.12 } }),
+              lineSeries("Errors/min", "errors"),
+            ],
+            ["brand", "danger"],
+            function (value) {
+              return formatPerMinute(Number(value));
+            },
+          );
+          renderTimeChart(
+            "latency-chart",
+            [lineSeries("Average", "avgLatencyMs"), lineSeries("P95", "p95LatencyMs")],
+            ["success", "brandSoft"],
+            function (value) {
+              return formatMilliseconds(Number(value));
+            },
+          );
+          renderProviderChart(snapshot.providers);
+          renderProviders(snapshot.providers);
+        }
+
+        async function refresh() {
+          try {
+            const response = await fetch("/metrics", {
+              credentials: "include",
+              headers: { Accept: "text/plain" },
+            });
+
+            if (response.status === 401) {
+              try {
+                window.localStorage.removeItem("user_email");
+              } catch {}
+              window.location.replace("/login");
+              return;
+            }
+
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            const body = await response.text();
+
+            if (!response.ok) {
+              throw new Error(body.trim() || `Failed to fetch /metrics (${response.status})`);
+            }
+            if (contentType.includes("text/html")) {
+              throw new Error("Prometheus metrics are unavailable.");
+            }
+
+            const snapshot = parseMetrics(body);
+            recordHistory(snapshot);
+            byId("metrics-output").textContent = body;
+            byId("summary-requests").textContent = formatCount(snapshot.requests);
+            byId("summary-errors").textContent = formatCount(snapshot.errors);
+            byId("summary-avg-latency").textContent = formatDuration(snapshot.avgLatencySeconds);
+            byId("summary-p95-latency").textContent = formatDuration(snapshot.p95LatencySeconds);
+            renderCharts(snapshot);
+            setStatus(`Last refreshed ${new Date().toLocaleTimeString()}`, "ok");
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Failed to load Prometheus metrics";
+            byId("metrics-output").textContent = message;
+            clearDashboard(message);
+            setStatus(message, "error");
+          }
+        }
+
+        clearDashboard("Loading metrics...");
+        refresh();
+        window.setInterval(refresh, REFRESH_INTERVAL_MS);
+        window.addEventListener("resize", function () {
+          Object.values(charts).forEach(function (chart) {
+            chart.resize();
+          });
+        });
+      })();
+    </script>
   </body>
 </html>
