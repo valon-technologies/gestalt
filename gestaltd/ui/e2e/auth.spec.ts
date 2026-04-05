@@ -59,27 +59,51 @@ test.describe("Authentication", () => {
     await expect(
       page.getByRole("link", { name: "API Tokens", exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Metrics moved to the admin UI" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Open admin UI" }),
-    ).toBeVisible();
   });
 
-  test("dashboard admin link opens the embedded admin UI", async ({
+  test("authenticated user can open the embedded admin UI directly", async ({
     authenticatedPage,
   }) => {
     const page = authenticatedPage;
     await mockIntegrations(page, []);
     await mockTokens(page, []);
+    await page.route("**/metrics", (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        body: `
+# TYPE gestaltd_operation_count_total counter
+gestaltd_operation_count_total{gestalt_provider="example",gestalt_operation="echo"} 12
+gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 8
+# TYPE gestaltd_operation_error_count_total counter
+gestaltd_operation_error_count_total{gestalt_provider="example",gestalt_operation="echo"} 2
+gestaltd_operation_error_count_total{gestalt_provider="slack",gestalt_operation="messages.list"} 1
+# TYPE gestaltd_operation_duration_seconds histogram
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.1"} 3
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="0.5"} 10
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="1"} 12
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="example",gestalt_operation="echo",le="+Inf"} 12
+gestaltd_operation_duration_seconds_sum{gestalt_provider="example",gestalt_operation="echo"} 3.6
+gestaltd_operation_duration_seconds_count{gestalt_provider="example",gestalt_operation="echo"} 12
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="0.1"} 2
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="0.5"} 7
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="1"} 8
+gestaltd_operation_duration_seconds_bucket{gestalt_provider="slack",gestalt_operation="messages.list",le="+Inf"} 8
+gestaltd_operation_duration_seconds_sum{gestalt_provider="slack",gestalt_operation="messages.list"} 2.4
+gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_operation="messages.list"} 8
+`.trim(),
+      });
+    });
 
-    await page.goto("/");
-    await page.getByRole("button", { name: "Open admin UI" }).click();
+    await page.goto("/admin/");
     await expect(page).toHaveURL(/\/admin\/$/);
     await expect(
       page.getByRole("heading", { name: "Prometheus metrics" }),
     ).toBeVisible();
+    await expect(page.locator("#summary-requests")).toHaveText("20");
+    await expect(page.locator("#summary-errors")).toHaveText("3");
+    await expect(page.getByText("Top providers")).toBeVisible();
+    await expect(page.locator("#provider-bars")).toContainText("example");
   });
 
   test("authenticated user on /login is redirected to dashboard", async ({
@@ -207,8 +231,8 @@ test.describe("Authentication", () => {
     await expect(
       page.locator("#status").getByText("Prometheus metrics are unavailable."),
     ).toBeVisible();
-    await expect(
-      page.locator("#metrics-output").getByText("Prometheus metrics are unavailable."),
-    ).toBeVisible();
+    await expect(page.locator("#metrics-output")).toHaveText(
+      "Prometheus metrics are unavailable.",
+    );
   });
 });

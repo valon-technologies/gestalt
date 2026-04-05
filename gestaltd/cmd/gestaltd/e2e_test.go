@@ -399,6 +399,9 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("Top providers")) {
+			t.Fatalf("expected graph sections in embedded admin UI: %s", adminBody)
+		}
 		if !bytes.Contains(adminBody, []byte(`fetch("/metrics"`)) {
 			t.Fatalf("expected admin ui to read /metrics directly: %s", adminBody)
 		}
@@ -492,6 +495,9 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("Top providers")) {
+			t.Fatalf("expected provider chart section in embedded admin UI: %s", adminBody)
 		}
 	})
 

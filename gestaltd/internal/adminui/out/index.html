@@ -5,89 +5,483 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gestalt Admin</title>
     <style>
+      :root {
+        color-scheme: light;
+        --background: hsl(36 28% 99%);
+        --surface: hsl(36 33% 97%);
+        --surface-raised: hsl(33 22% 93%);
+        --foreground: rgba(35, 24, 16, 1);
+        --muted: rgba(35, 24, 16, 0.6);
+        --faint: rgba(35, 24, 16, 0.42);
+        --border: rgba(35, 24, 16, 0.1);
+        --brand: #7a4f10;
+        --brand-soft: #eac59f;
+        --danger: #c75050;
+        --success: #3d6b3d;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --background: hsl(24 18% 8%);
+          --surface: hsl(24 14% 11%);
+          --surface-raised: hsl(24 12% 15%);
+          --foreground: rgba(232, 222, 212, 1);
+          --muted: rgba(232, 222, 212, 0.6);
+          --faint: rgba(232, 222, 212, 0.42);
+          --border: rgba(232, 222, 212, 0.1);
+          --brand: #f5ca78;
+          --brand-soft: #5c3c0c;
+          --danger: #f0a3a3;
+          --success: #b8dfb8;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
+        min-height: 100vh;
         font: 16px/1.5 system-ui, sans-serif;
-        background: #f6f4ef;
-        color: #251c11;
+        color: var(--foreground);
+        background:
+          radial-gradient(140% 90% at 50% 100%, #eaccb8 0%, #fdfcf9 50%, #f8f6f3 80%);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background:
+            radial-gradient(140% 90% at 50% 100%, #3d2808 0%, #1a1410 50%, #161110 80%);
+        }
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .topbar {
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--background) 88%, transparent);
+      }
+
+      .topbar .shell {
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .brand {
+        font: 700 1.125rem/1 Georgia, serif;
+        text-decoration: none;
+      }
+
+      .links {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+      }
+
+      .links a {
+        text-decoration: none;
       }
 
       main {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 32px 20px 40px;
+        padding: 36px 0 56px;
       }
 
       .card,
-      pre {
-        border: 1px solid #d9cfbf;
+      .status,
+      details {
+        border: 1px solid var(--border);
         border-radius: 12px;
-        background: #fff;
+        background: color-mix(in srgb, var(--surface) 90%, white);
       }
 
-      .card {
+      .hero,
+      .summary-card,
+      .panel-card,
+      .status,
+      summary {
         padding: 20px;
       }
 
+      .label-text {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+
+      h1,
+      h2,
+      .metric-value {
+        font-family: Georgia, serif;
+      }
+
       h1 {
-        margin: 0;
-        font-size: 2rem;
-        line-height: 1.1;
+        margin: 8px 0 0;
+        font-size: clamp(2rem, 4vw, 2.6rem);
+        line-height: 1;
       }
 
-      .actions {
-        margin-top: 16px;
+      h2 {
+        margin: 6px 0 0;
+        font-size: 1.3rem;
       }
 
-      .actions a {
-        display: inline-flex;
-        margin-right: 12px;
-        color: #704214;
-        text-decoration: none;
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
       }
 
       .status {
         margin-top: 16px;
-        padding: 12px 16px;
+      }
+
+      .status.ok {
+        color: var(--success);
       }
 
       .status.error {
-        color: #b94b42;
+        color: var(--danger);
+      }
+
+      .summary-grid,
+      .panel-grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 20px;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .panel-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .metric-value {
+        margin-top: 14px;
+        font-size: 2rem;
+        line-height: 1;
+      }
+
+      .metric-note {
+        font-size: 0.92rem;
+      }
+
+      .bar-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .bar-copy {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+
+      .bar-name {
+        font-weight: 600;
+      }
+
+      .bar-value,
+      .bar-meta {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .bar-track {
+        height: 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-raised) 65%, transparent);
+        overflow: hidden;
+      }
+
+      .bar-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--brand) 0%, var(--brand-soft) 100%);
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 600;
       }
 
       pre {
-        margin: 16px 0 0;
-        padding: 16px;
+        margin: 0;
+        padding: 0 20px 20px;
         overflow: auto;
-        min-height: 360px;
-        font-family: ui-monospace, monospace;
-        font-size: 0.85rem;
-        white-space: pre;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--muted);
+        font: 0.84rem/1.5 ui-monospace, monospace;
+      }
+
+      @media (max-width: 900px) {
+        .summary-grid,
+        .panel-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          padding: 0 16px;
+        }
+
+        main {
+          padding: 28px 0 40px;
+        }
+
+        .summary-grid,
+        .panel-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <section class="card">
+    <nav class="topbar">
+      <div class="shell">
+        <a class="brand" href="/">Gestalt</a>
+        <div class="links">
+          <a href="/">Client UI</a>
+          <a href="/metrics" target="_blank" rel="noreferrer">Raw /metrics</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="shell">
+      <section class="card hero">
+        <span class="label-text">Admin</span>
         <h1>Prometheus metrics</h1>
         <p>
-          The built-in admin UI stays basic. It reads the authenticated
-          <code>/metrics</code> scrape surface directly and shows the raw
-          output.
+          The embedded admin UI reuses the client workspace theme and derives a
+          few lightweight views directly from the authenticated
+          <code>/metrics</code> scrape.
         </p>
-        <div class="actions">
-          <a href="/">Client UI</a>
-          <a href="/metrics" target="_blank" rel="noreferrer">Open raw /metrics</a>
-        </div>
       </section>
 
-      <section class="card status" id="status">Loading /metrics...</section>
-      <pre id="metrics-output">Loading /metrics...</pre>
+      <section class="status" id="status">Loading metrics...</section>
+
+      <section class="summary-grid">
+        <article class="card summary-card">
+          <span class="label-text">Total requests</span>
+          <div class="metric-value" id="summary-requests">--</div>
+          <p class="metric-note">Cumulative invocations for this process.</p>
+        </article>
+        <article class="card summary-card">
+          <span class="label-text">Errors</span>
+          <div class="metric-value" id="summary-errors">--</div>
+          <p class="metric-note">Cumulative failed invocations.</p>
+        </article>
+        <article class="card summary-card">
+          <span class="label-text">Avg latency</span>
+          <div class="metric-value" id="summary-avg-latency">--</div>
+          <p class="metric-note">Computed from histogram sum and count.</p>
+        </article>
+        <article class="card summary-card">
+          <span class="label-text">P95 latency</span>
+          <div class="metric-value" id="summary-p95-latency">--</div>
+          <p class="metric-note">Estimated from current buckets.</p>
+        </article>
+      </section>
+
+      <section class="panel-grid">
+        <article class="card panel-card">
+          <span class="label-text">Current distribution</span>
+          <h2>Top providers</h2>
+          <div class="bar-list" id="provider-bars"></div>
+        </article>
+
+        <details class="card">
+          <summary>Raw Prometheus output</summary>
+          <pre id="metrics-output">Loading metrics...</pre>
+        </details>
+      </section>
     </main>
+
     <script>
       (function () {
-        const statusEl = document.getElementById("status");
-        const metricsEl = document.getElementById("metrics-output");
+        const METRIC_LINE =
+          /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        function setStatus(message, kind) {
+          byId("status").className = kind ? `status ${kind}` : "status";
+          byId("status").textContent = message;
+        }
+
+        function formatCount(value) {
+          return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+            Number.isFinite(value) ? value : 0,
+          );
+        }
+
+        function formatDuration(seconds) {
+          if (!Number.isFinite(seconds) || seconds < 0) return "--";
+          const ms = seconds * 1000;
+          return ms < 1000
+            ? `${ms.toFixed(ms >= 100 ? 0 : 1)} ms`
+            : `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
+        }
+
+        function formatPercent(value) {
+          return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 1 : 2)}%` : "--";
+        }
+
+        function parseLabels(raw) {
+          const source =
+            raw && raw[0] === "{" && raw[raw.length - 1] === "}"
+              ? raw.slice(1, -1)
+              : raw || "";
+          const labels = {};
+          const matcher = /([^=,]+)="((?:\\.|[^"])*)"/g;
+          let match;
+          while ((match = matcher.exec(source)) !== null) {
+            labels[match[1]] = match[2]
+              .replace(/\\\\/g, "\\")
+              .replace(/\\"/g, '"')
+              .replace(/\\n/g, "\n");
+          }
+          return labels;
+        }
+
+        function percentileFromBuckets(buckets, quantile) {
+          const points = Array.from(buckets.entries())
+            .map(function (entry) {
+              return [entry[0] === "+Inf" ? Number.POSITIVE_INFINITY : Number(entry[0]), entry[1]];
+            })
+            .filter(function (entry) {
+              return Number.isFinite(entry[1]) && !Number.isNaN(entry[0]);
+            })
+            .sort(function (left, right) {
+              return left[0] - right[0];
+            });
+
+          if (points.length === 0) return NaN;
+
+          const total = points[points.length - 1][1];
+          if (!Number.isFinite(total) || total <= 0) return NaN;
+
+          const target = total * quantile;
+          let lastFinite = NaN;
+          for (const point of points) {
+            if (Number.isFinite(point[0])) lastFinite = point[0];
+            if (point[1] >= target) return Number.isFinite(point[0]) ? point[0] : lastFinite;
+          }
+          return lastFinite;
+        }
+
+        function parseMetrics(text) {
+          const snapshot = {
+            requests: 0,
+            errors: 0,
+            durationSum: 0,
+            durationCount: 0,
+            buckets: new Map(),
+            providers: new Map(),
+          };
+
+          for (const rawLine of text.split("\n")) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) continue;
+
+            const match = line.match(METRIC_LINE);
+            if (!match) continue;
+
+            const metric = match[1];
+            const labels = parseLabels(match[2] || "");
+            const value = Number(match[3]);
+            if (!Number.isFinite(value)) continue;
+
+            const provider = labels.gestalt_provider || "unknown";
+            if (!snapshot.providers.has(provider)) {
+              snapshot.providers.set(provider, { label: provider, requests: 0, errors: 0 });
+            }
+            const row = snapshot.providers.get(provider);
+
+            if (metric === "gestaltd_operation_count_total") {
+              snapshot.requests += value;
+              row.requests += value;
+            } else if (metric === "gestaltd_operation_error_count_total") {
+              snapshot.errors += value;
+              row.errors += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_sum") {
+              snapshot.durationSum += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_count") {
+              snapshot.durationCount += value;
+            } else if (metric === "gestaltd_operation_duration_seconds_bucket") {
+              const le = labels.le || "+Inf";
+              snapshot.buckets.set(le, (snapshot.buckets.get(le) || 0) + value);
+            }
+          }
+
+          snapshot.providers = Array.from(snapshot.providers.values()).sort(function (left, right) {
+            return right.requests - left.requests;
+          });
+          return snapshot;
+        }
+
+        function clearDashboard(message) {
+          byId("summary-requests").textContent = "--";
+          byId("summary-errors").textContent = "--";
+          byId("summary-avg-latency").textContent = "--";
+          byId("summary-p95-latency").textContent = "--";
+          byId("provider-bars").innerHTML = `<p class="metric-note">${message}</p>`;
+        }
+
+        function renderProviders(items) {
+          const container = byId("provider-bars");
+          if (items.length === 0) {
+            container.innerHTML = '<p class="metric-note">No operation metrics have been emitted yet.</p>';
+            return;
+          }
+
+          const top = items.slice(0, 5);
+          const peak = Math.max.apply(
+            null,
+            top.map(function (item) {
+              return item.requests;
+            }).concat(0),
+          );
+
+          container.textContent = "";
+          for (const item of top) {
+            const row = document.createElement("div");
+            row.innerHTML =
+              '<div class="bar-copy"><span class="bar-name"></span><span class="bar-value"></span></div>' +
+              '<div class="bar-track"><div class="bar-fill"></div></div><div class="bar-meta"></div>';
+            row.querySelector(".bar-name").textContent = item.label;
+            row.querySelector(".bar-value").textContent = `${formatCount(item.requests)} requests`;
+            row.querySelector(".bar-fill").style.width = `${peak > 0 ? (item.requests / peak) * 100 : 0}%`;
+            row.querySelector(".bar-meta").textContent =
+              `${formatCount(item.errors)} errors · ` +
+              `${formatPercent(item.requests > 0 ? (item.errors / item.requests) * 100 : 0)}`;
+            container.appendChild(row);
+          }
+        }
 
         async function refresh() {
           try {
@@ -97,9 +491,7 @@
             });
 
             if (response.status === 401) {
-              try {
-                window.localStorage.removeItem("user_email");
-              } catch {}
+              window.localStorage.removeItem("user_email");
               window.location.replace("/login");
               return;
             }
@@ -110,25 +502,32 @@
             if (!response.ok) {
               throw new Error(body.trim() || `Failed to fetch /metrics (${response.status})`);
             }
-
             if (contentType.includes("text/html")) {
               throw new Error("Prometheus metrics are unavailable.");
             }
 
-            metricsEl.textContent = body;
-            statusEl.className = "card status";
-            statusEl.textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
+            const snapshot = parseMetrics(body);
+            byId("metrics-output").textContent = body;
+            byId("summary-requests").textContent = formatCount(snapshot.requests);
+            byId("summary-errors").textContent = formatCount(snapshot.errors);
+            byId("summary-avg-latency").textContent = formatDuration(
+              snapshot.durationCount > 0 ? snapshot.durationSum / snapshot.durationCount : NaN,
+            );
+            byId("summary-p95-latency").textContent = formatDuration(
+              percentileFromBuckets(snapshot.buckets, 0.95),
+            );
+            renderProviders(snapshot.providers);
+            setStatus(`Last refreshed ${new Date().toLocaleTimeString()}`, "ok");
           } catch (error) {
             const message =
-              error instanceof Error
-                ? error.message
-                : "Failed to load Prometheus metrics";
-            metricsEl.textContent = message;
-            statusEl.className = "card status error";
-            statusEl.textContent = message;
+              error instanceof Error ? error.message : "Failed to load Prometheus metrics";
+            byId("metrics-output").textContent = message;
+            clearDashboard(message);
+            setStatus(message, "error");
           }
         }
 
+        clearDashboard("Loading metrics...");
         refresh();
         window.setInterval(refresh, 15000);
       })();

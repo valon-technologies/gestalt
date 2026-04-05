@@ -101,31 +101,6 @@ export default function DashboardPage() {
               </p>
             </Link>
           </div>
-
-          <section className="mt-10 rounded-lg border border-alpha bg-base-100 p-8 shadow-card dark:bg-surface animate-fade-in-up [animation-delay:120ms]">
-            <span className="label-text">Admin</span>
-            <h2 className="mt-2 text-xl font-heading font-bold text-primary">
-              Metrics moved to the admin UI
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm text-muted">
-              Prometheus metrics now live at
-              <span className="font-mono text-primary"> /admin</span> so this
-              client workspace stays focused on integrations and tokens.
-            </p>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  window.location.assign("/admin/");
-                }}
-                className="inline-flex items-center gap-2 rounded-md border border-alpha px-4 py-2 text-sm font-medium text-primary transition-colors duration-150 hover:border-alpha-strong hover:bg-alpha-5"
-              >
-                Open admin UI
-                <span aria-hidden="true">&rarr;</span>
-              </button>
-            </div>
-          </section>
         </main>
       </div>
     </AuthGuard>
