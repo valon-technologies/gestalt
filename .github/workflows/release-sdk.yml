@@ -30,10 +30,17 @@ jobs:
     needs: validate-go-sdk
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
+      component-name: Gestalt Go SDK
+      version-prefix: 'sdk/go/v'
       tag-glob: 'sdk/go/v*'
       path-filters: |
         sdk/go
         sdk/proto
+      component-summary: |
+        Go SDK for building against Gestalt's plugin and protocol surfaces, including the generated protobuf types used by the server and plugins.
+      install-markdown: |
+        - Go modules: `go get github.com/valon-technologies/gestalt/sdk/go@v${version}`
+        - Package docs: [pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go](https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go)
 
   warm-go-sdk-module-proxy:
     name: Warm Go Module Proxy

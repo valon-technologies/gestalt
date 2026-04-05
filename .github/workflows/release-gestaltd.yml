@@ -94,9 +94,19 @@ jobs:
     needs: build
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
+      component-name: gestaltd
+      version-prefix: 'gestaltd/v'
       tag-glob: 'gestaltd/v*'
       path-filters: |
         gestaltd
+      component-summary: |
+        Self-hosted integration gateway for Gestalt with the embedded client UI, admin UI, HTTP API, and optional MCP endpoint.
+      install-markdown: |
+        - Homebrew: `brew upgrade gestaltd`
+        - Docker: `docker pull valontechnologies/gestaltd:${version}`
+        - Docs: [Deployment guide](https://docs.valon.tools/deploy)
+      exclude-subject-patterns: |
+        ^Update gestaltd formula and chart to v
       download-artifact-pattern: 'gestaltd-*'
 
   publish-image:

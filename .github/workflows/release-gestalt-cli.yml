@@ -26,9 +26,19 @@ jobs:
     needs: build
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
+      component-name: gestalt CLI
+      version-prefix: 'gestalt/v'
       tag-glob: 'gestalt/v*'
       path-filters: |
         gestalt
+      component-summary: |
+        Command-line client for authenticating with Gestalt, connecting integrations, invoking operations, and managing API tokens from the terminal.
+      install-markdown: |
+        - Homebrew: `brew upgrade gestalt`
+        - Docker: `docker pull valontechnologies/gestalt:${version}`
+        - Docs: [CLI reference](https://docs.valon.tools/reference/cli)
+      exclude-subject-patterns: |
+        ^Update gestalt formula to v
       download-artifact-pattern: 'gestalt-*'
 
   publish-image:
