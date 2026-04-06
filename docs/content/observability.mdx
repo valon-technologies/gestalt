@@ -203,8 +203,10 @@ When Gestalt serves `/metrics` on the public listener, it is authenticated with
 the same session or bearer-token middleware as the rest of the HTTP API. When
 `server.management` is configured, `/metrics` moves to the management listener
 and is expected to be protected by network policy or an internal-only reverse
-proxy instead. The embedded admin UI visualizes that same scrape surface instead
-of using a separate metrics API.
+proxy instead. That split-listener shape is the recommended production
+deployment. Keeping `/metrics` on the public listener is mainly for local
+development and other trusted-network environments. The embedded admin UI
+visualizes that same scrape surface instead of using a separate metrics API.
 
 The Prometheus endpoint and OTLP export hang off the same meter provider and
 include the HTTP middleware metrics, broker metrics, plugin gRPC client

@@ -29,7 +29,9 @@ It is not a production-ready security posture.
 ## Production Install Pattern
 
 For production, override the default auth and datastore settings and provide
-the required environment variables through `extraEnv`.
+the required environment variables through `extraEnv`. Prefer enabling the
+separate management listener and internal management Service so `/admin` and
+`/metrics` do not share the public listener.
 
 ```yaml
 config:
@@ -156,7 +158,9 @@ This configuration keeps the public UI and API on port `8080` while exposing
 `/admin` and `/metrics` only through the internal `gestalt-management` Service
 on port `9090`. If operators need browser access to `/admin`, place an
 internal-only ingress, VPN, or identity-aware proxy in front of that management
-Service rather than exposing it on the public ingress.
+Service rather than exposing it on the public ingress. Because `server.base_url`
+is set, the management admin UI can still link operators back to the public
+client UI hostname.
 
 ## When To Enable `pluginInit`
 
