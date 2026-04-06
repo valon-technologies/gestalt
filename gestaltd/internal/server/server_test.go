@@ -2795,24 +2795,62 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("api response stays json", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
-	}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["error"] == "" {
-		t.Fatal("expected error response")
-	}
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["error"] == "" {
+			t.Fatal("expected error response")
+		}
+	})
+
+	t.Run("browser response uses html page", func(t *testing.T) {
+		t.Parallel()
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+		if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/html") {
+			t.Fatalf("content-type = %q, want HTML", got)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("reading body: %v", err)
+		}
+		html := string(body)
+		if !strings.Contains(html, "Connection expired") {
+			t.Fatalf("expected HTML response to include title, got %q", html)
+		}
+		if !strings.Contains(html, "Start a new connection from Integrations.") {
+			t.Fatalf("expected HTML response to include recovery guidance, got %q", html)
+		}
+		if !strings.Contains(html, `href="/integrations"`) {
+			t.Fatalf("expected HTML response to link back to integrations, got %q", html)
+		}
+	})
 }
 
 func TestCreateAndListAPITokens(t *testing.T) {
