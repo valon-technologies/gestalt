@@ -71,13 +71,13 @@ func renderIndexHTML(indexHTML []byte, opts Options) []byte {
 	replaced := strings.Replace(
 		string(indexHTML),
 		`<a class="brand" href="/">Gestalt</a>`,
-		fmt.Sprintf(`<a class="brand" href="%s">Gestalt</a>`, html.EscapeString(normalized.BrandHref)),
+		fmt.Sprintf(`<a class="brand" href=%q>Gestalt</a>`, html.EscapeString(normalized.BrandHref)),
 		1,
 	)
 
 	clientUILink := ""
 	if normalized.ClientUIHref != "" {
-		clientUILink = fmt.Sprintf(`<a href="%s">Client UI</a>`, html.EscapeString(normalized.ClientUIHref))
+		clientUILink = fmt.Sprintf(`<a href=%q>Client UI</a>`, html.EscapeString(normalized.ClientUIHref))
 	}
 	replaced = strings.Replace(replaced, `<a href="/">Client UI</a>`, clientUILink, 1)
 	return []byte(replaced)
