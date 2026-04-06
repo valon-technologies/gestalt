@@ -1,21 +1,31 @@
-from __future__ import annotations
-
+import importlib
 import os
 import pathlib
 import signal
-import subprocess
 import sys
-import tempfile
 from concurrent import futures
+from dataclasses import dataclass
 
+from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
+GRPC_SERVER_MAX_WORKERS = 4
+
+
+@dataclass(frozen=True)
+class RuntimeArgs:
+    target: str
+    root: str | None = None
+    plugin_name: str | None = None
 
 
 def serve(plugin: Plugin) -> None:
-    grpc, json_format, plugin_pb2, plugin_pb2_grpc = _runtime_imports()
+    import grpc
+    from google.protobuf import json_format
+
+    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
 
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
@@ -24,7 +34,7 @@ def serve(plugin: Plugin) -> None:
     if os.path.exists(socket_path):
         os.unlink(socket_path)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS))
 
     class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
         def GetMetadata(self, _request, _context):
@@ -73,22 +83,15 @@ def serve(plugin: Plugin) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) == 5 and args[0] == "build":
-        _, root, target, output_path, plugin_name = args
-        build_plugin_binary(root, target, output_path, plugin_name)
-        return 0
-
-    if len(args) != 2:
-        print(
-            "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE\n"
-            "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
-            file=sys.stderr,
-        )
+    runtime_args = _parse_runtime_args(sys.argv[1:] if argv is None else argv)
+    if runtime_args is None:
+        _print_usage()
         return 2
 
-    root, target = args
-    plugin = _load_plugin(target, root)
+    plugin = _load_plugin(runtime_args)
+    if runtime_args.plugin_name:
+        plugin.name = runtime_args.plugin_name
+
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -98,105 +101,42 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: str) -> None:
-    root_path = pathlib.Path(root).resolve()
-    output = pathlib.Path(output_path).resolve()
-    module_name, _attr_name = _split_target(target)
+def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
+    if args:
+        if len(args) != 2:
+            return None
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="gestalt-python-release-") as work_dir:
-        work_path = pathlib.Path(work_dir)
-        launcher_path = work_path / "launcher.py"
-        launcher_path.write_text(
-            _launcher_source(target, plugin_name),
-            encoding="utf-8",
-        )
+        root, target = args
+        return RuntimeArgs(target=target, root=root)
 
-        pyinstaller_name = output.name
-        if sys.platform == "win32" and pyinstaller_name.endswith(".exe"):
-            pyinstaller_name = pyinstaller_name[:-4]
+    bundled_config = read_bundled_plugin_config(bundle_root=_bundle_root())
+    if bundled_config is None:
+        return None
 
-        command = [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            "--noconfirm",
-            "--clean",
-            "--onefile",
-            "--distpath",
-            str(output.parent),
-            "--workpath",
-            str(work_path / "build"),
-            "--specpath",
-            str(work_path / "spec"),
-            "--name",
-            pyinstaller_name,
-            "--hidden-import",
-            module_name,
-            "--paths",
-            str(root_path),
-            "--paths",
-            str(_sdk_import_root()),
-            str(launcher_path),
-        ]
-        subprocess.run(command, cwd=root_path, check=True)
+    return RuntimeArgs(
+        target=bundled_config.target,
+        plugin_name=bundled_config.plugin_name,
+    )
 
 
-def _load_plugin(target: str, root: str | None = None) -> Plugin:
-    import importlib
+def _bundle_root() -> pathlib.Path:
+    return pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
 
-    if root and root not in sys.path:
-        sys.path.insert(0, root)
 
-    module_name, attr_name = _split_target(target)
-    module = importlib.import_module(module_name)
-    plugin = getattr(module, attr_name, None)
+def _load_plugin(args: RuntimeArgs) -> Plugin:
+    if args.root and args.root not in sys.path:
+        sys.path.insert(0, args.root)
+
+    plugin_target = parse_plugin_target(args.target)
+    module = importlib.import_module(plugin_target.module_name)
+    plugin = getattr(module, plugin_target.attribute_name, None)
     if not isinstance(plugin, Plugin):
-        raise RuntimeError(f"{target} did not resolve to a gestalt.Plugin")
+        raise RuntimeError(f"{args.target} did not resolve to a gestalt.Plugin")
     return plugin
 
 
-def _launcher_source(target: str, plugin_name: str) -> str:
-    module_name, attr_name = _split_target(target)
-    return f"""from __future__ import annotations
-
-import importlib
-import os
-
-from gestalt._runtime import serve
-
-_gestalt_module = importlib.import_module({module_name!r})
-_gestalt_plugin = getattr(_gestalt_module, {attr_name!r})
-
-_gestalt_plugin.name = {plugin_name!r}
-
-if __name__ == "__main__":
-    catalog_path = os.environ.get("GESTALT_PLUGIN_WRITE_CATALOG")
-    if catalog_path:
-        _gestalt_plugin.write_catalog(catalog_path)
-        raise SystemExit(0)
-    serve(_gestalt_plugin)
-"""
-
-
-def _split_target(target: str) -> tuple[str, str]:
-    module_name, _, attr_name = target.partition(":")
-    if not module_name or not attr_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
-    return module_name, attr_name
-
-
-def _sdk_import_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parents[1]
-
-
-def _runtime_imports():
-    import grpc
-    from google.protobuf import json_format
-
-    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
-
-    return grpc, json_format, plugin_pb2, plugin_pb2_grpc
+def _print_usage() -> None:
+    print("usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE", file=sys.stderr)
 
 
 if __name__ == "__main__":
