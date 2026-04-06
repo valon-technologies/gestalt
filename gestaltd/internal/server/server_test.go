@@ -2796,6 +2796,8 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	t.Run("api response stays json", func(t *testing.T) {
+		t.Parallel()
+
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -2817,6 +2819,8 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	})
 
 	t.Run("browser response uses html page", func(t *testing.T) {
+		t.Parallel()
+
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state=not-valid", nil)
 		req.Header.Set("Accept", "text/html,application/xhtml+xml")
 		resp, err := http.DefaultClient.Do(req)
