@@ -40,7 +40,19 @@ const config: DocsThemeConfig = {
     );
   },
   footer: {
-    content: <span>Gestalt, a self-hosted integration platform</span>,
+    content: (
+      <span>
+        Gestalt, a self-hosted integration platform by{" "}
+        <a
+          href="https://valon.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: "underline", textUnderlineOffset: "0.18em" }}
+        >
+          Valon Technologies
+        </a>
+      </span>
+    ),
   },
   search: {
     placeholder: "Search documentation",
