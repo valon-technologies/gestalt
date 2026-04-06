@@ -39,7 +39,7 @@ Components registered by the `gestaltd` binary at startup.
 
 | Name | Purpose |
 | --- | --- |
-| `stdout` | Outputs structured logs to standard output. Traces and metrics use noop providers. Default when `telemetry` is omitted. |
+| `stdout` | Outputs structured logs to standard output, keeps traces disabled, and exposes local Prometheus metrics plus the built-in admin metrics UI. Default when `telemetry` is omitted. |
 | `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
 | `noop` | Disables all telemetry collection. |
 

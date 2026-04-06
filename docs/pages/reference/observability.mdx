@@ -106,6 +106,14 @@ directly and derives a few lightweight ECharts views in the browser without
 introducing a second admin JSON API or any custom server-side aggregation
 layer.
 
+`/metrics` uses the same platform auth boundary as the rest of `gestaltd`.
+That means:
+
+- with `auth.provider: none`, `/metrics` is open
+- with `local`, `google`, `oidc`, or other configured auth, `/metrics`
+  requires an authenticated session or API token
+- `/admin` follows the same auth model because it reads `/metrics` directly
+
 The admin UI intentionally stays basic:
 
 - summary cards and lightweight charts derived from `/metrics`

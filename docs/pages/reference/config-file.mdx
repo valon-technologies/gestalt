@@ -207,7 +207,8 @@ telemetry:
 Outputs structured logs to standard output. Traces remain disabled, but metrics
 are collected locally and exposed through the Prometheus-compatible `/metrics`
 endpoint. The built-in admin UI at `/admin` reads that same scrape surface.
-This is the default provider when `telemetry` is omitted.
+Both `/metrics` and `/admin` use the configured platform auth boundary. This is
+the default provider when `telemetry` is omitted.
 
 ### `otlp`
 
@@ -250,7 +251,8 @@ telemetry:
 
 Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy,
 Datadog Agent) while still keeping local `/metrics` available by default. The
-built-in admin UI at `/admin` reads that same local scrape surface.
+built-in admin UI at `/admin` reads that same local scrape surface. Both
+surfaces use the configured platform auth boundary.
 
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
@@ -277,7 +279,9 @@ telemetry:
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead.
 This disables Prometheus scraping. `/metrics` returns a clear unavailable
-response, and the built-in admin UI shows that metrics are unavailable.
+response, and the built-in admin UI shows that metrics are unavailable. The
+route still exists so operators get a clear disabled-state response instead of a
+404 or a client UI fallback page.
 
 ### Trace spans
 

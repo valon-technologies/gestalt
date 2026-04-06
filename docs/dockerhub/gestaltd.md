@@ -5,6 +5,7 @@
 - an HTTP API
 - a client UI at `/`
 - a built-in admin UI at `/admin`
+- an authenticated `/metrics` scrape endpoint when telemetry metrics are enabled
 - `/health` and `/ready` endpoints
 - an `/mcp` endpoint when providers expose tools
 - support for REST, GraphQL, MCP, and packaged plugins
@@ -148,15 +149,20 @@ docker run --rm \
 
 For more advanced setups, Gestalt also supports `secret://...` references with `env`, `file`, `google_secret_manager`, `aws_secrets_manager`, `vault`, and `azure_key_vault` secret providers.
 
-## Health endpoints
+## Health and observability endpoints
 
 The container exposes:
 
 - `GET /health` for liveness
 - `GET /ready` for readiness
+- `GET /metrics` for Prometheus scraping when telemetry metrics are enabled
 
 The client UI is served from `/` on the same port, and the built-in admin UI is
 served from `/admin`.
+
+`/metrics` follows the configured platform auth boundary. With `auth.provider:
+none`, it is open. With any configured auth provider, it requires an
+authenticated session or API token.
 
 ## SQLite and `/data`
 

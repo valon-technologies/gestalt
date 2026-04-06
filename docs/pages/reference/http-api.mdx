@@ -29,6 +29,14 @@ Valid bearer tokens are:
 
 ## Authenticated User Routes
 
+### Observability and Admin Surfaces
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/metrics` | Prometheus scrape endpoint when telemetry metrics are enabled. Returns `503` when telemetry metrics are disabled. |
+| `GET` | `/admin` | Redirects to the built-in admin UI at `/admin/`. |
+| `GET` | `/admin/*` | Built-in admin UI assets. The admin UI reads `/metrics` directly. |
+
 ### Integrations
 
 | Method | Path | Purpose |
