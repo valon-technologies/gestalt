@@ -21,7 +21,6 @@ export default function TokensPage() {
       .finally(() => setLoading(false));
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadTokens(); }, []);
 
   return (

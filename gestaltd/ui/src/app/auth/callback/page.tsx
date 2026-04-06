@@ -29,8 +29,11 @@ export default function AuthCallbackPage() {
         const port = parseInt(parts[1], 10);
         const originalState = parts.slice(2).join(":");
         if (port > 0 && port <= MAX_PORT) {
-          const params = new URLSearchParams({ state: originalState, code });
-          window.location.href = `http://127.0.0.1:${port}/?${params}`;
+          const redirectParams = new URLSearchParams({
+            state: originalState,
+            code,
+          });
+          window.location.href = `http://127.0.0.1:${port}/?${redirectParams}`;
           return;
         }
       }

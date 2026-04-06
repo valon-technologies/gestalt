@@ -452,12 +452,9 @@ gestalt tokens revoke <token-id>`}
 }
 
 function useDeploymentOrigin() {
-  const [origin, setOrigin] = useState(FALLBACK_ORIGIN);
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
-
+  const [origin] = useState(() =>
+    typeof window === "undefined" ? FALLBACK_ORIGIN : window.location.origin,
+  );
   return origin;
 }
 
