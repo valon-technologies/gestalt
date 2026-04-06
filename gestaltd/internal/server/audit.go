@@ -1,0 +1,55 @@
+package server
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
+)
+
+func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Principal) (*principal.Principal, error) {
+	if p == nil || p.UserID != "" || p.Identity == nil || p.Identity.Email == "" {
+		return p, nil
+	}
+
+	dbUser, err := s.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+	if err != nil {
+		return nil, err
+	}
+	if dbUser == nil || dbUser.ID == "" {
+		return nil, fmt.Errorf("authenticated principal missing user ID")
+	}
+
+	clone := *p
+	clone.UserID = dbUser.ID
+	return &clone, nil
+}
+
+func (s *Server) auditHTTPEvent(ctx context.Context, p *principal.Principal, provider, operation string, allowed bool, err error) {
+	if s.auditSink == nil {
+		return
+	}
+
+	ctx, entry := invocation.BuildAuditEntry(ctx, p, "http", provider, operation)
+	entry.Allowed = allowed
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	s.auditSink.Log(ctx, entry)
+}
+
+func (s *Server) auditHTTPEventWithUserID(ctx context.Context, userID, authSource, provider, operation string, allowed bool, err error) {
+	if s.auditSink == nil {
+		return
+	}
+
+	ctx, entry := invocation.BuildAuditEntry(ctx, nil, "http", provider, operation)
+	entry.UserID = userID
+	entry.AuthSource = authSource
+	entry.Allowed = allowed
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	s.auditSink.Log(ctx, entry)
+}

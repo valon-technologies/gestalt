@@ -18,6 +18,7 @@ var errPendingConnectionExpired = errors.New("pending connection expired")
 
 type integrationOAuthState struct {
 	UserID           string            `json:"uid"`
+	AuthSource       string            `json:"src,omitempty"`
 	Integration      string            `json:"int"`
 	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`

@@ -114,6 +114,7 @@ func runServer(env *bootstrapEnv) error {
 
 	result := env.Result
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
+	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
 	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
 	if err != nil {
 		return err
@@ -148,6 +149,7 @@ func runServer(env *bootstrapEnv) error {
 
 	srv, err := server.New(server.Config{
 		Auth:              result.Auth,
+		AuditSink:         result.AuditSink,
 		Datastore:         result.Datastore,
 		Providers:         result.Providers,
 		Invoker:           httpInvoker,
@@ -209,7 +211,7 @@ func runServer(env *bootstrapEnv) error {
 		return err
 	}
 
-	mcpInner, err := mcpSurface.handler(result)
+	mcpInner, err := mcpSurface.handler(result, mcpInvoker)
 	if err != nil {
 		return err
 	}
@@ -304,15 +306,16 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 	return surface
 }
 
-func (s mcpSurface) handler(result *bootstrap.Result) (http.Handler, error) {
+func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker) (http.Handler, error) {
 	broker, ok := result.Invoker.(*invocation.Broker)
 	if !ok {
 		return nil, fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 	}
 	return mcpserver.NewStreamableHTTPServer(
 		gestaltmcp.NewServer(gestaltmcp.Config{
-			Invoker:          result.Invoker,
+			Invoker:          invoker,
 			TokenResolver:    broker,
+			AuditSink:        result.AuditSink,
 			Providers:        result.Providers,
 			AllowedProviders: s.providers,
 			ToolPrefixes:     s.toolPrefixes,

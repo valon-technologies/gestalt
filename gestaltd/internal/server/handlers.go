@@ -24,6 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -37,21 +38,26 @@ const maxPort = 65535
 const sessionCookieName = "session_token"
 const defaultSessionCookieTTL = 24 * time.Hour
 
-func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
+var (
+	errNotAuthenticated = errors.New("not authenticated")
+	errResolveUser      = errors.New("failed to resolve user")
+)
+
+func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
-		return "", false
+		return "", errNotAuthenticated
 	}
 	if id := UserIDFromContext(r.Context()); id != "" {
-		return id, true
+		return id, nil
 	}
 	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
 	if err != nil || dbUser == nil || dbUser.ID == "" {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return "", false
+		return "", errResolveUser
 	}
-	return dbUser.ID, true
+	return dbUser.ID, nil
 }
 
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
@@ -191,13 +197,21 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 }
 
 func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
+	name := chi.URLParam(r, "name")
+	auditAllowed := false
+	auditErr := errors.New("connection disconnect failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), name, "connection.disconnect", auditAllowed, auditErr)
+	}()
+
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
-	name := chi.URLParam(r, "name")
 	if _, ok := s.getProvider(w, name); !ok {
+		auditErr = errors.New("integration not found")
 		return
 	}
 
@@ -205,6 +219,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	requestedConnection := r.URL.Query().Get("connection")
 	if requestedConnection != "" {
 		if !safeParamValue.MatchString(requestedConnection) {
+			auditErr = errors.New("connection name contains invalid characters")
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
@@ -213,6 +228,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
 	if err != nil {
+		auditErr = errors.New("failed to list tokens")
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
 	}
@@ -226,6 +242,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(matched) == 0 {
+		auditErr = errors.New("connection not found")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
@@ -241,10 +258,12 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(matched) == 0 {
+		auditErr = errors.New("connection instance not found")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
 		return
 	}
 	if len(matched) > 1 {
+		auditErr = errors.New("multiple matching connections")
 		labels := make([]string, len(matched))
 		for i, t := range matched {
 			labels[i] = fmt.Sprintf("%s/%s", t.Connection, t.Instance)
@@ -259,15 +278,19 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	tokenID := matched[0].ID
 	if tokenID == "" {
+		auditErr = errors.New("connection token is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
 
 	if err := s.datastore.DeleteToken(r.Context(), tokenID); err != nil {
+		auditErr = errors.New("failed to disconnect integration")
 		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
 		return
 	}
 
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
@@ -536,11 +559,24 @@ type authInfoResponse struct {
 	DisplayName string `json:"display_name"`
 }
 
+func (s *Server) authProviderName() string {
+	if s.auth == nil {
+		return "none"
+	}
+	return s.auth.Name()
+}
+
+func (s *Server) authEnabled() bool {
+	return s.auth != nil && !s.noAuth
+}
+
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
-	provider := s.auth.Name()
+	provider := s.authProviderName()
 	displayName := provider
-	if dn, ok := s.auth.(AuthProviderDisplayName); ok {
-		displayName = dn.DisplayName()
+	if s.auth != nil {
+		if dn, ok := s.auth.(AuthProviderDisplayName); ok {
+			displayName = dn.DisplayName()
+		}
 	}
 	writeJSON(w, http.StatusOK, authInfoResponse{
 		Provider:    provider,
@@ -549,8 +585,15 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("login start failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.start", auditAllowed, auditErr)
+	}()
+
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		auditErr = errors.New("invalid JSON body")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -558,8 +601,14 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
 		state = fmt.Sprintf("%s%d:%s", cliStatePrefix, req.CallbackPort, req.State)
 	}
+	if !s.authEnabled() {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
+		return
+	}
 	url, err := s.auth.LoginURL(state)
 	if err != nil {
+		auditErr = errors.New("failed to generate login URL")
 		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
 		return
 	}
@@ -569,6 +618,7 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt: s.now().Add(loginStateTTL).Unix(),
 		})
 		if encErr != nil {
+			auditErr = errors.New("failed to encode login state")
 			writeError(w, http.StatusInternalServerError, "failed to encode login state")
 			return
 		}
@@ -582,6 +632,8 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 			SameSite: http.SameSiteLaxMode,
 		})
 	}
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
@@ -638,9 +690,26 @@ type StatefulCallbackHandler interface {
 }
 
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("login callback failed")
+	auditUserID := ""
+	defer func() {
+		if auditUserID != "" {
+			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
+			return
+		}
+		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
+	}()
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
+		auditErr = errors.New("missing code parameter")
 		writeError(w, http.StatusBadRequest, "missing code parameter")
+		return
+	}
+	if !s.authEnabled() {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
 
@@ -656,12 +725,14 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		identity, err = s.auth.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
+		auditErr = errors.New("login failed")
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
 
 	if csrfErr := s.validateLoginState(r, originalState); csrfErr != nil {
+		auditErr = errors.New("login state validation failed")
 		slog.ErrorContext(r.Context(), "login state validation failed", "error", csrfErr)
 		writeError(w, http.StatusForbidden, "login state validation failed")
 		return
@@ -673,14 +744,19 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("cli") == "1" {
 		dbUser, dbErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
 		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
+			auditErr = errors.New("failed to resolve user")
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
+		auditUserID = dbUser.ID
 		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
 		if issueErr != nil {
+			auditErr = errors.New("failed to issue CLI API token")
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
 			return
 		}
+		auditAllowed = true
+		auditErr = nil
 		writeJSON(w, http.StatusOK, createTokenResponse{
 			ID:        apiToken.ID,
 			Name:      apiToken.Name,
@@ -690,6 +766,18 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if identity != nil && identity.Email != "" {
+		dbUser, auditPrincipalErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
+		switch {
+		case auditPrincipalErr != nil:
+			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", auditPrincipalErr)
+		case dbUser != nil && dbUser.ID != "":
+			auditUserID = dbUser.ID
+		default:
+			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", "authenticated principal missing user ID")
+		}
+	}
+
 	resp := map[string]any{
 		"email":        identity.Email,
 		"display_name": identity.DisplayName,
@@ -697,16 +785,20 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 	issuer, ok := s.auth.(SessionTokenIssuer)
 	if !ok {
+		auditErr = errors.New("auth provider does not support session tokens")
 		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
 		return
 	}
 	token, err := issuer.IssueSessionToken(identity)
 	if err != nil {
+		auditErr = errors.New("failed to issue session token")
 		writeError(w, http.StatusInternalServerError, "failed to issue session token")
 		return
 	}
 	s.setSessionCookie(w, token)
 
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -749,44 +841,60 @@ type startOAuthRequest struct {
 }
 
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("oauth start failed")
+	providerName := ""
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr)
+	}()
+
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		auditErr = errors.New("invalid JSON body")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	providerName = req.Integration
 
 	prov, ok := s.getProvider(w, req.Integration)
 	if !ok {
+		auditErr = errors.New("integration not found")
 		return
 	}
 
 	connection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
 	if !ok {
+		auditErr = errors.New("invalid connection")
 		return
 	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
 	if !ok {
+		auditErr = errors.New("oauth is not configured")
 		return
 	}
 
 	if s.stateCodec == nil {
+		auditErr = errors.New("oauth state encryption is not configured")
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
 		return
 	}
 
-	dbUserID, ok := s.resolveUserID(w, r)
-	if !ok {
+	dbUserID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
 	instance, ok := resolveRequestedInstance(w, req.Instance)
 	if !ok {
+		auditErr = errors.New("invalid instance")
 		return
 	}
 
 	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
 	if !ok {
+		auditErr = errors.New("invalid connection parameters")
 		return
 	}
 
@@ -806,8 +914,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
 
+	authSource := ""
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		authSource = p.AuthSource()
+	}
 	state, err := s.stateCodec.Encode(integrationOAuthState{
 		UserID:           dbUserID,
+		AuthSource:       authSource,
 		Integration:      req.Integration,
 		Connection:       connection,
 		Instance:         instance,
@@ -816,48 +929,67 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
 	if err != nil {
+		auditErr = errors.New("failed to encode oauth state")
 		writeError(w, http.StatusInternalServerError, "failed to encode oauth state")
 		return
 	}
 
 	authURL, err = setURLQueryParam(authURL, "state", state)
 	if err != nil {
+		auditErr = errors.New("failed to prepare oauth URL")
 		writeError(w, http.StatusInternalServerError, "failed to prepare oauth URL")
 		return
 	}
 
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"url": authURL, "state": state})
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	metricProvider := metricutil.UnknownAttrValue
 	callbackFailed := true
+	auditAllowed := false
+	auditErr := errors.New("oauth callback failed")
+	auditUserID := ""
+	stateAuthSource := ""
+	providerName := ""
 	defer func() {
 		recordOAuthCallbackMetric(r.Context(), metricProvider, callbackFailed)
+		if auditUserID != "" {
+			s.auditHTTPEventWithUserID(r.Context(), auditUserID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr)
+			return
+		}
+		s.auditHTTPEvent(r.Context(), nil, providerName, "connection.oauth.complete", auditAllowed, auditErr)
 	}()
 
 	code := r.URL.Query().Get("code")
 	encodedState := r.URL.Query().Get("state")
 	if code == "" || encodedState == "" {
+		auditErr = errors.New("missing code or state parameter")
 		writeError(w, http.StatusBadRequest, "missing code or state parameter")
 		return
 	}
 
 	if s.stateCodec == nil {
+		auditErr = errors.New("oauth state encryption is not configured")
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
 		return
 	}
 
 	state, err := s.stateCodec.Decode(encodedState, s.now())
 	if err != nil {
+		auditErr = errors.New("invalid or expired oauth state")
 		writeError(w, http.StatusBadRequest, "invalid or expired oauth state")
 		return
 	}
-
-	providerName := state.Integration
+	providerName = state.Integration
+	auditUserID = state.UserID
+	stateAuthSource = state.AuthSource
 	metricProvider = providerName
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
+		auditErr = errors.New("oauth is not configured")
 		return
 	}
 
@@ -876,6 +1008,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	var tokenResp *core.TokenResponse
 	tokenResp, err = handler.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	if err != nil {
+		auditErr = errors.New("token exchange failed")
 		slog.ErrorContext(r.Context(), "token exchange failed", "provider", providerName, "error", err)
 		writeError(w, http.StatusBadGateway, "token exchange failed")
 		return
@@ -883,6 +1016,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	metadata, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
 	if metaErr != nil {
+		auditErr = errors.New("failed to extract connection metadata from token response")
 		slog.ErrorContext(r.Context(), "connection metadata extraction failed", "provider", providerName, "error", metaErr)
 		writeError(w, http.StatusBadGateway, "failed to extract connection metadata from token response")
 		return
@@ -901,6 +1035,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	tm := tokenMaterial{
 		UserID:         state.UserID,
+		AuthSource:     state.AuthSource,
 		Integration:    providerName,
 		Connection:     state.Connection,
 		Instance:       callbackInstance,
@@ -912,6 +1047,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
+		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
 		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
@@ -920,15 +1056,19 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if result.Status == "selection_required" {
 		state, err := s.decodePendingConnectionToken(result.PendingToken)
 		if err != nil {
+			auditErr = errors.New("failed to prepare pending connection")
 			writeError(w, http.StatusInternalServerError, "failed to prepare pending connection")
 			return
 		}
+		auditAllowed = true
+		auditErr = nil
 		s.writePendingConnectionSelectionPage(w, state, result.PendingToken)
 		callbackFailed = false
 		return
 	}
-
 	callbackFailed = false
+	auditAllowed = true
+	auditErr = nil
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }
 
@@ -942,22 +1082,33 @@ type connectManualRequest struct {
 }
 
 func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("manual connection failed")
+	providerName := ""
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr)
+	}()
+
 	var req connectManualRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		auditErr = errors.New("invalid JSON body")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	providerName = req.Integration
 
 	var effectiveCredential string
 	if len(req.Credentials) > 0 {
 		for k, v := range req.Credentials {
 			if v == "" {
+				auditErr = fmt.Errorf("credential %q must not be empty", k)
 				writeError(w, http.StatusBadRequest, fmt.Sprintf("credential %q must not be empty", k))
 				return
 			}
 		}
 		b, err := json.Marshal(req.Credentials)
 		if err != nil {
+			auditErr = errors.New("invalid credentials map")
 			writeError(w, http.StatusBadRequest, "invalid credentials map")
 			return
 		}
@@ -967,49 +1118,62 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Integration == "" || effectiveCredential == "" {
+		auditErr = errors.New("integration and credential are required")
 		writeError(w, http.StatusBadRequest, "integration and credential are required")
 		return
 	}
 
 	prov, ok := s.getProvider(w, req.Integration)
 	if !ok {
+		auditErr = errors.New("integration not found")
 		return
 	}
 
 	mp, ok := prov.(core.ManualProvider)
 	if !ok || !mp.SupportsManualAuth() {
+		auditErr = errors.New("integration does not support manual auth")
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
 	}
 
-	dbUserID, ok := s.resolveUserID(w, r)
-	if !ok {
+	dbUserID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
 	manualInstance, ok := resolveRequestedInstance(w, req.Instance)
 	if !ok {
+		auditErr = errors.New("invalid instance")
 		return
 	}
 
 	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
 	if !ok {
+		auditErr = errors.New("invalid connection")
 		return
 	}
 
 	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
 	if !ok {
+		auditErr = errors.New("invalid connection parameters")
 		return
 	}
 
 	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
 	if metaErr != nil {
+		auditErr = errors.New(metaErr.Error())
 		writeError(w, http.StatusBadRequest, metaErr.Error())
 		return
 	}
 
+	authSource := ""
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		authSource = p.AuthSource()
+	}
 	tm := tokenMaterial{
 		UserID:       dbUserID,
+		AuthSource:   authSource,
 		Integration:  req.Integration,
 		Connection:   manualConnection,
 		Instance:     manualInstance,
@@ -1019,11 +1183,14 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
+		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", req.Integration, "error", err)
 		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
 
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1040,18 +1207,27 @@ type createTokenResponse struct {
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
+	auditAllowed := false
+	auditErr := errors.New("api token creation failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.create", auditAllowed, auditErr)
+	}()
+
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
 	var req createTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		auditErr = errors.New("invalid JSON body")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
+		auditErr = errors.New("name is required")
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
@@ -1059,6 +1235,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	if req.Scopes != "" {
 		for _, scope := range strings.Fields(req.Scopes) {
 			if _, err := s.providers.Get(scope); err != nil {
+				auditErr = fmt.Errorf("unknown scope %q", scope)
 				writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown scope %q", scope))
 				return
 			}
@@ -1067,10 +1244,13 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 
 	apiToken, plaintext, err := s.issueAPIToken(r.Context(), userID, req.Name, req.Scopes, false)
 	if err != nil {
+		auditErr = errors.New("failed to generate token")
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
 
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusCreated, createTokenResponse{
 		ID:        apiToken.ID,
 		Name:      apiToken.Name,
@@ -1088,8 +1268,8 @@ type apiTokenInfo struct {
 }
 
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
 		return
 	}
 
@@ -1282,39 +1462,80 @@ func userFacingAuthType(authType string) (string, bool) {
 }
 
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
+	auditAllowed := false
+	auditErr := errors.New("api token revoke failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke", auditAllowed, auditErr)
+	}()
+
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	if err := s.datastore.RevokeAPIToken(r.Context(), userID, id); err != nil {
 		if errors.Is(err, core.ErrNotFound) {
+			auditErr = errors.New("token not found")
 			writeError(w, http.StatusNotFound, "token not found")
 			return
 		}
+		auditErr = errors.New("failed to revoke token")
 		writeError(w, http.StatusInternalServerError, "failed to revoke token")
 		return
 	}
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
 func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
-	userID, ok := s.resolveUserID(w, r)
-	if !ok {
+	auditAllowed := false
+	auditErr := errors.New("api token revoke all failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke_all", auditAllowed, auditErr)
+	}()
+
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		auditErr = err
 		return
 	}
 
 	count, err := s.datastore.RevokeAllAPITokens(r.Context(), userID)
 	if err != nil {
+		auditErr = errors.New("failed to revoke tokens")
 		writeError(w, http.StatusInternalServerError, "failed to revoke tokens")
 		return
 	}
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("logout failed")
+	var auditPrincipal *principal.Principal
+	if !s.noAuth {
+		p, err := s.resolveRequestPrincipalWithUserID(r)
+		switch {
+		case err == nil:
+			auditPrincipal = p
+		case errors.Is(err, errInvalidAuthorizationHeader), errors.Is(err, principal.ErrInvalidToken):
+			slog.InfoContext(r.Context(), "logout: unable to resolve caller for audit", "error", err)
+		default:
+			slog.WarnContext(r.Context(), "logout: unable to resolve caller for audit", "error", err)
+		}
+	}
+	defer func() {
+		s.auditHTTPEvent(r.Context(), auditPrincipal, s.authProviderName(), "auth.logout", auditAllowed, auditErr)
+	}()
+
 	s.clearSessionCookie(w)
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1408,6 +1629,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 type tokenMaterial struct {
 	UserID         string
+	AuthSource     string
 	Integration    string
 	Connection     string
 	Instance       string

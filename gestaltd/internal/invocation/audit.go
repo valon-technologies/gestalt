@@ -5,8 +5,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -36,17 +38,51 @@ func NewLoggerAuditSink(logger *slog.Logger) *SlogAuditSink {
 	}
 }
 
+func buildAuditEntry(ctx context.Context, p *principal.Principal, source, providerName, operation string, meta *InvocationMeta) core.AuditEntry {
+	reqMeta := RequestMetaFromContext(ctx)
+	entry := core.AuditEntry{
+		Timestamp:  time.Now(),
+		RequestID:  meta.RequestID,
+		Source:     source,
+		Provider:   providerName,
+		Operation:  operation,
+		Depth:      meta.Depth,
+		ClientIP:   reqMeta.ClientIP,
+		RemoteAddr: reqMeta.RemoteAddr,
+		UserAgent:  reqMeta.UserAgent,
+	}
+	if p != nil {
+		entry.UserID = p.UserID
+		entry.AuthSource = p.AuthSource()
+	}
+	return entry
+}
+
+func BuildAuditEntry(ctx context.Context, p *principal.Principal, source, providerName, operation string) (context.Context, core.AuditEntry) {
+	ctx, meta := ensureMeta(ctx)
+	if p == nil {
+		p = principal.FromContext(ctx)
+	}
+	return ctx, buildAuditEntry(ctx, p, source, providerName, operation, meta)
+}
+
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	attrs := []slog.Attr{
 		slog.String("log.type", auditLogType),
 		slog.Time("event_time", entry.Timestamp),
 		slog.String("request_id", entry.RequestID),
 		slog.String("source", entry.Source),
-		slog.String("user_id", entry.UserID),
 		slog.String("provider", entry.Provider),
 		slog.String("operation", entry.Operation),
 		slog.Int("depth", entry.Depth),
 		slog.Bool("allowed", entry.Allowed),
+	}
+
+	if entry.AuthSource != "" {
+		attrs = append(attrs, slog.String("auth_source", entry.AuthSource))
+	}
+	if entry.UserID != "" {
+		attrs = append(attrs, slog.String("user_id", entry.UserID))
 	}
 
 	if entry.Error != "" {

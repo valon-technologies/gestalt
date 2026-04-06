@@ -9,6 +9,7 @@ type AuditEntry struct {
 	Timestamp  time.Time
 	RequestID  string
 	Source     string
+	AuthSource string
 	UserID     string
 	Provider   string
 	Operation  string
