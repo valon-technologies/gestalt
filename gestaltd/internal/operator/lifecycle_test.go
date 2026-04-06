@@ -358,37 +358,37 @@ print(json.dumps({
 		t.Fatalf("ReadFile(catalog.yaml): %v", err)
 	}
 	catalogText := string(catalogData)
-	if !strings.Contains(catalogText, `id: "echo"`) {
+	if !strings.Contains(catalogText, "id: echo") {
 		t.Fatalf("unexpected catalog contents: %s", catalogData)
 	}
 	if strings.Contains(catalogText, "\n\n") {
 		t.Fatalf("catalog contains unexpected blank lines: %q", catalogText)
 	}
-	arrayParam := regexp.MustCompile(`(?m)- name: "names"\n\s+type: "array"$`)
+	arrayParam := regexp.MustCompile(`(?m)- name: names\n\s+type: array$`)
 	if !arrayParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing array parameter type: %s", catalogText)
 	}
-	objectParam := regexp.MustCompile(`(?m)- name: "metadata"\n\s+type: "object"$`)
+	objectParam := regexp.MustCompile(`(?m)- name: metadata\n\s+type: object$`)
 	if !objectParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing object parameter type: %s", catalogText)
 	}
-	namesDefault := regexp.MustCompile(`(?m)- name: "names"\n\s+type: "array"\n\s+default: null$`)
+	namesDefault := regexp.MustCompile(`(?m)- name: names\n\s+type: array\n\s+default: null$`)
 	if !namesDefault.MatchString(catalogText) {
 		t.Fatalf("catalog missing null default for optional array: %s", catalogText)
 	}
-	filtersParam := regexp.MustCompile(`(?m)- name: "filters"\n\s+type: "object"$`)
+	filtersParam := regexp.MustCompile(`(?m)- name: filters\n\s+type: object$`)
 	if !filtersParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing nested object parameter type: %s", catalogText)
 	}
-	optionalModelParams := regexp.MustCompile(`(?s)- id: "maybe_filters".*?- name: "owner"\n\s+type: "string"\n\s+default: ""`)
+	optionalModelParams := regexp.MustCompile(`(?s)- id: maybe_filters.*?- name: owner\n\s+type: string\n\s+default: ""`)
 	if !optionalModelParams.MatchString(catalogText) {
 		t.Fatalf("catalog missing parameters for Optional model input: %s", catalogText)
 	}
-	limitParam := regexp.MustCompile(`(?m)- name: "limit"\n\s+type: "integer"$`)
+	limitParam := regexp.MustCompile(`(?m)- name: limit\n\s+type: integer$`)
 	if !limitParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing integer parameter type: %s", catalogText)
 	}
-	emptyStringDefault := regexp.MustCompile(`(?m)- name: "prefix"\n\s+type: "string"\n\s+default: ""$`)
+	emptyStringDefault := regexp.MustCompile(`(?m)- name: prefix\n\s+type: string\n\s+default: ""$`)
 	if !emptyStringDefault.MatchString(catalogText) {
 		t.Fatalf("catalog missing empty string default: %s", catalogText)
 	}

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import dataclasses
 import inspect
@@ -516,4 +514,44 @@ def _yaml_scalar(value: Any) -> str:
         return "true" if value else "false"
     if value is None:
         return "null"
+    if isinstance(value, str):
+        if _is_yaml_plain_string(value):
+            return value
+        return json.dumps(value)
     return json.dumps(value)
+
+
+_yaml_bool_like = {"true", "false", "null", "~", "yes", "no", "on", "off"}
+_yaml_number_pattern = re.compile(
+    r"""
+    ^
+    (?:
+        [-+]?(?:0|[1-9][0-9]*)
+        (?:\.[0-9]+)?
+        (?:[eE][-+]?[0-9]+)?
+      |
+        [-+]?\.[0-9]+
+        (?:[eE][-+]?[0-9]+)?
+    )
+    $
+    """,
+    re.VERBOSE,
+)
+
+
+def _is_yaml_plain_string(value: str) -> bool:
+    if value == "" or value != value.strip():
+        return False
+    if value.lower() in _yaml_bool_like:
+        return False
+    if _yaml_number_pattern.match(value):
+        return False
+    if "\n" in value or "\r" in value or "\t" in value:
+        return False
+    if value[0] in "-?:,[]{}#&*!|>'\"%@`":
+        return False
+    if ": " in value or value.endswith(":"):
+        return False
+    if " #" in value:
+        return False
+    return True
