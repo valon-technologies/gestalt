@@ -456,8 +456,6 @@ func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
-	writeUsageLine(w, "Non-mutating; requires existing lock state for managed plugins.")
-	writeUsageLine(w, "Run `gestaltd init` first when the config uses prepared artifacts.")
 }
 
 func writeUsageLine(w io.Writer, line string) {

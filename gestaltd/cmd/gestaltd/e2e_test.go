@@ -732,19 +732,6 @@ func TestE2EValidateNonMutating(t *testing.T) {
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatal("expected no lockfile after non-mutating validate")
 	}
-
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-	if _, err := os.Stat(lockPath); err != nil {
-		t.Fatalf("expected lockfile after init: %v", err)
-	}
-
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd validate after init: %v\n%s", err, out)
-	}
 }
 
 func TestE2EHelmChart(t *testing.T) {
@@ -1065,60 +1052,6 @@ providers:
 			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected validate to fail for unsupported plugin field, output: %s", out)
-			}
-			if !strings.Contains(string(out), tc.wantError) {
-				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
-			}
-		})
-	}
-}
-
-//nolint:paralleltest // Exercises init so the prepared manifest can affect validation.
-func TestE2EInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
-	cases := []struct {
-		name       string
-		setup      func(t *testing.T, dir string) string
-		pluginYAML string
-		wantError  string
-	}{
-		{
-			name:  "config headers unsupported for executable-only package plugin",
-			setup: setupPluginDir,
-			pluginYAML: `from:
-  package: %s
-headers:
-  x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			pluginDir := tc.setup(t, dir)
-			cfgPath := filepath.Join(dir, "config.yaml")
-			pluginYAML := fmt.Sprintf(tc.pluginYAML, pluginDir)
-			cfg := fmt.Sprintf(`auth:
-  provider: local
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  encryption_key: test-key
-providers:
-  example:
-    %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(pluginYAML, "\n", "\n    "))
-
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-			if err == nil {
-				t.Fatalf("expected init to fail for unsupported managed plugin field, output: %s", out)
 			}
 			if !strings.Contains(string(out), tc.wantError) {
 				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
