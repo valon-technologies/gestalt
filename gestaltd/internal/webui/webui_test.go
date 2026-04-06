@@ -156,6 +156,27 @@ func TestDirHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
 	}
 }
 
+func TestDirHandler_HTMLFallbackPreferredOverDirectory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	mustWriteFile(t, dir, "index.html", "<html>home</html>")
+	mustWriteFile(t, dir, "integrations.html", "<html>integrations</html>")
+	mustWriteFile(t, dir, "integrations/__next._full.txt", "metadata")
+
+	handler, err := DirHandler(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := mustServe(t, handler, "/integrations")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", code, http.StatusOK)
+	}
+	if !strings.Contains(body, "integrations") {
+		t.Fatalf("body = %q, want integrations content", body)
+	}
+}
+
 func TestDirHandler_RejectsDirectoryWithoutIndex(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

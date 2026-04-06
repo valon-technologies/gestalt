@@ -27,7 +27,7 @@ func NewHandler(root fs.FS) http.Handler {
 			path = "index.html"
 		}
 
-		if _, err := fs.Stat(root, path); err == nil {
+		if info, err := fs.Stat(root, path); err == nil && !info.IsDir() {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
