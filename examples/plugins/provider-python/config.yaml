@@ -1,0 +1,8 @@
+providers:
+  python-example:
+    from:
+      source:
+        path: ./plugin.yaml
+    mcp:
+      enabled: true
+      tool_prefix: py_

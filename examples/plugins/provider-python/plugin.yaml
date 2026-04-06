@@ -1,0 +1,9 @@
+source: github.com/acme/plugins/provider-python
+version: 0.1.0
+display_name: Python Example Provider
+description: A minimal example provider built with the Python SDK
+provider:
+  connections:
+    default:
+      auth:
+        type: none

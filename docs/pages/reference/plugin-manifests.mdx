@@ -224,4 +224,7 @@ gestaltd plugin release --version 1.2.3
 `gestaltd plugin release` preserves the source manifest format, so
 `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive.
 For executable Go plugins, release materializes the executable catalog
-automatically from the provider's typed router before packaging.
+automatically from the provider's typed router before packaging. For Python
+source plugins, release loads the plugin declared in `[tool.gestalt].plugin`,
+materializes the executable catalog automatically, and builds a current-platform
+executable artifact.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -262,6 +264,138 @@ func TestE2EPluginReleaseBigquery(t *testing.T) {
 	iconPath := filepath.Join(extractDir, "assets", "icon.svg")
 	if _, err := os.Stat(iconPath); err != nil {
 		t.Fatalf("expected assets/icon.svg in archive: %v", err)
+	}
+}
+
+func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	binaryName := releaseBinaryName("python-release", runtime.GOOS)
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	}
+
+	artifactPath := filepath.Join(extractDir, binaryName)
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Fatalf("expected %s in archive: %v", binaryName, err)
+	}
+
+	ctx := context.Background()
+	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+		Command: artifactPath,
+		StaticSpec: pluginhost.StaticProviderSpec{
+			Name: "python-release",
+		},
+		Config: map[string]any{"greeting": "Hi"},
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := prov.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	result, err := prov.Execute(ctx, "greet", map[string]any{"name": "Ada"}, "")
+	if err != nil {
+		t.Fatalf("Execute(greet): %v", err)
+	}
+	if result.Status != 200 {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+	if !strings.Contains(result.Body, "Hi, Ada!") {
+		t.Fatalf("body = %q, want greeting", result.Body)
+	}
+}
+
+func TestRun_PluginReleaseRejectsNonCurrentPlatformForPythonSourcePlugin(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	otherPlatform := "linux/amd64"
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		otherPlatform = "darwin/arm64"
+	}
+
+	out, err := runPluginReleaseCommandResult(pluginDir,
+		"--version", "0.0.13-test",
+		"--platform", otherPlatform,
+		"--output", outputDir,
+	)
+	if err == nil {
+		t.Fatalf("expected error for non-current platform, got output: %s", out)
+	}
+	if !strings.Contains(string(out), "python source plugins can only be released for the current platform") {
+		t.Fatalf("unexpected output: %s", out)
+	}
+}
+
+func TestRun_PluginReleaseRejectsInvalidPythonProviderTarget(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := filepath.Join(t.TempDir(), "invalid-python-release")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "pyproject.toml", []byte(`[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invalid-python-release"
+version = "0.1.0"
+dependencies = ["gestalt-sdk-python"]
+
+[tool.gestalt]
+plugin = "os import path\nimport os;os.system('cmd')#:attr"
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.py", []byte("plugin = None\n"), 0o644)
+	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/invalid-python-release",
+		Version: "0.0.1",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	writeTestFile(t, pluginDir, "plugin.yaml", manifestData, 0o644)
+
+	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.14-test", "--output", t.TempDir())
+	if err == nil {
+		t.Fatalf("expected invalid target error, got output: %s", out)
+	}
+	if !strings.Contains(string(out), "module must be a dot-separated Python identifier path") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
@@ -755,11 +889,10 @@ func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
 }
 
 func TestRun_PluginReleaseCopiesDeclarativeProviderSupportFiles(t *testing.T) {
-	t.Parallel()
-
 	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.10-test"
+	t.Setenv("PATH", pathWithoutGo(t))
 
 	runPluginReleaseCommand(t, pluginDir,
 		"--version", testVersion,
@@ -810,6 +943,132 @@ func TestRun_PluginReleaseCopiesSpecLoadedProviderSupportFiles(t *testing.T) {
 			t.Fatalf("expected %s in archive: %v", rel, err)
 		}
 	}
+}
+
+func newPythonSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, "python-release")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "pyproject.toml", []byte(`[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-release"
+version = "0.1.0"
+dependencies = ["gestalt-sdk-python"]
+
+[tool.gestalt]
+plugin = "provider:plugin"
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.py", []byte(`from __future__ import annotations
+
+import gestalt
+
+plugin = gestalt.Plugin.from_manifest("plugin.yaml")
+
+
+class GreetInput(gestalt.Model):
+    name: str = gestalt.field(default="World")
+
+
+class GreetOutput(gestalt.Model):
+    message: str
+
+
+@plugin.operation(id="greet", method="GET", read_only=True)
+def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
+    return GreetOutput(message=f"Hello, {input.name}!")
+`), 0o644)
+	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/python-release",
+		Version: "0.0.1",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	writeTestFile(t, pluginDir, "plugin.yaml", manifestData, 0o644)
+	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
+set -eu
+
+if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
+  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+    echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+    exit 1
+  fi
+  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+name: python-release
+operations:
+  - id: greet
+    method: GET
+EOF
+  exit 0
+fi
+
+if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
+  distpath=""
+  hidden_import=""
+  name=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --distpath)
+        distpath="$2"
+        shift 2
+        ;;
+      --hidden-import)
+        hidden_import="$2"
+        shift 2
+        ;;
+      --name)
+        name="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
+    echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
+    exit 1
+  fi
+  if [ "$hidden_import" != "provider" ]; then
+    echo "expected --hidden-import provider, got: $hidden_import" >&2
+    exit 1
+  fi
+  mkdir -p "$distpath"
+  cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$distpath/$name"
+  chmod +x "$distpath/$name"
+  exit 0
+fi
+
+echo "unexpected fake python invocation: $*" >&2
+exit 1
+`), 0o755)
+	return pluginDir
+}
+
+func pathWithoutGo(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	for _, name := range []string{"cat", "chmod", "cp", "mkdir"} {
+		target, err := exec.LookPath(name)
+		if err != nil {
+			t.Skipf("%s not found: %v", name, err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+			t.Fatalf("Symlink(%s): %v", name, err)
+		}
+	}
+	return dir
 }
 
 func newCompiledReleaseFixture(t *testing.T, dir string) string {

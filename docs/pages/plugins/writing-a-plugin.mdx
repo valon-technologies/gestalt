@@ -1,17 +1,18 @@
 # Writing a Plugin
 
-This guide walks through the full authoring flow for an executable provider plugin with the Go SDK.
+This guide walks through the full authoring flow for an executable provider plugin with the Go or Python SDK.
 
 You will:
 
-1. Implement the provider and typed operations in Go.
+1. Implement the provider and typed operations in Go or Python.
 2. Define static metadata and auth in `plugin.yaml`.
 3. Run the plugin locally with `from.source.path`.
-4. Package or release it with a single command.
+4. Release it with a single command.
 
 ## Prerequisites
 
-- Go 1.26 or later
+- Go 1.26 or later for Go plugins
+- Python 3.10 or later for Python plugins
 - A running `gestaltd` instance for testing
 
 ## Create the project
@@ -30,6 +31,15 @@ my-plugin/
   plugin.yaml
   provider/
     provider.go
+```
+
+For Python source plugins:
+
+```text
+my-plugin/
+  pyproject.toml
+  plugin.yaml
+  provider.py
 ```
 
 ## Define typed operations
@@ -102,6 +112,64 @@ func (p *Provider) greet(
 
 You do not write `main.go`. Gestalt synthesizes the executable wrapper automatically for local source execution, packaging, and release.
 
+## Python typed operations
+
+Point `pyproject.toml` at the plugin object that Gestalt should load:
+
+```toml
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-plugin"
+version = "0.1.0"
+dependencies = ["gestalt-sdk-python"]
+
+[tool.gestalt]
+plugin = "provider:plugin"
+```
+
+Then define operations in `provider.py`:
+
+```python
+from __future__ import annotations
+
+import gestalt
+
+plugin = gestalt.Plugin.from_manifest("plugin.yaml")
+
+
+class GreetInput(gestalt.Model):
+    name: str = gestalt.field(description="Name to greet", default="World")
+
+
+class GreetOutput(gestalt.Model):
+    message: str
+
+
+@plugin.configure
+def configure(_name: str, config: dict[str, object]) -> None:
+    plugin.greeting = str(config.get("greeting", "Hello"))
+
+
+@plugin.operation(
+    id="greet",
+    method="GET",
+    description="Return a greeting message",
+    read_only=True,
+)
+def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
+    greeting = getattr(plugin, "greeting", "Hello")
+    return GreetOutput(message=f"{greeting}, {input.name}!")
+
+
+if __name__ == "__main__":
+    plugin.serve()
+```
+
+You do not write a launcher script for local development or release. Gestalt loads `provider:plugin` from `[tool.gestalt]`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
+
 ## Write `plugin.yaml`
 
 Static metadata, auth, and passthrough surfaces stay in YAML:
@@ -173,13 +241,14 @@ gestalt invoke my-plugin greet -p name=Gestalt
 
 ## Release
 
-Build a release:
-
 ```sh
 gestaltd plugin release --version 0.1.0
 ```
 
-Gestalt materializes the executable catalog automatically from the typed router during local source-plugin execution and release.
+Gestalt materializes the executable catalog automatically during local source-plugin execution and release.
+
+- For Go source plugins, release builds every requested target platform.
+- For Python source plugins, release builds a current-platform executable artifact from the selected Python environment.
 
 ## Hybrid providers
 
