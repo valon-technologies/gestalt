@@ -42,7 +42,7 @@ server:
 | `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted. |
 | `encryption_key` | Yes | — | Root deployment secret. Used for encryption and derived session material. |
 | `api_token_ttl` | No | `30d` | Lifetime of newly issued API tokens. Accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). |
-| `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Prepared State](/concepts/prepared-state). |
+| `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Configuration](/concepts/configuration). |
 
 ## `auth`
 

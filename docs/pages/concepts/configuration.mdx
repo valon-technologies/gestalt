@@ -9,8 +9,7 @@ When `--config` is not specified, `gestaltd` searches for a config file in the f
 1. The `GESTALT_CONFIG` environment variable
 2. `./config.yaml`
 3. `~/.gestaltd/config.yaml`
-4. `~/.gestalt/config.yaml` (legacy path)
-5. `/etc/gestalt/config.yaml`
+4. `/etc/gestalt/config.yaml`
 
 If no config file is found, `gestaltd` generates a default local config at `~/.gestaltd/config.yaml` with anonymous auth and SQLite storage.
 
@@ -64,9 +63,76 @@ In **mutable mode** (`gestaltd serve`), Gestalt may resolve remote dependencies,
 
 In **deterministic mode**, you first run `gestaltd init` and then start the server with `gestaltd serve --locked`.
 
-That produces `gestalt.lock.json` next to the config file plus prepared artifacts under `.gestaltd/` in the configured artifacts directory.
+`gestaltd init` writes:
 
-See [Prepared State](/concepts/prepared-state) for how lockfiles, `server.artifacts_dir`, and locked startup fit together.
+- `gestalt.lock.json` next to the config file
+- prepared plugin and UI artifacts under `.gestaltd/` in the configured artifacts directory
+
+For a typical deployment directory, that looks like:
+
+```text
+deploy/
+  config.yaml
+  gestalt.lock.json
+  .gestaltd/plugins/...
+```
+
+If `server.artifacts_dir` or `--artifacts-dir` is set, the `.gestaltd/` directory is written there instead. The lockfile still lives next to the config file.
+
+### What the lockfile is for
+
+Pinned YAML config and lock state serve different purposes.
+
+For a source-backed plugin, the YAML config says which plugin release to use:
+
+```yaml
+providers:
+  example:
+    from:
+      source: github.com/acme/plugins/example
+      version: 1.2.3
+```
+
+That identifies the intended plugin version. The lockfile records the prepared result of resolving that config:
+
+- the exact release asset that was selected
+- the digest of the downloaded archive
+- the prepared manifest and executable or UI asset paths that `gestaltd` will use at runtime
+
+In other words:
+
+- the config declares intent
+- the lockfile records the exact prepared artifact set
+
+### Why locked startup needs it
+
+`gestaltd serve --locked` is intended for deterministic environments such as production images and Helm deployments. In locked mode, the server should not opportunistically resolve plugins or rewrite prepared state during startup.
+
+The lockfile gives `gestaltd` a persisted record of what was prepared during `init`, so it can:
+
+- verify that the prepared state still matches the config
+- fail fast when prepared artifacts are missing or stale
+- re-materialize the exact locked source artifact instead of re-resolving a release tag
+
+Without lock state, `serve --locked` would have no durable way to distinguish:
+
+- “this exact prepared artifact set matches the config”
+- from “some files happen to exist under `.gestaltd/`”
+
+### Typical workflows
+
+Use mutable startup when convenience matters more than determinism:
+
+```sh
+gestaltd serve --config ./config.yaml
+```
+
+For production and CI, prepare artifacts first and then start from the prepared state only:
+
+```sh
+gestaltd init --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
+```
 
 To validate a config without starting the server:
 
