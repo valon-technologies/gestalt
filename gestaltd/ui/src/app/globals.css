@@ -1,33 +1,10 @@
+@import "../../shared/theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 36 28% 99%;
-    --surface: 36 33% 97%;
-    --surface-raised: 33 22% 93%;
-    --border: 30 18% 87%;
-    --foreground: 24 30% 11%;
-    --radius: 0.75rem;
-
-    --alpha-dark: 35, 24, 16;
-  }
-
-  .dark {
-    --background: 24 18% 8%;
-    --surface: 24 14% 11%;
-    --surface-raised: 24 12% 15%;
-    --border: 24 10% 20%;
-    --foreground: 33 20% 90%;
-
-    --alpha-dark: 232, 222, 212;
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-
   * {
     border-color: hsl(var(--border));
   }
@@ -55,10 +32,6 @@
 }
 
 @layer components {
-  .label-text {
-    @apply text-[11px] font-medium uppercase tracking-widest text-faint;
-  }
-
   .doc-copy {
     @apply text-base leading-7 text-secondary;
   }
@@ -67,21 +40,4 @@
     @apply text-primary underline decoration-base-300 underline-offset-4 transition-colors duration-150 hover:text-gold-600 dark:decoration-base-600;
   }
 
-  .gradient-warm {
-    background: radial-gradient(
-      140% 90% at 50% 100%,
-      #EACCB8 0%,
-      #FDFCF9 50%,
-      #F8F6F3 80%
-    );
-  }
-
-  .dark .gradient-warm {
-    background: radial-gradient(
-      140% 90% at 50% 100%,
-      #3D2808 0%,
-      #1A1410 50%,
-      #161110 80%
-    );
-  }
 }
