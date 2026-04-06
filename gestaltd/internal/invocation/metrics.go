@@ -44,7 +44,7 @@ func newOperationMetrics(meter metric.Meter) operationMetrics {
 		),
 		refresh: newInt64Counter(
 			meter,
-			"gestaltd.token_refresh.count",
+			"gestaltd.oauth.token_refresh.count",
 			"Counts OAuth token refresh attempts performed by gestaltd.",
 		),
 	}

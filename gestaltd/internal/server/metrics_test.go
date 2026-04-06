@@ -266,12 +266,12 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	}
 
 	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.token_refresh.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
 		"gestalt.provider":        "fake",
 		"gestalt.connection_mode": "user",
 		"gestalt.result":          "success",
 	})
-	requireInt64Sum(t, rm, "gestaltd.token_refresh.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
 		"gestalt.provider":        "fake",
 		"gestalt.connection_mode": "user",
 		"gestalt.result":          "error",

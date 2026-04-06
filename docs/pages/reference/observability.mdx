@@ -129,13 +129,13 @@ credential refresh flows.
 | OTel instrument | Prometheus family | Type | Meaning |
 | --- | --- | --- | --- |
 | `gestaltd.oauth.callback.count` | `gestaltd_oauth_callback_count_total` | Counter | Counts integration OAuth callback outcomes. |
-| `gestaltd.token_refresh.count` | `gestaltd_token_refresh_count_total` | Counter | Counts OAuth token refresh attempts actually performed by `gestaltd`. |
+| `gestaltd.oauth.token_refresh.count` | `gestaltd_oauth_token_refresh_count_total` | Counter | Counts OAuth token refresh attempts actually performed by `gestaltd`. |
 
 These metrics use low-cardinality attributes:
 
 - `gestalt.provider`: the integration key
 - `gestalt.result`: `success` or `error`
-- `gestalt.connection_mode`: the provider auth mode on `gestaltd.token_refresh.count`
+- `gestalt.connection_mode`: the provider auth mode on `gestaltd.oauth.token_refresh.count`
 
 ### Current Non-Goals
 
