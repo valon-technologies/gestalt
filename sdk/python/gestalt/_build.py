@@ -95,7 +95,7 @@ def _pyinstaller_command(
         "--paths",
         str(root_path),
         "--add-data",
-        f"{bundle_config_path}{separator}{BUNDLED_CONFIG_NAME}",
+        f"{bundle_config_path}{separator}.",
         str(pathlib.Path(__file__).with_name("_pyinstaller.py")),
     ]
 

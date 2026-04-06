@@ -45,7 +45,7 @@ class BuildTests(unittest.TestCase):
         self.assertIn("--add-data", command)
         self.assertEqual(captured["cwd"], root.resolve())
         self.assertTrue(captured["check"])
-        self.assertEqual(captured["destination"], _bootstrap.BUNDLED_CONFIG_NAME)
+        self.assertEqual(captured["destination"], ".")
         self.assertEqual(
             captured["bundle_config"],
             {
