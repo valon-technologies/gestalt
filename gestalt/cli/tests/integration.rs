@@ -744,6 +744,7 @@ fn test_cli_invoke_table_output_renders_collection_and_metadata() {
                         "datasetReference": {"datasetId": "analytics", "projectId": "serviceone"},
                         "id": "serviceone:analytics",
                         "kind": "bigquery#dataset",
+                        "labels": {"owner": {"name": "platform"}},
                         "location": "US",
                         "type": "DEFAULT"
                     },
@@ -751,6 +752,7 @@ fn test_cli_invoke_table_output_renders_collection_and_metadata() {
                         "datasetReference": {"datasetId": "analytics_core", "projectId": "serviceone"},
                         "id": "serviceone:analytics_core",
                         "kind": "bigquery#dataset",
+                        "labels": {"owner": {"name": "warehouse"}},
                         "location": "US",
                         "type": "DEFAULT"
                     }
@@ -776,6 +778,8 @@ fn test_cli_invoke_table_output_renders_collection_and_metadata() {
         .stdout(predicate::str::contains("DATASETS"))
         .stdout(predicate::str::contains("DATASETREFERENCE.DATASETID"))
         .stdout(predicate::str::contains("DATASETREFERENCE.PROJECTID"))
+        .stdout(predicate::str::contains("{\"name\":\"platform\"}"))
+        .stdout(predicate::str::contains("LABELS.OWNER.NAME").not())
         .stdout(predicate::str::contains("analytics_core"))
         .stdout(predicate::str::contains("serviceone:analytics"))
         .stdout(predicate::str::contains("METADATA"))

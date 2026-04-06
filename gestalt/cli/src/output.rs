@@ -33,9 +33,7 @@ pub fn print_json_table(value: &serde_json::Value) {
         serde_json::Value::Object(obj) => {
             if let Some((array_key, arr)) = single_array_field(obj) {
                 println!("{}", array_key.to_uppercase());
-                print_json_table(&serde_json::Value::Array(
-                    arr.iter().map(flatten_table_object).collect(),
-                ));
+                print_json_table(&serde_json::Value::Array(arr.clone()));
 
                 let rows: Vec<Vec<String>> = obj
                     .iter()
