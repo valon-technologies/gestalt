@@ -338,16 +338,10 @@ func ValidatePackageDir(sourceDir string) (*pluginmanifestv1.Manifest, error) {
 			return nil, fmt.Errorf("artifact %s sha256 %s does not match manifest %s", artifact.Path, sum, artifact.SHA256)
 		}
 	}
-	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
-		schemaPath := filepath.Join(sourceDir, filepath.FromSlash(manifest.Provider.ConfigSchemaPath))
-		if _, err := os.Stat(schemaPath); err != nil {
-			return nil, fmt.Errorf("validate provider config schema %s: %w", manifest.Provider.ConfigSchemaPath, err)
-		}
-	}
-	if manifest.IconFile != "" {
-		iconPath := filepath.Join(sourceDir, filepath.FromSlash(manifest.IconFile))
-		if _, err := os.Stat(iconPath); err != nil {
-			return nil, fmt.Errorf("validate icon_file %s: %w", manifest.IconFile, err)
+	for _, ref := range LocalPackageReferences(manifest) {
+		refPath := filepath.Join(sourceDir, filepath.FromSlash(ref.Path))
+		if _, err := os.Stat(refPath); err != nil {
+			return nil, fmt.Errorf("validate %s %s: %w", ref.Description, ref.Path, err)
 		}
 	}
 	return manifest, nil

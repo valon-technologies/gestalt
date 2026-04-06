@@ -146,7 +146,17 @@ type pluginFingerprintInput struct {
 	Version string `json:"version,omitempty"`
 }
 
-func configHasPlugins(cfg *config.Config) bool {
+func configHasPluginLoading(cfg *config.Config) bool {
+	for name := range cfg.Integrations {
+		plugin := cfg.Integrations[name].Plugin
+		if plugin.HasManagedArtifacts() || (plugin != nil && plugin.Manifest != "") {
+			return true
+		}
+	}
+	return cfg.UI.Plugin.HasManagedArtifacts()
+}
+
+func configHasManagedPlugins(cfg *config.Config) bool {
 	for name := range cfg.Integrations {
 		if cfg.Integrations[name].Plugin.HasManagedArtifacts() {
 			return true
@@ -641,21 +651,28 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 }
 
 func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
-	if !configHasPlugins(cfg) {
+	if !configHasPluginLoading(cfg) {
 		return nil
 	}
 
 	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	lock, err := ReadLockfile(paths.lockfilePath)
-	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-		lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
-	}
-	if err != nil {
-		return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+	var lock *Lockfile
+	var err error
+	if configHasManagedPlugins(cfg) {
+		lock, err = ReadLockfile(paths.lockfilePath)
+		if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
+			lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
+		}
+		if err != nil {
+			return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+		}
 	}
 
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
+		if intg.Plugin == nil {
+			continue
+		}
 		configMap, err := config.NodeToMap(intg.Plugin.Config)
 		if err != nil {
 			return fmt.Errorf("decode plugin config for integration %q: %w", name, err)
@@ -665,7 +682,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			if err := l.applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 				return err
 			}
-		case intg.Plugin.Manifest != "":
+		case intg.Plugin != nil && intg.Plugin.Manifest != "":
 			if err := applyLocalPluginManifest(paths, "integration", name, intg.Plugin, configMap); err != nil {
 				return err
 			}

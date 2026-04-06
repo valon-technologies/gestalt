@@ -48,10 +48,10 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		digests = append(digests, sum)
 	}
 
-	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
-		sum, err := FileSHA256(filepath.Join(dirPath, filepath.FromSlash(manifest.Provider.ConfigSchemaPath)))
+	for _, ref := range LocalPackageReferences(manifest) {
+		sum, err := FileSHA256(filepath.Join(dirPath, filepath.FromSlash(ref.Path)))
 		if err != nil {
-			return "", fmt.Errorf("digest provider config schema: %w", err)
+			return "", fmt.Errorf("digest %s: %w", ref.Description, err)
 		}
 		digests = append(digests, sum)
 	}

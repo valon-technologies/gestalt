@@ -129,6 +129,20 @@ func (m providerMetadata) applyToDefinition(def *provider.Definition) {
 	}
 }
 
+func (m providerMetadata) displayNameOr(v string) string {
+	if m.displayName != "" {
+		return m.displayName
+	}
+	return v
+}
+
+func (m providerMetadata) descriptionOr(v string) string {
+	if m.description != "" {
+		return m.description
+	}
+	return v
+}
+
 type Deps struct {
 	EncryptionKey []byte
 	BaseURL       string
@@ -1177,22 +1191,22 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 	return prov, nil
 }
 
-func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, _ providerMetadata) (pluginhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
 	if manifest == nil || manifest.Provider == nil {
 		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}
 
-	displayName := manifest.DisplayName
+	displayName := meta.displayNameOr(manifest.DisplayName)
 	if displayName == "" {
 		displayName = name
 	}
-	description := manifest.Description
-	iconSVG := ""
+	description := meta.descriptionOr(manifest.Description)
+	iconSVG := meta.iconSVG
 	if iconPath := intg.Plugin.ResolvedIconFile; iconPath != "" {
 		svg, err := provider.ReadIconFile(iconPath)
 		if err != nil {
 			slog.Warn("could not read manifest icon_file", "path", iconPath, "error", err)
-		} else {
+		} else if iconSVG == "" {
 			iconSVG = svg
 		}
 	}
@@ -1214,6 +1228,17 @@ func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pl
 	}
 	if staticCatalog == nil && !manifest.Provider.IsManifestBacked() {
 		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define provider.static_catalog_path")
+	}
+	if staticCatalog != nil {
+		if displayName != "" {
+			staticCatalog.DisplayName = displayName
+		}
+		if description != "" {
+			staticCatalog.Description = description
+		}
+		if iconSVG != "" {
+			staticCatalog.IconSVG = iconSVG
+		}
 	}
 
 	return pluginhost.StaticProviderSpec{

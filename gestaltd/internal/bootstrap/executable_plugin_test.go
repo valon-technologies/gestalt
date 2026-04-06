@@ -106,6 +106,77 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 }
 
+func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T) {
+	t.Parallel()
+
+	const iconSVG = `<svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8"/></svg>`
+
+	bin := buildExampleProviderBinary(t)
+	iconPath := t.TempDir() + "/override.svg"
+	if err := os.WriteFile(iconPath, []byte(iconSVG), 0o644); err != nil {
+		t.Fatalf("WriteFile(icon): %v", err)
+	}
+
+	manifest := newExecutableManifest(
+		"Manifest Display",
+		"Manifest Description",
+		writeStaticCatalog(t, &catalog.Catalog{
+			Name:        "example",
+			DisplayName: "Catalog Display",
+			Description: "Catalog Description",
+			Operations: []catalog.CatalogOperation{
+				{ID: "status", Method: http.MethodGet},
+			},
+		}),
+	)
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				DisplayName: "Config Display",
+				Description: "Config Description",
+				IconFile:    iconPath,
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get(example): %v", err)
+	}
+	if prov.DisplayName() != "Config Display" {
+		t.Fatalf("DisplayName = %q, want %q", prov.DisplayName(), "Config Display")
+	}
+	if prov.Description() != "Config Description" {
+		t.Fatalf("Description = %q, want %q", prov.Description(), "Config Description")
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.DisplayName != "Config Display" {
+		t.Fatalf("catalog DisplayName = %q, want %q", cat.DisplayName, "Config Display")
+	}
+	if cat.Description != "Config Description" {
+		t.Fatalf("catalog Description = %q, want %q", cat.Description, "Config Description")
+	}
+	if cat.IconSVG != iconSVG {
+		t.Fatalf("catalog IconSVG = %q, want %q", cat.IconSVG, iconSVG)
+	}
+}
+
 func buildEchoPluginBinary(t *testing.T) string {
 	t.Helper()
 	if sharedEchoPluginBin == "" {

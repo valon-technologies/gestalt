@@ -172,6 +172,11 @@ func TestE2EInitDirectoryPackage(t *testing.T) {
 	if entry.SourceDigest == "" {
 		t.Fatal("expected non-empty SourceDigest for directory package")
 	}
+
+	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd validate: %v\n%s", err, out)
+	}
 }
 
 //nolint:paralleltest // Uses a process-wide HTTP transport override so the TLS package fetch trusts the test server.
