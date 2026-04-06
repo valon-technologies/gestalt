@@ -328,6 +328,15 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("Top providers")) {
 			t.Fatalf("expected graph sections in embedded admin UI: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("Time window")) {
+			t.Fatalf("expected chart controls in embedded admin UI: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("Refresh cadence")) {
+			t.Fatalf("expected refresh controls in embedded admin UI: %s", adminBody)
+		}
+		if bytes.Contains(adminBody, []byte("Raw Prometheus output")) {
+			t.Fatalf("did not expect raw prometheus section in embedded admin UI: %s", adminBody)
+		}
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
@@ -426,6 +435,15 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 		}
 		if !bytes.Contains(adminBody, []byte("Top providers")) {
 			t.Fatalf("expected provider chart section in embedded admin UI: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("Time window")) {
+			t.Fatalf("expected chart controls in embedded admin UI: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("Refresh cadence")) {
+			t.Fatalf("expected refresh controls in embedded admin UI: %s", adminBody)
+		}
+		if bytes.Contains(adminBody, []byte("Raw Prometheus output")) {
+			t.Fatalf("did not expect raw prometheus section in embedded admin UI: %s", adminBody)
 		}
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
