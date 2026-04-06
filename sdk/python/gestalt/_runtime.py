@@ -1,24 +1,44 @@
 from __future__ import annotations
 
-import json
+import importlib
 import os
 import pathlib
 import signal
 import sys
 from concurrent import futures
+from dataclasses import dataclass
 
+from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 
-ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
-CURRENT_PROTOCOL_VERSION = 2
-BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
+_IMPORT_ERROR: ImportError | None = None
 
-
-def serve(plugin: Plugin) -> None:
+try:
     import grpc
     from google.protobuf import json_format
 
     from .gen.v1 import plugin_pb2, plugin_pb2_grpc
+except ImportError as exc:  # pragma: no cover - depends on local runtime deps
+    grpc = None
+    json_format = None
+    plugin_pb2 = None
+    plugin_pb2_grpc = None
+    _IMPORT_ERROR = exc
+
+ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
+CURRENT_PROTOCOL_VERSION = 2
+
+
+@dataclass(frozen=True)
+class RuntimeArgs:
+    target: str
+    root: str | None = None
+    plugin_name: str | None = None
+
+
+def serve(plugin: Plugin) -> None:
+    if _IMPORT_ERROR is not None:
+        raise RuntimeError("gestalt runtime dependencies are not installed") from _IMPORT_ERROR
 
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
@@ -76,33 +96,15 @@ def serve(plugin: Plugin) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = list(sys.argv[1:] if argv is None else argv)
-    if not args:
-        config_path = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
-        config_path = config_path / BUNDLED_CONFIG_NAME
-        if not config_path.exists():
-            _print_usage()
-            return 2
+    runtime_args = _parse_runtime_args(sys.argv[1:] if argv is None else argv)
+    if runtime_args is None:
+        _print_usage()
+        return 2
 
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-        target = data.get("target", "").strip()
-        if not target:
-            raise RuntimeError(f"{config_path} is missing target")
+    plugin = _load_plugin(runtime_args)
+    if runtime_args.plugin_name:
+        plugin.name = runtime_args.plugin_name
 
-        plugin_name = data.get("plugin_name")
-        if plugin_name is not None:
-            plugin_name = str(plugin_name).strip() or None
-        root = None
-    else:
-        if len(args) != 2:
-            _print_usage()
-            return 2
-        root, target = args
-        plugin_name = None
-
-    plugin = _load_plugin(target, root)
-    if plugin_name:
-        plugin.name = plugin_name
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -112,32 +114,42 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _load_plugin(target: str, root: str | None = None) -> Plugin:
-    import importlib
+def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
+    if args:
+        if len(args) != 2:
+            return None
 
-    if root and root not in sys.path:
-        sys.path.insert(0, root)
+        root, target = args
+        return RuntimeArgs(target=target, root=root)
 
-    module_name, attr_name = _split_target(target)
-    module = importlib.import_module(module_name)
-    plugin = getattr(module, attr_name, None)
+    bundled_config = read_bundled_plugin_config(bundle_root=_bundle_root())
+    if bundled_config is None:
+        return None
+
+    return RuntimeArgs(
+        target=bundled_config.target,
+        plugin_name=bundled_config.plugin_name,
+    )
+
+
+def _bundle_root() -> pathlib.Path:
+    return pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
+
+
+def _load_plugin(args: RuntimeArgs) -> Plugin:
+    if args.root and args.root not in sys.path:
+        sys.path.insert(0, args.root)
+
+    plugin_target = parse_plugin_target(args.target)
+    module = importlib.import_module(plugin_target.module_name)
+    plugin = getattr(module, plugin_target.attribute_name, None)
     if not isinstance(plugin, Plugin):
-        raise RuntimeError(f"{target} did not resolve to a gestalt.Plugin")
+        raise RuntimeError(f"{args.target} did not resolve to a gestalt.Plugin")
     return plugin
 
 
-def _split_target(target: str) -> tuple[str, str]:
-    module_name, _, attr_name = target.partition(":")
-    if not module_name or not attr_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
-    return module_name, attr_name
-
-
 def _print_usage() -> None:
-    print(
-        "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE",
-        file=sys.stderr,
-    )
+    print("usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE", file=sys.stderr)
 
 
 if __name__ == "__main__":
