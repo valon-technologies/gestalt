@@ -51,6 +51,8 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 
 This produces a self-contained image that starts without fetching or resolving anything at runtime.
 
+See [Configuration](/concepts/configuration) for what `gestalt.lock.json` records and why `serve --locked` depends on it.
+
 ## Environment variables and secrets
 
 Gestalt expands `${VAR}` placeholders in the config before YAML decoding. The image also supports the `*_FILE` convention: if `VAR` is not set but `VAR_FILE` is, `${VAR}` resolves to the contents of that file. This works well with Docker secrets:
