@@ -30,11 +30,19 @@ func NewSlogAuditSink(w io.Writer) *SlogAuditSink {
 }
 
 func NewLoggerAuditSink(logger *slog.Logger) *SlogAuditSink {
+	return newLoggerAuditSink(logger, false)
+}
+
+func NewLevelAwareLoggerAuditSink(logger *slog.Logger) *SlogAuditSink {
+	return newLoggerAuditSink(logger, true)
+}
+
+func newLoggerAuditSink(logger *slog.Logger, respectLevel bool) *SlogAuditSink {
 	if logger == nil {
 		return NewSlogAuditSink(nil)
 	}
 	return &SlogAuditSink{
-		logger: slog.New(auditHandler{inner: logger.Handler()}),
+		logger: slog.New(auditHandler{inner: logger.Handler(), respectLevel: respectLevel}),
 	}
 }
 
@@ -115,10 +123,14 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 }
 
 type auditHandler struct {
-	inner slog.Handler
+	inner        slog.Handler
+	respectLevel bool
 }
 
-func (h auditHandler) Enabled(context.Context, slog.Level) bool {
+func (h auditHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	if h.respectLevel {
+		return h.inner.Enabled(ctx, level)
+	}
 	return true
 }
 
@@ -127,9 +139,9 @@ func (h auditHandler) Handle(ctx context.Context, record slog.Record) error {
 }
 
 func (h auditHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return auditHandler{inner: h.inner.WithAttrs(attrs)}
+	return auditHandler{inner: h.inner.WithAttrs(attrs), respectLevel: h.respectLevel}
 }
 
 func (h auditHandler) WithGroup(name string) slog.Handler {
-	return auditHandler{inner: h.inner.WithGroup(name)}
+	return auditHandler{inner: h.inner.WithGroup(name), respectLevel: h.respectLevel}
 }

@@ -219,6 +219,7 @@ telemetry:
 | Field | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `format` | No | `text` | `text` or `json`. |
+| `level` | No | `info` | Minimum audit log level for this dedicated stdout audit sink. `warn` keeps denied audit events while suppressing successful ones. |
 | `level` | No | `info` | `debug`, `info`, `warn`, or `error`. |
 | `service_name` | No | `gestaltd` | Service name attached to locally exposed metrics. |
 | `resource_attributes` | No | — | Extra resource attributes attached to local metrics. |
@@ -310,10 +311,91 @@ response, and the built-in admin UI shows that metrics are unavailable.
 ### Audit logs
 
 Audit records are emitted as structured log entries with `log.type=audit`.
-Route them to a dedicated audit backend using OTel Collector attribute-based
-filtering. See [Audit Logging](/audit-logging) for the event schema
-and coverage details, and [Observability](/observability) for export
-options.
+By default they inherit the normal telemetry log pipeline, but you can override
+that with the top-level `audit:` block below. See
+[Audit Logging](/audit-logging) for the event schema and coverage details, and
+[Observability](/observability) for export options. If you keep
+`audit.provider: inherit`, you can still route audit traffic to a dedicated
+backend by filtering on `log.type=audit` in your collector.
+
+## `audit`
+
+Controls where audit records are written. Audit output defaults to inheriting
+the main telemetry logger.
+
+### `inherit`
+
+```yaml
+audit:
+  provider: inherit
+```
+
+This is the default when `audit` is omitted. Audit records follow the same log
+route as `telemetry`:
+
+- `telemetry.provider: stdout` keeps audit logs on standard output
+- `telemetry.provider: otlp` exports audit logs through the OTLP log pipeline
+- `telemetry.provider: noop` disables audit output unless you override it
+
+`audit.config` is not allowed when `audit.provider` is `inherit`.
+
+### `stdout`
+
+```yaml
+audit:
+  provider: stdout
+  config:
+    format: json
+```
+
+Writes audit records to standard output even if the main telemetry pipeline is
+using a different provider.
+
+| Field | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `format` | No | `text` | `text` or `json`. |
+| `level` | No | `info` | Minimum audit log level for this dedicated stdout audit sink. `warn` keeps denied audit events while suppressing successful ones. |
+
+### `otlp`
+
+```yaml
+audit:
+  provider: otlp
+  config:
+    endpoint: audit-collector:4317
+    protocol: grpc
+    service_name: gestaltd
+    insecure: false
+    headers:
+      Authorization: Bearer ${AUDIT_OTLP_TOKEN}
+    resource_attributes:
+      log.stream: audit
+```
+
+Exports audit records over OTLP without changing where application logs,
+metrics, or traces go.
+
+| Field | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `endpoint` | No | SDK default | OTLP collector address. |
+| `protocol` | No | `grpc` | `grpc` or `http`. |
+| `service_name` | No | `gestaltd` | OpenTelemetry service name for exported audit logs. |
+| `insecure` | No | `false` | Skip TLS verification. |
+| `headers` | No | — | Extra headers on every export request. |
+| `resource_attributes` | No | — | Extra resource attributes attached to audit log exports. |
+
+Use this when you want audit records in a dedicated compliance pipeline while
+keeping the rest of `gestaltd` on `stdout` or a different OTLP collector.
+
+### `noop`
+
+```yaml
+audit:
+  provider: noop
+```
+
+Disables audit output explicitly. `audit.config` is not allowed when
+`audit.provider` is `noop`.
 
 ## `providers`
 
