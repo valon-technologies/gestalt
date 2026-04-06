@@ -12,14 +12,11 @@ import (
 const (
 	serverMeterName        = "gestaltd"
 	unknownMetricAttrValue = "unknown"
-	connectMethodOAuth     = "oauth"
-	connectMethodManual    = "manual"
 )
 
 var (
-	serverAttrProvider   = attribute.Key("gestalt.provider")
-	serverAttrResult     = attribute.Key("gestalt.result")
-	serverAttrAuthMethod = attribute.Key("gestalt.auth_method")
+	serverAttrProvider = attribute.Key("gestalt.provider")
+	serverAttrResult   = attribute.Key("gestalt.result")
 )
 
 func recordOAuthCallbackMetric(ctx context.Context, provider string, failed bool) {
@@ -35,23 +32,6 @@ func recordOAuthCallbackMetric(ctx context.Context, provider string, failed bool
 	counter.Add(ctx, 1, metric.WithAttributes(
 		serverAttrProvider.String(metricAttrValue(provider)),
 		serverAttrResult.String(metricResult(failed)),
-	))
-}
-
-func recordIntegrationConnectMetric(ctx context.Context, provider, method string) {
-	counter, err := otel.GetMeterProvider().Meter(serverMeterName).Int64Counter(
-		"gestaltd.integration.connect.count",
-		metric.WithDescription("Counts successful integration connection completions."),
-	)
-	if err != nil {
-		otel.Handle(err)
-		return
-	}
-
-	counter.Add(ctx, 1, metric.WithAttributes(
-		serverAttrProvider.String(metricAttrValue(provider)),
-		serverAttrAuthMethod.String(metricAttrValue(method)),
-		serverAttrResult.String("success"),
 	))
 }
 

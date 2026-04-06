@@ -154,31 +154,6 @@ func TestCustomAuthMetrics(t *testing.T) {
 		t.Fatalf("failed oauth callback status = %d, want %d", status, http.StatusBadGateway)
 	}
 
-	manualServer := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
-			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
-		})
-		cfg.DefaultConnection = map[string]string{"manual-svc": "default"}
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, manualServer)
-
-	manualBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
-	manualReq, _ := http.NewRequest(http.MethodPost, manualServer.URL+"/api/v1/auth/connect-manual", manualBody)
-	manualReq.Header.Set("Content-Type", "application/json")
-	manualResp, err := http.DefaultClient.Do(manualReq)
-	if err != nil {
-		t.Fatalf("manual connect request: %v", err)
-	}
-	defer func() { _ = manualResp.Body.Close() }()
-	if manualResp.StatusCode != http.StatusOK {
-		t.Fatalf("manual connect status = %d, want %d", manualResp.StatusCode, http.StatusOK)
-	}
-
 	rm := collectMetrics(t, reader)
 	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
 		"gestalt.provider": "slack",
@@ -187,16 +162,6 @@ func TestCustomAuthMetrics(t *testing.T) {
 	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
 		"gestalt.provider": "slack",
 		"gestalt.result":   "error",
-	})
-	requireInt64Sum(t, rm, "gestaltd.integration.connect.count", 1, map[string]string{
-		"gestalt.provider":    "slack",
-		"gestalt.auth_method": "oauth",
-		"gestalt.result":      "success",
-	})
-	requireInt64Sum(t, rm, "gestaltd.integration.connect.count", 1, map[string]string{
-		"gestalt.provider":    "manual-svc",
-		"gestalt.auth_method": "manual",
-		"gestalt.result":      "success",
 	})
 }
 

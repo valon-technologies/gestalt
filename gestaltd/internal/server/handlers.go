@@ -903,7 +903,6 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		Integration:    providerName,
 		Connection:     state.Connection,
 		Instance:       callbackInstance,
-		ConnectMethod:  connectMethodOAuth,
 		AccessToken:    tokenResp.AccessToken,
 		RefreshToken:   tokenResp.RefreshToken,
 		TokenExpiresAt: tokenExpiresAt,
@@ -1009,13 +1008,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tm := tokenMaterial{
-		UserID:        dbUserID,
-		Integration:   req.Integration,
-		Connection:    manualConnection,
-		Instance:      manualInstance,
-		ConnectMethod: connectMethodManual,
-		AccessToken:   effectiveCredential,
-		MetadataJSON:  manualMeta,
+		UserID:       dbUserID,
+		Integration:  req.Integration,
+		Connection:   manualConnection,
+		Instance:     manualInstance,
+		AccessToken:  effectiveCredential,
+		MetadataJSON: manualMeta,
 	}
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
@@ -1412,7 +1410,6 @@ type tokenMaterial struct {
 	Integration    string
 	Connection     string
 	Instance       string
-	ConnectMethod  string
 	AccessToken    string
 	RefreshToken   string
 	TokenExpiresAt *time.Time
@@ -1445,7 +1442,6 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 	if err := s.datastore.StoreToken(ctx, tok); err != nil {
 		return nil, err
 	}
-	recordIntegrationConnectMetric(ctx, tm.Integration, tm.ConnectMethod)
 	return tok, nil
 }
 

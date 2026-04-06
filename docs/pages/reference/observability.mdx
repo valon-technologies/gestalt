@@ -123,13 +123,12 @@ When a request references an unknown provider or operation, `gestaltd` records
 
 ### Connection Lifecycle Metrics
 
-These are Gestalt-specific metrics recorded around integration auth, connect,
-and credential refresh flows.
+These are Gestalt-specific metrics recorded around integration auth and
+credential refresh flows.
 
 | OTel instrument | Prometheus family | Type | Meaning |
 | --- | --- | --- | --- |
 | `gestaltd.oauth.callback.count` | `gestaltd_oauth_callback_count_total` | Counter | Counts integration OAuth callback outcomes. |
-| `gestaltd.integration.connect.count` | `gestaltd_integration_connect_count_total` | Counter | Counts successful integration connection completions. |
 | `gestaltd.token_refresh.count` | `gestaltd_token_refresh_count_total` | Counter | Counts OAuth token refresh attempts actually performed by `gestaltd`. |
 
 These metrics use low-cardinality attributes:
@@ -137,13 +136,6 @@ These metrics use low-cardinality attributes:
 - `gestalt.provider`: the integration key
 - `gestalt.result`: `success` or `error`
 - `gestalt.connection_mode`: the provider auth mode on `gestaltd.token_refresh.count`
-- `gestalt.auth_method`: `oauth` or `manual` on `gestaltd.integration.connect.count`
-
-`gestaltd.integration.connect.count` is emitted when a connection is stored
-successfully, including manual auth, direct OAuth completion, and the final
-selection step for multi-candidate discovery flows. It does not currently
-distinguish a first-time connection from reconnecting or updating an existing
-stored connection.
 
 ### Current Non-Goals
 
