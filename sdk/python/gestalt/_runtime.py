@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import signal
@@ -7,11 +8,13 @@ import subprocess
 import sys
 import tempfile
 from concurrent import futures
+from dataclasses import dataclass
 
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
+BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
 
 
 def serve(plugin: Plugin) -> None:
@@ -79,16 +82,18 @@ def main(argv: list[str] | None = None) -> int:
         build_plugin_binary(root, target, output_path, plugin_name)
         return 0
 
-    if len(args) != 2:
+    runtime_config = _runtime_config(args)
+    if runtime_config is None:
         print(
-            "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE\n"
+            "usage: python -m gestalt._runtime [ROOT MODULE:ATTRIBUTE]\n"
             "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
             file=sys.stderr,
         )
         return 2
 
-    root, target = args
-    plugin = _load_plugin(target, root)
+    plugin = _load_plugin(runtime_config.target, runtime_config.root)
+    if runtime_config.plugin_name:
+        plugin.name = runtime_config.plugin_name
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -106,9 +111,14 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gestalt-python-release-") as work_dir:
         work_path = pathlib.Path(work_dir)
-        launcher_path = work_path / "launcher.py"
-        launcher_path.write_text(
-            _launcher_source(target, plugin_name),
+        bundle_config_path = work_path / BUNDLED_CONFIG_NAME
+        bundle_config_path.write_text(
+            json.dumps(
+                {
+                    "target": target,
+                    "plugin_name": plugin_name,
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -135,9 +145,9 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
             module_name,
             "--paths",
             str(root_path),
-            "--paths",
-            str(_sdk_import_root()),
-            str(launcher_path),
+            "--add-data",
+            _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
+            str(_pyinstaller_entrypoint()),
         ]
         subprocess.run(command, cwd=root_path, check=True)
 
@@ -156,29 +166,6 @@ def _load_plugin(target: str, root: str | None = None) -> Plugin:
     return plugin
 
 
-def _launcher_source(target: str, plugin_name: str) -> str:
-    module_name, attr_name = _split_target(target)
-    return f"""from __future__ import annotations
-
-import importlib
-import os
-
-from gestalt._runtime import serve
-
-_gestalt_module = importlib.import_module({module_name!r})
-_gestalt_plugin = getattr(_gestalt_module, {attr_name!r})
-
-_gestalt_plugin.name = {plugin_name!r}
-
-if __name__ == "__main__":
-    catalog_path = os.environ.get("GESTALT_PLUGIN_WRITE_CATALOG")
-    if catalog_path:
-        _gestalt_plugin.write_catalog(catalog_path)
-        raise SystemExit(0)
-    serve(_gestalt_plugin)
-"""
-
-
 def _split_target(target: str) -> tuple[str, str]:
     module_name, _, attr_name = target.partition(":")
     if not module_name or not attr_name:
@@ -186,8 +173,49 @@ def _split_target(target: str) -> tuple[str, str]:
     return module_name, attr_name
 
 
-def _sdk_import_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parents[1]
+@dataclass(frozen=True)
+class _RuntimeConfig:
+    target: str
+    root: str | None = None
+    plugin_name: str | None = None
+
+
+def _runtime_config(args: list[str]) -> _RuntimeConfig | None:
+    if len(args) == 2:
+        root, target = args
+        return _RuntimeConfig(target=target, root=root)
+    if len(args) == 0:
+        return _bundled_runtime_config()
+    return None
+
+
+def _bundled_runtime_config() -> _RuntimeConfig | None:
+    config_path = _bundled_config_path()
+    if not config_path.exists():
+        return None
+
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+    target = data.get("target", "").strip()
+    plugin_name = data.get("plugin_name")
+    if not target:
+        raise RuntimeError(f"{config_path} is missing target")
+    if plugin_name is not None:
+        plugin_name = str(plugin_name).strip() or None
+    return _RuntimeConfig(target=target, plugin_name=plugin_name)
+
+
+def _bundled_config_path() -> pathlib.Path:
+    bundle_root = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
+    return bundle_root / BUNDLED_CONFIG_NAME
+
+
+def _pyinstaller_data_arg(source: pathlib.Path, destination_name: str) -> str:
+    separator = ";" if sys.platform == "win32" else ":"
+    return f"{source}{separator}{destination_name}"
+
+
+def _pyinstaller_entrypoint() -> pathlib.Path:
+    return pathlib.Path(__file__).with_name("_pyinstaller.py")
 
 
 def _runtime_imports():
