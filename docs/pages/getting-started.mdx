@@ -104,7 +104,10 @@ gestalt init
 ```
 
 The interactive wizard prompts for the server URL (default `http://localhost:8080`)
-and saves it to your local client config. You can also set it directly:
+and saves it to your local client config. It can also create a project-local
+`.gestalt.json` file with the same URL so a specific checkout or deployment
+directory keeps using that server without changing your machine-wide default.
+You can also set the global URL directly:
 
 ```sh
 gestalt config set url http://localhost:8080

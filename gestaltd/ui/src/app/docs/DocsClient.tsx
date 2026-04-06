@@ -197,11 +197,15 @@ export GESTALT_URL=${origin}`}
                 rows={[
                   [
                     "gestalt init",
-                    "Interactive setup that stores the URL and can start browser login.",
+                    "Interactive setup that stores the URL, can create a project-local .gestalt.json, and can start browser login.",
                   ],
                   [
                     "gestalt config set url ...",
                     "Persistent global config for your user account on this machine.",
+                  ],
+                  [
+                    ".gestalt.json",
+                    "Project-local URL override for one checkout or deployment directory.",
                   ],
                   [
                     "GESTALT_URL",
@@ -210,12 +214,19 @@ export GESTALT_URL=${origin}`}
                 ]}
               />
               <p className="doc-copy">
+                The optional{" "}
+                <code className="font-mono text-sm text-primary">.gestalt.json</code>{" "}
+                file stores only the deployment URL. The CLI searches the
+                current directory and then parent directories until it finds the
+                nearest project config.
+              </p>
+              <p className="doc-copy">
                 Resolution order is{" "}
                 <code className="font-mono text-sm text-primary">--url</code>,{" "}
                 <code className="font-mono text-sm text-primary">GESTALT_URL</code>,
                 project-local{" "}
                 <code className="font-mono text-sm text-primary">.gestalt.json</code>,
-                global CLI config, then{" "}
+                global CLI config, stored login credentials, then{" "}
                 <code className="font-mono text-sm text-primary">
                   http://localhost:8080
                 </code>
