@@ -9,18 +9,12 @@ import subprocess
 import sys
 import tempfile
 from concurrent import futures
-from dataclasses import dataclass
 
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
 BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
-SERVER_MAX_WORKERS = 4
-SERVER_SHUTDOWN_GRACE_SECONDS = 2
-WINDOWS_EXECUTABLE_SUFFIX = ".exe"
-PYINSTALLER_BUILD_DIR_NAME = "build"
-PYINSTALLER_SPEC_DIR_NAME = "spec"
 
 
 def serve(plugin: Plugin) -> None:
@@ -33,7 +27,7 @@ def serve(plugin: Plugin) -> None:
     if os.path.exists(socket_path):
         os.unlink(socket_path)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=SERVER_MAX_WORKERS))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
 
     class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
         def GetMetadata(self, _request, _context):
@@ -74,7 +68,7 @@ def serve(plugin: Plugin) -> None:
     server.start()
 
     def _shutdown(_signum, _frame):
-        server.stop(grace=SERVER_SHUTDOWN_GRACE_SECONDS)
+        server.stop(grace=2)
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
@@ -83,28 +77,32 @@ def serve(plugin: Plugin) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    try:
-        build_config = _build_config(args)
-        if build_config is not None:
-            build_plugin_binary(
-                build_config.root,
-                build_config.target,
-                build_config.output_path,
-                build_config.plugin_name,
-            )
-            return 0
+    if args[:1] == ["build"]:
+        build_args = _build_argument_parser().parse_args(args[1:])
+        build_plugin_binary(
+            build_args.root,
+            build_args.target,
+            build_args.output_path,
+            build_args.plugin_name,
+        )
+        return 0
 
-        runtime_config = _runtime_config(args)
-    except SystemExit as exc:
-        return exc.code if isinstance(exc.code, int) else 1
+    if args:
+        source_args = _runtime_argument_parser().parse_args(args)
+        root = source_args.root
+        target = source_args.target
+        plugin_name = None
+    else:
+        bundled = _bundled_runtime_config()
+        if bundled is None:
+            _print_usage()
+            return 2
+        target, plugin_name = bundled
+        root = None
 
-    if runtime_config is None:
-        _print_usage()
-        return 2
-
-    plugin = _load_plugin(runtime_config.target, runtime_config.root)
-    if runtime_config.plugin_name:
-        plugin.name = runtime_config.plugin_name
+    plugin = _load_plugin(target, root)
+    if plugin_name:
+        plugin.name = plugin_name
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -133,13 +131,33 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
             encoding="utf-8",
         )
 
-        command = _pyinstaller_command(
-            module_name=module_name,
-            root_path=root_path,
-            output_path=output,
-            work_path=work_path,
-            bundle_config_path=bundle_config_path,
-        )
+        pyinstaller_name = output.name
+        if sys.platform == "win32" and pyinstaller_name.endswith(".exe"):
+            pyinstaller_name = pyinstaller_name[:-4]
+
+        command = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--onefile",
+            "--distpath",
+            str(output.parent),
+            "--workpath",
+            str(work_path / "build"),
+            "--specpath",
+            str(work_path / "spec"),
+            "--name",
+            pyinstaller_name,
+            "--hidden-import",
+            module_name,
+            "--paths",
+            str(root_path),
+            "--add-data",
+            _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
+            str(_pyinstaller_entrypoint()),
+        ]
         subprocess.run(command, cwd=root_path, check=True)
 
 
@@ -164,43 +182,7 @@ def _split_target(target: str) -> tuple[str, str]:
     return module_name, attr_name
 
 
-@dataclass(frozen=True)
-class _RuntimeConfig:
-    target: str
-    root: str | None = None
-    plugin_name: str | None = None
-
-
-@dataclass(frozen=True)
-class _BuildConfig:
-    root: str
-    target: str
-    output_path: str
-    plugin_name: str
-
-
-def _build_config(args: list[str]) -> _BuildConfig | None:
-    if not args or args[0] != "build":
-        return None
-
-    parsed = _build_argument_parser().parse_args(args[1:])
-    return _BuildConfig(
-        root=parsed.root,
-        target=parsed.target,
-        output_path=parsed.output_path,
-        plugin_name=parsed.plugin_name,
-    )
-
-
-def _runtime_config(args: list[str]) -> _RuntimeConfig | None:
-    if len(args) == 0:
-        return _bundled_runtime_config()
-
-    parsed = _runtime_argument_parser().parse_args(args)
-    return _RuntimeConfig(target=parsed.target, root=parsed.root)
-
-
-def _bundled_runtime_config() -> _RuntimeConfig | None:
+def _bundled_runtime_config() -> tuple[str, str | None] | None:
     config_path = _bundled_config_path()
     if not config_path.exists():
         return None
@@ -212,7 +194,7 @@ def _bundled_runtime_config() -> _RuntimeConfig | None:
         raise RuntimeError(f"{config_path} is missing target")
     if plugin_name is not None:
         plugin_name = str(plugin_name).strip() or None
-    return _RuntimeConfig(target=target, plugin_name=plugin_name)
+    return target, plugin_name
 
 
 def _bundled_config_path() -> pathlib.Path:
@@ -243,46 +225,6 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("output_path", metavar="OUTPUT")
     parser.add_argument("plugin_name", metavar="PLUGIN_NAME")
     return parser
-
-
-def _pyinstaller_command(
-    *,
-    module_name: str,
-    root_path: pathlib.Path,
-    output_path: pathlib.Path,
-    work_path: pathlib.Path,
-    bundle_config_path: pathlib.Path,
-) -> list[str]:
-    return [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--noconfirm",
-        "--clean",
-        "--onefile",
-        "--distpath",
-        str(output_path.parent),
-        "--workpath",
-        str(work_path / PYINSTALLER_BUILD_DIR_NAME),
-        "--specpath",
-        str(work_path / PYINSTALLER_SPEC_DIR_NAME),
-        "--name",
-        _pyinstaller_name(output_path),
-        "--hidden-import",
-        module_name,
-        "--paths",
-        str(root_path),
-        "--add-data",
-        _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
-        str(_pyinstaller_entrypoint()),
-    ]
-
-
-def _pyinstaller_name(output_path: pathlib.Path) -> str:
-    name = output_path.name
-    if sys.platform == "win32" and name.endswith(WINDOWS_EXECUTABLE_SUFFIX):
-        return name[: -len(WINDOWS_EXECUTABLE_SUFFIX)]
-    return name
 
 
 def _print_usage() -> None:

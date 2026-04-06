@@ -11,7 +11,7 @@ from gestalt import _runtime
 
 
 class RuntimeTests(unittest.TestCase):
-    def test_runtime_config_uses_bundled_metadata_when_no_args(self) -> None:
+    def test_bundled_runtime_config_uses_bundled_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
             (bundle_dir / _runtime.BUNDLED_CONFIG_NAME).write_text(
@@ -25,15 +25,11 @@ class RuntimeTests(unittest.TestCase):
             )
 
             with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True):
-                config = _runtime._runtime_config([])
+                config = _runtime._bundled_runtime_config()
 
         self.assertEqual(
             config,
-            _runtime._RuntimeConfig(
-                root=None,
-                target="provider:plugin",
-                plugin_name="released-plugin",
-            ),
+            ("provider:plugin", "released-plugin"),
         )
 
     def test_main_loads_bundled_plugin_and_applies_plugin_name(self) -> None:
@@ -42,10 +38,7 @@ class RuntimeTests(unittest.TestCase):
         with mock.patch.object(
             _runtime,
             "_bundled_runtime_config",
-            return_value=_runtime._RuntimeConfig(
-                target="provider:plugin",
-                plugin_name="released-plugin",
-            ),
+            return_value=("provider:plugin", "released-plugin"),
         ), mock.patch.object(_runtime, "_load_plugin", return_value=plugin) as load_plugin, mock.patch.object(
             _runtime, "serve"
         ) as serve:
