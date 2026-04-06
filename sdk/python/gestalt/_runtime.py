@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import pathlib
@@ -15,6 +16,11 @@ from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
 BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
+SERVER_MAX_WORKERS = 4
+SERVER_SHUTDOWN_GRACE_SECONDS = 2
+WINDOWS_EXECUTABLE_SUFFIX = ".exe"
+PYINSTALLER_BUILD_DIR_NAME = "build"
+PYINSTALLER_SPEC_DIR_NAME = "spec"
 
 
 def serve(plugin: Plugin) -> None:
@@ -27,7 +33,7 @@ def serve(plugin: Plugin) -> None:
     if os.path.exists(socket_path):
         os.unlink(socket_path)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=SERVER_MAX_WORKERS))
 
     class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
         def GetMetadata(self, _request, _context):
@@ -68,7 +74,7 @@ def serve(plugin: Plugin) -> None:
     server.start()
 
     def _shutdown(_signum, _frame):
-        server.stop(grace=2)
+        server.stop(grace=SERVER_SHUTDOWN_GRACE_SECONDS)
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
@@ -77,18 +83,23 @@ def serve(plugin: Plugin) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) == 5 and args[0] == "build":
-        _, root, target, output_path, plugin_name = args
-        build_plugin_binary(root, target, output_path, plugin_name)
-        return 0
+    try:
+        build_config = _build_config(args)
+        if build_config is not None:
+            build_plugin_binary(
+                build_config.root,
+                build_config.target,
+                build_config.output_path,
+                build_config.plugin_name,
+            )
+            return 0
 
-    runtime_config = _runtime_config(args)
+        runtime_config = _runtime_config(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 1
+
     if runtime_config is None:
-        print(
-            "usage: python -m gestalt._runtime [ROOT MODULE:ATTRIBUTE]\n"
-            "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
-            file=sys.stderr,
-        )
+        _print_usage()
         return 2
 
     plugin = _load_plugin(runtime_config.target, runtime_config.root)
@@ -122,33 +133,13 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
             encoding="utf-8",
         )
 
-        pyinstaller_name = output.name
-        if sys.platform == "win32" and pyinstaller_name.endswith(".exe"):
-            pyinstaller_name = pyinstaller_name[:-4]
-
-        command = [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            "--noconfirm",
-            "--clean",
-            "--onefile",
-            "--distpath",
-            str(output.parent),
-            "--workpath",
-            str(work_path / "build"),
-            "--specpath",
-            str(work_path / "spec"),
-            "--name",
-            pyinstaller_name,
-            "--hidden-import",
-            module_name,
-            "--paths",
-            str(root_path),
-            "--add-data",
-            _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
-            str(_pyinstaller_entrypoint()),
-        ]
+        command = _pyinstaller_command(
+            module_name=module_name,
+            root_path=root_path,
+            output_path=output,
+            work_path=work_path,
+            bundle_config_path=bundle_config_path,
+        )
         subprocess.run(command, cwd=root_path, check=True)
 
 
@@ -180,13 +171,33 @@ class _RuntimeConfig:
     plugin_name: str | None = None
 
 
+@dataclass(frozen=True)
+class _BuildConfig:
+    root: str
+    target: str
+    output_path: str
+    plugin_name: str
+
+
+def _build_config(args: list[str]) -> _BuildConfig | None:
+    if not args or args[0] != "build":
+        return None
+
+    parsed = _build_argument_parser().parse_args(args[1:])
+    return _BuildConfig(
+        root=parsed.root,
+        target=parsed.target,
+        output_path=parsed.output_path,
+        plugin_name=parsed.plugin_name,
+    )
+
+
 def _runtime_config(args: list[str]) -> _RuntimeConfig | None:
-    if len(args) == 2:
-        root, target = args
-        return _RuntimeConfig(target=target, root=root)
     if len(args) == 0:
         return _bundled_runtime_config()
-    return None
+
+    parsed = _runtime_argument_parser().parse_args(args)
+    return _RuntimeConfig(target=parsed.target, root=parsed.root)
 
 
 def _bundled_runtime_config() -> _RuntimeConfig | None:
@@ -216,6 +227,70 @@ def _pyinstaller_data_arg(source: pathlib.Path, destination_name: str) -> str:
 
 def _pyinstaller_entrypoint() -> pathlib.Path:
     return pathlib.Path(__file__).with_name("_pyinstaller.py")
+
+
+def _runtime_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m gestalt._runtime")
+    parser.add_argument("root")
+    parser.add_argument("target", metavar="MODULE:ATTRIBUTE")
+    return parser
+
+
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m gestalt._runtime build")
+    parser.add_argument("root")
+    parser.add_argument("target", metavar="MODULE:ATTRIBUTE")
+    parser.add_argument("output_path", metavar="OUTPUT")
+    parser.add_argument("plugin_name", metavar="PLUGIN_NAME")
+    return parser
+
+
+def _pyinstaller_command(
+    *,
+    module_name: str,
+    root_path: pathlib.Path,
+    output_path: pathlib.Path,
+    work_path: pathlib.Path,
+    bundle_config_path: pathlib.Path,
+) -> list[str]:
+    return [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onefile",
+        "--distpath",
+        str(output_path.parent),
+        "--workpath",
+        str(work_path / PYINSTALLER_BUILD_DIR_NAME),
+        "--specpath",
+        str(work_path / PYINSTALLER_SPEC_DIR_NAME),
+        "--name",
+        _pyinstaller_name(output_path),
+        "--hidden-import",
+        module_name,
+        "--paths",
+        str(root_path),
+        "--add-data",
+        _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
+        str(_pyinstaller_entrypoint()),
+    ]
+
+
+def _pyinstaller_name(output_path: pathlib.Path) -> str:
+    name = output_path.name
+    if sys.platform == "win32" and name.endswith(WINDOWS_EXECUTABLE_SUFFIX):
+        return name[: -len(WINDOWS_EXECUTABLE_SUFFIX)]
+    return name
+
+
+def _print_usage() -> None:
+    print(
+        "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE\n"
+        "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
+        file=sys.stderr,
+    )
 
 
 def _runtime_imports():
