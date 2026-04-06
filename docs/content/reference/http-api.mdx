@@ -2,6 +2,11 @@
 
 This page documents the HTTP surface exposed by `gestaltd`.
 
+When `server.management` is not configured, every route below is served from the
+public listener. When `server.management` is configured, `/admin`, `/metrics`,
+`/health`, and `/ready` move to the management listener and return `404` on the
+public listener.
+
 ## Authentication Model
 
 Authenticated routes accept:
@@ -20,7 +25,7 @@ Valid bearer tokens are:
 | --- | --- | --- |
 | `GET` | `/health` | Basic liveness check. |
 | `GET` | `/ready` | Readiness check. Returns `503` until providers and datastore are ready. |
-| `GET` | `/admin` and `/admin/*` | Embedded admin UI shell. The UI fetches `/metrics` in the browser, so metric data still requires authenticated access to the scrape endpoint. |
+| `GET` | `/admin` and `/admin/*` | Embedded admin UI shell. On the management listener it reads same-origin `/metrics` without Gestalt auth, so access control is expected to come from your network or reverse proxy. |
 | `GET` | `/api/v1/auth/info` | Returns platform auth metadata. |
 | `POST` | `/api/v1/auth/login` | Starts platform login. |
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
@@ -59,7 +64,7 @@ Valid bearer tokens are:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. |
+| `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. Requires Gestalt auth only when served on the public listener. |
 
 ## MCP
 

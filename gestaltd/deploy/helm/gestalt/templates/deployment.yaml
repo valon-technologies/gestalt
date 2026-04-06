@@ -6,6 +6,8 @@ metadata:
     {{- include "gestalt.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
+  {{- $public := .Values.config.server.public | default dict }}
+  {{- $management := .Values.config.server.management | default dict }}
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
@@ -85,8 +87,13 @@ spec:
             - /etc/gestalt/config.yaml
           ports:
             - name: http
-              containerPort: {{ .Values.config.server.port | default 8080 }}
+              containerPort: {{ get $public "port" | default (.Values.config.server.port | default 8080) }}
               protocol: TCP
+            {{- if get $management "port" }}
+            - name: management
+              containerPort: {{ get $management "port" }}
+              protocol: TCP
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

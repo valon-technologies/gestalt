@@ -199,8 +199,12 @@ at `/metrics`.
 - `telemetry.provider: noop` disables Prometheus scraping; `/metrics` returns a
   clear unavailable response so the admin UI can surface that state.
 
-`/metrics` is an authenticated Prometheus text endpoint. The embedded admin UI
-visualizes that same scrape surface instead of using a separate metrics API.
+When Gestalt serves `/metrics` on the public listener, it is authenticated with
+the same session or bearer-token middleware as the rest of the HTTP API. When
+`server.management` is configured, `/metrics` moves to the management listener
+and is expected to be protected by network policy or an internal-only reverse
+proxy instead. The embedded admin UI visualizes that same scrape surface instead
+of using a separate metrics API.
 
 The Prometheus endpoint and OTLP export hang off the same meter provider and
 include the HTTP middleware metrics, broker metrics, plugin gRPC client

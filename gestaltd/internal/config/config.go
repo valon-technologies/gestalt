@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -231,12 +232,53 @@ type DatastoreConfig struct {
 	Config   yaml.Node `yaml:"config"`
 }
 
+type ListenerConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
 type ServerConfig struct {
-	Port          int    `yaml:"port"`
-	BaseURL       string `yaml:"base_url"`
-	EncryptionKey string `yaml:"encryption_key"`
-	APITokenTTL   string `yaml:"api_token_ttl"`
-	ArtifactsDir  string `yaml:"artifacts_dir"`
+	Port          int            `yaml:"port"`
+	Public        ListenerConfig `yaml:"public"`
+	Management    ListenerConfig `yaml:"management"`
+	BaseURL       string         `yaml:"base_url"`
+	EncryptionKey string         `yaml:"encryption_key"`
+	APITokenTTL   string         `yaml:"api_token_ttl"`
+	ArtifactsDir  string         `yaml:"artifacts_dir"`
+}
+
+func (s ServerConfig) PublicListener() ListenerConfig {
+	port := s.Public.Port
+	if port == 0 {
+		port = s.Port
+	}
+	if port == 0 {
+		port = 8080
+	}
+	return ListenerConfig{
+		Host: s.Public.Host,
+		Port: port,
+	}
+}
+
+func (s ServerConfig) PublicAddr() string {
+	listener := s.PublicListener()
+	return net.JoinHostPort(listener.Host, strconv.Itoa(listener.Port))
+}
+
+func (s ServerConfig) ManagementListener() (ListenerConfig, bool) {
+	if s.Management.Port == 0 {
+		return ListenerConfig{}, false
+	}
+	return s.Management, true
+}
+
+func (s ServerConfig) ManagementAddr() string {
+	listener, ok := s.ManagementListener()
+	if !ok {
+		return ""
+	}
+	return net.JoinHostPort(listener.Host, strconv.Itoa(listener.Port))
 }
 
 type IntegrationDef struct {
@@ -651,6 +693,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
+	if cfg.Server.Public.Port != 0 {
+		cfg.Server.Port = cfg.Server.Public.Port
+	}
 	if cfg.Secrets.Provider == "" {
 		cfg.Secrets.Provider = "env"
 	}
@@ -716,6 +761,9 @@ func resolveUpstreamURL(baseDir, value string) string {
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key, auth.provider, or datastore.provider.
 func ValidateStructure(cfg *Config) error {
+	if err := validateServerListeners(cfg.Server); err != nil {
+		return err
+	}
 	if cfg.Server.APITokenTTL != "" {
 		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
 			return fmt.Errorf("config validation: server.api_token_ttl: %w", err)
@@ -1202,6 +1250,35 @@ func validateUIPlugin(plugin *UIPluginDef) error {
 		}
 	}
 
+	return nil
+}
+
+func validateServerListeners(cfg ServerConfig) error {
+	public := cfg.PublicListener()
+	if public.Port <= 0 {
+		return fmt.Errorf("config validation: server.public.port must be greater than zero")
+	}
+	if _, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(public.Host, strconv.Itoa(public.Port))); err != nil {
+		return fmt.Errorf("config validation: server.public is invalid: %w", err)
+	}
+
+	management, ok := cfg.ManagementListener()
+	if !ok {
+		if cfg.Management.Host != "" {
+			return fmt.Errorf("config validation: server.management.port is required when server.management.host is set")
+		}
+		return nil
+	}
+	if management.Port <= 0 {
+		return fmt.Errorf("config validation: server.management.port must be greater than zero")
+	}
+	managementAddr := net.JoinHostPort(management.Host, strconv.Itoa(management.Port))
+	if _, err := net.ResolveTCPAddr("tcp", managementAddr); err != nil {
+		return fmt.Errorf("config validation: server.management is invalid: %w", err)
+	}
+	if managementAddr == cfg.PublicAddr() {
+		return fmt.Errorf("config validation: server.management must differ from server.public")
+	}
 	return nil
 }
 

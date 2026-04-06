@@ -1,3 +1,4 @@
+{{- $management := .Values.config.server.management | default dict }}
 Gestalt has been deployed successfully.
 
 {{- if .Values.ingress.enabled }}
@@ -36,6 +37,16 @@ Verify the deployment:
 
 Health check:
   curl http://127.0.0.1:{{ .Values.service.port }}/health
+
+{{- if and .Values.managementService.enabled (get $management "port") }}
+
+Management listener:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestalt.fullname" . }}-management {{ .Values.managementService.port }}:{{ .Values.managementService.port }}
+
+Then visit:
+  http://127.0.0.1:{{ .Values.managementService.port }}/admin
+  http://127.0.0.1:{{ .Values.managementService.port }}/metrics
+{{- end }}
 
 Default chart profile:
   auth.provider=none, SQLite on /data, single replica

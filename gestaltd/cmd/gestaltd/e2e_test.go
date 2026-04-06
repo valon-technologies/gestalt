@@ -503,6 +503,46 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 	})
 }
 
+func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+
+	publicPort := allocateTestPort(t)
+	managementPort := allocateTestPort(t)
+	cfgPath := writeSplitListenerE2EConfig(t, dir, pluginDir, publicPort, managementPort)
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	serveLockedAndExerciseWithManagement(t, cfgPath, publicPort, managementPort, "", func(t *testing.T, publicBaseURL, managementBaseURL string) {
+		invokeExampleOperation(t, publicBaseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		publicMetrics := getEndpointBody(t, publicBaseURL+"/metrics", http.StatusNotFound)
+		if bytes.Contains(publicMetrics, []byte("gestaltd_operation_count_total")) {
+			t.Fatalf("did not expect public listener to expose /metrics: %s", publicMetrics)
+		}
+
+		publicAdmin := getEndpointBody(t, publicBaseURL+"/admin", http.StatusNotFound)
+		if bytes.Contains(publicAdmin, []byte("Prometheus metrics")) {
+			t.Fatalf("did not expect public listener to expose /admin: %s", publicAdmin)
+		}
+
+		managementMetrics := getEndpointBody(t, managementBaseURL+"/metrics", http.StatusOK)
+		if !bytes.Contains(managementMetrics, []byte("gestaltd_operation_count_total")) {
+			t.Fatalf("expected management listener to expose /metrics: %s", managementMetrics)
+		}
+
+		managementAdmin := getEndpointBody(t, managementBaseURL+"/admin", http.StatusOK)
+		if !bytes.Contains(managementAdmin, []byte("Prometheus metrics")) {
+			t.Fatalf("expected management listener to expose /admin: %s", managementAdmin)
+		}
+	})
+}
+
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
 	t.Parallel()
 
@@ -655,6 +695,29 @@ func TestE2EHelmChart(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("management service renders from values", func(t *testing.T) {
+		t.Parallel()
+
+		rendered := renderHelmChart(t, helmPath, chartDir,
+			"--set", "managementService.enabled=true",
+			"--set", "managementService.port=9090",
+			"--set", "config.server.management.port=9090",
+			"--set-string", "config.server.management.host=0.0.0.0",
+		)
+
+		for _, want := range []string{
+			`kind: Service`,
+			`name: test-release-gestalt-management`,
+			`port: 9090`,
+			`targetPort: management`,
+			`containerPort: 9090`,
+		} {
+			if !strings.Contains(rendered, want) {
+				t.Fatalf("expected rendered manifest to contain %q\n%s", want, rendered)
+			}
+		}
+	})
 }
 
 func withoutEnvVar(env []string, name string) []string {
@@ -776,6 +839,7 @@ providers:
 				t.Fatalf("expected output to mention %q and YAML parsing, got: %s", tc.wantError, out)
 			}
 		})
+
 	}
 }
 
@@ -1066,6 +1130,47 @@ func writeE2EConfig(t *testing.T, dir, pluginDir string, port int) string {
 	return writeE2EConfigWithPaths(t, dir, pluginDir, filepath.Join(dir, "gestalt.db"), "", port)
 }
 
+func writeSplitListenerE2EConfig(t *testing.T, dir, pluginDir string, publicPort, managementPort int) string {
+	t.Helper()
+
+	if publicPort == 0 {
+		publicPort = 18080
+	}
+	if managementPort == 0 {
+		managementPort = 19090
+	}
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  encryption_key: test-e2e-key
+  public:
+    port: %d
+  management:
+    host: 127.0.0.1
+    port: %d
+providers:
+  example:
+    from:
+      source:
+        path: %s
+`, filepath.Join(dir, "gestalt.db"), publicPort, managementPort, manifestPath)
+
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return cfgPath
+}
+
 func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir string, port int) string {
 	t.Helper()
 
@@ -1132,6 +1237,43 @@ func serveLockedAndExerciseExample(t *testing.T, cfgPath string, port int, artif
 	waitForReady(t, baseURL, 30*time.Second)
 
 	exercise(t, baseURL)
+
+	stopped = true
+	_ = cmd.Process.Signal(os.Interrupt)
+	_ = cmd.Wait()
+	return stdout.String(), stderr.String()
+}
+
+func serveLockedAndExerciseWithManagement(t *testing.T, cfgPath string, publicPort, managementPort int, artifactsDir string, exercise func(t *testing.T, publicBaseURL, managementBaseURL string)) (string, string) {
+	t.Helper()
+
+	args := []string{"serve", "--locked", "--config", cfgPath}
+	if artifactsDir != "" {
+		args = append(args, "--artifacts-dir", artifactsDir)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.Command(gestaltdBin, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start serve: %v", err)
+	}
+	stopped := false
+	t.Cleanup(func() {
+		if !stopped {
+			_ = cmd.Process.Signal(os.Interrupt)
+			_ = cmd.Wait()
+		}
+	})
+
+	publicBaseURL := fmt.Sprintf("http://localhost:%d", publicPort)
+	managementBaseURL := fmt.Sprintf("http://localhost:%d", managementPort)
+	waitForReady(t, publicBaseURL, 30*time.Second)
+	waitForReady(t, managementBaseURL, 30*time.Second)
+
+	exercise(t, publicBaseURL, managementBaseURL)
 
 	stopped = true
 	_ = cmd.Process.Signal(os.Interrupt)

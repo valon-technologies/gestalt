@@ -62,7 +62,8 @@ Example minimal config:
 
 ```yaml
 server:
-  port: 8080
+  public:
+    port: 8080
   encryption_key: ${GESTALT_ENCRYPTION_KEY}
 
 auth:
@@ -75,6 +76,42 @@ datastore:
 
 providers: {}
 ```
+
+Example with a separate internal-only management listener:
+
+```yaml
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  management:
+    host: 0.0.0.0
+    port: 9090
+  encryption_key: ${GESTALT_ENCRYPTION_KEY}
+
+auth:
+  provider: none
+
+datastore:
+  provider: sqlite
+  config:
+    path: /data/gestalt.db
+
+providers: {}
+```
+
+```sh
+docker run --rm \
+  -p 8080:8080 \
+  -p 127.0.0.1:9090:9090 \
+  -e GESTALT_ENCRYPTION_KEY=change-me \
+  -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
+  -v gestalt-data:/data \
+  valontechnologies/gestaltd:latest
+```
+
+This keeps `/admin` and `/metrics` off the public interface while still making
+them reachable from the host at `127.0.0.1:9090`.
 
 ## Run a prepared production image
 
@@ -113,6 +150,7 @@ services:
     image: valontechnologies/gestaltd:latest
     ports:
       - "8080:8080"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./config.yaml:/etc/gestalt/config.yaml:ro
       - gestalt-data:/data
@@ -155,8 +193,10 @@ The container exposes:
 - `GET /health` for liveness
 - `GET /ready` for readiness
 
-The client UI is served from `/` on the same port, and the built-in admin UI is
-served from `/admin`.
+By default the client UI is served from `/` and the built-in admin UI is served
+from `/admin` on the public listener. If you configure `server.management`, then
+`/admin`, `/metrics`, `/health`, and `/ready` move to the management listener
+instead.
 
 ## SQLite and `/data`
 
