@@ -17,7 +17,7 @@ Both images are published for `linux/amd64` and `linux/arm64`.
 
 **TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.base_url` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
 
-**Locked startup.** For deterministic deployments, run `gestaltd init` locally to resolve plugins and generate a lock file, then bake the prepared state into a derived image. See [Docker](/deploy/docker) for the recommended production image pattern.
+**Locked startup.** For deterministic deployments, run `gestaltd init` locally to resolve plugins and generate prepared state, then bake that state into a derived image. See [Prepared State](/concepts/prepared-state) for the model and [Docker](/deploy/docker) for the recommended production image pattern.
 
 ## Deployment guides
 

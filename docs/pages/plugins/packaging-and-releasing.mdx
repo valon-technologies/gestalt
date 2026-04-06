@@ -104,7 +104,7 @@ When a config references packaged or remote plugins, run `gestaltd init` to reso
 gestaltd init --config ./config.yaml
 ```
 
-This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestalt/`. After init, `gestaltd serve --locked` starts the server using only the prepared state, without fetching or resolving anything at runtime.
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server using only the prepared state, without fetching or resolving anything at runtime. See [Prepared State](/concepts/prepared-state) for the full startup model.
 
 ## Package layout
 

@@ -8,10 +8,11 @@ When `--config` is not specified, `gestaltd` searches for a config file in the f
 
 1. The `GESTALT_CONFIG` environment variable
 2. `./config.yaml`
-3. `~/.gestalt/config.yaml`
-4. `/etc/gestalt/config.yaml`
+3. `~/.gestaltd/config.yaml`
+4. `~/.gestalt/config.yaml` (legacy path)
+5. `/etc/gestalt/config.yaml`
 
-If no config file is found, `gestaltd` generates a default local config at `~/.gestalt/config.yaml` with anonymous auth and SQLite storage.
+If no config file is found, `gestaltd` generates a default local config at `~/.gestaltd/config.yaml` with anonymous auth and SQLite storage.
 
 ## Config loading
 
@@ -59,21 +60,18 @@ The encryption key is the root secret for the deployment. Gestalt derives all cr
 
 Gestalt supports two startup modes: mutable and deterministic.
 
-In **mutable mode** (`gestaltd serve`), Gestalt may fetch remote specs, prepare plugins, and regenerate lock state at startup. This is convenient for development.
+In **mutable mode** (`gestaltd serve`), Gestalt may resolve remote dependencies, prepare managed artifacts, and regenerate lock state at startup. This is convenient for development.
 
-In **deterministic mode**, you first run `gestaltd init` to resolve all remote dependencies and write lock state:
+In **deterministic mode**, you first run `gestaltd init` and then start the server with `gestaltd serve --locked`.
 
-- `gestalt.lock.json`
-- `.gestalt/providers/`
-- `.gestalt/plugins/`
+That produces `gestalt.lock.json` next to the config file plus prepared artifacts under `.gestaltd/` in the configured artifacts directory.
 
-Then `gestaltd serve --locked` starts the server only if the lock state matches the config exactly. This is the recommended mode for production.
+See [Prepared State](/concepts/prepared-state) for how lockfiles, `server.artifacts_dir`, and locked startup fit together.
 
 To validate a config without starting the server:
 
 ```sh
-gestaltd init --config ./config.yaml
-gestaltd validate --config ./config.yaml
+gestaltd validate --init --config ./config.yaml
 ```
 
 ## Path resolution
