@@ -78,8 +78,10 @@ def categorize_subject(subject: str) -> str:
         lowered,
     ):
         return "New Features"
+    if re.match(r"^improve\b", lowered):
+        return "Improvements & Docs"
     if re.match(
-        r"^(avoid|correct|fix|harden|improve|protect|resolve|restore)\b",
+        r"^(avoid|correct|fix|harden|protect|resolve|restore)\b",
         lowered,
     ):
         return "Fixes & Reliability"
