@@ -191,6 +191,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "local-python-provider"
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "provider:plugin"
@@ -263,15 +264,9 @@ def list_items(_req: gestalt.Request) -> dict[str, object]:
 def status_zero(_req: gestalt.Request) -> gestalt.Response[dict[str, bool]]:
     return gestalt.Response(status=0, body={"ok": True})
 `), 0o644)
-	sdkPath := localPythonSDKPath(t)
-	writeTestFile(filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(strings.TrimSpace(
-		fmt.Sprintf(`
-			#!/bin/sh
-			set -eu
-
-			export PYTHONPATH=%q${PYTHONPATH:+:$PYTHONPATH}
-			exec %q "$@"
-		`, sdkPath, python3Path))+"\n"), 0o755)
+	if err := installLocalPythonSDK(t, python3Path, filepath.Join(dir, ".venv")); err != nil {
+		t.Fatalf("installLocalPythonSDK: %v", err)
+	}
 
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
@@ -488,7 +483,7 @@ print(json.dumps({
 	}
 }
 
-func localPythonSDKPath(t *testing.T) string {
+func localPythonSDKSourceDir(t *testing.T) string {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
@@ -500,6 +495,31 @@ func localPythonSDKPath(t *testing.T) string {
 		t.Fatalf("Stat(%s): %v", path, err)
 	}
 	return path
+}
+
+func installLocalPythonSDK(t *testing.T, python3Path, venvDir string) error {
+	t.Helper()
+
+	create := exec.Command(python3Path, "-m", "venv", venvDir)
+	if output, err := create.CombinedOutput(); err != nil {
+		return fmt.Errorf("create venv: %w\n%s", err, output)
+	}
+
+	venvPython := filepath.Join(venvDir, "bin", "python")
+	pipPath := filepath.Join(venvDir, "bin", "pip")
+	if _, err := os.Stat(pipPath); err != nil {
+		ensurePip := exec.Command(venvPython, "-m", "ensurepip", "--upgrade")
+		if output, ensureErr := ensurePip.CombinedOutput(); ensureErr != nil {
+			return fmt.Errorf("ensure pip: %w\n%s", ensureErr, output)
+		}
+	}
+
+	install := exec.Command(pipPath, "install", "--no-deps", localPythonSDKSourceDir(t))
+	install.Env = append(os.Environ(), "PIP_DISABLE_PIP_VERSION_CHECK=1")
+	if output, err := install.CombinedOutput(); err != nil {
+		return fmt.Errorf("install local gestalt package: %w\n%s", err, output)
+	}
+	return nil
 }
 
 func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {

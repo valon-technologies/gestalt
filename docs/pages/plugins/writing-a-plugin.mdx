@@ -113,7 +113,9 @@ You do not write `main.go`. Gestalt synthesizes the executable wrapper automatic
 
 ## Python typed operations
 
-Point `pyproject.toml` at the plugin object that Gestalt should load:
+Install `gestalt` into the plugin's Python environment, typically from the
+internal wheel or private index, then point `pyproject.toml` at the plugin
+object that Gestalt should load:
 
 ```toml
 [build-system]
@@ -123,7 +125,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "my-plugin"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "provider:plugin"
@@ -167,7 +169,7 @@ if __name__ == "__main__":
     plugin.serve()
 ```
 
-You do not write a launcher script for local development or release. Gestalt loads `provider:plugin` from `[tool.gestalt]`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
+You do not write a launcher script for local development or release. Gestalt loads `provider:plugin` from `[tool.gestalt]`, materializes the static catalog automatically, and packages a runnable executable artifact during release. The selected Python environment must already have `gestalt` installed.
 
 ## Write `plugin.yaml`
 

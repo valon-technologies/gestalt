@@ -371,7 +371,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "invalid-python-release"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "os import path\nimport os;os.system('cmd')#:attr"
@@ -959,7 +959,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "python-release"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "provider:plugin"
@@ -998,6 +998,10 @@ def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
 	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
 set -eu
 
+if [ "$#" -ge 2 ] && [ "$1" = "-c" ] && [ "$2" = "import gestalt; import PyInstaller" ]; then
+  exit 0
+fi
+
 if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
   if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
     echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
@@ -1016,6 +1020,7 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
   distpath=""
   hidden_import=""
   name=""
+  paths_count=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --distpath)
@@ -1030,6 +1035,10 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
         name="$2"
         shift 2
         ;;
+      --paths)
+        paths_count=$((paths_count + 1))
+        shift 2
+        ;;
       *)
         shift
         ;;
@@ -1041,6 +1050,10 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
   fi
   if [ "$hidden_import" != "provider" ]; then
     echo "expected --hidden-import provider, got: $hidden_import" >&2
+    exit 1
+  fi
+  if [ "$paths_count" -ne 1 ]; then
+    echo "expected exactly one --paths argument, got: $paths_count" >&2
     exit 1
   fi
   mkdir -p "$distpath"
