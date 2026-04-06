@@ -576,20 +576,36 @@
           return charts[id];
         }
 
+        let themeProbe = null;
+
+        function resolveThemeColor(name) {
+          if (!themeProbe) {
+            themeProbe = document.createElement("span");
+            themeProbe.setAttribute("aria-hidden", "true");
+            themeProbe.style.cssText =
+              "position:absolute;visibility:hidden;pointer-events:none;inset:auto;top:-9999px;";
+            document.body.appendChild(themeProbe);
+          }
+
+          themeProbe.style.color = `var(${name})`;
+          return window.getComputedStyle(themeProbe).color;
+        }
+
         function theme() {
-          const styles = window.getComputedStyle(document.documentElement);
           return {
-            brand: styles.getPropertyValue("--brand").trim(),
-            brandSoft: styles.getPropertyValue("--brand-soft").trim(),
-            border: styles.getPropertyValue("--border").trim(),
-            foreground: styles.getPropertyValue("--foreground").trim(),
-            muted: styles.getPropertyValue("--muted").trim(),
-            faint: styles.getPropertyValue("--faint").trim(),
-            danger: styles.getPropertyValue("--danger").trim(),
-            success: styles.getPropertyValue("--success").trim(),
-            surfaceRaised: styles.getPropertyValue("--surface-raised").trim(),
+            brand: resolveThemeColor("--brand"),
+            brandSoft: resolveThemeColor("--brand-soft"),
+            border: resolveThemeColor("--border"),
+            foreground: resolveThemeColor("--foreground"),
+            muted: resolveThemeColor("--muted"),
+            faint: resolveThemeColor("--faint"),
+            danger: resolveThemeColor("--danger"),
+            success: resolveThemeColor("--success"),
+            surfaceRaised: resolveThemeColor("--surface-raised"),
           };
         }
+
+        window.__gestaltAdminTheme = theme;
 
         function positiveDelta(current, previous) {
           if (!Number.isFinite(current)) return 0;

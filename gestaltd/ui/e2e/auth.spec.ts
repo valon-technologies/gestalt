@@ -127,6 +127,20 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     await expect(page.locator("#activity-chart canvas")).toHaveCount(1);
     await expect(page.locator("#latency-chart canvas")).toHaveCount(1);
     await expect(page.locator("#provider-chart canvas")).toHaveCount(1);
+    const chartColors = await page.evaluate(() => {
+      const scope = window as Window & {
+        __gestaltAdminTheme?: () => {
+          border: string;
+          foreground: string;
+          surfaceRaised: string;
+        };
+      };
+      return scope.__gestaltAdminTheme ? scope.__gestaltAdminTheme() : null;
+    });
+    expect(chartColors).not.toBeNull();
+    expect(chartColors?.surfaceRaised).toMatch(/^rgba?\(/);
+    expect(chartColors?.border).toMatch(/^rgba?\(/);
+    expect(chartColors?.foreground).toMatch(/^rgba?\(/);
     await expect(page.getByText("Top providers")).toBeVisible();
     await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
     await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
