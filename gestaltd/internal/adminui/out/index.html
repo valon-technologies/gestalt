@@ -537,20 +537,36 @@
           return charts[id];
         }
 
+        let themeProbe = null;
+
+        function resolveThemeColor(value) {
+          if (!themeProbe) {
+            themeProbe = document.createElement("span");
+            themeProbe.setAttribute("aria-hidden", "true");
+            themeProbe.style.cssText =
+              "position:absolute;visibility:hidden;pointer-events:none;inset:auto;top:-9999px;";
+            document.body.appendChild(themeProbe);
+          }
+
+          themeProbe.style.color = value;
+          return window.getComputedStyle(themeProbe).color;
+        }
+
         function theme() {
-          const styles = window.getComputedStyle(document.documentElement);
           return {
-            brand: styles.getPropertyValue("--brand").trim(),
-            brandSoft: styles.getPropertyValue("--brand-soft").trim(),
-            border: `hsl(${styles.getPropertyValue("--border").trim()} / 1)`,
-            foreground: `hsl(${styles.getPropertyValue("--foreground").trim()} / 1)`,
-            muted: `rgba(${styles.getPropertyValue("--alpha-dark").trim()}, 0.6)`,
-            faint: `rgba(${styles.getPropertyValue("--alpha-dark").trim()}, 0.42)`,
-            danger: styles.getPropertyValue("--danger").trim(),
-            success: styles.getPropertyValue("--success").trim(),
-            surfaceRaised: `hsl(${styles.getPropertyValue("--surface-raised").trim()} / 1)`,
+            brand: resolveThemeColor("var(--brand)"),
+            brandSoft: resolveThemeColor("var(--brand-soft)"),
+            border: resolveThemeColor("hsl(var(--border) / 1)"),
+            foreground: resolveThemeColor("hsl(var(--foreground) / 1)"),
+            muted: resolveThemeColor("rgba(var(--alpha-dark), 0.6)"),
+            faint: resolveThemeColor("rgba(var(--alpha-dark), 0.42)"),
+            danger: resolveThemeColor("var(--danger)"),
+            success: resolveThemeColor("var(--success)"),
+            surfaceRaised: resolveThemeColor("hsl(var(--surface-raised) / 1)"),
           };
         }
+
+        window.__gestaltAdminTheme = theme;
 
         function positiveDelta(current, previous) {
           if (!Number.isFinite(current)) return 0;
