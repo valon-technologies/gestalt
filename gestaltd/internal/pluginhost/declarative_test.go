@@ -289,8 +289,8 @@ func TestDeclarativeProvider_Metadata(t *testing.T) {
 	if len(cat.Operations) != 4 {
 		t.Fatalf("Catalog returned %d ops, want 4", len(cat.Operations))
 	}
-	if cat.Operations[0].ID != "list_items" {
-		t.Errorf("ops[0].ID = %s, want list_items", cat.Operations[0].ID)
+	if cat.Operations[0].ID != "create_item" {
+		t.Errorf("ops[0].ID = %s, want create_item", cat.Operations[0].ID)
 	}
 }
 
@@ -357,7 +357,7 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 		t.Fatalf("IconSVG = %q, want empty", cat.IconSVG)
 	}
 
-	wantIDs := []string{"list_items", "create_item", "get_item", "update_item"}
+	wantIDs := []string{"create_item", "get_item", "list_items", "update_item"}
 	if len(cat.Operations) != len(wantIDs) {
 		t.Fatalf("got %d operations, want %d", len(cat.Operations), len(wantIDs))
 	}
@@ -366,11 +366,11 @@ func TestDeclarativeProviderCatalog(t *testing.T) {
 			t.Fatalf("Operations[%d].ID = %q, want %q", i, cat.Operations[i].ID, want)
 		}
 	}
-	if got := cat.Operations[0].Parameters[0].Location; got != "query" {
-		t.Fatalf("list_items first param location = %q, want query", got)
-	}
-	if got := cat.Operations[1].Parameters[0].Location; got != "body" {
+	if got := cat.Operations[0].Parameters[0].Location; got != "body" {
 		t.Fatalf("create_item first param location = %q, want body", got)
+	}
+	if got := cat.Operations[2].Parameters[0].Location; got != "query" {
+		t.Fatalf("list_items first param location = %q, want query", got)
 	}
 	if cat.Operations[3].InputSchema == nil {
 		t.Fatal("expected compiled input schema on update_item")

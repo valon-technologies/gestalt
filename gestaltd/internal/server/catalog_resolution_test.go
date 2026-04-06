@@ -195,6 +195,48 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	}
 }
 
+func TestResolveCatalog_SortsMergedOperationsByID(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "combo-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "combo-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "zeta_rest", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionCat: &catalog.Catalog{
+			Name: "combo-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "alpha_mcp", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+			},
+		},
+	}
+
+	resolver := &stubTokenResolver{token: "tok_sorted"}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "combo-api", resolver, p, "default", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+	if cat.Operations[0].ID != "alpha_mcp" {
+		t.Fatalf("operation[0].ID = %q, want %q", cat.Operations[0].ID, "alpha_mcp")
+	}
+	if cat.Operations[1].ID != "zeta_rest" {
+		t.Fatalf("operation[1].ID = %q, want %q", cat.Operations[1].ID, "zeta_rest")
+	}
+}
+
 func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 	t.Parallel()
 

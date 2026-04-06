@@ -142,6 +142,7 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			filtered.Operations = append(filtered.Operations, op)
 		}
 	}
+	filtered.SortOperations()
 	return &filtered
 }
 

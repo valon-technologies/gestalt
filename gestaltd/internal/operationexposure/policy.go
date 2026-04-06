@@ -175,5 +175,6 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		}
 		filtered.Operations = append(filtered.Operations, op)
 	}
+	filtered.SortOperations()
 	return filtered
 }

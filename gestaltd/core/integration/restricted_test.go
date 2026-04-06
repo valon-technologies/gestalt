@@ -67,7 +67,7 @@ func TestCatalogFilters(t *testing.T) {
 	}
 }
 
-func TestCatalogPreservesOrder(t *testing.T) {
+func TestCatalogSortsOperationsByID(t *testing.T) {
 	t.Parallel()
 
 	inner := &stubWithOps{
@@ -81,11 +81,11 @@ func TestCatalogPreservesOrder(t *testing.T) {
 	if len(ops) != 2 {
 		t.Fatalf("OperationsList: got %d ops, want 2", len(ops))
 	}
-	if ops[0].Name != "list_channels" {
-		t.Errorf("ops[0].Name: got %q, want %q", ops[0].Name, "list_channels")
+	if ops[0].Name != "delete_message" {
+		t.Errorf("ops[0].Name: got %q, want %q", ops[0].Name, "delete_message")
 	}
-	if ops[1].Name != "delete_message" {
-		t.Errorf("ops[1].Name: got %q, want %q", ops[1].Name, "delete_message")
+	if ops[1].Name != "list_channels" {
+		t.Errorf("ops[1].Name: got %q, want %q", ops[1].Name, "list_channels")
 	}
 }
 

@@ -72,6 +72,7 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 		}
 	}
 
+	merged.SortOperations()
 	integration.CompileSchemas(merged)
 	return merged, nil
 }

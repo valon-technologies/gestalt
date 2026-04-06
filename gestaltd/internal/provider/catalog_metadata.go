@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -45,10 +44,7 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 		ops = append(ops, catOp)
 	}
 
-	sort.Slice(ops, func(i, j int) bool {
-		return ops[i].ID < ops[j].ID
-	})
-
 	cat.Operations = ops
+	cat.SortOperations()
 	return cat
 }

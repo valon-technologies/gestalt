@@ -93,6 +93,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		p.catalog.Operations = append(p.catalog.Operations, catOp)
 	}
 
+	p.catalog.SortOperations()
 	integration.CompileSchemas(p.catalog)
 	for i := range p.catalog.Operations {
 		op := &p.catalog.Operations[i]

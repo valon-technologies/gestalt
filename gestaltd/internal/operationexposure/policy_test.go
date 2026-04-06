@@ -74,7 +74,10 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	if len(filteredCat.Operations) != 2 {
 		t.Fatalf("got %d catalog operations, want 2", len(filteredCat.Operations))
 	}
-	if filteredCat.Operations[0].ID != "items" || filteredCat.Operations[0].Description != "Custom description" {
+	if filteredCat.Operations[0].ID != "get_item" {
 		t.Fatalf("first catalog operation = %+v", filteredCat.Operations[0])
+	}
+	if filteredCat.Operations[1].ID != "items" || filteredCat.Operations[1].Description != "Custom description" {
+		t.Fatalf("second catalog operation = %+v", filteredCat.Operations[1])
 	}
 }

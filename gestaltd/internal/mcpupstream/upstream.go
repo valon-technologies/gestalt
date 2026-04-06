@@ -255,6 +255,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 		cat.Operations = append(cat.Operations, catOp)
 	}
 
+	cat.SortOperations()
 	return cat
 }
 
