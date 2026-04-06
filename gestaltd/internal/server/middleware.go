@@ -89,6 +89,57 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+var errInvalidAuthorizationHeader = errors.New("invalid authorization header format")
+
+func requestBearerToken(r *http.Request) (string, error) {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return "", nil
+	}
+	bearer := strings.TrimPrefix(header, core.BearerScheme)
+	if bearer == header {
+		return "", errInvalidAuthorizationHeader
+	}
+	return bearer, nil
+}
+
+func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal, error) {
+	var lastErr error
+
+	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+		p, err := s.resolver.ResolveToken(r.Context(), c.Value)
+		if p != nil {
+			return p, nil
+		}
+		lastErr = err
+	}
+
+	token, err := requestBearerToken(r)
+	if err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, lastErr
+	}
+
+	p, err := s.resolver.ResolveToken(r.Context(), token)
+	if p != nil {
+		return p, nil
+	}
+	if err != nil {
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.Principal, error) {
+	p, err := s.resolveRequestPrincipal(r)
+	if err != nil || p == nil {
+		return p, err
+	}
+	return s.resolvePrincipalUserID(r.Context(), p)
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.noAuth {
@@ -97,40 +148,35 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		var p *principal.Principal
-		var lastErr error
-
-		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-			p, lastErr = s.resolver.ResolveToken(r.Context(), c.Value)
-		}
-
-		if p == nil {
-			if header := r.Header.Get("Authorization"); header != "" {
-				bearer := strings.TrimPrefix(header, core.BearerScheme)
-				if bearer == header {
-					writeError(w, http.StatusUnauthorized, "invalid authorization header format")
-					return
-				}
-				p, lastErr = s.resolver.ResolveToken(r.Context(), bearer)
+		p, err := s.resolveRequestPrincipal(r)
+		if err == nil && p != nil {
+			enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
+			switch {
+			case enrichErr == nil && enriched != nil:
+				p = enriched
+			case enrichErr != nil:
+				slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
 			}
-		}
-
-		if p == nil {
-			if lastErr == nil {
-				writeError(w, http.StatusUnauthorized, "missing authorization")
-				return
-			}
-			if errors.Is(lastErr, principal.ErrInvalidToken) {
-				slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
-				writeError(w, http.StatusUnauthorized, "invalid token")
-				return
-			}
-			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", lastErr)
-			writeError(w, http.StatusInternalServerError, "token validation failed")
+			ctx := principal.WithPrincipal(r.Context(), p)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		ctx := principal.WithPrincipal(r.Context(), p)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		switch {
+		case err == nil:
+			writeError(w, http.StatusUnauthorized, "missing authorization")
+			return
+		case errors.Is(err, errInvalidAuthorizationHeader):
+			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+			return
+		case errors.Is(err, principal.ErrInvalidToken):
+			slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
+			writeError(w, http.StatusUnauthorized, "invalid token")
+			return
+		default:
+			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
+			writeError(w, http.StatusInternalServerError, "token validation failed")
+			return
+		}
 	})
 }

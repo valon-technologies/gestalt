@@ -24,6 +24,7 @@ type directToolCaller interface {
 type Config struct {
 	Invoker          invocation.Invoker
 	TokenResolver    invocation.TokenResolver
+	AuditSink        core.AuditSink
 	Providers        *registry.PluginMap[core.Provider]
 	AllowedProviders []string
 	ToolPrefixes     map[string]string

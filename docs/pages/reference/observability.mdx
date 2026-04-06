@@ -3,6 +3,9 @@
 Gestalt ships with structured logging, health endpoints, readiness checks, a
 Prometheus scrape endpoint, and optional OpenTelemetry export.
 
+For the audit-specific log schema and event coverage, see
+[Audit Logging](/reference/audit-logging).
+
 ## Health Endpoints
 
 | Path | Meaning |
@@ -222,7 +225,9 @@ Gestalt logs:
 - provider readiness
 - auth and connection flow failures
 - invocation failures
+- audit records with `log.type=audit`
 - datastore warnings
 
 When OTLP is enabled, the server routes structured logs through the OpenTelemetry
-log bridge.
+log bridge. You can split audit records into a dedicated sink by filtering on
+`log.type=audit`.

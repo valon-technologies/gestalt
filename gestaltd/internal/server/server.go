@@ -25,6 +25,7 @@ type Server struct {
 	router             chi.Router
 	handler            http.Handler
 	auth               core.AuthProvider
+	auditSink          core.AuditSink
 	datastore          core.Datastore
 	providers          *registry.PluginMap[core.Provider]
 	resolver           *principal.Resolver
@@ -49,6 +50,7 @@ type Server struct {
 
 type Config struct {
 	Auth              core.AuthProvider
+	AuditSink         core.AuditSink
 	Datastore         core.Datastore
 	Providers         *registry.PluginMap[core.Provider]
 	Invoker           invocation.Invoker
@@ -71,7 +73,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
 	}
-	noAuth := cfg.Auth.Name() == "none"
+	noAuth := cfg.Auth == nil || cfg.Auth.Name() == "none"
 	var stateCodec *integrationOAuthStateCodec
 	var encryptor *cryptoutil.AESGCMEncryptor
 	if len(cfg.StateSecret) > 0 {
@@ -100,6 +102,7 @@ func New(cfg Config) (*Server, error) {
 		router:            router,
 		handler:           otelhttp.NewHandler(router, "gestaltd"),
 		auth:              cfg.Auth,
+		auditSink:         cfg.AuditSink,
 		datastore:         cfg.Datastore,
 		providers:         cfg.Providers,
 		resolver:          resolver,

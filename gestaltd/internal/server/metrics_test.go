@@ -88,6 +88,7 @@ func TestCustomAuthMetrics(t *testing.T) {
 	t.Parallel()
 
 	reader := useManualMeterProvider(t)
+	const providerName = "metrics-slack"
 
 	handler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
@@ -101,11 +102,11 @@ func TestCustomAuthMetrics(t *testing.T) {
 
 	oauthServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithAuthURL{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			StubIntegration: coretesting.StubIntegration{N: providerName},
 			authURL:         "https://slack.com/oauth/v2/authorize",
 		})
-		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth(providerName, handler)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -117,7 +118,7 @@ func TestCustomAuthMetrics(t *testing.T) {
 	startOAuth := func(code string) int {
 		t.Helper()
 
-		body := bytes.NewBufferString(`{"integration":"slack"}`)
+		body := bytes.NewBufferString(`{"integration":"` + providerName + `"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, oauthServer.URL+"/api/v1/auth/start-oauth", body)
 		startReq.Header.Set("Content-Type", "application/json")
 		startResp, err := http.DefaultClient.Do(startReq)
@@ -156,11 +157,11 @@ func TestCustomAuthMetrics(t *testing.T) {
 
 	rm := collectMetrics(t, reader)
 	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
-		"gestalt.provider": "slack",
+		"gestalt.provider": providerName,
 		"gestalt.result":   "success",
 	})
 	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
-		"gestalt.provider": "slack",
+		"gestalt.provider": providerName,
 		"gestalt.result":   "error",
 	})
 }
@@ -169,11 +170,12 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	t.Parallel()
 
 	reader := useManualMeterProvider(t)
+	const providerName = "metrics-fake"
 
 	successStub := &stubOAuthIntegration{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
+				N: providerName,
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"token":"` + token + `"}`}, nil
 				},
@@ -191,8 +193,8 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	expiresSoon := time.Now().Add(2 * time.Minute)
 	successServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, successStub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", successStub.refreshTokenFn)
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, successStub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -200,7 +202,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					UserID:       "u1",
-					Integration:  "fake",
+					Integration:  providerName,
 					AccessToken:  "stale-access-token",
 					RefreshToken: "old-refresh-token",
 					ExpiresAt:    &expiresSoon,
@@ -210,7 +212,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, successServer)
 
-	successReq, _ := http.NewRequest(http.MethodGet, successServer.URL+"/api/v1/fake/list", nil)
+	successReq, _ := http.NewRequest(http.MethodGet, successServer.URL+"/api/v1/"+providerName+"/list", nil)
 	successResp, err := http.DefaultClient.Do(successReq)
 	if err != nil {
 		t.Fatalf("refresh success request: %v", err)
@@ -222,7 +224,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 
 	errorStub := &stubOAuthIntegration{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "fake"},
+			StubIntegration: coretesting.StubIntegration{N: providerName},
 			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, refreshToken string) (*core.TokenResponse, error) {
@@ -236,8 +238,8 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	alreadyExpired := time.Now().Add(-10 * time.Minute)
 	errorServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, errorStub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", errorStub.refreshTokenFn)
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, errorStub.refreshTokenFn)
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -245,7 +247,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
 				return &core.IntegrationToken{
 					UserID:       "u1",
-					Integration:  "fake",
+					Integration:  providerName,
 					AccessToken:  "expired-token",
 					RefreshToken: "expired-refresh-token",
 					ExpiresAt:    &alreadyExpired,
@@ -255,7 +257,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, errorServer)
 
-	errorReq, _ := http.NewRequest(http.MethodGet, errorServer.URL+"/api/v1/fake/list", nil)
+	errorReq, _ := http.NewRequest(http.MethodGet, errorServer.URL+"/api/v1/"+providerName+"/list", nil)
 	errorResp, err := http.DefaultClient.Do(errorReq)
 	if err != nil {
 		t.Fatalf("refresh error request: %v", err)
@@ -267,23 +269,23 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 
 	rm := collectMetrics(t, reader)
 	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
-		"gestalt.provider":        "fake",
+		"gestalt.provider":        providerName,
 		"gestalt.connection_mode": "user",
 		"gestalt.result":          "success",
 	})
 	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
-		"gestalt.provider":        "fake",
+		"gestalt.provider":        providerName,
 		"gestalt.connection_mode": "user",
 		"gestalt.result":          "error",
 	})
 	requireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
-		"gestalt.provider":        "fake",
+		"gestalt.provider":        providerName,
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",
 	})
 	requireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
-		"gestalt.provider":        "fake",
+		"gestalt.provider":        providerName,
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",

@@ -34,12 +34,25 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := &coretesting.StubDatastore{}
+	ds := &coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "user-session", Email: email}, nil
+		},
+	}
 	broker := invocation.NewBroker(providers, ds)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Auth: &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "session@example.com"}, nil
+			},
+		},
+		AuditSink:   auditSink,
 		Datastore:   ds,
 		Providers:   providers,
 		Invoker:     guarded,
@@ -54,6 +67,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-prov/ping", bytes.NewBufferString(`{}`))
 	req.Header.Set("X-Forwarded-For", "203.0.113.42, 10.0.0.1")
 	req.Header.Set("User-Agent", "test-client/1.0")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -86,6 +100,12 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	}
 	if record["provider"] != "audit-prov" {
 		t.Errorf("expected provider=audit-prov, got %v", record["provider"])
+	}
+	if record["auth_source"] != "session" {
+		t.Errorf("expected auth_source=session, got %v", record["auth_source"])
+	}
+	if record["user_id"] != "user-session" {
+		t.Errorf("expected user_id=user-session, got %v", record["user_id"])
 	}
 	if record["allowed"] != true {
 		t.Errorf("expected allowed=true, got %v", record["allowed"])

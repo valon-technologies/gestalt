@@ -23,6 +23,29 @@ type Principal struct {
 	Scopes   []string
 }
 
+func (s Source) String() string {
+	switch s {
+	case SourceSession:
+		return "session"
+	case SourceAPIToken:
+		return "api_token"
+	case SourceEnv:
+		return "env"
+	default:
+		return ""
+	}
+}
+
+func (p *Principal) AuthSource() string {
+	if p == nil {
+		return ""
+	}
+	if p.Identity == nil && p.UserID == "" && len(p.Scopes) == 0 {
+		return ""
+	}
+	return p.Source.String()
+}
+
 type contextKey struct{}
 
 func WithPrincipal(ctx context.Context, p *Principal) context.Context {

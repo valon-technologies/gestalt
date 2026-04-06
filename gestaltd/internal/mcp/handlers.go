@@ -46,9 +46,27 @@ func makeDirectHandler(cfg Config, prov core.Provider, provName, opName, connect
 		instance, _ := args["_instance"].(string)
 		delete(args, "_instance")
 
-		result, err := invocation.CallDirectTool(ctx, cfg.TokenResolver, principal.FromContext(ctx), prov, provName, opName, connection, instance, args, req.Params.Meta)
+		auditCtx, entry := invocation.BuildAuditEntry(ctx, principal.FromContext(ctx), "mcp", provName, opName)
+		result, err := invocation.CallDirectTool(auditCtx, cfg.TokenResolver, principal.FromContext(auditCtx), prov, provName, opName, connection, instance, args, req.Params.Meta)
 		if err != nil {
+			entry.Allowed = false
+			entry.Error = err.Error()
+			if cfg.AuditSink != nil {
+				cfg.AuditSink.Log(auditCtx, entry)
+			}
 			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		if result != nil && result.IsError {
+			entry.Allowed = false
+			entry.Error = invocation.ToolErrorMessage(result)
+			if cfg.AuditSink != nil {
+				cfg.AuditSink.Log(auditCtx, entry)
+			}
+			return result, nil
+		}
+		entry.Allowed = true
+		if cfg.AuditSink != nil {
+			cfg.AuditSink.Log(auditCtx, entry)
 		}
 		return result, nil
 	}

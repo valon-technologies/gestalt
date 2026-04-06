@@ -628,6 +628,47 @@ func TestMetricsEndpointsRequireAuth(t *testing.T) {
 	}
 }
 
+func TestMetricsSessionAuthDoesNotRequireUserLookup(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "metrics@example.test"}, nil
+			},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return nil, fmt.Errorf("datastore unavailable")
+			},
+		}
+		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+			_, _ = w.Write([]byte("gestaltd_operation_count_total 1\n"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/metrics", nil)
+	req.Header.Set("Authorization", "Bearer session-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("authenticated GET /metrics with session token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for session-authenticated /metrics, got %d: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("gestaltd_operation_count_total")) {
+		t.Fatalf("expected prometheus metric in body, got %s", body)
+	}
+}
+
 func TestListIntegrations(t *testing.T) {
 	t.Parallel()
 
@@ -2056,9 +2097,47 @@ func TestStartLoginWithInvalidCallbackPort(t *testing.T) {
 	}
 }
 
+func TestStartLogin_NoAuthInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = nil
+		cfg.AuditSink = auditSink
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", strings.NewReader("{"))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.start" {
+		t.Fatalf("expected audit operation auth.login.start, got %v", auditRecord["operation"])
+	}
+	if auditRecord["provider"] != "none" {
+		t.Fatalf("expected audit provider none, got %v", auditRecord["provider"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
+	}
+}
+
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &stubAuthWithToken{
 			StubAuthProvider: coretesting.StubAuthProvider{
@@ -2071,6 +2150,12 @@ func TestLoginCallback(t *testing.T) {
 				},
 			},
 		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+		cfg.AuditSink = auditSink
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -2100,6 +2185,24 @@ func TestLoginCallback(t *testing.T) {
 	}
 	if result["email"] != "user@example.com" {
 		t.Fatalf("unexpected email: %v", result["email"])
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected login audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.complete" {
+		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["user_id"] != "u1" {
+		t.Fatalf("expected audit user_id u1, got %v", auditRecord["user_id"])
 	}
 }
 
@@ -2229,6 +2332,42 @@ func TestLoginCallbackMissingStateCookie(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginCallback_NoAuthMissingCode(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = nil
+		cfg.AuditSink = auditSink
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/login/callback?state=anything")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.complete" {
+		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
+	}
+	if auditRecord["provider"] != "none" {
+		t.Fatalf("expected audit provider none, got %v", auditRecord["provider"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
 }
 
@@ -2380,6 +2519,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		t.Parallel()
 
 		var stored *core.IntegrationToken
+		var auditBuf bytes.Buffer
 
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
@@ -2397,6 +2537,15 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "user@example.com"}, nil
+				},
+			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
@@ -2409,12 +2558,14 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 					return nil
 				},
 			}
+			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
 		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer session-token")
 		startResp, err := http.DefaultClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
@@ -2460,6 +2611,24 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if stored.AccessToken != "slack-token" {
 			t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
+		}
+
+		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+		if len(lines) == 0 {
+			t.Fatal("expected oauth callback audit record")
+		}
+		var auditRecord map[string]any
+		if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["operation"] != "connection.oauth.complete" {
+			t.Fatalf("expected audit operation connection.oauth.complete, got %v", auditRecord["operation"])
+		}
+		if auditRecord["auth_source"] != "session" {
+			t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+		}
+		if auditRecord["user_id"] != "u1" {
+			t.Fatalf("expected audit user_id u1, got %v", auditRecord["user_id"])
 		}
 	})
 
@@ -2759,8 +2928,20 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	t.Parallel()
 
 	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
 		cfg.Now = func() time.Time { return fixedNow }
+		cfg.AuditSink = auditSink
 		cfg.Datastore = &coretesting.StubDatastore{
 			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 				return &core.User{ID: "u1", Email: email}, nil
@@ -2772,6 +2953,7 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	body := bytes.NewBufferString(`{"name":"expiry-test"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2802,6 +2984,83 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	expected := fixedNow.Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
 		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "api_token.create" {
+		t.Fatalf("expected audit operation api_token.create, got %v", auditRecord["operation"])
+	}
+	if auditRecord["source"] != "http" {
+		t.Fatalf("expected audit source http, got %v", auditRecord["source"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["user_id"] != "u1" {
+		t.Fatalf("expected audit user_id u1, got %v", auditRecord["user_id"])
+	}
+	if auditRecord["allowed"] != true {
+		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
+	}
+}
+
+func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.AuditSink = auditSink
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return nil, fmt.Errorf("datastore unavailable")
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"failure-test"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 500, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "api_token.create" {
+		t.Fatalf("expected audit operation api_token.create, got %v", auditRecord["operation"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
+	}
+	if auditRecord["error"] != "failed to resolve user" {
+		t.Fatalf("expected audit error failed to resolve user, got %v", auditRecord["error"])
 	}
 }
 
@@ -3042,6 +3301,36 @@ func TestAuthInfoFallback(t *testing.T) {
 	}
 	if body["display_name"] != "custom" {
 		t.Fatalf("expected display_name to fall back to name custom, got %q", body["display_name"])
+	}
+}
+
+func TestAuthInfoNoAuth(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = nil
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if body["provider"] != "none" {
+		t.Fatalf("expected provider none, got %q", body["provider"])
+	}
+	if body["display_name"] != "none" {
+		t.Fatalf("expected display_name none, got %q", body["display_name"])
 	}
 }
 
@@ -4253,6 +4542,8 @@ func TestConnectManual(t *testing.T) {
 		}))
 		testutil.CloseOnCleanup(t, discoverySrv)
 
+		var auditBuf bytes.Buffer
+		auditSink := invocation.NewSlogAuditSink(&auditBuf)
 		var stored *core.IntegrationToken
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -4296,6 +4587,7 @@ func TestConnectManual(t *testing.T) {
 					return nil
 				},
 			}
+			cfg.AuditSink = auditSink
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -4385,6 +4677,23 @@ func TestConnectManual(t *testing.T) {
 		if noAuthResp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("expected 401 without auth, got %d", noAuthResp.StatusCode)
 		}
+		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+		if len(lines) == 0 {
+			t.Fatal("expected pending connection audit record")
+		}
+		var noAuthAudit map[string]any
+		if err := json.Unmarshal(lines[len(lines)-1], &noAuthAudit); err != nil {
+			t.Fatalf("parsing pending connection audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if noAuthAudit["operation"] != "connection.pending.select" {
+			t.Fatalf("expected pending connection audit operation, got %v", noAuthAudit["operation"])
+		}
+		if noAuthAudit["allowed"] != false {
+			t.Fatalf("expected denied pending connection audit, got %v", noAuthAudit["allowed"])
+		}
+		if userID, ok := noAuthAudit["user_id"]; ok && userID != "" {
+			t.Fatalf("expected unauthenticated denied selection to omit user_id, got %v", userID)
+		}
 
 		mismatchForm := url.Values{
 			"pending_token":   {connectResult.PendingToken},
@@ -4401,6 +4710,23 @@ func TestConnectManual(t *testing.T) {
 
 		if mismatchResp.StatusCode != http.StatusNotFound {
 			t.Fatalf("expected 404 for mismatched user, got %d", mismatchResp.StatusCode)
+		}
+		lines = bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+		if len(lines) == 0 {
+			t.Fatal("expected pending connection audit record")
+		}
+		var mismatchAudit map[string]any
+		if err := json.Unmarshal(lines[len(lines)-1], &mismatchAudit); err != nil {
+			t.Fatalf("parsing mismatched pending connection audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if mismatchAudit["operation"] != "connection.pending.select" {
+			t.Fatalf("expected pending connection audit operation, got %v", mismatchAudit["operation"])
+		}
+		if mismatchAudit["allowed"] != false {
+			t.Fatalf("expected denied pending connection audit, got %v", mismatchAudit["allowed"])
+		}
+		if mismatchAudit["user_id"] == "u1" {
+			t.Fatalf("expected denied selection not to be attributed to token owner, got %v", mismatchAudit["user_id"])
 		}
 		if stored != nil {
 			t.Fatal("did not expect token to be stored for mismatched user")
@@ -4823,12 +5149,14 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 	}
 }
 
-func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore) http.Handler {
+func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore, auditSink core.AuditSink) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, ds)
+	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink, invocation.WithoutRateLimit())
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       broker,
+		Invoker:       mcpInvoker,
 		TokenResolver: broker,
+		AuditSink:     auditSink,
 		Providers:     providers,
 	})
 	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
@@ -4872,7 +5200,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 		},
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
-	mcpHandler := newMCPHandler(t, providers, ds)
+	mcpHandler := newMCPHandler(t, providers, ds, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = providers
@@ -4932,7 +5260,7 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 		return &reg.Providers
 	}()
 	ds := &coretesting.StubDatastore{}
-	mcpHandler := newMCPHandler(t, providers, ds)
+	mcpHandler := newMCPHandler(t, providers, ds, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -4978,14 +5306,21 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	}
 
 	var calledName string
+	var calledRequestID string
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
 			ops:             []core.Operation{{Name: "run_query", Description: "Execute a SQL query"}},
 		},
 		catalog: cat,
-		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+		callFn: func(ctx context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
 			calledName = name
+			meta := invocation.MetaFromContext(ctx)
+			if meta != nil {
+				calledRequestID = meta.RequestID
+			}
 			return mcpgo.NewToolResultText("query executed"), nil
 		},
 	}
@@ -4996,16 +5331,27 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		},
 	}
 	providers := testutil.NewProviderRegistry(t, prov)
-	mcpHandler := newMCPHandler(t, providers, ds)
+	mcpHandler := newMCPHandler(t, providers, ds, auditSink)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
 		cfg.Providers = providers
 		cfg.Datastore = ds
 		cfg.MCPHandler = mcpHandler
 	})
 	defer ts.Close()
 
-	mcpJSONRPC(t, ts, nil, map[string]any{
+	headers := map[string]string{"Authorization": "Bearer session-token"}
+
+	mcpJSONRPC(t, ts, headers, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -5016,7 +5362,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		},
 	})
 
-	status, resp := mcpJSONRPC(t, ts, nil, map[string]any{
+	status, resp := mcpJSONRPC(t, ts, headers, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/list",
@@ -5037,7 +5383,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		t.Fatalf("expected clickhouse_run_query, got %v", firstTool["name"])
 	}
 
-	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
+	status, resp = mcpJSONRPC(t, ts, headers, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
 		"method":  "tools/call",
@@ -5056,6 +5402,9 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	if calledName != "run_query" {
 		t.Fatalf("expected direct CallTool with run_query, got %q", calledName)
 	}
+	if calledRequestID == "" {
+		t.Fatal("expected direct CallTool context to include request ID")
+	}
 	content, ok := result["content"].([]any)
 	if !ok || len(content) == 0 {
 		t.Fatalf("expected content in result, got %v", result)
@@ -5063,6 +5412,74 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	textBlock := content[0].(map[string]any)
 	if textBlock["text"] != "query executed" {
 		t.Fatalf("expected passthrough result, got %v", textBlock)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected MCP audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing MCP audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["source"] != "mcp" {
+		t.Fatalf("expected audit source mcp, got %v", auditRecord["source"])
+	}
+	if auditRecord["provider"] != "clickhouse" {
+		t.Fatalf("expected audit provider clickhouse, got %v", auditRecord["provider"])
+	}
+	if auditRecord["operation"] != "run_query" {
+		t.Fatalf("expected audit operation run_query, got %v", auditRecord["operation"])
+	}
+	if auditRecord["request_id"] != calledRequestID {
+		t.Fatalf("expected audit request_id %q, got %v", calledRequestID, auditRecord["request_id"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["user_id"] != "u1" {
+		t.Fatalf("expected audit user_id u1, got %v", auditRecord["user_id"])
+	}
+	if auditRecord["allowed"] != true {
+		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
+	}
+
+	prov.callFn = func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+		return mcpgo.NewToolResultError("query failed"), nil
+	}
+
+	status, resp = mcpJSONRPC(t, ts, headers, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      4,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "clickhouse_run_query",
+			"arguments": map[string]any{"sql": "SELECT broken"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call error result: expected 200, got %d", status)
+	}
+	result, ok = resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/call error result: expected result, got %v", resp)
+	}
+	if result["isError"] != true {
+		t.Fatalf("expected MCP direct error result, got %v", result["isError"])
+	}
+
+	lines = bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected MCP audit record")
+	}
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing MCP error audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false for MCP error result, got %v", auditRecord["allowed"])
+	}
+	if auditRecord["error"] != "query failed" {
+		t.Fatalf("expected audit error query failed, got %v", auditRecord["error"])
 	}
 }
 
@@ -5476,10 +5893,14 @@ func TestCookieAuth(t *testing.T) {
 	stub := &coretesting.StubAuthProvider{
 		N: "test",
 		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-			if token == "valid-cookie-token" {
+			switch token {
+			case "valid-cookie-token":
 				return &core.UserIdentity{Email: "cookie@test.local"}, nil
+			case "valid-header-token":
+				return &core.UserIdentity{Email: "header@test.local"}, nil
+			default:
+				return nil, fmt.Errorf("invalid token")
 			}
-			return nil, fmt.Errorf("invalid token")
 		},
 	}
 
@@ -5511,15 +5932,48 @@ func TestCookieAuth(t *testing.T) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		t.Fatal("cookie auth should have passed middleware, got 401")
 	}
+
+	// An invalid cookie should still fall back to a valid Authorization header.
+	reqWithFallback, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	reqWithFallback.AddCookie(&http.Cookie{Name: "session_token", Value: "invalid-cookie-token"})
+	reqWithFallback.Header.Set("Authorization", "Bearer valid-header-token")
+	fallbackResp, err := http.DefaultClient.Do(reqWithFallback)
+	if err != nil {
+		t.Fatalf("request with header fallback: %v", err)
+	}
+	defer func() { _ = fallbackResp.Body.Close() }()
+
+	if fallbackResp.StatusCode == http.StatusUnauthorized {
+		t.Fatal("valid Authorization header should have passed middleware after invalid cookie")
+	}
 }
 
 func TestLogout(t *testing.T) {
 	t.Parallel()
 
-	ts := newTestServer(t, func(cfg *server.Config) {})
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+		cfg.AuditSink = auditSink
+	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -5541,6 +5995,63 @@ func TestLogout(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected session_token cookie to be cleared")
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.logout" {
+		t.Fatalf("expected audit operation auth.logout, got %v", auditRecord["operation"])
+	}
+	if auditRecord["source"] != "http" {
+		t.Fatalf("expected audit source http, got %v", auditRecord["source"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["user_id"] != "u1" {
+		t.Fatalf("expected audit user_id u1, got %v", auditRecord["user_id"])
+	}
+	if auditRecord["allowed"] != true {
+		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
+	}
+}
+
+func TestLogout_NoAuthNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = nil
+		cfg.AuditSink = auditSink
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.logout" {
+		t.Fatalf("expected audit operation auth.logout, got %v", auditRecord["operation"])
+	}
+	if auditRecord["provider"] != "none" {
+		t.Fatalf("expected audit provider none, got %v", auditRecord["provider"])
+	}
+	if auditRecord["allowed"] != true {
+		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
 	}
 }
 

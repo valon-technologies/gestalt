@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -242,39 +241,20 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if s.noAuth {
 		return "", false, nil
 	}
-
-	var token string
-	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-		token = c.Value
-	} else if header := r.Header.Get("Authorization"); header != "" {
-		bearer := strings.TrimPrefix(header, core.BearerScheme)
-		if bearer == header {
+	p, err := s.resolveRequestPrincipalWithUserID(r)
+	if err != nil {
+		if errors.Is(err, errInvalidAuthorizationHeader) {
 			return "", true, principal.ErrInvalidToken
 		}
-		token = bearer
+		return "", true, err
 	}
-	if token == "" {
+	if p == nil {
 		return "", false, nil
 	}
-
-	p, err := s.resolver.ResolveToken(r.Context(), token)
-	if err != nil {
-		return "", true, err
-	}
-	if p.UserID != "" {
-		return p.UserID, true, nil
-	}
-	if p.Identity == nil || p.Identity.Email == "" {
-		return "", true, fmt.Errorf("authenticated principal missing email")
-	}
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), p.Identity.Email)
-	if err != nil {
-		return "", true, err
-	}
-	if dbUser == nil || dbUser.ID == "" {
+	if p.UserID == "" {
 		return "", true, fmt.Errorf("authenticated principal missing user ID")
 	}
-	return dbUser.ID, true, nil
+	return p.UserID, true, nil
 }
 
 func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pendingConnectionState) error {
@@ -322,12 +302,27 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("pending connection selection failed")
+	auditUserID := ""
+	auditAuthSource := ""
+	providerName := ""
+	defer func() {
+		if auditUserID != "" {
+			s.auditHTTPEventWithUserID(r.Context(), auditUserID, auditAuthSource, providerName, "connection.pending.select", auditAllowed, auditErr)
+			return
+		}
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.pending.select", auditAllowed, auditErr)
+	}()
+
 	if err := r.ParseForm(); err != nil {
+		auditErr = errors.New("invalid form body")
 		writeError(w, http.StatusBadRequest, "invalid form body")
 		return
 	}
 	pendingToken := r.Form.Get("pending_token")
 	if pendingToken == "" {
+		auditErr = errors.New("pending_token is required")
 		writeError(w, http.StatusBadRequest, "pending_token is required")
 		return
 	}
@@ -341,13 +336,20 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 			status = http.StatusGone
 			s.clearPendingConnectionCookie(w)
 		}
+		auditErr = errors.New("invalid or expired pending connection")
 		writeError(w, status, "invalid or expired pending connection")
 		return
 	}
+	providerName = state.Token.Integration
 	if !s.authorizePendingConnection(w, r, state) {
+		auditErr = errors.New("pending connection authorization required")
 		return
 	}
+	auditUserID = state.Token.UserID
+	auditAuthSource = state.Token.AuthSource
 	if candidateIndex == "" && candidateID == "" {
+		auditAllowed = true
+		auditErr = nil
 		s.writePendingConnectionSelectionPage(w, state, pendingToken)
 		return
 	}
@@ -356,26 +358,31 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	if candidateIndex != "" {
 		selected, err = findDiscoveryCandidateByIndex(state.Candidates, candidateIndex)
 		if err != nil {
+			auditErr = errors.New(err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	} else {
 		selected = findDiscoveryCandidate(state.Candidates, candidateID)
 		if selected == nil {
+			auditErr = errors.New("candidate not found")
 			writeError(w, http.StatusBadRequest, "candidate not found")
 			return
 		}
 	}
 	if selected == nil {
+		auditErr = errors.New("candidate not found")
 		writeError(w, http.StatusBadRequest, "candidate not found")
 		return
 	}
 	if err := validateDiscoveryMetadata(selected.Metadata); err != nil {
+		auditErr = errors.New(err.Error())
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	merged, err := mergeMetadataJSON(state.Token.MetadataJSON, selected.Metadata)
 	if err != nil {
+		auditErr = errors.New("failed to merge metadata")
 		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
 		return
 	}
@@ -383,6 +390,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	tm := state.Token
 	tm.MetadataJSON = merged
 	if _, err := s.storeTokenFromMaterial(r.Context(), tm); err != nil {
+		auditErr = errors.New("failed to store connection")
 		writeError(w, http.StatusInternalServerError, "failed to store connection")
 		return
 	}
@@ -393,9 +401,13 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Token.Integration); err == nil {
 			connectedURL = nextURL
 		}
+		auditAllowed = true
+		auditErr = nil
 		http.Redirect(w, r, connectedURL, http.StatusSeeOther)
 		return
 	}
 
+	auditAllowed = true
+	auditErr = nil
 	s.writePendingConnectionSuccessPage(w, state.Token.Integration)
 }

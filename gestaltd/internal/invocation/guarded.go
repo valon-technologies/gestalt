@@ -3,7 +3,6 @@ package invocation
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -78,21 +77,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 		p = &principal.Principal{}
 	}
 
-	reqMeta := RequestMetaFromContext(ctx)
-	entry := core.AuditEntry{
-		Timestamp:  time.Now(),
-		RequestID:  meta.RequestID,
-		Source:     g.source,
-		Provider:   providerName,
-		Operation:  operation,
-		Depth:      meta.Depth,
-		ClientIP:   reqMeta.ClientIP,
-		RemoteAddr: reqMeta.RemoteAddr,
-		UserAgent:  reqMeta.UserAgent,
-	}
-	if p != nil {
-		entry.UserID = p.UserID
-	}
+	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
 
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false

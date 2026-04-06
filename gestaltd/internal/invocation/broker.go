@@ -290,7 +290,7 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("%w: %s", &apiexec.UpstreamOperationError{Message: "operation failed"}, toolErrorMessage(result))
+		return nil, fmt.Errorf("%w: %s", &apiexec.UpstreamOperationError{Message: "operation failed"}, ToolErrorMessage(result))
 	}
 
 	if result.StructuredContent != nil {
@@ -314,7 +314,7 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
 }
 
-func toolErrorMessage(result *mcpgo.CallToolResult) string {
+func ToolErrorMessage(result *mcpgo.CallToolResult) string {
 	for _, item := range result.Content {
 		if text, ok := mcpgo.AsTextContent(item); ok && strings.TrimSpace(text.Text) != "" {
 			return text.Text
