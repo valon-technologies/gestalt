@@ -84,6 +84,8 @@ struct StartOAuthRequest<'a> {
     connection: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     instance: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_params: Option<&'a BTreeMap<String, String>>,
 }
 
 #[derive(Serialize)]
@@ -180,11 +182,13 @@ where
     let auth_target = resolve_auth_target(&integration, selected_connection.as_deref());
 
     if auth_target.supports_oauth() {
+        let connection_params = prompt_connection_params(&integration)?;
         return start_oauth(
             client,
             name,
             selected_connection.as_deref(),
             instance,
+            connection_params.as_ref(),
             open_browser,
         );
     }
@@ -211,6 +215,7 @@ fn start_oauth<F>(
     name: &str,
     connection: Option<&str>,
     instance: Option<&str>,
+    connection_params: Option<&BTreeMap<String, String>>,
     open_browser: F,
 ) -> Result<()>
 where
@@ -223,6 +228,7 @@ where
                 integration: name,
                 connection,
                 instance,
+                connection_params,
             },
         )
         .context("failed to start OAuth flow")?;
@@ -421,7 +427,11 @@ fn resolve_auth_target(
         && let Some(connection_info) = integration.connection_by_name(connection)
     {
         return ResolvedAuthTarget {
-            auth_types: connection_info.auth_types.clone(),
+            auth_types: if connection_info.auth_types.is_empty() {
+                integration.auth_types.clone()
+            } else {
+                connection_info.auth_types.clone()
+            },
             credential_fields: if connection_info.credential_fields.is_empty() {
                 integration.credential_fields.clone()
             } else {

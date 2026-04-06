@@ -659,8 +659,9 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
             r#"[{
                 "name":"manual-svc",
                 "display_name":"Manual Service",
+                "auth_types":["manual"],
                 "connections":[
-                    {"name":"workspace","auth_types":["manual"],"credential_fields":[{"name":"token","label":"Workspace token"}]},
+                    {"name":"workspace","credential_fields":[{"name":"token","label":"Workspace token"}]},
                     {"name":"plugin","auth_types":["oauth"]}
                 ]
             }]"#,
@@ -733,6 +734,7 @@ fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
                 "name":"github",
                 "display_name":"GitHub",
                 "auth_types":["oauth","manual"],
+                "connection_params":{"site":{"description":"GitHub site","required":true}},
                 "credential_fields":[{"name":"token","label":"Token"}]
             }]"#,
         )
@@ -742,32 +744,51 @@ fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
         .match_header("Authorization", "Bearer test-token")
         .match_header("Content-Type", "application/json")
         .match_body(Matcher::JsonString(
-            r#"{"integration":"github"}"#.to_string(),
+            r#"{"connection_params":{"site":"github.valon.com"},"integration":"github"}"#
+                .to_string(),
         ))
         .with_status(200)
         .with_header("Content-Type", "application/json")
         .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
         .create();
 
-    let client = create_client(&server);
-    let opened = std::cell::RefCell::new(None::<String>);
+    let home = tempfile::tempdir().unwrap();
+    let browser_bin = tempfile::tempdir().unwrap();
+    for command in ["open", "xdg-open"] {
+        let path = browser_bin.path().join(command);
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
 
-    let result = gestalt::commands::integrations::connect_with_browser_opener(
-        &client,
-        "github",
-        None,
-        None,
-        |url| {
-            *opened.borrow_mut() = Some(url.to_string());
-            Ok(())
-        },
-    );
+            let mut perms = std::fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&path, perms).unwrap();
+        }
+    }
 
-    assert!(result.is_ok());
-    assert_eq!(
-        opened.into_inner().as_deref(),
-        Some("https://example.com/oauth")
-    );
+    let path = std::env::join_paths(
+        std::iter::once(browser_bin.path().to_path_buf()).chain(
+            std::env::var_os("PATH")
+                .into_iter()
+                .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
+        ),
+    )
+    .unwrap();
+
+    cli_command_for_server(home.path(), &server)
+        .env("PATH", path)
+        .args(["integrations", "connect", "github"])
+        .write_stdin("github.valon.com\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("GitHub site"))
+        .stderr(predicate::str::contains(
+            "Opening browser to connect github...",
+        ))
+        .stderr(predicate::str::contains(
+            "If the browser doesn't open, visit: https://example.com/oauth",
+        ));
 }
 
 #[test]
