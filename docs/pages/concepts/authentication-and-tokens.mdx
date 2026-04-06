@@ -42,6 +42,8 @@ OAuth flows are initiated through the HTTP API (`POST /api/v1/auth/start-oauth`)
 
 Gestalt stores integration credentials keyed by user, integration, connection name, and instance. This allows a single user to maintain multiple connections to the same integration, for example to connect to separate Jira sites or different tenant environments.
 
+> **Warning:** Renaming a `providers:` entry is a breaking change for stored connections. Existing credentials will stop resolving until they are migrated or reconnected.
+
 ## API tokens
 
 API tokens provide programmatic access to Gestalt. They authenticate requests to the HTTP API and `/mcp` without requiring a browser session.
