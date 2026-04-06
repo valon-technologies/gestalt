@@ -46,12 +46,6 @@ type releasePlatform struct {
 	GOARCH string
 }
 
-type releaseBuild struct {
-	platform releasePlatform
-	target   string
-	python   bool
-}
-
 func runPluginRelease(args []string) error {
 	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
 	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
@@ -96,27 +90,17 @@ func runPluginRelease(args []string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	platformValue, err := normalizeReleasePlatformsForSourcePlugin(".", srcManifest, *platforms)
-	if err != nil {
-		return err
-	}
-
-	platList, err := parseReleasePlatforms(platformValue)
-	if err != nil {
-		return err
-	}
-
-	builds, err := detectReleaseBuilds(".", srcManifest, platList)
+	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, *platforms)
 	if err != nil {
 		return err
 	}
 
 	var archivePaths []string
-	if len(builds) > 0 {
-		for _, build := range builds {
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, build, *outputDir, manifestFile, manifestFormat)
+	if len(buildPlatforms) > 0 {
+		for _, platform := range buildPlatforms {
+			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
-				return fmt.Errorf("build %s/%s: %w", build.platform.GOOS, build.platform.GOARCH, err)
+				return fmt.Errorf("build %s/%s: %w", platform.GOOS, platform.GOARCH, err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
@@ -135,49 +119,42 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platforms []releasePlatform) ([]releaseBuild, error) {
-	builds := make([]releaseBuild, 0, len(platforms))
+func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, value string) ([]releasePlatform, error) {
 	hasProviderKind := manifestHasKind(manifest, pluginmanifestv1.KindProvider)
+	if !hasProviderKind {
+		return nil, nil
+	}
+
 	providerBuildRequired := releaseRequiresBuildTarget(manifest)
-	var missingErr error
-
-	for _, plat := range platforms {
-		if hasProviderKind {
-			providerSourceMissing := false
-			var goToolUnavailable error
-			_, err := pluginpkg.DetectGoProviderImportPath(root, plat.GOOS, plat.GOARCH)
-			switch {
-			case err == nil:
-				builds = append(builds, releaseBuild{platform: plat})
-				continue
-			case errors.Is(err, pluginpkg.ErrNoGoProviderPackage):
-				providerSourceMissing = true
-			case errors.Is(err, pluginpkg.ErrGoToolUnavailable):
-				providerSourceMissing = true
-				goToolUnavailable = err
-			default:
-				return nil, fmt.Errorf("detect Go provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
-			}
-
-			target, err := pluginpkg.DetectPythonProviderTarget(root)
-			switch {
-			case err == nil:
-				if plat.GOOS != runtime.GOOS || plat.GOARCH != runtime.GOARCH {
-					return nil, fmt.Errorf("python source plugins can only be released for the current platform %s/%s", runtime.GOOS, runtime.GOARCH)
-				}
-				builds = append(builds, releaseBuild{platform: plat, target: target, python: true})
-				continue
-			case errors.Is(err, pluginpkg.ErrNoPythonProviderPackage):
-				if goToolUnavailable != nil {
-					return nil, fmt.Errorf("detect Go provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, goToolUnavailable)
-				}
-				if providerSourceMissing && providerBuildRequired && missingErr == nil {
-					missingErr = fmt.Errorf("no Go or Python provider package found")
-				}
-			default:
-				return nil, fmt.Errorf("detect Python provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
-			}
+	if value == defaultPlatforms {
+		currentPlatformOnly, err := pluginpkg.SourceProviderCurrentPlatformOnly(root, runtime.GOOS, runtime.GOARCH)
+		switch {
+		case err == nil && currentPlatformOnly:
+			value = currentReleasePlatform()
+		case err == nil || errors.Is(err, pluginpkg.ErrNoSourceProviderPackage):
+		default:
+			return nil, fmt.Errorf("detect source provider package: %w", err)
 		}
+	}
+
+	platforms, err := parseReleasePlatforms(value)
+	if err != nil {
+		return nil, err
+	}
+
+	builds := make([]releasePlatform, 0, len(platforms))
+	var missingProvider bool
+	for _, platform := range platforms {
+		if err := pluginpkg.ValidateSourceProviderRelease(root, platform.GOOS, platform.GOARCH); err != nil {
+			if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
+				if providerBuildRequired {
+					missingProvider = true
+				}
+				continue
+			}
+			return nil, fmt.Errorf("detect source provider package for %s/%s: %w", platform.GOOS, platform.GOARCH, err)
+		}
+		builds = append(builds, platform)
 	}
 
 	if len(builds) == 0 {
@@ -186,17 +163,17 @@ func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platf
 		}
 		return nil, nil
 	}
-	if missingErr != nil {
-		return nil, missingErr
+	if missingProvider {
+		return nil, fmt.Errorf("no Go or Python provider package found")
 	}
 	return builds, nil
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, build releaseBuild, outputDir, manifestFile, manifestFormat string) (string, error) {
-	plat := build.platform
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
+	plat := platform
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
 	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
-		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, build)
+		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, platform)
 	})
 }
 
@@ -221,40 +198,6 @@ func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat s
 
 	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
 	return archivePath, nil
-}
-
-func buildReleaseBinary(root, binaryPath string, plat releasePlatform) error {
-	return pluginpkg.BuildGoProviderBinary(root, binaryPath, plat.GOOS, plat.GOARCH)
-}
-
-func normalizeReleasePlatformsForSourcePlugin(root string, manifest *pluginmanifestv1.Manifest, value string) (string, error) {
-	if value != defaultPlatforms {
-		return value, nil
-	}
-	if !releaseRequiresBuildTarget(manifest) {
-		return value, nil
-	}
-	hasGoProvider, goErr := pluginpkg.HasGoProviderPackage(root)
-	if goErr != nil && !errors.Is(goErr, pluginpkg.ErrGoToolUnavailable) {
-		return "", fmt.Errorf("detect Go provider package: %w", goErr)
-	}
-	if goErr == nil && hasGoProvider {
-		return value, nil
-	}
-	target, err := pluginpkg.DetectPythonProviderTarget(root)
-	switch {
-	case err == nil && target != "":
-		return currentReleasePlatform(), nil
-	case errors.Is(err, pluginpkg.ErrNoPythonProviderPackage):
-		if errors.Is(goErr, pluginpkg.ErrGoToolUnavailable) {
-			return "", fmt.Errorf("detect Go provider package: %w", goErr)
-		}
-		return value, nil
-	case err != nil:
-		return "", fmt.Errorf("detect Python provider package: %w", err)
-	default:
-		return value, nil
-	}
 }
 
 func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, manifest *pluginmanifestv1.Manifest) error {
@@ -312,18 +255,12 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	})
 }
 
-func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, build releaseBuild) (*pluginmanifestv1.Manifest, error) {
-	plat := build.platform
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, platform releasePlatform) (*pluginmanifestv1.Manifest, error) {
+	plat := platform
 	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
-	if build.python {
-		if err := buildPythonReleaseBinary(sourceDir, binaryPath, pluginName, build.target); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := buildReleaseBinary(sourceDir, binaryPath, build.platform); err != nil {
-			return nil, err
-		}
+	if err := pluginpkg.BuildSourceProviderReleaseBinary(sourceDir, binaryPath, pluginName, plat.GOOS, plat.GOARCH); err != nil {
+		return nil, err
 	}
 
 	digest, err := pluginpkg.FileSHA256(binaryPath)

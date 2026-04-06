@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/template"
 )
@@ -73,26 +72,6 @@ func NewGoProviderWrapper(root, goos, goarch string) (string, func(), error) {
 		return "", nil, fmt.Errorf("write Go provider wrapper: %w", err)
 	}
 	return path, cleanup, nil
-}
-
-func GoProviderRunCommand(root string) (string, []string, func(), error) {
-	wrapperPath, cleanup, err := NewGoProviderWrapper(root, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	return "go", []string{"-C", root, "run", goReadonlyFlag, wrapperPath}, cleanup, nil
-}
-
-func HasGoProviderPackage(root string) (bool, error) {
-	_, err := DetectGoProviderImportPath(root, runtime.GOOS, runtime.GOARCH)
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, ErrNoGoProviderPackage):
-		return false, nil
-	default:
-		return false, err
-	}
 }
 
 func BuildGoProviderTempBinary(root, goos, goarch string) (string, func(), error) {

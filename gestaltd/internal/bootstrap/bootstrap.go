@@ -1187,24 +1187,13 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
 		rootDir := filepath.Dir(intg.Plugin.ResolvedManifestPath)
-		hasGoProvider, err := pluginpkg.HasGoProviderPackage(rootDir)
-		if err != nil && !errors.Is(err, pluginpkg.ErrGoToolUnavailable) {
-			return nil, fmt.Errorf("detect synthesized Go provider package: %w", err)
+		var err error
+		command, args, cleanup, err = pluginpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
+		if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
+			return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
 		}
-		if err == nil && hasGoProvider {
-			command, cleanup, err = pluginpkg.BuildGoProviderTempBinary(rootDir, runtime.GOOS, runtime.GOARCH)
-			if err != nil {
-				return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
-			}
-			args = nil
-		} else {
-			command, args, cleanup, err = pluginpkg.SourceProviderRunCommand(rootDir)
-			if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
-				return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
-			}
-			if err != nil {
-				return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
-			}
+		if err != nil {
+			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
 		}
 	}
 	if cleanup != nil {

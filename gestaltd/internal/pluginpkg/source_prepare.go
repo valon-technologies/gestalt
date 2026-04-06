@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -47,7 +48,7 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *pluginmanifestv1.M
 }
 
 func generateSourceStaticCatalog(rootDir, catalogPath string) error {
-	command, args, cleanup, err := SourceProviderRunCommand(rootDir)
+	command, args, cleanup, err := SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		if errors.Is(err, ErrNoSourceProviderPackage) {
 			return nil
