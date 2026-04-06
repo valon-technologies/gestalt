@@ -73,6 +73,90 @@ assembled from:
 A single provider can mix executable plugin logic with spec-backed or MCP
 surfaces. That is the main composition model in Gestalt.
 
+## Provider patterns
+
+### Inline REST provider
+
+```yaml
+providers:
+  support:
+    connections:
+      default:
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: API Token
+    surfaces:
+      rest:
+        base_url: https://api.support.example.com
+        operations:
+          - name: list_tickets
+            description: Return open support tickets
+            method: GET
+            path: /tickets
+```
+
+### OpenAPI-backed provider
+
+```yaml
+providers:
+  httpbin:
+    connections:
+      public:
+        mode: none
+        auth:
+          type: none
+    surfaces:
+      openapi:
+        document: ./openapi/httpbin.yaml
+        connection: public
+    allowed_operations:
+      get_ip:
+        alias: get_ip
+    mcp:
+      enabled: true
+      tool_prefix: httpbin_
+```
+
+### Local source plugin
+
+```yaml
+providers:
+  gmail:
+    display_name: Gmail
+    from:
+      source:
+        path: ./plugins/gmail/plugin.yaml
+    mcp:
+      enabled: true
+      tool_prefix: gmail_
+```
+
+### Hybrid provider
+
+```yaml
+providers:
+  support:
+    from:
+      source:
+        path: ./plugins/support/plugin.yaml
+    connections:
+      mcp:
+        mode: user
+        auth:
+          type: mcp_oauth
+    surfaces:
+      openapi:
+        document: ./openapi/support.yaml
+      mcp:
+        url: https://mcp.support.example.com/mcp
+        connection: mcp
+    allowed_operations:
+      tickets.list:
+        alias: list_tickets
+```
+
 ## Connections and auth
 
 Connections define how Gestalt authenticates to upstream systems.
@@ -110,6 +194,16 @@ Gestalt stores upstream credentials by user, provider, connection name, and
 instance. Renaming a `providers:` key is therefore a breaking change for stored
 connections.
 
+### Choosing an auth strategy
+
+| Scenario | Recommended configuration |
+| --- | --- |
+| Local development | `auth.provider: none` |
+| Single-user dev server with login flows | `auth.provider: local` |
+| Multi-user deployment | `auth.provider: google` or `auth.provider: oidc` |
+| Per-user upstream access | `mode: user` on provider connections |
+| Shared service credential | `mode: identity` on provider connections |
+
 ## Platform auth and API tokens
 
 Platform auth controls access to the web UI, HTTP API, and `/mcp`. The main
@@ -141,6 +235,32 @@ providers:
 In practice, tool exposure follows the provider surfaces and catalog that
 Gestalt builds at startup. Declarative REST, OpenAPI, GraphQL, upstream MCP, and
 plugin-backed operations can all contribute tools.
+
+## Managed parameters and response mapping
+
+Use `managed_parameters` when OpenAPI- or GraphQL-backed operations need fixed
+header or path values injected before they are exposed to callers.
+
+```yaml
+managed_parameters:
+  - in: header
+    name: X-API-Version
+    value: "2026-04-01"
+  - in: path
+    name: account_id
+    value: primary
+```
+
+Use `response_mapping` when the upstream response needs explicit data or
+pagination extraction:
+
+```yaml
+response_mapping:
+  data_path: data.items
+  pagination:
+    has_more_path: pageInfo.hasNextPage
+    cursor_path: pageInfo.endCursor
+```
 
 ## Startup workflows
 
@@ -191,7 +311,9 @@ deploy/
 ```
 
 The config declares intent, while the lockfile records the exact prepared result
-that `serve --locked` should trust.
+that `serve --locked` should trust. That lets Gestalt verify that prepared
+artifacts still match the current config instead of just using whatever happens
+to exist on disk.
 
 ### Lockfile example
 
@@ -286,3 +408,22 @@ providers:
 - [Security](/security) for trust boundaries and token handling
 - [Observability](/observability) for metrics, logs, and OTLP export
 - [Plugins](/plugins) for executable plugins, provider packages, and UI bundles
+
+## Minimal config
+
+```yaml
+server:
+  port: 8080
+  base_url: http://localhost:8080
+  encryption_key: change-me
+
+auth:
+  provider: none
+
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+
+providers: {}
+```

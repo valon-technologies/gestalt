@@ -92,6 +92,13 @@ webui:
   asset_root: ui/out
 ```
 
+Runtime behavior for UI bundles:
+
+- `gestaltd init` prepares the packaged UI and records it in `gestalt.lock.json`
+- `gestaltd serve --locked` serves the prepared asset root at `/`
+- if `ui.plugin` is omitted, Gestalt falls back to the built-in client UI
+- the built-in admin UI remains available at `/admin`
+
 ## Build a release
 
 Use `gestaltd plugin release` to build a plugin release and produce release archives:
