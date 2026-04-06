@@ -71,11 +71,11 @@ type CustomFixtures = {
 };
 
 export const test = base.extend<CustomFixtures>({
-  authenticatedPage: async ({ page }, use) => {
+  authenticatedPage: async ({ page }, runAuthenticatedPage) => {
     await page.addInitScript(() => {
       localStorage.setItem("user_email", "test@gestalt.dev");
     });
-    await use(page);
+    await runAuthenticatedPage(page);
   },
 });
 

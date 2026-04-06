@@ -10,15 +10,19 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const connected = new URLSearchParams(window.location.search).get("connected");
+    return connected ? `${connected} connected successfully.` : null;
+  });
 
   useEffect(() => {
-    const connected = new URLSearchParams(window.location.search).get("connected");
-    if (connected) {
-      setToast(`${connected} connected successfully.`);
+    if (toast) {
       window.history.replaceState(null, "", "/integrations");
     }
-  }, []);
+  }, [toast]);
 
   function loadIntegrations() {
     getIntegrations()
@@ -29,7 +33,6 @@ export default function IntegrationsPage() {
       .finally(() => setLoading(false));
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadIntegrations(); }, []);
 
   return (
