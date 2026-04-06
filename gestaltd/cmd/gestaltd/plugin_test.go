@@ -998,20 +998,6 @@ def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
 	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
 set -eu
 
-if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
-  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-    echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
-    exit 1
-  fi
-  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
-name: python-release
-operations:
-  - id: greet
-    method: GET
-EOF
-  exit 0
-fi
-
 if [ "$#" -ge 3 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ] && [ "$3" = "build" ]; then
   if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
@@ -1040,6 +1026,20 @@ if [ "$#" -ge 3 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ] && [ "$3" 
   mkdir -p "$output_dir"
   cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$output"
   chmod +x "$output"
+  exit 0
+fi
+
+if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
+  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+    echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+    exit 1
+  fi
+  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+name: python-release
+operations:
+  - id: greet
+    method: GET
+EOF
   exit 0
 fi
 
