@@ -295,32 +295,6 @@ func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleasePreservesCompiledWebUIMetadata(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newCompiledWebUIReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	testVersion := "0.0.21-test"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-compiled-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-
-	_, manifest := readManifestFromDir(t, extractDir)
-	if manifest.WebUI == nil || manifest.WebUI.AssetRoot != "out" {
-		t.Fatalf("manifest webui = %#v, want asset_root %q", manifest.WebUI, "out")
-	}
-
-	if _, err := os.Stat(filepath.Join(extractDir, "out", "index.html")); err != nil {
-		t.Fatalf("expected webui asset in archive: %v", err)
-	}
-}
-
 func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	t.Parallel()
 
@@ -384,7 +358,7 @@ func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseTreatsGoModWithoutCmdAsDeclarative(t *testing.T) {
+func TestRun_PluginReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
@@ -409,7 +383,7 @@ func TestRun_PluginReleaseTreatsGoModWithoutCmdAsDeclarative(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseTreatsDeclarativePluginWithHelperMainAsSource(t *testing.T) {
+func TestRun_PluginReleaseIgnoresHelperMainPackagesWithoutProviderPackage(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
@@ -995,36 +969,12 @@ func newCompiledManifestBackedProviderReleaseFixture(t *testing.T, dir string) s
 
 func writeStaticCatalogProviderMain(t *testing.T, dir string) {
 	t.Helper()
-	writeStaticCatalogProviderMainAt(t, dir, filepath.ToSlash(filepath.Join("provider", "provider.go")))
+	writeStaticCatalogProviderMainAt(t, dir, "provider.go")
 }
 
 func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
 	t.Helper()
 	writeTestFile(t, dir, rel, []byte(testutil.GeneratedProviderPackageSource()), 0644)
-}
-
-func newCompiledWebUIReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, "compiled-webui-test")
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/compiled-webui-test\n\ngo 1.22\n"), 0644)
-	writeTestFile(t, pluginDir, "cmd/main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/compiled-webui-test",
-		Version:     "0.0.1",
-		DisplayName: "Compiled WebUI Test",
-		IconFile:    "branding/icon.svg",
-		Kinds:       []string{pluginmanifestv1.KindWebUI},
-		WebUI: &pluginmanifestv1.WebUIMetadata{
-			AssetRoot: "out",
-		},
-	})
-	writeTestFile(t, pluginDir, "branding/icon.svg", []byte("<svg></svg>\n"), 0644)
-	writeTestFile(t, pluginDir, "out/index.html", []byte("<html></html>\n"), 0644)
-	return pluginDir
 }
 
 func newPrebuiltHybridReleaseFixture(t *testing.T, dir string) string {
