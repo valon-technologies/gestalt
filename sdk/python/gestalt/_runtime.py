@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import signal
+import subprocess
 import sys
+import tempfile
 from concurrent import futures
 
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
@@ -71,15 +74,21 @@ def serve(plugin: Plugin) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    if len(args) == 5 and args[0] == "build":
+        _, root, target, output_path, plugin_name = args
+        build_plugin_binary(root, target, output_path, plugin_name)
+        return 0
+
     if len(args) != 2:
-        print("usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE", file=sys.stderr)
+        print(
+            "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE\n"
+            "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
+            file=sys.stderr,
+        )
         return 2
 
     root, target = args
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-    plugin = _load_plugin(target)
+    plugin = _load_plugin(target, root)
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -89,18 +98,96 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _load_plugin(target: str) -> Plugin:
+def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: str) -> None:
+    root_path = pathlib.Path(root).resolve()
+    output = pathlib.Path(output_path).resolve()
+    module_name, _attr_name = _split_target(target)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="gestalt-python-release-") as work_dir:
+        work_path = pathlib.Path(work_dir)
+        launcher_path = work_path / "launcher.py"
+        launcher_path.write_text(
+            _launcher_source(target, plugin_name),
+            encoding="utf-8",
+        )
+
+        pyinstaller_name = output.name
+        if sys.platform == "win32" and pyinstaller_name.endswith(".exe"):
+            pyinstaller_name = pyinstaller_name[:-4]
+
+        command = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--onefile",
+            "--distpath",
+            str(output.parent),
+            "--workpath",
+            str(work_path / "build"),
+            "--specpath",
+            str(work_path / "spec"),
+            "--name",
+            pyinstaller_name,
+            "--hidden-import",
+            module_name,
+            "--paths",
+            str(root_path),
+            "--paths",
+            str(_sdk_import_root()),
+            str(launcher_path),
+        ]
+        subprocess.run(command, cwd=root_path, check=True)
+
+
+def _load_plugin(target: str, root: str | None = None) -> Plugin:
     import importlib
 
-    module_name, _, attr_name = target.partition(":")
-    if not module_name or not attr_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
+    if root and root not in sys.path:
+        sys.path.insert(0, root)
 
+    module_name, attr_name = _split_target(target)
     module = importlib.import_module(module_name)
     plugin = getattr(module, attr_name, None)
     if not isinstance(plugin, Plugin):
         raise RuntimeError(f"{target} did not resolve to a gestalt.Plugin")
     return plugin
+
+
+def _launcher_source(target: str, plugin_name: str) -> str:
+    module_name, attr_name = _split_target(target)
+    return f"""from __future__ import annotations
+
+import importlib
+import os
+
+from gestalt._runtime import serve
+
+_gestalt_module = importlib.import_module({module_name!r})
+_gestalt_plugin = getattr(_gestalt_module, {attr_name!r})
+
+_gestalt_plugin.name = {plugin_name!r}
+
+if __name__ == "__main__":
+    catalog_path = os.environ.get("GESTALT_PLUGIN_WRITE_CATALOG")
+    if catalog_path:
+        _gestalt_plugin.write_catalog(catalog_path)
+        raise SystemExit(0)
+    serve(_gestalt_plugin)
+"""
+
+
+def _split_target(target: str) -> tuple[str, str]:
+    module_name, _, attr_name = target.partition(":")
+    if not module_name or not attr_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
+    return module_name, attr_name
+
+
+def _sdk_import_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1]
 
 
 def _runtime_imports():

@@ -998,6 +998,37 @@ def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
 	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
 set -eu
 
+if [ "$#" -ge 3 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ] && [ "$3" = "build" ]; then
+  if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
+    echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
+    exit 1
+  fi
+  if [ "$#" -ne 7 ]; then
+    echo "unexpected gestalt._runtime build args: $*" >&2
+    exit 1
+  fi
+  root="$4"
+  target="$5"
+  output="$6"
+  name="$7"
+  if [ "$target" != "provider:plugin" ]; then
+    echo "unexpected provider target: $target" >&2
+    exit 1
+  fi
+  if [ "$name" != "python-release" ]; then
+    echo "unexpected plugin name: $name" >&2
+    exit 1
+  fi
+  output_dir="${output%/*}"
+  if [ "$output_dir" = "$output" ]; then
+    output_dir="."
+  fi
+  mkdir -p "$output_dir"
+  cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$output"
+  chmod +x "$output"
+  exit 0
+fi
+
 if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
   if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
     echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
@@ -1009,43 +1040,6 @@ operations:
   - id: greet
     method: GET
 EOF
-  exit 0
-fi
-
-if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
-  distpath=""
-  hidden_import=""
-  name=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --distpath)
-        distpath="$2"
-        shift 2
-        ;;
-      --hidden-import)
-        hidden_import="$2"
-        shift 2
-        ;;
-      --name)
-        name="$2"
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
-  if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
-    echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
-    exit 1
-  fi
-  if [ "$hidden_import" != "provider" ]; then
-    echo "expected --hidden-import provider, got: $hidden_import" >&2
-    exit 1
-  fi
-  mkdir -p "$distpath"
-  cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$distpath/$name"
-  chmod +x "$distpath/$name"
   exit 0
 fi
 
