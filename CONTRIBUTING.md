@@ -40,7 +40,7 @@ cd ../proto
 ./update-go-sdk.sh
 ./check-go-sdk-sync.sh
 
-cd ../gestaltd/ui
+cd ../../gestaltd/ui
 npm ci
 npm run typecheck
 npm run build
