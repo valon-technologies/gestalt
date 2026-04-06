@@ -26,14 +26,17 @@ test.describe("Docs page", () => {
     await expect(page).toHaveURL(/\/docs/);
     await expect(
       page.getByRole("heading", {
-        name: "Use Gestalt from the terminal, browser, or any MCP-aware client.",
+        name: "Gestalt User Guide",
       }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Install the `gestalt` CLI" }),
+      page.getByRole("heading", { name: "Set Up The CLI" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Connect an MCP client to `gestaltd`" }),
+      page.getByRole("heading", { name: "Use With MCP" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: "http://localhost:8080/mcp" }),
     ).toBeVisible();
   });
 });

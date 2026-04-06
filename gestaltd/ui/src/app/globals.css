@@ -59,6 +59,14 @@
     @apply text-[11px] font-medium uppercase tracking-widest text-faint;
   }
 
+  .doc-copy {
+    @apply text-base leading-7 text-secondary;
+  }
+
+  .doc-link {
+    @apply text-primary underline decoration-base-300 underline-offset-4 transition-colors duration-150 hover:text-gold-600 dark:decoration-base-600;
+  }
+
   .gradient-warm {
     background: radial-gradient(
       140% 90% at 50% 100%,
