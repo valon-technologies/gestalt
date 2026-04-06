@@ -20,6 +20,7 @@ Valid bearer tokens are:
 | --- | --- | --- |
 | `GET` | `/health` | Basic liveness check. |
 | `GET` | `/ready` | Readiness check. Returns `503` until providers and datastore are ready. |
+| `GET` | `/admin` and `/admin/*` | Embedded admin UI shell. The UI fetches `/metrics` in the browser, so metric data still requires authenticated access to the scrape endpoint. |
 | `GET` | `/api/v1/auth/info` | Returns platform auth metadata. |
 | `POST` | `/api/v1/auth/login` | Starts platform login. |
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
@@ -53,6 +54,12 @@ Valid bearer tokens are:
 | `GET` | `/api/v1/tokens` | List API tokens for the current user. |
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 | `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
+
+### Operator Surfaces
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. |
 
 ## MCP
 

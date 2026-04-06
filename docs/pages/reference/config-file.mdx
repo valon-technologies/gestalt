@@ -183,7 +183,7 @@ secrets:
 
 ## `telemetry`
 
-Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced.
+Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. Metrics are emitted for broker invocations, inbound HTTP requests, and plugin gRPC client calls; see [Observability](/reference/observability) for the emitted metric inventory and Prometheus name translation.
 
 ### `stdout`
 
