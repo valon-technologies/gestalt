@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -35,6 +36,7 @@ const (
 	attrTransport      = attribute.Key("gestalt.transport")
 	attrUserID         = attribute.Key("gestalt.user_id")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
+	attrResult         = attribute.Key("gestalt.result")
 )
 
 type connectionCtxKey struct{}
@@ -136,10 +138,10 @@ func (b *Broker) ListCapabilities() []core.Capability {
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (_ *core.OperationResult, err error) {
 	startedAt := time.Now()
-	metricProvider := unknownMetricAttrValue
-	metricOperation := unknownMetricAttrValue
-	metricTransport := unknownMetricAttrValue
-	metricConnectionMode := unknownMetricAttrValue
+	metricProvider := metricutil.UnknownAttrValue
+	metricOperation := metricutil.UnknownAttrValue
+	metricTransport := metricutil.UnknownAttrValue
+	metricConnectionMode := metricutil.UnknownAttrValue
 
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke",
 		trace.WithSpanKind(trace.SpanKindInternal),
@@ -201,7 +203,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 	metricOperation = operation
-	metricTransport = metricAttrValue(transport)
+	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
 
 	if conn == "" {
@@ -430,11 +432,11 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 		}
 	}
 
-	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection)
+	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, normalizeConnectionMode(prov.ConnectionMode()))
 	return ctx, accessToken, err
 }
 
-func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.IntegrationToken, providerName, connection string) (string, error) {
+func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.IntegrationToken, providerName, connection, connectionMode string) (string, error) {
 	if token.RefreshToken == "" || token.ExpiresAt == nil {
 		return token.AccessToken, nil
 	}
@@ -449,7 +451,10 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 
 	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
 	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
-		return b.refreshOAuth(context.WithoutCancel(ctx), refresher, token.RefreshToken)
+		refreshCtx := context.WithoutCancel(ctx)
+		resp, err := b.refreshOAuth(refreshCtx, refresher, token.RefreshToken)
+		recordTokenRefreshMetrics(refreshCtx, providerName, connectionMode, err != nil)
+		return resp, err
 	})
 	if err != nil {
 		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)

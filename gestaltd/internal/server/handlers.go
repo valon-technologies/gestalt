@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 
@@ -829,6 +830,12 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	metricProvider := metricutil.UnknownAttrValue
+	callbackFailed := true
+	defer func() {
+		recordOAuthCallbackMetric(r.Context(), metricProvider, callbackFailed)
+	}()
+
 	code := r.URL.Query().Get("code")
 	encodedState := r.URL.Query().Get("state")
 	if code == "" || encodedState == "" {
@@ -848,6 +855,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	providerName := state.Integration
+	metricProvider = providerName
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		return
@@ -916,9 +924,11 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 			return
 		}
 		s.writePendingConnectionSelectionPage(w, state, result.PendingToken)
+		callbackFailed = false
 		return
 	}
 
+	callbackFailed = false
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }
 
