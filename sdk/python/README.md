@@ -26,8 +26,9 @@ python3 sdk/python/scripts/generate_stubs.py
 ```
 
 The script uses pinned `buf` remote Python plugins so the generated stubs stay
-reproducible while `plugin_pb2.py` tracks the protobuf `7.34.1` runtime floor
-used by this SDK package. `buf` must be available on `PATH`.
+reproducible while `plugin_pb2.py` tracks the protobuf `6.33.1` runtime floor
+used by this SDK package and remains compatible with protobuf 7 runtimes.
+`buf` must be available on `PATH`.
 
 ## Publishing
 
