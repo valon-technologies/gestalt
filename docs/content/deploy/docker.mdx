@@ -31,6 +31,25 @@ volumes:
   gestalt-data:
 ```
 
+## Published images
+
+Gestalt publishes two Docker images for `linux/amd64` and `linux/arm64`:
+
+| Image | Purpose |
+| --- | --- |
+| `valontechnologies/gestaltd:latest` | Server image. Runs the HTTP API, web UI, and MCP endpoint. |
+| `valontechnologies/gestalt:latest` | CLI image. Useful for CI and containerized automation. |
+
+Example CLI usage:
+
+```sh
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  integrations list
+```
+
 ## Production image
 
 For deterministic production deployments, run `gestaltd init` locally to resolve plugins and write lock state, then bake the result into a derived image:
@@ -51,7 +70,8 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 
 This produces a self-contained image that starts without fetching or resolving anything at runtime.
 
-See [Configuration](/concepts/configuration) for what `gestalt.lock.json` records and why `serve --locked` depends on it.
+See [Configuration](/configuration) for what `gestalt.lock.json` records and
+why `serve --locked` depends on it.
 
 ## Environment variables and secrets
 
@@ -66,7 +86,8 @@ docker run --rm \
   valontechnologies/gestaltd:latest
 ```
 
-For production, use a dedicated secret manager with `secret://` references. See [Configuration](/concepts/configuration) for details.
+For production, use a dedicated secret manager with `secret://` references. See
+[Configuration](/configuration) for details.
 
 ## Health endpoints
 

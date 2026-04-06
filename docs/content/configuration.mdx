@@ -1,0 +1,288 @@
+# Configuration
+
+Gestalt is configured from a single YAML file. This page explains the model and
+the main workflows. Use the [Config File](/reference/config-file) page for the
+authoritative field-by-field reference.
+
+## Config lifecycle
+
+When `--config` is not supplied, `gestaltd` looks for config in this order:
+
+1. `GESTALT_CONFIG`
+2. `./config.yaml`
+3. `~/.gestaltd/config.yaml`
+4. `~/.gestalt/config.yaml`
+5. `/etc/gestalt/config.yaml`
+
+If nothing is found, `gestaltd` generates a default local config at
+`~/.gestaltd/config.yaml`.
+
+During loading, Gestalt:
+
+1. Expands `${ENV_VAR}` placeholders before YAML decode.
+2. Falls back to `ENV_VAR_FILE` when the direct variable is unset.
+3. Rejects unknown YAML fields.
+4. Resolves relative paths from the config file directory.
+5. Resolves `secret://...` values through the configured secret manager during
+   bootstrap.
+
+## Top-level blocks
+
+Most deployments only need a few top-level blocks:
+
+| Block | Purpose |
+| --- | --- |
+| `server` | HTTP listener, base URL, encryption key, API token TTL, prepared artifacts dir |
+| `auth` | Platform login for the web UI, HTTP API, and `/mcp` |
+| `datastore` | Persistent storage for users, sessions, API tokens, and integration credentials |
+| `secrets` | Resolution for `secret://...` references |
+| `telemetry` | Structured logs, metrics, traces, and OTLP export |
+| `providers` | The integrations users actually invoke |
+| `egress` | Optional outbound policy rules and credential grants |
+| `ui` | Optional packaged web UI bundle |
+
+## Defaults and required fields
+
+Gestalt applies a small set of important defaults:
+
+- `server.port`: `8080`
+- `secrets.provider`: `env`
+- `telemetry.provider`: `stdout`
+
+The most important required fields are:
+
+- `auth.provider`
+- `datastore.provider`
+- `server.encryption_key`
+
+`server.encryption_key` is the root deployment secret. Gestalt derives token
+encryption and related session material from it, so changing it is a meaningful
+deployment event rather than a cosmetic config update.
+
+## Providers
+
+Each entry under `providers:` becomes a runtime provider. A provider can be
+assembled from:
+
+- inline REST operations in YAML
+- an OpenAPI document
+- a GraphQL endpoint
+- an upstream MCP server
+- a local or published plugin source
+
+A single provider can mix executable plugin logic with spec-backed or MCP
+surfaces. That is the main composition model in Gestalt.
+
+## Connections and auth
+
+Connections define how Gestalt authenticates to upstream systems.
+
+### Connection modes
+
+| Mode | Meaning |
+| --- | --- |
+| `none` | No upstream credential is needed |
+| `user` | Each user stores their own upstream credential |
+| `identity` | One shared service credential is used |
+| `either` | Prefer a user credential, fall back to the shared identity |
+
+### Connection naming
+
+`connections.default` is common, but it is not required. If you use only named
+connections, each configured surface must explicitly name which connection it
+uses.
+
+Users can also store multiple instances of the same connection. The HTTP API and
+CLI expose `_connection` and `_instance` selectors so callers can disambiguate
+which stored credential to use.
+
+### Auth types
+
+Common connection auth types include:
+
+- `oauth2`
+- `mcp_oauth`
+- `bearer`
+- `manual`
+- `none`
+
+Gestalt stores upstream credentials by user, provider, connection name, and
+instance. Renaming a `providers:` key is therefore a breaking change for stored
+connections.
+
+## Platform auth and API tokens
+
+Platform auth controls access to the web UI, HTTP API, and `/mcp`. The main
+choices are:
+
+- `auth.provider: none` for local development
+- `auth.provider: local` for a single-user dev environment
+- `auth.provider: google` or `auth.provider: oidc` for real multi-user setups
+
+For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`.
+They are accepted through `Authorization: Bearer ...` and use the same auth
+middleware as browser sessions.
+
+## MCP
+
+Gestalt exposes a single MCP endpoint at `/mcp`. MCP uses the same auth model
+as the rest of the HTTP surface.
+
+Use the provider-level `mcp` block to control tool naming, for example:
+
+```yaml
+providers:
+  github:
+    mcp:
+      enabled: true
+      tool_prefix: github_
+```
+
+In practice, tool exposure follows the provider surfaces and catalog that
+Gestalt builds at startup. Declarative REST, OpenAPI, GraphQL, upstream MCP, and
+plugin-backed operations can all contribute tools.
+
+## Startup workflows
+
+### Fast local development
+
+```sh
+gestaltd serve --config ./config.yaml
+```
+
+### Deterministic production startup
+
+```sh
+gestaltd init --config ./config.yaml
+gestaltd serve --locked --config ./config.yaml
+```
+
+### Validation only
+
+```sh
+gestaltd validate --config ./config.yaml
+```
+
+`init` prepares published plugin sources, packaged UI bundles, and other locked
+artifacts into writable state. `serve --locked` starts only from that prepared
+state.
+
+## Prepared state and lockfiles
+
+Gestalt supports two startup modes:
+
+- mutable startup with `gestaltd serve`
+- deterministic startup with `gestaltd init` followed by `gestaltd serve --locked`
+
+`gestaltd init` writes:
+
+- `gestalt.lock.json` next to the config file
+- prepared provider and UI artifacts under `.gestaltd/` in the configured
+  artifacts directory
+
+Typical layout:
+
+```text
+deploy/
+  config.yaml
+  gestalt.lock.json
+  .gestaltd/providers/...
+  .gestaltd/ui/...
+```
+
+The config declares intent, while the lockfile records the exact prepared result
+that `serve --locked` should trust.
+
+### Lockfile example
+
+For a source-backed plugin, the YAML config says which release you intend to
+use:
+
+```yaml
+providers:
+  example:
+    from:
+      source:
+        ref: github.com/acme/plugins/example
+        version: 1.2.3
+```
+
+The lockfile records the concrete prepared result of resolving that config:
+
+```json
+{
+  "version": 1,
+  "providers": {
+    "example": {
+      "fingerprint": "...",
+      "source": "github.com/acme/plugins/example",
+      "version": "1.2.3",
+      "resolved_url": "https://github.com/...",
+      "archive_sha256": "...",
+      "manifest": ".gestaltd/providers/example/plugin.yaml",
+      "executable": ".gestaltd/providers/example/artifacts/linux/amd64/provider"
+    }
+  },
+  "ui": {
+    "fingerprint": "...",
+    "source": "github.com/acme/plugins/web",
+    "version": "1.2.3",
+    "resolved_url": "https://github.com/...",
+    "archive_sha256": "...",
+    "manifest": ".gestaltd/ui/plugin.yaml",
+    "asset_root": ".gestaltd/ui/dist"
+  }
+}
+```
+
+That distinction matters because `serve --locked` needs a durable record of what
+was prepared during `init`, not just whatever files happen to exist on disk.
+
+## Example
+
+```yaml
+server:
+  base_url: https://gestalt.example.com
+  encryption_key: secret://gestalt-encryption-key
+
+auth:
+  provider: oidc
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+
+providers:
+  github:
+    display_name: GitHub
+    mcp:
+      enabled: true
+      tool_prefix: github_
+    connections:
+      api:
+        mode: user
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: Personal Access Token
+      mcp:
+        mode: user
+        auth:
+          type: mcp_oauth
+    surfaces:
+      openapi:
+        document: ./openapi/github.yaml
+        connection: api
+      mcp:
+        url: https://api.githubcopilot.com/mcp/
+        connection: mcp
+```
+
+## Where to go next
+
+- [Config File](/reference/config-file) for exact syntax and validation rules
+- [HTTP API](/reference/http-api) for invocation and connection flows
+- [Security](/security) for trust boundaries and token handling
+- [Observability](/observability) for metrics, logs, and OTLP export
+- [Plugins](/plugins) for executable plugins, provider packages, and UI bundles

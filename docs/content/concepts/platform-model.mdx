@@ -1,55 +1,9 @@
 # Platform Model
 
-Gestalt is built on a small set of composable primitives. A single YAML configuration file defines which primitives to use, and `gestaltd` assembles them into a running integration platform at startup.
+This material now lives in [Configuration](/configuration).
 
-## Primitives
+Use:
 
-| Primitive | Role |
-| --- | --- |
-| `auth` | Authenticates users to Gestalt and issues platform sessions. |
-| `datastore` | Stores users, API tokens, OAuth credentials, and runtime state. |
-| `secrets` | Resolves `secret://` references in the config at boot time. |
-| `providers` | The integrations that users interact with. Each entry under `providers:` becomes a callable provider. |
-
-## Startup
-
-When `gestaltd` starts, it loads the config file, expands environment variables and secret references, builds each platform primitive, builds providers, and starts the HTTP server. See [Configuration](/concepts/configuration) for the full config lifecycle.
-
-## Providers
-
-Each entry under `providers:` in the config becomes a runtime provider. Providers can be built from three sources:
-
-| Source | Description |
-| --- | --- |
-| Inline declarative | Defined entirely in YAML using `surfaces.rest`. |
-| Inline spec-backed | Generated from an OpenAPI spec, GraphQL endpoint, or upstream MCP server. |
-| Source or published plugin | A separate process that communicates with `gestaltd` over gRPC. See [Plugins](/plugins). |
-
-A source or published plugin can also expose spec-backed surfaces alongside its own operations. This is referred to as a hybrid provider.
-
-## Connections
-
-Connections define how a provider authenticates with upstream APIs. Each provider has a `connections.default` entry and may define additional named connections.
-
-| Mode | Description |
-| --- | --- |
-| `none` | No credential is needed. |
-| `user` | Each user authenticates individually. |
-| `identity` | A single shared service credential is used. |
-| `either` | User credentials are preferred, with fallback to the shared identity. |
-
-When a user has multiple stored connections for the same provider, callers must specify which instance to use. When only one exists, Gestalt selects it automatically.
-
-## Invocation
-
-All execution paths go through a shared invocation broker. The broker resolves the target provider and operation, selects and refreshes credentials, and returns normalized results. Because the broker is shared, the same authorization and credential behavior applies whether the request comes from the HTTP API, the web UI, or an MCP client.
-
-## Surfaces
-
-Providers are accessible through three surfaces, all served from the same `gestaltd` process:
-
-| Surface | Endpoint |
-| --- | --- |
-| HTTP API | `/api/v1/` |
-| Web UI | `/` |
-| MCP | `/mcp` (mounted when at least one provider exposes MCP tools) |
+- [Configuration](/configuration) for providers, surfaces, connections, auth,
+  and MCP
+- [Getting Started](/getting-started) for the quickest end-to-end flow

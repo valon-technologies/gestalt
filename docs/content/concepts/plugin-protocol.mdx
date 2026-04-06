@@ -1,40 +1,9 @@
 # Plugin Protocol
 
-Gestalt plugins are separate processes that extend `gestaltd` with custom provider logic. The host and plugin communicate over a local Unix socket using gRPC. See [Writing a Plugin](/plugins/writing-a-plugin) for a practical guide to building one.
+This material has moved to [Writing a Plugin](/plugins/writing-a-plugin).
 
-## How plugins work
+Use:
 
-When `gestaltd` starts a plugin, it creates a temporary Unix socket, sets the `GESTALT_PLUGIN_SOCKET` environment variable, and launches the plugin binary as a child process. The plugin connects to the socket and registers itself over gRPC. The host then sends the plugin its configured name and config block.
-
-## Provider plugin contract
-
-A provider plugin must:
-
-- Report metadata (name, display name, description, connection mode)
-- Accept its configured provider name and config block during startup
-- Expose an operation catalog
-- Execute operations when invoked
-
-A plugin may optionally:
-
-- Expose a request-scoped catalog that varies based on the caller's credentials
-
-## Config placement
-
-Plugin config is passed from the `config` block under the provider entry:
-
-```yaml
-providers:
-  example:
-    from:
-      source:
-        path: ./plugin.yaml
-    config:
-      greeting: hello
-```
-
-The plugin receives this as a key-value map during startup. If the plugin needs config validation, declare it in the manifest with `provider.config_schema_path`.
-
-## Language support
-
-Gestalt currently provides a Go SDK for writing plugins (`sdk/go`). Support for additional languages is planned. The underlying protocol is gRPC, so plugins can be implemented in any language that supports gRPC by implementing the `ProviderPlugin` service contract defined in `sdk/proto/v1/plugin.proto`.
+- [Writing a Plugin](/plugins/writing-a-plugin) for the runtime model, SDKs, and
+  authoring flow
+- [Plugin Manifests](/reference/plugin-manifests) for manifest syntax

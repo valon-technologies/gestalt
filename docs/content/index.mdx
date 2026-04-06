@@ -2,55 +2,46 @@ import { Cards } from 'nextra/components'
 
 # Gestalt
 
-Gestalt is a platform for self-hostable, configurable integrations and tooling, with authentication and execution out-of-the-box.
+Gestalt is a self-hostable integration platform. A single YAML config defines
+how users authenticate, how upstream APIs are connected, and which tools are
+exposed through the HTTP API, web UI, and `/mcp`.
 
-## How does Gestalt work?
+## How it works
 
 Gestalt works in three stages:
 
-### Configure
+1. Configure platform auth, storage, secrets, providers, and optional MCP
+   naming.
+2. Connect users or shared identities to upstream systems through OAuth or
+   manual auth.
+3. Invoke the same provider catalog through the browser, HTTP API, CLI, or MCP.
 
-Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
+## What you can build
 
-### Connect
+- Inline REST providers defined entirely in YAML
+- OpenAPI, GraphQL, and upstream MCP integrations
+- Executable plugins with Go or Python
+- Custom web UI bundles packaged alongside provider releases
 
-Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
-
-### Invoke
-
-Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
-
-## Why Gestalt?
-
-### Self-hosted and private
-
-Gestalt runs in your infrastructure. Credentials and data never leave your network.
-
-### One config, many integrations
-
-A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
-
-### Works with AI tooling
-
-Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
-
-### Extensible
-
-Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
-
-## Start Here
+## Start here
 
 <Cards>
   <Cards.Card title="Getting Started" href="/getting-started">
-    Run Gestalt out-of-the-box, then move to custom configurations.
+    Run Gestalt locally, invoke a sample integration, and verify the core flow.
   </Cards.Card>
-  <Cards.Card title="Platform Model" href="/concepts/platform-model">
-    See how the pieces of Gestalt all fit together.
+  <Cards.Card title="Configuration" href="/configuration">
+    Learn the configuration model, provider surfaces, auth, connections, and MCP.
   </Cards.Card>
-  <Cards.Card title="Configuration" href="/concepts/configuration">
-    Learn the top-level primitives and lifecycle of Gestalt.
+  <Cards.Card title="Plugins" href="/plugins">
+    Decide when to use executable plugins, provider packages, or UI bundles.
+  </Cards.Card>
+  <Cards.Card title="Security" href="/security">
+    Review trust boundaries, encryption, headers, and token handling.
   </Cards.Card>
   <Cards.Card title="Deploy" href="/deploy">
     Ship Gestalt to the cloud provider of your choice.
+  </Cards.Card>
+  <Cards.Card title="Reference" href="/reference/config-file">
+    Look up exact config syntax, manifest fields, API routes, and CLI commands.
   </Cards.Card>
 </Cards>

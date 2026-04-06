@@ -1,11 +1,12 @@
 export default {
   index: "Overview",
-  introduction: "Introduction",
   "getting-started": "Getting Started",
-  concepts: "Concepts",
+  configuration: "Configuration",
   plugins: "Plugins",
+  security: "Security",
+  observability: "Observability",
+  "audit-logging": "Audit Logging",
   deploy: "Deploy",
   reference: "Reference",
   troubleshooting: "Troubleshooting",
-  contributing: "Contributing",
 };

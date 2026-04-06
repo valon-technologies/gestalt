@@ -9,6 +9,21 @@ You will:
 3. Run the plugin locally with `from.source.path`.
 4. Release it with a single command.
 
+## Runtime model
+
+Executable plugins are separate processes started by `gestaltd`. The host opens
+a temporary Unix socket, sets `GESTALT_PLUGIN_SOCKET`, and waits for the plugin
+to connect back over gRPC.
+
+At startup the plugin receives:
+
+- the configured provider name
+- the provider `config` block
+- the current request context for each invocation
+
+The host still owns auth, token storage, connection selection, and HTTP or MCP
+routing. Plugins do not access the datastore directly.
+
 ## Prerequisites
 
 - Go 1.26 or later for Go plugins
@@ -234,6 +249,10 @@ providers:
       enabled: true
       tool_prefix: my_
 ```
+
+See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema and
+[Packaging and Releasing](/plugins/packaging-and-releasing) for the release
+archive workflow.
 
 Then invoke it:
 

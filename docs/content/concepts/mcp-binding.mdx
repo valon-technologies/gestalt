@@ -1,68 +1,9 @@
 # MCP
 
-Gestalt exposes a single MCP endpoint at `/mcp`. AI agents, coding assistants, and other MCP clients can use this endpoint to discover and invoke any provider that has MCP enabled.
+This material has moved to [Configuration](/configuration).
 
-## Availability
+Use:
 
-The `/mcp` endpoint is mounted when at least one provider declares an MCP-capable surface. This includes providers with inline declarative operations, OpenAPI or GraphQL surfaces, upstream MCP connections, and source or published plugins with an operation catalog.
-
-## Tool discovery
-
-Gestalt converts provider operation catalogs into MCP tools. HTTP-backed operations become tools that route through the invocation broker. Upstream MCP tools from `surfaces.mcp` are passed through directly. Hybrid providers expose both sets under a single integration.
-
-Providers that support request-scoped catalogs have their tool lists refreshed at discovery and call time, so the available tools reflect the caller's current connection state.
-
-## Tool naming
-
-Tool names are derived from provider operation IDs. Use `mcp.tool_prefix` to namespace tools and prevent collisions across providers:
-
-```yaml
-providers:
-  slack:
-    mcp:
-      enabled: true
-      tool_prefix: slack_
-```
-
-## Authentication
-
-The `/mcp` endpoint uses the same authentication as the rest of the HTTP API. Callers authenticate with a platform session cookie or an API token (`Authorization: Bearer gst_api_...`).
-
-## Connection selection
-
-MCP requests follow the same connection resolution logic as the HTTP API. The server resolves the provider's default connection, honors surface-specific connection names, and fails the request if multiple stored instances exist without a unique match.
-
-For hybrid providers, the API-backed and MCP-backed surfaces can use different named connections.
-
-## Example
-
-This configuration exposes a provider with both OpenAPI operations and upstream MCP tools:
-
-```yaml
-providers:
-  notion:
-    mcp:
-      enabled: true
-      tool_prefix: notion_
-    surfaces:
-      openapi:
-        document: ./openapi/notion.yaml
-        connection: REST
-      mcp:
-        url: https://mcp.notion.com/mcp
-        connection: MCP
-    connections:
-      MCP:
-        mode: user
-        auth:
-          type: mcp_oauth
-      REST:
-        mode: user
-        auth:
-          type: bearer
-          credentials:
-            - name: token
-              label: API Token
-```
-
-With this configuration, the HTTP API exposes the OpenAPI-backed operations, and `/mcp` exposes both the REST operations and the upstream Notion MCP tools. Each surface authenticates through its own named connection.
+- [Configuration](/configuration) for MCP exposure, naming, and connection
+  selection
+- [HTTP API](/reference/http-api) for the HTTP and MCP surface details

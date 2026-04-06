@@ -34,7 +34,8 @@ gestaltd validate --config ./config.yaml
 gestaltd plugin release --version 0.1.0
 ```
 
-See [Configuration](/concepts/configuration) for the relationship between `init`, `serve --locked`, and `validate`.
+See [Configuration](/configuration) for the relationship between `init`,
+`serve --locked`, and `validate`.
 
 ## `gestalt`
 
@@ -72,6 +73,11 @@ The `gestalt` client resolves the server URL in this order:
 4. global CLI config from `gestalt config set url ...`
 5. the saved server URL from stored login credentials
 6. `http://localhost:8080`
+
+For auth, the CLI uses this order:
+
+1. `GESTALT_API_KEY`
+2. stored credentials from `gestalt auth login`
 
 ### Project Config File
 
