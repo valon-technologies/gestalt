@@ -1,13 +1,105 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiClient, CredentialFieldInfo, DiscoveryCandidateInfo, IntegrationInfo};
+use crate::api::ApiClient;
 use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output::{self, Format};
 
 const PLUGIN_CONNECTION_NAME: &str = "_plugin";
 const PLUGIN_CONNECTION_ALIAS: &str = "plugin";
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct IntegrationInfo {
+    name: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    auth_types: Vec<String>,
+    #[serde(default)]
+    connection_params: BTreeMap<String, ConnectionParamDef>,
+    #[serde(default)]
+    connections: Vec<ConnectionDefInfo>,
+    #[serde(default)]
+    credential_fields: Vec<CredentialFieldInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ConnectionDefInfo {
+    name: String,
+    #[serde(default)]
+    auth_types: Vec<String>,
+    #[serde(default)]
+    credential_fields: Vec<CredentialFieldInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ConnectionParamDef {
+    #[serde(default)]
+    required: bool,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    default: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ConnectManualResponse {
+    status: String,
+    #[serde(default)]
+    integration: Option<String>,
+    #[serde(default)]
+    selection_url: Option<String>,
+    #[serde(default)]
+    pending_token: Option<String>,
+    #[serde(default)]
+    candidates: Vec<DiscoveryCandidateInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+struct CredentialFieldInfo {
+    name: String,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    help_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+struct DiscoveryCandidateInfo {
+    id: String,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Serialize)]
+struct StartOAuthRequest<'a> {
+    integration: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct ConnectManualRequest<'a> {
+    integration: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credentials: Option<&'a BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_params: Option<&'a BTreeMap<String, String>>,
+}
 
 #[derive(Debug, Clone)]
 struct ResolvedAuthTarget {
@@ -125,13 +217,23 @@ where
     F: FnOnce(&str) -> Result<()>,
 {
     let resp = client
-        .start_integration_oauth(name, connection, instance)
+        .post(
+            "/api/v1/auth/start-oauth",
+            &StartOAuthRequest {
+                integration: name,
+                connection,
+                instance,
+            },
+        )
         .context("failed to start OAuth flow")?;
+    let url = resp["url"]
+        .as_str()
+        .context("response missing 'url' field")?;
 
     eprintln!("Opening browser to connect {}...", name);
-    eprintln!("If the browser doesn't open, visit: {}", resp.url);
+    eprintln!("If the browser doesn't open, visit: {}", url);
 
-    if open_browser(&resp.url).is_err() {
+    if open_browser(url).is_err() {
         eprintln!("Could not open browser automatically.");
     }
 
@@ -167,16 +269,22 @@ fn connect_manual(
         ManualCredentialPayload::Multiple(values) => (None, Some(values)),
     };
 
-    let response = client
-        .connect_manual_integration(
-            name,
-            credential,
-            credentials,
-            connection_params.as_ref(),
-            connection,
-            instance,
-        )
-        .context("failed to connect integration")?;
+    let response: ConnectManualResponse = serde_json::from_value(
+        client
+            .post(
+                "/api/v1/auth/connect-manual",
+                &ConnectManualRequest {
+                    integration: name,
+                    credential,
+                    credentials,
+                    connection,
+                    instance,
+                    connection_params: connection_params.as_ref(),
+                },
+            )
+            .context("failed to connect integration")?,
+    )
+    .context("failed to parse manual connect response")?;
 
     match response.status.as_str() {
         "connected" => {
@@ -230,7 +338,13 @@ fn complete_pending_selection(
     };
 
     client
-        .finalize_pending_connection(selection_url, pending_token, selected)
+        .post_form(
+            selection_url,
+            &[
+                ("pending_token", pending_token.to_string()),
+                ("candidate_index", selected.to_string()),
+            ],
+        )
         .context("failed to finalize selected connection")?;
 
     output::print_success(&format!(
@@ -242,9 +356,14 @@ fn complete_pending_selection(
 }
 
 fn fetch_integration(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
-    client
-        .list_integrations_typed()
-        .context("failed to load integrations")?
+    let integrations: Vec<IntegrationInfo> = serde_json::from_value(
+        client
+            .get("/api/v1/integrations")
+            .context("failed to load integrations")?,
+    )
+    .context("failed to parse integrations")?;
+
+    integrations
         .into_iter()
         .find(|integration| integration.name == name)
         .with_context(|| format!("integration '{}' not found", name))
@@ -428,7 +547,7 @@ impl IntegrationInfo {
         non_empty(self.display_name.as_deref()).unwrap_or(&self.name)
     }
 
-    fn connection_by_name(&self, name: &str) -> Option<&crate::api::ConnectionDefInfo> {
+    fn connection_by_name(&self, name: &str) -> Option<&ConnectionDefInfo> {
         let normalized = normalize_connection_name(name);
         self.connections
             .iter()
