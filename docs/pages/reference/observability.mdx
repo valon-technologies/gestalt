@@ -117,14 +117,9 @@ These metrics use low-cardinality attributes:
 - `gestalt.operation`: the catalog operation id
 - `gestalt.transport`: how the operation is implemented: `plugin`, `rest`, or `mcp-passthrough`
 - `gestalt.connection_mode`: the provider auth mode: `none`, `user`, `identity`, or `either`
-- `gestalt.result`: `success` or `error`
 
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
-
-`gestaltd.operation.count` and `gestaltd.operation.duration` split their series
-by `gestalt.result`, so you can query operation successes and failures directly
-without deriving success as `count - error_count`.
 
 ### Connection Lifecycle Metrics
 

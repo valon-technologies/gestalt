@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,9 +20,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
+var meterProviderTestMu sync.Mutex
+
 func useManualMeterProvider(t *testing.T) *sdkmetric.ManualReader {
 	t.Helper()
 
+	meterProviderTestMu.Lock()
 	prev := otel.GetMeterProvider()
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
@@ -29,6 +33,7 @@ func useManualMeterProvider(t *testing.T) *sdkmetric.ManualReader {
 	t.Cleanup(func() {
 		_ = provider.Shutdown(context.Background())
 		otel.SetMeterProvider(prev)
+		meterProviderTestMu.Unlock()
 	})
 	return reader
 }
@@ -80,6 +85,8 @@ func attrsMatch(set attribute.Set, want map[string]string) bool {
 }
 
 func TestCustomAuthMetrics(t *testing.T) {
+	t.Parallel()
+
 	reader := useManualMeterProvider(t)
 
 	handler := &testOAuthHandler{
@@ -194,6 +201,8 @@ func TestCustomAuthMetrics(t *testing.T) {
 }
 
 func TestRefreshAndOperationResultMetrics(t *testing.T) {
+	t.Parallel()
+
 	reader := useManualMeterProvider(t)
 
 	successStub := &stubOAuthIntegration{
@@ -302,18 +311,16 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.connection_mode": "user",
 		"gestalt.result":          "error",
 	})
-	requireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
 		"gestalt.provider":        "fake",
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",
-		"gestalt.result":          "success",
 	})
-	requireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
 		"gestalt.provider":        "fake",
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",
-		"gestalt.result":          "error",
 	})
 }

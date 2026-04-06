@@ -61,16 +61,12 @@ func recordOperationMetrics(
 	connectionMode string,
 	failed bool,
 ) {
-	metrics := operationMetricsCache.load(func(meter metric.Meter) operationMetrics {
-		return newOperationMetrics(meter)
-	})
-	result := metricResult(failed)
+	metrics := operationMetricsCache.load(newOperationMetrics)
 	attrs := []attribute.KeyValue{
 		attrProvider.String(metricAttrValue(provider)),
 		attrOperation.String(metricAttrValue(operation)),
 		attrTransport.String(metricAttrValue(transport)),
 		attrConnectionMode.String(metricAttrValue(connectionMode)),
-		attrResult.String(result),
 	}
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -82,9 +78,7 @@ func recordOperationMetrics(
 }
 
 func recordTokenRefreshMetrics(ctx context.Context, provider string, connectionMode string, failed bool) {
-	metrics := operationMetricsCache.load(func(meter metric.Meter) operationMetrics {
-		return newOperationMetrics(meter)
-	})
+	metrics := operationMetricsCache.load(newOperationMetrics)
 	metrics.refresh.Add(ctx, 1, metric.WithAttributes(
 		attrProvider.String(metricAttrValue(provider)),
 		attrConnectionMode.String(metricAttrValue(connectionMode)),
