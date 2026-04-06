@@ -16,6 +16,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -36,12 +37,13 @@ func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 	return host
 }
 
-func echoExecutableManifest(t *testing.T, name string, ops ...catalog.CatalogOperation) *pluginmanifestv1.Manifest {
+func echoExecutableManifest(t *testing.T, name string, ops ...catalog.CatalogOperation) (string, *pluginmanifestv1.Manifest) {
 	t.Helper()
-	return newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+	root := writeStaticCatalog(t, &catalog.Catalog{
 		Name:       name,
 		Operations: ops,
-	}))
+	})
+	return root, newExecutableManifest("Echo", "Echoes back the input parameters")
 }
 
 func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
@@ -54,7 +56,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
-	manifest := echoExecutableManifest(t, "sandboxed",
+	manifestRoot, manifest := echoExecutableManifest(t, "sandboxed",
 		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
 		catalog.CatalogOperation{ID: "read_file", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "path", Type: "string", Required: true}}},
 	)
@@ -63,11 +65,12 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					AllowedHosts:     []string{"localhost"},
-					HostBinary:       hostBin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					AllowedHosts:         []string{"localhost"},
+					HostBinary:           hostBin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -100,7 +103,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
-	manifest := echoExecutableManifest(t, "sandboxed",
+	manifestRoot, manifest := echoExecutableManifest(t, "sandboxed",
 		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
 	)
 
@@ -108,11 +111,12 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					AllowedHosts:     []string{"localhost"},
-					HostBinary:       hostBin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					AllowedHosts:         []string{"localhost"},
+					HostBinary:           hostBin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -142,6 +146,56 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	}
 }
 
+func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
+	t.Parallel()
+
+	hostBin := buildGestaltdBinary(t)
+	manifestPath := filepath.Join(exampleProviderRoot(t), "plugin.yaml")
+	_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				Plugin: &config.PluginDef{
+					AllowedHosts:         []string{"localhost"},
+					HostBinary:           hostBin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: manifestPath,
+					Config: mustNode(t, map[string]any{
+						"greeting": "Hello from sandbox",
+					}),
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "greet", map[string]any{"name": "Gestalt"}, "")
+	if err != nil {
+		t.Fatalf("Execute greet: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("greet status = %d, body = %s", result.Status, result.Body)
+	}
+	if result.Body != `{"message":"Hello from sandbox, Gestalt!"}` {
+		t.Fatalf("greet body = %q", result.Body)
+	}
+}
+
 func TestSandboxDisabledByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +205,7 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	}
 
 	bin := buildEchoPluginBinary(t)
-	manifest := echoExecutableManifest(t, "nosandbox",
+	manifestRoot, manifest := echoExecutableManifest(t, "nosandbox",
 		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
 		catalog.CatalogOperation{ID: "read_file", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "path", Type: "string", Required: true}}},
 	)
@@ -160,9 +214,10 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"nosandbox": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -200,7 +255,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	host := hostFromTestServer(t, ts)
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
-	manifest := echoExecutableManifest(t, "proxied",
+	manifestRoot, manifest := echoExecutableManifest(t, "proxied",
 		catalog.CatalogOperation{ID: "make_http_request", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "url", Type: "string", Required: true}}},
 	)
 
@@ -208,11 +263,12 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"proxied": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					AllowedHosts:     []string{host},
-					HostBinary:       hostBin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					AllowedHosts:         []string{host},
+					HostBinary:           hostBin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -257,7 +313,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
-	manifest := echoExecutableManifest(t, "blocked",
+	manifestRoot, manifest := echoExecutableManifest(t, "blocked",
 		catalog.CatalogOperation{ID: "make_http_request", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "url", Type: "string", Required: true}}},
 	)
 
@@ -265,11 +321,12 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"blocked": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					AllowedHosts:     []string{"not-a-real-host.example.com"},
-					HostBinary:       hostBin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					AllowedHosts:         []string{"not-a-real-host.example.com"},
+					HostBinary:           hostBin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},

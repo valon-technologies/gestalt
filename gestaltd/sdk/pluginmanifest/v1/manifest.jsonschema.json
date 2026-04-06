@@ -59,10 +59,6 @@
           "type": "string",
           "minLength": 1
         },
-        "static_catalog_path": {
-          "type": "string",
-          "minLength": 1
-        },
         "exec": {
           "$ref": "#/$defs/exec"
         },
@@ -107,42 +103,7 @@
         "mcp": {
           "$ref": "#/$defs/mcp_config"
         }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "exec"
-          ]
-        },
-        {
-          "properties": {
-            "surfaces": {
-              "anyOf": [
-                {
-                  "required": [
-                    "rest"
-                  ]
-                },
-                {
-                  "required": [
-                    "openapi"
-                  ]
-                },
-                {
-                  "required": [
-                    "graphql"
-                  ]
-                },
-                {
-                  "required": [
-                    "mcp"
-                  ]
-                }
-              ]
-            }
-          }
-        }
-      ]
+      }
     },
     "webui": {
       "type": "object",

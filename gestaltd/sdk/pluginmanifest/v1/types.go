@@ -28,7 +28,6 @@ type WebUIMetadata struct {
 
 type Provider struct {
 	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
-	StaticCatalogPath    string                             `json:"static_catalog_path,omitempty" yaml:"static_catalog_path,omitempty"`
 	Auth                 *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	ConnectionMode       string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
 	MCP                  bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
@@ -76,10 +75,6 @@ type ProviderConnectionParam struct {
 
 func (p *Provider) IsDeclarative() bool {
 	return p != nil && len(p.Operations) > 0
-}
-
-func (p *Provider) HasStaticCatalog() bool {
-	return p != nil && p.StaticCatalogPath != ""
 }
 
 func (p *Provider) IsSpecLoaded() bool {

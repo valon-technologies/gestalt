@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 )
 
 var (
@@ -28,7 +31,10 @@ func TestMain(m *testing.M) {
 	errs := make([]error, 2)
 	wg.Add(2)
 	go func() { defer wg.Done(); errs[0] = buildGo(".", gestaltdBin) }()
-	go func() { defer wg.Done(); errs[1] = buildGo("../../../examples/plugins/provider-go", pluginBin) }()
+	go func() {
+		defer wg.Done()
+		errs[1] = pluginpkg.BuildGoProviderBinary("../../../examples/plugins/provider-go", pluginBin, runtime.GOOS, runtime.GOARCH)
+	}()
 	wg.Wait()
 
 	for i, err := range errs {
@@ -45,7 +51,11 @@ func TestMain(m *testing.M) {
 }
 
 func buildGo(dir, output string) error {
-	cmd := exec.Command("go", "build", "-o", output, ".")
+	return runGo(dir, "build", "-o", output, ".")
+}
+
+func runGo(dir string, args ...string) error {
+	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

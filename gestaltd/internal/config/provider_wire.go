@@ -25,14 +25,18 @@ type providerWire struct {
 }
 
 type providerSourceWire struct {
-	Command      string            `yaml:"command"`
-	Manifest     string            `yaml:"manifest"`
-	Package      string            `yaml:"package"`
-	Source       string            `yaml:"source"`
-	Version      string            `yaml:"version"`
-	Args         []string          `yaml:"args"`
-	Env          map[string]string `yaml:"env"`
-	AllowedHosts []string          `yaml:"allowed_hosts"`
+	Command      string                    `yaml:"command"`
+	Source       *providerPluginSourceWire `yaml:"source"`
+	Package      string                    `yaml:"package"`
+	Args         []string                  `yaml:"args"`
+	Env          map[string]string         `yaml:"env"`
+	AllowedHosts []string                  `yaml:"allowed_hosts"`
+}
+
+type providerPluginSourceWire struct {
+	Path    string `yaml:"path"`
+	Ref     string `yaml:"ref"`
+	Version string `yaml:"version"`
 }
 
 type providerConnectionWire struct {
@@ -102,10 +106,8 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 
 	plugin := &PluginDef{
 		Command:           wire.From.Command,
-		Manifest:          wire.From.Manifest,
+		Source:            pluginSourceFromWire(wire.From.Source),
 		Package:           wire.From.Package,
-		Source:            wire.From.Source,
-		Version:           wire.From.Version,
 		Args:              wire.From.Args,
 		Env:               wire.From.Env,
 		Config:            wire.Config,
@@ -186,6 +188,17 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 		i.MCPToolPrefix = wire.MCP.ToolPrefix
 	}
 	return nil
+}
+
+func pluginSourceFromWire(wire *providerPluginSourceWire) *PluginSourceDef {
+	if wire == nil {
+		return nil
+	}
+	return &PluginSourceDef{
+		Path:    wire.Path,
+		Ref:     wire.Ref,
+		Version: wire.Version,
+	}
 }
 
 func validateProviderWire(wire *providerWire) error {

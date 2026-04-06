@@ -13,15 +13,51 @@ import (
 
 type stubProvider struct{}
 
+type stubInput struct{}
+
+type stubOutput struct {
+	Operation string `json:"operation"`
+}
+
+var stubRouter = gestalt.MustRouter(
+	"stub-provider",
+	gestalt.Register(
+		gestalt.Operation[stubInput, stubOutput]{
+			ID:     "test_op",
+			Method: http.MethodPost,
+		},
+		(*stubProvider).testOp,
+	),
+)
+
+var startableStubRouter = gestalt.MustRouter(
+	"stub-provider",
+	gestalt.Register(
+		gestalt.Operation[stubInput, stubOutput]{
+			ID:     "test_op",
+			Method: http.MethodPost,
+		},
+		(*startableStubProvider).testOp,
+	),
+)
+
+var sessionCatalogStubRouter = gestalt.MustRouter(
+	"stub-provider",
+	gestalt.Register(
+		gestalt.Operation[stubInput, stubOutput]{
+			ID:     "test_op",
+			Method: http.MethodPost,
+		},
+		(*sessionCatalogStubProvider).testOp,
+	),
+)
+
 func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
 }
 
-func (p *stubProvider) Execute(_ context.Context, operation string, _ map[string]any, _ string) (*gestalt.OperationResult, error) {
-	return &gestalt.OperationResult{
-		Status: 200,
-		Body:   `{"operation":"` + operation + `"}`,
-	}, nil
+func (p *stubProvider) testOp(_ context.Context, _ stubInput, _ gestalt.Request) (gestalt.Response[stubOutput], error) {
+	return gestalt.OK(stubOutput{Operation: "test_op"}), nil
 }
 
 type startableStubProvider struct {
@@ -48,7 +84,7 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ stri
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &stubProvider{})
+	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
 	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
@@ -68,7 +104,7 @@ func TestProviderServerGetMetadata_SessionCatalogCapability(t *testing.T) {
 				{ID: "session_op", Method: http.MethodGet},
 			},
 		},
-	})
+	}, sessionCatalogStubRouter)
 	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		t.Fatalf("GetMetadata: %v", err)
@@ -90,7 +126,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		},
 	}
 
-	client := newProviderPluginClient(t, prov)
+	client := newProviderPluginClient(t, prov, sessionCatalogStubRouter)
 	resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
 	if err != nil {
 		t.Fatalf("GetSessionCatalog: %v", err)
@@ -103,7 +139,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 func TestProviderServerExecute(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &stubProvider{})
+	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
 	ctx := context.Background()
 
 	params, _ := structpb.NewStruct(map[string]any{"key": "value"})
@@ -127,7 +163,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 	t.Parallel()
 
 	prov := &startableStubProvider{}
-	client := newProviderPluginClient(t, prov)
+	client := newProviderPluginClient(t, prov, startableStubRouter)
 	ctx := context.Background()
 
 	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
@@ -153,7 +189,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 func TestProviderServerUnimplementedRPCs(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &stubProvider{})
+	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
 	ctx := context.Background()
 
 	_, err := client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{Token: "t"})

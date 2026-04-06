@@ -66,7 +66,7 @@ func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifes
 	return decodeManifest(data, format, false)
 }
 
-func decodeManifest(data []byte, format string, allowMissingArtifactDigests bool) (*pluginmanifestv1.Manifest, error) {
+func decodeManifest(data []byte, format string, sourceMode bool) (*pluginmanifestv1.Manifest, error) {
 	wire, err := decodeManifestWire(data, format)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func decodeManifest(data []byte, format string, allowMissingArtifactDigests bool
 		return nil, fmt.Errorf("manifest validation failed: %w", err)
 	}
 	manifest := wireManifestToInternal(wire)
-	if err := validateManifest(manifest, allowMissingArtifactDigests); err != nil {
+	if err := validateManifest(manifest, sourceMode); err != nil {
 		return nil, err
 	}
 	return manifest, nil
@@ -109,7 +109,7 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	return validateManifest(manifest, false)
 }
 
-func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactDigests bool) error {
+func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is required")
 	}
@@ -132,10 +132,11 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 	isDeclarative := manifest.Provider.IsDeclarative()
 	isSpecLoaded := manifest.Provider.IsSpecLoaded()
 	isManifestBackedProvider := isDeclarative || isSpecLoaded
+	allowsSourceExecutableEntrypointOmission := sourceMode && !isManifestBackedProvider && manifest.Entrypoints.Provider == nil
 
-	needsArtifacts := false
+	needsArtifacts := len(manifest.Artifacts) > 0
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider && (!isManifestBackedProvider || manifest.IsHybridProvider()) {
+		if kind == pluginmanifestv1.KindProvider && (!isManifestBackedProvider || manifest.IsHybridProvider()) && !allowsSourceExecutableEntrypointOmission {
 			needsArtifacts = true
 			break
 		}
@@ -149,7 +150,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 			if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
 				return err
 			}
-			if artifact.SHA256 == "" && !allowMissingArtifactDigests {
+			if artifact.SHA256 == "" && !sourceMode {
 				return fmt.Errorf("artifact %s sha256 is required", artifact.Path)
 			}
 			if _, exists := artifactPaths[artifact.Path]; exists {
@@ -185,23 +186,20 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 					return err
 				}
 			}
-			if manifest.Provider.StaticCatalogPath != "" {
-				if err := validateRelativePackagePath(manifest.Provider.StaticCatalogPath, "provider static catalog path"); err != nil {
-					return err
-				}
-			}
 			if isDeclarative {
 				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
 					return err
 				}
 			}
 			if !isManifestBackedProvider || manifest.IsHybridProvider() {
-				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
-					return err
+				if manifest.Entrypoints.Provider == nil && !allowsSourceExecutableEntrypointOmission {
+					return fmt.Errorf("%s entrypoint is required", kind)
 				}
-			}
-			if manifest.Entrypoints.Provider != nil && !isManifestBackedProvider && !manifest.Provider.HasStaticCatalog() {
-				return fmt.Errorf("provider static_catalog_path is required for executable providers without declarative or spec surfaces")
+				if manifest.Entrypoints.Provider != nil {
+					if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
+						return err
+					}
+				}
 			}
 		case pluginmanifestv1.KindWebUI:
 			if manifest.WebUI == nil {
@@ -352,7 +350,15 @@ func EncodeManifest(manifest *pluginmanifestv1.Manifest) ([]byte, error) {
 }
 
 func EncodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
-	if err := ValidateManifest(manifest); err != nil {
+	return encodeManifestFormat(manifest, format, false)
+}
+
+func EncodeSourceManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
+	return encodeManifestFormat(manifest, format, true)
+}
+
+func encodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string, sourceMode bool) ([]byte, error) {
+	if err := validateManifest(manifest, sourceMode); err != nil {
 		return nil, err
 	}
 	switch format {

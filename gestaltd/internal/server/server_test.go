@@ -777,8 +777,10 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 	stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 	plugin := &config.PluginDef{
-		Source:  "github.com/acme/plugins/example",
-		Version: "1.0.0",
+		Source: &config.PluginSourceDef{
+			Ref:     "github.com/acme/plugins/example",
+			Version: "1.0.0",
+		},
 		Auth: &config.ConnectionAuthDef{
 			Type: pluginmanifestv1.AuthTypeManual,
 			Credentials: []config.CredentialFieldDef{

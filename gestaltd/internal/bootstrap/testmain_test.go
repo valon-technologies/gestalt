@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 )
 
 var (
@@ -51,7 +53,7 @@ func TestMain(m *testing.M) {
 		{
 			name:   "example provider",
 			dir:    filepath.Join(root, "examples", "plugins", "provider-go"),
-			target: ".",
+			target: "",
 			output: sharedExampleProviderBin,
 		},
 		{
@@ -88,7 +90,14 @@ func TestMain(m *testing.M) {
 }
 
 func buildBootstrapTestBinary(dir, target, output string) error {
-	cmd := exec.Command("go", "build", "-o", output, target)
+	if target == "" {
+		return pluginpkg.BuildGoProviderBinary(dir, output, runtime.GOOS, runtime.GOARCH)
+	}
+	return runGoCommand(dir, "build", "-o", output, target)
+}
+
+func runGoCommand(dir string, args ...string) error {
+	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

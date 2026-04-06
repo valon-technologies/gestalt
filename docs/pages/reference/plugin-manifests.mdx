@@ -26,7 +26,7 @@ A manifest can define exactly one of:
 | `icon_file` | Relative path to an SVG icon bundled with the package. |
 | `provider` | Provider metadata and optional declarative surfaces. |
 | `webui` | UI metadata for UI-only packages. |
-| `artifacts` | Packaged executable artifacts keyed by platform. |
+| `artifacts` | Packaged executable artifacts keyed by platform. Source manifests used for local development or `plugin release` may omit them for pure executable providers. |
 
 ## Basic YAML Manifest
 
@@ -143,6 +143,11 @@ Use this style when:
 - a reusable package should ship its own connection model
 - you want packaged custom code plus spec-backed operations
 
+When an executable provider defines helper operations in Go, Gestalt
+materializes that executable catalog automatically during local source-plugin
+execution and package/release. See [Writing a Plugin](/plugins/writing-a-plugin)
+for the end-to-end authoring flow.
+
 ## Post-Connect Discovery
 
 Providers can define `provider.connections.default.discovery` to perform one
@@ -201,6 +206,7 @@ webui:
 - `source` and `version` are required.
 - A manifest defines either `provider` or `webui`, not both.
 - Declarative-only provider packages do not require `artifacts`.
+- Pure executable source manifests used with `from.command` or `gestaltd plugin release` may omit `artifacts` and `entrypoints.provider`.
 - Executable provider packages do require `artifacts` plus `provider.exec.artifact_path`.
 - `config_schema_path` validates `providers.*.config`.
 - Config schemas may be written in JSON or YAML.
@@ -223,3 +229,5 @@ gestaltd plugin release --version 1.2.3
 
 `gestaltd plugin release` preserves the source manifest format, so
 `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release package.
+For executable Go plugins, release materializes the executable catalog
+automatically from the provider's typed router before packaging.

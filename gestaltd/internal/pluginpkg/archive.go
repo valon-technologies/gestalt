@@ -344,6 +344,13 @@ func ValidatePackageDir(sourceDir string) (*pluginmanifestv1.Manifest, error) {
 			return nil, fmt.Errorf("validate %s %s: %w", ref.Description, ref.Path, err)
 		}
 	}
+	staticCatalog, err := ReadStaticCatalog(sourceDir, "")
+	if err != nil {
+		return nil, err
+	}
+	if staticCatalog == nil && StaticCatalogRequired(manifest) {
+		return nil, fmt.Errorf("validate provider static catalog %s: file does not exist", StaticCatalogFile)
+	}
 	return manifest, nil
 }
 

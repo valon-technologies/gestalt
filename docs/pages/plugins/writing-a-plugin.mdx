@@ -1,10 +1,17 @@
 # Writing a Plugin
 
-This guide walks through building a provider plugin using the Go SDK.
+This guide walks through the full authoring flow for an executable provider plugin with the Go SDK.
+
+You will:
+
+1. Implement the provider and typed operations in Go.
+2. Define static metadata and auth in `plugin.yaml`.
+3. Run the plugin locally with `from.source.path`.
+4. Package or release it with a single command.
 
 ## Prerequisites
 
-- Go 1.22 or later
+- Go 1.26 or later
 - A running `gestaltd` instance for testing
 
 ## Create the project
@@ -15,171 +22,142 @@ go mod init example.com/my-plugin
 go get github.com/valon-technologies/gestalt/sdk/go
 ```
 
-## Implement the provider
+Recommended layout:
 
-A provider plugin implements the runtime `gestalt.Provider` interface. Static
-metadata and static operations live in the manifest:
+```text
+my-plugin/
+  go.mod
+  plugin.yaml
+  provider/
+    provider.go
+```
+
+## Define typed operations
+
+Create a package that holds the provider, typed operation definitions, and router:
 
 ```go
-package main
+package provider
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+  "context"
+  "fmt"
+  "net/http"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+  gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
-type myProvider struct {
-	greeting string
+type Provider struct {
+  greeting string
 }
 
-func (p *myProvider) Configure(
-	ctx context.Context,
-	name string,
-	config map[string]any,
-) error {
-	if g, ok := config["greeting"].(string); ok {
-		p.greeting = g
-	}
-	return nil
+type GreetInput struct {
+  Name string `json:"name,omitempty" doc:"Name to greet"`
 }
 
-func (p *myProvider) Execute(
-	ctx context.Context,
-	operation string,
-	params map[string]any,
-	token string,
-) (*gestalt.OperationResult, error) {
-	switch operation {
-	case "greet":
-		name, _ := params["name"].(string)
-		if name == "" {
-			name = "World"
-		}
-		body, _ := json.Marshal(map[string]string{
-			"message": fmt.Sprintf("%s, %s!", p.greeting, name),
-		})
-		return &gestalt.OperationResult{
-			Status: http.StatusOK,
-			Body:   string(body),
-		}, nil
-	default:
-		return &gestalt.OperationResult{
-			Status: http.StatusNotFound,
-			Body:   `{"error":"unknown operation"}`,
-		}, nil
-	}
+type GreetOutput struct {
+  Message string `json:"message"`
 }
 
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(),
-		syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+var (
+  greetOperation = gestalt.Operation[GreetInput, GreetOutput]{
+    ID:          "greet",
+    Method:      http.MethodGet,
+    Description: "Return a greeting message",
+  }
+  Router = gestalt.MustRouter(
+    "my-plugin",
+    gestalt.Register(greetOperation, (*Provider).greet),
+  )
+)
 
-	provider := &myProvider{greeting: "Hello"}
-	if err := gestalt.ServeProvider(ctx, provider); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+func New() *Provider {
+  return &Provider{}
+}
+
+func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+  if g, ok := config["greeting"].(string); ok {
+    p.greeting = g
+  }
+  return nil
+}
+
+func (p *Provider) greet(
+  _ context.Context,
+  input GreetInput,
+  _ gestalt.Request,
+) (gestalt.Response[GreetOutput], error) {
+  greeting := p.greeting
+  if greeting == "" {
+    greeting = "Hello"
+  }
+  if input.Name == "" {
+    input.Name = "World"
+  }
+  return gestalt.OK(GreetOutput{
+    Message: fmt.Sprintf("%s, %s!", greeting, input.Name),
+  }), nil
 }
 ```
 
-## The Provider interface
+You do not write `main.go`. Gestalt synthesizes the executable wrapper automatically for local source execution, packaging, and release.
 
-Every plugin must implement these methods:
+## Write `plugin.yaml`
 
-| Method | Purpose |
-| --- | --- |
-| `Configure()` | One-time startup hook. Receives the provider name and the `config` block from the YAML. |
-| `Execute()` | Handles an operation invocation. Receives the operation ID, input parameters, and the caller's access token. |
-
-## Optional interfaces
-
-Plugins can implement additional interfaces for advanced behavior:
-
-| Interface | Method | Purpose |
-| --- | --- | --- |
-| `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a different operation catalog based on the caller's credentials. |
-
-Provider config schemas belong in the manifest via `provider.config_schema_path`, not in the Go provider interface.
-
-Static plugin metadata also belongs in the manifest:
+Static metadata, auth, and passthrough surfaces stay in YAML:
 
 ```yaml
-source: example.com/my-plugin
+source: github.com/example/plugins/my-plugin
 version: 0.1.0
 display_name: My Plugin
 description: A custom provider plugin
-kinds:
-  - provider
 provider:
-  auth:
-    type: none
-  static_catalog_path: catalog.yaml
+  connections:
+    default:
+      auth:
+        type: none
 ```
 
-```yaml
-name: my-plugin
-operations:
-  - id: greet
-    method: GET
-    description: Return a greeting
-    parameters:
-      - name: name
-        type: string
-        description: Name to greet
-        required: true
-```
+`plugin.yaml` stays the source of truth for:
 
-### Using Configure
+- display name and description
+- auth and connection model
+- passthrough API surfaces such as REST, OpenAPI, GraphQL, or MCP
 
-Implement `Configure` to receive configuration at boot time:
+## Struct tag conventions
 
-```go
-func (p *myProvider) Configure(
-	ctx context.Context,
-	name string,
-	config map[string]any,
-) error {
-	if g, ok := config["greeting"].(string); ok {
-		p.greeting = g
-	}
-	return nil
-}
-```
+The typed router derives catalog parameters from the input struct:
 
-The corresponding config:
+- `json:"name"` sets the parameter name.
+- `json:",omitempty"` makes the parameter optional by default.
+- `doc:"..."` sets the parameter description.
+- `required:"true|false"` overrides the required inference.
+- `default:"..."` sets a scalar default value.
 
-```yaml
-providers:
-  my-plugin:
-    from:
-      command: ./my-plugin
-      manifest: ./plugin.yaml
-    config:
-      greeting: Howdy
-```
+Use plain structs for inputs. Nested structs are emitted as `object` parameters, and slices are emitted as `array`.
+
+## Optional interfaces
+
+Plugins can still implement:
+
+| Interface | Method | Purpose |
+| --- | --- | --- |
+| `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a dynamic catalog that depends on the caller's credentials or runtime state. |
 
 ## Test locally
 
-Build the plugin and reference it from a Gestalt config:
+Point a local config at the source plugin. Gestalt will synthesize the executable wrapper and materialize the executable catalog automatically:
 
 ```sh
-go build -o my-plugin .
+gestaltd serve --config ./config.yaml
 ```
 
 ```yaml
 providers:
   my-plugin:
     from:
-      command: ./my-plugin
-      manifest: ./plugin.yaml
+      source:
+        path: ./plugin.yaml
     config:
       greeting: Hello
     mcp:
@@ -187,9 +165,33 @@ providers:
       tool_prefix: my_
 ```
 
-Start the server and invoke the plugin:
+Then invoke it:
 
 ```sh
-gestaltd serve --config ./config.yaml
 gestalt invoke my-plugin greet -p name=Gestalt
 ```
+
+## Package and release
+
+Create a package:
+
+```sh
+gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
+```
+
+Build a release:
+
+```sh
+gestaltd plugin release --version 0.1.0
+```
+
+Gestalt materializes the executable catalog automatically from the typed router during local source-plugin execution and package/release.
+
+## Hybrid providers
+
+Hybrid packages still work the same way:
+
+- `plugin.yaml` can define passthrough surfaces such as `provider.surfaces.openapi`, `provider.surfaces.rest`, `provider.surfaces.graphql`, or `provider.surfaces.mcp`
+- Go-defined typed operations define only the executable helper operations
+
+Do not define the same operation ID in both places.

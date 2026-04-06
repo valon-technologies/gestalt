@@ -23,7 +23,6 @@ type manifestWire struct {
 
 type providerManifestWire struct {
 	ConfigSchemaPath  string                                                 `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
-	StaticCatalogPath string                                                 `json:"static_catalog_path,omitempty" yaml:"static_catalog_path,omitempty"`
 	Exec              *providerExecWire                                      `json:"exec,omitempty" yaml:"exec,omitempty"`
 	Connections       map[string]*providerManifestConnectionWire             `json:"connections,omitempty" yaml:"connections,omitempty"`
 	Headers           map[string]string                                      `json:"headers,omitempty" yaml:"headers,omitempty"`
@@ -87,25 +86,31 @@ type providerManifestMCPWire struct {
 }
 
 func decodeManifestWire(data []byte, format string) (*manifestWire, error) {
+	var wire manifestWire
+	if err := decodeStrict(data, format, "manifest", &wire); err != nil {
+		return nil, err
+	}
+	return &wire, nil
+}
+
+func decodeStrict(data []byte, format, subject string, target any) error {
 	switch format {
 	case ManifestFormatJSON:
 		dec := json.NewDecoder(bytes.NewReader(data))
 		dec.DisallowUnknownFields()
-		var wire manifestWire
-		if err := dec.Decode(&wire); err != nil {
-			return nil, fmt.Errorf("parse manifest JSON: %w", err)
+		if err := dec.Decode(target); err != nil {
+			return fmt.Errorf("parse %s JSON: %w", subject, err)
 		}
-		return &wire, nil
+		return nil
 	case ManifestFormatYAML:
 		dec := yaml.NewDecoder(bytes.NewReader(data))
 		dec.KnownFields(true)
-		var wire manifestWire
-		if err := dec.Decode(&wire); err != nil {
-			return nil, fmt.Errorf("parse manifest YAML: %w", err)
+		if err := dec.Decode(target); err != nil {
+			return fmt.Errorf("parse %s YAML: %w", subject, err)
 		}
-		return &wire, nil
+		return nil
 	default:
-		return nil, fmt.Errorf("unsupported manifest format %q", format)
+		return fmt.Errorf("unsupported %s format %q", subject, format)
 	}
 }
 
@@ -127,7 +132,6 @@ func wireManifestToInternal(wire *manifestWire) *pluginmanifestv1.Manifest {
 		manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindProvider)
 		manifest.Provider = &pluginmanifestv1.Provider{
 			ConfigSchemaPath:  wire.Provider.ConfigSchemaPath,
-			StaticCatalogPath: wire.Provider.StaticCatalogPath,
 			Headers:           wire.Provider.Headers,
 			ManagedParameters: wire.Provider.ManagedParameters,
 			ResponseMapping:   wire.Provider.ResponseMapping,
@@ -219,7 +223,6 @@ func internalManifestToWire(manifest *pluginmanifestv1.Manifest) *manifestWire {
 
 	provider := &providerManifestWire{
 		ConfigSchemaPath:  manifest.Provider.ConfigSchemaPath,
-		StaticCatalogPath: manifest.Provider.StaticCatalogPath,
 		Headers:           manifest.Provider.Headers,
 		ManagedParameters: manifest.Provider.ManagedParameters,
 		ResponseMapping:   manifest.Provider.ResponseMapping,

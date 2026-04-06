@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -96,20 +97,55 @@ func TestRun_PluginRootReturnsHelpWhenNoSubcommandProvided(t *testing.T) {
 func TestRun_PluginPackageCreatesArchive(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	src := newPluginPackageFixture(t, dir)
-	outPath := filepath.Join(dir, "testowner-provider-0.1.0.tar.gz")
-
-	output, err := runPluginCommandResult("", "package", "--input", src, "--output", outPath)
-	if err != nil {
-		t.Fatalf("plugin package failed: %v\n%s", err, output)
+	cases := []struct {
+		name     string
+		cwd      func(string) string
+		inputArg func(string) string
+	}{
+		{
+			name:     "absolute input",
+			cwd:      func(string) string { return "" },
+			inputArg: func(src string) string { return src },
+		},
+		{
+			name:     "relative input",
+			cwd:      func(dir string) string { return dir },
+			inputArg: func(string) string { return "src" },
+		},
 	}
 
-	if _, err := os.Stat(outPath); err != nil {
-		t.Fatalf("expected package archive to exist: %v", err)
-	}
-	if !strings.Contains(string(output), "packaged") {
-		t.Fatalf("expected package output, got: %q", output)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			src := newPluginPackageFixture(t, dir)
+			outPath := filepath.Join(dir, "testowner-provider-0.1.0.tar.gz")
+
+			output, err := runPluginCommandResult(tc.cwd(dir), "package", "--input", tc.inputArg(src), "--output", outPath)
+			if err != nil {
+				t.Fatalf("plugin package failed: %v\n%s", err, output)
+			}
+
+			if _, err := os.Stat(outPath); err != nil {
+				t.Fatalf("expected package archive to exist: %v", err)
+			}
+			extractDir := filepath.Join(dir, "extracted")
+			if err := pluginpkg.ExtractPackage(outPath, extractDir); err != nil {
+				t.Fatalf("extract package: %v", err)
+			}
+			data, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.StaticCatalogFile))
+			if err != nil {
+				t.Fatalf("read generated catalog: %v", err)
+			}
+			if !strings.Contains(string(data), "generated_op") {
+				t.Fatalf("unexpected generated catalog: %s", data)
+			}
+			if !strings.Contains(string(output), "packaged") {
+				t.Fatalf("expected package output, got: %q", output)
+			}
+		})
 	}
 }
 
@@ -146,6 +182,74 @@ func TestRun_PluginPackageCreatesDirectory(t *testing.T) {
 	}
 	if string(data) != "provider" {
 		t.Fatalf("unexpected artifact content: %q", data)
+	}
+	if !strings.Contains(string(output), "packaged") {
+		t.Fatalf("expected packaged output, got: %q", output)
+	}
+}
+
+func TestRun_PluginPackageMaterializesSourcePlugin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	src := newSourcePluginPackageFixture(t, dir)
+	goModPath := filepath.Join(src, "go.mod")
+	goSumPath := filepath.Join(src, "go.sum")
+	goModBefore, err := os.ReadFile(goModPath)
+	if err != nil {
+		t.Fatalf("ReadFile(go.mod): %v", err)
+	}
+	goSumBefore, err := os.ReadFile(goSumPath)
+	if err != nil {
+		t.Fatalf("ReadFile(go.sum): %v", err)
+	}
+
+	outPath := filepath.Join(dir, "output-dir")
+	output, err := runPluginCommandResult(dir, "package", "--input", "src", "--output", outPath)
+	if err != nil {
+		t.Fatalf("plugin package failed: %v\n%s", err, output)
+	}
+
+	_, manifest := readManifestFromDir(t, outPath)
+	if len(manifest.Artifacts) != 1 {
+		t.Fatalf("Artifacts = %+v, want single current-platform artifact", manifest.Artifacts)
+	}
+	if manifest.IsDeclarativeOnlyProvider() {
+		t.Fatal("expected packaged source hybrid plugin to remain executable")
+	}
+	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath == "" {
+		t.Fatalf("Provider entrypoint = %+v, want materialized artifact path", manifest.Entrypoints.Provider)
+	}
+	if manifest.Provider == nil || manifest.Provider.BaseURL != "https://api.example.com" {
+		t.Fatalf("provider base_url = %#v", manifest.Provider)
+	}
+	if len(manifest.Provider.Operations) != 1 || manifest.Provider.Operations[0].Name != "ping" {
+		t.Fatalf("provider operations = %+v", manifest.Provider.Operations)
+	}
+	artifactPath := filepath.Join(outPath, filepath.FromSlash(manifest.Entrypoints.Provider.ArtifactPath))
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Fatalf("materialized artifact missing: %v", err)
+	}
+	catalogData, err := os.ReadFile(filepath.Join(outPath, pluginpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("ReadFile(catalog.yaml): %v", err)
+	}
+	if !strings.Contains(string(catalogData), "generated_op") {
+		t.Fatalf("unexpected generated catalog: %s", catalogData)
+	}
+	goModAfter, err := os.ReadFile(goModPath)
+	if err != nil {
+		t.Fatalf("ReadFile(go.mod): %v", err)
+	}
+	goSumAfter, err := os.ReadFile(goSumPath)
+	if err != nil {
+		t.Fatalf("ReadFile(go.sum): %v", err)
+	}
+	if string(goModAfter) != string(goModBefore) {
+		t.Fatal("plugin package mutated go.mod")
+	}
+	if string(goSumAfter) != string(goSumBefore) {
+		t.Fatal("plugin package mutated go.sum")
 	}
 	if !strings.Contains(string(output), "packaged") {
 		t.Fatalf("expected packaged output, got: %q", output)
@@ -715,6 +819,7 @@ func TestRun_PluginReleaseCompilesManifestBackedProviderWithoutSourceArtifacts(t
 	)
 
 	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
 	if manifest.IsDeclarativeOnlyProvider() {
@@ -728,6 +833,13 @@ func TestRun_PluginReleaseCompilesManifestBackedProviderWithoutSourceArtifacts(t
 	}
 	if manifest.Provider == nil || manifest.Provider.BaseURL != releaseHybridBaseURL {
 		t.Fatalf("provider base_url = %#v, want %q", manifest.Provider, releaseHybridBaseURL)
+	}
+	data, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("read generated catalog: %v", err)
+	}
+	if !strings.Contains(string(data), "generated_op") {
+		t.Fatalf("unexpected generated catalog: %s", data)
 	}
 }
 
@@ -832,104 +944,6 @@ func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(prebuiltHybridArtifactPath))); err != nil {
 		t.Fatalf("expected prebuilt artifact in archive: %v", err)
-	}
-}
-
-func TestRun_PluginReleasePackagesRootMainBuildTarget(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newRootMainReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.7-test"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
-		t.Fatalf("artifacts = %+v", manifest.Artifacts)
-	}
-}
-
-func TestRun_PluginReleasePrefersCmdBuildTargetOverRootMain(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newNestedCmdReleaseFixture(t, t.TempDir())
-	writeTestFile(t, pluginDir, "main.go", []byte("package main\n\nfunc main() { missingSymbol() }\n"), 0644)
-
-	outputDir := t.TempDir()
-	const testVersion = "0.0.7-rc.1"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
-		t.Fatalf("artifacts = %+v", manifest.Artifacts)
-	}
-}
-
-func TestRun_PluginReleaseBuildsNestedCmdMainPackage(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newNestedCmdReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.7-alpha.1"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
-		t.Fatalf("artifacts = %+v", manifest.Artifacts)
-	}
-}
-
-func TestRun_PluginReleaseDetectsPlatformTaggedMainPackage(t *testing.T) {
-	t.Parallel()
-
-	targetOS := "linux"
-	switch runtime.GOOS {
-	case "linux":
-		targetOS = "darwin"
-	case "darwin":
-		targetOS = "linux"
-	default:
-		t.Skipf("platform-tagged release test expects darwin or linux host, got %s", runtime.GOOS)
-	}
-
-	pluginDir := newRootMainReleaseFixture(t, t.TempDir())
-	writeTestFile(t, pluginDir, "main.go", []byte("//go:build "+targetOS+"\n\npackage main\n\nfunc main() {}\n"), 0644)
-
-	outputDir := t.TempDir()
-	const testVersion = "0.0.7-beta.1"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", targetOS+"/amd64",
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + targetOS + "_amd64.tar.gz"
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].OS != targetOS || manifest.Artifacts[0].Arch != "amd64" {
-		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
 }
 
@@ -1069,14 +1083,16 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	if err := os.WriteFile(filepath.Join(src, "openapi.yaml"), []byte("openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"), 0644); err != nil {
 		t.Fatalf("WriteFile(openapi.yaml): %v", err)
 	}
+	writeTestFile(t, src, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/provider")), 0644)
+	writeTestFile(t, src, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
+	writeStaticCatalogProviderMain(t, src)
 
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/provider",
 		Version: "0.1.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			StaticCatalogPath: "catalog.yaml",
-			ConfigSchemaPath:  "schemas/config.schema.json",
+			ConfigSchemaPath: "schemas/config.schema.json",
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -1099,9 +1115,44 @@ func newPluginPackageFixture(t *testing.T, dir string) string {
 	if err := os.WriteFile(filepath.Join(src, "plugin.json"), manifestData, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
-		t.Fatalf("WriteFile(catalog.yaml): %v", err)
+	return src
+}
+
+func newSourcePluginPackageFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, "schemas"), 0755); err != nil {
+		t.Fatalf("MkdirAll(schemas): %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(src, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0644); err != nil {
+		t.Fatalf("WriteFile(schema): %v", err)
+	}
+	writeTestFile(t, src, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/source-provider")), 0644)
+	writeTestFile(t, src, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
+	writeStaticCatalogProviderMain(t, src)
+
+	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/source-provider",
+		Version: "0.1.0",
+		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			ConfigSchemaPath: "schemas/config.schema.json",
+			Auth:             &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			BaseURL:          "https://api.example.com",
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:   "ping",
+					Method: "GET",
+					Path:   "/ping",
+				},
+			},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	writeTestFile(t, src, "plugin.yaml", manifestData, 0644)
 	return src
 }
 
@@ -1112,8 +1163,9 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
-	writeTestFile(t, pluginDir, "go.mod", []byte("module "+releaseTestModule+"\n\ngo 1.22\n"), 0644)
-	writeTestFile(t, pluginDir, "cmd/main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
+	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, releaseTestModule)), 0644)
+	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
+	writeStaticCatalogProviderMain(t, pluginDir)
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
@@ -1195,28 +1247,6 @@ func newSpecLoadedProviderReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-func newRootMainReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := newCompiledReleaseFixture(t, dir)
-	if err := os.RemoveAll(filepath.Join(pluginDir, "cmd")); err != nil {
-		t.Fatalf("RemoveAll(cmd): %v", err)
-	}
-	writeTestFile(t, pluginDir, "main.go", []byte("package main\n\nfunc main() {}\n"), 0644)
-	return pluginDir
-}
-
-func newNestedCmdReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := newCompiledReleaseFixture(t, dir)
-	if err := os.Remove(filepath.Join(pluginDir, "cmd", "main.go")); err != nil {
-		t.Fatalf("Remove(cmd/main.go): %v", err)
-	}
-	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join("cmd", releaseTestPluginName, "main.go")), []byte("package main\n\nfunc main() {}\n"), 0644)
-	return pluginDir
-}
-
 func newHybridReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -1276,8 +1306,19 @@ func newCompiledManifestBackedProviderReleaseFixture(t *testing.T, dir string) s
 			},
 		},
 	})
+	_ = os.Remove(filepath.Join(pluginDir, pluginpkg.StaticCatalogFile))
 
 	return pluginDir
+}
+
+func writeStaticCatalogProviderMain(t *testing.T, dir string) {
+	t.Helper()
+	writeStaticCatalogProviderMainAt(t, dir, filepath.ToSlash(filepath.Join("provider", "provider.go")))
+}
+
+func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
+	t.Helper()
+	writeTestFile(t, dir, rel, []byte(testutil.GeneratedProviderPackageSource()), 0644)
 }
 
 func newCompiledWebUIReleaseFixture(t *testing.T, dir string) string {
@@ -1484,18 +1525,14 @@ func writeReleaseTestManifest(t *testing.T, dir string, manifest *pluginmanifest
 
 func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
-	if manifest.Provider != nil && manifest.Entrypoints.Provider != nil && manifest.Provider.StaticCatalogPath == "" {
-		manifest.Provider.StaticCatalogPath = "catalog.yaml"
-	}
-
 	populateMissingArtifactDigests(t, dir, manifest)
 	data, err := encodeTestManifestFormat(manifest, pluginpkg.ManifestFormatFromPath(manifestFile))
 	if err != nil {
 		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
 	}
 	writeTestFile(t, dir, manifestFile, data, 0644)
-	if manifest.Provider != nil && manifest.Provider.StaticCatalogPath != "" {
-		writeTestFile(t, dir, manifest.Provider.StaticCatalogPath, []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
+	if manifest.Provider != nil {
+		writeTestFile(t, dir, pluginpkg.StaticCatalogFile, []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 	}
 }
 
@@ -1519,7 +1556,7 @@ func populateMissingArtifactDigests(t *testing.T, dir string, manifest *pluginma
 }
 
 func encodeTestManifestFormat(manifest *pluginmanifestv1.Manifest, format string) ([]byte, error) {
-	return pluginpkg.EncodeManifestFormat(manifest, format)
+	return pluginpkg.EncodeSourceManifestFormat(manifest, format)
 }
 
 func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode) {

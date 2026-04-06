@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -19,7 +19,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeProvider(ctx, &stubProvider{})
+		errCh <- gestalt.ServeProvider(ctx, &stubProvider{}, stubRouter)
 	}()
 	t.Cleanup(func() {
 		cancel()

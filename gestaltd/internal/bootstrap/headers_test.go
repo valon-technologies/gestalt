@@ -147,7 +147,7 @@ func TestBootstrap_ConfigBaseURLOverridesManifestBaseURL(t *testing.T) {
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
-				Source:               manifest.Source,
+				Source:               &config.PluginSourceDef{Ref: manifest.Source, Version: manifest.Version},
 				IsDeclarative:        true,
 				ResolvedManifestPath: manifestPath,
 				ResolvedManifest:     manifest,

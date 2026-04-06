@@ -1,14 +1,24 @@
 // Package gestalt provides a Go SDK for building Gestalt provider plugins.
 //
 // Gestalt plugins extend the platform with new integrations and automations.
-// A [Provider] exposes a set of named operations (e.g. "list_issues",
-// "send_message") that callers can invoke. Providers are short-lived: they
-// start, handle requests, and stop when the host is done.
+// A [Provider] is the runtime portion: it receives startup config and serves
+// typed executable operations when the host invokes them.
+//
+// Static metadata still belongs to the plugin manifest. Static executable
+// operations are authored in Go and materialized automatically by the SDK and
+// host. The recommended authoring flow is:
+//
+//  1. Implement [Provider.Configure].
+//  2. Define typed operations and handlers in Go with [Operation], [Register],
+//     and [Router].
+//  3. Export `New()` plus `Router` from the provider package.
+//
+// This keeps the runtime contract single-source and manifest-backed while still
+// giving plugin authors typed Go definitions for executable helper operations.
 //
 // # Implementing a Provider
 //
-// Implement the [Provider] interface and call [ServeProvider]. Static metadata
-// and the static catalog belong in the plugin manifest, not in the Go type:
+// The runtime provider interface stays small:
 //
 //	type MyProvider struct{}
 //
@@ -16,18 +26,13 @@
 //		return nil
 //	}
 //
-//	func (p *MyProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*gestalt.OperationResult, error) {
-//		return &gestalt.OperationResult{Status: 200, Body: `{"message":"hello"}`}, nil
-//	}
+//	func New() *MyProvider { return &MyProvider{} }
 //
-//	func main() {
-//		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-//		defer cancel()
-//		if err := gestalt.ServeProvider(ctx, &MyProvider{}); err != nil {
-//			log.Fatal(err)
-//		}
-//	}
+//	var Router = gestalt.MustRouter(
+//		"my-plugin",
+//		gestalt.Register(myOperation, (*MyProvider).myHandler),
+//	)
 //
-// The corresponding manifest would define fields like display_name,
-// description, auth, and provider.static_catalog_path.
+// See the public example under `examples/plugins/provider-go` and
+// `/docs/plugins/writing-a-plugin` for the full typed authoring flow.
 package gestalt

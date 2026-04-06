@@ -35,7 +35,6 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 
 	if manifest.Provider != nil {
 		add(manifest.Provider.ConfigSchemaPath, "provider config schema")
-		add(manifest.Provider.StaticCatalogPath, "provider static catalog")
 	}
 	add(manifest.IconFile, "icon_file")
 	return refs
@@ -58,10 +57,6 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 
 	if resolved := resolve(provider.OpenAPI); resolved != provider.OpenAPI {
 		provider.OpenAPI = resolved
-		changed = true
-	}
-	if resolved := resolve(provider.StaticCatalogPath); resolved != provider.StaticCatalogPath {
-		provider.StaticCatalogPath = resolved
 		changed = true
 	}
 	if resolved := resolve(provider.GraphQLURL); resolved != provider.GraphQLURL {

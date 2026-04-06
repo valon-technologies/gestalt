@@ -10,7 +10,7 @@ Gestalt currently provides a first-party SDK for **Go** (`sdk/go`). The underlyi
 
 ## How plugins work
 
-When a provider entry includes a `from` block, `gestaltd` starts the plugin as a child process at boot time. The host creates a temporary Unix socket, passes the socket path to the plugin via the `GESTALT_PLUGIN_SOCKET` environment variable, and the plugin connects back to register itself. Once connected, the plugin receives its name and config, exposes its operation catalog, and begins handling invocation requests.
+When a provider entry includes a `from` block, `gestaltd` starts the plugin as a child process at boot time. The host creates a temporary Unix socket, passes the socket path to the plugin via the `GESTALT_PLUGIN_SOCKET` environment variable, and the plugin connects back to register itself. Once connected, the plugin receives its name and config, exposes its dynamic capabilities, and begins handling invocation requests.
 
 Plugins run in process isolation. They cannot access the datastore, other users' credentials, or the host process memory. The host resolves credentials and passes only the current caller's access token to the plugin for each request.
 

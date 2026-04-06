@@ -152,8 +152,7 @@ func TestValidate(t *testing.T) {
 		testutil.CloseOnCleanup(t, specSrv)
 
 		plugin := &config.PluginDef{
-			Source:            "github.com/acme/plugins/reports",
-			Version:           "1.0.0",
+			Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
 			IsDeclarative:     true,
 			OpenAPIConnection: "reports",
 			ResponseMapping: &config.ResponseMappingDef{
@@ -204,8 +203,7 @@ func TestValidate(t *testing.T) {
 		testutil.CloseOnCleanup(t, specSrv)
 
 		plugin := &config.PluginDef{
-			Source:        "github.com/acme/plugins/reports",
-			Version:       "1.0.0",
+			Source:        &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
 			IsDeclarative: true,
 			ConnectionParams: map[string]config.ConnectionParamDef{
 				"tenant": {Required: true},
@@ -251,8 +249,7 @@ func TestValidate(t *testing.T) {
 		cfg := validConfig()
 		cfg.Integrations["reports"] = config.IntegrationDef{
 			Plugin: &config.PluginDef{
-				Source:            "github.com/acme/plugins/reports",
-				Version:           "1.0.0",
+				Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
 				IsDeclarative:     true,
 				OpenAPIConnection: "reports",
 				ResolvedManifest: &pluginmanifestv1.Manifest{

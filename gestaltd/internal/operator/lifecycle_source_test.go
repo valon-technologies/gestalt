@@ -68,7 +68,7 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -113,8 +113,9 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 		"providers:",
 		"  alpha:",
 		"    from:",
-		"      source: " + source,
-		"      version: " + version,
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
 	}
 
 	yaml := strings.Join(lines, "\n") + "\n"
@@ -293,8 +294,9 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 		"providers:",
 		"  gadget:",
 		"    from:",
-		"      source: " + source,
-		"      version: " + version,
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -440,8 +442,9 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		"providers:",
 		"  alpha:",
 		"    from:",
-		"      source: " + testSource,
-		"      version: " + testVersion,
+		"      source:",
+		"        ref: " + testSource,
+		"        version: " + testVersion,
 	}, "\n") + "\n"
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {

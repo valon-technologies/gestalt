@@ -47,7 +47,8 @@ providers:
     display_name: Service A
     from:
       command: /tmp/provider
-      manifest: /tmp/plugin.yaml
+      source:
+        path: /tmp/plugin.yaml
 `)
 
 	cfg, err := Load(path)
@@ -95,7 +96,8 @@ providers:
   service-a:
     from:
       command: /tmp/provider
-      manifest: /tmp/plugin.yaml
+      source:
+        path: /tmp/plugin.yaml
 `)
 
 	cfg, err := LoadWithMapping(path, getenv)
@@ -301,7 +303,8 @@ providers:
   service:
     from:
       command: /usr/bin/provider
-      manifest: /usr/bin/provider.yaml
+      source:
+        path: /usr/bin/provider.yaml
 `,
 		},
 		{
@@ -373,7 +376,8 @@ providers:
   external:
     from:
       command: /tmp/plugin
-      manifest: /tmp/plugin.yaml
+      source:
+        path: /tmp/plugin.yaml
       package: ./plugins/dummy.tar.gz
 `,
 			wantErr: true,
@@ -438,8 +442,9 @@ providers:
 providers:
   external:
     from:
-      source: github.com/acme-corp/tools/widget
-      version: 1.2.3
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
 `,
 		},
 		{
@@ -448,8 +453,9 @@ providers:
 providers:
   external:
     from:
-      source: github.com/acme-corp/tools/widget
-      version: 1.2.3
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
     base_url: https://api.example.com
 `,
 		},
@@ -459,7 +465,8 @@ providers:
 providers:
   external:
     from:
-      source: github.com/acme-corp/tools/widget
+      source:
+        ref: github.com/acme-corp/tools/widget
 `,
 			wantErr: true,
 		},
@@ -525,7 +532,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 		},
@@ -533,7 +540,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "both package and source rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Package: "./some-dir", Source: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+					"sample": {Plugin: &PluginDef{Package: "./some-dir", Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -551,19 +558,19 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source without version rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: "github.com/test-org/test-repo/test-plugin"}},
+					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin"}}},
 				},
 			},
-			wantErr: "plugin.version is required",
+			wantErr: "plugin.source.version is required",
 		},
 		{
-			name: "package with version rejected",
+			name: "source version without ref rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Package: "./some-dir", Version: "1.0.0"}},
+					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Version: "1.0.0"}}},
 				},
 			},
-			wantErr: "plugin.version is only valid with plugin.source",
+			wantErr: "plugin.source.path or plugin.source.ref is required",
 		},
 		{
 			name: "http package rejected",
@@ -646,7 +653,8 @@ providers:
     icon_file: ../assets/service.svg
     from:
       command: ../bin/provider
-      manifest: ../bin/plugin.yaml
+      source:
+        path: ../bin/plugin.yaml
   service-b:
     from:
       package: ../plugins/dummy.tar.gz
@@ -667,6 +675,9 @@ providers:
 	}
 	if got := cfg.Integrations["service-a"].Plugin.Command; got != filepath.Join(dir, "bin", "provider") {
 		t.Fatalf("integration plugin command = %q", got)
+	}
+	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "plugin.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "plugin.yaml"))
 	}
 	if got := cfg.Integrations["service-b"].Plugin.Package; got != filepath.Join(dir, "plugins", "dummy.tar.gz") {
 		t.Fatalf("integration plugin package = %q, want %q", got, filepath.Join(dir, "plugins", "dummy.tar.gz"))
@@ -802,7 +813,7 @@ func TestIsInline(t *testing.T) {
 		{name: "nil plugin", plugin: nil, want: false},
 		{name: "external command", plugin: &PluginDef{Command: "/bin/test"}, want: false},
 		{name: "external package", plugin: &PluginDef{Package: "./pkg"}, want: false},
-		{name: "external source", plugin: &PluginDef{Source: "github.com/a/b/c", Version: "1.0.0"}, want: false},
+		{name: "external source", plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/a/b/c", Version: "1.0.0"}}, want: false},
 		{name: "inline openapi", plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}, want: true},
 		{name: "inline graphql", plugin: &PluginDef{GraphQLURL: "https://example.com/graphql"}, want: true},
 		{name: "inline mcp", plugin: &PluginDef{MCPURL: "https://example.com/mcp"}, want: true},
@@ -832,8 +843,8 @@ func TestExternalPluginRejectsInlineOperations(t *testing.T) {
 		Integrations: map[string]IntegrationDef{
 			"bad": {
 				Plugin: &PluginDef{
-					Command:  "echo",
-					Manifest: "plugin.yaml",
+					Command: "echo",
+					Source:  &PluginSourceDef{Path: "plugin.yaml"},
 					Operations: []InlineOperationDef{
 						{Name: "op", Method: "GET", Path: "/op"},
 					},
@@ -856,9 +867,9 @@ func TestExternalPluginAllowsSpecURL(t *testing.T) {
 		Integrations: map[string]IntegrationDef{
 			"ok": {
 				Plugin: &PluginDef{
-					Command:  "echo",
-					Manifest: "plugin.yaml",
-					OpenAPI:  "https://example.com/spec.json",
+					Command: "echo",
+					Source:  &PluginSourceDef{Path: "plugin.yaml"},
+					OpenAPI: "https://example.com/spec.json",
 				},
 			},
 		},

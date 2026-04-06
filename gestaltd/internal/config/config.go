@@ -64,6 +64,12 @@ func (p *UIPluginDef) HasManagedArtifacts() bool {
 	return p != nil && (p.Package != "" || p.Source != "")
 }
 
+type PluginSourceDef struct {
+	Path    string `yaml:"path"`
+	Ref     string `yaml:"ref"`
+	Version string `yaml:"version"`
+}
+
 type EgressConfig struct {
 	DefaultAction string                  `yaml:"default_action"`
 	Policies      []EgressPolicyRule      `yaml:"policies"`
@@ -93,13 +99,11 @@ type EgressCredentialGrant struct {
 }
 
 type PluginDef struct {
-	Command  string            `yaml:"command"`
-	Manifest string            `yaml:"manifest"`
-	Package  string            `yaml:"package"`
-	Source   string            `yaml:"source"`
-	Version  string            `yaml:"version"`
-	Args     []string          `yaml:"args"`
-	Env      map[string]string `yaml:"env"`
+	Command string            `yaml:"command"`
+	Source  *PluginSourceDef  `yaml:"source"`
+	Package string            `yaml:"package"`
+	Args    []string          `yaml:"args"`
+	Env     map[string]string `yaml:"env"`
 
 	Config       yaml.Node `yaml:"config"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
@@ -138,7 +142,7 @@ func (p *PluginDef) IsInline() bool {
 	if p == nil {
 		return false
 	}
-	if p.Source != "" || p.Package != "" || p.Command != "" || p.Manifest != "" {
+	if p.Source != nil || p.Package != "" || p.Command != "" {
 		return false
 	}
 	return p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "" || len(p.Operations) > 0 ||
@@ -146,7 +150,36 @@ func (p *PluginDef) IsInline() bool {
 }
 
 func (p *PluginDef) HasManagedArtifacts() bool {
-	return p != nil && (p.Package != "" || p.Source != "")
+	return p != nil && (p.Package != "" || p.HasManagedSource())
+}
+
+func (p *PluginDef) HasLocalSource() bool {
+	return p != nil && p.Source != nil && p.Source.Path != ""
+}
+
+func (p *PluginDef) HasManagedSource() bool {
+	return p != nil && p.Source != nil && p.Source.Ref != ""
+}
+
+func (p *PluginDef) SourcePath() string {
+	if p == nil || p.Source == nil {
+		return ""
+	}
+	return p.Source.Path
+}
+
+func (p *PluginDef) SourceRef() string {
+	if p == nil || p.Source == nil {
+		return ""
+	}
+	return p.Source.Ref
+}
+
+func (p *PluginDef) SourceVersion() string {
+	if p == nil || p.Source == nil {
+		return ""
+	}
+	return p.Source.Version
 }
 
 func (p *PluginDef) HasResolvedManifest() bool {
@@ -650,6 +683,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if intg.Plugin != nil {
 			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
 			intg.Plugin.Package = resolvePackagePath(baseDir, intg.Plugin.Package)
+			if intg.Plugin.Source != nil {
+				intg.Plugin.Source.Path = resolveRelativePath(baseDir, intg.Plugin.Source.Path)
+			}
 			if intg.Plugin.OpenAPI != "" {
 				intg.Plugin.OpenAPI = resolveUpstreamURL(baseDir, intg.Plugin.OpenAPI)
 			}
@@ -984,49 +1020,61 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if err := validateManagedParameterConfig("config validation: "+kind+" "+strconv.Quote(name), plugin.Headers, plugin.ManagedParameters); err != nil {
 		return err
 	}
+	if plugin.Source != nil {
+		modeCount := 0
+		if plugin.Source.Path != "" {
+			modeCount++
+		}
+		if plugin.Source.Ref != "" {
+			modeCount++
+		}
+		switch {
+		case modeCount == 0:
+			return fmt.Errorf("config validation: %s %q plugin.source.path or plugin.source.ref is required when plugin.source is set", kind, name)
+		case modeCount > 1:
+			return fmt.Errorf("config validation: %s %q plugin.source.path and plugin.source.ref are mutually exclusive", kind, name)
+		}
+	}
 	sourceCount := 0
-	if plugin.Command != "" {
+	if plugin.Command != "" || plugin.HasLocalSource() {
 		sourceCount++
 	}
 	if plugin.Package != "" {
 		sourceCount++
 	}
-	if plugin.Source != "" {
+	if plugin.HasManagedSource() {
 		sourceCount++
 	}
 	switch {
 	case sourceCount == 0:
-		return fmt.Errorf("config validation: %s %q plugin.command, plugin.package, or plugin.source is required", kind, name)
+		return fmt.Errorf("config validation: %s %q plugin.source, plugin.command, or plugin.package is required", kind, name)
 	case sourceCount > 1:
-		return fmt.Errorf("config validation: %s %q plugin.command, plugin.package, and plugin.source are mutually exclusive", kind, name)
+		return fmt.Errorf("config validation: %s %q plugin.source, plugin.command, and plugin.package are mutually exclusive", kind, name)
 	}
 
-	if plugin.Source != "" {
-		if _, err := pluginsource.Parse(plugin.Source); err != nil {
-			return fmt.Errorf("config validation: %s %q plugin.source: %w", kind, name, err)
+	if plugin.HasManagedSource() {
+		if _, err := pluginsource.Parse(plugin.SourceRef()); err != nil {
+			return fmt.Errorf("config validation: %s %q plugin.source.ref: %w", kind, name, err)
 		}
-		if plugin.Version == "" {
-			return fmt.Errorf("config validation: %s %q plugin.version is required when plugin.source is set", kind, name)
+		if plugin.SourceVersion() == "" {
+			return fmt.Errorf("config validation: %s %q plugin.source.version is required when plugin.source.ref is set", kind, name)
 		}
-		if err := pluginsource.ValidateVersion(plugin.Version); err != nil {
-			return fmt.Errorf("config validation: %s %q plugin.version: %w", kind, name, err)
+		if err := pluginsource.ValidateVersion(plugin.SourceVersion()); err != nil {
+			return fmt.Errorf("config validation: %s %q plugin.source.version: %w", kind, name, err)
 		}
 	}
 
-	if (plugin.Command != "" || plugin.Package != "") && plugin.Version != "" {
-		return fmt.Errorf("config validation: %s %q plugin.version is only valid with plugin.source", kind, name)
+	if plugin.HasLocalSource() && plugin.SourceVersion() != "" {
+		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
+	}
+	if plugin.Package != "" && plugin.SourceVersion() != "" {
+		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
 	}
 	if plugin.Command == "" && len(plugin.Args) > 0 {
 		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
 	}
-	if plugin.Command != "" && plugin.Manifest == "" && !plugin.HasResolvedManifest() {
-		return fmt.Errorf("config validation: %s %q plugin.manifest is required when plugin.command is set", kind, name)
-	}
-	if plugin.Manifest != "" && plugin.Command == "" {
-		return fmt.Errorf("config validation: %s %q plugin.manifest is only valid with plugin.command", kind, name)
-	}
-	if plugin.Manifest != "" && (plugin.Package != "" || plugin.Source != "") {
-		return fmt.Errorf("config validation: %s %q plugin.manifest cannot be combined with plugin.package or plugin.source", kind, name)
+	if plugin.Command != "" && !plugin.HasLocalSource() && !plugin.HasResolvedManifest() {
+		return fmt.Errorf("config validation: %s %q plugin.source.path is required when plugin.command is set", kind, name)
 	}
 	if strings.HasPrefix(plugin.Package, "http://") {
 		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
@@ -1090,22 +1138,16 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		reason    string
 	}{
 		{
-			field:     "plugin.manifest",
-			present:   plugin.Manifest != "",
-			supported: plugin.Command != "",
-			reason:    "is only valid when the plugin runs from a local command; remove plugin.manifest or configure plugin.command",
-		},
-		{
 			field:     "plugin.env",
 			present:   len(plugin.Env) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.command, plugin.package, or plugin.source",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source, plugin.command, or plugin.package",
 		},
 		{
 			field:     "plugin.allowed_hosts",
 			present:   len(plugin.AllowedHosts) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.command, plugin.package, or plugin.source",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source, plugin.command, or plugin.package",
 		},
 		{
 			field:     "plugin.openapi_connection",
