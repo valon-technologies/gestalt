@@ -15,6 +15,10 @@ artifacts.
 
 The checked-in Python protobuf stubs live in `gestalt/gen/v1`.
 
+This is an SDK maintainer workflow. Plugin authors consume the checked-in
+stubs through the `gestalt` package and do not need to regenerate them in
+plugin repositories.
+
 Regenerate them from the repo root with:
 
 ```sh
