@@ -89,40 +89,10 @@ jobs:
         run: uv python install 3.14
 
       - name: Normalize package version from tag
-        env:
-          RAW_VERSION: ${{ github.ref_name }}
         run: |
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          ref_name = os.environ["RAW_VERSION"]
-          raw = ref_name.removeprefix("sdk/python/v")
-          match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?", raw)
-          if match is None:
-              raise SystemExit(f"unsupported Python SDK tag format: {raw}")
-
-          base, phase, phase_num = match.groups()
-          suffix = ""
-          if phase is not None:
-              suffix = {"alpha": "a", "beta": "b", "rc": "rc"}[phase] + phase_num
-          pep440 = base + suffix
-
-          path = pathlib.Path("pyproject.toml")
-          data = path.read_text()
-          updated, count = re.subn(
-              r'^version = "[^"]+"$',
-              f'version = "{pep440}"',
-              data,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          if count != 1:
-              raise SystemExit("failed to update [project].version in pyproject.toml")
-          path.write_text(updated)
-          print(f"normalized {raw} -> {pep440}")
-          PY
+          python3 ../../.github/scripts/normalize-python-sdk-version.py \
+            pyproject.toml \
+            "${GITHUB_REF_NAME#sdk/python/v}"
 
       - name: Build distributions
         run: uv build
