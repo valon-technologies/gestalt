@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import pathlib
@@ -18,7 +17,10 @@ BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
 
 
 def serve(plugin: Plugin) -> None:
-    grpc, json_format, plugin_pb2, plugin_pb2_grpc = _runtime_imports()
+    import grpc
+    from google.protobuf import json_format
+
+    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
 
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
@@ -77,28 +79,35 @@ def serve(plugin: Plugin) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if args[:1] == ["build"]:
-        build_args = _build_argument_parser().parse_args(args[1:])
-        build_plugin_binary(
-            build_args.root,
-            build_args.target,
-            build_args.output_path,
-            build_args.plugin_name,
-        )
-        return 0
-
-    if args:
-        source_args = _runtime_argument_parser().parse_args(args)
-        root = source_args.root
-        target = source_args.target
-        plugin_name = None
-    else:
-        bundled = _bundled_runtime_config()
-        if bundled is None:
+    if not args:
+        config_path = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
+        config_path = config_path / BUNDLED_CONFIG_NAME
+        if not config_path.exists():
             _print_usage()
             return 2
-        target, plugin_name = bundled
+
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        target = data.get("target", "").strip()
+        if not target:
+            raise RuntimeError(f"{config_path} is missing target")
+
+        plugin_name = data.get("plugin_name")
+        if plugin_name is not None:
+            plugin_name = str(plugin_name).strip() or None
         root = None
+    elif args[0] == "build":
+        if len(args) != 5:
+            _print_usage()
+            return 2
+        _, root, target, output_path, plugin_name = args
+        build_plugin_binary(root, target, output_path, plugin_name)
+        return 0
+    else:
+        if len(args) != 2:
+            _print_usage()
+            return 2
+        root, target = args
+        plugin_name = None
 
     plugin = _load_plugin(target, root)
     if plugin_name:
@@ -134,6 +143,7 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
         pyinstaller_name = output.name
         if sys.platform == "win32" and pyinstaller_name.endswith(".exe"):
             pyinstaller_name = pyinstaller_name[:-4]
+        separator = ";" if sys.platform == "win32" else ":"
 
         command = [
             sys.executable,
@@ -155,8 +165,8 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
             "--paths",
             str(root_path),
             "--add-data",
-            _pyinstaller_data_arg(bundle_config_path, BUNDLED_CONFIG_NAME),
-            str(_pyinstaller_entrypoint()),
+            f"{bundle_config_path}{separator}{BUNDLED_CONFIG_NAME}",
+            str(pathlib.Path(__file__).with_name("_pyinstaller.py")),
         ]
         subprocess.run(command, cwd=root_path, check=True)
 
@@ -182,66 +192,12 @@ def _split_target(target: str) -> tuple[str, str]:
     return module_name, attr_name
 
 
-def _bundled_runtime_config() -> tuple[str, str | None] | None:
-    config_path = _bundled_config_path()
-    if not config_path.exists():
-        return None
-
-    data = json.loads(config_path.read_text(encoding="utf-8"))
-    target = data.get("target", "").strip()
-    plugin_name = data.get("plugin_name")
-    if not target:
-        raise RuntimeError(f"{config_path} is missing target")
-    if plugin_name is not None:
-        plugin_name = str(plugin_name).strip() or None
-    return target, plugin_name
-
-
-def _bundled_config_path() -> pathlib.Path:
-    bundle_root = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
-    return bundle_root / BUNDLED_CONFIG_NAME
-
-
-def _pyinstaller_data_arg(source: pathlib.Path, destination_name: str) -> str:
-    separator = ";" if sys.platform == "win32" else ":"
-    return f"{source}{separator}{destination_name}"
-
-
-def _pyinstaller_entrypoint() -> pathlib.Path:
-    return pathlib.Path(__file__).with_name("_pyinstaller.py")
-
-
-def _runtime_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m gestalt._runtime")
-    parser.add_argument("root")
-    parser.add_argument("target", metavar="MODULE:ATTRIBUTE")
-    return parser
-
-
-def _build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m gestalt._runtime build")
-    parser.add_argument("root")
-    parser.add_argument("target", metavar="MODULE:ATTRIBUTE")
-    parser.add_argument("output_path", metavar="OUTPUT")
-    parser.add_argument("plugin_name", metavar="PLUGIN_NAME")
-    return parser
-
-
 def _print_usage() -> None:
     print(
         "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE\n"
         "   or: python -m gestalt._runtime build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME",
         file=sys.stderr,
     )
-
-
-def _runtime_imports():
-    import grpc
-    from google.protobuf import json_format
-
-    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
-
-    return grpc, json_format, plugin_pb2, plugin_pb2_grpc
 
 
 if __name__ == "__main__":

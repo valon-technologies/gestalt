@@ -11,7 +11,9 @@ from gestalt import _runtime
 
 
 class RuntimeTests(unittest.TestCase):
-    def test_bundled_runtime_config_uses_bundled_metadata(self) -> None:
+    def test_main_loads_bundled_plugin_and_applies_plugin_name(self) -> None:
+        plugin = Plugin("source-name")
+
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
             (bundle_dir / _runtime.BUNDLED_CONFIG_NAME).write_text(
@@ -24,25 +26,10 @@ class RuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True):
-                config = _runtime._bundled_runtime_config()
-
-        self.assertEqual(
-            config,
-            ("provider:plugin", "released-plugin"),
-        )
-
-    def test_main_loads_bundled_plugin_and_applies_plugin_name(self) -> None:
-        plugin = Plugin("source-name")
-
-        with mock.patch.object(
-            _runtime,
-            "_bundled_runtime_config",
-            return_value=("provider:plugin", "released-plugin"),
-        ), mock.patch.object(_runtime, "_load_plugin", return_value=plugin) as load_plugin, mock.patch.object(
-            _runtime, "serve"
-        ) as serve:
-            result = _runtime.main([])
+            with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True), mock.patch.object(
+                _runtime, "_load_plugin", return_value=plugin
+            ) as load_plugin, mock.patch.object(_runtime, "serve") as serve:
+                result = _runtime.main([])
 
         self.assertEqual(result, 0)
         load_plugin.assert_called_once_with("provider:plugin", None)
@@ -88,7 +75,7 @@ class RuntimeTests(unittest.TestCase):
                 "plugin_name": "released-plugin",
             },
         )
-        self.assertEqual(command[-1], str(_runtime._pyinstaller_entrypoint()))
+        self.assertEqual(command[-1], str(pathlib.Path(_runtime.__file__).with_name("_pyinstaller.py")))
 
 
 if __name__ == "__main__":
