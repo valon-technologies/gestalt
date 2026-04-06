@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result, bail};
 use reqwest::Method;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -40,6 +42,104 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
 }
 
 pub const PROJECT_CONFIG_FILE: &str = ".gestalt.json";
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct IntegrationInfo {
+    pub name: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub auth_types: Vec<String>,
+    #[serde(default)]
+    pub connection_params: BTreeMap<String, ConnectionParamDef>,
+    #[serde(default)]
+    pub connections: Vec<ConnectionDefInfo>,
+    #[serde(default)]
+    pub credential_fields: Vec<CredentialFieldInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ConnectionDefInfo {
+    pub name: String,
+    #[serde(default)]
+    pub auth_types: Vec<String>,
+    #[serde(default)]
+    pub credential_fields: Vec<CredentialFieldInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ConnectionParamDef {
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub default: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+pub struct CredentialFieldInfo {
+    pub name: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub help_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+pub struct DiscoveryCandidateInfo {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct StartOAuthResponse {
+    pub url: String,
+    #[serde(default)]
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ConnectIntegrationResult {
+    pub status: String,
+    #[serde(default)]
+    pub integration: Option<String>,
+    #[serde(default)]
+    pub selection_url: Option<String>,
+    #[serde(default)]
+    pub pending_token: Option<String>,
+    #[serde(default)]
+    pub candidates: Vec<DiscoveryCandidateInfo>,
+}
+
+#[derive(Serialize)]
+struct StartOAuthRequest<'a> {
+    integration: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct ConnectManualRequest<'a> {
+    integration: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credentials: Option<&'a BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_params: Option<&'a BTreeMap<String, String>>,
+}
 
 fn find_project_config_value(key: &str) -> Option<String> {
     let mut dir = std::env::current_dir().ok()?;
@@ -147,6 +247,66 @@ impl ApiClient {
 
     pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {
         self.delete(&format!("/api/v1/tokens/{id}"))
+    }
+
+    pub fn list_integrations_typed(&self) -> Result<Vec<IntegrationInfo>> {
+        let resp = self.get("/api/v1/integrations")?;
+        serde_json::from_value(resp).context("failed to parse integrations")
+    }
+
+    pub fn start_integration_oauth(
+        &self,
+        integration: &str,
+        connection: Option<&str>,
+        instance: Option<&str>,
+    ) -> Result<StartOAuthResponse> {
+        let resp = self.post(
+            "/api/v1/auth/start-oauth",
+            &StartOAuthRequest {
+                integration,
+                connection,
+                instance,
+            },
+        )?;
+        serde_json::from_value(resp).context("failed to parse OAuth response")
+    }
+
+    pub fn connect_manual_integration(
+        &self,
+        integration: &str,
+        credential: Option<&str>,
+        credentials: Option<&BTreeMap<String, String>>,
+        connection_params: Option<&BTreeMap<String, String>>,
+        connection: Option<&str>,
+        instance: Option<&str>,
+    ) -> Result<ConnectIntegrationResult> {
+        let resp = self.post(
+            "/api/v1/auth/connect-manual",
+            &ConnectManualRequest {
+                integration,
+                credential,
+                credentials,
+                connection,
+                instance,
+                connection_params,
+            },
+        )?;
+        serde_json::from_value(resp).context("failed to parse manual connect response")
+    }
+
+    pub fn finalize_pending_connection(
+        &self,
+        selection_url: &str,
+        pending_token: &str,
+        candidate_index: usize,
+    ) -> Result<String> {
+        self.post_form(
+            selection_url,
+            &[
+                ("pending_token", pending_token.to_string()),
+                ("candidate_index", candidate_index.to_string()),
+            ],
+        )
     }
 
     fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {

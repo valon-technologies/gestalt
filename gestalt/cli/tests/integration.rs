@@ -4,7 +4,9 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use anyhow::{Result, bail};
 use assert_cmd::Command;
+use gestalt::interactive::{InputPrompt, PromptOption, Prompter};
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
 use predicates::prelude::*;
@@ -213,6 +215,41 @@ fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
         .args(args)
         .output()
         .unwrap()
+}
+
+struct MockPrompter {
+    selections: Vec<usize>,
+    inputs: Vec<String>,
+    seen_selects: Vec<(String, Vec<PromptOption>)>,
+    seen_inputs: Vec<InputPrompt>,
+}
+
+impl MockPrompter {
+    fn new(selections: Vec<usize>, inputs: Vec<&str>) -> Self {
+        Self {
+            selections,
+            inputs: inputs.into_iter().map(str::to_string).collect(),
+            seen_selects: Vec::new(),
+            seen_inputs: Vec::new(),
+        }
+    }
+}
+
+impl Prompter for MockPrompter {
+    fn select(&mut self, prompt: &str, options: &[PromptOption]) -> Result<usize> {
+        self.seen_selects
+            .push((prompt.to_string(), options.to_vec()));
+        Ok(self.selections.remove(0))
+    }
+
+    fn input(&mut self, prompt: &InputPrompt) -> Result<String> {
+        self.seen_inputs.push(prompt.clone());
+        Ok(self.inputs.remove(0))
+    }
+
+    fn confirm(&mut self, _question: &str, _default: bool) -> Result<bool> {
+        bail!("confirm should not be called in integration connect tests")
+    }
 }
 
 #[test]
@@ -595,6 +632,280 @@ fn test_connect_omits_null_connection_and_instance() {
 
     mock.assert();
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"datadog",
+                "display_name":"Datadog",
+                "description":"Metrics and logs",
+                "auth_types":["manual"],
+                "connection_params":{"site":{"description":"Datadog site","default":"datadoghq.com","required":true}},
+                "credential_fields":[{"name":"api_key","label":"API key","description":"Use a personal API key","help_url":"https://docs.example.com/datadog"}]
+            }]"#,
+        )
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection_params":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"connected","integration":"datadog"}"#)
+        .create();
+
+    let client = create_client(&server);
+    let mut prompts = MockPrompter::new(vec![], vec!["datadoghq.eu", "dd-key"]);
+    let browser_used = std::cell::Cell::new(false);
+
+    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
+        &client,
+        "datadog",
+        None,
+        None,
+        &mut prompts,
+        |_| {
+            browser_used.set(true);
+            Ok(())
+        },
+    );
+
+    assert!(result.is_ok());
+    assert!(!browser_used.get());
+    assert_eq!(
+        prompts.seen_inputs,
+        vec![
+            InputPrompt {
+                label: "Datadog site".to_string(),
+                description: None,
+                help_url: None,
+                default: Some("datadoghq.com".to_string()),
+                required: true,
+                secret: false,
+            },
+            InputPrompt {
+                label: "API key".to_string(),
+                description: Some("Use a personal API key".to_string()),
+                help_url: Some("https://docs.example.com/datadog".to_string()),
+                default: None,
+                required: true,
+                secret: true,
+            },
+        ]
+    );
+}
+
+#[test]
+fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"manual-svc",
+                "display_name":"Manual Service",
+                "connections":[
+                    {"name":"workspace","auth_types":["manual"],"credential_fields":[{"name":"token","label":"Workspace token"}]},
+                    {"name":"plugin","auth_types":["oauth"]}
+                ]
+            }]"#,
+        )
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection":"workspace","credential":"abc123","integration":"manual-svc"}"#
+                .to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"{
+                "status":"selection_required",
+                "integration":"manual-svc",
+                "selection_url":"/api/v1/auth/pending-connection",
+                "pending_token":"pending-123",
+                "candidates":[
+                    {"id":"site-a","name":"Site A"},
+                    {"id":"site-b","name":"Site B"}
+                ]
+            }"#,
+        )
+        .create();
+    let _select = server
+        .mock("POST", "/api/v1/auth/pending-connection")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header(
+            "content-type",
+            Matcher::Regex("application/x-www-form-urlencoded.*".to_string()),
+        )
+        .match_body(Matcher::Exact(
+            "pending_token=pending-123&candidate_index=1".to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "text/html")
+        .with_body("<html>ok</html>")
+        .create();
+
+    let client = create_client(&server);
+    let mut prompts = MockPrompter::new(vec![0, 1], vec!["abc123"]);
+
+    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
+        &client,
+        "manual-svc",
+        None,
+        None,
+        &mut prompts,
+        |_| bail!("browser should not be used"),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(prompts.seen_selects.len(), 2);
+    assert_eq!(
+        prompts.seen_selects[0],
+        (
+            "Select a Manual Service connection:".to_string(),
+            vec![
+                PromptOption {
+                    label: "workspace".to_string(),
+                    detail: Some("Auth: manual".to_string()),
+                },
+                PromptOption {
+                    label: "plugin".to_string(),
+                    detail: Some("Auth: OAuth".to_string()),
+                },
+            ]
+        )
+    );
+    assert_eq!(
+        prompts.seen_inputs,
+        vec![InputPrompt {
+            label: "Workspace token".to_string(),
+            description: None,
+            help_url: None,
+            default: None,
+            required: true,
+            secret: true,
+        }]
+    );
+}
+
+#[test]
+fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"github",
+                "display_name":"GitHub",
+                "auth_types":["oauth","manual"],
+                "credential_fields":[{"name":"token","label":"Token"}]
+            }]"#,
+        )
+        .create();
+    let _oauth = server
+        .mock("POST", "/api/v1/auth/start-oauth")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"integration":"github"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+        .create();
+
+    let client = create_client(&server);
+    let mut prompts = MockPrompter::new(vec![], vec![]);
+    let opened = std::cell::RefCell::new(None::<String>);
+
+    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
+        &client,
+        "github",
+        None,
+        None,
+        &mut prompts,
+        |url| {
+            *opened.borrow_mut() = Some(url.to_string());
+            Ok(())
+        },
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(
+        opened.into_inner().as_deref(),
+        Some("https://example.com/oauth")
+    );
+    assert!(prompts.seen_inputs.is_empty());
+    assert!(prompts.seen_selects.is_empty());
+}
+
+#[test]
+fn test_manual_connect_falls_back_to_generic_credential_prompt() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"credential":"secret","integration":"manual-svc"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
+        .create();
+
+    let client = create_client(&server);
+    let mut prompts = MockPrompter::new(vec![], vec!["secret"]);
+
+    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
+        &client,
+        "manual-svc",
+        None,
+        None,
+        &mut prompts,
+        |_| bail!("browser should not be used"),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(
+        prompts.seen_inputs,
+        vec![InputPrompt {
+            label: "Credential".to_string(),
+            description: None,
+            help_url: None,
+            default: None,
+            required: true,
+            secret: true,
+        }]
+    );
 }
 
 fn catalog_body() -> &'static str {
