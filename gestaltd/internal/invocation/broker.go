@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -137,10 +138,10 @@ func (b *Broker) ListCapabilities() []core.Capability {
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (_ *core.OperationResult, err error) {
 	startedAt := time.Now()
-	metricProvider := unknownMetricAttrValue
-	metricOperation := unknownMetricAttrValue
-	metricTransport := unknownMetricAttrValue
-	metricConnectionMode := unknownMetricAttrValue
+	metricProvider := metricutil.UnknownAttrValue
+	metricOperation := metricutil.UnknownAttrValue
+	metricTransport := metricutil.UnknownAttrValue
+	metricConnectionMode := metricutil.UnknownAttrValue
 
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke",
 		trace.WithSpanKind(trace.SpanKindInternal),
@@ -202,7 +203,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 	metricOperation = operation
-	metricTransport = metricAttrValue(transport)
+	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
 
 	if conn == "" {

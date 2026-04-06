@@ -4,18 +4,16 @@ import (
 	"context"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 )
-
-const unknownMetricAttrValue = "unknown"
 
 type operationMetrics struct {
 	count      metric.Int64Counter
@@ -63,10 +61,10 @@ func recordOperationMetrics(
 ) {
 	metrics := operationMetricsCache.load(newOperationMetrics)
 	attrs := []attribute.KeyValue{
-		attrProvider.String(metricAttrValue(provider)),
-		attrOperation.String(metricAttrValue(operation)),
-		attrTransport.String(metricAttrValue(transport)),
-		attrConnectionMode.String(metricAttrValue(connectionMode)),
+		attrProvider.String(metricutil.AttrValue(provider)),
+		attrOperation.String(metricutil.AttrValue(operation)),
+		attrTransport.String(metricutil.AttrValue(transport)),
+		attrConnectionMode.String(metricutil.AttrValue(connectionMode)),
 	}
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -80,9 +78,9 @@ func recordOperationMetrics(
 func recordTokenRefreshMetrics(ctx context.Context, provider string, connectionMode string, failed bool) {
 	metrics := operationMetricsCache.load(newOperationMetrics)
 	metrics.refresh.Add(ctx, 1, metric.WithAttributes(
-		attrProvider.String(metricAttrValue(provider)),
-		attrConnectionMode.String(metricAttrValue(connectionMode)),
-		attrResult.String(metricResult(failed)),
+		attrProvider.String(metricutil.AttrValue(provider)),
+		attrConnectionMode.String(metricutil.AttrValue(connectionMode)),
+		attrResult.String(metricutil.ResultValue(failed)),
 	))
 }
 
@@ -106,20 +104,6 @@ func newFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Flo
 		return noopmetric.Float64Histogram{}
 	}
 	return histogram
-}
-
-func metricAttrValue(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return unknownMetricAttrValue
-	}
-	return value
-}
-
-func metricResult(failed bool) string {
-	if failed {
-		return "error"
-	}
-	return "success"
 }
 
 func normalizeConnectionMode(mode core.ConnectionMode) string {

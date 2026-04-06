@@ -2,16 +2,15 @@ package server
 
 import (
 	"context"
-	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
 const (
-	serverMeterName        = "gestaltd"
-	unknownMetricAttrValue = "unknown"
+	serverMeterName = "gestaltd"
 )
 
 var (
@@ -30,21 +29,7 @@ func recordOAuthCallbackMetric(ctx context.Context, provider string, failed bool
 	}
 
 	counter.Add(ctx, 1, metric.WithAttributes(
-		serverAttrProvider.String(metricAttrValue(provider)),
-		serverAttrResult.String(metricResult(failed)),
+		serverAttrProvider.String(metricutil.AttrValue(provider)),
+		serverAttrResult.String(metricutil.ResultValue(failed)),
 	))
-}
-
-func metricAttrValue(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return unknownMetricAttrValue
-	}
-	return value
-}
-
-func metricResult(failed bool) string {
-	if failed {
-		return "error"
-	}
-	return "success"
 }

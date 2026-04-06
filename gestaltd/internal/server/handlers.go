@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 
@@ -829,7 +830,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	metricProvider := unknownMetricAttrValue
+	metricProvider := metricutil.UnknownAttrValue
 	callbackFailed := true
 	defer func() {
 		recordOAuthCallbackMetric(r.Context(), metricProvider, callbackFailed)
