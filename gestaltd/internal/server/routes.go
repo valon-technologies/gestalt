@@ -22,6 +22,7 @@ func (s *Server) routes() {
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
+		s.mountManagementRootRedirect(r)
 		s.mountAdminUIRoutes(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
@@ -55,6 +56,16 @@ func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	case metricsUnauthenticated:
 		r.HandleFunc("/metrics", s.servePrometheusMetrics)
 	}
+}
+
+func (s *Server) mountManagementRootRedirect(r chi.Router) {
+	if s.adminUI == nil {
+		return
+	}
+
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+	})
 }
 
 func (s *Server) mountAdminUIRoutes(r chi.Router) {

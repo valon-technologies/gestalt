@@ -47,12 +47,15 @@ server:
 | `public.host` | No | all interfaces | Host or IP for the public listener. |
 | `public.port` | No | `8080` | Port for the public listener. |
 | `management.host` | No | all interfaces | Host or IP for the optional management listener. |
-| `management.port` | No | — | Port for the optional management listener. When omitted, `/admin` and `/metrics` stay on the public listener. |
+| `management.port` | No | — | Port for the optional management listener. When omitted, `/admin` and `/metrics` stay on the public listener. That mode is best kept to local development or other trusted-network deployments. |
 | `port` | No | `8080` | Backward-compatible shorthand for `public.port`. `public.port` takes precedence when both are set. |
-| `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted. |
+| `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. |
 | `encryption_key` | Yes | — | Root deployment secret. Used for encryption and derived session material. |
 | `api_token_ttl` | No | `30d` | Lifetime of newly issued API tokens. Accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). |
 | `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Configuration](/configuration). |
+
+For production, prefer configuring `server.management` so the operator surface
+leaves the public listener entirely.
 
 When `server.management` is configured, Gestalt serves:
 
@@ -63,6 +66,10 @@ The management listener is intended to be protected by deployment infrastructure
 such as private networking, VPN, or an internal-only reverse proxy. Gestalt does
 not apply its own session or API-token auth to `/metrics` on the management
 listener.
+
+When `server.base_url` is set, the management admin UI uses that absolute URL
+for its `Client UI` link. When `server.base_url` is unset, the management admin
+UI omits that link rather than sending operators to a broken same-origin `/`.
 
 ## `auth`
 

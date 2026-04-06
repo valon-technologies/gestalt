@@ -113,6 +113,11 @@ docker run --rm \
 This keeps `/admin` and `/metrics` off the public interface while still making
 them reachable from the host at `127.0.0.1:9090`.
 
+For production-style deployments, prefer this split-listener pattern over
+leaving `/admin` and `/metrics` on the public listener. If you also set
+`server.base_url`, the management admin UI can link back to the public client
+UI hostname; otherwise it omits that link.
+
 ## Run a prepared production image
 
 For deterministic production images, run `gestaltd init` before `docker build`
@@ -196,7 +201,8 @@ The container exposes:
 By default the client UI is served from `/` and the built-in admin UI is served
 from `/admin` on the public listener. If you configure `server.management`, then
 `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener
-instead.
+instead. That split is the recommended production deployment shape; the
+single-listener mode is mainly for local development and trusted-network use.
 
 ## SQLite and `/data`
 

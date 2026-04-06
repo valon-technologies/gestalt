@@ -288,7 +288,7 @@
         <h1>Prometheus metrics</h1>
         <p>
           The embedded admin UI reuses the client workspace theme and derives a
-          few lightweight views directly from the authenticated
+          few lightweight views directly from the same-origin
           <code>/metrics</code> scrape, with browser-local chart history for
           quick operator debugging.
         </p>
@@ -344,7 +344,7 @@
         </div>
 
         <p class="metric-note controls-note">
-          Filters the browser's current chart history from authenticated
+          Filters the browser's current chart history from same-origin
           <code>/metrics</code> scrapes. Provider totals stay cumulative.
         </p>
       </section>
@@ -355,7 +355,7 @@
           <h2>Requests and failures</h2>
           <div class="chart" id="activity-chart" data-chart-state="empty"></div>
           <p class="metric-note chart-caption">
-            Derived from consecutive authenticated <code>/metrics</code> scrapes
+            Derived from consecutive same-origin <code>/metrics</code> scrapes
             captured in this browser session.
           </p>
         </article>
@@ -375,7 +375,7 @@
           <div class="chart" id="provider-chart" data-chart-state="empty"></div>
           <div class="bar-list" id="provider-bars"></div>
           <p class="metric-note chart-caption">
-            Based on the latest authenticated <code>/metrics</code> scrape for
+            Based on the latest same-origin <code>/metrics</code> scrape for
             this process.
           </p>
         </article>

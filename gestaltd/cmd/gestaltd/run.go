@@ -130,7 +130,7 @@ func runServer(env *bootstrapEnv) error {
 		)
 	}
 
-	clientUI, adminUI, err := resolveUIHandlers(env.Config)
+	clientUI, publicAdminUI, managementAdminUI, err := resolveUIHandlers(env.Config)
 	if err != nil {
 		return fmt.Errorf("resolving ui handlers: %w", err)
 	}
@@ -167,7 +167,7 @@ func runServer(env *bootstrapEnv) error {
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
 		MCPHandler:        mcpHandler,
 		ClientUI:          clientUI,
-		AdminUI:           adminUI,
+		AdminUI:           publicAdminUI,
 	}
 
 	publicProfile := server.RouteProfileAll
@@ -202,10 +202,16 @@ func runServer(env *bootstrapEnv) error {
 	}}
 
 	if managementAddr := env.Config.Server.ManagementAddr(); managementAddr != "" {
+		slog.Warn(
+			"management listener serves /admin and /metrics without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
+			"addr", managementAddr,
+		)
+
 		managementConfig := baseServerConfig
 		managementConfig.RouteProfile = server.RouteProfileManagement
 		managementConfig.MCPHandler = nil
 		managementConfig.ClientUI = nil
+		managementConfig.AdminUI = managementAdminUI
 		managementSrv, err := server.New(managementConfig)
 		if err != nil {
 			return fmt.Errorf("creating management server: %w", err)
@@ -275,16 +281,33 @@ const (
 	adminUIDirEnv  = "GESTALTD_ADMIN_UI_DIR"
 )
 
-func resolveUIHandlers(cfg *config.Config) (http.Handler, http.Handler, error) {
+func resolveUIHandlers(cfg *config.Config) (http.Handler, http.Handler, http.Handler, error) {
 	clientUI, err := resolveClientUIHandler(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	adminUI, err := resolveAdminUIHandler()
+
+	publicAdminUI, err := resolveAdminUIHandler(adminui.Options{
+		BrandHref:    "/",
+		ClientUIHref: "/",
+	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return clientUI, adminUI, nil
+
+	managementClientUIHref := ""
+	if cfg.Server.BaseURL != "" {
+		managementClientUIHref = cfg.Server.BaseURL
+	}
+	managementAdminUI, err := resolveAdminUIHandler(adminui.Options{
+		BrandHref:    "/admin/",
+		ClientUIHref: managementClientUIHref,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return clientUI, publicAdminUI, managementAdminUI, nil
 }
 
 func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
@@ -300,11 +323,11 @@ func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
 	return nil, fmt.Errorf("ui plugin configured but asset root not resolved")
 }
 
-func resolveAdminUIHandler() (http.Handler, error) {
+func resolveAdminUIHandler(opts adminui.Options) (http.Handler, error) {
 	if dir := strings.TrimSpace(os.Getenv(adminUIDirEnv)); dir != "" {
-		return webui.DirHandler(dir)
+		return adminui.DirHandler(dir, opts)
 	}
-	handler := adminui.EmbeddedHandler()
+	handler := adminui.EmbeddedHandler(opts)
 	if handler == nil {
 		return nil, fmt.Errorf("embedded admin ui assets not found")
 	}

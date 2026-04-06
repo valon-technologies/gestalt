@@ -756,7 +756,7 @@ func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	serveLockedAndExerciseWithManagement(t, cfgPath, publicPort, managementPort, "", func(t *testing.T, publicBaseURL, managementBaseURL string) {
+	stdout, stderr := serveLockedAndExerciseWithManagement(t, cfgPath, publicPort, managementPort, "", func(t *testing.T, publicBaseURL, managementBaseURL string) {
 		invokeExampleOperation(t, publicBaseURL, "echo", `{"message":"hello"}`, http.StatusOK)
 
 		publicMetrics := getEndpointBody(t, publicBaseURL+"/metrics", http.StatusNotFound)
@@ -774,11 +774,28 @@ func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
 			t.Fatalf("expected management listener to expose /metrics: %s", managementMetrics)
 		}
 
+		managementRoot := getEndpointBody(t, managementBaseURL+"/", http.StatusOK)
+		if !bytes.Contains(managementRoot, []byte("Prometheus metrics")) {
+			t.Fatalf("expected management listener root to land on admin ui: %s", managementRoot)
+		}
+
 		managementAdmin := getEndpointBody(t, managementBaseURL+"/admin", http.StatusOK)
 		if !bytes.Contains(managementAdmin, []byte("Prometheus metrics")) {
 			t.Fatalf("expected management listener to expose /admin: %s", managementAdmin)
 		}
+		if !bytes.Contains(managementAdmin, []byte(`class="brand" href="/admin/"`)) {
+			t.Fatalf("expected management admin brand link to stay on /admin: %s", managementAdmin)
+		}
+		if bytes.Contains(managementAdmin, []byte(`<a href="/">Client UI</a>`)) {
+			t.Fatalf("did not expect management admin to link to same-origin /: %s", managementAdmin)
+		}
+		if !bytes.Contains(managementAdmin, []byte(`href="https://gestalt.example.test"`)) {
+			t.Fatalf("expected management admin to link to configured public base url: %s", managementAdmin)
+		}
 	})
+	if !strings.Contains(stdout, "management listener serves /admin and /metrics without Gestalt auth") {
+		t.Fatalf("expected management-listener warning in stdout\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
 }
 
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
@@ -1391,6 +1408,7 @@ datastore:
     path: %s
 server:
   encryption_key: test-e2e-key
+  base_url: https://gestalt.example.test
   public:
     port: %d
   management:
