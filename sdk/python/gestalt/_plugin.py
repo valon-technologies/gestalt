@@ -166,7 +166,16 @@ class Plugin:
     def write_catalog(self, path: str | pathlib.Path) -> None:
         catalog_path = pathlib.Path(path)
         catalog_path.parent.mkdir(parents=True, exist_ok=True)
-        catalog_path.write_text(_yaml_dump(self.catalog_dict()), encoding="utf-8")
+        catalog_path.write_text(
+            yaml.dump(
+                self.catalog_dict(),
+                Dumper=_CatalogDumper,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
 
     def serve(self) -> None:
         from . import _runtime
@@ -478,13 +487,3 @@ def _slug_name(value: str) -> str:
 class _CatalogDumper(yaml.SafeDumper):
     def increase_indent(self, flow: bool = False, indentless: bool = False) -> Any:
         return super().increase_indent(flow, False)
-
-
-def _yaml_dump(value: Any) -> str:
-    return yaml.dump(
-        value,
-        Dumper=_CatalogDumper,
-        sort_keys=False,
-        default_flow_style=False,
-        allow_unicode=True,
-    )

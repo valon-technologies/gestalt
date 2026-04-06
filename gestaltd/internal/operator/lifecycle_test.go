@@ -2,7 +2,6 @@ package operator
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -261,17 +260,7 @@ def list_items(_req: gestalt.Request) -> dict[str, object]:
 def status_zero(_req: gestalt.Request) -> gestalt.Response[dict[str, bool]]:
     return gestalt.Response(status=0, body={"ok": True})
 `), 0o644)
-	sdkPath := localPythonSDKPath(t)
-	pythonDepsPath := filepath.Join(dir, ".python-deps")
-	installPyYAMLForTest(t, python3Path, pythonDepsPath)
-	writeTestFile(filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(strings.TrimSpace(
-		fmt.Sprintf(`
-			#!/bin/sh
-			set -eu
-
-			export PYTHONPATH=%q:%q${PYTHONPATH:+:$PYTHONPATH}
-			exec %q "$@"
-		`, pythonDepsPath, sdkPath, python3Path))+"\n"), 0o755)
+	createLocalPythonSDKVenv(t, python3Path, filepath.Join(dir, ".venv"), localPythonSDKPath(t))
 
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
@@ -500,23 +489,33 @@ func localPythonSDKPath(t *testing.T) string {
 	return path
 }
 
-func installPyYAMLForTest(t *testing.T, pythonPath, target string) {
+func createLocalPythonSDKVenv(t *testing.T, pythonPath, venvPath, sdkPath string) {
 	t.Helper()
 
-	cmd := exec.Command(
+	createVenv := exec.Command(
 		pythonPath,
+		"-m",
+		"venv",
+		venvPath,
+	)
+	result, err := createVenv.CombinedOutput()
+	if err != nil {
+		t.Fatalf("create Python test venv: %v\n%s", err, result)
+	}
+
+	venvPython := filepath.Join(venvPath, "bin", "python")
+	installSDK := exec.Command(
+		venvPython,
 		"-m",
 		"pip",
 		"install",
 		"--disable-pip-version-check",
 		"--quiet",
-		"--target",
-		target,
-		"PyYAML==6.0.3",
+		sdkPath,
 	)
-	result, err := cmd.CombinedOutput()
+	result, err = installSDK.CombinedOutput()
 	if err != nil {
-		t.Fatalf("install PyYAML for test: %v\n%s", err, result)
+		t.Fatalf("install local Python SDK into test venv: %v\n%s", err, result)
 	}
 }
 
