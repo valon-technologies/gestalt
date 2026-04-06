@@ -11,6 +11,7 @@ from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
+GRPC_SERVER_MAX_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,8 @@ def serve(plugin: Plugin) -> None:
     if os.path.exists(socket_path):
         os.unlink(socket_path)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    # Keep the historical concurrency here so I/O-bound plugin handlers can overlap.
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS))
 
     class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
         def GetMetadata(self, _request, _context):
