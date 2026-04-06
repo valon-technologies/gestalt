@@ -70,8 +70,7 @@
       }
 
       .card,
-      .status,
-      details {
+      .status {
         border: 1px solid hsl(var(--border) / 1);
         border-radius: 12px;
         background: color-mix(in srgb, hsl(var(--surface)) 90%, white);
@@ -81,7 +80,7 @@
       .summary-card,
       .panel-card,
       .status,
-      summary {
+      .controls {
         padding: 20px;
       }
 
@@ -136,6 +135,45 @@
 
       .panel-wide {
         grid-column: 1 / -1;
+      }
+
+      .controls {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+
+      .control-cluster {
+        display: flex;
+        align-items: end;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .control-group {
+        display: grid;
+        gap: 8px;
+      }
+
+      .control-select {
+        border: 1px solid hsl(var(--border) / 1);
+        border-radius: 999px;
+        background: color-mix(in srgb, hsl(var(--surface-raised)) 48%, white);
+        color: hsl(var(--foreground) / 1);
+        font: inherit;
+      }
+
+      .control-select {
+        min-width: 136px;
+        padding: 8px 12px;
+      }
+
+      .controls-note {
+        margin-top: 0;
+        max-width: 380px;
       }
 
       .metric-value {
@@ -205,21 +243,6 @@
         background: linear-gradient(90deg, var(--brand) 0%, var(--brand-soft) 100%);
       }
 
-      summary {
-        cursor: pointer;
-        font-weight: 600;
-      }
-
-      pre {
-        margin: 0;
-        padding: 0 20px 20px;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: rgba(var(--alpha-dark), 0.6);
-        font: 0.84rem/1.5 ui-monospace, monospace;
-      }
-
       @media (max-width: 900px) {
         .summary-grid,
         .panel-grid {
@@ -234,6 +257,11 @@
 
         main {
           padding: 28px 0 40px;
+        }
+
+        .controls,
+        .control-cluster {
+          align-items: stretch;
         }
 
         .summary-grid,
@@ -261,7 +289,8 @@
         <p>
           The embedded admin UI reuses the client workspace theme and derives a
           few lightweight views directly from the authenticated
-          <code>/metrics</code> scrape.
+          <code>/metrics</code> scrape, with browser-local chart history for
+          quick operator debugging.
         </p>
       </section>
 
@@ -290,13 +319,44 @@
         </article>
       </section>
 
+      <section class="card controls">
+        <div class="control-cluster">
+          <label class="control-group" for="time-window-select">
+            <span class="label-text">Time window</span>
+            <select class="control-select" id="time-window-select">
+              <option value="15m">15 min</option>
+              <option value="1h">1 hour</option>
+              <option value="6h">6 hours</option>
+              <option value="24h">24 hours</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+
+          <label class="control-group" for="refresh-interval-select">
+            <span class="label-text">Refresh cadence</span>
+            <select class="control-select" id="refresh-interval-select">
+              <option value="15000">15 seconds</option>
+              <option value="30000">30 seconds</option>
+              <option value="60000">1 minute</option>
+              <option value="0">Paused</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="metric-note controls-note">
+          Filters the browser's current chart history from authenticated
+          <code>/metrics</code> scrapes. Provider totals stay cumulative.
+        </p>
+      </section>
+
       <section class="panel-grid">
         <article class="card panel-card">
           <span class="label-text">Recent activity</span>
           <h2>Requests and failures</h2>
           <div class="chart" id="activity-chart" data-chart-state="empty"></div>
           <p class="metric-note chart-caption">
-            Derived from consecutive authenticated <code>/metrics</code> scrapes.
+            Derived from consecutive authenticated <code>/metrics</code> scrapes
+            captured in this browser session.
           </p>
         </article>
 
@@ -314,12 +374,11 @@
           <h2>Top providers</h2>
           <div class="chart" id="provider-chart" data-chart-state="empty"></div>
           <div class="bar-list" id="provider-bars"></div>
+          <p class="metric-note chart-caption">
+            Based on the latest authenticated <code>/metrics</code> scrape for
+            this process.
+          </p>
         </article>
-
-        <details class="card panel-wide">
-          <summary>Raw Prometheus output</summary>
-          <pre id="metrics-output">Loading metrics...</pre>
-        </details>
       </section>
     </main>
     <script src="./echarts.simple.min.js"></script>
@@ -327,11 +386,47 @@
       (function () {
         const METRIC_LINE =
           /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
-        const REFRESH_INTERVAL_MS = 15000;
-        const HISTORY_LIMIT = Math.ceil((60 * 60 * 1000) / REFRESH_INTERVAL_MS);
+        const DEFAULT_REFRESH_INTERVAL_MS = 15000;
+        const HISTORY_RETENTION_MS = 24 * 60 * 60 * 1000;
+        const TIME_WINDOWS = [
+          {
+            key: "15m",
+            label: "15 min",
+            ms: 15 * 60 * 1000,
+          },
+          {
+            key: "1h",
+            label: "1 hour",
+            ms: 60 * 60 * 1000,
+          },
+          {
+            key: "6h",
+            label: "6 hours",
+            ms: 6 * 60 * 60 * 1000,
+          },
+          {
+            key: "24h",
+            label: "24 hours",
+            ms: 24 * 60 * 60 * 1000,
+          },
+          {
+            key: "all",
+            label: "All",
+            ms: null,
+          },
+        ];
+        const REFRESH_OPTIONS = [
+          { value: 15000, label: "15 seconds" },
+          { value: 30000, label: "30 seconds" },
+          { value: 60000, label: "1 minute" },
+          { value: 0, label: "Paused" },
+        ];
         const charts = {};
         const history = [];
         let latestSnapshot = null;
+        let selectedWindowKey = "1h";
+        let refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS;
+        let refreshTimer = null;
 
         function byId(id) {
           return document.getElementById(id);
@@ -368,6 +463,75 @@
           return Number.isFinite(value)
             ? `${value.toFixed(value >= 100 ? 0 : 1)} ms`
             : "--";
+        }
+
+        function normalizeWindowKey(key) {
+          return TIME_WINDOWS.some(function (windowOption) {
+            return windowOption.key === key;
+          })
+            ? key
+            : "1h";
+        }
+
+        function normalizeRefreshIntervalMs(value) {
+          const numeric = Number(value);
+          return REFRESH_OPTIONS.some(function (option) {
+            return option.value === numeric;
+          })
+            ? numeric
+            : DEFAULT_REFRESH_INTERVAL_MS;
+        }
+
+        function selectedWindow() {
+          return (
+            TIME_WINDOWS.find(function (windowOption) {
+              return windowOption.key === selectedWindowKey;
+            }) || TIME_WINDOWS[1]
+          );
+        }
+
+        function syncControlState() {
+          byId("time-window-select").value = selectedWindowKey;
+          byId("refresh-interval-select").value = String(refreshIntervalMs);
+        }
+
+        function scheduleRefreshTimer() {
+          if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+            refreshTimer = null;
+          }
+          if (refreshIntervalMs > 0) {
+            refreshTimer = window.setInterval(refresh, refreshIntervalMs);
+          }
+        }
+
+        function bindControls() {
+          byId("time-window-select").addEventListener("change", function (event) {
+            const target = event.target;
+            if (!target || typeof target.value !== "string") return;
+            const nextKey = normalizeWindowKey(target.value);
+            if (nextKey === selectedWindowKey) return;
+            selectedWindowKey = nextKey;
+            syncControlState();
+            if (latestSnapshot) {
+              renderCharts(latestSnapshot);
+            }
+          });
+
+          byId("refresh-interval-select").addEventListener("change", function (event) {
+            const target = event.target;
+            if (!target || typeof target.value !== "string") return;
+            const nextValue = normalizeRefreshIntervalMs(target.value);
+            if (nextValue === refreshIntervalMs) return;
+            refreshIntervalMs = nextValue;
+            syncControlState();
+            scheduleRefreshTimer();
+            if (refreshIntervalMs > 0) {
+              refresh();
+            }
+          });
+
+          syncControlState();
         }
 
         function parseLabels(raw) {
@@ -593,12 +757,24 @@
             errorsTotal: snapshot.errors,
           });
 
-          while (history.length > HISTORY_LIMIT) {
+          const cutoff = now - HISTORY_RETENTION_MS;
+          while (history.length > 0 && history[0].timestamp < cutoff) {
             history.shift();
           }
         }
 
-        function lineSeries(name, key, extra) {
+        function visibleHistory() {
+          if (history.length === 0) return [];
+          const windowOption = selectedWindow();
+          if (windowOption.ms == null) return history.slice();
+          const latestTimestamp = history[history.length - 1].timestamp;
+          const cutoff = latestTimestamp - windowOption.ms;
+          return history.filter(function (entry) {
+            return entry.timestamp >= cutoff;
+          });
+        }
+
+        function lineSeries(entries, name, key, extra) {
           return Object.assign(
             {
               name,
@@ -606,7 +782,7 @@
               smooth: true,
               showSymbol: false,
               lineStyle: { width: 2 },
-              data: history.map(function (entry) {
+              data: entries.map(function (entry) {
                 return [entry.timestamp, entry[key]];
               }),
             },
@@ -614,7 +790,12 @@
           );
         }
 
-        function renderTimeChart(id, series, colors, formatter) {
+        function renderTimeChart(id, entries, series, colors, formatter) {
+          if (entries.length === 0) {
+            setChartMessage(id, "No local history is available for the selected window yet.");
+            return;
+          }
+
           const chart = ensureChart(id);
           if (!chart) return;
 
@@ -747,11 +928,15 @@
         }
 
         function renderCharts(snapshot) {
+          const windowedHistory = visibleHistory();
           renderTimeChart(
             "activity-chart",
+            windowedHistory,
             [
-              lineSeries("Requests/min", "requests", { areaStyle: { opacity: 0.12 } }),
-              lineSeries("Errors/min", "errors"),
+              lineSeries(windowedHistory, "Requests/min", "requests", {
+                areaStyle: { opacity: 0.12 },
+              }),
+              lineSeries(windowedHistory, "Errors/min", "errors"),
             ],
             ["brand", "danger"],
             function (value) {
@@ -760,7 +945,11 @@
           );
           renderTimeChart(
             "latency-chart",
-            [lineSeries("Average", "avgLatencyMs"), lineSeries("P95", "p95LatencyMs")],
+            windowedHistory,
+            [
+              lineSeries(windowedHistory, "Average", "avgLatencyMs"),
+              lineSeries(windowedHistory, "P95", "p95LatencyMs"),
+            ],
             ["success", "brandSoft"],
             function (value) {
               return formatMilliseconds(Number(value));
@@ -798,7 +987,6 @@
             const snapshot = parseMetrics(body);
             latestSnapshot = snapshot;
             recordHistory(snapshot);
-            byId("metrics-output").textContent = body;
             byId("summary-requests").textContent = formatCount(snapshot.requests);
             byId("summary-errors").textContent = formatCount(snapshot.errors);
             byId("summary-avg-latency").textContent = formatDuration(snapshot.avgLatencySeconds);
@@ -808,15 +996,16 @@
           } catch (error) {
             const message =
               error instanceof Error ? error.message : "Failed to load Prometheus metrics";
-            byId("metrics-output").textContent = message;
+            latestSnapshot = null;
             clearDashboard(message);
             setStatus(message, "error");
           }
         }
 
+        bindControls();
         clearDashboard("Loading metrics...");
         refresh();
-        window.setInterval(refresh, REFRESH_INTERVAL_MS);
+        scheduleRefreshTimer();
         window.addEventListener("resize", function () {
           Object.values(charts).forEach(function (chart) {
             chart.resize();

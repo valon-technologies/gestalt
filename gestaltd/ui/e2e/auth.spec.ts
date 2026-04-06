@@ -141,11 +141,17 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     expect(chartColors?.surfaceRaised).toMatch(/^rgba?\(/);
     expect(chartColors?.border).toMatch(/^rgba?\(/);
     expect(chartColors?.foreground).toMatch(/^rgba?\(/);
+    await expect(page.getByText("Time window")).toBeVisible();
+    await expect(page.locator("#time-window-select")).toHaveValue("1h");
+    await expect(page.locator("#refresh-interval-select")).toHaveValue("15000");
+    await page.locator("#time-window-select").selectOption("15m");
+    await expect(page.locator("#time-window-select")).toHaveValue("15m");
     await expect(page.getByText("Top providers")).toBeVisible();
     await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
     await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
     await expect(page.locator("#provider-bars")).toContainText("example");
     await expect(page.locator("#provider-bars")).not.toContainText("unknown");
+    await expect(page.locator("#metrics-output")).toHaveCount(0);
   });
 
   test("authenticated user on /login is redirected to dashboard", async ({
@@ -287,9 +293,10 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     await expect(page.locator("#activity-chart")).toHaveAttribute("data-chart-state", "empty");
     await expect(page.locator("#latency-chart")).toHaveAttribute("data-chart-state", "empty");
     await expect(page.locator("#provider-chart")).toHaveAttribute("data-chart-state", "empty");
-    await expect(page.locator("#metrics-output")).toHaveText(
+    await expect(page.locator("#provider-bars")).toContainText(
       "Prometheus metrics are unavailable.",
     );
+    await expect(page.locator("#metrics-output")).toHaveCount(0);
   });
 
   test("admin metrics error body is rendered as text, not injected as HTML", async ({
@@ -320,6 +327,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
       `<img src=x onerror="window.__gestaltXss=1">metrics unavailable`,
     );
     await expect(page.locator("#provider-bars img")).toHaveCount(0);
+    await expect(page.locator("#metrics-output")).toHaveCount(0);
     const xssMarker = await page.evaluate(() => {
       const scope = window as Window & { __gestaltXss?: number };
       return scope.__gestaltXss ?? null;
