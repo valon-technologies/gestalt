@@ -17,7 +17,8 @@ go get github.com/valon-technologies/gestalt/sdk/go
 
 ## Implement the provider
 
-A provider plugin implements the `gestalt.Provider` interface:
+A provider plugin implements the runtime `gestalt.Provider` interface. Static
+metadata and static operations live in the manifest:
 
 ```go
 package main
@@ -38,12 +39,6 @@ type myProvider struct {
 	greeting string
 }
 
-func (p *myProvider) Name() string           { return "my-plugin" }
-func (p *myProvider) DisplayName() string    { return "My Plugin" }
-func (p *myProvider) Description() string    { return "A custom provider plugin" }
-func (p *myProvider) ConnectionMode() gestalt.ConnectionMode {
-	return gestalt.ConnectionModeNone
-}
 func (p *myProvider) Configure(
 	ctx context.Context,
 	name string,
@@ -53,29 +48,6 @@ func (p *myProvider) Configure(
 		p.greeting = g
 	}
 	return nil
-}
-
-func (p *myProvider) Catalog() *gestalt.Catalog {
-	return &gestalt.Catalog{
-		Name:        p.Name(),
-		DisplayName: p.DisplayName(),
-		Description: p.Description(),
-		Operations: []gestalt.CatalogOperation{
-			{
-				ID:          "greet",
-				Description: "Return a greeting",
-				Method:      http.MethodGet,
-				Parameters: []gestalt.CatalogParameter{
-					{
-						Name:        "name",
-						Type:        "string",
-						Description: "Name to greet",
-						Required:    true,
-					},
-				},
-			},
-		},
-	}
 }
 
 func (p *myProvider) Execute(
@@ -124,24 +96,8 @@ Every plugin must implement these methods:
 
 | Method | Purpose |
 | --- | --- |
-| `Name()` | Internal identifier for the provider. |
-| `DisplayName()` | Human-readable name shown in the UI and API. |
-| `Description()` | Brief description of what the provider does. |
-| `ConnectionMode()` | How the provider authenticates with upstream APIs. |
 | `Configure()` | One-time startup hook. Receives the provider name and the `config` block from the YAML. |
-| `Catalog()` | Returns the list of operations the provider supports. |
 | `Execute()` | Handles an operation invocation. Receives the operation ID, input parameters, and the caller's access token. |
-
-### Connection modes
-
-| Mode | Constant | Description |
-| --- | --- | --- |
-| None | `ConnectionModeNone` | No credential needed. |
-| User | `ConnectionModeUser` | Each user provides their own credential. |
-| Identity | `ConnectionModeIdentity` | A shared service credential is used. |
-| Either | `ConnectionModeEither` | Prefer user credentials, fall back to shared. |
-
-When the connection mode is `user` or `either`, the `token` parameter in `Execute` contains the caller's OAuth access token.
 
 ## Optional interfaces
 
@@ -152,6 +108,34 @@ Plugins can implement additional interfaces for advanced behavior:
 | `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a different operation catalog based on the caller's credentials. |
 
 Provider config schemas belong in the manifest via `provider.config_schema_path`, not in the Go provider interface.
+
+Static plugin metadata also belongs in the manifest:
+
+```yaml
+source: example.com/my-plugin
+version: 0.1.0
+display_name: My Plugin
+description: A custom provider plugin
+kinds:
+  - provider
+provider:
+  auth:
+    type: none
+  static_catalog_path: catalog.yaml
+```
+
+```yaml
+name: my-plugin
+operations:
+  - id: greet
+    method: GET
+    description: Return a greeting
+    parameters:
+      - name: name
+        type: string
+        description: Name to greet
+        required: true
+```
 
 ### Using Configure
 
@@ -177,6 +161,7 @@ providers:
   my-plugin:
     from:
       command: ./my-plugin
+      manifest: ./plugin.yaml
     config:
       greeting: Howdy
 ```
@@ -192,9 +177,9 @@ go build -o my-plugin .
 ```yaml
 providers:
   my-plugin:
-    display_name: My Plugin
     from:
       command: ./my-plugin
+      manifest: ./plugin.yaml
     config:
       greeting: Hello
     mcp:

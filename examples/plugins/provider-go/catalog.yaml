@@ -1,0 +1,21 @@
+name: example
+operations:
+  - id: greet
+    method: GET
+    description: Return a greeting message
+    parameters:
+      - name: name
+        type: string
+        description: Name to greet
+        required: true
+  - id: echo
+    method: POST
+    description: Echo back the input
+    parameters:
+      - name: message
+        type: string
+        description: Message to echo
+        required: true
+  - id: status
+    method: GET
+    description: Return provider startup state

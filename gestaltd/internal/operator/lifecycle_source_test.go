@@ -68,7 +68,7 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -88,6 +88,9 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "plugin.json"), manifestBytes, 0644); err != nil {
 		t.Fatalf("write provider manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+		t.Fatalf("write provider catalog: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), []byte(binaryContent), 0755); err != nil {
 		t.Fatalf("write provider artifact: %v", err)

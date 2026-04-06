@@ -26,6 +26,7 @@ type providerWire struct {
 
 type providerSourceWire struct {
 	Command      string            `yaml:"command"`
+	Manifest     string            `yaml:"manifest"`
 	Package      string            `yaml:"package"`
 	Source       string            `yaml:"source"`
 	Version      string            `yaml:"version"`
@@ -101,6 +102,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 
 	plugin := &PluginDef{
 		Command:           wire.From.Command,
+		Manifest:          wire.From.Manifest,
 		Package:           wire.From.Package,
 		Source:            wire.From.Source,
 		Version:           wire.From.Version,

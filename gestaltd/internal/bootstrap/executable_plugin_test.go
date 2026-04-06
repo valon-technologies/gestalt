@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -20,11 +21,24 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	t.Parallel()
 
 	bin := buildExampleProviderBinary(t)
+	manifest := newExecutableManifest(
+		"Example Provider",
+		"A minimal example provider built with the public SDK",
+		writeStaticCatalog(t, &catalog.Catalog{
+			Name: "example",
+			Operations: []catalog.CatalogOperation{
+				{ID: "greet", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+				{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+				{ID: "status", Method: http.MethodGet},
+			},
+		}),
+	)
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"example": {
 				Plugin: &config.PluginDef{
-					Command: bin,
+					Command:          bin,
+					ResolvedManifest: manifest,
 					Config: mustNode(t, map[string]any{
 						"greeting": "Hello from config",
 					}),
@@ -43,6 +57,22 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	prov, err := providers.Get("example")
 	if err != nil {
 		t.Fatalf("providers.Get(example): %v", err)
+	}
+	if prov.DisplayName() != "Example Provider" {
+		t.Fatalf("DisplayName = %q", prov.DisplayName())
+	}
+	if prov.Description() != "A minimal example provider built with the public SDK" {
+		t.Fatalf("Description = %q", prov.Description())
+	}
+	cat := prov.Catalog()
+	if cat == nil || len(cat.Operations) != 3 {
+		t.Fatalf("unexpected catalog: %+v", cat)
+	}
+	if cat.DisplayName != "Example Provider" || cat.Description != "A minimal example provider built with the public SDK" {
+		t.Fatalf("unexpected catalog metadata: %+v", cat)
+	}
+	if cat.Operations[0].Transport != catalog.TransportPlugin {
+		t.Fatalf("unexpected catalog transport: %+v", cat.Operations[0])
 	}
 
 	result, err := prov.Execute(context.Background(), "greet", map[string]any{"name": "Gestalt"}, "")
@@ -76,6 +106,77 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 }
 
+func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T) {
+	t.Parallel()
+
+	const iconSVG = `<svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8"/></svg>`
+
+	bin := buildExampleProviderBinary(t)
+	iconPath := t.TempDir() + "/override.svg"
+	if err := os.WriteFile(iconPath, []byte(iconSVG), 0o644); err != nil {
+		t.Fatalf("WriteFile(icon): %v", err)
+	}
+
+	manifest := newExecutableManifest(
+		"Manifest Display",
+		"Manifest Description",
+		writeStaticCatalog(t, &catalog.Catalog{
+			Name:        "example",
+			DisplayName: "Catalog Display",
+			Description: "Catalog Description",
+			Operations: []catalog.CatalogOperation{
+				{ID: "status", Method: http.MethodGet},
+			},
+		}),
+	)
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"example": {
+				DisplayName: "Config Display",
+				Description: "Config Description",
+				IconFile:    iconPath,
+				Plugin: &config.PluginDef{
+					Command:          bin,
+					ResolvedManifest: manifest,
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get(example): %v", err)
+	}
+	if prov.DisplayName() != "Config Display" {
+		t.Fatalf("DisplayName = %q, want %q", prov.DisplayName(), "Config Display")
+	}
+	if prov.Description() != "Config Description" {
+		t.Fatalf("Description = %q, want %q", prov.Description(), "Config Description")
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("expected non-nil catalog")
+	}
+	if cat.DisplayName != "Config Display" {
+		t.Fatalf("catalog DisplayName = %q, want %q", cat.DisplayName, "Config Display")
+	}
+	if cat.Description != "Config Description" {
+		t.Fatalf("catalog Description = %q, want %q", cat.Description, "Config Description")
+	}
+	if cat.IconSVG != iconSVG {
+		t.Fatalf("catalog IconSVG = %q, want %q", cat.IconSVG, iconSVG)
+	}
+}
+
 func buildEchoPluginBinary(t *testing.T) string {
 	t.Helper()
 	if sharedEchoPluginBin == "" {
@@ -101,29 +202,48 @@ func mustNode(t *testing.T, value any) yaml.Node {
 	return node
 }
 
+func writeStaticCatalog(t *testing.T, cat *catalog.Catalog) string {
+	t.Helper()
+	data, err := yaml.Marshal(cat)
+	if err != nil {
+		t.Fatalf("yaml.Marshal(catalog): %v", err)
+	}
+	path := t.TempDir() + "/catalog.yaml"
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog): %v", err)
+	}
+	return path
+}
+
+func newExecutableManifest(displayName, description, staticCatalogPath string) *pluginmanifestv1.Manifest {
+	return &pluginmanifestv1.Manifest{
+		Source:      "github.com/acme/plugins/test",
+		Version:     "1.0.0",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		DisplayName: displayName,
+		Description: description,
+		Provider: &pluginmanifestv1.Provider{
+			StaticCatalogPath: staticCatalogPath,
+		},
+	}
+}
+
 func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
 
-	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/acme/plugins/echo",
-		Version: "1.0.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			Auth: &pluginmanifestv1.ProviderAuth{
-				Type:             pluginmanifestv1.AuthTypeOAuth2,
-				AuthorizationURL: "https://example.com/authorize",
-				TokenURL:         "https://example.com/token",
-				Scopes:           []string{"read", "write"},
-			},
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoauth",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
 		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
-		},
+	}))
+	manifest.Provider.Auth = &pluginmanifestv1.ProviderAuth{
+		Type:             pluginmanifestv1.AuthTypeOAuth2,
+		AuthorizationURL: "https://example.com/authorize",
+		TokenURL:         "https://example.com/token",
+		Scopes:           []string{"read", "write"},
 	}
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
@@ -180,18 +300,12 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 
-	manifest := &pluginmanifestv1.Manifest{
-		Source:   "github.com/acme/plugins/echo",
-		Version:  "1.0.0",
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echonoauth",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: "artifacts/" + runtime.GOOS + "/" + runtime.GOARCH + "/provider"},
-		},
-	}
+	}))
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echonoauth": {
@@ -219,13 +333,21 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 func TestPluginProcessEnvIsolation(t *testing.T) {
 	t.Parallel()
 	bin := buildEchoPluginBinary(t)
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	}))
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
 				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"provider"},
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -271,6 +393,31 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	}
 }
 
+func TestExecutablePluginRequiresManifest(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"echoext": {
+				Plugin: &config.PluginDef{
+					Command: bin,
+					Args:    []string{"provider"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err == nil {
+		t.Fatal("expected buildProvidersStrict to reject executable plugin without manifest")
+	}
+	if got := err.Error(); got != `bootstrap: provider validation failed: integration "echoext": build external plugin provider "echoext": executable plugins must be manifest-backed` {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	t.Parallel()
 
@@ -309,13 +456,21 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, specSrv)
 
+	manifest := newExecutableManifest("Hybrid", "", writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
+		},
+	}))
+	manifest.Provider.OpenAPI = specSrv.URL
+
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"provider"},
-					OpenAPI: specSrv.URL,
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -379,6 +534,12 @@ func TestHybridPluginMergesCommandAndDeclarativeREST(t *testing.T) {
 		Version: "1.0.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
+			StaticCatalogPath: writeStaticCatalog(t, &catalog.Catalog{
+				Name: "hybrid",
+				Operations: []catalog.CatalogOperation{
+					{ID: "echo", Method: http.MethodPost},
+				},
+			}),
 			BaseURL: apiSrv.URL,
 			Operations: []pluginmanifestv1.ProviderOperation{
 				{

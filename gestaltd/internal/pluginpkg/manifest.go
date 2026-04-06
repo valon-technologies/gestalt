@@ -185,6 +185,11 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 					return err
 				}
 			}
+			if manifest.Provider.StaticCatalogPath != "" {
+				if err := validateRelativePackagePath(manifest.Provider.StaticCatalogPath, "provider static catalog path"); err != nil {
+					return err
+				}
+			}
 			if isDeclarative {
 				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
 					return err
@@ -194,6 +199,9 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, allowMissingArtifactD
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 					return err
 				}
+			}
+			if manifest.Entrypoints.Provider != nil && !isManifestBackedProvider && !manifest.Provider.HasStaticCatalog() {
+				return fmt.Errorf("provider static_catalog_path is required for executable providers without declarative or spec surfaces")
 			}
 		case pluginmanifestv1.KindWebUI:
 			if manifest.WebUI == nil {

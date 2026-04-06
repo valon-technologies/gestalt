@@ -14,7 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 func buildGestaltdBinary(t *testing.T) string {
@@ -34,6 +36,14 @@ func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 	return host
 }
 
+func echoExecutableManifest(t *testing.T, name string, ops ...catalog.CatalogOperation) *pluginmanifestv1.Manifest {
+	t.Helper()
+	return newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+		Name:       name,
+		Operations: ops,
+	}))
+}
+
 func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	t.Parallel()
 
@@ -44,15 +54,20 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
+	manifest := echoExecutableManifest(t, "sandboxed",
+		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
+		catalog.CatalogOperation{ID: "read_file", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "path", Type: "string", Required: true}}},
+	)
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
 				Plugin: &config.PluginDef{
-					Command:      bin,
-					Args:         []string{"provider"},
-					AllowedHosts: []string{"localhost"},
-					HostBinary:   hostBin,
+					Command:          bin,
+					Args:             []string{"provider"},
+					AllowedHosts:     []string{"localhost"},
+					HostBinary:       hostBin,
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -85,15 +100,19 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
+	manifest := echoExecutableManifest(t, "sandboxed",
+		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
+	)
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
 				Plugin: &config.PluginDef{
-					Command:      bin,
-					Args:         []string{"provider"},
-					AllowedHosts: []string{"localhost"},
-					HostBinary:   hostBin,
+					Command:          bin,
+					Args:             []string{"provider"},
+					AllowedHosts:     []string{"localhost"},
+					HostBinary:       hostBin,
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -132,13 +151,18 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	}
 
 	bin := buildEchoPluginBinary(t)
+	manifest := echoExecutableManifest(t, "nosandbox",
+		catalog.CatalogOperation{ID: "echo", Method: http.MethodPost},
+		catalog.CatalogOperation{ID: "read_file", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "path", Type: "string", Required: true}}},
+	)
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"nosandbox": {
 				Plugin: &config.PluginDef{
-					Command: bin,
-					Args:    []string{"provider"},
+					Command:          bin,
+					Args:             []string{"provider"},
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -176,15 +200,19 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	host := hostFromTestServer(t, ts)
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
+	manifest := echoExecutableManifest(t, "proxied",
+		catalog.CatalogOperation{ID: "make_http_request", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "url", Type: "string", Required: true}}},
+	)
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"proxied": {
 				Plugin: &config.PluginDef{
-					Command:      bin,
-					Args:         []string{"provider"},
-					AllowedHosts: []string{host},
-					HostBinary:   hostBin,
+					Command:          bin,
+					Args:             []string{"provider"},
+					AllowedHosts:     []string{host},
+					HostBinary:       hostBin,
+					ResolvedManifest: manifest,
 				},
 			},
 		},
@@ -229,15 +257,19 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	hostBin := buildGestaltdBinary(t)
+	manifest := echoExecutableManifest(t, "blocked",
+		catalog.CatalogOperation{ID: "make_http_request", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "url", Type: "string", Required: true}}},
+	)
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"blocked": {
 				Plugin: &config.PluginDef{
-					Command:      bin,
-					Args:         []string{"provider"},
-					AllowedHosts: []string{"not-a-real-host.example.com"},
-					HostBinary:   hostBin,
+					Command:          bin,
+					Args:             []string{"provider"},
+					AllowedHosts:     []string{"not-a-real-host.example.com"},
+					HostBinary:       hostBin,
+					ResolvedManifest: manifest,
 				},
 			},
 		},

@@ -47,6 +47,7 @@ providers:
     display_name: Service A
     from:
       command: /tmp/provider
+      manifest: /tmp/plugin.yaml
 `)
 
 	cfg, err := Load(path)
@@ -94,6 +95,7 @@ providers:
   service-a:
     from:
       command: /tmp/provider
+      manifest: /tmp/plugin.yaml
 `)
 
 	cfg, err := LoadWithMapping(path, getenv)
@@ -299,6 +301,7 @@ providers:
   service:
     from:
       command: /usr/bin/provider
+      manifest: /usr/bin/provider.yaml
 `,
 		},
 		{
@@ -370,6 +373,7 @@ providers:
   external:
     from:
       command: /tmp/plugin
+      manifest: /tmp/plugin.yaml
       package: ./plugins/dummy.tar.gz
 `,
 			wantErr: true,
@@ -642,6 +646,7 @@ providers:
     icon_file: ../assets/service.svg
     from:
       command: ../bin/provider
+      manifest: ../bin/plugin.yaml
   service-b:
     from:
       package: ../plugins/dummy.tar.gz
@@ -827,7 +832,8 @@ func TestExternalPluginRejectsInlineOperations(t *testing.T) {
 		Integrations: map[string]IntegrationDef{
 			"bad": {
 				Plugin: &PluginDef{
-					Command: "echo",
+					Command:  "echo",
+					Manifest: "plugin.yaml",
 					Operations: []InlineOperationDef{
 						{Name: "op", Method: "GET", Path: "/op"},
 					},
@@ -850,8 +856,9 @@ func TestExternalPluginAllowsSpecURL(t *testing.T) {
 		Integrations: map[string]IntegrationDef{
 			"ok": {
 				Plugin: &PluginDef{
-					Command: "echo",
-					OpenAPI: "https://example.com/spec.json",
+					Command:  "echo",
+					Manifest: "plugin.yaml",
+					OpenAPI:  "https://example.com/spec.json",
 				},
 			},
 		},

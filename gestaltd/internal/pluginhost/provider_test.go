@@ -13,12 +13,13 @@ import (
 
 type roundTripProvider struct{}
 
-func (p *roundTripProvider) Name() string        { return "roundtrip" }
-func (p *roundTripProvider) DisplayName() string { return "Round Trip" }
-func (p *roundTripProvider) Description() string { return "test provider" }
-func (p *roundTripProvider) ConnectionMode() core.ConnectionMode {
-	return core.ConnectionModeEither
+func (p *roundTripProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
+	return nil
 }
+func (p *roundTripProvider) Name() string                        { return "roundtrip" }
+func (p *roundTripProvider) DisplayName() string                 { return "Round Trip" }
+func (p *roundTripProvider) Description() string                 { return "test provider" }
+func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeEither }
 
 func (p *roundTripProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return &core.OperationResult{
@@ -26,8 +27,6 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 		Body:   fmt.Sprintf("%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"]),
 	}, nil
 }
-
-func (p *roundTripProvider) SupportsManualAuth() bool { return true }
 
 func (p *roundTripProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
@@ -51,62 +50,68 @@ func (p *roundTripProvider) CatalogForRequest(_ context.Context, token string) (
 	}, nil
 }
 
-func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return map[string]core.ConnectionParamDef{
-		"tenant":  {Required: true, Description: "Tenant slug"},
-		"team_id": {From: "token_response", Field: "team_id"},
-	}
-}
-
-func (p *roundTripProvider) AuthTypes() []string {
-	return []string{"manual"}
-}
-
 type manualOnlySDKProvider struct{}
-
-func (p *manualOnlySDKProvider) Name() string { return "manual-only" }
-
-func (p *manualOnlySDKProvider) DisplayName() string { return "Manual Only" }
-
-func (p *manualOnlySDKProvider) Description() string { return "manual auth provider" }
-
-func (p *manualOnlySDKProvider) ConnectionMode() sdkgestalt.ConnectionMode {
-	return sdkgestalt.ConnectionModeIdentity
-}
 
 func (p *manualOnlySDKProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
-}
-
-func (p *manualOnlySDKProvider) Catalog() *sdkgestalt.Catalog {
-	return &sdkgestalt.Catalog{
-		Name:        "manual-only",
-		DisplayName: "Manual Only",
-		Description: "manual auth provider",
-		Operations: []sdkgestalt.CatalogOperation{
-			{
-				ID:          "echo",
-				Description: "Echo input",
-				Method:      http.MethodPost,
-				Parameters: []sdkgestalt.CatalogParameter{
-					{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
-				},
-			},
-		},
-	}
 }
 
 func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
 	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
 }
 
-func (p *manualOnlySDKProvider) SupportsManualAuth() bool { return true }
+func roundTripStaticSpec() StaticProviderSpec {
+	return StaticProviderSpec{
+		Name:           "roundtrip",
+		DisplayName:    "Round Trip",
+		Description:    "test provider",
+		ConnectionMode: core.ConnectionModeEither,
+		Catalog: &catalog.Catalog{
+			Name:        "roundtrip",
+			DisplayName: "Round Trip",
+			Description: "test provider",
+			Operations: []catalog.CatalogOperation{
+				{ID: "echo", Method: http.MethodPost},
+			},
+		},
+		AuthTypes: []string{"manual"},
+		ConnectionParams: map[string]core.ConnectionParamDef{
+			"tenant":  {Required: true, Description: "Tenant slug"},
+			"team_id": {From: "token_response", Field: "team_id"},
+		},
+	}
+}
+
+func manualOnlyStaticSpec() StaticProviderSpec {
+	return StaticProviderSpec{
+		Name:           "manual-only",
+		DisplayName:    "Manual Only",
+		Description:    "manual auth provider",
+		ConnectionMode: core.ConnectionModeIdentity,
+		Catalog: &catalog.Catalog{
+			Name:        "manual-only",
+			DisplayName: "Manual Only",
+			Description: "manual auth provider",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "echo",
+					Description: "Echo input",
+					Method:      http.MethodPost,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "message", Type: "string", Description: "message", Required: true, Default: "hello"},
+					},
+				},
+			},
+		},
+		AuthTypes: []string{"manual"},
+	}
+}
 
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil)
+	prov, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}
@@ -163,82 +168,13 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if defs := cpp.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
-
-}
-
-func TestRemoteProviderIconSVG(t *testing.T) {
-	t.Parallel()
-
-	const testSVG = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>`
-
-	t.Run("metadata override fills empty icon on existing catalog", func(t *testing.T) {
-		t.Parallel()
-
-		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
-		if err != nil {
-			t.Fatalf("NewRemoteProvider: %v", err)
-		}
-		cat := prov.Catalog()
-		if cat.IconSVG != testSVG {
-			t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, testSVG)
-		}
-	})
-
-	t.Run("metadata override replaces existing catalog icon", func(t *testing.T) {
-		t.Parallel()
-
-		const existingIcon = `<svg><circle/></svg>`
-		client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-		prov, err := NewRemoteProvider(context.Background(), client, "roundtrip", nil, WithMetadataOverrides("", "", testSVG))
-		if err != nil {
-			t.Fatalf("NewRemoteProvider: %v", err)
-		}
-		base := prov.(*remoteProviderWithSessionCatalog).remoteProviderBase
-		base.catalog.IconSVG = existingIcon
-
-		cat := prov.Catalog()
-		if cat.IconSVG != testSVG {
-			t.Fatalf("IconSVG = %q, want override %q", cat.IconSVG, testSVG)
-		}
-	})
-}
-
-func TestRemoteProviderMetadataOverridesApplyToSessionCatalog(t *testing.T) {
-	t.Parallel()
-
-	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemoteProvider(
-		context.Background(),
-		client,
-		"roundtrip",
-		nil,
-		WithMetadataOverrides("Override", "Override description", "<svg/>"),
-	)
-	if err != nil {
-		t.Fatalf("NewRemoteProvider: %v", err)
-	}
-
-	cat, err := prov.(core.SessionCatalogProvider).CatalogForRequest(context.Background(), "token-123")
-	if err != nil {
-		t.Fatalf("CatalogForRequest: %v", err)
-	}
-	if cat.DisplayName != "Override" {
-		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Override")
-	}
-	if cat.Description != "Override description" {
-		t.Fatalf("Description = %q, want %q", cat.Description, "Override description")
-	}
-	if cat.IconSVG != "<svg/>" {
-		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
-	}
 }
 
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
 	client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, "manual-only", nil)
+	prov, err := NewRemoteProvider(context.Background(), client, manualOnlyStaticSpec(), nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}

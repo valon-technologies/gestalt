@@ -134,17 +134,10 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		if err := copyFile(manifestSrc, manifestDest); err != nil {
 			return nil, fmt.Errorf("copy manifest: %w", err)
 		}
-		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
-		for _, schemaRel := range configSchemaPaths(manifest, dirPath) {
-			schemaSrc := filepath.Join(dirPath, filepath.FromSlash(schemaRel))
-			schemaDest := filepath.Join(destDir, filepath.FromSlash(schemaRel))
-			if err := os.MkdirAll(filepath.Dir(schemaDest), 0755); err != nil {
-				return nil, fmt.Errorf("create schema directory: %w", err)
-			}
-			if err := copyFile(schemaSrc, schemaDest); err != nil {
-				return nil, fmt.Errorf("copy config schema %s: %w", schemaRel, err)
-			}
+		if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
+			return nil, err
 		}
+		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
 		installed := buildInstalledPlugin(manifest, destDir, manifestDest, "", nil, "")
 		return installed, nil
 	}
@@ -180,7 +173,6 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 	if err := copyFile(manifestSrc, manifestDest); err != nil {
 		return nil, fmt.Errorf("copy manifest: %w", err)
 	}
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
 
 	artifactDest := filepath.Join(destDir, filepath.FromSlash(artifact.Path))
 	if err := os.MkdirAll(filepath.Dir(artifactDest), 0755); err != nil {
@@ -190,16 +182,10 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("copy artifact: %w", err)
 	}
 
-	for _, schemaRel := range configSchemaPaths(manifest, dirPath) {
-		schemaSrc := filepath.Join(dirPath, filepath.FromSlash(schemaRel))
-		schemaDest := filepath.Join(destDir, filepath.FromSlash(schemaRel))
-		if err := os.MkdirAll(filepath.Dir(schemaDest), 0755); err != nil {
-			return nil, fmt.Errorf("create schema directory: %w", err)
-		}
-		if err := copyFile(schemaSrc, schemaDest); err != nil {
-			return nil, fmt.Errorf("copy config schema %s: %w", schemaRel, err)
-		}
+	if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
+		return nil, err
 	}
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
 
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
@@ -258,12 +244,18 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
 }
 
-func configSchemaPaths(manifest *pluginmanifestv1.Manifest, dirPath string) []string {
-	var paths []string
-	if manifest.Provider != nil && manifest.Provider.ConfigSchemaPath != "" {
-		paths = append(paths, manifest.Provider.ConfigSchemaPath)
+func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifestv1.Manifest) error {
+	for _, ref := range pluginpkg.LocalPackageReferences(manifest) {
+		src := filepath.Join(srcDir, filepath.FromSlash(ref.Path))
+		dest := filepath.Join(destDir, filepath.FromSlash(ref.Path))
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return fmt.Errorf("create %s directory: %w", ref.Description, err)
+		}
+		if err := copyFile(src, dest); err != nil {
+			return fmt.Errorf("copy %s %s: %w", ref.Description, ref.Path, err)
+		}
 	}
-	return paths
+	return nil
 }
 
 func copyDir(src, dst string) error {

@@ -2,11 +2,9 @@ package pluginhost
 
 import (
 	"context"
-	"slices"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -22,24 +20,7 @@ func NewProviderServer(provider core.Provider) *ProviderServer {
 }
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
-	var defs map[string]core.ConnectionParamDef
-	if cpp, ok := s.provider.(core.ConnectionParamProvider); ok {
-		defs = cpp.ConnectionParamDefs()
-	}
-
-	staticCatalog, err := catalogToJSON(staticCatalogForProvider(s.provider))
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
-	}
-
 	return &proto.ProviderMetadata{
-		Name:                   s.provider.Name(),
-		DisplayName:            s.provider.DisplayName(),
-		Description:            s.provider.Description(),
-		ConnectionMode:         coreConnectionModeToProto(s.provider.ConnectionMode()),
-		AuthTypes:              authTypesForProvider(s.provider),
-		ConnectionParams:       connectionParamDefsToProto(defs),
-		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
 	}, nil
 }
@@ -78,29 +59,6 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
 	}
 	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
-}
-
-func authTypesForProvider(prov core.Provider) []string {
-	if atl, ok := prov.(core.AuthTypeLister); ok {
-		return slices.Clone(atl.AuthTypes())
-	}
-	_, hasOAuth := prov.(core.OAuthProvider)
-	hasManual := false
-	if mp, ok := prov.(core.ManualProvider); ok {
-		hasManual = mp.SupportsManualAuth()
-	}
-	switch {
-	case hasOAuth && hasManual:
-		return []string{"oauth", "manual"}
-	case hasManual:
-		return []string{"manual"}
-	default:
-		return []string{"oauth"}
-	}
-}
-
-func staticCatalogForProvider(prov core.Provider) *catalog.Catalog {
-	return prov.Catalog()
 }
 
 func supportsSessionCatalog(prov core.Provider) bool {

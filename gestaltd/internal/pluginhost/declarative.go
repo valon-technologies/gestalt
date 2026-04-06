@@ -186,19 +186,10 @@ func (p *DeclarativeProvider) SupportsManualAuth() bool {
 }
 
 func (p *DeclarativeProvider) CredentialFields() []core.CredentialFieldDef {
-	if p.auth == nil || len(p.auth.Credentials) == 0 {
+	if p.auth == nil {
 		return nil
 	}
-	fields := make([]core.CredentialFieldDef, len(p.auth.Credentials))
-	for i, cf := range p.auth.Credentials {
-		fields[i] = core.CredentialFieldDef{
-			Name:        cf.Name,
-			Label:       cf.Label,
-			Description: cf.Description,
-			HelpURL:     cf.HelpURL,
-		}
-	}
-	return fields
+	return CredentialFieldsFromManifest(p.auth.Credentials)
 }
 
 func (p *DeclarativeProvider) AuthTypes() []string {
@@ -242,28 +233,9 @@ func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken str
 }
 
 func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	if len(p.connectionDefs) == 0 {
-		return nil
-	}
-	defs := make(map[string]core.ConnectionParamDef, len(p.connectionDefs))
-	for name, cp := range p.connectionDefs {
-		defs[name] = core.ConnectionParamDef{
-			Required:    cp.Required,
-			Description: cp.Description,
-			From:        cp.From,
-		}
-	}
-	return defs
+	return ConnectionParamDefsFromManifest(p.connectionDefs)
 }
 
 func (p *DeclarativeProvider) DiscoveryConfig() *core.DiscoveryConfig {
-	if p.postConnectDiscovery == nil {
-		return nil
-	}
-	return &core.DiscoveryConfig{
-		URL:             p.postConnectDiscovery.URL,
-		IDPath:          p.postConnectDiscovery.IDPath,
-		NamePath:        p.postConnectDiscovery.NamePath,
-		MetadataMapping: p.postConnectDiscovery.MetadataMapping,
-	}
+	return DiscoveryConfigFromManifest(p.postConnectDiscovery)
 }

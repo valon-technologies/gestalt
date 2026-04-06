@@ -21,6 +21,7 @@ const (
 	hybridProviderArg     = "--serve-provider"
 	hybridProviderBaseURL = "https://api.example.com"
 	hybridOperationName   = "list_items"
+	testCatalogYAML       = "name: provider\noperations:\n  - id: echo\n    method: POST\n"
 )
 
 func TestInstall(t *testing.T) {
@@ -339,7 +340,8 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 		Version: version,
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			ConfigSchemaPath: schemaPath,
+			StaticCatalogPath: "catalog.yaml",
+			ConfigSchemaPath:  schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -361,6 +363,9 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
 	}
 	return srcDir
 }
@@ -406,7 +411,7 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -427,6 +432,9 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
 	}
 	return srcDir
 }
@@ -456,7 +464,7 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -478,6 +486,9 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 
 	archivePath := filepath.Join(dir, filepath.Base(srcDir)+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
@@ -493,7 +504,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -531,6 +542,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 		}
 	}
 	writeFile(pluginpkg.ManifestFile, manifestBytes, 0644)
+	writeFile("catalog.yaml", []byte(testCatalogYAML), 0644)
 	writeFile(filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")), []byte(content), 0755)
 
 	if err := tw.Close(); err != nil {
@@ -554,7 +566,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -592,6 +604,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 		}
 	}
 	writeFile(pluginpkg.ManifestFile, manifestBytes, 0644)
+	writeFile("catalog.yaml", []byte(testCatalogYAML), 0644)
 	writeFile(artifactName, []byte(firstContent), 0755)
 	writeFile(artifactName, []byte(secondContent), 0755)
 
@@ -614,7 +627,7 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -652,6 +665,9 @@ func mustBuildV2Package(t *testing.T, dir, source, version, content string) stri
 	if err := os.WriteFile(filepath.Join(sourceDir, pluginpkg.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(sourceDir, archivePath); err != nil {
@@ -680,6 +696,9 @@ func mustBuildV2PluginDir(t *testing.T, dir, source, version, content string) st
 	}
 	if err := os.WriteFile(filepath.Join(sourceDir, pluginpkg.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
 	}
 	return sourceDir
 }

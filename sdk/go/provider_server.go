@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"context"
-	"slices"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
@@ -41,23 +40,8 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 }
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
-	var connParams map[string]*proto.ConnectionParamDef
-	if cpp, ok := s.provider.(ConnectionParamProvider); ok {
-		connParams = connectionParamDefsToProto(cpp.ConnectionParamDefs())
-	}
-	staticCatalog, err := catalogToJSON(s.provider.Catalog())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode static catalog: %v", err)
-	}
 	return &proto.ProviderMetadata{
-		Name:                   s.provider.Name(),
-		DisplayName:            s.provider.DisplayName(),
-		Description:            s.provider.Description(),
-		ConnectionMode:         coreConnectionModeToProto(s.provider.ConnectionMode()),
-		ConnectionParams:       connParams,
-		StaticCatalogJson:      staticCatalog,
 		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
-		AuthTypes:              authTypes(s.provider),
 	}, nil
 }
 
@@ -98,16 +82,6 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
 	}
 	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
-}
-
-func authTypes(p Provider) []string {
-	if atl, ok := p.(AuthTypeLister); ok {
-		return slices.Clone(atl.AuthTypes())
-	}
-	if mp, ok := p.(ManualAuthProvider); ok && mp.SupportsManualAuth() {
-		return []string{"manual"}
-	}
-	return nil
 }
 
 func supportsSessionCatalog(p Provider) bool {

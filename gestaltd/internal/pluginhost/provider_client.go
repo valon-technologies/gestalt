@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"slices"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -15,13 +14,31 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+type StaticProviderSpec struct {
+	Name             string
+	DisplayName      string
+	Description      string
+	IconSVG          string
+	ConnectionMode   core.ConnectionMode
+	Catalog          *catalog.Catalog
+	AuthTypes        []string
+	ConnectionParams map[string]core.ConnectionParamDef
+	CredentialFields []core.CredentialFieldDef
+	DiscoveryConfig  *core.DiscoveryConfig
+}
+
 type remoteProviderBase struct {
 	client      proto.ProviderPluginClient
-	metadata    *proto.ProviderMetadata
+	name        string
+	displayName string
+	description string
+	connection  core.ConnectionMode
 	catalog     *catalog.Catalog
 	iconSVG     string
-	displayOver string
-	descOver    string
+	authTypes   []string
+	connParams  map[string]core.ConnectionParamDef
+	credFields  []core.CredentialFieldDef
+	discovery   *core.DiscoveryConfig
 	closer      io.Closer
 }
 
@@ -34,16 +51,58 @@ func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
 }
 
-func WithMetadataOverrides(displayName, description, iconSVG string) RemoteProviderOption {
-	return func(b *remoteProviderBase) {
-		if displayName != "" {
-			b.displayOver = displayName
+func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
+	supportsSessionCatalog, err := getSessionCatalogSupportWithRetry(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if err := callStartProvider(ctx, client, spec.Name, config); err != nil {
+		return nil, err
+	}
+
+	base := &remoteProviderBase{
+		client:      client,
+		name:        spec.Name,
+		displayName: spec.DisplayName,
+		description: spec.Description,
+		connection:  spec.ConnectionMode,
+		catalog:     spec.Catalog,
+		iconSVG:     spec.IconSVG,
+		authTypes:   spec.AuthTypes,
+		connParams:  spec.ConnectionParams,
+		credFields:  spec.CredentialFields,
+		discovery:   spec.DiscoveryConfig,
+	}
+	for _, opt := range opts {
+		opt(base)
+	}
+
+	if supportsSessionCatalog {
+		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
+	}
+	return base, nil
+}
+
+func getSessionCatalogSupportWithRetry(ctx context.Context, client proto.ProviderPluginClient) (bool, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+		if err == nil {
+			return meta.GetSupportsSessionCatalog(), nil
 		}
-		if description != "" {
-			b.descOver = description
+		if status.Code(err) == codes.Unimplemented {
+			return false, nil
 		}
-		if iconSVG != "" {
-			b.iconSVG = iconSVG
+		if status.Code(err) != codes.Unavailable {
+			return false, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return false, err
+		case <-ticker.C:
 		}
 	}
 }
@@ -55,73 +114,15 @@ func (p *remoteProviderBase) Close() error {
 	return nil
 }
 
-func NewRemoteProvider(ctx context.Context, client proto.ProviderPluginClient, name string, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
-	meta, err := getMetadataWithRetry(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-	if err := callStartProvider(ctx, client, name, config); err != nil {
-		return nil, err
-	}
-	staticCatalog, err := catalogFromJSON(meta.GetStaticCatalogJson())
-	if err != nil {
-		return nil, err
-	}
-
-	base := &remoteProviderBase{
-		client:   client,
-		metadata: meta,
-		catalog:  buildRemoteCatalog(meta, staticCatalog),
-	}
-	for _, opt := range opts {
-		opt(base)
-	}
-
-	if meta.GetSupportsSessionCatalog() {
-		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
-	}
-	return base, nil
-}
-
-func getMetadataWithRetry(ctx context.Context, client proto.ProviderPluginClient) (*proto.ProviderMetadata, error) {
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
-		if err == nil {
-			return meta, nil
-		}
-		if status.Code(err) != codes.Unavailable {
-			return nil, err
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, err
-		case <-ticker.C:
-		}
-	}
-}
-
-func (p *remoteProviderBase) Name() string { return p.metadata.GetName() }
-
-func (p *remoteProviderBase) DisplayName() string {
-	if p.displayOver != "" {
-		return p.displayOver
-	}
-	return p.metadata.GetDisplayName()
-}
-
-func (p *remoteProviderBase) Description() string {
-	if p.descOver != "" {
-		return p.descOver
-	}
-	return p.metadata.GetDescription()
-}
+func (p *remoteProviderBase) Name() string        { return p.name }
+func (p *remoteProviderBase) DisplayName() string { return p.displayName }
+func (p *remoteProviderBase) Description() string { return p.description }
 
 func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
-	return protoConnectionModeToCore(p.metadata.GetConnectionMode())
+	if p.connection == "" {
+		return core.ConnectionModeUser
+	}
+	return p.connection
 }
 
 func (p *remoteProviderBase) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
@@ -145,22 +146,32 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 }
 
 func (p *remoteProviderBase) SupportsManualAuth() bool {
-	return slices.Contains(p.metadata.GetAuthTypes(), "manual")
+	for _, authType := range p.authTypes {
+		if authType == "manual" {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
-	if p.catalog == nil {
-		return nil
-	}
 	return p.decorateCatalog(p.catalog)
 }
 
 func (p *remoteProviderBase) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return connectionParamDefsFromProto(p.metadata.GetConnectionParams())
+	return p.connParams
 }
 
 func (p *remoteProviderBase) AuthTypes() []string {
-	return slices.Clone(p.metadata.GetAuthTypes())
+	return p.authTypes
+}
+
+func (p *remoteProviderBase) CredentialFields() []core.CredentialFieldDef {
+	return p.credFields
+}
+
+func (p *remoteProviderBase) DiscoveryConfig() *core.DiscoveryConfig {
+	return p.discovery
 }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -184,42 +195,27 @@ func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context
 	return p.sessionCatalog(ctx, token)
 }
 
-func buildRemoteCatalog(meta *proto.ProviderMetadata, staticCatalog *catalog.Catalog) *catalog.Catalog {
-	if staticCatalog == nil {
-		return nil
-	}
-
-	cat := staticCatalog.Clone()
-	if cat.Name == "" {
-		cat.Name = meta.GetName()
-	}
-	if cat.DisplayName == "" {
-		cat.DisplayName = meta.GetDisplayName()
-	}
-	if cat.Description == "" {
-		cat.Description = meta.GetDescription()
-	}
-	for i := range cat.Operations {
-		if cat.Operations[i].Transport == "" {
-			cat.Operations[i].Transport = catalog.TransportPlugin
-		}
-	}
-	return cat
-}
-
 func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	if cat == nil {
 		return nil
 	}
 	decorated := cat.Clone()
-	if decorated.DisplayName == "" || p.displayOver != "" {
-		decorated.DisplayName = p.DisplayName()
+	if decorated.Name == "" {
+		decorated.Name = p.name
 	}
-	if decorated.Description == "" || p.descOver != "" {
-		decorated.Description = p.Description()
+	if decorated.DisplayName == "" {
+		decorated.DisplayName = p.displayName
+	}
+	if decorated.Description == "" {
+		decorated.Description = p.description
 	}
 	if p.iconSVG != "" {
 		decorated.IconSVG = p.iconSVG
+	}
+	for i := range decorated.Operations {
+		if decorated.Operations[i].Transport == "" {
+			decorated.Operations[i].Transport = catalog.TransportPlugin
+		}
 	}
 	return decorated
 }

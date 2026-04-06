@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -138,13 +139,6 @@ func (m providerMetadata) displayNameOr(v string) string {
 func (m providerMetadata) descriptionOr(v string) string {
 	if m.description != "" {
 		return m.description
-	}
-	return v
-}
-
-func (m providerMetadata) iconSVGOr(v string) string {
-	if m.iconSVG != "" {
-		return m.iconSVG
 	}
 	return v
 }
@@ -746,10 +740,6 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 }
 
 func buildExternalPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	pluginProv, err := buildPluginProvider(ctx, name, intg, pluginConfig, meta)
-	if err != nil {
-		return nil, err
-	}
 	manifest := intg.Plugin.ResolvedManifest
 	manifestProvider := intg.Plugin.ManifestProvider()
 	allowedOperations := intg.Plugin.AllowedOperations
@@ -757,7 +747,6 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	if intg.Plugin.HasResolvedManifest() {
 		resolvedManifest, resolvedAllowedOperations, err := config.EffectiveManifestBackedInputs(name, intg.Plugin)
 		if err != nil {
-			closeIfPossible(pluginProv)
 			return nil, err
 		}
 		manifest = resolvedManifest
@@ -766,6 +755,18 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 		allowedOperations = resolvedAllowedOperations
 		specPlugin = nil
+	}
+	if manifest == nil || manifestProvider == nil {
+		return nil, fmt.Errorf("build external plugin provider %q: executable plugins must be manifest-backed", name)
+	}
+
+	staticSpec, err := buildPluginStaticSpec(name, intg, manifest, meta)
+	if err != nil {
+		return nil, fmt.Errorf("build external plugin provider %q: %w", name, err)
+	}
+	pluginProv, err := buildPluginProvider(ctx, intg, pluginConfig, staticSpec)
+	if err != nil {
+		return nil, err
 	}
 	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
 	if err != nil {
@@ -790,9 +791,9 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 		}
 		merged, err := composite.NewMergedWithConnections(
 			name,
-			meta.displayNameOr(pluginProv.DisplayName()),
-			meta.descriptionOr(pluginProv.Description()),
-			meta.iconSVGOr(firstProviderIconSVG(pluginProv, apiProv)),
+			pluginProv.DisplayName(),
+			pluginProv.Description(),
+			firstProviderIconSVG(pluginProv, apiProv),
 			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
 			composite.BoundProvider{Provider: apiProv, Connection: plan.apiConnection()},
 		)
@@ -834,9 +835,9 @@ func buildExternalPluginProvider(ctx context.Context, name string, intg config.I
 	}
 	merged, err := composite.NewMergedWithConnections(
 		name,
-		meta.displayNameOr(pluginProv.DisplayName()),
-		meta.descriptionOr(pluginProv.Description()),
-		meta.iconSVGOr(firstProviderIconSVG(pluginProv, specProv)),
+		pluginProv.DisplayName(),
+		pluginProv.Description(),
+		firstProviderIconSVG(pluginProv, specProv),
 		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
 		composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
 	)
@@ -1174,15 +1175,12 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec) (core.Provider, error) {
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
 		Command:      intg.Plugin.Command,
 		Args:         intg.Plugin.Args,
 		Env:          intg.Plugin.Env,
-		Name:         name,
-		DisplayName:  meta.displayName,
-		Description:  meta.description,
-		IconSVG:      meta.iconSVG,
+		StaticSpec:   spec,
 		Config:       pluginConfig,
 		AllowedHosts: intg.Plugin.AllowedHosts,
 		HostBinary:   intg.Plugin.HostBinary,
@@ -1191,6 +1189,81 @@ func buildPluginProvider(ctx context.Context, name string, intg config.Integrati
 		return nil, err
 	}
 	return prov, nil
+}
+
+func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
+	if manifest == nil || manifest.Provider == nil {
+		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
+	}
+
+	displayName := meta.displayNameOr(manifest.DisplayName)
+	if displayName == "" {
+		displayName = name
+	}
+	description := meta.descriptionOr(manifest.Description)
+	iconSVG := meta.iconSVG
+	if iconPath := intg.Plugin.ResolvedIconFile; iconPath != "" {
+		svg, err := provider.ReadIconFile(iconPath)
+		if err != nil {
+			slog.Warn("could not read manifest icon_file", "path", iconPath, "error", err)
+		} else if iconSVG == "" {
+			iconSVG = svg
+		}
+	}
+
+	conn := config.EffectivePluginConnectionDef(intg.Plugin, manifest.Provider)
+	connMode := core.ConnectionMode(conn.Mode)
+	if connMode == "" {
+		switch conn.Auth.Type {
+		case "", pluginmanifestv1.AuthTypeNone:
+			connMode = core.ConnectionModeNone
+		default:
+			connMode = core.ConnectionModeUser
+		}
+	}
+
+	staticCatalog, err := pluginpkg.ReadStaticCatalog(manifest.Provider.StaticCatalogPath, name)
+	if err != nil {
+		return pluginhost.StaticProviderSpec{}, err
+	}
+	if staticCatalog == nil && !manifest.Provider.IsManifestBacked() {
+		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define provider.static_catalog_path")
+	}
+	if staticCatalog != nil {
+		if displayName != "" {
+			staticCatalog.DisplayName = displayName
+		}
+		if description != "" {
+			staticCatalog.Description = description
+		}
+		if iconSVG != "" {
+			staticCatalog.IconSVG = iconSVG
+		}
+	}
+
+	return pluginhost.StaticProviderSpec{
+		Name:             name,
+		DisplayName:      displayName,
+		Description:      description,
+		IconSVG:          iconSVG,
+		ConnectionMode:   connMode,
+		Catalog:          staticCatalog,
+		AuthTypes:        staticAuthTypes(conn.Auth.Type),
+		ConnectionParams: pluginhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
+		CredentialFields: pluginhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
+		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Provider.PostConnectDiscovery),
+	}, nil
+}
+
+func staticAuthTypes(authType string) []string {
+	switch authType {
+	case "", pluginmanifestv1.AuthTypeNone:
+		return nil
+	case pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeBearer:
+		return []string{"manual"}
+	default:
+		return []string{"oauth"}
+	}
 }
 
 func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {

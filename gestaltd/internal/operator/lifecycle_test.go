@@ -27,7 +27,7 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -47,6 +47,9 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), data, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 	return srcDir
 }
 
@@ -63,6 +66,137 @@ func writeTestConfig(t *testing.T, dir, packagePath string) string {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 	return cfgPath
+}
+
+func TestLoadForExecutionAtPath_ResolvesLocalManifestCommandPluginWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifest, err := pluginpkg.EncodeManifest(&pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/local-provider",
+		Version:     "0.1.0",
+		DisplayName: "Local Provider",
+		Description: "Local manifest-backed provider",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			BaseURL: "https://example.com",
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{
+					Name:   "ping",
+					Method: "GET",
+					Path:   "/ping",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+providers:
+  example:
+    from:
+      command: /tmp/provider
+      manifest: ./plugin.yaml
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	intg := loaded.Integrations["example"]
+	if intg.DisplayName != "Local Provider" {
+		t.Fatalf("DisplayName = %q", intg.DisplayName)
+	}
+	if intg.Description != "Local manifest-backed provider" {
+		t.Fatalf("Description = %q", intg.Description)
+	}
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
+	}
+	if intg.Plugin.ResolvedManifestPath != manifestPath {
+		t.Fatalf("ResolvedManifestPath = %q, want %q", intg.Plugin.ResolvedManifestPath, manifestPath)
+	}
+	if !intg.Plugin.IsDeclarative {
+		t.Fatal("expected manifest-backed command plugin to resolve as declarative")
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifest, err := pluginpkg.EncodeManifest(&pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/local-provider",
+		Version:     "0.1.0",
+		DisplayName: "Local Provider",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			BaseURL: "https://example.com",
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{Name: "ping", Method: "GET", Path: "/ping"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+providers:
+  example:
+    from:
+      command: /tmp/provider
+      manifest: ./plugin.yaml
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load config: %v", err)
+	}
+	loaded.Integrations["missing"] = config.IntegrationDef{}
+
+	lc := NewLifecycle(nil)
+	if err := lc.applyLockedPlugins(cfgPath, "", loaded, false); err != nil {
+		t.Fatalf("applyLockedPlugins: %v", err)
+	}
+	if loaded.Integrations["example"].Plugin == nil || loaded.Integrations["example"].Plugin.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Integrations["example"].Plugin)
+	}
 }
 
 func TestInitAtPath_WritesLockfileWithPluginEntry(t *testing.T) {
@@ -274,6 +408,37 @@ func TestLockMatchesConfig_FalseWhenFingerprintChanged(t *testing.T) {
 	}
 	if lockMatchesConfig(cfg, paths, lock2) {
 		t.Fatal("lockMatchesConfig returned true after fingerprint was corrupted")
+	}
+}
+
+func TestLockMatchesConfig_FalseWhenStaticCatalogChanged(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := mustBuildTestPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "catalog-test-binary")
+	cfgPath := writeTestConfig(t, dir, pluginDir)
+
+	lc := NewLifecycle(nil)
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(pluginDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: greet\n    method: GET\n"), 0644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load config: %v", err)
+	}
+	paths := initPathsForConfig(cfgPath)
+	lock, err := ReadLockfile(paths.lockfilePath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+
+	if lockMatchesConfig(cfg, paths, lock) {
+		t.Fatal("lockMatchesConfig returned true after static catalog changed")
 	}
 }
 

@@ -58,7 +58,8 @@ properties:
 				Version: "0.1.0",
 				Kinds:   []string{pluginmanifestv1.KindProvider},
 				Provider: &pluginmanifestv1.Provider{
-					ConfigSchemaPath: tc.schemaPath,
+					StaticCatalogPath: "catalog.yaml",
+					ConfigSchemaPath:  tc.schemaPath,
 				},
 				Artifacts: []pluginmanifestv1.Artifact{
 					{
@@ -78,6 +79,9 @@ properties:
 			}
 			if err := os.WriteFile(manifestPath, data, 0644); err != nil {
 				t.Fatalf("WriteFile(manifest): %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+				t.Fatalf("WriteFile(catalog): %v", err)
 			}
 
 			if err := ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindProvider, map[string]any{"api_key": "sk-test"}); err != nil {

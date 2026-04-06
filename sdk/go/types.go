@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 )
 
-// ConnectionMode controls how a provider authenticates with its upstream
-// service. The mode is declared as provider metadata and tells the host
-// whether a user-supplied OAuth token, a service-level identity, both,
-// or neither is required.
+// ConnectionMode describes how a provider authenticates with its upstream
+// service. Static connection behavior belongs in the plugin manifest rather
+// than the Go provider interface, but the type remains available for
+// compatibility and for session-catalog related code.
 type ConnectionMode string
 
 const (
@@ -22,20 +22,15 @@ const (
 	ConnectionModeEither ConnectionMode = "either"
 )
 
-// Provider is the core interface that every provider plugin must implement.
-// It declares metadata about the provider, receives provider-level startup
-// configuration, provides the discovery catalog, and executes individual
-// operations when called by the host.
+// Provider is the core interface that every executable provider plugin must
+// implement. Static metadata and the static operation catalog are supplied by
+// the plugin manifest; the provider only receives startup configuration and
+// executes operations when called by the host.
 //
 // The token argument to Execute is a user OAuth token supplied by the host
-// when [ConnectionMode] is [ConnectionModeUser] or [ConnectionModeEither].
+// when the manifest declares a user or either connection mode.
 type Provider interface {
-	Name() string
-	DisplayName() string
-	Description() string
-	ConnectionMode() ConnectionMode
 	Configure(ctx context.Context, name string, config map[string]any) error
-	Catalog() *Catalog
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
@@ -102,21 +97,21 @@ type ConnectionParamDef struct {
 	Field       string
 }
 
-// ConnectionParamProvider is an optional interface a [Provider] can implement
-// to declare the connection parameters it needs. The host resolves these
-// parameters and delivers them via [WithConnectionParams] on each Execute call.
+// ConnectionParamProvider previously declared static connection parameters from
+// code. Static connection metadata now belongs in manifests, but the interface
+// remains for compatibility and is ignored by the executable plugin host.
 type ConnectionParamProvider interface {
 	ConnectionParamDefs() map[string]ConnectionParamDef
 }
 
-// ManualAuthProvider is an optional interface a [Provider] can implement to
-// indicate it accepts manually-entered credentials instead of OAuth.
+// ManualAuthProvider is retained for compatibility and is ignored by the
+// executable plugin host, which reads auth behavior from manifests.
 type ManualAuthProvider interface {
 	SupportsManualAuth() bool
 }
 
-// AuthTypeLister is an optional interface a [Provider] can implement to
-// advertise the authentication methods it supports (e.g. "oauth", "manual").
+// AuthTypeLister is retained for compatibility and is ignored by the
+// executable plugin host, which reads auth behavior from manifests.
 type AuthTypeLister interface {
 	AuthTypes() []string
 }

@@ -7,29 +7,13 @@
 //
 // # Implementing a Provider
 //
-// Implement the [Provider] interface and call [ServeProvider]:
+// Implement the [Provider] interface and call [ServeProvider]. Static metadata
+// and the static catalog belong in the plugin manifest, not in the Go type:
 //
 //	type MyProvider struct{}
 //
-//	func (p *MyProvider) Name() string            { return "my_provider" }
-//	func (p *MyProvider) DisplayName() string     { return "My Provider" }
-//	func (p *MyProvider) Description() string     { return "Does useful things." }
-//	func (p *MyProvider) ConnectionMode() gestalt.ConnectionMode {
-//		return gestalt.ConnectionModeNone
-//	}
 //	func (p *MyProvider) Configure(ctx context.Context, name string, config map[string]any) error {
 //		return nil
-//	}
-//
-//	func (p *MyProvider) Catalog() *gestalt.Catalog {
-//		return &gestalt.Catalog{
-//			Name: "my_provider",
-//			Operations: []gestalt.CatalogOperation{{
-//				ID:          "hello",
-//				Description: "Says hello",
-//				Method:      "GET",
-//			}},
-//		}
 //	}
 //
 //	func (p *MyProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*gestalt.OperationResult, error) {
@@ -43,4 +27,7 @@
 //			log.Fatal(err)
 //		}
 //	}
+//
+// The corresponding manifest would define fields like display_name,
+// description, auth, and provider.static_catalog_path.
 package gestalt
