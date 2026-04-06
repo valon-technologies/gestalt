@@ -34,7 +34,6 @@ def serve(plugin: Plugin) -> None:
     if os.path.exists(socket_path):
         os.unlink(socket_path)
 
-    # Keep the historical concurrency here so I/O-bound plugin handlers can overlap.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS))
 
     class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
