@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from gestalt._runtime import main
 
 

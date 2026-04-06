@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import importlib
 import os
 import pathlib
@@ -10,20 +8,6 @@ from dataclasses import dataclass
 
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
-
-_IMPORT_ERROR: ImportError | None = None
-
-try:
-    import grpc
-    from google.protobuf import json_format
-
-    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
-except ImportError as exc:  # pragma: no cover - depends on local runtime deps
-    grpc = None
-    json_format = None
-    plugin_pb2 = None
-    plugin_pb2_grpc = None
-    _IMPORT_ERROR = exc
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
@@ -37,8 +21,10 @@ class RuntimeArgs:
 
 
 def serve(plugin: Plugin) -> None:
-    if _IMPORT_ERROR is not None:
-        raise RuntimeError("gestalt runtime dependencies are not installed") from _IMPORT_ERROR
+    import grpc
+    from google.protobuf import json_format
+
+    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
 
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
