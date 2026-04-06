@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light;
+  --background: 36 28% 99%;
+  --surface: 36 33% 97%;
+  --surface-raised: 33 22% 93%;
+  --border: 30 18% 87%;
+  --foreground: 24 30% 11%;
+  --radius: 0.75rem;
+  --alpha-dark: 35, 24, 16;
+  --brand: #7a4f10;
+  --brand-soft: #eac59f;
+  --danger: #c75050;
+  --success: #3d6b3d;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 24 18% 8%;
+  --surface: 24 14% 11%;
+  --surface-raised: 24 12% 15%;
+  --border: 24 10% 20%;
+  --foreground: 33 20% 90%;
+  --alpha-dark: 232, 222, 212;
+  --brand: #f5ca78;
+  --brand-soft: #5c3c0c;
+  --danger: #f0a3a3;
+  --success: #b8dfb8;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.label-text {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(var(--alpha-dark), 0.42);
+}
+
+.gradient-warm {
+  background: radial-gradient(
+    140% 90% at 50% 100%,
+    #eaccb8 0%,
+    #fdfcf9 50%,
+    #f8f6f3 80%
+  );
+}
+
+.dark .gradient-warm {
+  background: radial-gradient(
+    140% 90% at 50% 100%,
+    #3d2808 0%,
+    #1a1410 50%,
+    #161110 80%
+  );
+}

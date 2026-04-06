@@ -4,57 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gestalt Admin</title>
+    <script>
+      (function () {
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+        const applyTheme = function () {
+          document.documentElement.classList.toggle("dark", media.matches);
+          window.dispatchEvent(new Event("gestalt-themechange"));
+        };
+
+        applyTheme();
+        media.addEventListener("change", applyTheme);
+      })();
+    </script>
+    <link rel="stylesheet" href="./theme.css" />
     <style>
-      :root {
-        color-scheme: light;
-        --background: hsl(36 28% 99%);
-        --surface: hsl(36 33% 97%);
-        --surface-raised: hsl(33 22% 93%);
-        --foreground: rgba(35, 24, 16, 1);
-        --muted: rgba(35, 24, 16, 0.6);
-        --faint: rgba(35, 24, 16, 0.42);
-        --border: rgba(35, 24, 16, 0.1);
-        --brand: #7a4f10;
-        --brand-soft: #eac59f;
-        --danger: #c75050;
-        --success: #3d6b3d;
-      }
-
-      @media (prefers-color-scheme: dark) {
-        :root {
-          color-scheme: dark;
-          --background: hsl(24 18% 8%);
-          --surface: hsl(24 14% 11%);
-          --surface-raised: hsl(24 12% 15%);
-          --foreground: rgba(232, 222, 212, 1);
-          --muted: rgba(232, 222, 212, 0.6);
-          --faint: rgba(232, 222, 212, 0.42);
-          --border: rgba(232, 222, 212, 0.1);
-          --brand: #f5ca78;
-          --brand-soft: #5c3c0c;
-          --danger: #f0a3a3;
-          --success: #b8dfb8;
-        }
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
       body {
         margin: 0;
         min-height: 100vh;
         font: 16px/1.5 system-ui, sans-serif;
-        color: var(--foreground);
-        background:
-          radial-gradient(140% 90% at 50% 100%, #eaccb8 0%, #fdfcf9 50%, #f8f6f3 80%);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        body {
-          background:
-            radial-gradient(140% 90% at 50% 100%, #3d2808 0%, #1a1410 50%, #161110 80%);
-        }
+        color: hsl(var(--foreground) / 1);
       }
 
       a {
@@ -68,8 +36,8 @@
       }
 
       .topbar {
-        border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--background) 88%, transparent);
+        border-bottom: 1px solid hsl(var(--border) / 1);
+        background: color-mix(in srgb, hsl(var(--background)) 88%, transparent);
       }
 
       .topbar .shell {
@@ -90,7 +58,7 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        color: var(--muted);
+        color: rgba(var(--alpha-dark), 0.6);
       }
 
       .links a {
@@ -104,9 +72,9 @@
       .card,
       .status,
       details {
-        border: 1px solid var(--border);
+        border: 1px solid hsl(var(--border) / 1);
         border-radius: 12px;
-        background: color-mix(in srgb, var(--surface) 90%, white);
+        background: color-mix(in srgb, hsl(var(--surface)) 90%, white);
       }
 
       .hero,
@@ -115,14 +83,6 @@
       .status,
       summary {
         padding: 20px;
-      }
-
-      .label-text {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--faint);
       }
 
       h1,
@@ -144,7 +104,7 @@
 
       p {
         margin: 12px 0 0;
-        color: var(--muted);
+        color: rgba(var(--alpha-dark), 0.6);
       }
 
       .status {
@@ -198,9 +158,9 @@
         align-items: center;
         justify-content: center;
         min-height: 240px;
-        border: 1px dashed var(--border);
+        border: 1px dashed hsl(var(--border) / 1);
         border-radius: 12px;
-        background: color-mix(in srgb, var(--surface-raised) 40%, transparent);
+        background: color-mix(in srgb, hsl(var(--surface-raised)) 40%, transparent);
         padding: 20px;
         text-align: center;
       }
@@ -228,14 +188,14 @@
 
       .bar-value,
       .bar-meta {
-        color: var(--muted);
+        color: rgba(var(--alpha-dark), 0.6);
         font-size: 0.92rem;
       }
 
       .bar-track {
         height: 10px;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--surface-raised) 65%, transparent);
+        background: color-mix(in srgb, hsl(var(--surface-raised)) 65%, transparent);
         overflow: hidden;
       }
 
@@ -256,7 +216,7 @@
         overflow: auto;
         white-space: pre-wrap;
         word-break: break-word;
-        color: var(--muted);
+        color: rgba(var(--alpha-dark), 0.6);
         font: 0.84rem/1.5 ui-monospace, monospace;
       }
 
@@ -283,7 +243,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="gradient-warm">
     <nav class="topbar">
       <div class="shell">
         <a class="brand" href="/">Gestalt</a>
@@ -371,6 +331,7 @@
         const HISTORY_LIMIT = Math.ceil((60 * 60 * 1000) / REFRESH_INTERVAL_MS);
         const charts = {};
         const history = [];
+        let latestSnapshot = null;
 
         function byId(id) {
           return document.getElementById(id);
@@ -576,20 +537,36 @@
           return charts[id];
         }
 
+        let themeProbe = null;
+
+        function resolveThemeColor(value) {
+          if (!themeProbe) {
+            themeProbe = document.createElement("span");
+            themeProbe.setAttribute("aria-hidden", "true");
+            themeProbe.style.cssText =
+              "position:absolute;visibility:hidden;pointer-events:none;inset:auto;top:-9999px;";
+            document.body.appendChild(themeProbe);
+          }
+
+          themeProbe.style.color = value;
+          return window.getComputedStyle(themeProbe).color;
+        }
+
         function theme() {
-          const styles = window.getComputedStyle(document.documentElement);
           return {
-            brand: styles.getPropertyValue("--brand").trim(),
-            brandSoft: styles.getPropertyValue("--brand-soft").trim(),
-            border: styles.getPropertyValue("--border").trim(),
-            foreground: styles.getPropertyValue("--foreground").trim(),
-            muted: styles.getPropertyValue("--muted").trim(),
-            faint: styles.getPropertyValue("--faint").trim(),
-            danger: styles.getPropertyValue("--danger").trim(),
-            success: styles.getPropertyValue("--success").trim(),
-            surfaceRaised: styles.getPropertyValue("--surface-raised").trim(),
+            brand: resolveThemeColor("var(--brand)"),
+            brandSoft: resolveThemeColor("var(--brand-soft)"),
+            border: resolveThemeColor("hsl(var(--border) / 1)"),
+            foreground: resolveThemeColor("hsl(var(--foreground) / 1)"),
+            muted: resolveThemeColor("rgba(var(--alpha-dark), 0.6)"),
+            faint: resolveThemeColor("rgba(var(--alpha-dark), 0.42)"),
+            danger: resolveThemeColor("var(--danger)"),
+            success: resolveThemeColor("var(--success)"),
+            surfaceRaised: resolveThemeColor("hsl(var(--surface-raised) / 1)"),
           };
         }
+
+        window.__gestaltAdminTheme = theme;
 
         function positiveDelta(current, previous) {
           if (!Number.isFinite(current)) return 0;
@@ -819,6 +796,7 @@
             }
 
             const snapshot = parseMetrics(body);
+            latestSnapshot = snapshot;
             recordHistory(snapshot);
             byId("metrics-output").textContent = body;
             byId("summary-requests").textContent = formatCount(snapshot.requests);
@@ -843,6 +821,11 @@
           Object.values(charts).forEach(function (chart) {
             chart.resize();
           });
+        });
+        window.addEventListener("gestalt-themechange", function () {
+          if (latestSnapshot) {
+            renderCharts(latestSnapshot);
+          }
         });
       })();
     </script>

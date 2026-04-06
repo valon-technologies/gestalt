@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "./dev.sh",
     "dev:next": "next dev",
-    "build": "next build",
+    "sync:theme": "node ./scripts/sync-admin-theme.mjs",
+    "build": "npm run sync:theme && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

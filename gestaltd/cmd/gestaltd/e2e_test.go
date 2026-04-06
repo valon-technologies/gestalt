@@ -416,6 +416,9 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("theme.css")) {
+			t.Fatalf("expected admin ui to include shared theme asset: %s", adminBody)
+		}
 	})
 
 	if traceRequests.Load() == 0 {
@@ -516,6 +519,9 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
+		if !bytes.Contains(adminBody, []byte("theme.css")) {
+			t.Fatalf("expected admin ui to include shared theme asset: %s", adminBody)
+		}
 	})
 
 	if !strings.Contains(stdout, `"msg":"audit"`) {
@@ -565,6 +571,9 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 		}
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("theme.css")) {
+			t.Fatalf("expected admin ui to include shared theme asset: %s", adminBody)
 		}
 	})
 }
@@ -625,6 +634,9 @@ ui:
 		}
 		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
 			t.Fatalf("expected built-in admin UI to include echarts asset: %s", adminBody)
+		}
+		if !bytes.Contains(adminBody, []byte("theme.css")) {
+			t.Fatalf("expected built-in admin UI to include shared theme asset: %s", adminBody)
 		}
 	})
 }
