@@ -74,6 +74,33 @@ telemetry:
       level: info
 ```
 
+## Audit Routing
+
+Audit logs inherit the main telemetry logger by default. If you need a
+different route for compliance, analytics, or warehousing, configure the
+top-level `audit:` block separately:
+
+```yaml
+telemetry:
+  provider: stdout
+  config:
+    format: json
+
+audit:
+  provider: otlp
+  config:
+    endpoint: audit-collector:4317
+    protocol: grpc
+    headers:
+      Authorization: Bearer ${AUDIT_OTLP_TOKEN}
+```
+
+That keeps application logs on stdout while exporting only audit records over
+OTLP. You can also set `audit.provider: stdout` to keep audit logs on stdout
+when telemetry is `noop`, or `audit.provider: noop` to disable audit output
+explicitly. If you leave `audit.provider: inherit`, collectors can still split
+the stream by filtering on `log.type=audit`.
+
 ## Emitted Metrics
 
 The built-in metric surface currently covers:

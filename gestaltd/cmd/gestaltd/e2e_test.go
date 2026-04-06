@@ -108,6 +108,98 @@ providers:
 	}
 }
 
+func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+
+	cfgPath := writeE2EConfig(t, dir, pluginDir, 18080)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`audit:
+  config:
+    format: json
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config audit: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
+	}
+	if !strings.Contains(string(out), "audit.config is not supported when audit.provider is") {
+		t.Fatalf("expected inherit-provider audit config error, got: %s", out)
+	}
+}
+
+func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		auditYAML string
+		wantError string
+	}{
+		{
+			name: "unknown audit provider",
+			auditYAML: `audit:
+  provider: bogus
+`,
+			wantError: "unknown audit.provider",
+		},
+		{
+			name: "stdout audit requires mapping config",
+			auditYAML: `audit:
+  provider: stdout
+  config: nope
+`,
+			wantError: "stdout audit: parsing config",
+		},
+		{
+			name: "otlp audit rejects non-otlp logs exporter",
+			auditYAML: `audit:
+  provider: otlp
+  config:
+    logs:
+      exporter: stdout
+`,
+			wantError: "otlp audit: logs.exporter must be",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			pluginDir := setupPluginDir(t, dir)
+
+			cfgPath := writeE2EConfig(t, dir, pluginDir, 18080)
+			cfgBytes, err := os.ReadFile(cfgPath)
+			if err != nil {
+				t.Fatalf("read config: %v", err)
+			}
+			cfgBytes = append(cfgBytes, []byte(tc.auditYAML)...)
+			if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+				t.Fatalf("write config audit: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected %q, got: %s", tc.wantError, out)
+			}
+		})
+	}
+}
+
 func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	t.Parallel()
 
@@ -387,6 +479,69 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	}
 }
 
+func TestE2EInitServeLockedOTLPAuditExportsAuditWithoutStdoutAuditLogs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+
+	var logRequests atomic.Int32
+	otlpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/logs":
+			logRequests.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(otlpServer.Close)
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: stdout
+  config:
+    level: info
+    format: json
+audit:
+  provider: otlp
+  config:
+    endpoint: `+strings.TrimPrefix(otlpServer.URL, "http://")+`
+    protocol: http
+    insecure: true
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		body := invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("unmarshal success response: %v\nbody: %s", err, body)
+		}
+		if result["echo"] != "hello" {
+			t.Fatalf("expected echo=hello, got %v", result)
+		}
+	})
+
+	if logRequests.Load() == 0 {
+		t.Fatalf("expected audit logs to export over OTLP\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if strings.Contains(stdout, `"msg":"audit"`) {
+		t.Fatalf("did not expect audit logs on stdout when audit.provider=otlp\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
 func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -501,6 +656,89 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 			t.Fatalf("expected admin ui to include shared theme asset: %s", adminBody)
 		}
 	})
+}
+
+func TestE2EInitServeLockedNoopTelemetryWithStdoutAuditStillEmitsAuditLogs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: noop
+audit:
+  provider: stdout
+  config:
+    format: json
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+
+		promBody := getEndpointBody(t, baseURL+"/metrics", http.StatusServiceUnavailable)
+		if !bytes.Contains(promBody, []byte("Prometheus metrics are unavailable")) {
+			t.Fatalf("expected disabled metrics message in /metrics body: %s", promBody)
+		}
+	})
+
+	if !strings.Contains(stdout, `"msg":"audit"`) {
+		t.Fatalf("expected audit log on stdout even with telemetry.provider=noop\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestE2EInitServeLockedStdoutAuditHonorsConfiguredLevel(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+
+	port := allocateTestPort(t)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfgBytes = append(cfgBytes, []byte(`telemetry:
+  provider: noop
+audit:
+  provider: stdout
+  config:
+    format: json
+    level: warn
+`)...)
+	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
+		t.Fatalf("write config telemetry: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	stdout, stderr := serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		invokeExampleOperation(t, baseURL, "echo", `{"message":"hello"}`, http.StatusOK)
+	})
+
+	if strings.Contains(stdout, `"operation":"echo"`) {
+		t.Fatalf("did not expect info-level audit log at audit.level=warn\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if strings.Contains(stdout, `"msg":"audit"`) {
+		t.Fatalf("did not expect any audit log on stdout for info-only traffic at audit.level=warn\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
 }
 
 func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {

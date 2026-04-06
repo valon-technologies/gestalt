@@ -92,13 +92,21 @@ Non-invocation HTTP audit events use explicit operation names:
 
 ## Routing
 
-Audit records are standard structured logs, so you route them the same way as
-the rest of `gestaltd` telemetry:
+By default, audit records follow the main `telemetry` log pipeline:
 
 - `telemetry.provider: stdout` writes them to local structured logs
 - `telemetry.provider: otlp` exports them through the OTLP log pipeline
 
-If you need a dedicated sink, route on `log.type=audit` in your collector.
+If you need a dedicated audit route, configure the top-level `audit:` block:
+
+- `audit.provider: stdout` keeps audit logs on stdout even when telemetry uses a different provider
+- `audit.provider: otlp` exports only audit records to a dedicated OTLP collector
+- `audit.provider: noop` disables audit output explicitly
+
+If you keep `audit.provider: inherit`, you can still split audit records
+downstream by filtering on `log.type=audit` in your collector. For the config
+surface itself, see [Config File](/reference/config-file). For export options,
+see [Observability](/observability).
 
 ## Metrics Notes
 

@@ -33,6 +33,7 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
@@ -105,6 +106,33 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Telemetry["noop"] = telemetrynoop.Factory
 	factories.Telemetry["stdout"] = telemetrystdout.Factory
 	factories.Telemetry["otlp"] = telemetryotlp.Factory
+	factories.Audit = func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+		switch cfg.Provider {
+		case "", "inherit":
+			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
+		case "noop":
+			return invocation.NewLoggerAuditSink(telemetrynoop.New().Logger()), nil, nil
+		case "stdout":
+			var stdoutCfg struct {
+				Level  string `yaml:"level"`
+				Format string `yaml:"format"`
+			}
+			if cfg.Config.Kind != 0 {
+				if err := cfg.Config.Decode(&stdoutCfg); err != nil {
+					return nil, nil, fmt.Errorf("stdout audit: parsing config: %w", err)
+				}
+			}
+			return invocation.NewLevelAwareLoggerAuditSink(telemetrystdout.NewLogger(stdoutCfg.Level, stdoutCfg.Format)), nil, nil
+		case "otlp":
+			logger, closeFn, err := telemetryotlp.NewAuditLogger(ctx, cfg.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			return invocation.NewLevelAwareLoggerAuditSink(logger), closeFn, nil
+		default:
+			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Provider)
+		}
+	}
 	factories.Auth["google"] = google.Factory
 	factories.Auth["local"] = local.Factory
 	factories.Auth["none"] = authnone.Factory

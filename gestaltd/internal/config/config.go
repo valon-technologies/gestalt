@@ -38,6 +38,7 @@ type Config struct {
 	Datastore    DatastoreConfig           `yaml:"datastore"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
+	Audit        AuditConfig               `yaml:"audit"`
 	Integrations map[string]IntegrationDef `yaml:"providers"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
@@ -45,6 +46,11 @@ type Config struct {
 }
 
 type TelemetryConfig struct {
+	Provider string    `yaml:"provider"`
+	Config   yaml.Node `yaml:"config"`
+}
+
+type AuditConfig struct {
 	Provider string    `yaml:"provider"`
 	Config   yaml.Node `yaml:"config"`
 }
@@ -702,6 +708,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Telemetry.Provider == "" {
 		cfg.Telemetry.Provider = "stdout"
 	}
+	if cfg.Audit.Provider == "" {
+		cfg.Audit.Provider = "inherit"
+	}
 }
 
 func resolveBaseURL(cfg *Config) {
@@ -769,6 +778,9 @@ func ValidateStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: server.api_token_ttl: %w", err)
 		}
 	}
+	if err := validateAudit(cfg.Audit); err != nil {
+		return err
+	}
 	if err := validateEgress(&cfg.Egress); err != nil {
 		return err
 	}
@@ -782,6 +794,54 @@ func ValidateStructure(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func validateAudit(cfg AuditConfig) error {
+	switch cfg.Provider {
+	case "", "inherit", "noop":
+		if cfg.Config.Kind == 0 {
+			return nil
+		}
+		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.Provider)
+	case "stdout":
+		if cfg.Config.Kind == 0 {
+			return nil
+		}
+		var stdoutCfg struct {
+			Level  string `yaml:"level"`
+			Format string `yaml:"format"`
+		}
+		if err := cfg.Config.Decode(&stdoutCfg); err != nil {
+			return fmt.Errorf("config validation: stdout audit: parsing config: %w", err)
+		}
+		return nil
+	case "otlp":
+		if cfg.Config.Kind == 0 {
+			return nil
+		}
+		var otlpCfg struct {
+			Protocol string `yaml:"protocol"`
+			Logs     struct {
+				Exporter string `yaml:"exporter"`
+			} `yaml:"logs"`
+		}
+		if err := cfg.Config.Decode(&otlpCfg); err != nil {
+			return fmt.Errorf("config validation: otlp audit: parsing config: %w", err)
+		}
+		if otlpCfg.Protocol != "" {
+			switch strings.ToLower(otlpCfg.Protocol) {
+			case "grpc", "http":
+			default:
+				return fmt.Errorf("config validation: otlp audit: unknown protocol %q (expected \"grpc\" or \"http\")", otlpCfg.Protocol)
+			}
+		}
+		if otlpCfg.Logs.Exporter != "" && !strings.EqualFold(otlpCfg.Logs.Exporter, "otlp") {
+			return fmt.Errorf("config validation: otlp audit: logs.exporter must be %q", "otlp")
+		}
+		return nil
+	default:
+		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.Provider)
+	}
 }
 
 // ValidateResolvedStructure checks integration fields whose support depends on

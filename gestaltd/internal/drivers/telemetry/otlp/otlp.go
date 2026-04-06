@@ -336,12 +336,43 @@ func (h levelFilterHandler) WithGroup(name string) slog.Handler {
 	return levelFilterHandler{level: h.level, inner: h.inner.WithGroup(name)}
 }
 
-var Factory bootstrap.TelemetryFactory = func(node yaml.Node) (core.TelemetryProvider, error) {
+func decodeConfig(node yaml.Node, subject string) (yamlConfig, error) {
 	var cfg yamlConfig
 	if node.Kind != 0 {
 		if err := node.Decode(&cfg); err != nil {
-			return nil, fmt.Errorf("otlp telemetry: parsing config: %w", err)
+			return yamlConfig{}, fmt.Errorf("%s: parsing config: %w", subject, err)
 		}
 	}
+	return cfg, nil
+}
+
+var Factory bootstrap.TelemetryFactory = func(node yaml.Node) (core.TelemetryProvider, error) {
+	cfg, err := decodeConfig(node, "otlp telemetry")
+	if err != nil {
+		return nil, err
+	}
 	return New(context.Background(), cfg)
+}
+
+func NewAuditLogger(ctx context.Context, node yaml.Node) (*slog.Logger, func(context.Context) error, error) {
+	cfg, err := decodeConfig(node, "otlp audit")
+	if err != nil {
+		return nil, nil, err
+	}
+	applyConfigDefaults(&cfg)
+	if !strings.EqualFold(cfg.Logs.Exporter, "otlp") {
+		return nil, nil, fmt.Errorf("otlp audit: logs.exporter must be %q", "otlp")
+	}
+
+	logger, lp, err := buildLogger(ctx, cfg, telemetryutil.BuildResource(cfg.ServiceName, cfg.ResourceAttributes))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var closeFn func(context.Context) error
+	if lp != nil {
+		closeFn = lp.Shutdown
+	}
+
+	return logger, closeFn, nil
 }

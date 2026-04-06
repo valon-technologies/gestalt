@@ -161,12 +161,14 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type DatastoreFactory func(node yaml.Node, deps Deps) (core.Datastore, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
+type AuditFactory func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
 	Auth       map[string]AuthFactory
 	Datastores map[string]DatastoreFactory
 	Secrets    map[string]SecretManagerFactory
 	Telemetry  map[string]TelemetryFactory
+	Audit      AuditFactory
 	Builtins   []core.Provider
 }
 
@@ -192,8 +194,9 @@ type Result struct {
 	Telemetry        core.TelemetryProvider
 	Egress           EgressDeps
 
-	mu     sync.Mutex
-	closed bool
+	auditClose func(context.Context) error
+	mu         sync.Mutex
+	closed     bool
 }
 
 func (r *Result) Start(ctx context.Context) error {
@@ -226,6 +229,9 @@ func (r *Result) Close(ctx context.Context) error {
 		closeDatastore(r.Datastore),
 		closeSecretManager(r.SecretManager),
 	)
+	if r.auditClose != nil {
+		errs = append(errs, r.auditClose(ctx))
+	}
 	if r.Telemetry != nil {
 		errs = append(errs, r.Telemetry.Shutdown(ctx))
 	}
@@ -372,10 +378,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
-	audit := core.AuditSink(invocation.NewLoggerAuditSink(prepared.Telemetry.Logger()))
+	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
+	if err != nil {
+		return nil, err
+	}
+	closeAudit := true
+	defer func() {
+		if closeAudit && auditClose != nil {
+			_ = auditClose(context.Background())
+		}
+	}()
 
 	closeProviders = false
 	closeCore = false
+	closeAudit = false
 	return &Result{
 		Auth:             prepared.Auth,
 		Datastore:        prepared.Datastore,
@@ -388,6 +404,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SecretManager:    prepared.SecretManager,
 		Telemetry:        prepared.Telemetry,
 		Egress:           prepared.Deps.Egress,
+		auditClose:       auditClose,
 	}, nil
 }
 
@@ -401,6 +418,22 @@ func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.Teleme
 		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.Provider, err)
 	}
 	return tp, nil
+}
+
+func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+	if factories.Audit == nil {
+		switch cfg.Audit.Provider {
+		case "", "inherit":
+			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
+		default:
+			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.Provider)
+		}
+	}
+	sink, closeFn, err := factories.Audit(ctx, cfg.Audit, telemetry)
+	if err != nil {
+		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.Provider, err)
+	}
+	return sink, closeFn, nil
 }
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
@@ -488,6 +521,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {
+		return err
+	}
+	if err := resolveYAMLNode(&cfg.Audit.Config, resolve); err != nil {
 		return err
 	}
 
