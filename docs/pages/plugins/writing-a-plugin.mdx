@@ -123,11 +123,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "my-plugin"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "provider:plugin"
 ```
+
+If you install the SDK from a private index, pin `gestalt` to that index with
+`uv` rather than relying on PyPI fallback.
 
 Then define operations in `provider.py`:
 

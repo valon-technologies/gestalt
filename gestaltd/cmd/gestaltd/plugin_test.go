@@ -371,7 +371,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "invalid-python-release"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "os import path\nimport os;os.system('cmd')#:attr"
@@ -959,7 +959,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "python-release"
 version = "0.1.0"
-dependencies = ["gestalt-sdk-python"]
+dependencies = ["gestalt"]
 
 [tool.gestalt]
 plugin = "provider:plugin"
