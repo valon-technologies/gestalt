@@ -15,15 +15,17 @@ import (
 )
 
 const (
-	pythonProjectFile   = "pyproject.toml"
-	pythonRuntimeModule = "gestalt._runtime"
+	pythonProjectFile       = "pyproject.toml"
+	pythonRuntimeModule     = "gestalt._runtime"
+	windowsOS               = "windows"
+	windowsExecutableSuffix = ".exe"
 )
 
 var ErrNoPythonProviderPackage = errors.New("no Python provider package found")
 
 var pythonIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-func DetectPythonProviderTarget(root string) (string, error) {
+func detectPythonProviderTarget(root string) (string, error) {
 	projectPath := filepath.Join(root, pythonProjectFile)
 	if _, err := os.Stat(projectPath); err != nil {
 		if os.IsNotExist(err) {
@@ -45,25 +47,29 @@ func DetectPythonProviderTarget(root string) (string, error) {
 	if target == "" {
 		return "", ErrNoPythonProviderPackage
 	}
-	if _, _, err := SplitPythonProviderTarget(target); err != nil {
+	if _, _, err := splitPythonProviderTarget(target); err != nil {
 		return "", fmt.Errorf("%s tool.gestalt.plugin: %w", pythonProjectFile, err)
 	}
 	return target, nil
 }
 
-func PythonProviderRunCommand(root string) (string, []string, func(), error) {
-	target, err := DetectPythonProviderTarget(root)
+func pythonProviderRunCommand(root string) (string, []string, func(), error) {
+	target, err := detectPythonProviderTarget(root)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	interpreter, err := DetectPythonInterpreter(root)
+	return pythonProviderRunCommandForTarget(root, target)
+}
+
+func pythonProviderRunCommandForTarget(root, target string) (string, []string, func(), error) {
+	interpreter, err := detectPythonInterpreter(root)
 	if err != nil {
 		return "", nil, nil, err
 	}
 	return interpreter, []string{"-m", pythonRuntimeModule, root, target}, nil, nil
 }
 
-func DetectPythonInterpreter(root string) (string, error) {
+func detectPythonInterpreter(root string) (string, error) {
 	for _, candidate := range pythonInterpreterCandidates(root) {
 		if candidate == "" {
 			continue
@@ -98,7 +104,7 @@ func pythonInterpreterCandidates(root string) []string {
 	}
 }
 
-func SplitPythonProviderTarget(target string) (module string, attr string, err error) {
+func splitPythonProviderTarget(target string) (module string, attr string, err error) {
 	module, attr, ok := strings.Cut(strings.TrimSpace(target), ":")
 	module = strings.TrimSpace(module)
 	attr = strings.TrimSpace(attr)
@@ -217,4 +223,124 @@ func parseTOMLString(value string) (string, error) {
 	default:
 		return "", fmt.Errorf("must be a quoted string")
 	}
+}
+
+func buildPythonProviderBinary(root, outputPath, pluginName, target, goos, goarch string) error {
+	if err := validatePythonReleasePlatform(goos, goarch); err != nil {
+		return err
+	}
+
+	module, attr, err := splitPythonProviderTarget(target)
+	if err != nil {
+		return fmt.Errorf("invalid Python provider target %q: %w", target, err)
+	}
+
+	interpreter, err := detectPythonInterpreter(root)
+	if err != nil {
+		return fmt.Errorf("detect Python release interpreter: %w", err)
+	}
+
+	workDir, err := os.MkdirTemp("", "gestalt-python-release-*")
+	if err != nil {
+		return fmt.Errorf("create Python release workdir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(workDir) }()
+
+	launcherPath := filepath.Join(workDir, "launcher.py")
+	if err := os.WriteFile(launcherPath, []byte(pythonReleaseLauncherSource(module, attr, pluginName)), 0o644); err != nil {
+		return fmt.Errorf("write Python release launcher: %w", err)
+	}
+
+	pyinstallerName := filepath.Base(outputPath)
+	if goos == windowsOS {
+		pyinstallerName = strings.TrimSuffix(pyinstallerName, windowsExecutableSuffix)
+	}
+
+	args := []string{
+		"-m", "PyInstaller",
+		"--noconfirm",
+		"--clean",
+		"--onefile",
+		"--distpath", filepath.Dir(outputPath),
+		"--workpath", filepath.Join(workDir, "build"),
+		"--specpath", filepath.Join(workDir, "spec"),
+		"--name", pyinstallerName,
+		"--hidden-import", module,
+		"--paths", root,
+	}
+	for _, sdkPath := range pythonReleaseImportPaths() {
+		args = append(args, "--paths", sdkPath)
+	}
+	args = append(args, launcherPath)
+
+	cmd := exec.Command(interpreter, args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), pythonReleaseEnv()...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("python release build: %w (ensure PyInstaller is installed in the selected Python environment)", err)
+	}
+	return nil
+}
+
+func validatePythonReleasePlatform(goos, goarch string) error {
+	if goos == runtime.GOOS && goarch == runtime.GOARCH {
+		return nil
+	}
+	return fmt.Errorf("python source plugins can only be released for the current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+}
+
+func pythonReleaseLauncherSource(module, attr, pluginName string) string {
+	return fmt.Sprintf(`from __future__ import annotations
+
+import importlib
+import os
+
+from gestalt._runtime import serve
+
+_gestalt_module = importlib.import_module(%q)
+_gestalt_plugin = getattr(_gestalt_module, %q)
+
+_gestalt_plugin.name = %q
+
+if __name__ == "__main__":
+    catalog_path = os.environ.get("GESTALT_PLUGIN_WRITE_CATALOG")
+    if catalog_path:
+        _gestalt_plugin.write_catalog(catalog_path)
+        raise SystemExit(0)
+    serve(_gestalt_plugin)
+`, module, attr, pluginName)
+}
+
+func pythonReleaseImportPaths() []string {
+	paths := []string{}
+	if sdkPath := localPythonSDKPath(); sdkPath != "" {
+		paths = append(paths, sdkPath)
+	}
+	return paths
+}
+
+func pythonReleaseEnv() []string {
+	paths := pythonReleaseImportPaths()
+	if len(paths) == 0 {
+		return nil
+	}
+	value := strings.Join(paths, string(os.PathListSeparator))
+	if existing := os.Getenv("PYTHONPATH"); existing != "" {
+		value += string(os.PathListSeparator) + existing
+	}
+	return []string{"PYTHONPATH=" + value}
+}
+
+func localPythonSDKPath() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	path := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "sdk", "python"))
+	if _, err := os.Stat(filepath.Join(path, "pyproject.toml")); err != nil {
+		return ""
+	}
+	return path
 }
