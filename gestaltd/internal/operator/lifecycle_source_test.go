@@ -163,9 +163,9 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 		t.Errorf("lock version = %d, want %d", lock.Version, LockVersion)
 	}
 
-	entry, ok := lock.Plugins[LockPluginKey("integration", "alpha")]
+	entry, ok := lock.Providers["alpha"]
 	if !ok {
-		t.Fatal("lock entry for integration:alpha not found")
+		t.Fatal("lock entry for provider alpha not found")
 	}
 	if entry.Source != source {
 		t.Errorf("entry.Source = %q, want %q", entry.Source, source)
@@ -196,7 +196,7 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 		t.Errorf("executable not found at %s: %v", executablePath, err)
 	}
 
-	wantPrefix := ".gestaltd/plugins/integration_alpha/"
+	wantPrefix := ".gestaltd/providers/alpha/"
 	if !strings.HasPrefix(entry.Manifest, wantPrefix) {
 		t.Errorf("manifest path %q does not start with %q", entry.Manifest, wantPrefix)
 	}
@@ -222,7 +222,7 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	readEntry := readBack.Plugins[LockPluginKey("integration", "alpha")]
+	readEntry := readBack.Providers["alpha"]
 	if readEntry.Source != source {
 		t.Errorf("readback Source = %q, want %q", readEntry.Source, source)
 	}
@@ -320,8 +320,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry := lock.Plugins[LockPluginKey("integration", "gadget")]
-	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "plugins", "integration_gadget")
+	entry := lock.Providers["gadget"]
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "gadget")
 	if err := os.RemoveAll(pluginRoot); err != nil {
 		t.Fatalf("RemoveAll plugin root: %v", err)
 	}
@@ -347,8 +347,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
 	}
-	if cfg.Integrations["gadget"].Plugin.Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Integrations["gadget"].Plugin.Command, executablePath)
+	if cfg.Providers["gadget"].Plugin.Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Providers["gadget"].Plugin.Command, executablePath)
 	}
 }
 
@@ -466,9 +466,9 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("lock version = %d, want %d", lock.Version, LockVersion)
 	}
 
-	entry, ok := lock.Plugins[LockPluginKey("integration", "alpha")]
+	entry, ok := lock.Providers["alpha"]
 	if !ok {
-		t.Fatal("lock entry for integration:alpha not found")
+		t.Fatal("lock entry for provider alpha not found")
 	}
 	if entry.Source != testSource {
 		t.Errorf("entry.Source = %q, want %q", entry.Source, testSource)
@@ -500,7 +500,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("lockfile on disk version = %d, want %d", readBack.Version, LockVersion)
 	}
 
-	wantDirName := "integration_alpha"
+	wantDirName := string(filepath.Separator) + filepath.Join(".gestaltd", "providers", "alpha") + string(filepath.Separator)
 	executablePath := resolveLockPath(artifactsDir, entry.Executable)
 	if !strings.Contains(executablePath, wantDirName) {
 		t.Errorf("executable path %q does not contain expected dir %q", executablePath, wantDirName)
@@ -521,7 +521,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("executable content = %q, want %q", execData, testBinary)
 	}
 
-	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "plugins", "integration_alpha")
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
 	if err := os.RemoveAll(pluginRoot); err != nil {
 		t.Fatalf("RemoveAll plugin root: %v", err)
 	}
@@ -544,7 +544,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if got := assetCount.Load() - assetsBefore; got != 1 {
 		t.Errorf("asset request count during locked load = %d, want 1", got)
 	}
-	if cfg.Integrations["alpha"].Plugin.Command != executablePath {
-		t.Errorf("plugin command = %q, want %q", cfg.Integrations["alpha"].Plugin.Command, executablePath)
+	if cfg.Providers["alpha"].Plugin.Command != executablePath {
+		t.Errorf("plugin command = %q, want %q", cfg.Providers["alpha"].Plugin.Command, executablePath)
 	}
 }

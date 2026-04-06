@@ -744,7 +744,7 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
+			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this provider to plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
@@ -754,7 +754,7 @@ surfaces:
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this provider to plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
@@ -787,7 +787,7 @@ surfaces:
       - name: list_items
         method: GET
         path: /items`,
-			wantError: "plugin.response_mapping is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
+			wantError: "plugin.response_mapping is only valid for openapi/graphql providers; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
 		},
 		{
 			name: "multiple api surfaces are rejected",

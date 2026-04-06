@@ -44,8 +44,8 @@ func stubTelemetryFactory() bootstrap.TelemetryFactory {
 	}
 }
 
-func pluginIntegration() config.IntegrationDef {
-	return config.IntegrationDef{
+func pluginIntegration() config.ProviderDef {
+	return config.ProviderDef{
 		Plugin: &config.PluginDef{
 			BaseURL: "https://api.example.test",
 			Operations: []config.InlineOperationDef{
@@ -61,7 +61,7 @@ func validConfig() *config.Config {
 		Datastore: config.DatastoreConfig{Provider: "test-store"},
 		Secrets:   config.SecretsConfig{Provider: "test-secrets"},
 		Telemetry: config.TelemetryConfig{Provider: "test-telemetry"},
-		Integrations: map[string]config.IntegrationDef{
+		Providers: map[string]config.ProviderDef{
 			"alpha": pluginIntegration(),
 		},
 		Server: config.ServerConfig{
@@ -173,7 +173,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
+		cfg.Providers["reports"] = config.ProviderDef{
 			Plugin: plugin,
 		}
 
@@ -217,7 +217,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
+		cfg.Providers["reports"] = config.ProviderDef{
 			Plugin: plugin,
 		}
 
@@ -247,7 +247,7 @@ func TestValidate(t *testing.T) {
 		testutil.CloseOnCleanup(t, specSrv)
 
 		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
+		cfg.Providers["reports"] = config.ProviderDef{
 			Plugin: &config.PluginDef{
 				Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
 				IsDeclarative:     true,
@@ -275,7 +275,7 @@ func TestValidateRejectsInvalidManagedParameters(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
+	cfg.Providers["alpha"] = config.ProviderDef{
 		Plugin: &config.PluginDef{
 			BaseURL: "https://api.example.test",
 			Operations: []config.InlineOperationDef{
@@ -305,7 +305,7 @@ func TestBootstrapMultipleProviders(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations["beta"] = pluginIntegration()
+	cfg.Providers["beta"] = pluginIntegration()
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
@@ -319,7 +319,7 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations = nil
+	cfg.Providers = nil
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
@@ -357,7 +357,7 @@ func TestBootstrapPluginOnlySkipsFactory(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
+	cfg.Providers["alpha"] = config.ProviderDef{
 		Plugin: &config.PluginDef{
 			Command: "echo",
 		},

@@ -84,7 +84,7 @@ type providerMCPWire struct {
 	ToolPrefix string `yaml:"tool_prefix"`
 }
 
-func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
+func (i *ProviderDef) UnmarshalYAML(value *yaml.Node) error {
 	data, err := yaml.Marshal(value)
 	if err != nil {
 		return err
@@ -172,7 +172,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 		plugin.BaseURL = wire.BaseURL
 	}
 
-	*i = IntegrationDef{
+	*i = ProviderDef{
 		Plugin:      plugin,
 		DisplayName: wire.DisplayName,
 		Description: wire.Description,

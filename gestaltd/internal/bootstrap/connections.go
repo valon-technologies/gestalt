@@ -18,12 +18,12 @@ type ConnectionMaps struct {
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	maps := ConnectionMaps{
-		DefaultConnection: make(map[string]string, len(cfg.Integrations)),
-		APIConnection:     make(map[string]string, len(cfg.Integrations)),
-		MCPConnection:     make(map[string]string, len(cfg.Integrations)),
+		DefaultConnection: make(map[string]string, len(cfg.Providers)),
+		APIConnection:     make(map[string]string, len(cfg.Providers)),
+		MCPConnection:     make(map[string]string, len(cfg.Providers)),
 	}
 
-	for name, intg := range cfg.Integrations {
+	for name, intg := range cfg.Providers {
 		defaultConnection := config.PluginConnectionName
 		apiConnection := config.PluginConnectionName
 		mcpConnection := config.PluginConnectionName
@@ -31,7 +31,7 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 		if intg.Plugin != nil {
 			plan, err := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestProvider())
 			if err != nil {
-				return ConnectionMaps{}, fmt.Errorf("integration %q: %w", name, err)
+				return ConnectionMaps{}, fmt.Errorf("provider %q: %w", name, err)
 			}
 			defaultConnection = plan.authDefaultConnection()
 			apiConnection = plan.apiConnection()
@@ -218,7 +218,7 @@ func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string
 	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
 }
 
-func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps, regStore *lazyRegStore) (map[string]OAuthHandler, error) {
+func buildConnectionAuthMap(name string, intg config.ProviderDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps, regStore *lazyRegStore) (map[string]OAuthHandler, error) {
 	manifestProvider := (*pluginmanifestv1.Provider)(nil)
 	if manifest != nil {
 		manifestProvider = manifest.Provider

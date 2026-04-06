@@ -24,23 +24,23 @@ const (
 )
 
 // PluginConnectionName is the implicit connection name used when storing
-// tokens for plugin-only integrations that do not declare YAML connections.
+// tokens for plugin-only providers that do not declare YAML connections.
 const PluginConnectionName = "_plugin"
 
 // PluginConnectionAlias is the user-facing alias that maps to
-// PluginConnectionName. In hybrid integrations, mcp.connection can be set
+// PluginConnectionName. In hybrid providers, mcp.connection can be set
 // to "plugin" to reuse the plugin's OAuth token.
 const PluginConnectionAlias = "plugin"
 
 type Config struct {
-	Auth         AuthConfig                `yaml:"auth"`
-	Datastore    DatastoreConfig           `yaml:"datastore"`
-	Secrets      SecretsConfig             `yaml:"secrets"`
-	Telemetry    TelemetryConfig           `yaml:"telemetry"`
-	Integrations map[string]IntegrationDef `yaml:"providers"`
-	Server       ServerConfig              `yaml:"server"`
-	Egress       EgressConfig              `yaml:"egress"`
-	UI           UIConfig                  `yaml:"ui"`
+	Auth      AuthConfig             `yaml:"auth"`
+	Datastore DatastoreConfig        `yaml:"datastore"`
+	Secrets   SecretsConfig          `yaml:"secrets"`
+	Telemetry TelemetryConfig        `yaml:"telemetry"`
+	Providers map[string]ProviderDef `yaml:"providers"`
+	Server    ServerConfig           `yaml:"server"`
+	Egress    EgressConfig           `yaml:"egress"`
+	UI        UIConfig               `yaml:"ui"`
 }
 
 type TelemetryConfig struct {
@@ -239,7 +239,7 @@ type ServerConfig struct {
 	ArtifactsDir  string `yaml:"artifacts_dir"`
 }
 
-type IntegrationDef struct {
+type ProviderDef struct {
 	Plugin        *PluginDef `yaml:"plugin"`
 	DisplayName   string     `yaml:"display_name"`
 	Description   string     `yaml:"description"`
@@ -248,7 +248,7 @@ type IntegrationDef struct {
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
-// connection. All connections in a single integration must share the same Mode.
+// connection. All connections in a single provider must share the same Mode.
 type ConnectionDef struct {
 	Mode             string                        `yaml:"mode"`
 	Auth             ConnectionAuthDef             `yaml:"auth"`
@@ -517,8 +517,8 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		return nil
 	}
 
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Providers {
+		intg := cfg.Providers[name]
 		if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
@@ -534,11 +534,11 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 
 		node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
 		if err != nil {
-			return fmt.Errorf("expanding managed plugin config for integration %q: %w", name, err)
+			return fmt.Errorf("expanding managed plugin config for provider %q: %w", name, err)
 		}
 
 		intg.Plugin.Config = node
-		cfg.Integrations[name] = intg
+		cfg.Providers[name] = intg
 	}
 
 	return nil
@@ -673,8 +673,8 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		baseDir = filepath.Dir(absPath)
 	}
 
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Providers {
+		intg := cfg.Providers[name]
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
@@ -692,7 +692,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 				intg.Plugin.MCPURL = resolveUpstreamURL(baseDir, intg.Plugin.MCPURL)
 			}
 		}
-		cfg.Integrations[name] = intg
+		cfg.Providers[name] = intg
 	}
 
 }
@@ -711,7 +711,7 @@ func resolveUpstreamURL(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
-// ValidateStructure checks config shape: integration references, plugin
+// ValidateStructure checks config shape: provider references, plugin
 // declarations, connection references, URL template params, egress rules.
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key, auth.provider, or datastore.provider.
@@ -727,24 +727,24 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateUIPlugin(cfg.UI.Plugin); err != nil {
 		return err
 	}
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		if err := validatePluginIntegration(name, intg); err != nil {
+	for name := range cfg.Providers {
+		intg := cfg.Providers[name]
+		if err := validatePluginProvider(name, intg); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ValidateResolvedStructure checks integration fields whose support depends on
+// ValidateResolvedStructure checks provider fields whose support depends on
 // resolved managed plugin manifests. Callers should use this after init has
 // applied locked plugin artifacts into the config. It intentionally does not
 // rerun the full structural validator on the mutated config.
 func ValidateResolvedStructure(cfg *Config) error {
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Providers {
+		intg := cfg.Providers[name]
 		if intg.Plugin == nil {
-			return fmt.Errorf("config validation: integration %q requires a plugin", name)
+			return fmt.Errorf("config validation: provider %q requires a plugin", name)
 		}
 		if err := validateSupportedPluginFields(name, intg.Plugin); err != nil {
 			return err
@@ -770,9 +770,9 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validatePluginIntegration(name string, intg IntegrationDef) error {
+func validatePluginProvider(name string, intg ProviderDef) error {
 	if intg.Plugin == nil {
-		return fmt.Errorf("config validation: integration %q requires a plugin", name)
+		return fmt.Errorf("config validation: provider %q requires a plugin", name)
 	}
 	p := intg.Plugin
 	if p.IsInline() {
@@ -780,7 +780,7 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 			return err
 		}
 	} else {
-		if err := validateExternalPlugin("integration", name, p); err != nil {
+		if err := validateExternalPlugin("provider", name, p); err != nil {
 			return err
 		}
 	}
@@ -789,23 +789,23 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 
 func validateInlinePlugin(name string, p *PluginDef) error {
 	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
-		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
+		return fmt.Errorf("config validation: inline provider %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
 	}
 	if len(p.Operations) > 0 && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "") {
-		return fmt.Errorf("config validation: inline integration %q plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured", name)
+		return fmt.Errorf("config validation: inline provider %q plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured", name)
 	}
-	if err := validateManagedParameterConfig("config validation: integration "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
+	if err := validateManagedParameterConfig("config validation: provider "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
 		return err
 	}
 	for i, op := range p.Operations {
 		if op.Name == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].name is required", name, i)
+			return fmt.Errorf("config validation: provider %q operations[%d].name is required", name, i)
 		}
 		if op.Method == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].method is required", name, i)
+			return fmt.Errorf("config validation: provider %q operations[%d].method is required", name, i)
 		}
 		if op.Path == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].path is required", name, i)
+			return fmt.Errorf("config validation: provider %q operations[%d].path is required", name, i)
 		}
 	}
 	if err := validateInlineConnectionReferences(name, p); err != nil {
@@ -908,7 +908,7 @@ func validateInlineConnectionReferences(name string, p *PluginDef) error {
 
 func validateInlineConnectionDefaults(name string, p *PluginDef) error {
 	declared := declaredInlineConnections(p)
-	return validateConnectionDefaults(name, "inline integration", len(declared), inlineConnectionReferences(p))
+	return validateConnectionDefaults(name, "inline provider", len(declared), inlineConnectionReferences(p))
 }
 
 func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
@@ -916,7 +916,7 @@ func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, 
 }
 
 func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
-	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
+	return validateConnectionDefaults(name, "provider", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
 }
 
 func validateConnectionReferences(name string, declared map[string]struct{}, refs []inlineConnectionReference) error {
@@ -931,7 +931,7 @@ func validateConnectionReferences(name string, declared map[string]struct{}, ref
 		if _, ok := declared[resolved]; ok {
 			continue
 		}
-		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, ref.field, ref.name)
+		return fmt.Errorf("config validation: provider %q %s references undeclared connection %q", name, ref.field, ref.name)
 	}
 	return nil
 }
@@ -1045,7 +1045,7 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		return fmt.Errorf("config validation: %s %q external plugin cannot use inline operations", kind, name)
 	}
 
-	if kind != "integration" {
+	if kind != "provider" {
 		hasInline := plugin.OpenAPI != "" || plugin.GraphQLURL != "" || plugin.MCPURL != "" ||
 			plugin.BaseURL != "" || plugin.Auth != nil || len(plugin.Connections) > 0
 		if hasInline {
@@ -1102,13 +1102,13 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			field:     "plugin.env",
 			present:   len(plugin.Env) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this provider to plugin.source",
 		},
 		{
 			field:     "plugin.allowed_hosts",
 			present:   len(plugin.AllowedHosts) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this provider to plugin.source",
 		},
 		{
 			field:     "plugin.openapi_connection",
@@ -1150,12 +1150,12 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			field:     "plugin.response_mapping",
 			present:   plugin.ResponseMapping != nil,
 			supported: supportsResponseMapping,
-			reason:    "is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
+			reason:    "is only valid for openapi/graphql providers; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
 		},
 	}
 	for _, check := range checks {
 		if check.present && !check.supported {
-			return fmt.Errorf("config validation: integration %q %s %s", name, check.field, check.reason)
+			return fmt.Errorf("config validation: provider %q %s %s", name, check.field, check.reason)
 		}
 	}
 	if !plugin.IsInline() && effectiveProvider != nil {

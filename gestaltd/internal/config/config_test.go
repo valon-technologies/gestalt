@@ -67,7 +67,7 @@ providers:
 	if cfg.Server.EncryptionKey != "server-key" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
-	if got := cfg.Integrations["service-a"].DisplayName; got != "Service A" {
+	if got := cfg.Providers["service-a"].DisplayName; got != "Service A" {
 		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
 	}
 }
@@ -238,7 +238,7 @@ providers:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "plugin.yaml") {
+	if got := cfg.Providers["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "plugin.yaml") {
 		t.Fatalf("unexpected plugin source path: %q", got)
 	}
 }
@@ -515,7 +515,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "local source valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}}},
 				},
 			},
@@ -523,7 +523,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
@@ -531,7 +531,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source path and ref rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Path: "./plugin.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
@@ -540,7 +540,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "nil plugin rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {},
 				},
 			},
@@ -549,7 +549,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source without version rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin"}}},
 				},
 			},
@@ -558,7 +558,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source version without ref rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Version: "1.0.0"}}},
 				},
 			},
@@ -567,7 +567,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "inline plugin with openapi accepted",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}},
 				},
 			},
@@ -575,7 +575,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "inline plugin with auth and openapi accepted",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Providers: map[string]ProviderDef{
 					"sample": {Plugin: &PluginDef{
 						OpenAPI: "https://example.com/spec.json",
 						Auth:    &ConnectionAuthDef{Type: "oauth2"},
@@ -638,10 +638,10 @@ providers:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
+	if got := cfg.Providers["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "plugin.yaml") {
+	if got := cfg.Providers["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "plugin.yaml") {
 		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "plugin.yaml"))
 	}
 }
@@ -750,7 +750,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	plugin := loaded.Integrations["sample"].Plugin
+	plugin := loaded.Providers["sample"].Plugin
 	if plugin == nil {
 		t.Fatal("expected plugin to be loaded")
 	}
@@ -799,7 +799,7 @@ func TestIsInline(t *testing.T) {
 func TestExternalPluginRejectsInlineOperations(t *testing.T) {
 	t.Parallel()
 	cfg := &Config{
-		Integrations: map[string]IntegrationDef{
+		Providers: map[string]ProviderDef{
 			"bad": {
 				Plugin: &PluginDef{
 					Source: &PluginSourceDef{Path: "plugin.yaml"},
@@ -822,7 +822,7 @@ func TestExternalPluginRejectsInlineOperations(t *testing.T) {
 func TestExternalPluginAllowsSpecURL(t *testing.T) {
 	t.Parallel()
 	cfg := &Config{
-		Integrations: map[string]IntegrationDef{
+		Providers: map[string]ProviderDef{
 			"ok": {
 				Plugin: &PluginDef{
 					Source:  &PluginSourceDef{Path: "plugin.yaml"},

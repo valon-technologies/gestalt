@@ -20,7 +20,7 @@ func TestBootstrapProducesStructuredLogs(t *testing.T) { //nolint:paralleltest /
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
+	cfg.Providers = map[string]config.ProviderDef{
 		"alpha": {
 			Plugin: &config.PluginDef{
 				BaseURL: "https://api.example.test",
@@ -80,7 +80,7 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
+	cfg.Providers = map[string]config.ProviderDef{
 		"broken": {
 			Plugin: &config.PluginDef{
 				Command: "/nonexistent/path/to/plugin",

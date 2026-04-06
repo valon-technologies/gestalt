@@ -32,7 +32,7 @@ type Server struct {
 	defaultConnection  map[string]string
 	catalogConnection  map[string]string
 	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	integrationDefs    map[string]config.IntegrationDef
+	integrationDefs    map[string]config.ProviderDef
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	secureCookies      bool
@@ -55,7 +55,7 @@ type Config struct {
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	IntegrationDefs   map[string]config.IntegrationDef
+	ProviderDefs      map[string]config.ProviderDef
 	SecureCookies     bool
 	StateSecret       []byte
 	APITokenTTL       time.Duration
@@ -107,7 +107,7 @@ func New(cfg Config) (*Server, error) {
 		defaultConnection: cfg.DefaultConnection,
 		catalogConnection: cfg.CatalogConnection,
 		connectionAuth:    cfg.ConnectionAuth,
-		integrationDefs:   cfg.IntegrationDefs,
+		integrationDefs:   cfg.ProviderDefs,
 		noAuth:            noAuth,
 		secureCookies:     cfg.SecureCookies,
 		encryptor:         encryptor,
