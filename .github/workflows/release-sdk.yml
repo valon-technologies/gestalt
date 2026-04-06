@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      UV_PYTHON: "3.12"
+      UV_PYTHON: "3.14"
     defaults:
       run:
         working-directory: sdk/python
@@ -86,7 +86,7 @@ jobs:
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
 
       - name: Install Python
-        run: uv python install 3.12
+        run: uv python install 3.14
 
       - name: Normalize package version from tag
         env:
