@@ -41,14 +41,14 @@ func SourceProviderExecutionCommand(root, goos, goarch string) (string, []string
 	if err != nil {
 		return "", nil, nil, err
 	}
-	switch {
-	case kind == sourceProviderKindGo:
+	switch kind {
+	case sourceProviderKindGo:
 		command, cleanup, err := BuildGoProviderTempBinary(root, goos, goarch)
 		if err != nil {
 			return "", nil, nil, err
 		}
 		return command, nil, cleanup, nil
-	case kind == sourceProviderKindPython:
+	case sourceProviderKindPython:
 		return pythonProviderExecutionCommand(root, pythonTarget)
 	default:
 		return "", nil, nil, ErrNoSourceProviderPackage
@@ -68,10 +68,7 @@ func ValidateSourceProviderRelease(root, goos, goarch string) error {
 	if err != nil {
 		return err
 	}
-	if kind == sourceProviderKindPython && (goos != runtime.GOOS || goarch != runtime.GOARCH) {
-		return fmt.Errorf("python source plugins can only be released for the current platform %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-	return nil
+	return validateSourceProviderReleaseKind(kind, goos, goarch)
 }
 
 func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch string) error {
@@ -83,13 +80,20 @@ func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch
 	case sourceProviderKindGo:
 		return BuildGoProviderBinary(root, outputPath, goos, goarch)
 	case sourceProviderKindPython:
-		if err := ValidateSourceProviderRelease(root, goos, goarch); err != nil {
+		if err := validateSourceProviderReleaseKind(kind, goos, goarch); err != nil {
 			return err
 		}
 		return BuildPythonProviderBinary(root, outputPath, pluginName, pythonTarget)
 	default:
 		return ErrNoSourceProviderPackage
 	}
+}
+
+func validateSourceProviderReleaseKind(kind, goos, goarch string) error {
+	if kind == sourceProviderKindPython && (goos != runtime.GOOS || goarch != runtime.GOARCH) {
+		return fmt.Errorf("python source plugins can only be released for the current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	return nil
 }
 
 func HasSourceProviderPackage(root string) (bool, error) {
