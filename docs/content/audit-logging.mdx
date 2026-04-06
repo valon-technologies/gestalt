@@ -1,0 +1,118 @@
+# Audit Logging
+
+`gestaltd` emits audit records as structured logs with `log.type=audit`.
+
+Audit logging covers both invocation traffic and security-sensitive management
+actions, so you can forward one stream to a SIEM, warehouse, or compliance
+backend without having to reconstruct behavior from mixed application logs.
+
+## Coverage
+
+Audit events are emitted for:
+
+- HTTP operation invocations with `source: http`
+- MCP operation invocations with `source: mcp`
+- Other guarded runtime surfaces that use the invocation guard, such as binding
+  hooks, with a surface-specific `source`
+- Login and logout flows
+- Integration connect and disconnect flows
+- API token create and revoke flows
+
+`gestaltd` resolves the authenticated user ID before emitting session-backed
+audit events, so session requests and API-token requests both produce stable
+`user_id` values when a user identity exists.
+
+## Fields
+
+Every audit record includes:
+
+| Field | Meaning |
+| --- | --- |
+| `log.type` | Always `audit` |
+| `event_time` | Event timestamp |
+| `request_id` | Request-scoped correlation ID |
+| `source` | Surface that emitted the event, such as `http`, `mcp`, or `binding:...` |
+| `provider` | Integration key for provider-scoped events |
+| `operation` | Operation or event name |
+| `depth` | Invocation depth for guarded invocation events |
+| `allowed` | Whether `gestaltd` allowed or completed the audited action |
+
+These fields are emitted when available:
+
+| Field | Meaning |
+| --- | --- |
+| `auth_source` | Auth mechanism for the caller: `session`, `api_token`, or `env` |
+| `user_id` | Stable internal user ID |
+| `error` | Denial or failure reason |
+| `client_ip` | Client IP, preferring `X-Forwarded-For` |
+| `remote_addr` | Immediate peer address |
+| `user_agent` | HTTP user agent |
+| `trace_id` | Active OpenTelemetry trace ID |
+| `span_id` | Active OpenTelemetry span ID |
+
+For platform-level events such as API-token CRUD, `provider` is empty because
+the event is not tied to a specific integration.
+
+## Event Names
+
+Invocation events use the catalog operation ID in `operation`.
+
+Non-invocation HTTP audit events use explicit operation names:
+
+- `auth.login.start`
+- `auth.login.complete`
+- `auth.logout`
+- `connection.oauth.start`
+- `connection.oauth.complete`
+- `connection.manual.connect`
+- `connection.pending.select`
+- `connection.disconnect`
+- `api_token.create`
+- `api_token.revoke`
+- `api_token.revoke_all`
+
+## Example
+
+```json
+{
+  "log.type": "audit",
+  "event_time": "2026-04-06T18:23:11.842Z",
+  "request_id": "2a7c1d7f-2b25-4b7a-8ae8-02f4d8f6f2b2",
+  "source": "mcp",
+  "auth_source": "api_token",
+  "user_id": "usr_123",
+  "provider": "github",
+  "operation": "issues_list",
+  "depth": 0,
+  "allowed": true,
+  "trace_id": "0af7651916cd43dd8448eb211c80319c",
+  "span_id": "b7ad6b7169203331"
+}
+```
+
+## Routing
+
+Audit records are standard structured logs, so you route them the same way as
+the rest of `gestaltd` telemetry:
+
+- `telemetry.provider: stdout` writes them to local structured logs
+- `telemetry.provider: otlp` exports them through the OTLP log pipeline
+
+If you need a dedicated sink, route on `log.type=audit` in your collector.
+
+## Metrics Notes
+
+Audit logs are a good source for invocation-based activity metrics. In
+particular, `source`, `auth_source`, `user_id`, `provider`, `operation`, and
+`allowed` are enough to derive distinct-user activity over guarded invocations.
+
+For DAU, WAU, or MAU built from tool usage, filter to successful top-level
+invocations, for example:
+
+- `allowed = true`
+- `depth = 0`
+- non-empty `user_id`
+
+This produces a clean “users who actually invoked a tool” metric. If you need a
+broader product-activity definition, treat the non-invocation audit events as a
+separate metric family rather than mixing them into invocation counts.

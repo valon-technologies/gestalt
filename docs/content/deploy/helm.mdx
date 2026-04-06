@@ -82,7 +82,7 @@ helm upgrade --install gestalt \
 | `config` | Rendered as `/etc/gestalt/config.yaml`. |
 | `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
 | `persistence` | PVC settings for SQLite or other local state. |
-| `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. |
+| `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. Use it when the chart should prepare locked state for published packages, packaged UI bundles, or remote REST and GraphQL upstreams. |
 | `ingress` | Standard ingress settings. |
 | `ingress.hosts[].paths` | Per-host ingress paths and path types. |
 | `managementService` | Optional internal Service for a separate management listener. |
@@ -141,7 +141,7 @@ extraEnv:
         name: gestalt-secrets
         key: oidc-client-secret
   - name: OIDC_REDIRECT_URL
-    value: "https://gestalt.example.com/auth/callback"
+    value: "https://gestalt.example.com/api/v1/auth/login/callback"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
@@ -162,8 +162,9 @@ Service rather than exposing it on the public ingress.
 
 Enable the init container when your config uses:
 
-- `plugin.source`
+- `providers.*.from.source.ref`
 - `ui.plugin.source`
+- remote REST or GraphQL upstreams that you want prepared into locked state
 
 The init container copies the rendered config and runs:
 
@@ -171,4 +172,5 @@ The init container copies the rendered config and runs:
 
 The main container then starts in locked mode against the prepared state.
 
-See [Configuration](/concepts/configuration) for how the lockfile and prepared artifacts fit together.
+See [Configuration](/configuration) for how the lockfile and prepared artifacts
+fit together.

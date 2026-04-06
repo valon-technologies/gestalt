@@ -1,40 +1,4 @@
 # UI Plugins
 
-Gestalt serves two web surfaces from the same `gestaltd` process:
-
-- the client UI at `/`
-- the built-in admin UI at `/admin`
-
-`ui.plugin` replaces only the client UI. The admin UI remains built in.
-
-## Config Shape
-
-```yaml
-ui:
-  plugin:
-    source: github.com/acme/plugins/gestalt-ui
-    version: 1.2.0
-```
-
-## Manifest Requirements
-
-A UI package uses the same manifest system as provider plugins, but the manifest
-kind is `webui`.
-
-The manifest points at an asset root:
-
-```yaml
-kinds:
-  - webui
-webui:
-  asset_root: ui/out
-```
-
-## Runtime Behavior
-
-- `gestaltd init` prepares the UI package and records it in `gestalt.lock.json`.
-- `gestaltd serve --locked` serves the prepared asset root at `/`.
-- If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI.
-- The built-in admin UI remains available at `/admin`.
-
-See [Configuration](/concepts/configuration) for how lock state and prepared UI assets are written and consumed.
+This material has moved to
+[Packaging and Releasing](/plugins/packaging-and-releasing).

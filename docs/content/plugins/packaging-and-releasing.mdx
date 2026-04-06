@@ -1,18 +1,30 @@
 # Packaging and Releasing
 
-Once a plugin is working locally with `from.source.path`, you can publish release archives for distribution. Release archives are self-contained and include a manifest, compiled binaries, and optional assets.
+Once a provider or UI package works locally, you can publish a release archive
+for distribution. Release archives are self-contained and include a manifest,
+optional executable artifacts, and optional static assets.
 
-## Source manifest vs release manifest
+## What can be packaged
 
-Every release archive requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). During local development and `gestaltd plugin release`, pure executable source manifests can stay lean and omit `artifacts` and `entrypoints.provider`. The release command materializes those fields for you.
+Gestalt uses the same packaging system for:
 
-A minimal source manifest for an executable provider:
+- declarative provider packages
+- executable provider plugins
+- packaged web UI bundles
+
+Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
+
+## Source manifests vs release manifests
+
+During local development and `gestaltd plugin release`, executable source
+manifests can omit `artifacts` and `provider.exec.artifact_path`. Release
+packaging materializes those fields for you.
+
+### Minimal executable source manifest
 
 ```yaml
 source: github.com/acme/plugins/my-plugin
 version: 0.1.0
-kinds:
-  - provider
 provider:
   connections:
     default:
@@ -20,18 +32,72 @@ provider:
         type: none
 ```
 
-For Go source plugins, the provider code lives at the module root. You do not write `main.go`; Gestalt synthesizes the wrapper during source execution and release packaging.
+For Go source plugins, the provider code lives at the module root. For Python
+source plugins, Gestalt loads the plugin object declared in `[tool.gestalt]`.
+In both cases, Gestalt synthesizes the runnable wrapper for local source
+execution and release packaging.
 
-### Declarative-only release archives
+### Declarative provider package
 
-A manifest can describe a declarative provider that requires no compiled binary. This is useful for distributing reusable REST providers, OpenAPI-backed integrations, or web UI bundles:
+A manifest can describe a declarative provider that requires no compiled binary.
+This is useful for distributing reusable REST providers or OpenAPI-backed
+integrations:
 
 ```yaml
-name: my-rest-provider
+source: github.com/acme/plugins/support-api
 version: 0.1.0
-kinds:
-  - provider
+provider:
+  connections:
+    default:
+      auth:
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+  surfaces:
+    openapi:
+      document: openapi.yaml
 ```
+
+### Release manifest for an executable provider
+
+Packaged executable providers add `provider.exec.artifact_path` plus concrete
+`artifacts` entries:
+
+```yaml
+source: github.com/acme/plugins/my-plugin
+version: 0.1.0
+provider:
+  exec:
+    artifact_path: artifacts/linux/amd64/provider
+  connections:
+    default:
+      auth:
+        type: none
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/provider
+    sha256: "..."
+```
+
+### UI bundle manifest
+
+UI packages use the same manifest system:
+
+```yaml
+source: github.com/acme/plugins/gestalt-ui
+version: 1.2.0
+webui:
+  asset_root: ui/out
+```
+
+Runtime behavior for UI bundles:
+
+- `gestaltd init` prepares the packaged UI and records it in `gestalt.lock.json`
+- `gestaltd serve --locked` serves the prepared asset root at `/`
+- if `ui.plugin` is omitted, Gestalt falls back to the built-in client UI
+- the built-in admin UI remains available at `/admin`
 
 ## Build a release
 
@@ -43,20 +109,17 @@ gestaltd plugin release --version 0.1.0
 
 Run this from the plugin source directory. It produces release archives and writes a checksums file.
 
-For executable Go plugins, release materializes the executable catalog
-automatically from the provider's typed router before packaging and can target
-multiple platforms.
+For executable Go plugins, release materializes the executable catalog from the
+typed router before packaging and can target multiple platforms.
 
 For Python source plugins, release loads the plugin declared in
 `[tool.gestalt].plugin`, materializes the executable catalog automatically, and
 builds a current-platform executable artifact from the selected Python
 environment.
 
-## Reference a plugin
+## Reference packages from config
 
-There are two ways to reference a plugin from the Gestalt config:
-
-### Local source path
+### Provider source path
 
 Use the source tree directly during development:
 
@@ -68,9 +131,10 @@ providers:
         path: ./plugins/my-plugin/plugin.yaml
 ```
 
-### Versioned source
+### Published provider package or plugin
 
-Reference a published plugin by source and version. `gestaltd init` resolves the release archive and writes it to lock state:
+Reference a published package by source and version. `gestaltd init` resolves
+the release archive and writes it to lock state:
 
 ```yaml
 providers:
@@ -83,15 +147,30 @@ providers:
 
 This is the recommended approach for production deployments.
 
+### UI bundle
+
+Reference a packaged UI bundle separately under `ui.plugin`:
+
+```yaml
+ui:
+  plugin:
+    source: github.com/acme/plugins/gestalt-ui
+    version: 1.2.0
+```
+
 ## Prepared state
 
-When a config references published plugins, run `gestaltd init` to resolve and prepare them:
+When a config references published packages or a packaged UI, run `gestaltd init`
+to resolve and prepare them:
 
 ```sh
 gestaltd init --config ./config.yaml
 ```
 
-This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server using only the prepared state, without fetching or resolving anything at runtime. See [Configuration](/concepts/configuration) for the full startup model.
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts
+under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server
+using only the prepared state, without fetching or resolving anything at
+runtime. See [Configuration](/configuration) for the full startup model.
 
 ## Release archive layout
 
@@ -108,4 +187,9 @@ assets/
   icon.svg
 ```
 
-The exact structure is determined by the manifest. The `schemas/` directory is optional and used for config validation. The `assets/` directory is optional and used for icons or other static files.
+The exact structure is determined by the manifest. `schemas/` is optional and
+used for provider config validation. `assets/` is optional and used for icons or
+other static files.
+
+Use [Plugin Manifests](/reference/plugin-manifests) for the canonical manifest
+reference.

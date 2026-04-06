@@ -206,7 +206,7 @@ webui:
 - `source` and `version` are required.
 - A manifest defines either `provider` or `webui`, not both.
 - Declarative-only provider packages do not require `artifacts`.
-- Pure executable source manifests used with `from.source.path` or `gestaltd plugin release` may omit `artifacts` and `entrypoints.provider`.
+- Pure executable source manifests used with `from.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`.
 - Executable provider packages do require `artifacts` plus `provider.exec.artifact_path`.
 - `config_schema_path` validates `providers.*.config`.
 - Config schemas may be written in JSON or YAML.

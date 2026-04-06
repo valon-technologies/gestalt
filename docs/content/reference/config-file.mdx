@@ -10,6 +10,7 @@ datastore: {}
 secrets: {}
 telemetry: {}
 providers: {}
+egress: {}
 server: {}
 ui: {}
 ```
@@ -51,7 +52,7 @@ server:
 | `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted. |
 | `encryption_key` | Yes | — | Root deployment secret. Used for encryption and derived session material. |
 | `api_token_ttl` | No | `30d` | Lifetime of newly issued API tokens. Accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). |
-| `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Configuration](/concepts/configuration). |
+| `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Configuration](/configuration). |
 
 When `server.management` is configured, Gestalt serves:
 
@@ -202,7 +203,7 @@ secrets:
 
 ## `telemetry`
 
-Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/reference/observability) for the emitted metric inventory and Prometheus name translation.
+Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
 
 ### `stdout`
 
@@ -310,8 +311,8 @@ response, and the built-in admin UI shows that metrics are unavailable.
 
 Audit records are emitted as structured log entries with `log.type=audit`.
 Route them to a dedicated audit backend using OTel Collector attribute-based
-filtering. See [Audit Logging](/reference/audit-logging) for the event schema
-and coverage details, and [Observability](/reference/observability) for export
+filtering. See [Audit Logging](/audit-logging) for the event schema
+and coverage details, and [Observability](/observability) for export
 options.
 
 ## `providers`
@@ -354,13 +355,13 @@ these named entries as integrations.
 | `icon_file` | SVG icon path resolved from the config directory. |
 | `config` | Provider-specific config passed into packaged providers. |
 | `from` | Optional packaged/executable source. Omit it for fully inline providers. |
-| `connections` | Named connections. `default` is the primary connection entry. |
+| `connections` | Named connections. `default` is common but not required if every surface names its connection explicitly. |
 | `headers` | Static headers applied to declarative or spec-backed requests. |
-| `managed_parameters` | Fixed header or path values injected before exposure. |
+| `managed_parameters` | Fixed header or path values injected into OpenAPI or GraphQL-backed operations before exposure. |
 | `response_mapping` | Data and pagination mapping for OpenAPI or GraphQL providers. |
 | `allowed_operations` | Surface allowlist plus `alias` and `description` overrides. |
 | `surfaces` | Declarative REST, OpenAPI, GraphQL, and MCP surfaces. |
-| `expose` | MCP exposure settings such as tool prefix. |
+| `mcp` | MCP exposure settings such as `enabled` and `tool_prefix`. |
 
 ### `providers.*.from`
 
@@ -647,6 +648,34 @@ mcp:
   tool_prefix: github_
 ```
 
+## `egress`
+
+Use `egress` to control outbound requests made through providers and to grant
+operator-managed credentials to specific outbound destinations.
+
+```yaml
+egress:
+  default_action: deny
+  policies:
+    - action: allow
+      provider: github
+      method: GET
+      host: api.github.com
+  credentials:
+    - secret_ref: github-service-token
+      auth_style: bearer
+      host: api.github.com
+```
+
+| Field | Purpose |
+| --- | --- |
+| `default_action` | Global fallback policy. `allow` or `deny`. |
+| `policies` | Static allow or deny rules matched by provider, operation, method, host, path, or subject. |
+| `credentials` | Secret-backed outbound credential grants matched by subject, method, host, or path. |
+
+For credential grants, `auth_style` may be `bearer`, `raw`, `basic`, or
+`none`.
+
 ## `ui`
 
 ```yaml
@@ -664,7 +693,8 @@ ui:
 When `ui` is omitted, `gestaltd` serves the built-in client UI at `/`. When
 `ui.plugin` is configured, the plugin's assets replace that client UI at `/`.
 The built-in admin UI remains available at `/admin`. See
-[UI Plugins](/reference/ui-plugins) for the full workflow.
+[Packaging and Releasing](/plugins/packaging-and-releasing) for the full
+workflow.
 
 ## Validation Rules
 

@@ -29,7 +29,8 @@ all qualify.
 This means the integration has more than one possible connection and no default.
 Set one of:
 
-- `plugin.default_connection`
+- `surfaces.*.connection` in the provider config when there is no
+  `connections.default`
 - `_connection` on the invocation request
 - `--connection` in the client CLI
 
