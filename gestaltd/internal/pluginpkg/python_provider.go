@@ -16,7 +16,6 @@ import (
 
 const (
 	pythonProjectFile   = "pyproject.toml"
-	pythonBuildModule   = "gestalt._build"
 	pythonRuntimeModule = "gestalt._runtime"
 )
 
@@ -66,7 +65,7 @@ func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target string)
 		return fmt.Errorf("detect Python release interpreter: %w", err)
 	}
 
-	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName)
+	cmd := exec.Command(interpreter, "-m", pythonRuntimeModule, "build", sourceDir, target, binaryPath, pluginName)
 	cmd.Dir = sourceDir
 	cmd.Env = append(os.Environ(), pythonBackendEnv()...)
 	cmd.Stdout = os.Stdout

@@ -1012,19 +1012,19 @@ EOF
   exit 0
 fi
 
-if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
+if [ "$#" -ge 3 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ] && [ "$3" = "build" ]; then
   if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
     exit 1
   fi
-  if [ "$#" -ne 6 ]; then
-    echo "unexpected gestalt._build args: $*" >&2
+  if [ "$#" -ne 7 ]; then
+    echo "unexpected gestalt._runtime build args: $*" >&2
     exit 1
   fi
-  root="$3"
-  target="$4"
-  output="$5"
-  name="$6"
+  root="$4"
+  target="$5"
+  output="$6"
+  name="$7"
   if [ "$target" != "provider:plugin" ]; then
     echo "unexpected provider target: $target" >&2
     exit 1
