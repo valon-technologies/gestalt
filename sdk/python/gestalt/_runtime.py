@@ -101,8 +101,7 @@ def main(argv: list[str] | None = None) -> int:
 def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: str) -> None:
     root_path = pathlib.Path(root).resolve()
     output = pathlib.Path(output_path).resolve()
-
-    _load_plugin(target, str(root_path))
+    module_name, _attr_name = _split_target(target)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gestalt-python-release-") as work_dir:
@@ -133,7 +132,7 @@ def build_plugin_binary(root: str, target: str, output_path: str, plugin_name: s
             "--name",
             pyinstaller_name,
             "--hidden-import",
-            target.split(":", 1)[0],
+            module_name,
             "--paths",
             str(root_path),
             "--paths",
@@ -149,10 +148,7 @@ def _load_plugin(target: str, root: str | None = None) -> Plugin:
     if root and root not in sys.path:
         sys.path.insert(0, root)
 
-    module_name, _, attr_name = target.partition(":")
-    if not module_name or not attr_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
-
+    module_name, attr_name = _split_target(target)
     module = importlib.import_module(module_name)
     plugin = getattr(module, attr_name, None)
     if not isinstance(plugin, Plugin):
@@ -161,7 +157,7 @@ def _load_plugin(target: str, root: str | None = None) -> Plugin:
 
 
 def _launcher_source(target: str, plugin_name: str) -> str:
-    module_name, _, attr_name = target.partition(":")
+    module_name, attr_name = _split_target(target)
     return f"""from __future__ import annotations
 
 import importlib
@@ -181,6 +177,13 @@ if __name__ == "__main__":
         raise SystemExit(0)
     serve(_gestalt_plugin)
 """
+
+
+def _split_target(target: str) -> tuple[str, str]:
+    module_name, _, attr_name = target.partition(":")
+    if not module_name or not attr_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
+    return module_name, attr_name
 
 
 def _sdk_import_root() -> pathlib.Path:
