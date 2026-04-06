@@ -2,6 +2,8 @@ package invocation
 
 import (
 	"context"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +21,10 @@ type operationMetrics struct {
 	count      metric.Int64Counter
 	errorCount metric.Int64Counter
 	duration   metric.Float64Histogram
+	refresh    metric.Int64Counter
 }
 
-var operationMetricsOnce = sync.OnceValue(func() operationMetrics {
-	meter := otel.Meter(tracerName)
-
+func newOperationMetrics(meter metric.Meter) operationMetrics {
 	return operationMetrics{
 		count: newInt64Counter(
 			meter,
@@ -41,8 +42,15 @@ var operationMetricsOnce = sync.OnceValue(func() operationMetrics {
 			"Measures gestaltd operation invocation duration.",
 			"s",
 		),
+		refresh: newInt64Counter(
+			meter,
+			"gestaltd.token_refresh.count",
+			"Counts OAuth token refresh attempts performed by gestaltd.",
+		),
 	}
-})
+}
+
+var operationMetricsCache metricCache[operationMetrics]
 
 func recordOperationMetrics(
 	ctx context.Context,
@@ -53,12 +61,16 @@ func recordOperationMetrics(
 	connectionMode string,
 	failed bool,
 ) {
-	metrics := operationMetricsOnce()
+	metrics := operationMetricsCache.load(func(meter metric.Meter) operationMetrics {
+		return newOperationMetrics(meter)
+	})
+	result := metricResult(failed)
 	attrs := []attribute.KeyValue{
 		attrProvider.String(metricAttrValue(provider)),
 		attrOperation.String(metricAttrValue(operation)),
 		attrTransport.String(metricAttrValue(transport)),
 		attrConnectionMode.String(metricAttrValue(connectionMode)),
+		attrResult.String(result),
 	}
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -67,6 +79,17 @@ func recordOperationMetrics(
 	if failed {
 		metrics.errorCount.Add(ctx, 1, metric.WithAttributes(attrs...))
 	}
+}
+
+func recordTokenRefreshMetrics(ctx context.Context, provider string, connectionMode string, failed bool) {
+	metrics := operationMetricsCache.load(func(meter metric.Meter) operationMetrics {
+		return newOperationMetrics(meter)
+	})
+	metrics.refresh.Add(ctx, 1, metric.WithAttributes(
+		attrProvider.String(metricAttrValue(provider)),
+		attrConnectionMode.String(metricAttrValue(connectionMode)),
+		attrResult.String(metricResult(failed)),
+	))
 }
 
 func newInt64Counter(meter metric.Meter, name, desc string) metric.Int64Counter {
@@ -98,9 +121,56 @@ func metricAttrValue(value string) string {
 	return value
 }
 
+func metricResult(failed bool) string {
+	if failed {
+		return "error"
+	}
+	return "success"
+}
+
 func normalizeConnectionMode(mode core.ConnectionMode) string {
 	if mode == "" {
 		return string(core.ConnectionModeUser)
 	}
 	return string(mode)
+}
+
+type metricCache[T any] struct {
+	mu      sync.Mutex
+	key     string
+	metrics T
+}
+
+func (c *metricCache[T]) load(build func(metric.Meter) T) T {
+	provider := otel.GetMeterProvider()
+	if key, ok := meterProviderCacheKey(provider); ok {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.key == key {
+			return c.metrics
+		}
+		metrics := build(provider.Meter(tracerName))
+		c.key = key
+		c.metrics = metrics
+		return metrics
+	}
+	return build(provider.Meter(tracerName))
+}
+
+func meterProviderCacheKey(provider metric.MeterProvider) (string, bool) {
+	if provider == nil {
+		return "", false
+	}
+
+	value := reflect.ValueOf(provider)
+	if !value.IsValid() {
+		return "", false
+	}
+
+	switch value.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer:
+		return value.Type().String() + ":" + strconv.FormatUint(uint64(value.Pointer()), 16), true
+	default:
+		return "", false
+	}
 }
