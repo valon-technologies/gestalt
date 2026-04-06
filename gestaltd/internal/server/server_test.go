@@ -1312,6 +1312,11 @@ func TestListOperations(t *testing.T) {
 			Name: "test-int",
 			Operations: []catalog.CatalogOperation{
 				{
+					ID:          "archive_comment",
+					Description: "Archive a comment",
+					Method:      http.MethodPost,
+				},
+				{
 					ID:          "save_comment",
 					Description: "Create or update a comment",
 					Method:      http.MethodPost,
@@ -1363,21 +1368,24 @@ func TestListOperations(t *testing.T) {
 		t.Fatalf("decoding response: %v", err)
 	}
 	_ = resp.Body.Close()
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 operation, got %d", len(ops))
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
 	}
-	if ops[0].ID != "save_comment" {
-		t.Fatalf("expected save_comment, got %+v", ops)
+	if ops[0].ID != "archive_comment" {
+		t.Fatalf("expected archive_comment first, got %+v", ops)
 	}
-	if len(ops[0].Parameters) != 4 {
-		t.Fatalf("save_comment parameters = %+v, want 4", ops[0].Parameters)
+	if ops[1].ID != "save_comment" {
+		t.Fatalf("expected save_comment second, got %+v", ops)
+	}
+	if len(ops[1].Parameters) != 4 {
+		t.Fatalf("save_comment parameters = %+v, want 4", ops[1].Parameters)
 	}
 	paramsByName := make(map[string]struct {
 		Name     string `json:"name"`
 		Type     string `json:"type"`
 		Required bool   `json:"required"`
-	}, len(ops[0].Parameters))
-	for _, param := range ops[0].Parameters {
+	}, len(ops[1].Parameters))
+	for _, param := range ops[1].Parameters {
 		paramsByName[param.Name] = param
 	}
 	if got := paramsByName["body"]; got.Type != "string" || !got.Required {
@@ -1412,20 +1420,26 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
 		},
+		catalog: &catalog.Catalog{
+			Name: "test-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "zeta_rest", Description: "REST op", Method: http.MethodGet, Transport: catalog.TransportREST},
+			},
+		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			switch token {
 			case testCatalogToken:
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
-						{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "alpha_mcp", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
 					},
 				}, nil
 			case altCatalogToken:
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
-						{ID: "session_only_alt", Description: "Session-only alt op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "beta_mcp_alt", Description: "Session-only alt op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
 					},
 				}, nil
 			default:
@@ -1490,11 +1504,14 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 operation, got %d", len(ops))
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "session_only" {
-		t.Fatalf("expected id 'session_only', got %v", ops[0]["id"])
+	if ops[0]["id"] != "alpha_mcp" {
+		t.Fatalf("expected first id 'alpha_mcp', got %v", ops[0]["id"])
+	}
+	if ops[1]["id"] != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
 	}
 	if gotConnection != testCatalogConnection {
 		t.Fatalf("connection = %q, want %q", gotConnection, testCatalogConnection)
@@ -1515,11 +1532,14 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding override response: %v", err)
 	}
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 override operation, got %d", len(ops))
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "session_only_alt" {
-		t.Fatalf("expected id 'session_only_alt', got %v", ops[0]["id"])
+	if ops[0]["id"] != "beta_mcp_alt" {
+		t.Fatalf("expected first id 'beta_mcp_alt', got %v", ops[0]["id"])
+	}
+	if ops[1]["id"] != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
 	}
 	if gotConnection != altCatalogConnection {
 		t.Fatalf("override list connection = %q, want %q", gotConnection, altCatalogConnection)
@@ -1529,7 +1549,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 
 	body := bytes.NewBufferString(`{"query":"platform"}`)
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", body)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/alpha_mcp", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -1541,8 +1561,8 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("invoke: expected 200, got %d: %s", resp.StatusCode, respBody)
 	}
-	if gotTool != "session_only" {
-		t.Fatalf("expected tool session_only, got %q", gotTool)
+	if gotTool != "alpha_mcp" {
+		t.Fatalf("expected tool alpha_mcp, got %q", gotTool)
 	}
 	if gotToken != testCatalogToken {
 		t.Fatalf("expected token %q, got %q", testCatalogToken, gotToken)
@@ -1552,7 +1572,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 
 	body = bytes.NewBufferString(fmt.Sprintf(`{"query":"expansion","_connection":%q,"_instance":%q}`, altCatalogConnection, altInstance))
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only_alt", body)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/beta_mcp_alt", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -1570,8 +1590,8 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if gotInstance != altInstance {
 		t.Fatalf("override instance = %q, want %q", gotInstance, altInstance)
 	}
-	if gotTool != "session_only_alt" {
-		t.Fatalf("expected tool session_only_alt, got %q", gotTool)
+	if gotTool != "beta_mcp_alt" {
+		t.Fatalf("expected tool beta_mcp_alt, got %q", gotTool)
 	}
 	if gotToken != altCatalogToken {
 		t.Fatalf("expected override token %q, got %q", altCatalogToken, gotToken)

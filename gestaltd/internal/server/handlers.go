@@ -374,6 +374,9 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
+	sort.Slice(cat.Operations, func(i, j int) bool {
+		return cat.Operations[i].ID < cat.Operations[j].ID
+	})
 	writeJSON(w, http.StatusOK, cat.Operations)
 }
 
