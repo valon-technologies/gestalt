@@ -998,19 +998,19 @@ def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
 	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
 set -eu
 
-if [ "$#" -ge 3 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ] && [ "$3" = "build" ]; then
+if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
     exit 1
   fi
-  if [ "$#" -ne 7 ]; then
-    echo "unexpected gestalt._runtime build args: $*" >&2
+  if [ "$#" -ne 6 ]; then
+    echo "unexpected gestalt._build args: $*" >&2
     exit 1
   fi
-  root="$4"
-  target="$5"
-  output="$6"
-  name="$7"
+  root="$3"
+  target="$4"
+  output="$5"
+  name="$6"
   if [ "$target" != "provider:plugin" ]; then
     echo "unexpected provider target: $target" >&2
     exit 1
