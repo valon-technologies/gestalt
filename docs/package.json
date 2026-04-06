@@ -10,15 +10,16 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "16.2.2",
+    "@types/react-dom": "^19.2.3",
+    "next": "^16.2.2",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@types/node": "25.5.0",
-    "@types/react": "18.3.28",
+    "@types/react": "^19.2.14",
     "typescript": "5.9.3"
   }
 }
