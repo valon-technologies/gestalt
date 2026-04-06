@@ -209,9 +209,9 @@ metrics, and exporter metadata described above.
 The admin UI intentionally stays basic:
 
 - summary cards and lightweight charts derived from `/metrics`
-- browser-local chart history with selectable time windows up to 24 hours
+- in-browser time-window and refresh controls for the current page session
 - adjustable browser refresh cadence, including pause
-- no shared history across browsers or replicas
+- no persisted history across page reloads
 - no cross-replica aggregation
 
 It is designed for built-in operator visibility, not as a replacement for a

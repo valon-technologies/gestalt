@@ -158,34 +158,12 @@
         gap: 8px;
       }
 
-      .chip-row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .control-chip,
       .control-select {
         border: 1px solid hsl(var(--border) / 1);
         border-radius: 999px;
         background: color-mix(in srgb, hsl(var(--surface-raised)) 48%, white);
         color: hsl(var(--foreground) / 1);
         font: inherit;
-      }
-
-      .control-chip {
-        cursor: pointer;
-        padding: 8px 12px;
-        transition:
-          background-color 140ms ease,
-          border-color 140ms ease,
-          color 140ms ease;
-      }
-
-      .control-chip.is-active {
-        border-color: transparent;
-        background: color-mix(in srgb, var(--brand) 82%, black);
-        color: white;
       }
 
       .control-select {
@@ -343,16 +321,16 @@
 
       <section class="card controls">
         <div class="control-cluster">
-          <div class="control-group">
+          <label class="control-group" for="time-window-select">
             <span class="label-text">Time window</span>
-            <div class="chip-row" id="time-window-controls">
-              <button class="control-chip" type="button" data-window-key="15m">15 min</button>
-              <button class="control-chip" type="button" data-window-key="1h">1 hour</button>
-              <button class="control-chip" type="button" data-window-key="6h">6 hours</button>
-              <button class="control-chip" type="button" data-window-key="24h">24 hours</button>
-              <button class="control-chip" type="button" data-window-key="all">All</button>
-            </div>
-          </div>
+            <select class="control-select" id="time-window-select">
+              <option value="15m">15 min</option>
+              <option value="1h">1 hour</option>
+              <option value="6h">6 hours</option>
+              <option value="24h">24 hours</option>
+              <option value="all">All</option>
+            </select>
+          </label>
 
           <label class="control-group" for="refresh-interval-select">
             <span class="label-text">Refresh cadence</span>
@@ -365,7 +343,10 @@
           </label>
         </div>
 
-        <p class="metric-note controls-note" id="history-note">Loading chart controls...</p>
+        <p class="metric-note controls-note">
+          Filters the browser's current chart history from authenticated
+          <code>/metrics</code> scrapes. Provider totals stay cumulative.
+        </p>
       </section>
 
       <section class="panel-grid">
@@ -375,7 +356,7 @@
           <div class="chart" id="activity-chart" data-chart-state="empty"></div>
           <p class="metric-note chart-caption">
             Derived from consecutive authenticated <code>/metrics</code> scrapes
-            stored locally in this browser.
+            captured in this browser session.
           </p>
         </article>
 
@@ -407,54 +388,44 @@
           /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
         const DEFAULT_REFRESH_INTERVAL_MS = 15000;
         const HISTORY_RETENTION_MS = 24 * 60 * 60 * 1000;
-        const HISTORY_STORAGE_KEY = "gestalt_admin_metrics_history_v1";
-        const PREFERENCES_STORAGE_KEY = "gestalt_admin_metrics_preferences_v1";
         const TIME_WINDOWS = [
           {
             key: "15m",
             label: "15 min",
-            noteLabel: "the last 15 minutes",
             ms: 15 * 60 * 1000,
           },
           {
             key: "1h",
             label: "1 hour",
-            noteLabel: "the last hour",
             ms: 60 * 60 * 1000,
           },
           {
             key: "6h",
             label: "6 hours",
-            noteLabel: "the last 6 hours",
             ms: 6 * 60 * 60 * 1000,
           },
           {
             key: "24h",
             label: "24 hours",
-            noteLabel: "the last 24 hours",
             ms: 24 * 60 * 60 * 1000,
           },
           {
             key: "all",
             label: "All",
-            noteLabel: "all retained local history",
             ms: null,
           },
         ];
         const REFRESH_OPTIONS = [
-          { value: 15000, label: "15 seconds", noteLabel: "15 seconds" },
-          { value: 30000, label: "30 seconds", noteLabel: "30 seconds" },
-          { value: 60000, label: "1 minute", noteLabel: "1 minute" },
-          { value: 0, label: "Paused", noteLabel: "paused" },
+          { value: 15000, label: "15 seconds" },
+          { value: 30000, label: "30 seconds" },
+          { value: 60000, label: "1 minute" },
+          { value: 0, label: "Paused" },
         ];
         const charts = {};
-        const history = loadHistory();
-        const storedPreferences = loadPreferences();
+        const history = [];
         let latestSnapshot = null;
-        let selectedWindowKey = normalizeWindowKey(storedPreferences.windowKey);
-        let refreshIntervalMs = normalizeRefreshIntervalMs(
-          storedPreferences.refreshIntervalMs,
-        );
+        let selectedWindowKey = "1h";
+        let refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS;
         let refreshTimer = null;
 
         function byId(id) {
@@ -494,90 +465,6 @@
             : "--";
         }
 
-        function sanitizeMetricValue(value) {
-          if (value == null) return null;
-          const numeric = Number(value);
-          return Number.isFinite(numeric) ? numeric : null;
-        }
-
-        function normalizeHistoryEntry(entry) {
-          if (!entry || typeof entry !== "object") return null;
-          const timestamp = Number(entry.timestamp);
-          if (!Number.isFinite(timestamp)) return null;
-
-          return {
-            timestamp,
-            requests: Number.isFinite(Number(entry.requests)) ? Number(entry.requests) : 0,
-            errors: Number.isFinite(Number(entry.errors)) ? Number(entry.errors) : 0,
-            avgLatencyMs: sanitizeMetricValue(entry.avgLatencyMs),
-            p95LatencyMs: sanitizeMetricValue(entry.p95LatencyMs),
-            requestsTotal: Number.isFinite(Number(entry.requestsTotal))
-              ? Number(entry.requestsTotal)
-              : 0,
-            errorsTotal: Number.isFinite(Number(entry.errorsTotal))
-              ? Number(entry.errorsTotal)
-              : 0,
-          };
-        }
-
-        function pruneHistoryEntries(entries) {
-          const cutoff = Date.now() - HISTORY_RETENTION_MS;
-          return entries
-            .filter(function (entry) {
-              return entry && entry.timestamp >= cutoff;
-            })
-            .sort(function (left, right) {
-              return left.timestamp - right.timestamp;
-            });
-        }
-
-        function loadHistory() {
-          try {
-            const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-            if (!raw) return [];
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) return [];
-            return pruneHistoryEntries(
-              parsed
-                .map(function (entry) {
-                  return normalizeHistoryEntry(entry);
-                })
-                .filter(Boolean),
-            );
-          } catch {
-            return [];
-          }
-        }
-
-        function persistHistory() {
-          try {
-            window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
-          } catch {}
-        }
-
-        function loadPreferences() {
-          try {
-            const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === "object" ? parsed : {};
-          } catch {
-            return {};
-          }
-        }
-
-        function persistPreferences() {
-          try {
-            window.localStorage.setItem(
-              PREFERENCES_STORAGE_KEY,
-              JSON.stringify({
-                windowKey: selectedWindowKey,
-                refreshIntervalMs,
-              }),
-            );
-          } catch {}
-        }
-
         function normalizeWindowKey(key) {
           return TIME_WINDOWS.some(function (windowOption) {
             return windowOption.key === key;
@@ -603,29 +490,9 @@
           );
         }
 
-        function selectedRefreshOption() {
-          return (
-            REFRESH_OPTIONS.find(function (option) {
-              return option.value === refreshIntervalMs;
-            }) || REFRESH_OPTIONS[0]
-          );
-        }
-
-        function updateHistoryNote() {
-          byId("history-note").textContent =
-            `Activity and latency charts use ${selectedWindow().noteLabel} stored locally ` +
-            `in this browser for up to 24 hours. Provider totals stay cumulative. ` +
-            `Refresh cadence: ${selectedRefreshOption().noteLabel}.`;
-        }
-
         function syncControlState() {
-          document.querySelectorAll("[data-window-key]").forEach(function (button) {
-            const isActive = button.getAttribute("data-window-key") === selectedWindowKey;
-            button.classList.toggle("is-active", isActive);
-            button.setAttribute("aria-pressed", isActive ? "true" : "false");
-          });
+          byId("time-window-select").value = selectedWindowKey;
           byId("refresh-interval-select").value = String(refreshIntervalMs);
-          updateHistoryNote();
         }
 
         function scheduleRefreshTimer() {
@@ -639,18 +506,16 @@
         }
 
         function bindControls() {
-          document.querySelectorAll("[data-window-key]").forEach(function (button) {
-            button.addEventListener("click", function () {
-              const nextKey = button.getAttribute("data-window-key") || "";
-              const normalized = normalizeWindowKey(nextKey);
-              if (normalized === selectedWindowKey) return;
-              selectedWindowKey = normalized;
-              persistPreferences();
-              syncControlState();
-              if (latestSnapshot) {
-                renderCharts(latestSnapshot);
-              }
-            });
+          byId("time-window-select").addEventListener("change", function (event) {
+            const target = event.target;
+            if (!target || typeof target.value !== "string") return;
+            const nextKey = normalizeWindowKey(target.value);
+            if (nextKey === selectedWindowKey) return;
+            selectedWindowKey = nextKey;
+            syncControlState();
+            if (latestSnapshot) {
+              renderCharts(latestSnapshot);
+            }
           });
 
           byId("refresh-interval-select").addEventListener("change", function (event) {
@@ -659,7 +524,6 @@
             const nextValue = normalizeRefreshIntervalMs(target.value);
             if (nextValue === refreshIntervalMs) return;
             refreshIntervalMs = nextValue;
-            persistPreferences();
             syncControlState();
             scheduleRefreshTimer();
             if (refreshIntervalMs > 0) {
@@ -897,7 +761,6 @@
           while (history.length > 0 && history[0].timestamp < cutoff) {
             history.shift();
           }
-          persistHistory();
         }
 
         function visibleHistory() {
@@ -1129,10 +992,7 @@
             byId("summary-avg-latency").textContent = formatDuration(snapshot.avgLatencySeconds);
             byId("summary-p95-latency").textContent = formatDuration(snapshot.p95LatencySeconds);
             renderCharts(snapshot);
-            setStatus(
-              `Last refreshed ${new Date().toLocaleTimeString()} · window ${selectedWindow().label}`,
-              "ok",
-            );
+            setStatus(`Last refreshed ${new Date().toLocaleTimeString()}`, "ok");
           } catch (error) {
             const message =
               error instanceof Error ? error.message : "Failed to load Prometheus metrics";

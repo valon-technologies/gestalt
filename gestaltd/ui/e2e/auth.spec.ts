@@ -142,18 +142,10 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
     expect(chartColors?.border).toMatch(/^rgba?\(/);
     expect(chartColors?.foreground).toMatch(/^rgba?\(/);
     await expect(page.getByText("Time window")).toBeVisible();
-    await expect(page.getByRole("button", { name: "1 hour" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(page.locator("#time-window-select")).toHaveValue("1h");
     await expect(page.locator("#refresh-interval-select")).toHaveValue("15000");
-    await expect(page.locator("#history-note")).toContainText("last hour");
-    await page.getByRole("button", { name: "15 min" }).click();
-    await expect(page.getByRole("button", { name: "15 min" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(page.locator("#history-note")).toContainText("last 15 minutes");
+    await page.locator("#time-window-select").selectOption("15m");
+    await expect(page.locator("#time-window-select")).toHaveValue("15m");
     await expect(page.getByText("Top providers")).toBeVisible();
     await expect(page.locator("#provider-bars")).toContainText("slash\\nname");
     await expect(page.locator("#provider-bars .bar-name").first()).toHaveText("slash\\nname");
