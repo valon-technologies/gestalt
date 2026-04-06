@@ -103,7 +103,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 
 	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-generated-provider")), 0o644)
 	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(filepath.ToSlash(filepath.Join("provider", "provider.go")), []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.1.0",

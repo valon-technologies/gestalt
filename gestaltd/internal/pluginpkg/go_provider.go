@@ -14,7 +14,7 @@ import (
 	"text/template"
 )
 
-const goProviderPackageTarget = "./provider"
+const goProviderPackageTarget = "."
 const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")

@@ -969,7 +969,7 @@ func newCompiledManifestBackedProviderReleaseFixture(t *testing.T, dir string) s
 
 func writeStaticCatalogProviderMain(t *testing.T, dir string) {
 	t.Helper()
-	writeStaticCatalogProviderMainAt(t, dir, filepath.ToSlash(filepath.Join("provider", "provider.go")))
+	writeStaticCatalogProviderMainAt(t, dir, "provider.go")
 }
 
 func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
