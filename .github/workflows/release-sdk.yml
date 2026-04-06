@@ -75,13 +75,27 @@ jobs:
     name: Publish Python SDK
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      PYTHON_REPOSITORY: ${{ vars.GAR_PYTHON_REPOSITORY }}
       UV_PYTHON: "3.14"
     defaults:
       run:
         working-directory: sdk/python
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Authenticate to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
 
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
 
@@ -104,19 +118,18 @@ jobs:
 
       - name: Publish distributions
         env:
-          GESTALT_PYTHON_PUBLISH_URL: ${{ secrets.GESTALT_PYTHON_PUBLISH_URL }}
-          UV_PUBLISH_TOKEN: ${{ secrets.GESTALT_PYTHON_PUBLISH_TOKEN }}
-          UV_PUBLISH_USERNAME: ${{ secrets.GESTALT_PYTHON_PUBLISH_USERNAME }}
-          UV_PUBLISH_PASSWORD: ${{ secrets.GESTALT_PYTHON_PUBLISH_PASSWORD }}
+          UV_PUBLISH_URL: https://${{ env.REGION }}-python.pkg.dev/${{ env.PROJECT_ID }}/${{ env.PYTHON_REPOSITORY }}/
+          UV_PUBLISH_USERNAME: oauth2accesstoken
+          UV_PUBLISH_PASSWORD: ${{ steps.gcp-auth.outputs.access_token }}
         run: |
-          if [ -z "${GESTALT_PYTHON_PUBLISH_URL}" ]; then
-            echo "GESTALT_PYTHON_PUBLISH_URL must be configured" >&2
+          if [ -z "${PROJECT_ID}" ] || [ -z "${REGION}" ] || [ -z "${PYTHON_REPOSITORY}" ]; then
+            echo "GCP_PROJECT_ID, GCP_REGION, and GAR_PYTHON_REPOSITORY must be configured" >&2
             exit 1
           fi
 
-          if [ -z "${UV_PUBLISH_TOKEN}" ] && { [ -z "${UV_PUBLISH_USERNAME}" ] || [ -z "${UV_PUBLISH_PASSWORD}" ]; }; then
-            echo "configure GESTALT_PYTHON_PUBLISH_TOKEN or GESTALT_PYTHON_PUBLISH_USERNAME and GESTALT_PYTHON_PUBLISH_PASSWORD" >&2
+          if [ -z "${UV_PUBLISH_PASSWORD}" ]; then
+            echo "failed to mint Google access token for Artifact Registry" >&2
             exit 1
           fi
 
-          uv publish --publish-url "${GESTALT_PYTHON_PUBLISH_URL}"
+          uv publish
