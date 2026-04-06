@@ -3,6 +3,14 @@ name: Publish Scoped GitHub Release
 on:
   workflow_call:
     inputs:
+      component-name:
+        description: Display name used in the release title and body.
+        required: true
+        type: string
+      version-prefix:
+        description: Tag prefix to strip when rendering the release version.
+        required: true
+        type: string
       tag-glob:
         description: Tag glob used to find the previous release tag.
         required: true
@@ -13,6 +21,21 @@ on:
         type: string
       download-artifact-pattern:
         description: Optional artifact name pattern to download and attach to the release.
+        required: false
+        default: ''
+        type: string
+      component-summary:
+        description: Optional summary paragraph shown near the top of the release body.
+        required: false
+        default: ''
+        type: string
+      install-markdown:
+        description: Optional markdown block with install or upgrade guidance.
+        required: false
+        default: ''
+        type: string
+      exclude-subject-patterns:
+        description: Optional newline-delimited regex patterns for commit subjects to omit from release notes.
         required: false
         default: ''
         type: string
@@ -36,26 +59,31 @@ jobs:
           pattern: ${{ inputs.download-artifact-pattern }}
           path: release
           merge-multiple: true
+      - name: Compute release metadata
+        id: meta
+        run: |
+          version="${GITHUB_REF_NAME#${{ inputs.version-prefix }}}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${{ inputs.component-name }} ${version}" >> "$GITHUB_OUTPUT"
       - name: Generate scoped release notes
         env:
+          COMPONENT_NAME: ${{ inputs.component-name }}
+          COMPONENT_SUMMARY: ${{ inputs.component-summary }}
+          EXCLUDE_SUBJECT_PATTERNS: ${{ inputs.exclude-subject-patterns }}
+          INSTALL_MARKDOWN: ${{ inputs.install-markdown }}
           PATH_FILTERS: ${{ inputs.path-filters }}
+          VERSION_PREFIX: ${{ inputs.version-prefix }}
         run: |
-          path_filters=()
-          while IFS= read -r path; do
-            [[ -n "$path" ]] || continue
-            path_filters+=("$path")
-          done <<< "$PATH_FILTERS"
-
-          .github/scripts/generate-release-notes.sh \
+          python3 .github/scripts/generate-release-notes.py \
             "${{ inputs.tag-glob }}" \
             "${{ github.ref_name }}" \
-            release-notes.md \
-            "${path_filters[@]}"
+            release-notes.md
       - name: Create GitHub Release with assets
         if: ${{ inputs.download-artifact-pattern != '' }}
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           files: release/*
+          name: ${{ steps.meta.outputs.release_name }}
           body_path: release-notes.md
           draft: false
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
@@ -63,6 +91,7 @@ jobs:
         if: ${{ inputs.download-artifact-pattern == '' }}
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
+          name: ${{ steps.meta.outputs.release_name }}
           body_path: release-notes.md
           draft: false
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
