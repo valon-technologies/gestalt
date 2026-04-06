@@ -21,6 +21,14 @@ import (
 // status message in the /ready response.
 type ReadinessChecker func() string
 
+type RouteProfile int
+
+const (
+	RouteProfileAll RouteProfile = iota
+	RouteProfilePublic
+	RouteProfileManagement
+)
+
 type Server struct {
 	router             chi.Router
 	handler            http.Handler
@@ -46,6 +54,7 @@ type Server struct {
 	mcpHandler         http.Handler
 	clientUI           http.Handler
 	adminUI            http.Handler
+	routeProfile       RouteProfile
 }
 
 type Config struct {
@@ -67,6 +76,7 @@ type Config struct {
 	MCPHandler        http.Handler
 	ClientUI          http.Handler
 	AdminUI           http.Handler
+	RouteProfile      RouteProfile
 }
 
 func New(cfg Config) (*Server, error) {
@@ -122,6 +132,7 @@ func New(cfg Config) (*Server, error) {
 		mcpHandler:        cfg.MCPHandler,
 		clientUI:          cfg.ClientUI,
 		adminUI:           cfg.AdminUI,
+		routeProfile:      cfg.RouteProfile,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

@@ -1,0 +1,23 @@
+{{- $management := .Values.config.server.management | default dict }}
+{{- if and .Values.managementService.enabled (get $management "port") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gestalt.fullname" . }}-management
+  labels:
+    {{- include "gestalt.labels" . | nindent 4 }}
+  {{- with .Values.managementService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.managementService.type }}
+  ports:
+    - port: {{ .Values.managementService.port }}
+      targetPort: management
+      protocol: TCP
+      name: management
+  selector:
+    {{- include "gestalt.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+{{- end }}

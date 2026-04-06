@@ -14,23 +14,47 @@ func (s *Server) routes() {
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
-	s.mountCoreRoutes(r)
-	s.mountMCPRoutes(r)
-	s.mountAPIRoutes(r)
-	s.mountAdminUIRoutes(r)
+	switch s.routeProfile {
+	case RouteProfilePublic:
+		s.mountCoreRoutes(r, metricsHidden)
+		s.mountMCPRoutes(r)
+		s.mountAPIRoutes(r)
+		s.mountManagementHiddenRoutes(r)
+	case RouteProfileManagement:
+		s.mountCoreRoutes(r, metricsUnauthenticated)
+		s.mountAdminUIRoutes(r)
+	default:
+		s.mountCoreRoutes(r, metricsAuthenticated)
+		s.mountMCPRoutes(r)
+		s.mountAPIRoutes(r)
+		s.mountAdminUIRoutes(r)
+	}
 
 	if s.clientUI != nil {
 		r.NotFound(s.clientUI.ServeHTTP)
 	}
 }
 
-func (s *Server) mountCoreRoutes(r chi.Router) {
+type metricsExposure int
+
+const (
+	metricsHidden metricsExposure = iota
+	metricsAuthenticated
+	metricsUnauthenticated
+)
+
+func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
-	r.Group(func(r chi.Router) {
-		r.Use(s.authMiddleware)
+	switch exposure {
+	case metricsAuthenticated:
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			r.HandleFunc("/metrics", s.servePrometheusMetrics)
+		})
+	case metricsUnauthenticated:
 		r.HandleFunc("/metrics", s.servePrometheusMetrics)
-	})
+	}
 }
 
 func (s *Server) mountAdminUIRoutes(r chi.Router) {
@@ -42,6 +66,13 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
 	})
 	r.Handle("/admin/*", http.StripPrefix("/admin", s.adminUI))
+}
+
+func (s *Server) mountManagementHiddenRoutes(r chi.Router) {
+	notFound := http.NotFoundHandler()
+	r.Handle("/metrics", notFound)
+	r.Handle("/admin", notFound)
+	r.Handle("/admin/*", notFound)
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {

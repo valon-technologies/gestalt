@@ -147,7 +147,7 @@ func runServer(env *bootstrapEnv) error {
 		}
 	}
 
-	srv, err := server.New(server.Config{
+	baseServerConfig := server.Config{
 		Auth:              result.Auth,
 		AuditSink:         result.AuditSink,
 		Datastore:         result.Datastore,
@@ -168,41 +168,84 @@ func runServer(env *bootstrapEnv) error {
 		MCPHandler:        mcpHandler,
 		ClientUI:          clientUI,
 		AdminUI:           adminUI,
-	})
+	}
+
+	publicProfile := server.RouteProfileAll
+	if env.Config.Server.ManagementAddr() != "" {
+		publicProfile = server.RouteProfilePublic
+	}
+	baseServerConfig.RouteProfile = publicProfile
+
+	srv, err := server.New(baseServerConfig)
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
 	}
 
-	addr := fmt.Sprintf(":%d", env.Config.Server.Port)
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           srv,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+	type namedHTTPServer struct {
+		name   string
+		server *http.Server
 	}
 
-	listenErr := make(chan error, 1)
-	go func() {
-		slog.Info("gestaltd listening", "addr", addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			listenErr <- err
+	newHTTPServer := func(name, addr string, handler http.Handler) *http.Server {
+		return &http.Server{
+			Addr:              addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxHeaderBytes:    1 << 20,
 		}
-	}()
+	}
+
+	servers := []namedHTTPServer{{
+		name:   "public",
+		server: newHTTPServer("public", env.Config.Server.PublicAddr(), srv),
+	}}
+
+	if managementAddr := env.Config.Server.ManagementAddr(); managementAddr != "" {
+		managementConfig := baseServerConfig
+		managementConfig.RouteProfile = server.RouteProfileManagement
+		managementConfig.MCPHandler = nil
+		managementConfig.ClientUI = nil
+		managementSrv, err := server.New(managementConfig)
+		if err != nil {
+			return fmt.Errorf("creating management server: %w", err)
+		}
+		servers = append(servers, namedHTTPServer{
+			name:   "management",
+			server: newHTTPServer("management", managementAddr, managementSrv),
+		})
+	}
+
+	type listenFailure struct {
+		name string
+		err  error
+	}
+	listenErr := make(chan listenFailure, len(servers))
+	for _, entry := range servers {
+		entry := entry
+		go func() {
+			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.server.Addr)
+			if err := entry.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				listenErr <- listenFailure{name: entry.name, err: err}
+			}
+		}()
+	}
 
 	defer func() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer drainCancel()
-		if err := httpServer.Shutdown(drainCtx); err != nil {
-			slog.Warn("server shutdown", "error", err)
+		for _, entry := range servers {
+			if err := entry.server.Shutdown(drainCtx); err != nil {
+				slog.Warn("server shutdown", "listener", entry.name, "error", err)
+			}
 		}
 	}()
 
 	select {
 	case <-result.ProvidersReady:
 		slog.Info("all providers ready", "count", len(result.Providers.List()))
-	case err := <-listenErr:
-		return fmt.Errorf("http server: %v", err)
+	case failure := <-listenErr:
+		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
 	case <-env.Ctx.Done():
 		return nil
 	}
@@ -219,8 +262,8 @@ func runServer(env *bootstrapEnv) error {
 	slog.Info("MCP endpoint enabled", "path", "/mcp")
 
 	select {
-	case err := <-listenErr:
-		return fmt.Errorf("http server: %v", err)
+	case failure := <-listenErr:
+		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
 	case <-env.Ctx.Done():
 	}
 
@@ -379,6 +422,8 @@ func logConfigSummary(path string, cfg *config.Config) {
 	slog.Info("config loaded",
 		"config_file", path,
 		"server_port", cfg.Server.Port,
+		"server_public_addr", cfg.Server.PublicAddr(),
+		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"auth_provider", cfg.Auth.Provider,

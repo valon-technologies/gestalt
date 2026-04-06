@@ -41,7 +41,12 @@ datastore:
   provider: data-store
 server:
   encryption_key: server-key
-  port: 9090
+  public:
+    host: 127.0.0.1
+    port: 9090
+  management:
+    host: 127.0.0.1
+    port: 9191
 providers:
   service-a:
     display_name: Service A

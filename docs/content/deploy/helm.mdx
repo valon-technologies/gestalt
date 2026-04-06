@@ -85,13 +85,27 @@ helm upgrade --install gestalt \
 | `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. |
 | `ingress` | Standard ingress settings. |
 | `ingress.hosts[].paths` | Per-host ingress paths and path types. |
+| `managementService` | Optional internal Service for a separate management listener. |
 
 ## Example Values
 
 ```yaml
+service:
+  type: LoadBalancer
+  port: 8080
+
+managementService:
+  enabled: true
+  type: ClusterIP
+  port: 9090
+
 config:
   server:
-    port: 8080
+    public:
+      port: 8080
+    management:
+      host: 0.0.0.0
+      port: 9090
     base_url: "${GESTALT_BASE_URL}"
     encryption_key: "${GESTALT_ENCRYPTION_KEY}"
   auth:
@@ -137,6 +151,12 @@ extraEnv:
 pluginInit:
   enabled: true
 ```
+
+This configuration keeps the public UI and API on port `8080` while exposing
+`/admin` and `/metrics` only through the internal `gestalt-management` Service
+on port `9090`. If operators need browser access to `/admin`, place an
+internal-only ingress, VPN, or identity-aware proxy in front of that management
+Service rather than exposing it on the public ingress.
 
 ## When To Enable `pluginInit`
 
