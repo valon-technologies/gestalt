@@ -57,7 +57,7 @@ See [Configuration](/concepts/configuration) for the relationship between `init`
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get|set|unset|list` | Manage the local client config. |
 | `gestalt integrations list` | List integrations from the server. |
-| `gestalt integrations connect NAME` | Start an integration OAuth flow. |
+| `gestalt integrations connect NAME` | Connect an integration through OAuth or interactive manual auth. |
 | `gestalt invoke INTEGRATION [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt describe INTEGRATION OPERATION` | Show one operation's parameter contract. |
 | `gestalt tokens create|list|revoke` | Manage Gestalt API tokens. |
@@ -97,6 +97,10 @@ directories until it finds the nearest `.gestalt.json`.
 
 - `--connection`
 - `--instance`
+
+When the selected integration or connection uses manual auth instead of OAuth,
+the CLI now prompts for the required credential fields and connection
+parameters using the same metadata surfaced in the web UI.
 
 ### Invoke Flags
 

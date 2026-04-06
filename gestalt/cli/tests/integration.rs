@@ -530,6 +530,13 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
 #[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+        .create();
     let mock = server
         .mock("POST", "/api/v1/auth/start-oauth")
         .match_header("Authorization", "Bearer test-token")
@@ -558,6 +565,13 @@ fn test_connect_includes_connection_and_instance() {
 #[test]
 fn test_connect_omits_null_connection_and_instance() {
     let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+        .create();
     let mock = server
         .mock("POST", "/api/v1/auth/start-oauth")
         .match_header("Authorization", "Bearer test-token")

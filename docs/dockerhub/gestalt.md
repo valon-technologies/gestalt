@@ -77,7 +77,7 @@ jobs:
 | `init`                      | Interactive setup wizard               |
 | `config get/set/unset/list` | Manage persistent configuration        |
 | `integrations list`         | List available integrations            |
-| `integrations connect`      | Connect an integration via OAuth       |
+| `integrations connect`      | Connect an integration via OAuth or interactive manual auth |
 | `invoke <integ> <op>`       | Execute an integration operation       |
 | `describe <integ> <op>`     | Describe an integration operation      |
 | `tokens create/list/revoke` | Manage API tokens                      |

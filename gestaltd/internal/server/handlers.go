@@ -1640,10 +1640,16 @@ type tokenMaterial struct {
 }
 
 type postConnectResult struct {
-	Status       string `json:"status"`
-	Integration  string `json:"integration,omitempty"`
-	SelectionURL string `json:"selection_url,omitempty"`
-	PendingToken string `json:"pending_token,omitempty"`
+	Status       string                   `json:"status"`
+	Integration  string                   `json:"integration,omitempty"`
+	SelectionURL string                   `json:"selection_url,omitempty"`
+	PendingToken string                   `json:"pending_token,omitempty"`
+	Candidates   []discoveryCandidateInfo `json:"candidates,omitempty"`
+}
+
+type discoveryCandidateInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
@@ -1731,6 +1737,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				Integration:  tm.Integration,
 				SelectionURL: pendingConnectionPath,
 				PendingToken: pendingToken,
+				Candidates:   discoveryCandidateInfos(candidates),
 			}, nil
 		}
 	}
@@ -1739,4 +1746,18 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 		return nil, err
 	}
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+}
+
+func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCandidateInfo {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]discoveryCandidateInfo, len(candidates))
+	for i, candidate := range candidates {
+		out[i] = discoveryCandidateInfo{
+			ID:   candidate.ID,
+			Name: candidate.Name,
+		}
+	}
+	return out
 }
