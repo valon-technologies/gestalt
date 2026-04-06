@@ -273,14 +273,6 @@ func TestPluginFingerprint_ChangesWithName(t *testing.T) {
 	}
 }
 
-func TestLockPluginKey(t *testing.T) {
-	t.Parallel()
-
-	if got := LockPluginKey("integration", "example"); got != "integration:example" {
-		t.Fatalf("LockPluginKey = %q", got)
-	}
-}
-
 func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	t.Parallel()
 
@@ -289,7 +281,6 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	lock := &Lockfile{
 		Version:   999,
 		Providers: make(map[string]LockProviderEntry),
-		Plugins:   make(map[string]LockPluginEntry),
 	}
 	if err := WriteLockfile(lockPath, lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
@@ -312,19 +303,24 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	want := &Lockfile{
 		Version: LockVersion,
 		Providers: map[string]LockProviderEntry{
-			"test-provider": {
-				Fingerprint: "test-fp",
-				Provider:    ".gestaltd/providers/test.json",
+			"example": {
+				Fingerprint:   "provider-fp",
+				Source:        "github.com/test-org/test-repo/test-plugin",
+				Version:       "1.0.0",
+				ResolvedURL:   "https://example.com/example.tar.gz",
+				ArchiveSHA256: "abc123",
+				Manifest:      ".gestaltd/providers/example/plugin.json",
+				Executable:    ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
-		Plugins: map[string]LockPluginEntry{
-			"integration:example": {
-				Fingerprint: "plugin-fp",
-				Source:      "github.com/test-org/test-repo/test-plugin",
-				Version:     "1.0.0",
-				Manifest:    ".gestaltd/plugins/integration_example/plugin.json",
-				Executable:  ".gestaltd/plugins/integration_example/artifacts/darwin/arm64/provider",
-			},
+		UI: &LockUIEntry{
+			Fingerprint:   "ui-fp",
+			Source:        "github.com/test-org/test-repo/test-ui",
+			Version:       "2.0.0",
+			ResolvedURL:   "https://example.com/ui.tar.gz",
+			ArchiveSHA256: "def456",
+			Manifest:      ".gestaltd/ui/plugin.json",
+			AssetRoot:     ".gestaltd/ui/assets",
 		},
 	}
 	if err := WriteLockfile(lockPath, want); err != nil {
@@ -338,10 +334,13 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Version != want.Version {
 		t.Fatalf("Version = %d, want %d", got.Version, want.Version)
 	}
-	if got.Providers["test-provider"].Fingerprint != want.Providers["test-provider"].Fingerprint {
+	if got.Providers["example"].Fingerprint != want.Providers["example"].Fingerprint {
 		t.Fatal("provider fingerprint mismatch")
 	}
-	if got.Plugins["integration:example"].Source != want.Plugins["integration:example"].Source || got.Plugins["integration:example"].Version != want.Plugins["integration:example"].Version {
-		t.Fatal("plugin source mismatch")
+	if got.Providers["example"].Source != want.Providers["example"].Source || got.Providers["example"].Version != want.Providers["example"].Version {
+		t.Fatal("provider source mismatch")
+	}
+	if got.UI == nil || got.UI.Source != want.UI.Source || got.UI.Version != want.UI.Version {
+		t.Fatal("ui lock entry mismatch")
 	}
 }

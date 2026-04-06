@@ -74,7 +74,8 @@ For a typical deployment directory, that looks like:
 deploy/
   config.yaml
   gestalt.lock.json
-  .gestaltd/plugins/...
+  .gestaltd/providers/...
+  .gestaltd/ui/...
 ```
 
 If `server.artifacts_dir` or `--artifacts-dir` is set, the `.gestaltd/` directory is written there instead. The lockfile still lives next to the config file.
@@ -98,6 +99,34 @@ That identifies the intended plugin version. The lockfile records the prepared r
 - the exact release asset that was selected
 - the digest of the downloaded archive
 - the prepared manifest and executable or UI asset paths that `gestaltd` will use at runtime
+
+The lockfile is organized by surface rather than by prefixed string keys:
+
+```json
+{
+  "version": 1,
+  "providers": {
+    "example": {
+      "fingerprint": "...",
+      "source": "github.com/acme/plugins/example",
+      "version": "1.2.3",
+      "resolved_url": "https://github.com/...",
+      "archive_sha256": "...",
+      "manifest": ".gestaltd/providers/example/plugin.yaml",
+      "executable": ".gestaltd/providers/example/artifacts/linux/amd64/provider"
+    }
+  },
+  "ui": {
+    "fingerprint": "...",
+    "source": "github.com/acme/plugins/web",
+    "version": "1.2.3",
+    "resolved_url": "https://github.com/...",
+    "archive_sha256": "...",
+    "manifest": ".gestaltd/ui/plugin.yaml",
+    "asset_root": ".gestaltd/ui/dist"
+  }
+}
+```
 
 In other words:
 
