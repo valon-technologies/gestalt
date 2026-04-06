@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib
 import os
 import pathlib
@@ -5,6 +7,7 @@ import signal
 import sys
 from concurrent import futures
 from dataclasses import dataclass
+from typing import Any
 
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
@@ -12,6 +15,7 @@ from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
 GRPC_SERVER_MAX_WORKERS = 4
+USAGE = "usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE"
 
 
 @dataclass(frozen=True)
@@ -21,64 +25,32 @@ class RuntimeArgs:
     plugin_name: str | None = None
 
 
+@dataclass(frozen=True)
+class _RuntimeImports:
+    grpc: Any
+    json_format: Any
+    plugin_pb2: Any
+    plugin_pb2_grpc: Any
+
+
 def serve(plugin: Plugin) -> None:
-    import grpc
-    from google.protobuf import json_format
+    runtime = _runtime_imports()
+    socket_path = _socket_path_from_env()
+    _remove_stale_socket(socket_path)
 
-    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
-
-    socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
-    if not socket_path:
-        raise RuntimeError(f"{ENV_PLUGIN_SOCKET} is required")
-
-    if os.path.exists(socket_path):
-        os.unlink(socket_path)
-
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS))
-
-    class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
-        def GetMetadata(self, _request, _context):
-            return plugin_pb2.ProviderMetadata(
-                min_protocol_version=CURRENT_PROTOCOL_VERSION,
-                max_protocol_version=CURRENT_PROTOCOL_VERSION,
-            )
-
-        def StartProvider(self, request, _context):
-            config = {}
-            if request.HasField("config"):
-                config = json_format.MessageToDict(
-                    request.config,
-                    preserving_proto_field_name=True,
-                )
-            plugin.configure_provider(request.name, config)
-            return plugin_pb2.StartProviderResponse(protocol_version=CURRENT_PROTOCOL_VERSION)
-
-        def Execute(self, request, _context):
-            params = {}
-            if request.HasField("params"):
-                params = json_format.MessageToDict(
-                    request.params,
-                    preserving_proto_field_name=True,
-                )
-            status, body = plugin.execute(
-                request.operation,
-                params,
-                Request(
-                    token=request.token,
-                    connection_params=dict(request.connection_params),
-                ),
-            )
-            return plugin_pb2.OperationResult(status=status, body=body)
-
-    plugin_pb2_grpc.add_ProviderPluginServicer_to_server(ProviderServicer(), server)
+    server = runtime.grpc.server(
+        futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
+    )
+    runtime.plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
+        _provider_servicer(
+            plugin=plugin,
+            runtime=runtime,
+        ),
+        server,
+    )
     server.add_insecure_port(f"unix:{socket_path}")
     server.start()
-
-    def _shutdown(_signum, _frame):
-        server.stop(grace=2)
-
-    signal.signal(signal.SIGTERM, _shutdown)
-    signal.signal(signal.SIGINT, _shutdown)
+    _register_shutdown_handlers(server)
     server.wait_for_termination()
 
 
@@ -92,9 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     if runtime_args.plugin_name:
         plugin.name = runtime_args.plugin_name
 
-    catalog_path = os.environ.get(ENV_WRITE_CATALOG)
-    if catalog_path:
-        plugin.write_catalog(catalog_path)
+    if _write_catalog_if_requested(plugin):
         return 0
 
     serve(plugin)
@@ -120,7 +90,9 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
 
 
 def _bundle_root() -> pathlib.Path:
-    return pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
+    return pathlib.Path(
+        getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent)
+    )
 
 
 def _load_plugin(args: RuntimeArgs) -> Plugin:
@@ -136,7 +108,107 @@ def _load_plugin(args: RuntimeArgs) -> Plugin:
 
 
 def _print_usage() -> None:
-    print("usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE", file=sys.stderr)
+    print(USAGE, file=sys.stderr)
+
+
+def _write_catalog_if_requested(plugin: Plugin) -> bool:
+    catalog_path = os.environ.get(ENV_WRITE_CATALOG)
+    if not catalog_path:
+        return False
+
+    plugin.write_catalog(catalog_path)
+    return True
+
+
+def _socket_path_from_env() -> pathlib.Path:
+    socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
+    if not socket_path:
+        raise RuntimeError(f"{ENV_PLUGIN_SOCKET} is required")
+    return pathlib.Path(socket_path)
+
+
+def _remove_stale_socket(socket_path: pathlib.Path) -> None:
+    if socket_path.exists():
+        socket_path.unlink()
+
+
+def _register_shutdown_handlers(server: Any) -> None:
+    def _shutdown(_signum, _frame):
+        server.stop(grace=2)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+
+def _provider_servicer(*, plugin: Plugin, runtime: _RuntimeImports):
+    class ProviderServicer(runtime.plugin_pb2_grpc.ProviderPluginServicer):
+        def GetMetadata(self, _request, _context):
+            return runtime.plugin_pb2.ProviderMetadata(
+                min_protocol_version=CURRENT_PROTOCOL_VERSION,
+                max_protocol_version=CURRENT_PROTOCOL_VERSION,
+            )
+
+        def StartProvider(self, request, _context):
+            plugin.configure_provider(
+                request.name,
+                _message_to_dict(
+                    field_name="config",
+                    json_format=runtime.json_format,
+                    message=request.config,
+                    request=request,
+                ),
+            )
+            return runtime.plugin_pb2.StartProviderResponse(
+                protocol_version=CURRENT_PROTOCOL_VERSION
+            )
+
+        def Execute(self, request, _context):
+            status, body = plugin.execute(
+                request.operation,
+                _message_to_dict(
+                    field_name="params",
+                    json_format=runtime.json_format,
+                    message=request.params,
+                    request=request,
+                ),
+                Request(
+                    token=request.token,
+                    connection_params=dict(request.connection_params),
+                ),
+            )
+            return runtime.plugin_pb2.OperationResult(status=status, body=body)
+
+    return ProviderServicer()
+
+
+def _message_to_dict(
+    *,
+    field_name: str,
+    json_format: Any,
+    message: Any,
+    request: Any,
+) -> dict[str, Any]:
+    if not request.HasField(field_name):
+        return {}
+
+    return json_format.MessageToDict(
+        message,
+        preserving_proto_field_name=True,
+    )
+
+
+def _runtime_imports() -> _RuntimeImports:
+    import grpc
+    from google.protobuf import json_format
+
+    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
+
+    return _RuntimeImports(
+        grpc=grpc,
+        json_format=json_format,
+        plugin_pb2=plugin_pb2,
+        plugin_pb2_grpc=plugin_pb2_grpc,
+    )
 
 
 if __name__ == "__main__":
