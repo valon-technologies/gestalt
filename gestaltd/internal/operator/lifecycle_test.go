@@ -195,9 +195,7 @@ name = "local-python-provider"
 [tool.gestalt]
 plugin = "provider:plugin"
 `, "\n")), 0o644)
-	writeTestFile("provider.py", []byte(`from __future__ import annotations
-
-from typing import Optional
+	writeTestFile("provider.py", []byte(`from typing import Optional
 
 import gestalt
 
@@ -264,14 +262,16 @@ def status_zero(_req: gestalt.Request) -> gestalt.Response[dict[str, bool]]:
     return gestalt.Response(status=0, body={"ok": True})
 `), 0o644)
 	sdkPath := localPythonSDKPath(t)
+	pythonDepsPath := filepath.Join(dir, ".python-deps")
+	installPyYAMLForTest(t, python3Path, pythonDepsPath)
 	writeTestFile(filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(strings.TrimSpace(
 		fmt.Sprintf(`
 			#!/bin/sh
 			set -eu
 
-			export PYTHONPATH=%q${PYTHONPATH:+:$PYTHONPATH}
+			export PYTHONPATH=%q:%q${PYTHONPATH:+:$PYTHONPATH}
 			exec %q "$@"
-		`, sdkPath, python3Path))+"\n"), 0o755)
+		`, pythonDepsPath, sdkPath, python3Path))+"\n"), 0o755)
 
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
@@ -304,9 +304,7 @@ providers:
         path: ./plugin.yaml
 `
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
-	writeTestFile("exercise.py", []byte(`from __future__ import annotations
-
-import json
+	writeTestFile("exercise.py", []byte(`import json
 
 import gestalt
 import provider
@@ -380,7 +378,7 @@ print(json.dumps({
 	if !filtersParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing nested object parameter type: %s", catalogText)
 	}
-	optionalModelParams := regexp.MustCompile(`(?s)- id: maybe_filters.*?- name: owner\n\s+type: string\n\s+default: ""`)
+	optionalModelParams := regexp.MustCompile(`(?s)- id: maybe_filters.*?- name: owner\n\s+type: string\n\s+default: ''`)
 	if !optionalModelParams.MatchString(catalogText) {
 		t.Fatalf("catalog missing parameters for Optional model input: %s", catalogText)
 	}
@@ -388,7 +386,7 @@ print(json.dumps({
 	if !limitParam.MatchString(catalogText) {
 		t.Fatalf("catalog missing integer parameter type: %s", catalogText)
 	}
-	emptyStringDefault := regexp.MustCompile(`(?m)- name: prefix\n\s+type: string\n\s+default: ""$`)
+	emptyStringDefault := regexp.MustCompile(`(?m)- name: prefix\n\s+type: string\n\s+default: ''$`)
 	if !emptyStringDefault.MatchString(catalogText) {
 		t.Fatalf("catalog missing empty string default: %s", catalogText)
 	}
@@ -500,6 +498,26 @@ func localPythonSDKPath(t *testing.T) string {
 		t.Fatalf("Stat(%s): %v", path, err)
 	}
 	return path
+}
+
+func installPyYAMLForTest(t *testing.T, pythonPath, target string) {
+	t.Helper()
+
+	cmd := exec.Command(
+		pythonPath,
+		"-m",
+		"pip",
+		"install",
+		"--disable-pip-version-check",
+		"--quiet",
+		"--target",
+		target,
+		"PyYAML==6.0.3",
+	)
+	result, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install PyYAML for test: %v\n%s", err, result)
+	}
 }
 
 func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {

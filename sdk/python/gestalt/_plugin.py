@@ -8,6 +8,8 @@ import types
 from dataclasses import MISSING
 from typing import Any, Generic, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
 
+import yaml
+
 ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG"
 
 T = TypeVar("T")
@@ -473,85 +475,16 @@ def _slug_name(value: str) -> str:
     return cleaned or "plugin"
 
 
-def _yaml_dump(value: Any, indent: int = 0) -> str:
-    return "\n".join(_yaml_lines(value, indent)) + "\n"
+class _CatalogDumper(yaml.SafeDumper):
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> Any:
+        return super().increase_indent(flow, False)
 
 
-def _yaml_lines(value: Any, indent: int) -> list[str]:
-    prefix = "  " * indent
-    if isinstance(value, dict):
-        lines: list[str] = []
-        for key, item in value.items():
-            if isinstance(item, (dict, list)):
-                nested = _yaml_lines(item, indent + 1)
-                if nested:
-                    lines.append(f"{prefix}{key}:")
-                    lines.extend(nested)
-                else:
-                    lines.append(f"{prefix}{key}: {_yaml_scalar(item)}")
-            else:
-                lines.append(f"{prefix}{key}: {_yaml_scalar(item)}")
-        return lines
-    if isinstance(value, list):
-        lines: list[str] = []
-        for item in value:
-            if isinstance(item, (dict, list)):
-                nested = _yaml_lines(item, indent + 1)
-                if nested:
-                    first, *rest = nested
-                    lines.append(f"{prefix}- {first.lstrip()}")
-                    lines.extend(rest)
-                else:
-                    lines.append(f"{prefix}- {_yaml_scalar(item)}")
-            else:
-                lines.append(f"{prefix}- {_yaml_scalar(item)}")
-        return lines
-    return [f"{prefix}{_yaml_scalar(value)}"]
-
-
-def _yaml_scalar(value: Any) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "null"
-    if isinstance(value, str):
-        if _is_yaml_plain_string(value):
-            return value
-        return json.dumps(value)
-    return json.dumps(value)
-
-
-_yaml_bool_like = {"true", "false", "null", "~", "yes", "no", "on", "off"}
-_yaml_number_pattern = re.compile(
-    r"""
-    ^
-    (?:
-        [-+]?(?:0|[1-9][0-9]*)
-        (?:\.[0-9]+)?
-        (?:[eE][-+]?[0-9]+)?
-      |
-        [-+]?\.[0-9]+
-        (?:[eE][-+]?[0-9]+)?
+def _yaml_dump(value: Any) -> str:
+    return yaml.dump(
+        value,
+        Dumper=_CatalogDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
     )
-    $
-    """,
-    re.VERBOSE,
-)
-
-
-def _is_yaml_plain_string(value: str) -> bool:
-    if value == "" or value != value.strip():
-        return False
-    if value.lower() in _yaml_bool_like:
-        return False
-    if _yaml_number_pattern.match(value):
-        return False
-    if "\n" in value or "\r" in value or "\t" in value:
-        return False
-    if value[0] in "-?:,[]{}#&*!|>'\"%@`":
-        return False
-    if ": " in value or value.endswith(":"):
-        return False
-    if " #" in value:
-        return False
-    return True
