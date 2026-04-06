@@ -77,7 +77,6 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 			}
 		}
 	}
-	m.catalog.SortOperations()
 	integration.CompileSchemas(m.catalog)
 	return m, nil
 }

@@ -173,7 +173,6 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 		op.Transport = catalog.TransportREST
 		merged.Operations = append(merged.Operations, op)
 	}
-	merged.SortOperations()
 	return merged
 }
 

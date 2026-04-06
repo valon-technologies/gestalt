@@ -1581,6 +1581,130 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestListOperations_SortsOperationsByID(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		ops: []core.Operation{
+			{Name: "zeta_op", Description: "Zeta", Method: http.MethodGet},
+			{Name: "alpha_op", Description: "Alpha", Method: http.MethodPost},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var ops []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
+	}
+	if ops[0].ID != "alpha_op" {
+		t.Fatalf("ops[0].ID = %q, want %q", ops[0].ID, "alpha_op")
+	}
+	if ops[1].ID != "zeta_op" {
+		t.Fatalf("ops[1].ID = %q, want %q", ops[1].ID, "zeta_op")
+	}
+}
+
+func TestListOperations_SortsMergedSessionCatalogByID(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{
+			Name: "test-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "zeta_rest", Description: "REST op", Method: http.MethodGet, Transport: catalog.TransportREST},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != testCatalogToken {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{
+				Name: "test-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "alpha_mcp", Description: "MCP op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+				},
+			}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			ListTokensForConnectionFn: func(_ context.Context, _, integration, connection string) ([]*core.IntegrationToken, error) {
+				if integration != "test-int" {
+					return nil, fmt.Errorf("unexpected integration %q", integration)
+				}
+				if connection != testCatalogConnection {
+					return nil, fmt.Errorf("unexpected connection %q", connection)
+				}
+				return []*core.IntegrationToken{{AccessToken: testCatalogToken, Instance: "default"}}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(ops))
+	}
+	if ops[0].ID != "alpha_mcp" {
+		t.Fatalf("ops[0].ID = %q, want %q", ops[0].ID, "alpha_mcp")
+	}
+	if ops[1].ID != "zeta_rest" {
+		t.Fatalf("ops[1].ID = %q, want %q", ops[1].ID, "zeta_rest")
+	}
+}
+
 func TestListOperations_NotFound(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {

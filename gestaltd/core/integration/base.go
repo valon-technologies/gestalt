@@ -117,12 +117,7 @@ func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {
 	return b.DiscoveryDef
 }
 
-func (b *Base) SetCatalog(c *catalog.Catalog) {
-	if c != nil {
-		c.SortOperations()
-	}
-	b.catalog = c
-}
+func (b *Base) SetCatalog(c *catalog.Catalog) { b.catalog = c }
 
 func (b *Base) Catalog() *catalog.Catalog { return b.catalog }
 

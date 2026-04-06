@@ -171,26 +171,3 @@ func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
 	}
 }
-
-func TestMergedCatalogSortsOperationsByID(t *testing.T) {
-	t.Parallel()
-
-	merged, err := composite.NewMerged("test", "Test", "desc", "",
-		&fakeProvider{name: "api", ops: []core.Operation{{Name: "zeta"}}},
-		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "alpha"}}},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cat := merged.Catalog()
-	if len(cat.Operations) != 2 {
-		t.Fatalf("len(Operations) = %d, want 2", len(cat.Operations))
-	}
-	if cat.Operations[0].ID != "alpha" {
-		t.Fatalf("operation[0].ID = %q, want %q", cat.Operations[0].ID, "alpha")
-	}
-	if cat.Operations[1].ID != "zeta" {
-		t.Fatalf("operation[1].ID = %q, want %q", cat.Operations[1].ID, "zeta")
-	}
-}

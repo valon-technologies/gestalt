@@ -3,7 +3,6 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -83,28 +82,7 @@ func (c *Catalog) Clone() *Catalog {
 		out.Headers[k] = v
 	}
 	copy(out.Operations, c.Operations)
-	out.SortOperations()
 	return out
-}
-
-func (c *Catalog) SortOperations() {
-	if c == nil || len(c.Operations) < 2 {
-		return
-	}
-	sort.SliceStable(c.Operations, func(i, j int) bool {
-		left := c.Operations[i]
-		right := c.Operations[j]
-		if left.ID != right.ID {
-			return left.ID < right.ID
-		}
-		if left.Transport != right.Transport {
-			return left.Transport < right.Transport
-		}
-		if left.Method != right.Method {
-			return left.Method < right.Method
-		}
-		return left.Path < right.Path
-	})
 }
 
 func LoadCatalogYAML(data []byte) (*Catalog, error) {
@@ -115,7 +93,6 @@ func LoadCatalogYAML(data []byte) (*Catalog, error) {
 	if err := catalog.Validate(); err != nil {
 		return nil, err
 	}
-	catalog.SortOperations()
 	return &catalog, nil
 }
 
