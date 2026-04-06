@@ -20,3 +20,31 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+
+  - package-ecosystem: gomod
+    directory: /gestaltd
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: gomod
+    directory: /sdk/go
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: npm
+    directory: /gestaltd/ui
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
