@@ -7,7 +7,7 @@
 - a built-in admin UI at `/admin`
 - `/health` and `/ready` endpoints
 - an `/mcp` endpoint when providers expose tools
-- support for REST, GraphQL, MCP, and packaged plugins
+- support for REST, GraphQL, MCP, and source or published plugins
 
 ## Quick reference
 
@@ -22,8 +22,8 @@
 - Default config path: `/etc/gestalt/config.yaml`
 - Default writable data and artifacts dir: `/data`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config uses `providers.*.from.package`,
-  `providers.*.from.source`, or a packaged UI, run `init` first.
+- Locked startup is the default. If your config uses `providers.*.from.source.ref`
+  or `ui.plugin.source`, run `init` first.
 
 ## Supported tags
 
@@ -184,10 +184,10 @@ You can also use it to check startup behavior directly:
 docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
-## Packaging plugins
+## Releasing plugins
 
-If you build a plugin package in Docker, compile your binaries into a plugin
-directory first, then package that directory with `gestaltd`:
+If you build a plugin release in Docker, run `gestaltd plugin release` from the
+plugin source directory:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest AS gestaltd
@@ -197,8 +197,8 @@ RUN apk add --no-cache git
 COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
-RUN go build -o ./my-plugin/artifacts/linux/amd64/provider ./plugins/cmd/myplugin && \
-    gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz && \
+RUN cd ./my-plugin && \
+    gestaltd plugin release --version 0.1.0 && \
     gestaltd init --config ./deploy/config.yaml
 ```
 

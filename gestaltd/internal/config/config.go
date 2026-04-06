@@ -53,7 +53,6 @@ type UIConfig struct {
 }
 
 type UIPluginDef struct {
-	Package string `yaml:"package"`
 	Source  string `yaml:"source"`
 	Version string `yaml:"version"`
 
@@ -61,7 +60,7 @@ type UIPluginDef struct {
 }
 
 func (p *UIPluginDef) HasManagedArtifacts() bool {
-	return p != nil && (p.Package != "" || p.Source != "")
+	return p != nil && p.Source != ""
 }
 
 type PluginSourceDef struct {
@@ -99,10 +98,9 @@ type EgressCredentialGrant struct {
 }
 
 type PluginDef struct {
-	Command string            `yaml:"command"`
+	Command string            `yaml:"-"`
 	Source  *PluginSourceDef  `yaml:"source"`
-	Package string            `yaml:"package"`
-	Args    []string          `yaml:"args"`
+	Args    []string          `yaml:"-"`
 	Env     map[string]string `yaml:"env"`
 
 	Config       yaml.Node `yaml:"config"`
@@ -142,7 +140,7 @@ func (p *PluginDef) IsInline() bool {
 	if p == nil {
 		return false
 	}
-	if p.Source != nil || p.Package != "" || p.Command != "" {
+	if p.Source != nil {
 		return false
 	}
 	return p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "" || len(p.Operations) > 0 ||
@@ -150,7 +148,7 @@ func (p *PluginDef) IsInline() bool {
 }
 
 func (p *PluginDef) HasManagedArtifacts() bool {
-	return p != nil && (p.Package != "" || p.HasManagedSource())
+	return p != nil && p.HasManagedSource()
 }
 
 func (p *PluginDef) HasLocalSource() bool {
@@ -681,8 +679,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
 		if intg.Plugin != nil {
-			intg.Plugin.Command = resolveExecutablePath(baseDir, intg.Plugin.Command)
-			intg.Plugin.Package = resolvePackagePath(baseDir, intg.Plugin.Package)
 			if intg.Plugin.Source != nil {
 				intg.Plugin.Source.Path = resolveRelativePath(baseDir, intg.Plugin.Source.Path)
 			}
@@ -699,9 +695,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		cfg.Integrations[name] = intg
 	}
 
-	if cfg.UI.Plugin != nil {
-		cfg.UI.Plugin.Package = resolvePackagePath(baseDir, cfg.UI.Plugin.Package)
-	}
 }
 
 func resolveRelativePath(baseDir, value string) string {
@@ -711,24 +704,7 @@ func resolveRelativePath(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
-func resolveExecutablePath(baseDir, value string) string {
-	if value == "" || filepath.IsAbs(value) {
-		return value
-	}
-	if strings.HasPrefix(value, ".") || strings.ContainsRune(value, os.PathSeparator) {
-		return filepath.Clean(filepath.Join(baseDir, value))
-	}
-	return value
-}
-
 func resolveUpstreamURL(baseDir, value string) string {
-	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
-		return value
-	}
-	return filepath.Clean(filepath.Join(baseDir, value))
-}
-
-func resolvePackagePath(baseDir, value string) string {
 	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
 		return value
 	}
@@ -1036,10 +1012,7 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		}
 	}
 	sourceCount := 0
-	if plugin.Command != "" || plugin.HasLocalSource() {
-		sourceCount++
-	}
-	if plugin.Package != "" {
+	if plugin.HasLocalSource() {
 		sourceCount++
 	}
 	if plugin.HasManagedSource() {
@@ -1047,9 +1020,9 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	}
 	switch {
 	case sourceCount == 0:
-		return fmt.Errorf("config validation: %s %q plugin.source, plugin.command, or plugin.package is required", kind, name)
+		return fmt.Errorf("config validation: %s %q plugin.source is required", kind, name)
 	case sourceCount > 1:
-		return fmt.Errorf("config validation: %s %q plugin.source, plugin.command, and plugin.package are mutually exclusive", kind, name)
+		return fmt.Errorf("config validation: %s %q plugin.source.path and plugin.source.ref are mutually exclusive", kind, name)
 	}
 
 	if plugin.HasManagedSource() {
@@ -1066,18 +1039,6 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 
 	if plugin.HasLocalSource() && plugin.SourceVersion() != "" {
 		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
-	}
-	if plugin.Package != "" && plugin.SourceVersion() != "" {
-		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
-	}
-	if plugin.Command == "" && len(plugin.Args) > 0 {
-		return fmt.Errorf("config validation: %s %q plugin.args are only valid with plugin.command", kind, name)
-	}
-	if plugin.Command != "" && !plugin.HasLocalSource() && !plugin.HasResolvedManifest() {
-		return fmt.Errorf("config validation: %s %q plugin.source.path is required when plugin.command is set", kind, name)
-	}
-	if strings.HasPrefix(plugin.Package, "http://") {
-		return fmt.Errorf("config validation: %s %q plugin.package requires HTTPS; plain HTTP is not supported", kind, name)
 	}
 
 	if len(plugin.Operations) > 0 {
@@ -1100,7 +1061,7 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 		return nil
 	}
 	if plugin.HasManagedArtifacts() && !plugin.HasResolvedManifest() {
-		// Package/source plugins may gain supported surfaces or declarative
+		// Managed-source plugins may gain supported surfaces or declarative
 		// behavior from the resolved manifest. Validate those fields once init has
 		// prepared the artifact and loaded the manifest.
 		return nil
@@ -1141,13 +1102,13 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			field:     "plugin.env",
 			present:   len(plugin.Env) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source, plugin.command, or plugin.package",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
 		},
 		{
 			field:     "plugin.allowed_hosts",
 			present:   len(plugin.AllowedHosts) > 0,
 			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source, plugin.command, or plugin.package",
+			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
 		},
 		{
 			field:     "plugin.openapi_connection",
@@ -1225,18 +1186,8 @@ func validateUIPlugin(plugin *UIPluginDef) error {
 	if plugin == nil {
 		return nil
 	}
-	sourceCount := 0
-	if plugin.Package != "" {
-		sourceCount++
-	}
-	if plugin.Source != "" {
-		sourceCount++
-	}
-	switch {
-	case sourceCount == 0:
-		return fmt.Errorf("config validation: ui plugin.package or plugin.source is required")
-	case sourceCount > 1:
-		return fmt.Errorf("config validation: ui plugin.package and plugin.source are mutually exclusive")
+	if plugin.Source == "" {
+		return fmt.Errorf("config validation: ui plugin.source is required")
 	}
 
 	if plugin.Source != "" {
@@ -1251,12 +1202,6 @@ func validateUIPlugin(plugin *UIPluginDef) error {
 		}
 	}
 
-	if plugin.Package != "" && plugin.Version != "" {
-		return fmt.Errorf("config validation: ui plugin.version is only valid with plugin.source")
-	}
-	if strings.HasPrefix(plugin.Package, "http://") {
-		return fmt.Errorf("config validation: ui plugin.package requires HTTPS; plain HTTP is not supported")
-	}
 	return nil
 }
 

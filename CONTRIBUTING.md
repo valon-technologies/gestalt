@@ -7,7 +7,7 @@
 | `gestaltd/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
 | `gestaltd/core` | Public interfaces for auth, datastore, secrets, and providers. |
 | `gestaltd/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other server internals. |
-| `plugins` | External plugin packages (declarative and compiled). |
+| `plugins` | External plugin source trees and release archives. |
 | `sdk` | Public SDKs and plugin manifest definitions. |
 | `gestaltd/ui` | Frontend that is embedded into the server build. |
 | `docs` | Documentation site. |

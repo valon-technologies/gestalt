@@ -171,13 +171,7 @@ Then invoke it:
 gestalt invoke my-plugin greet -p name=Gestalt
 ```
 
-## Package and release
-
-Create a package:
-
-```sh
-gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
-```
+## Release
 
 Build a release:
 
@@ -185,7 +179,7 @@ Build a release:
 gestaltd plugin release --version 0.1.0
 ```
 
-Gestalt materializes the executable catalog automatically from the typed router during local source-plugin execution and package/release.
+Gestalt materializes the executable catalog automatically from the typed router during local source-plugin execution and release.
 
 ## Hybrid providers
 

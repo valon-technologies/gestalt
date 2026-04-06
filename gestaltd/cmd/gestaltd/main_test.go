@@ -143,7 +143,7 @@ providers:
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(string(out), `plugin.source, plugin.command, or plugin.package is required`) {
+	if !strings.Contains(string(out), `plugin.source is required`) {
 		t.Fatalf("expected provider-source validation error, got: %s", out)
 	}
 }

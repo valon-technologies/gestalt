@@ -59,7 +59,7 @@ providers:
 
 Use `allowed_operations` to restrict which operations are exposed and to rename them with `alias`.
 
-### Packaged plugin
+### Local source plugin
 
 ```yaml
 providers:
@@ -67,28 +67,29 @@ providers:
     display_name: Gmail
     description: Read and send Gmail messages
     from:
-      package: ./dist/gmail-plugin.tar.gz
+      source:
+        path: ./plugins/gmail/plugin.yaml
     mcp:
       enabled: true
       tool_prefix: gmail_
 ```
 
-The three ways to reference a plugin are:
+The two ways to reference a plugin are:
 
-- `from.command`: run an executable directly (best for local development)
-- `from.package`: load a local directory, local archive, or HTTPS archive
-- `from.source` with `from.version`: resolve a published plugin during `gestaltd init`
+- `from.source.path`: load a local plugin source tree (best for local development)
+- `from.source.ref` with `from.source.version`: resolve a published plugin during `gestaltd init`
 
 ### Plugin with additional API surfaces
 
-A packaged plugin can also expose spec-backed surfaces alongside its own operations:
+A source-backed plugin can also expose spec-backed surfaces alongside its own operations:
 
 ```yaml
 providers:
   support:
     display_name: Support
     from:
-      package: ./dist/support-plugin.tar.gz
+      source:
+        path: ./plugins/support/plugin.yaml
     connections:
       mcp:
         mode: user

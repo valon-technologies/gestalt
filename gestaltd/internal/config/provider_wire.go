@@ -25,10 +25,7 @@ type providerWire struct {
 }
 
 type providerSourceWire struct {
-	Command      string                    `yaml:"command"`
 	Source       *providerPluginSourceWire `yaml:"source"`
-	Package      string                    `yaml:"package"`
-	Args         []string                  `yaml:"args"`
 	Env          map[string]string         `yaml:"env"`
 	AllowedHosts []string                  `yaml:"allowed_hosts"`
 }
@@ -105,10 +102,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	plugin := &PluginDef{
-		Command:           wire.From.Command,
 		Source:            pluginSourceFromWire(wire.From.Source),
-		Package:           wire.From.Package,
-		Args:              wire.From.Args,
 		Env:               wire.From.Env,
 		Config:            wire.Config,
 		AllowedHosts:      wire.From.AllowedHosts,

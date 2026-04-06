@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -29,86 +28,11 @@ func runPlugin(args []string) error {
 	case "-h", "--help", "help":
 		printPluginUsage(os.Stderr)
 		return flag.ErrHelp
-	case "package":
-		return runPluginPackage(args[1:])
 	case "release":
 		return runPluginRelease(args[1:])
 	default:
 		return fmt.Errorf("unknown plugin command %q", args[0])
 	}
-}
-
-func runPluginPackage(args []string) error {
-	fs := flag.NewFlagSet("gestaltd plugin package", flag.ContinueOnError)
-	fs.Usage = func() { printPluginPackageUsage(fs.Output()) }
-	input := fs.String("input", "", "path to plugin manifest or build directory")
-	output := fs.String("output", "", "output path (directory, or .tar.gz for archive)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	return packageFromDir(*input, *output)
-}
-
-func packageFromDir(input, output string) error {
-	if input == "" || output == "" {
-		return fmt.Errorf("usage: gestaltd plugin package --input PATH --output PATH")
-	}
-
-	sourceDir := input
-	if info, err := os.Stat(input); err != nil {
-		return err
-	} else if !info.IsDir() {
-		if !pluginpkg.IsManifestFile(input) {
-			return fmt.Errorf("plugin package input must be a directory or one of %s, got %q", strings.Join(pluginpkg.ManifestFiles, ", "), input)
-		}
-		sourceDir = filepath.Dir(input)
-	}
-	manifestPath, err := pluginpkg.FindManifestFile(sourceDir)
-	if err != nil {
-		return err
-	}
-	_, srcManifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("prepare source manifest %s: %w", manifestPath, err)
-	}
-	if err := validatePackageOutputPath(sourceDir, output); err != nil {
-		return err
-	}
-
-	packageDir := sourceDir
-	var cleanup func()
-	if srcManifest != nil && srcManifest.Entrypoints.Provider == nil && manifestHasKind(srcManifest, pluginmanifestv1.KindProvider) {
-		needsMaterialization := releaseRequiresBuildTarget(srcManifest)
-		if !needsMaterialization {
-			hasProviderPackage, detectErr := pluginpkg.HasGoProviderPackage(sourceDir)
-			if detectErr != nil {
-				return fmt.Errorf("detect Go provider package in %s: %w", sourceDir, detectErr)
-			}
-			needsMaterialization = hasProviderPackage
-		}
-		if needsMaterialization {
-			packageDir, cleanup, err = materializeSourcePackageDir(sourceDir, manifestPath, srcManifest)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-		}
-	}
-
-	if isArchiveOutput(output) {
-		if err := pluginpkg.CreatePackageFromDir(packageDir, output); err != nil {
-			return err
-		}
-	} else {
-		if err := pluginpkg.CopyPackageDir(packageDir, output); err != nil {
-			return err
-		}
-	}
-	_, _ = fmt.Fprintf(os.Stdout, "packaged %s -> %s\n", sourceDir, output)
-	return nil
 }
 
 const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
@@ -349,38 +273,6 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		}
 		return manifest, nil
 	})
-}
-
-func materializeSourcePackageDir(sourceDir, manifestPath string, srcManifest *pluginmanifestv1.Manifest) (string, func(), error) {
-	src, err := pluginsource.Parse(srcManifest.Source)
-	if err != nil {
-		return "", nil, fmt.Errorf("invalid source in manifest: %w", err)
-	}
-
-	builds, err := detectReleaseBuilds(sourceDir, srcManifest, []releasePlatform{{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}})
-	if err != nil {
-		return "", nil, err
-	}
-	if len(builds) != 1 {
-		return "", nil, fmt.Errorf("expected a single build for current platform %s/%s, got %d", runtime.GOOS, runtime.GOARCH, len(builds))
-	}
-
-	stagingDir, err := os.MkdirTemp("", "gestalt-package-*")
-	if err != nil {
-		return "", nil, fmt.Errorf("create package staging dir: %w", err)
-	}
-	cleanup := func() { _ = os.RemoveAll(stagingDir) }
-
-	manifest, err := prepareBuiltPackageDir(stagingDir, sourceDir, srcManifest, srcManifest.Version, src.Plugin, builds[0])
-	if err != nil {
-		cleanup()
-		return "", nil, err
-	}
-	if err := writeReleaseManifestFile(stagingDir, filepath.Base(manifestPath), pluginpkg.ManifestFormatFromPath(manifestPath), manifest); err != nil {
-		cleanup()
-		return "", nil, err
-	}
-	return stagingDir, cleanup, nil
 }
 
 func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, build releaseBuild) (*pluginmanifestv1.Manifest, error) {
@@ -650,28 +542,6 @@ func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, ou
 	return nil
 }
 
-func validatePackageOutputPath(sourceDir, outputPath string) error {
-	sourceAbs, err := filepath.Abs(sourceDir)
-	if err != nil {
-		return fmt.Errorf("resolve source dir: %w", err)
-	}
-	outputAbs, err := filepath.Abs(outputPath)
-	if err != nil {
-		return fmt.Errorf("resolve output path: %w", err)
-	}
-	inside, err := pathWithinBase(outputAbs, sourceAbs)
-	if err != nil {
-		return fmt.Errorf("compare output path to source dir: %w", err)
-	}
-	if inside {
-		if isArchiveOutput(outputPath) {
-			return fmt.Errorf("output archive %q must not be inside source directory %q", outputPath, sourceDir)
-		}
-		return fmt.Errorf("output directory %q must not be inside source directory %q", outputPath, sourceDir)
-	}
-	return nil
-}
-
 func pathWithinBase(path, base string) (bool, error) {
 	rel, err := filepath.Rel(base, path)
 	if err != nil {
@@ -692,31 +562,12 @@ func normalizeReleasePath(rel string) (string, error) {
 	return cleanPath, nil
 }
 
-func isArchiveOutput(path string) bool {
-	return strings.HasSuffix(path, ".tar.gz") || strings.HasSuffix(path, ".tgz")
-}
-
 func printPluginUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  package     Package a plugin for distribution")
-	writeUsageLine(w, "  release     Cross-compile and package a plugin for release")
-}
-
-func printPluginPackageUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd plugin package --input PATH --output PATH")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Package an existing plugin directory for distribution.")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Output format is determined by the --output path: paths ending in")
-	writeUsageLine(w, ".tar.gz produce an archive, all other paths produce a directory.")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Flags:")
-	writeUsageLine(w, "  --input     Path to plugin manifest or build directory")
-	writeUsageLine(w, "  --output    Output path (directory, or .tar.gz for archive)")
+	writeUsageLine(w, "  release     Cross-compile and build plugin release archives")
 }
 
 func printPluginReleaseUsage(w io.Writer) {
