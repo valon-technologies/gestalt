@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail};
 
 use crate::api::{ApiClient, CredentialFieldInfo, DiscoveryCandidateInfo, IntegrationInfo};
-use crate::interactive::{InputPrompt, PromptOption, Prompter, StdioPrompter};
+use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output::{self, Format};
 
 const PLUGIN_CONNECTION_NAME: &str = "_plugin";
@@ -68,15 +68,9 @@ pub fn connect(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> Result<()> {
-    let mut prompts = StdioPrompter;
-    connect_with_browser_opener_and_prompter(
-        client,
-        name,
-        connection,
-        instance,
-        &mut prompts,
-        |url| open::that(url).map(|_| ()).map_err(Into::into),
-    )
+    connect_with_browser_opener(client, name, connection, instance, |url| {
+        open::that(url).map(|_| ()).map_err(Into::into)
+    })
 }
 
 pub fn connect_with_browser_opener<F>(
@@ -89,31 +83,8 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let mut prompts = StdioPrompter;
-    connect_with_browser_opener_and_prompter(
-        client,
-        name,
-        connection,
-        instance,
-        &mut prompts,
-        open_browser,
-    )
-}
-
-pub fn connect_with_browser_opener_and_prompter<P, F>(
-    client: &ApiClient,
-    name: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    prompts: &mut P,
-    open_browser: F,
-) -> Result<()>
-where
-    P: Prompter,
-    F: FnOnce(&str) -> Result<()>,
-{
     let integration = fetch_integration(client, name)?;
-    let selected_connection = resolve_connection(&integration, connection, prompts)?;
+    let selected_connection = resolve_connection(&integration, connection)?;
     let auth_target = resolve_auth_target(&integration, selected_connection.as_deref());
 
     if auth_target.supports_oauth() {
@@ -134,7 +105,6 @@ where
             selected_connection.as_deref(),
             instance,
             &auth_target,
-            prompts,
         );
     }
 
@@ -168,18 +138,14 @@ where
     Ok(())
 }
 
-fn connect_manual<P>(
+fn connect_manual(
     client: &ApiClient,
     integration: &IntegrationInfo,
     name: &str,
     connection: Option<&str>,
     instance: Option<&str>,
     auth_target: &ResolvedAuthTarget,
-    prompts: &mut P,
-) -> Result<()>
-where
-    P: Prompter,
-{
+) -> Result<()> {
     eprintln!(
         "Connecting {} with manual auth.",
         integration.display_name()
@@ -194,8 +160,8 @@ where
         );
     }
 
-    let connection_params = prompt_connection_params(integration, prompts)?;
-    let credential_payload = prompt_manual_credentials(&auth_target.credential_fields, prompts)?;
+    let connection_params = prompt_connection_params(integration)?;
+    let credential_payload = prompt_manual_credentials(&auth_target.credential_fields)?;
     let (credential, credentials) = match &credential_payload {
         ManualCredentialPayload::Single(value) => (Some(value.as_str()), None),
         ManualCredentialPayload::Multiple(values) => (None, Some(values)),
@@ -226,23 +192,18 @@ where
             response.selection_url.as_deref(),
             response.pending_token.as_deref(),
             &response.candidates,
-            prompts,
         ),
         other => bail!("unexpected manual connect response status '{}'", other),
     }
 }
 
-fn complete_pending_selection<P>(
+fn complete_pending_selection(
     client: &ApiClient,
     integration: &str,
     selection_url: Option<&str>,
     pending_token: Option<&str>,
     candidates: &[DiscoveryCandidateInfo],
-    prompts: &mut P,
-) -> Result<()>
-where
-    P: Prompter,
-{
+) -> Result<()> {
     let selection_url = selection_url.context("manual connect response missing selection_url")?;
     let pending_token = pending_token.context("manual connect response missing pending_token")?;
     if candidates.is_empty() {
@@ -259,7 +220,7 @@ where
                 detail: Some(candidate.id.clone()),
             })
             .collect();
-        prompts.select(
+        prompt_select(
             &format!(
                 "Gestalt found more than one {} connection. Choose one to save:",
                 integration
@@ -289,14 +250,10 @@ fn fetch_integration(client: &ApiClient, name: &str) -> Result<IntegrationInfo> 
         .with_context(|| format!("integration '{}' not found", name))
 }
 
-fn resolve_connection<P>(
+fn resolve_connection(
     integration: &IntegrationInfo,
     requested_connection: Option<&str>,
-    prompts: &mut P,
-) -> Result<Option<String>>
-where
-    P: Prompter,
-{
+) -> Result<Option<String>> {
     if integration.connections.is_empty() {
         return Ok(requested_connection.map(str::to_string));
     }
@@ -330,7 +287,7 @@ where
             )),
         })
         .collect();
-    let idx = prompts.select(
+    let idx = prompt_select(
         &format!("Select a {} connection:", integration.display_name()),
         &options,
     )?;
@@ -360,20 +317,16 @@ fn resolve_auth_target(
     }
 }
 
-fn prompt_connection_params<P>(
+fn prompt_connection_params(
     integration: &IntegrationInfo,
-    prompts: &mut P,
-) -> Result<Option<BTreeMap<String, String>>>
-where
-    P: Prompter,
-{
+) -> Result<Option<BTreeMap<String, String>>> {
     if integration.connection_params.is_empty() {
         return Ok(None);
     }
 
     let mut values = BTreeMap::new();
     for (name, def) in &integration.connection_params {
-        let value = prompts.input(&InputPrompt {
+        let value = prompt_input(&InputPrompt {
             label: non_empty(def.description.as_deref())
                 .unwrap_or(name)
                 .to_string(),
@@ -395,13 +348,7 @@ where
     }
 }
 
-fn prompt_manual_credentials<P>(
-    fields: &[CredentialFieldInfo],
-    prompts: &mut P,
-) -> Result<ManualCredentialPayload>
-where
-    P: Prompter,
-{
+fn prompt_manual_credentials(fields: &[CredentialFieldInfo]) -> Result<ManualCredentialPayload> {
     let fields = if fields.is_empty() {
         vec![CredentialFieldInfo {
             name: "credential".to_string(),
@@ -415,22 +362,19 @@ where
 
     if fields.len() == 1 {
         return Ok(ManualCredentialPayload::Single(prompt_for_credential(
-            &fields[0], prompts,
+            &fields[0],
         )?));
     }
 
     let mut values = BTreeMap::new();
     for field in &fields {
-        values.insert(field.name.clone(), prompt_for_credential(field, prompts)?);
+        values.insert(field.name.clone(), prompt_for_credential(field)?);
     }
     Ok(ManualCredentialPayload::Multiple(values))
 }
 
-fn prompt_for_credential<P>(field: &CredentialFieldInfo, prompts: &mut P) -> Result<String>
-where
-    P: Prompter,
-{
-    prompts.input(&InputPrompt {
+fn prompt_for_credential(field: &CredentialFieldInfo) -> Result<String> {
+    prompt_input(&InputPrompt {
         label: field.display_label(),
         description: non_empty(field.description.as_deref()).map(str::to_string),
         help_url: non_empty(field.help_url.as_deref()).map(str::to_string),

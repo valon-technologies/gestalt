@@ -4,9 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use anyhow::{Result, bail};
 use assert_cmd::Command;
-use gestalt::interactive::{InputPrompt, PromptOption, Prompter};
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
 use predicates::prelude::*;
@@ -217,39 +215,12 @@ fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
-struct MockPrompter {
-    selections: Vec<usize>,
-    inputs: Vec<String>,
-    seen_selects: Vec<(String, Vec<PromptOption>)>,
-    seen_inputs: Vec<InputPrompt>,
-}
-
-impl MockPrompter {
-    fn new(selections: Vec<usize>, inputs: Vec<&str>) -> Self {
-        Self {
-            selections,
-            inputs: inputs.into_iter().map(str::to_string).collect(),
-            seen_selects: Vec::new(),
-            seen_inputs: Vec::new(),
-        }
-    }
-}
-
-impl Prompter for MockPrompter {
-    fn select(&mut self, prompt: &str, options: &[PromptOption]) -> Result<usize> {
-        self.seen_selects
-            .push((prompt.to_string(), options.to_vec()));
-        Ok(self.selections.remove(0))
-    }
-
-    fn input(&mut self, prompt: &InputPrompt) -> Result<String> {
-        self.seen_inputs.push(prompt.clone());
-        Ok(self.inputs.remove(0))
-    }
-
-    fn confirm(&mut self, _question: &str, _default: bool) -> Result<bool> {
-        bail!("confirm should not be called in integration connect tests")
-    }
+fn cli_command_for_server(home: &Path, server: &Server) -> Command {
+    let mut cmd = cli_command(home);
+    cmd.env("GESTALT_API_KEY", "test-token")
+        .arg("--url")
+        .arg(server.url());
+    cmd
 }
 
 #[test]
@@ -665,45 +636,15 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
         .with_body(r#"{"status":"connected","integration":"datadog"}"#)
         .create();
 
-    let client = create_client(&server);
-    let mut prompts = MockPrompter::new(vec![], vec!["datadoghq.eu", "dd-key"]);
-    let browser_used = std::cell::Cell::new(false);
-
-    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
-        &client,
-        "datadog",
-        None,
-        None,
-        &mut prompts,
-        |_| {
-            browser_used.set(true);
-            Ok(())
-        },
-    );
-
-    assert!(result.is_ok());
-    assert!(!browser_used.get());
-    assert_eq!(
-        prompts.seen_inputs,
-        vec![
-            InputPrompt {
-                label: "Datadog site".to_string(),
-                description: None,
-                help_url: None,
-                default: Some("datadoghq.com".to_string()),
-                required: true,
-                secret: false,
-            },
-            InputPrompt {
-                label: "API key".to_string(),
-                description: Some("Use a personal API key".to_string()),
-                help_url: Some("https://docs.example.com/datadog".to_string()),
-                default: None,
-                required: true,
-                secret: true,
-            },
-        ]
-    );
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "datadog"])
+        .write_stdin("datadoghq.eu\ndd-key\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Datadog site"))
+        .stderr(predicate::str::contains("API key"))
+        .stderr(predicate::str::contains("Connected datadog."));
 }
 
 #[test]
@@ -763,47 +704,20 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
         .with_body("<html>ok</html>")
         .create();
 
-    let client = create_client(&server);
-    let mut prompts = MockPrompter::new(vec![0, 1], vec!["abc123"]);
-
-    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
-        &client,
-        "manual-svc",
-        None,
-        None,
-        &mut prompts,
-        |_| bail!("browser should not be used"),
-    );
-
-    assert!(result.is_ok());
-    assert_eq!(prompts.seen_selects.len(), 2);
-    assert_eq!(
-        prompts.seen_selects[0],
-        (
-            "Select a Manual Service connection:".to_string(),
-            vec![
-                PromptOption {
-                    label: "workspace".to_string(),
-                    detail: Some("Auth: manual".to_string()),
-                },
-                PromptOption {
-                    label: "plugin".to_string(),
-                    detail: Some("Auth: OAuth".to_string()),
-                },
-            ]
-        )
-    );
-    assert_eq!(
-        prompts.seen_inputs,
-        vec![InputPrompt {
-            label: "Workspace token".to_string(),
-            description: None,
-            help_url: None,
-            default: None,
-            required: true,
-            secret: true,
-        }]
-    );
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("1\nabc123\n2\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Select a Manual Service connection:",
+        ))
+        .stderr(predicate::str::contains("Workspace token"))
+        .stderr(predicate::str::contains(
+            "Gestalt found more than one manual-svc connection. Choose one to save:",
+        ))
+        .stderr(predicate::str::contains("Connected manual-svc (Site B)"));
 }
 
 #[test]
@@ -836,15 +750,13 @@ fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
         .create();
 
     let client = create_client(&server);
-    let mut prompts = MockPrompter::new(vec![], vec![]);
     let opened = std::cell::RefCell::new(None::<String>);
 
-    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
+    let result = gestalt::commands::integrations::connect_with_browser_opener(
         &client,
         "github",
         None,
         None,
-        &mut prompts,
         |url| {
             *opened.borrow_mut() = Some(url.to_string());
             Ok(())
@@ -856,8 +768,6 @@ fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
         opened.into_inner().as_deref(),
         Some("https://example.com/oauth")
     );
-    assert!(prompts.seen_inputs.is_empty());
-    assert!(prompts.seen_selects.is_empty());
 }
 
 #[test]
@@ -882,30 +792,14 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
         .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
         .create();
 
-    let client = create_client(&server);
-    let mut prompts = MockPrompter::new(vec![], vec!["secret"]);
-
-    let result = gestalt::commands::integrations::connect_with_browser_opener_and_prompter(
-        &client,
-        "manual-svc",
-        None,
-        None,
-        &mut prompts,
-        |_| bail!("browser should not be used"),
-    );
-
-    assert!(result.is_ok());
-    assert_eq!(
-        prompts.seen_inputs,
-        vec![InputPrompt {
-            label: "Credential".to_string(),
-            description: None,
-            help_url: None,
-            default: None,
-            required: true,
-            secret: true,
-        }]
-    );
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("secret\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("\nCredential\n"))
+        .stderr(predicate::str::contains("Connected manual-svc."));
 }
 
 fn catalog_body() -> &'static str {
