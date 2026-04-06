@@ -76,10 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     root, target = args
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-    plugin = _load_plugin(target)
+    plugin = _load_plugin(target, root)
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         plugin.write_catalog(catalog_path)
@@ -89,8 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _load_plugin(target: str) -> Plugin:
+def _load_plugin(target: str, root: str | None = None) -> Plugin:
     import importlib
+
+    if root and root not in sys.path:
+        sys.path.insert(0, root)
 
     module_name, _, attr_name = target.partition(":")
     if not module_name or not attr_name:

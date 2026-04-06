@@ -1012,40 +1012,34 @@ EOF
   exit 0
 fi
 
-if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "PyInstaller" ]; then
-  distpath=""
-  hidden_import=""
-  name=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --distpath)
-        distpath="$2"
-        shift 2
-        ;;
-      --hidden-import)
-        hidden_import="$2"
-        shift 2
-        ;;
-      --name)
-        name="$2"
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
+if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
     exit 1
   fi
-  if [ "$hidden_import" != "provider" ]; then
-    echo "expected --hidden-import provider, got: $hidden_import" >&2
+  if [ "$#" -ne 6 ]; then
+    echo "unexpected gestalt._build args: $*" >&2
     exit 1
   fi
-  mkdir -p "$distpath"
-  cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$distpath/$name"
-  chmod +x "$distpath/$name"
+  root="$3"
+  target="$4"
+  output="$5"
+  name="$6"
+  if [ "$target" != "provider:plugin" ]; then
+    echo "unexpected provider target: $target" >&2
+    exit 1
+  fi
+  if [ "$name" != "python-release" ]; then
+    echo "unexpected plugin name: $name" >&2
+    exit 1
+  fi
+  output_dir="${output%/*}"
+  if [ "$output_dir" = "$output" ]; then
+    output_dir="."
+  fi
+  mkdir -p "$output_dir"
+  cp "$GESTALT_TEST_PYINSTALLER_BINARY" "$output"
+  chmod +x "$output"
   exit 0
 fi
 
