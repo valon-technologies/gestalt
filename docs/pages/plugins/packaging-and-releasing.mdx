@@ -20,6 +20,8 @@ provider:
         type: none
 ```
 
+For Go source plugins, the executable code lives under `provider/`. You do not write `main.go`; Gestalt synthesizes the wrapper during source execution and release packaging.
+
 ### Declarative-only release archives
 
 A manifest can describe a declarative provider that requires no compiled binary. This is useful for distributing reusable REST providers, OpenAPI-backed integrations, or web UI bundles:

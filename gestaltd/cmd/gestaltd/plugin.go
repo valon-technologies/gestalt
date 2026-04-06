@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -44,11 +43,6 @@ const windowsExecutableSuffix = ".exe"
 type releasePlatform struct {
 	GOOS   string
 	GOARCH string
-}
-
-type releaseBuild struct {
-	platform releasePlatform
-	target   string
 }
 
 func runPluginRelease(args []string) error {
@@ -110,7 +104,7 @@ func runPluginRelease(args []string) error {
 		for _, build := range builds {
 			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, build, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
-				return fmt.Errorf("build %s/%s: %w", build.platform.GOOS, build.platform.GOARCH, err)
+				return fmt.Errorf("build %s/%s: %w", build.GOOS, build.GOARCH, err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
@@ -129,8 +123,8 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platforms []releasePlatform) ([]releaseBuild, error) {
-	builds := make([]releaseBuild, 0, len(platforms))
+func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platforms []releasePlatform) ([]releasePlatform, error) {
+	builds := make([]releasePlatform, 0, len(platforms))
 	hasProviderKind := manifestHasKind(manifest, pluginmanifestv1.KindProvider)
 	providerBuildRequired := releaseRequiresBuildTarget(manifest)
 	var missingErr error
@@ -140,7 +134,7 @@ func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platf
 			_, err := pluginpkg.DetectGoProviderImportPath(root, plat.GOOS, plat.GOARCH)
 			switch {
 			case err == nil:
-				builds = append(builds, releaseBuild{platform: plat})
+				builds = append(builds, plat)
 				continue
 			case errors.Is(err, pluginpkg.ErrNoGoProviderPackage):
 				if providerBuildRequired && missingErr == nil {
@@ -149,16 +143,6 @@ func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platf
 			default:
 				return nil, fmt.Errorf("detect Go provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 			}
-		}
-
-		target, err := pluginpkg.DetectGoMainBuildTarget(root, plat.GOOS, plat.GOARCH)
-		switch {
-		case err == nil:
-			builds = append(builds, releaseBuild{platform: plat, target: target})
-		case errors.Is(err, pluginpkg.ErrNoGoMainPackage):
-			continue
-		default:
-			return nil, fmt.Errorf("detect Go main package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 		}
 	}
 
@@ -174,11 +158,10 @@ func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platf
 	return builds, nil
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, build releaseBuild, outputDir, manifestFile, manifestFormat string) (string, error) {
-	plat := build.platform
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, plat releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
 	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
-		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, build)
+		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, plat)
 	})
 }
 
@@ -205,19 +188,8 @@ func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat s
 	return archivePath, nil
 }
 
-func buildReleaseBinary(root, buildTarget, binaryPath string, plat releasePlatform) error {
-	if buildTarget == "" {
-		return pluginpkg.BuildGoProviderBinary(root, binaryPath, plat.GOOS, plat.GOARCH)
-	}
-
-	cmd := exec.Command("go", "-C", root, "build", "-mod=readonly", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+plat.GOOS, "GOARCH="+plat.GOARCH)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("go build: %w", err)
-	}
-	return nil
+func buildReleaseBinary(root, binaryPath string, plat releasePlatform) error {
+	return pluginpkg.BuildGoProviderBinary(root, binaryPath, plat.GOOS, plat.GOARCH)
 }
 
 func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, manifest *pluginmanifestv1.Manifest) error {
@@ -275,10 +247,10 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	})
 }
 
-func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, build releaseBuild) (*pluginmanifestv1.Manifest, error) {
-	binaryName := releaseBinaryName(pluginName, build.platform.GOOS)
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, plat releasePlatform) (*pluginmanifestv1.Manifest, error) {
+	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
-	if err := buildReleaseBinary(sourceDir, build.target, binaryPath, build.platform); err != nil {
+	if err := buildReleaseBinary(sourceDir, binaryPath, plat); err != nil {
 		return nil, err
 	}
 
@@ -289,7 +261,7 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginman
 	if err := copyReleasePackageFiles(srcManifest, sourceDir, stagingDir, false); err != nil {
 		return nil, err
 	}
-	return buildReleaseManifest(srcManifest, version, binaryName, build.platform, digest)
+	return buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
 }
 
 func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {

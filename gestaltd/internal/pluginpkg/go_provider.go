@@ -18,7 +18,6 @@ const goProviderPackageTarget = "./provider"
 const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
-var ErrNoGoMainPackage = errors.New("no Go main package found")
 
 //go:embed go_provider_wrapper.go.tmpl
 var goProviderWrapperSource string
@@ -123,22 +122,6 @@ func BuildGoProviderBinary(root, outputPath, goos, goarch string) error {
 		return fmt.Errorf("go build: %w", err)
 	}
 	return nil
-}
-
-func DetectGoMainBuildTarget(root, goos, goarch string) (string, error) {
-	for _, target := range []string{"./cmd", "."} {
-		name, err := goPackageField(root, target, "{{.Name}}", goos, goarch)
-		if err != nil {
-			if isMissingGoPackageError(err) {
-				continue
-			}
-			return "", fmt.Errorf("%s: %w", target, err)
-		}
-		if strings.TrimSpace(name) == "main" {
-			return target, nil
-		}
-	}
-	return "", ErrNoGoMainPackage
 }
 
 func goPackageField(root, buildTarget, field, goos, goarch string) (string, error) {
