@@ -20,7 +20,7 @@ provider:
         type: none
 ```
 
-For Go source plugins, the executable code lives under `provider/`. You do not write `main.go`; Gestalt synthesizes the wrapper during source execution and release packaging.
+For Go source plugins, the provider code lives at the module root. You do not write `main.go`; Gestalt synthesizes the wrapper during source execution and release packaging.
 
 ### Declarative-only release archives
 
