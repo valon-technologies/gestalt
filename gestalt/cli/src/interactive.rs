@@ -18,15 +18,15 @@ pub struct InputPrompt {
     pub secret: bool,
 }
 
-fn read_line() -> Result<String> {
+fn read_line() -> Result<Option<String>> {
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
-    Ok(lines
-        .next()
-        .unwrap_or(Ok(String::new()))
-        .context("failed to read input")?
-        .trim()
-        .to_string())
+    match lines.next() {
+        Some(line) => Ok(Some(
+            line.context("failed to read input")?.trim().to_string(),
+        )),
+        None => Ok(None),
+    }
 }
 
 pub fn prompt_select(prompt: &str, options: &[PromptOption]) -> Result<usize> {
@@ -46,7 +46,7 @@ pub fn prompt_select(prompt: &str, options: &[PromptOption]) -> Result<usize> {
     loop {
         write!(stderr, "Selection [1-{}]: ", options.len())?;
         stderr.flush()?;
-        let input = read_line()?;
+        let input = read_line()?.context("stdin closed while waiting for selection")?;
 
         if let Ok(choice) = input.parse::<usize>()
             && (1..=options.len()).contains(&choice)
@@ -82,7 +82,7 @@ pub fn prompt_input(prompt: &InputPrompt) -> Result<String> {
                 None => write!(stderr, "Value: ")?,
             }
             stderr.flush()?;
-            read_line()?
+            read_line()?.context("stdin closed while waiting for input")?
         };
 
         let trimmed = value.trim().to_string();
@@ -107,7 +107,9 @@ pub fn prompt_confirm(question: &str, default: bool) -> Result<bool> {
     write!(stderr, "{} [{}]: ", question, hint)?;
     stderr.flush()?;
 
-    let input = read_line()?.to_lowercase();
+    let input = read_line()?
+        .context("stdin closed while waiting for confirmation")?
+        .to_lowercase();
     if input.is_empty() {
         Ok(default)
     } else {

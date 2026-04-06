@@ -802,6 +802,28 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
         .stderr(predicate::str::contains("Connected manual-svc."));
 }
 
+#[test]
+fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "stdin closed while waiting for input",
+        ));
+}
+
 fn catalog_body() -> &'static str {
     r#"[{
         "id": "do_thing",

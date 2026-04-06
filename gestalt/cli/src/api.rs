@@ -209,32 +209,7 @@ impl ApiClient {
         }
 
         let body = resp.text().context("failed to read response body")?;
-
-        if status.is_client_error() || status.is_server_error() {
-            let message = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|v| extract_error_message(&v))
-                .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
-
-            if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
-                bail!(
-                    "{} (using {} from environment; \
-                     unset it to use your stored CLI API token from 'gestalt auth login')",
-                    message,
-                    ENV_API_KEY,
-                );
-            }
-            if status == StatusCode::UNAUTHORIZED
-                && self.token_source == TokenSource::StoredCredentials
-            {
-                bail!(
-                    "{} (stored CLI API token may be expired or revoked; run 'gestalt auth login' to mint a new one)",
-                    message,
-                );
-            }
-
-            bail!("{}", message);
-        }
+        self.bail_on_error_response(status, &body)?;
 
         if body.is_empty() {
             return Ok(serde_json::json!({}));
@@ -246,9 +221,13 @@ impl ApiClient {
     fn handle_text_response(&self, resp: reqwest::blocking::Response) -> Result<String> {
         let status = resp.status();
         let body = resp.text().context("failed to read response body")?;
+        self.bail_on_error_response(status, &body)?;
+        Ok(body)
+    }
 
+    fn bail_on_error_response(&self, status: StatusCode, body: &str) -> Result<()> {
         if status.is_client_error() || status.is_server_error() {
-            let message = serde_json::from_str::<serde_json::Value>(&body)
+            let message = serde_json::from_str::<serde_json::Value>(body)
                 .ok()
                 .and_then(|v| extract_error_message(&v))
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
@@ -272,8 +251,7 @@ impl ApiClient {
 
             bail!("{}", message);
         }
-
-        Ok(body)
+        Ok(())
     }
 }
 
