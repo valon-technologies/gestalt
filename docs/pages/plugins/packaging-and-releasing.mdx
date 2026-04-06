@@ -1,10 +1,10 @@
 # Packaging and Releasing
 
-Once a plugin is working locally with `from.command`, you can package it for distribution. Packaged plugins are self-contained archives that include a manifest, compiled binaries, and optional assets.
+Once a plugin is working locally with `from.source.path`, you can publish release archives for distribution. Release archives are self-contained and include a manifest, compiled binaries, and optional assets.
 
-## Source manifest vs packaged manifest
+## Source manifest vs release manifest
 
-Every package requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). During local development and `gestaltd plugin release`, pure executable source manifests can stay lean and omit packaged `artifacts` and `entrypoints.provider`. The release command materializes those packaged fields for you.
+Every release archive requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). During local development and `gestaltd plugin release`, pure executable source manifests can stay lean and omit `artifacts` and `entrypoints.provider`. The release command materializes those fields for you.
 
 A minimal source manifest for an executable provider:
 
@@ -20,7 +20,7 @@ provider:
         type: none
 ```
 
-### Declarative-only packages
+### Declarative-only release archives
 
 A manifest can describe a declarative provider that requires no compiled binary. This is useful for distributing reusable REST providers, OpenAPI-backed integrations, or web UI bundles:
 
@@ -30,16 +30,6 @@ version: 0.1.0
 kinds:
   - provider
 ```
-
-## Package a plugin
-
-Use `gestaltd plugin package` to create a distributable archive from a plugin directory:
-
-```sh
-gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
-```
-
-The input directory should contain the manifest and any referenced artifacts.
 
 ## Build a cross-platform release
 
@@ -54,35 +44,25 @@ Run this from the plugin source directory. It compiles the binary for each targe
 For executable Go plugins, release materializes the executable catalog
 automatically from the provider's typed router before packaging.
 
-## Reference a packaged plugin
+## Reference a plugin
 
-There are three ways to reference a packaged plugin from the Gestalt config:
+There are two ways to reference a plugin from the Gestalt config:
 
-### Local path
+### Local source path
 
-Point to a directory or archive on disk:
-
-```yaml
-providers:
-  my-plugin:
-    from:
-      package: ./dist/my-plugin.tar.gz
-```
-
-### HTTPS URL
-
-Reference a remote archive:
+Use the source tree directly during development:
 
 ```yaml
 providers:
   my-plugin:
     from:
-      package: https://releases.example.com/my-plugin-0.1.0.tar.gz
+      source:
+        path: ./plugins/my-plugin/plugin.yaml
 ```
 
 ### Versioned source
 
-Reference a published plugin by source and version. `gestaltd init` resolves the package and writes it to lock state:
+Reference a published plugin by source and version. `gestaltd init` resolves the release archive and writes it to lock state:
 
 ```yaml
 providers:
@@ -97,7 +77,7 @@ This is the recommended approach for production deployments.
 
 ## Prepared state
 
-When a config references packaged or remote plugins, run `gestaltd init` to resolve and prepare them:
+When a config references published plugins, run `gestaltd init` to resolve and prepare them:
 
 ```sh
 gestaltd init --config ./config.yaml
@@ -105,9 +85,9 @@ gestaltd init --config ./config.yaml
 
 This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server using only the prepared state, without fetching or resolving anything at runtime. See [Configuration](/concepts/configuration) for the full startup model.
 
-## Package layout
+## Release archive layout
 
-A typical plugin package contains:
+A typical release archive contains:
 
 ```
 plugin.yaml

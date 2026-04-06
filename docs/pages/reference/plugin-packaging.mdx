@@ -1,11 +1,11 @@
-# Plugin Packaging
+# Plugin Release Archives
 
-Gestalt uses one package format for:
+Gestalt uses one release archive format for:
 
 - provider plugins
 - web UI bundles
 
-Each package is described by a manifest file named one of:
+Each release archive is described by a manifest file named one of:
 
 - `plugin.yaml`
 - `plugin.yml`
@@ -13,63 +13,45 @@ Each package is described by a manifest file named one of:
 
 ## How Plugins Enter A Config
 
-There are three ways to point at a packaged plugin from `config.yaml`.
+There are two ways to point at a plugin from `config.yaml`.
 
-### `command`
+### `source.path`
 
-Use a local executable directly.
+Use a local source tree directly.
 
 ```yaml
 providers:
   example:
     from:
-      command: ./bin/example-provider
+      source:
+        path: ./plugin.yaml
     config:
       greeting: hello
 ```
 
 This is best for local development.
 
-### `package`
-
-Load a local directory, local archive, or HTTPS archive.
-
-```yaml
-providers:
-  example:
-    from:
-      package: ./dist/example-provider.tar.gz
-```
-
-### `source`
+### `source.ref`
 
 Resolve a versioned plugin source during `init`.
 
 In config, that looks like `source.ref: github.com/acme/plugins/example` plus
 `source.version: 1.2.3`.
 
-This is the cleanest path for reusable, versioned packages.
+This is the cleanest path for reusable, versioned plugins.
 
-## What `init` Does For Packaged Plugins
+## What `init` Does For Published Plugins
 
 `gestaltd init` resolves and prepares:
 
-- `from.package`
 - `from.source`
-- `ui.plugin.package`
 - `ui.plugin.source`
 
 It writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. See [Configuration](/concepts/configuration) for the deployment model around `init` and `serve --locked`.
 
-## Packaging Commands
+## Release Command
 
-### Package A Plugin Directory
-
-```sh
-gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
-```
-
-### Build A Cross-Platform Release
+Build a cross-platform release:
 
 ```sh
 gestaltd plugin release --version 0.1.0
@@ -78,9 +60,9 @@ gestaltd plugin release --version 0.1.0
 Run `plugin release` from the plugin source directory. It compiles the plugin,
 produces release archives, and writes a checksums file.
 
-## Declarative-Only Packages
+## Declarative-Only Archives
 
-A provider manifest can be declarative-only. In that case the package contains a
+A provider manifest can be declarative-only. In that case the release archive contains a
 manifest and optional schemas or assets, but no executable artifact is required.
 
 That is useful when you want to ship:
@@ -89,13 +71,13 @@ That is useful when you want to ship:
 - a reusable OpenAPI-backed integration
 - a reusable web UI bundle
 
-## Executable Packages
+## Executable Archives
 
-Executable provider packages add `artifacts` plus
+Executable provider release archives add `artifacts` plus
 `entrypoints.provider.artifact_path` to the manifest. `gestaltd plugin release`
 builds that structure for you.
 
-## Package Layout
+## Release Archive Layout
 
 Typical contents:
 

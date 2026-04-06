@@ -100,7 +100,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
-	if intg.Plugin == nil || intg.Plugin.Package == "" || !intg.Plugin.HasResolvedManifest() {
+	if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() || !intg.Plugin.HasResolvedManifest() {
 		return buildProvider(ctx, name, intg, deps, regStore)
 	}
 	prov, err := newPreparedProviderStub(name, intg)

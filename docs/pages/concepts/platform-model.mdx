@@ -23,9 +23,9 @@ Each entry under `providers:` in the config becomes a runtime provider. Provider
 | --- | --- |
 | Inline declarative | Defined entirely in YAML using `surfaces.rest`. |
 | Inline spec-backed | Generated from an OpenAPI spec, GraphQL endpoint, or upstream MCP server. |
-| Packaged plugin | A separate process that communicates with `gestaltd` over gRPC. See [Plugins](/plugins). |
+| Source or published plugin | A separate process that communicates with `gestaltd` over gRPC. See [Plugins](/plugins). |
 
-A packaged plugin can also expose spec-backed surfaces alongside its own operations. This is referred to as a hybrid provider.
+A source or published plugin can also expose spec-backed surfaces alongside its own operations. This is referred to as a hybrid provider.
 
 ## Connections
 

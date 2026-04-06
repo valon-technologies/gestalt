@@ -2,7 +2,7 @@
 
 Gestalt ships two CLIs:
 
-- `gestaltd` for server lifecycle and plugin packaging
+- `gestaltd` for server lifecycle and plugin releases
 - `gestalt` for interactive access to a running server
 
 ## `gestaltd`
@@ -14,7 +14,7 @@ Gestalt ships two CLIs:
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. |
 | `gestaltd serve --locked --config PATH` | Start from prepared state only. |
-| `gestaltd init --config PATH` | Prepare packaged plugin artifacts and write lock state. |
+| `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. |
 | `gestaltd validate --config PATH` | Validate config without serving. |
 | `gestaltd version` | Print the server version. |
 
@@ -22,8 +22,7 @@ Gestalt ships two CLIs:
 
 | Command | Purpose |
 | --- | --- |
-| `gestaltd plugin package --input PATH --output PATH` | Package a plugin directory into a directory or `.tar.gz` archive. |
-| `gestaltd plugin release --version VERSION` | Cross-compile and package a plugin release. |
+| `gestaltd plugin release --version VERSION` | Cross-compile and build plugin release archives. |
 
 ### Common Examples
 
@@ -32,11 +31,10 @@ gestaltd
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
-gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 gestaltd plugin release --version 0.1.0
 ```
 
-See [Configuration](/concepts/configuration) for the relationship between `init`, `serve --locked`, and `validate --init`.
+See [Configuration](/concepts/configuration) for the relationship between `init`, `serve --locked`, and `validate`.
 
 ## `gestalt`
 

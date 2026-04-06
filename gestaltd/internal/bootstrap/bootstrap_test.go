@@ -226,7 +226,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects undeclared resolved manifest connection override", func(t *testing.T) {
+	t.Run("config validation rejects undeclared resolved manifest connection override", func(t *testing.T) {
 		t.Parallel()
 
 		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -261,7 +261,7 @@ func TestValidate(t *testing.T) {
 			},
 		}
 
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
+		err := config.ValidateStructure(cfg)
 		if err == nil {
 			t.Fatal("expected validation error")
 		}

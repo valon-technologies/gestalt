@@ -185,9 +185,6 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if entry.Executable == "" {
 		t.Error("entry.Executable is empty")
 	}
-	if entry.Package != "" {
-		t.Errorf("entry.Package should be empty for source plugins, got %q", entry.Package)
-	}
 
 	configDir := filepath.Dir(configPath)
 	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
@@ -491,9 +488,6 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	wantSHA := sha256hex(string(archiveData))
 	if entry.ArchiveSHA256 != wantSHA {
 		t.Errorf("entry.ArchiveSHA256 = %q, want %q", entry.ArchiveSHA256, wantSHA)
-	}
-	if entry.Package != "" {
-		t.Errorf("entry.Package should be empty for source plugins, got %q", entry.Package)
 	}
 
 	configDir := filepath.Dir(configPath)

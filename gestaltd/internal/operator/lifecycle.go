@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -41,8 +40,6 @@ type LockProviderEntry struct {
 
 type LockPluginEntry struct {
 	Fingerprint   string `json:"fingerprint"`
-	Package       string `json:"package,omitempty"`
-	SourceDigest  string `json:"source_digest,omitempty"`
 	Source        string `json:"source,omitempty"`
 	Version       string `json:"version,omitempty"`
 	ResolvedURL   string `json:"resolved_url,omitempty"`
@@ -141,7 +138,6 @@ type initPaths struct {
 
 type pluginFingerprintInput struct {
 	Name    string `json:"name"`
-	Package string `json:"package,omitempty"`
 	Source  string `json:"source,omitempty"`
 	Version string `json:"version,omitempty"`
 }
@@ -280,24 +276,8 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if _, err := os.Stat(assetRootPath); err != nil {
 			return false
 		}
-		if entry.SourceDigest != "" && cfg.UI.Plugin.Package != "" && !strings.HasPrefix(cfg.UI.Plugin.Package, "https://") {
-			digest, err := sourceDigestForPackage(cfg.UI.Plugin.Package)
-			if err != nil || digest != entry.SourceDigest {
-				return false
-			}
-		}
 	}
 	return true
-}
-
-func relativePackagePath(configDir, pkg string) string {
-	if pkg == "" || strings.HasPrefix(pkg, "https://") || strings.HasPrefix(pkg, "http://") {
-		return pkg
-	}
-	if rel, err := filepath.Rel(configDir, pkg); err == nil {
-		return filepath.ToSlash(rel)
-	}
-	return pkg
 }
 
 func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) (string, error) {
@@ -307,7 +287,6 @@ func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) 
 
 	input := pluginFingerprintInput{
 		Name:    name,
-		Package: relativePackagePath(configDir, plugin.Package),
 		Source:  plugin.SourceRef(),
 		Version: plugin.SourceVersion(),
 	}
@@ -322,11 +301,9 @@ func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) 
 
 func UIPluginFingerprint(plugin *config.UIPluginDef) (string, error) {
 	input := struct {
-		Package string `json:"package,omitempty"`
 		Source  string `json:"source,omitempty"`
 		Version string `json:"version,omitempty"`
 	}{
-		Package: plugin.Package,
 		Source:  plugin.Source,
 		Version: plugin.Version,
 	}
@@ -350,11 +327,7 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, 
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
-	if entry.Source != "" {
-		if entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
-			return false
-		}
-	} else if entry.Package != relativePackagePath(paths.configDir, plugin.Package) {
+	if entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
 		return false
 	}
 	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
@@ -364,12 +337,6 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, 
 	if entry.Executable != "" {
 		executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
 		if _, err := os.Stat(executablePath); err != nil {
-			return false
-		}
-	}
-	if entry.Source == "" && entry.SourceDigest != "" && !strings.HasPrefix(plugin.Package, "https://") {
-		digest, err := sourceDigestForPackage(plugin.Package)
-		if err != nil || digest != entry.SourceDigest {
 			return false
 		}
 	}
@@ -387,15 +354,10 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, cfg *config.Config
 		if err != nil {
 			return nil, fmt.Errorf("decode plugin config for integration %q: %w", name, err)
 		}
-		var entry LockPluginEntry
-		switch {
-		case intg.Plugin.HasManagedSource():
-			entry, err = l.lockEntryForSource(ctx, paths, "integration", name, intg.Plugin, configMap)
-		case intg.Plugin.Package != "":
-			entry, err = lockEntryForPackage(ctx, paths, "integration", name, intg.Plugin, configMap)
-		default:
+		if !intg.Plugin.HasManagedSource() {
 			continue
 		}
+		entry, err := l.lockEntryForSource(ctx, paths, "integration", name, intg.Plugin, configMap)
 		if err != nil {
 			return nil, err
 		}
@@ -410,86 +372,6 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, cfg *config.Config
 	}
 
 	return written, nil
-}
-
-func sourceDigestForPackage(packagePath string) (string, error) {
-	info, err := os.Stat(packagePath)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		_, manifest, _, err := pluginpkg.LoadManifestFromPath(packagePath)
-		if err != nil {
-			return "", err
-		}
-		return pluginpkg.DirectoryDigest(packagePath, manifest)
-	}
-	return pluginpkg.ArchiveDigest(packagePath)
-}
-
-func lockEntryForPackage(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
-	packagePath := plugin.Package
-	isURL := strings.HasPrefix(packagePath, "https://")
-
-	var sourceDigest string
-	if isURL {
-		tmpPath, cleanup, err := pluginpkg.FetchPackage(ctx, packagePath)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("%s %q plugin.package %q: %w", kind, name, packagePath, err)
-		}
-		defer cleanup()
-		packagePath = tmpPath
-	}
-
-	info, err := os.Stat(packagePath)
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.package %q: %w", kind, name, plugin.Package, err)
-	}
-
-	destDir := pluginDestDir(paths, kind, name)
-	var installed *pluginstore.InstalledPlugin
-	if info.IsDir() {
-		installed, err = pluginstore.InstallFromDir(packagePath, destDir)
-	} else {
-		installed, err = pluginstore.Install(packagePath, destDir)
-	}
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.package %q: %w", kind, name, plugin.Package, err)
-	}
-
-	if !isURL {
-		sourceDigest, err = sourceDigestForPackage(packagePath)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("%s %q source digest: %w", kind, name, err)
-		}
-	}
-
-	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKind(kind), configMap); err != nil {
-		return LockPluginEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
-	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
-	}
-	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
-	}
-	var executableRel string
-	if installed.ExecutablePath != "" {
-		executablePath, err := filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
-		}
-		executableRel = filepath.ToSlash(executablePath)
-	}
-	return LockPluginEntry{
-		Fingerprint:  fingerprint,
-		Package:      relativePackagePath(paths.configDir, plugin.Package),
-		SourceDigest: sourceDigest,
-		Manifest:     filepath.ToSlash(manifestPath),
-		Executable:   executableRel,
-	}, nil
 }
 
 func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
@@ -558,9 +440,7 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 
 	destDir := pluginDestDir(paths, "ui", "default")
 	var installed *pluginstore.InstalledPlugin
-	var sourceDigest string
-	switch {
-	case plugin.Source != "":
+	if plugin.Source != "" {
 		src, err := pluginsource.Parse(plugin.Source)
 		if err != nil {
 			return LockPluginEntry{}, fmt.Errorf("ui plugin.source %q: %w", plugin.Source, err)
@@ -600,54 +480,9 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 			Manifest:      filepath.ToSlash(manifestPath),
 			AssetRoot:     filepath.ToSlash(assetRoot),
 		}, nil
-
-	case plugin.Package != "":
-		packagePath := plugin.Package
-		isURL := strings.HasPrefix(packagePath, "https://")
-		if isURL {
-			tmpPath, cleanup, err := pluginpkg.FetchPackage(ctx, packagePath)
-			if err != nil {
-				return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", packagePath, err)
-			}
-			defer cleanup()
-			packagePath = tmpPath
-		}
-		info, err := os.Stat(packagePath)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)
-		}
-		if info.IsDir() {
-			installed, err = pluginstore.InstallFromDir(packagePath, destDir)
-		} else {
-			installed, err = pluginstore.Install(packagePath, destDir)
-		}
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("ui plugin.package %q: %w", plugin.Package, err)
-		}
-		if !isURL {
-			sourceDigest, err = sourceDigestForPackage(packagePath)
-			if err != nil {
-				return LockPluginEntry{}, fmt.Errorf("ui plugin source digest: %w", err)
-			}
-		}
-		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
-		}
-		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
-		if err != nil {
-			return LockPluginEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
-		}
-		return LockPluginEntry{
-			Fingerprint:  fingerprint,
-			Package:      relativePackagePath(paths.configDir, plugin.Package),
-			SourceDigest: sourceDigest,
-			Manifest:     filepath.ToSlash(manifestPath),
-			AssetRoot:    filepath.ToSlash(assetRoot),
-		}, nil
 	}
 
-	return LockPluginEntry{}, fmt.Errorf("ui plugin requires package or source")
+	return LockPluginEntry{}, fmt.Errorf("ui plugin requires source")
 }
 
 func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
@@ -664,7 +499,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
 		}
 		if err != nil {
-			return fmt.Errorf("plugin packages require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+			return fmt.Errorf("managed plugins require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
 		}
 	}
 
@@ -747,30 +582,24 @@ func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
-	if entry.Source != "" {
-		if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
-			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
-		}
-	} else if entry.Fingerprint != fingerprint || entry.Package != relativePackagePath(paths.configDir, plugin.Package) {
+	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
 	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
 	executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
 	needMaterialize := false
-	if entry.Source != "" {
-		if _, err := os.Stat(manifestPath); err != nil {
+	if _, err := os.Stat(manifestPath); err != nil {
+		needMaterialize = true
+	}
+	if !needMaterialize && entry.Executable != "" {
+		if _, err := os.Stat(executablePath); err != nil {
 			needMaterialize = true
 		}
-		if !needMaterialize && entry.Executable != "" {
-			if _, err := os.Stat(executablePath); err != nil {
-				needMaterialize = true
-			}
-		}
-		if needMaterialize {
-			if err := l.materializeLockedSourcePlugin(context.Background(), paths, kind, name, entry); err != nil {
-				return err
-			}
+	}
+	if needMaterialize {
+		if err := l.materializeLockedSourcePlugin(context.Background(), paths, kind, name, entry); err != nil {
+			return err
 		}
 	}
 	if _, err := os.Stat(manifestPath); err != nil {

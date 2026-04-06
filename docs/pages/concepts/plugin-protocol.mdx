@@ -27,12 +27,13 @@ Plugin config is passed from the `config` block under the provider entry:
 providers:
   example:
     from:
-      command: ./provider
+      source:
+        path: ./plugin.yaml
     config:
       greeting: hello
 ```
 
-The plugin receives this as a key-value map during startup. If the packaged plugin needs config validation, declare it in the manifest with `provider.config_schema_path`.
+The plugin receives this as a key-value map during startup. If the plugin needs config validation, declare it in the manifest with `provider.config_schema_path`.
 
 ## Language support
 

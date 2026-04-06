@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -19,8 +19,8 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	packagePath := buildPreparedPluginPackageRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
-	cfgPath := writePreparedPackageConfig(t, dir, packagePath, map[string]string{
+	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
+	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "one",
 	}, []string{
 		"encryption_key: test-key",
@@ -31,7 +31,7 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
-	writePreparedPackageConfig(t, dir, packagePath, map[string]string{
+	writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"wrong_key": "two",
 	}, []string{
 		"encryption_key: test-key",
@@ -52,8 +52,8 @@ func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
 	dir := t.TempDir()
 	apiKeyEnv := "TEST_API_KEY_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	portEnv := apiKeyEnv + "_PORT"
-	packagePath := buildPreparedPluginPackageRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
-	cfgPath := writePreparedPackageConfig(t, dir, packagePath, map[string]string{
+	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
+	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "${" + apiKeyEnv + "}",
 	}, []string{
 		"port: ${" + portEnv + "}",
@@ -121,12 +121,10 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	}
 }
 
-func buildPreparedPluginPackageRequiringAPIKey(t *testing.T, dir, source, version string) string {
+func buildPreparedPluginRequiringAPIKey(t *testing.T, dir, source, version string) string {
 	t.Helper()
 
 	srcDir := filepath.Join(dir, "plugin-src")
-	artifactRel := pluginArtifactRel()
-	artifactAbs := filepath.Join(srcDir, filepath.FromSlash(artifactRel))
 	schemaRel := "schemas/config.schema.json"
 	schema := `{
   "type": "object",
@@ -136,48 +134,29 @@ func buildPreparedPluginPackageRequiringAPIKey(t *testing.T, dir, source, versio
   }
 }`
 
-	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0o755); err != nil {
-		t.Fatalf("MkdirAll artifact dir: %v", err)
-	}
-	if err := copyFile(pluginBin, artifactAbs); err != nil {
-		t.Fatalf("copy plugin binary: %v", err)
-	}
+	testutil.CopyExampleProviderPlugin(t, srcDir)
 	writeTestFile(t, srcDir, schemaRel, []byte(schema), 0o644)
-
-	digest, err := fileSHA256(artifactAbs)
-	if err != nil {
-		t.Fatalf("hash plugin artifact: %v", err)
-	}
-
-	writeManifestFile(t, srcDir, &pluginmanifestv1.Manifest{
-		Source:  source,
-		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
+	manifest := &pluginmanifestv1.Manifest{
+		Source:      source,
+		Version:     version,
+		DisplayName: "Example Provider",
+		Description: "A minimal example provider built with the public SDK",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			ConfigSchemaPath: schemaRel,
 		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   artifactRel,
-				SHA256: digest,
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
-		},
-	})
-
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
-	return archivePath
+	writeManifestFile(t, srcDir, manifest)
+
+	return srcDir
 }
 
-func writePreparedPackageConfig(t *testing.T, dir, packagePath string, pluginConfig map[string]string, serverLines []string) string {
+func writePreparedSourceConfig(t *testing.T, dir, pluginDir string, pluginConfig map[string]string, serverLines []string) string {
 	t.Helper()
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	var serverBlock strings.Builder
@@ -212,8 +191,9 @@ datastore:
 %sproviders:
   example:
     from:
-      package: %s
-%s`, filepath.Join(dir, "gestalt.db"), serverBlock.String(), packagePath, configBlock.String())
+      source:
+        path: %s
+%s`, filepath.Join(dir, "gestalt.db"), serverBlock.String(), manifestPath, configBlock.String())
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}

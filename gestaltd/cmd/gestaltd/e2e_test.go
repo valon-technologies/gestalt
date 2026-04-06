@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -20,49 +19,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
-
-func TestE2EInitArchiveAndValidate(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-
-	out, err := exec.Command(gestaltdBin, "plugin", "package", "--input", pluginDir, "--output", archivePath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd plugin package: %v\n%s", err, out)
-	}
-
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", 0)
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	lockPath := filepath.Join(dir, operator.InitLockfileName)
-	lock, err := operator.ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
-	if !ok {
-		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
-	}
-	if entry.SourceDigest == "" {
-		t.Fatal("expected non-empty SourceDigest for archive package")
-	}
-	if entry.Package == "" {
-		t.Fatal("expected non-empty Package in lockfile entry")
-	}
-
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd validate: %v\n%s", err, out)
-	}
-}
 
 func TestE2EValidateRejectsInvalidInlineConnectionConfigs(t *testing.T) {
 	t.Parallel()
@@ -148,74 +108,6 @@ providers:
 	}
 }
 
-func TestE2EInitDirectoryPackage(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	cfgPath := writeE2EConfigForDir(t, dir, pluginDir)
-
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	lockPath := filepath.Join(dir, operator.InitLockfileName)
-	lock, err := operator.ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
-	if !ok {
-		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
-	}
-	if entry.SourceDigest == "" {
-		t.Fatal("expected non-empty SourceDigest for directory package")
-	}
-
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd validate: %v\n%s", err, out)
-	}
-}
-
-//nolint:paralleltest // Uses a process-wide HTTP transport override so the TLS package fetch trusts the test server.
-func TestE2EInitHTTPSPackage(t *testing.T) {
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
-
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, archivePath)
-	}))
-	defer ts.Close()
-
-	savedTransport := http.DefaultTransport
-	http.DefaultTransport = ts.Client().Transport
-	t.Cleanup(func() { http.DefaultTransport = savedTransport })
-
-	cfgPath := writeE2EConfig(t, dir, ts.URL+"/plugin.tar.gz", 0)
-	if err := run([]string{"init", "--config", cfgPath}); err != nil {
-		t.Fatalf("run init: %v", err)
-	}
-
-	lockPath := filepath.Join(dir, operator.InitLockfileName)
-	lock, err := operator.ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
-	if !ok {
-		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
-	}
-	if entry.SourceDigest != "" {
-		t.Fatalf("expected empty SourceDigest for HTTPS package, got %q", entry.SourceDigest)
-	}
-}
-
 func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	t.Parallel()
 
@@ -231,15 +123,9 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	}
 
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(deployDir, "plugin.tar.gz")
-
-	out, err := exec.Command(gestaltdBin, "plugin", "package", "--input", pluginDir, "--output", archivePath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd plugin package: %v\n%s", err, out)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfigWithPaths(t, deployDir, "plugin.tar.gz", filepath.Join(dataDir, "gestalt.db"), artifactsDir, port)
+	cfgPath := writeE2EConfigWithPaths(t, deployDir, pluginDir, filepath.Join(dataDir, "gestalt.db"), artifactsDir, port)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -254,7 +140,7 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 		t.Fatalf("write config telemetry: %v", err)
 	}
 
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath, "--artifacts-dir", artifactsDir).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--artifacts-dir", artifactsDir).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
@@ -321,10 +207,6 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
 	var logRequests, traceRequests, metricRequests atomic.Int32
 	var metricBodiesMu sync.Mutex
@@ -350,7 +232,7 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 	t.Cleanup(otlpServer.Close)
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -468,13 +350,9 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -534,13 +412,9 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -578,81 +452,14 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 	})
 }
 
-func TestE2EServeLockedUsesUIPluginForClientRootAndKeepsAdminBuiltIn(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-
-	providerPluginDir := setupPluginDir(t, dir)
-	providerArchivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(providerPluginDir, providerArchivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir provider: %v", err)
-	}
-
-	uiPluginDir := newWebUIReleaseFixture(t, dir)
-	if err := os.WriteFile(
-		filepath.Join(uiPluginDir, webUITestAssetRoot, "index.html"),
-		[]byte("<html><body>custom client ui</body></html>\n"),
-		0o644,
-	); err != nil {
-		t.Fatalf("write ui plugin index: %v", err)
-	}
-	uiArchivePath := filepath.Join(dir, "client-ui.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(uiPluginDir, uiArchivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir ui: %v", err)
-	}
-
-	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
-	cfgBytes, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	cfgBytes = append(cfgBytes, []byte(`
-ui:
-  plugin:
-    package: client-ui.tar.gz
-`)...)
-	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
-		t.Fatalf("write ui plugin config: %v", err)
-	}
-
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
-		rootBody := getEndpointBody(t, baseURL+"/", http.StatusOK)
-		if !bytes.Contains(rootBody, []byte("custom client ui")) {
-			t.Fatalf("expected ui.plugin assets at root: %s", rootBody)
-		}
-
-		adminBody := getEndpointBody(t, baseURL+"/admin", http.StatusOK)
-		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
-			t.Fatalf("expected built-in admin UI at /admin: %s", adminBody)
-		}
-		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
-			t.Fatalf("expected built-in admin UI to include echarts asset: %s", adminBody)
-		}
-		if !bytes.Contains(adminBody, []byte("theme.css")) {
-			t.Fatalf("expected built-in admin UI to include shared theme asset: %s", adminBody)
-		}
-	})
-}
-
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 
 	cmd := exec.Command(gestaltdBin, "--config", cfgPath)
 	cmd.Stdout = os.Stdout
@@ -717,17 +524,13 @@ func TestE2EValidateNonMutating(t *testing.T) {
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", 0)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, 0)
 	lockPath := filepath.Join(dir, operator.InitLockfileName)
 
 	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected validate to fail without init, output: %s", out)
+	if err != nil {
+		t.Fatalf("expected validate to succeed without init for local source plugins: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatal("expected no lockfile after non-mutating validate")
@@ -866,21 +669,24 @@ func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 		{
 			name: "bogus field",
 			pluginYAML: `from:
-  command: /tmp/provider
+  source:
+    path: /tmp/plugin.yaml
 bogus: true`,
 			wantError: "bogus",
 		},
 		{
 			name: "removed plugin connection field",
 			pluginYAML: `from:
-  command: /tmp/provider
+  source:
+    path: /tmp/plugin.yaml
 connection: default`,
 			wantError: "connection",
 		},
 		{
 			name: "removed provider params field",
 			pluginYAML: `from:
-  command: /tmp/provider
+  source:
+    path: /tmp/plugin.yaml
 params:
   tenant:
     required: true`,
@@ -938,7 +744,7 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source, plugin.command, or plugin.package",
+			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
@@ -948,12 +754,11 @@ surfaces:
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source, plugin.command, or plugin.package",
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
 			pluginYAML: `from:
-  command: /tmp/provider
   source:
     path: /tmp/plugin.yaml
 headers:
@@ -963,7 +768,6 @@ headers:
 		{
 			name: "managed parameters unsupported without api surface",
 			pluginYAML: `from:
-  command: /tmp/provider
   source:
     path: /tmp/plugin.yaml
 managed_parameters:
@@ -1062,6 +866,68 @@ providers:
 	}
 }
 
+func TestE2EValidateRejectsUnsupportedSourcePluginFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		setup      func(t *testing.T, dir string) string
+		pluginYAML string
+		wantError  string
+	}{
+		{
+			name:  "config headers unsupported for executable-only source plugin",
+			setup: setupPluginDir,
+			pluginYAML: `from:
+  source:
+    path: %s
+headers:
+  x-test: value`,
+			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			pluginDir := tc.setup(t, dir)
+			manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+			if err != nil {
+				t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+			}
+			cfgPath := filepath.Join(dir, "config.yaml")
+			pluginYAML := fmt.Sprintf(tc.pluginYAML, manifestPath)
+			cfg := fmt.Sprintf(`auth:
+  provider: local
+datastore:
+  provider: sqlite
+  config:
+    path: %s
+server:
+  encryption_key: test-key
+providers:
+  example:
+    %s
+`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(pluginYAML, "\n", "\n    "))
+
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate to fail for unsupported source plugin field, output: %s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
+			}
+		})
+	}
+}
+
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
@@ -1078,7 +944,8 @@ server:
 providers:
   example:
     from:
-      command: /tmp/provider
+      source:
+        path: /tmp/plugin.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -1119,105 +986,44 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(baseDir, "plugin-src")
-	artifactRel := pluginArtifactRel()
-	artifactAbs := filepath.Join(pluginDir, filepath.FromSlash(artifactRel))
-
-	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-
-	if err := copyFile(pluginBin, artifactAbs); err != nil {
-		t.Fatalf("copy plugin binary: %v", err)
-	}
-
-	writeManifest(t, pluginDir, version)
-	return pluginDir
-}
-
-func writeManifest(t *testing.T, pluginDir, version string) {
-	t.Helper()
-
-	artifactRel := pluginArtifactRel()
-	artifactAbs := filepath.Join(pluginDir, filepath.FromSlash(artifactRel))
-
-	digest, err := fileSHA256(artifactAbs)
-	if err != nil {
-		t.Fatalf("compute artifact digest: %v", err)
-	}
-
+	testutil.CopyExampleProviderPlugin(t, pluginDir)
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   "github.com/test/plugins/provider",
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   artifactRel,
-				SHA256: digest,
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: artifactRel,
-			},
-		},
+		Source:      "github.com/test/plugins/provider",
+		Version:     version,
+		DisplayName: "Example Provider",
+		Description: "A minimal example provider built with the public SDK",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider:    &pluginmanifestv1.Provider{},
 	}
 	writeManifestFile(t, pluginDir, manifest)
+	return pluginDir
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
-	data, err := pluginpkg.EncodeManifest(manifest)
+	data, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
 	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.ManifestFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
-	if manifest.Provider != nil {
-		if err := os.WriteFile(filepath.Join(pluginDir, pluginpkg.StaticCatalogFile), []byte("name: provider\noperations:\n  - id: greet\n    method: GET\n  - id: echo\n    method: POST\n  - id: status\n    method: GET\n"), 0o644); err != nil {
-			t.Fatalf("write catalog: %v", err)
-		}
-	}
 }
 
-func pluginArtifactRel() string {
-	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		return err
-	}
-	return out.Close()
-}
-
-func fileSHA256(path string) (string, error) {
-	return pluginpkg.FileSHA256(path)
-}
-
-func writeE2EConfig(t *testing.T, dir, packageRef string, port int) string {
+func writeE2EConfig(t *testing.T, dir, pluginDir string, port int) string {
 	t.Helper()
-	return writeE2EConfigWithPaths(t, dir, packageRef, filepath.Join(dir, "gestalt.db"), "", port)
+	return writeE2EConfigWithPaths(t, dir, pluginDir, filepath.Join(dir, "gestalt.db"), "", port)
 }
 
-func writeE2EConfigWithPaths(t *testing.T, dir, packageRef, dbPath, artifactsDir string, port int) string {
+func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir string, port int) string {
 	t.Helper()
 
 	if port == 0 {
 		port = 18080
+	}
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -1237,18 +1043,14 @@ datastore:
 %sproviders:
   example:
     from:
-      package: %s
-`, dbPath, serverBlock, packageRef)
+      source:
+        path: %s
+`, dbPath, serverBlock, manifestPath)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	return cfgPath
-}
-
-func writeE2EConfigForDir(t *testing.T, dir, pluginDir string) string {
-	t.Helper()
-	return writeE2EConfig(t, dir, pluginDir, 0)
 }
 
 func serveLockedAndExerciseExample(t *testing.T, cfgPath string, port int, artifactsDir string, exercise func(t *testing.T, baseURL string)) (string, string) {
@@ -1408,13 +1210,9 @@ func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(pluginDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeHybridAPIPluginConfig(t, dir, archivePath, port)
+	cfgPath := writeHybridAPIPluginConfig(t, dir, pluginDir, port)
 
 	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
@@ -1444,37 +1242,18 @@ func TestE2EHybridAPIPluginIntegration(t *testing.T) {
 	waitForReady(t, baseURL, 30*time.Second)
 }
 
-func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testing.T) {
+func TestE2EHybridSpecLoadedSourceKeepsExecutableAndAllowedOperations(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	pluginDir := setupHybridSpecLoadedPluginDir(t, dir)
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
-
-	out, err := exec.Command(gestaltdBin, "plugin", "package", "--input", pluginDir, "--output", archivePath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd plugin package: %v\n%s", err, out)
-	}
 
 	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, "plugin.tar.gz", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 
-	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	lockPath := filepath.Join(dir, operator.InitLockfileName)
-	lock, err := operator.ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	entry, ok := lock.Plugins[operator.LockPluginKey("integration", "example")]
-	if !ok {
-		t.Fatalf("lockfile missing plugin entry: %+v", lock.Plugins)
-	}
-	if entry.Executable == "" {
-		t.Fatal("expected packaged hybrid plugin executable to be preserved in lockfile")
 	}
 
 	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
@@ -1514,7 +1293,7 @@ func TestE2EHybridSpecLoadedPackageKeepsExecutableAndAllowedOperations(t *testin
 	}
 	sort.Strings(ids)
 	if !containsString(ids, "echo") {
-		t.Fatalf("operation ids = %v, want echo from the packaged executable", ids)
+		t.Fatalf("operation ids = %v, want echo from the executable provider", ids)
 	}
 	if !containsString(ids, "messages.list") || !containsString(ids, "getProfile") {
 		t.Fatalf("operation ids = %v, want aliased spec operations", ids)
@@ -1615,8 +1394,12 @@ providers:
 	}
 }
 
-func writeHybridAPIPluginConfig(t *testing.T, dir, packageRef string, port int) string {
+func writeHybridAPIPluginConfig(t *testing.T, dir, pluginDir string, port int) string {
 	t.Helper()
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`auth:
@@ -1632,8 +1415,9 @@ providers:
   hybrid:
     display_name: Hybrid Test
     from:
-      package: %s
-`, filepath.Join(dir, "gestalt.db"), port, packageRef)
+      source:
+        path: %s
+`, filepath.Join(dir, "gestalt.db"), port, manifestPath)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1644,19 +1428,10 @@ providers:
 func setupHybridSpecLoadedPluginDir(t *testing.T, baseDir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(baseDir, "hybrid-plugin-src")
-	artifactRel := pluginArtifactRel()
-	artifactAbs := filepath.Join(pluginDir, filepath.FromSlash(artifactRel))
+	pluginDir := setupPluginDir(t, baseDir)
 	specRel := filepath.ToSlash(filepath.Join("specs", "openapi.yaml"))
-
-	if err := os.MkdirAll(filepath.Dir(artifactAbs), 0o755); err != nil {
-		t.Fatalf("MkdirAll artifact dir: %v", err)
-	}
 	if err := os.MkdirAll(filepath.Join(pluginDir, "specs"), 0o755); err != nil {
 		t.Fatalf("MkdirAll specs dir: %v", err)
-	}
-	if err := copyFile(pluginBin, artifactAbs); err != nil {
-		t.Fatalf("copy plugin binary: %v", err)
 	}
 
 	spec := `openapi: 3.0.0
@@ -1689,33 +1464,17 @@ paths:
 		t.Fatalf("write spec: %v", err)
 	}
 
-	digest, err := fileSHA256(artifactAbs)
-	if err != nil {
-		t.Fatalf("compute artifact digest: %v", err)
-	}
-
 	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/test/plugins/hybrid-spec-loaded",
-		Version: "0.1.0",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
+		Source:      "github.com/test/plugins/hybrid-spec-loaded",
+		Version:     "0.1.0",
+		DisplayName: "Example Provider",
+		Description: "A minimal example provider built with the public SDK",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
 			OpenAPI: specRel,
 			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
 				"gmail.users.messages.list": {Alias: "messages.list"},
 				"gmail.users.getProfile":    {Alias: "getProfile"},
-			},
-		},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   artifactRel,
-				SHA256: digest,
-			},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: artifactRel,
 			},
 		},
 	}
