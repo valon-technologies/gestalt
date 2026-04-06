@@ -707,6 +707,90 @@ fn test_cli_integrations_list_table_output() {
 }
 
 #[test]
+fn test_cli_invoke_table_output_renders_collection_and_metadata() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = server
+        .mock("GET", "/api/v1/integrations/bigquery/operations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "id": "list_datasets",
+                "description": "List datasets",
+                "method": "POST",
+                "parameters": [
+                    {"name": "project_id", "type": "string", "location": "query", "required": true}
+                ]
+            }]"#,
+        )
+        .create();
+
+    let invoke_mock = server
+        .mock("POST", "/api/v1/bigquery/list_datasets")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"project_id":"serviceone"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"{
+                "datasets": [
+                    {
+                        "datasetReference": {"datasetId": "analytics", "projectId": "serviceone"},
+                        "id": "serviceone:analytics",
+                        "kind": "bigquery#dataset",
+                        "labels": {"owner": {"name": "platform"}},
+                        "location": "US",
+                        "type": "DEFAULT"
+                    },
+                    {
+                        "datasetReference": {"datasetId": "analytics_core", "projectId": "serviceone"},
+                        "id": "serviceone:analytics_core",
+                        "kind": "bigquery#dataset",
+                        "labels": {"owner": {"name": "warehouse"}},
+                        "location": "US",
+                        "type": "DEFAULT"
+                    }
+                ],
+                "etag": "abc123",
+                "kind": "bigquery#datasetList"
+            }"#,
+        )
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.env("GESTALT_API_KEY", "test-token").args([
+        "--url",
+        &server.url(),
+        "invoke",
+        "bigquery",
+        "list_datasets",
+        "-p",
+        "project_id=serviceone",
+    ]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("DATASETS"))
+        .stdout(predicate::str::contains("DATASETREFERENCE.DATASETID"))
+        .stdout(predicate::str::contains("DATASETREFERENCE.PROJECTID"))
+        .stdout(predicate::str::contains("{\"name\":\"platform\"}"))
+        .stdout(predicate::str::contains("LABELS.OWNER.NAME").not())
+        .stdout(predicate::str::contains("analytics_core"))
+        .stdout(predicate::str::contains("serviceone:analytics"))
+        .stdout(predicate::str::contains("METADATA"))
+        .stdout(predicate::str::contains("bigquery#datasetList"))
+        .stdout(predicate::str::contains("abc123"))
+        .stdout(predicate::str::contains("\"datasetReference\"").not());
+
+    invoke_mock.assert();
+}
+
+#[test]
 fn test_cli_invoke_merges_file_params_and_selects_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
