@@ -633,7 +633,7 @@ func bindResolvedProviderManifest(name string, plugin *config.PluginDef, manifes
 		if plugin.Command != "" {
 			isDeclarative = false
 		} else {
-			hasProviderPackage, err := pluginpkg.HasGoProviderPackage(filepath.Dir(manifestPath))
+			hasProviderPackage, err := pluginpkg.HasSourceProviderPackage(filepath.Dir(manifestPath))
 			if err != nil {
 				return fmt.Errorf("detect local source executable for provider %q: %w", name, err)
 			}

@@ -1180,18 +1180,32 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec) (core.Provider, error) {
 	command := intg.Plugin.Command
 	args := intg.Plugin.Args
+	env := clonePluginEnv(intg.Plugin.Env)
 	var cleanup func()
 	if command == "" {
 		if intg.Plugin.ResolvedManifestPath == "" {
-			return nil, fmt.Errorf("resolved manifest path is required for synthesized Go provider execution")
+			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
 		rootDir := filepath.Dir(intg.Plugin.ResolvedManifestPath)
-		var err error
-		command, cleanup, err = pluginpkg.BuildGoProviderTempBinary(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			return nil, fmt.Errorf("prepare synthesized Go provider execution: %w", err)
+		hasGoProvider, err := pluginpkg.HasGoProviderPackage(rootDir)
+		if err != nil && !errors.Is(err, pluginpkg.ErrGoToolUnavailable) {
+			return nil, fmt.Errorf("detect synthesized Go provider package: %w", err)
 		}
-		args = nil
+		if err == nil && hasGoProvider {
+			command, cleanup, err = pluginpkg.BuildGoProviderTempBinary(rootDir, runtime.GOOS, runtime.GOARCH)
+			if err != nil {
+				return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
+			}
+			args = nil
+		} else {
+			command, args, cleanup, err = pluginpkg.SourceProviderRunCommand(rootDir)
+			if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
+				return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
+			}
+			if err != nil {
+				return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
+			}
+		}
 	}
 	if cleanup != nil {
 		defer func() {
@@ -1204,7 +1218,7 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
 		Command:      command,
 		Args:         args,
-		Env:          intg.Plugin.Env,
+		Env:          env,
 		StaticSpec:   spec,
 		Config:       pluginConfig,
 		AllowedHosts: intg.Plugin.AllowedHosts,
@@ -1216,6 +1230,17 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 	}
 	cleanup = nil
 	return prov, nil
+}
+
+func clonePluginEnv(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {

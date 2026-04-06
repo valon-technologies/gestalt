@@ -47,14 +47,16 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *pluginmanifestv1.M
 }
 
 func generateSourceStaticCatalog(rootDir, catalogPath string) error {
-	command, args, cleanup, err := GoProviderRunCommand(rootDir)
+	command, args, cleanup, err := SourceProviderRunCommand(rootDir)
 	if err != nil {
-		if errors.Is(err, ErrNoGoProviderPackage) {
+		if errors.Is(err, ErrNoSourceProviderPackage) {
 			return nil
 		}
-		return fmt.Errorf("prepare Go provider wrapper for static catalog: %w", err)
+		return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
 	}
-	defer cleanup()
+	if cleanup != nil {
+		defer cleanup()
+	}
 
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), envWriteCatalog+"="+catalogPath)

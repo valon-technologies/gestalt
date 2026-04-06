@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -96,6 +97,96 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 	if got["greeting"] != "Hello from config" {
 		t.Fatalf("status.greeting = %q", got["greeting"])
+	}
+}
+
+func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("source-plugin fallback fixture is POSIX-only")
+	}
+
+	bin := buildExampleProviderBinary(t)
+	root := t.TempDir()
+	manifest := &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/python-source",
+		Version:     "0.1.0",
+		DisplayName: "Python Source",
+		Description: "Python source provider fixture",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		},
+	}
+	manifestData, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	manifestPath := filepath.Join(root, "plugin.yaml")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(plugin.yaml): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+plugin = "provider:plugin"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+	catalogData, err := yaml.Marshal(&catalog.Catalog{
+		Name: "python-source",
+		Operations: []catalog.CatalogOperation{
+			{ID: "greet", Method: http.MethodPost},
+			{ID: "status", Method: http.MethodGet},
+		},
+	})
+	if err != nil {
+		t.Fatalf("yaml.Marshal(catalog): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, pluginpkg.StaticCatalogFile), catalogData, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog.yaml): %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".venv", "bin"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.venv/bin): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".venv", "bin", "python"), []byte("#!/bin/sh\nset -eu\nexec "+strconv.Quote(bin)+"\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(.venv/bin/python): %v", err)
+	}
+
+	t.Setenv("PATH", t.TempDir())
+
+	cfg := &config.Config{
+		Integrations: map[string]config.IntegrationDef{
+			"python-source": {
+				Plugin: &config.PluginDef{
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: manifestPath,
+					Config: mustNode(t, map[string]any{
+						"greeting": "Hi",
+					}),
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("python-source")
+	if err != nil {
+		t.Fatalf("providers.Get(python-source): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "greet", map[string]any{"name": "Ada"}, "")
+	if err != nil {
+		t.Fatalf("Execute(greet): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("greet status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if result.Body != `{"message":"Hi, Ada!"}` {
+		t.Fatalf("greet body = %q", result.Body)
 	}
 }
 

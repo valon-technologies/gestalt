@@ -18,6 +18,7 @@ const goProviderPackageTarget = "."
 const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
+var ErrGoToolUnavailable = errors.New("go tool unavailable")
 
 //go:embed go_provider_wrapper.go.tmpl
 var goProviderWrapperSource string
@@ -27,6 +28,12 @@ var goProviderWrapperTemplate = template.Must(template.New("go-provider-wrapper"
 func DetectGoProviderImportPath(root, goos, goarch string) (string, error) {
 	importPath, err := goPackageField(root, goProviderPackageTarget, "{{.ImportPath}}", goos, goarch)
 	if err != nil {
+		if errors.Is(err, ErrGoToolUnavailable) {
+			if !goProviderSourceExists(root) {
+				return "", ErrNoGoProviderPackage
+			}
+			return "", err
+		}
 		if isMissingGoPackageError(err) {
 			return "", ErrNoGoProviderPackage
 		}
@@ -133,6 +140,9 @@ func goPackageField(root, buildTarget, field, goos, goarch string) (string, erro
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		if isMissingGoToolError(err) {
+			return "", fmt.Errorf("%w: %v", ErrGoToolUnavailable, err)
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
@@ -140,6 +150,41 @@ func goPackageField(root, buildTarget, field, goos, goarch string) (string, erro
 		return "", errors.New(msg)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func isMissingGoToolError(err error) bool {
+	if errors.Is(err, exec.ErrNotFound) {
+		return true
+	}
+	var execErr *exec.Error
+	if errors.As(err, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, `exec: "go": executable file not found`) ||
+		strings.Contains(msg, "executable file not found in $PATH")
+}
+
+func goProviderSourceExists(root string) bool {
+	providerDir := filepath.Join(root, "provider")
+	if _, err := os.Stat(providerDir); err != nil {
+		return false
+	}
+
+	stop := errors.New("found go provider source")
+	err := filepath.WalkDir(providerDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(d.Name(), ".go") && !strings.HasSuffix(d.Name(), "_test.go") {
+			return stop
+		}
+		return nil
+	})
+	return errors.Is(err, stop)
 }
 
 func isMissingGoPackageError(err error) bool {

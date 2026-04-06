@@ -51,14 +51,16 @@ It writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under
 
 ## Release Command
 
-Build a cross-platform release:
+Build a release:
 
 ```sh
 gestaltd plugin release --version 0.1.0
 ```
 
-Run `plugin release` from the plugin source directory. It compiles the plugin,
-produces release archives, and writes a checksums file.
+Run `plugin release` from the plugin source directory. It produces release
+archives and writes a checksums file. Go source plugins can target multiple
+platforms. Python source plugins build a current-platform executable artifact
+from the selected Python environment.
 
 ## Declarative-Only Archives
 
