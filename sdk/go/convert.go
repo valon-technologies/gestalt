@@ -4,47 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
-
-func coreConnectionModeToProto(mode ConnectionMode) proto.ConnectionMode {
-	switch mode {
-	case ConnectionModeNone, "":
-		return proto.ConnectionMode_CONNECTION_MODE_NONE
-	case ConnectionModeUser:
-		return proto.ConnectionMode_CONNECTION_MODE_USER
-	case ConnectionModeIdentity:
-		return proto.ConnectionMode_CONNECTION_MODE_IDENTITY
-	case ConnectionModeEither:
-		return proto.ConnectionMode_CONNECTION_MODE_EITHER
-	default:
-		return proto.ConnectionMode_CONNECTION_MODE_UNSPECIFIED
-	}
-}
 
 func mapFromStruct(s *structpb.Struct) map[string]any {
 	if s == nil {
 		return nil
 	}
 	return s.AsMap()
-}
-
-func connectionParamDefsToProto(defs map[string]ConnectionParamDef) map[string]*proto.ConnectionParamDef {
-	if len(defs) == 0 {
-		return nil
-	}
-	out := make(map[string]*proto.ConnectionParamDef, len(defs))
-	for name, def := range defs {
-		out[name] = &proto.ConnectionParamDef{
-			Required:     def.Required,
-			Description:  def.Description,
-			DefaultValue: def.Default,
-			From:         def.From,
-			Field:        def.Field,
-		}
-	}
-	return out
 }
 
 func catalogToJSON(cat *Catalog) (string, error) {

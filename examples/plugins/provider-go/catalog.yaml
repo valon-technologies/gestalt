@@ -7,7 +7,6 @@ operations:
       - name: name
         type: string
         description: Name to greet
-        required: true
   - id: echo
     method: POST
     description: Echo back the input
@@ -19,3 +18,4 @@ operations:
   - id: status
     method: GET
     description: Return provider startup state
+    read_only: true

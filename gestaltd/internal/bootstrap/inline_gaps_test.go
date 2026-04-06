@@ -348,8 +348,7 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"hybrid": {
 			Plugin: &config.PluginDef{
-				Source:               manifest.Source,
-				Version:              manifest.Version,
+				Source:               &config.PluginSourceDef{Ref: manifest.Source, Version: manifest.Version},
 				IsDeclarative:        true,
 				ResolvedManifestPath: manifestPath,
 				ResolvedManifest:     manifest,

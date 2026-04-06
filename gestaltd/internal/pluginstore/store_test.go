@@ -340,8 +340,7 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 		Version: version,
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			StaticCatalogPath: "catalog.yaml",
-			ConfigSchemaPath:  schemaPath,
+			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -411,7 +410,7 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -464,7 +463,7 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -504,7 +503,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -566,7 +565,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -627,7 +626,7 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

@@ -94,8 +94,9 @@ When `allowed_hosts` is configured on a provider, the plugin is automatically sa
 providers:
   my-plugin:
     from:
-      source: github.com/acme/plugins/my-plugin
-      version: 1.0.0
+      source:
+        ref: github.com/acme/plugins/my-plugin
+        version: 1.0.0
       allowed_hosts:
         - "api.example.com"
         - "*.slack.com"

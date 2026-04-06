@@ -1,10 +1,9 @@
-source: example.com/provider-go
+source: github.com/valon-technologies/gestalt/provider-go
 version: 0.1.0
 display_name: Example Provider
 description: A minimal example provider built with the public SDK
-kinds:
-  - provider
 provider:
-  auth:
-    type: none
-  static_catalog_path: catalog.yaml
+  connections:
+    default:
+      auth:
+        type: none

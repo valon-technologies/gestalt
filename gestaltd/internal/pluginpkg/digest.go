@@ -55,6 +55,18 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		}
 		digests = append(digests, sum)
 	}
+	staticCatalogPath := StaticCatalogPath(dirPath)
+	if _, err := os.Stat(staticCatalogPath); err == nil {
+		sum, err := FileSHA256(staticCatalogPath)
+		if err != nil {
+			return "", fmt.Errorf("digest provider static catalog: %w", err)
+		}
+		digests = append(digests, sum)
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("digest provider static catalog: %w", err)
+	} else if StaticCatalogRequired(manifest) {
+		return "", fmt.Errorf("digest provider static catalog: %s does not exist", StaticCatalogFile)
+	}
 
 	if manifest.WebUI != nil && manifest.WebUI.AssetRoot != "" {
 		assetDir := filepath.Join(dirPath, filepath.FromSlash(manifest.WebUI.AssetRoot))

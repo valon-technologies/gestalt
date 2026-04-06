@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -1176,18 +1178,43 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 }
 
 func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec) (core.Provider, error) {
+	command := intg.Plugin.Command
+	args := intg.Plugin.Args
+	var cleanup func()
+	if command == "" {
+		if intg.Plugin.ResolvedManifestPath == "" {
+			return nil, fmt.Errorf("resolved manifest path is required for synthesized Go provider execution")
+		}
+		rootDir := filepath.Dir(intg.Plugin.ResolvedManifestPath)
+		var err error
+		command, cleanup, err = pluginpkg.BuildGoProviderTempBinary(rootDir, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return nil, fmt.Errorf("prepare synthesized Go provider execution: %w", err)
+		}
+		args = nil
+	}
+	if cleanup != nil {
+		defer func() {
+			if cleanup != nil {
+				cleanup()
+			}
+		}()
+	}
+
 	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
-		Command:      intg.Plugin.Command,
-		Args:         intg.Plugin.Args,
+		Command:      command,
+		Args:         args,
 		Env:          intg.Plugin.Env,
 		StaticSpec:   spec,
 		Config:       pluginConfig,
 		AllowedHosts: intg.Plugin.AllowedHosts,
 		HostBinary:   intg.Plugin.HostBinary,
+		Cleanup:      cleanup,
 	})
 	if err != nil {
 		return nil, err
 	}
+	cleanup = nil
 	return prov, nil
 }
 
@@ -1222,12 +1249,19 @@ func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pl
 		}
 	}
 
-	staticCatalog, err := pluginpkg.ReadStaticCatalog(manifest.Provider.StaticCatalogPath, name)
-	if err != nil {
-		return pluginhost.StaticProviderSpec{}, err
+	var staticCatalog *catalog.Catalog
+	if manifestRoot := filepath.Dir(intg.Plugin.ResolvedManifestPath); intg.Plugin.ResolvedManifestPath != "" {
+		var err error
+		staticCatalog, err = pluginpkg.ReadStaticCatalog(manifestRoot, name)
+		if err != nil {
+			return pluginhost.StaticProviderSpec{}, err
+		}
 	}
-	if staticCatalog == nil && !manifest.Provider.IsManifestBacked() {
-		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define provider.static_catalog_path")
+	if staticCatalog == nil && pluginpkg.StaticCatalogRequired(manifest) {
+		if intg.Plugin.ResolvedManifestPath == "" {
+			return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
+		}
+		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", pluginpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {

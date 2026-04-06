@@ -149,7 +149,7 @@ type pluginFingerprintInput struct {
 func configHasPluginLoading(cfg *config.Config) bool {
 	for name := range cfg.Integrations {
 		plugin := cfg.Integrations[name].Plugin
-		if plugin.HasManagedArtifacts() || (plugin != nil && plugin.Manifest != "") {
+		if plugin.HasManagedArtifacts() || plugin.HasLocalSource() {
 			return true
 		}
 	}
@@ -308,8 +308,8 @@ func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) 
 	input := pluginFingerprintInput{
 		Name:    name,
 		Package: relativePackagePath(configDir, plugin.Package),
-		Source:  plugin.Source,
-		Version: plugin.Version,
+		Source:  plugin.SourceRef(),
+		Version: plugin.SourceVersion(),
 	}
 
 	payload, err := json.Marshal(input)
@@ -351,7 +351,7 @@ func pluginEntryMatches(paths initPaths, name string, plugin *config.PluginDef, 
 		return false
 	}
 	if entry.Source != "" {
-		if entry.Source != plugin.Source || entry.Version != plugin.Version {
+		if entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
 			return false
 		}
 	} else if entry.Package != relativePackagePath(paths.configDir, plugin.Package) {
@@ -389,7 +389,7 @@ func (l *Lifecycle) writePluginArtifacts(ctx context.Context, cfg *config.Config
 		}
 		var entry LockPluginEntry
 		switch {
-		case intg.Plugin.Source != "":
+		case intg.Plugin.HasManagedSource():
 			entry, err = l.lockEntryForSource(ctx, paths, "integration", name, intg.Plugin, configMap)
 		case intg.Plugin.Package != "":
 			entry, err = lockEntryForPackage(ctx, paths, "integration", name, intg.Plugin, configMap)
@@ -493,16 +493,16 @@ func lockEntryForPackage(ctx context.Context, paths initPaths, kind, name string
 }
 
 func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) (LockPluginEntry, error) {
-	src, err := pluginsource.Parse(plugin.Source)
+	src, err := pluginsource.Parse(plugin.SourceRef())
 	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.source %q: %w", kind, name, plugin.Source, err)
+		return LockPluginEntry{}, fmt.Errorf("%s %q plugin.source.ref %q: %w", kind, name, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockPluginEntry{}, fmt.Errorf("%s %q: source plugin resolution requires a source resolver", kind, name)
 	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
-		return LockPluginEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.Source, plugin.Version, err)
+		return LockPluginEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
 	defer resolved.Cleanup()
 
@@ -512,11 +512,11 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kin
 		return LockPluginEntry{}, fmt.Errorf("%s %q install source plugin: %w", kind, name, err)
 	}
 
-	if installed.Manifest.Source != plugin.Source {
-		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, plugin.Source)
+	if installed.Manifest.Source != plugin.SourceRef() {
+		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, plugin.SourceRef())
 	}
-	if installed.Manifest.Version != plugin.Version {
-		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.Version)
+	if installed.Manifest.Version != plugin.SourceVersion() {
+		return LockPluginEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.SourceVersion())
 	}
 
 	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, manifestKind(kind), configMap); err != nil {
@@ -540,8 +540,8 @@ func (l *Lifecycle) lockEntryForSource(ctx context.Context, paths initPaths, kin
 	}
 	return LockPluginEntry{
 		Fingerprint:   fingerprint,
-		Source:        plugin.Source,
-		Version:       plugin.Version,
+		Source:        plugin.SourceRef(),
+		Version:       plugin.SourceVersion(),
 		ResolvedURL:   resolved.ResolvedURL,
 		ArchiveSHA256: resolved.ArchiveSHA256,
 		Manifest:      filepath.ToSlash(manifestPath),
@@ -682,7 +682,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			if err := l.applyLockedPluginEntry(paths, lock, "integration", name, intg.Plugin, configMap); err != nil {
 				return err
 			}
-		case intg.Plugin != nil && intg.Plugin.Manifest != "":
+		case intg.Plugin.HasLocalSource():
 			if err := applyLocalPluginManifest(paths, "integration", name, intg.Plugin, configMap); err != nil {
 				return err
 			}
@@ -721,21 +721,18 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 }
 
 func applyLocalPluginManifest(paths initPaths, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
-	if plugin == nil || plugin.Manifest == "" {
+	if plugin == nil || !plugin.HasLocalSource() {
 		return nil
 	}
 
-	manifestPath := plugin.Manifest
-	if !filepath.IsAbs(manifestPath) {
-		manifestPath = filepath.Join(paths.configDir, plugin.Manifest)
-	}
+	manifestPath := plugin.SourcePath()
 	if _, err := os.Stat(manifestPath); err != nil {
 		return fmt.Errorf("manifest for %s %q not found at %s: %w", kind, name, manifestPath, err)
 	}
 
-	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	_, manifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
 	if err != nil {
-		return fmt.Errorf("read manifest for %s %q: %w", kind, name, err)
+		return fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)
 	}
 	return bindResolvedManifest(kind, name, plugin, manifestPath, manifest, configMap)
 }
@@ -751,7 +748,7 @@ func (l *Lifecycle) applyLockedPluginEntry(paths initPaths, lock *Lockfile, kind
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
 	if entry.Source != "" {
-		if entry.Fingerprint != fingerprint || entry.Source != plugin.Source || entry.Version != plugin.Version {
+		if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
 			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 		}
 	} else if entry.Fingerprint != fingerprint || entry.Package != relativePackagePath(paths.configDir, plugin.Package) {
@@ -813,7 +810,19 @@ func bindResolvedManifest(kind, name string, plugin *config.PluginDef, manifestP
 	resolvePluginIcon(manifest, manifestPath, plugin)
 	plugin.ResolvedManifestPath = manifestPath
 	plugin.ResolvedManifest = manifest
-	plugin.IsDeclarative = kind == "integration" && manifest.IsDeclarativeOnlyProvider()
+	isDeclarative := kind == "integration" && manifest.IsDeclarativeOnlyProvider()
+	if isDeclarative && plugin != nil && plugin.HasLocalSource() {
+		if plugin.Command != "" {
+			isDeclarative = false
+		} else {
+			hasProviderPackage, err := pluginpkg.HasGoProviderPackage(filepath.Dir(manifestPath))
+			if err != nil {
+				return fmt.Errorf("detect local source executable for %s %q: %w", kind, name, err)
+			}
+			isDeclarative = !hasProviderPackage
+		}
+	}
+	plugin.IsDeclarative = isDeclarative
 	return nil
 }
 

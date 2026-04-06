@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -66,13 +66,44 @@ func packageFromDir(input, output string) error {
 		}
 		sourceDir = filepath.Dir(input)
 	}
+	manifestPath, err := pluginpkg.FindManifestFile(sourceDir)
+	if err != nil {
+		return err
+	}
+	_, srcManifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("prepare source manifest %s: %w", manifestPath, err)
+	}
+	if err := validatePackageOutputPath(sourceDir, output); err != nil {
+		return err
+	}
+
+	packageDir := sourceDir
+	var cleanup func()
+	if srcManifest != nil && srcManifest.Entrypoints.Provider == nil && manifestHasKind(srcManifest, pluginmanifestv1.KindProvider) {
+		needsMaterialization := releaseRequiresBuildTarget(srcManifest)
+		if !needsMaterialization {
+			hasProviderPackage, detectErr := pluginpkg.HasGoProviderPackage(sourceDir)
+			if detectErr != nil {
+				return fmt.Errorf("detect Go provider package in %s: %w", sourceDir, detectErr)
+			}
+			needsMaterialization = hasProviderPackage
+		}
+		if needsMaterialization {
+			packageDir, cleanup, err = materializeSourcePackageDir(sourceDir, manifestPath, srcManifest)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+		}
+	}
 
 	if isArchiveOutput(output) {
-		if err := pluginpkg.CreatePackageFromDir(sourceDir, output); err != nil {
+		if err := pluginpkg.CreatePackageFromDir(packageDir, output); err != nil {
 			return err
 		}
 	} else {
-		if err := pluginpkg.CopyPackageDir(sourceDir, output); err != nil {
+		if err := pluginpkg.CopyPackageDir(packageDir, output); err != nil {
 			return err
 		}
 	}
@@ -82,8 +113,6 @@ func packageFromDir(input, output string) error {
 
 const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
 const defaultReleaseOutputDir = "dist/"
-const releaseCmdBuildTarget = "./cmd"
-const releaseRootBuildTarget = "."
 const releaseBinaryPrefix = "gestalt-plugin-"
 const windowsOS = "windows"
 const windowsExecutableSuffix = ".exe"
@@ -97,8 +126,6 @@ type releaseBuild struct {
 	platform releasePlatform
 	target   string
 }
-
-var errNoGoMainPackage = errors.New("no Go main package found")
 
 func runPluginRelease(args []string) error {
 	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
@@ -124,9 +151,9 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, srcManifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	_, srcManifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
 	if err != nil {
-		return fmt.Errorf("decode %s: %w", manifestPath, err)
+		return fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
 	manifestFormat := pluginpkg.ManifestFormatFromPath(manifestPath)
 	manifestFile := filepath.Base(manifestPath)
@@ -149,7 +176,7 @@ func runPluginRelease(args []string) error {
 		return err
 	}
 
-	builds, err := detectReleaseBuilds(".", src.Plugin, srcManifest, platList)
+	builds, err := detectReleaseBuilds(".", srcManifest, platList)
 	if err != nil {
 		return err
 	}
@@ -157,7 +184,7 @@ func runPluginRelease(args []string) error {
 	var archivePaths []string
 	if len(builds) > 0 {
 		for _, build := range builds {
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, build.target, build.platform, *outputDir, manifestFile, manifestFormat)
+			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, build, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
 				return fmt.Errorf("build %s/%s: %w", build.platform.GOOS, build.platform.GOARCH, err)
 			}
@@ -178,27 +205,42 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func detectReleaseBuilds(root, pluginName string, manifest *pluginmanifestv1.Manifest, platforms []releasePlatform) ([]releaseBuild, error) {
+func detectReleaseBuilds(root string, manifest *pluginmanifestv1.Manifest, platforms []releasePlatform) ([]releaseBuild, error) {
 	builds := make([]releaseBuild, 0, len(platforms))
+	hasProviderKind := manifestHasKind(manifest, pluginmanifestv1.KindProvider)
+	providerBuildRequired := releaseRequiresBuildTarget(manifest)
 	var missingErr error
 
 	for _, plat := range platforms {
-		target, err := detectGoBuildTarget(root, pluginName, plat.GOOS, plat.GOARCH)
+		if hasProviderKind {
+			_, err := pluginpkg.DetectGoProviderImportPath(root, plat.GOOS, plat.GOARCH)
+			switch {
+			case err == nil:
+				builds = append(builds, releaseBuild{platform: plat})
+				continue
+			case errors.Is(err, pluginpkg.ErrNoGoProviderPackage):
+				if providerBuildRequired && missingErr == nil {
+					missingErr = fmt.Errorf("detect Go provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
+				}
+			default:
+				return nil, fmt.Errorf("detect Go provider package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
+			}
+		}
+
+		target, err := pluginpkg.DetectGoMainBuildTarget(root, plat.GOOS, plat.GOARCH)
 		switch {
 		case err == nil:
 			builds = append(builds, releaseBuild{platform: plat, target: target})
-		case errors.Is(err, errNoGoMainPackage):
-			if missingErr == nil {
-				missingErr = fmt.Errorf("detect build target for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
-			}
+		case errors.Is(err, pluginpkg.ErrNoGoMainPackage):
+			continue
 		default:
-			return nil, fmt.Errorf("detect build target for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
+			return nil, fmt.Errorf("detect Go main package for %s/%s: %w", plat.GOOS, plat.GOARCH, err)
 		}
 	}
 
 	if len(builds) == 0 {
-		if releaseRequiresBuildTarget(manifest) {
-			return nil, errNoGoMainPackage
+		if providerBuildRequired {
+			return nil, pluginpkg.ErrNoGoProviderPackage
 		}
 		return nil, nil
 	}
@@ -208,23 +250,11 @@ func detectReleaseBuilds(root, pluginName string, manifest *pluginmanifestv1.Man
 	return builds, nil
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildTarget string, plat releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, build releaseBuild, outputDir, manifestFile, manifestFormat string) (string, error) {
+	plat := build.platform
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
 	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
-		binaryName := releaseBinaryName(pluginName, plat.GOOS)
-		binaryPath := filepath.Join(stagingDir, binaryName)
-		if err := buildReleaseBinary(buildTarget, binaryPath, plat); err != nil {
-			return nil, err
-		}
-
-		digest, err := pluginpkg.FileSHA256(binaryPath)
-		if err != nil {
-			return nil, fmt.Errorf("hash binary: %w", err)
-		}
-		if err := copyReleasePackageFiles(srcManifest, ".", stagingDir, false); err != nil {
-			return nil, err
-		}
-		return buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
+		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, build)
 	})
 }
 
@@ -251,9 +281,12 @@ func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat s
 	return archivePath, nil
 }
 
-func buildReleaseBinary(buildTarget, binaryPath string, plat releasePlatform) error {
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
-	cmd.Dir = "."
+func buildReleaseBinary(root, buildTarget, binaryPath string, plat releasePlatform) error {
+	if buildTarget == "" {
+		return pluginpkg.BuildGoProviderBinary(root, binaryPath, plat.GOOS, plat.GOARCH)
+	}
+
+	cmd := exec.Command("go", "-C", root, "build", "-mod=readonly", "-trimpath", "-ldflags", "-s -w", "-o", binaryPath, buildTarget)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+plat.GOOS, "GOARCH="+plat.GOARCH)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -271,72 +304,16 @@ func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, m
 	return os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644)
 }
 
-func detectGoBuildTarget(root, pluginName, goos, goarch string) (string, error) {
-	targets := make([]string, 0, 3)
-	if pluginName != "" {
-		targets = append(targets, releaseCmdBuildTarget+"/"+pluginName)
-	}
-	targets = append(targets, releaseCmdBuildTarget, releaseRootBuildTarget)
-
-	var fatalErr error
-	for _, target := range targets {
-		name, err := goPackageName(root, target, goos, goarch)
-		if err != nil {
-			if isMissingGoPackageError(err) {
-				continue
-			}
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("%s: %w", target, err)
-			}
-			continue
-		}
-		if name == "main" {
-			return target, nil
-		}
-	}
-
-	if fatalErr != nil {
-		return "", fatalErr
-	}
-	return "", errNoGoMainPackage
-}
-
-func goPackageName(root, buildTarget, goos, goarch string) (string, error) {
-	cmd := exec.Command("go", "list", "-f", "{{.Name}}", buildTarget)
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errors.New(msg)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func isMissingGoPackageError(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "directory not found") ||
-		strings.Contains(msg, "no such file or directory") ||
-		strings.Contains(msg, "go.mod file not found") ||
-		strings.Contains(msg, "cannot find main module") ||
-		strings.Contains(msg, "does not contain main module or its selected dependencies") ||
-		strings.Contains(msg, "no Go files") ||
-		strings.Contains(msg, "build constraints exclude all Go files") ||
-		strings.Contains(msg, "matched no packages")
-}
-
 func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
+	return manifestHasKind(manifest, pluginmanifestv1.KindProvider) && (manifest.Provider == nil || !manifest.Provider.IsManifestBacked())
+}
+
+func manifestHasKind(manifest *pluginmanifestv1.Manifest, kind string) bool {
 	if manifest == nil {
 		return false
 	}
-	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider && (manifest.Provider == nil || !manifest.Provider.IsManifestBacked()) {
+	for _, manifestKind := range manifest.Kinds {
+		if manifestKind == kind {
 			return true
 		}
 	}
@@ -372,6 +349,55 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 		}
 		return manifest, nil
 	})
+}
+
+func materializeSourcePackageDir(sourceDir, manifestPath string, srcManifest *pluginmanifestv1.Manifest) (string, func(), error) {
+	src, err := pluginsource.Parse(srcManifest.Source)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid source in manifest: %w", err)
+	}
+
+	builds, err := detectReleaseBuilds(sourceDir, srcManifest, []releasePlatform{{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}})
+	if err != nil {
+		return "", nil, err
+	}
+	if len(builds) != 1 {
+		return "", nil, fmt.Errorf("expected a single build for current platform %s/%s, got %d", runtime.GOOS, runtime.GOARCH, len(builds))
+	}
+
+	stagingDir, err := os.MkdirTemp("", "gestalt-package-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create package staging dir: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(stagingDir) }
+
+	manifest, err := prepareBuiltPackageDir(stagingDir, sourceDir, srcManifest, srcManifest.Version, src.Plugin, builds[0])
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if err := writeReleaseManifestFile(stagingDir, filepath.Base(manifestPath), pluginpkg.ManifestFormatFromPath(manifestPath), manifest); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return stagingDir, cleanup, nil
+}
+
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, build releaseBuild) (*pluginmanifestv1.Manifest, error) {
+	binaryName := releaseBinaryName(pluginName, build.platform.GOOS)
+	binaryPath := filepath.Join(stagingDir, binaryName)
+	if err := buildReleaseBinary(sourceDir, build.target, binaryPath, build.platform); err != nil {
+		return nil, err
+	}
+
+	digest, err := pluginpkg.FileSHA256(binaryPath)
+	if err != nil {
+		return nil, fmt.Errorf("hash binary: %w", err)
+	}
+	if err := copyReleasePackageFiles(srcManifest, sourceDir, stagingDir, false); err != nil {
+		return nil, err
+	}
+	return buildReleaseManifest(srcManifest, version, binaryName, build.platform, digest)
 }
 
 func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {
@@ -563,7 +589,7 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 		if err := copyPath(manifest.Provider.ConfigSchemaPath, false); err != nil {
 			return err
 		}
-		if err := copyPath(manifest.Provider.StaticCatalogPath, false); err != nil {
+		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}
 		if err := copyMaybeLocalPath(manifest.Provider.OpenAPI, false); err != nil {
@@ -621,6 +647,28 @@ func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, ou
 		return fmt.Errorf("--output %q must not be inside webui.asset_root %q", outputDir, manifest.WebUI.AssetRoot)
 	}
 
+	return nil
+}
+
+func validatePackageOutputPath(sourceDir, outputPath string) error {
+	sourceAbs, err := filepath.Abs(sourceDir)
+	if err != nil {
+		return fmt.Errorf("resolve source dir: %w", err)
+	}
+	outputAbs, err := filepath.Abs(outputPath)
+	if err != nil {
+		return fmt.Errorf("resolve output path: %w", err)
+	}
+	inside, err := pathWithinBase(outputAbs, sourceAbs)
+	if err != nil {
+		return fmt.Errorf("compare output path to source dir: %w", err)
+	}
+	if inside {
+		if isArchiveOutput(outputPath) {
+			return fmt.Errorf("output archive %q must not be inside source directory %q", outputPath, sourceDir)
+		}
+		return fmt.Errorf("output directory %q must not be inside source directory %q", outputPath, sourceDir)
+	}
 	return nil
 }
 

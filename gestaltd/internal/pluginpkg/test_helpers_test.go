@@ -52,7 +52,7 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     testArtifactOS,
@@ -95,9 +95,8 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 		Source:  source,
 		Version: version,
 		Provider: &providerManifestWire{
-			Exec:              &providerExecWire{ArtifactPath: artifactPath},
-			StaticCatalogPath: "catalog.yaml",
-			Surfaces:          providerManifestSurfacesWire{},
+			Exec:     &providerExecWire{ArtifactPath: artifactPath},
+			Surfaces: providerManifestSurfacesWire{},
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -151,10 +150,10 @@ func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
 
 func mustWriteStaticCatalog(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
-	if manifest == nil || manifest.Provider == nil || manifest.Provider.StaticCatalogPath == "" {
+	if manifest == nil || manifest.Provider == nil {
 		return
 	}
-	mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(manifest.Provider.StaticCatalogPath)), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, StaticCatalogFile), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 }
 
 func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFile) {

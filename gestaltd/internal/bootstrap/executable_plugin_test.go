@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -21,24 +23,15 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	t.Parallel()
 
 	bin := buildExampleProviderBinary(t)
-	manifest := newExecutableManifest(
-		"Example Provider",
-		"A minimal example provider built with the public SDK",
-		writeStaticCatalog(t, &catalog.Catalog{
-			Name: "example",
-			Operations: []catalog.CatalogOperation{
-				{ID: "greet", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-				{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
-				{ID: "status", Method: http.MethodGet},
-			},
-		}),
-	)
+	manifestRoot := exampleProviderRoot(t)
+	manifest := newExecutableManifest("Example Provider", "A minimal example provider built with the public SDK")
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"example": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 					Config: mustNode(t, map[string]any{
 						"greeting": "Hello from config",
 					}),
@@ -117,18 +110,15 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 		t.Fatalf("WriteFile(icon): %v", err)
 	}
 
-	manifest := newExecutableManifest(
-		"Manifest Display",
-		"Manifest Description",
-		writeStaticCatalog(t, &catalog.Catalog{
-			Name:        "example",
-			DisplayName: "Catalog Display",
-			Description: "Catalog Description",
-			Operations: []catalog.CatalogOperation{
-				{ID: "status", Method: http.MethodGet},
-			},
-		}),
-	)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name:        "example",
+		DisplayName: "Catalog Display",
+		Description: "Catalog Description",
+		Operations: []catalog.CatalogOperation{
+			{ID: "status", Method: http.MethodGet},
+		},
+	})
+	manifest := newExecutableManifest("Manifest Display", "Manifest Description")
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
@@ -137,8 +127,9 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 				Description: "Config Description",
 				IconFile:    iconPath,
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					ResolvedManifest: manifest,
+					Command:              bin,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -193,6 +184,15 @@ func buildExampleProviderBinary(t *testing.T) string {
 	return sharedExampleProviderBin
 }
 
+func exampleProviderRoot(t *testing.T) string {
+	t.Helper()
+	root, err := repoRootForBootstrapTests()
+	if err != nil {
+		t.Fatalf("repoRootForBootstrapTests: %v", err)
+	}
+	return filepath.Join(root, "examples", "plugins", "provider-go")
+}
+
 func mustNode(t *testing.T, value any) yaml.Node {
 	t.Helper()
 	var node yaml.Node
@@ -208,23 +208,22 @@ func writeStaticCatalog(t *testing.T, cat *catalog.Catalog) string {
 	if err != nil {
 		t.Fatalf("yaml.Marshal(catalog): %v", err)
 	}
-	path := t.TempDir() + "/catalog.yaml"
+	dir := t.TempDir()
+	path := filepath.Join(dir, pluginpkg.StaticCatalogFile)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog): %v", err)
 	}
-	return path
+	return dir
 }
 
-func newExecutableManifest(displayName, description, staticCatalogPath string) *pluginmanifestv1.Manifest {
+func newExecutableManifest(displayName, description string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
 		Source:      "github.com/acme/plugins/test",
 		Version:     "1.0.0",
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		DisplayName: displayName,
 		Description: description,
-		Provider: &pluginmanifestv1.Provider{
-			StaticCatalogPath: staticCatalogPath,
-		},
+		Provider:    &pluginmanifestv1.Provider{},
 	}
 }
 
@@ -233,12 +232,13 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echoauth",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost},
 		},
-	}))
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	manifest.Provider.Auth = &pluginmanifestv1.ProviderAuth{
 		Type:             pluginmanifestv1.AuthTypeOAuth2,
 		AuthorizationURL: "https://example.com/authorize",
@@ -255,7 +255,8 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 						"client_id":     "test-client-id",
 						"client_secret": "test-client-secret",
 					}),
-					ResolvedManifest: manifest,
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -300,19 +301,21 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echonoauth",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost},
 		},
-	}))
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echonoauth": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -333,21 +336,23 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 func TestPluginProcessEnvIsolation(t *testing.T) {
 	t.Parallel()
 	bin := buildEchoPluginBinary(t)
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters", writeStaticCatalog(t, &catalog.Catalog{
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echoext",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost},
 			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
 		},
-	}))
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -456,21 +461,23 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, specSrv)
 
-	manifest := newExecutableManifest("Hybrid", "", writeStaticCatalog(t, &catalog.Catalog{
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "hybrid",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost},
 		},
-	}))
+	})
+	manifest := newExecutableManifest("Hybrid", "")
 	manifest.Provider.OpenAPI = specSrv.URL
 
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -529,17 +536,17 @@ func TestHybridPluginMergesCommandAndDeclarativeREST(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, apiSrv)
 
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
+		},
+	})
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/acme/plugins/hybrid",
 		Version: "1.0.0",
 		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			StaticCatalogPath: writeStaticCatalog(t, &catalog.Catalog{
-				Name: "hybrid",
-				Operations: []catalog.CatalogOperation{
-					{ID: "echo", Method: http.MethodPost},
-				},
-			}),
 			BaseURL: apiSrv.URL,
 			Operations: []pluginmanifestv1.ProviderOperation{
 				{
@@ -582,9 +589,10 @@ func TestHybridPluginMergesCommandAndDeclarativeREST(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
 				},
 			},
 		},
@@ -707,9 +715,10 @@ func TestHybridPluginUsesManifestStaticHeadersForSpecSurface(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(t.TempDir(), "plugin.yaml"),
 				},
 			},
 		},
@@ -821,9 +830,10 @@ func TestHybridPluginUsesManifestManagedParametersForSpecSurface(t *testing.T) {
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(t.TempDir(), "plugin.yaml"),
 				},
 			},
 		},
@@ -957,9 +967,10 @@ func TestHybridPluginUsesManifestManagedPathParametersForSpecSurface(t *testing.
 		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
-					Command:          bin,
-					Args:             []string{"provider"},
-					ResolvedManifest: manifest,
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(t.TempDir(), "plugin.yaml"),
 				},
 			},
 		},

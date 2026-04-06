@@ -2,27 +2,22 @@
 
 Once a plugin is working locally with `from.command`, you can package it for distribution. Packaged plugins are self-contained archives that include a manifest, compiled binaries, and optional assets.
 
-## Plugin manifest
+## Source manifest vs packaged manifest
 
-Every package requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). The manifest declares the plugin's metadata, supported platforms, and entry points.
+Every package requires a manifest file named `plugin.yaml` (or `plugin.yml` or `plugin.json`). During local development and `gestaltd plugin release`, pure executable source manifests can stay lean and omit packaged `artifacts` and `entrypoints.provider`. The release command materializes those packaged fields for you.
 
-A minimal manifest for an executable provider:
+A minimal source manifest for an executable provider:
 
 ```yaml
-name: my-plugin
+source: github.com/acme/plugins/my-plugin
 version: 0.1.0
 kinds:
   - provider
-entrypoints:
-  provider:
-    artifact_path: artifacts/my-plugin
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/my-plugin-linux-amd64
-  - os: darwin
-    arch: arm64
-    path: artifacts/my-plugin-darwin-arm64
+provider:
+  connections:
+    default:
+      auth:
+        type: none
 ```
 
 ### Declarative-only packages
@@ -55,6 +50,9 @@ gestaltd plugin release --version 0.1.0
 ```
 
 Run this from the plugin source directory. It compiles the binary for each target platform, produces release archives, and writes a checksums file.
+
+For executable Go plugins, release materializes the executable catalog
+automatically from the provider's typed router before packaging.
 
 ## Reference a packaged plugin
 
@@ -90,8 +88,9 @@ Reference a published plugin by source and version. `gestaltd init` resolves the
 providers:
   my-plugin:
     from:
-      source: github.com/your-org/your-plugins/my-plugin
-      version: 0.1.0
+      source:
+        ref: github.com/your-org/your-plugins/my-plugin
+        version: 0.1.0
 ```
 
 This is the recommended approach for production deployments.

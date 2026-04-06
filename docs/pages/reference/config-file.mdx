@@ -345,24 +345,22 @@ Use `from` when the provider is backed by an executable or packaged plugin.
 
 ```yaml
 from:
-  command: ./bin/provider
-  args:
-    - --debug
-  env:
-    LOG_LEVEL: debug
+  source:
+    path: ./plugin.yaml
 ```
 
 | Field | Purpose |
 | --- | --- |
-| `command` | Execute a local binary directly. |
+| `source.path` | Load a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed. |
+| `source.ref` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
+| `source.version` | Required with `source.ref`. Invalid with `source.path` or `package`. |
+| `command` | Execute a local binary directly. Requires `source.path`. |
 | `package` | Load a local directory, local archive, or HTTPS archive. |
-| `source` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
-| `version` | Required with `source`. Invalid with `command` or `package`. |
 | `args` | Extra process arguments for `command`. |
 | `env` | Extra environment variables for executable providers. |
 | `allowed_hosts` | Optional network allowlist for sandboxed plugin processes. |
 
-`command`, `package`, and `source` are mutually exclusive.
+`source`, `package`, and `command` define how the provider is loaded. `source.path` and `source.ref` are mutually exclusive. `command` is an optional override within local `source.path` mode.
 
 ### Auth shapes inside `connections`
 
@@ -662,8 +660,8 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 ### Structural
 
 - Provider entries are decoded directly; there is no nested `plugin` block
-- Exactly one of `from.command`, `from.package`, or `from.source` per packaged provider
-- `from.version` is required with `from.source` and invalid with `from.command` or `from.package`
+- Exactly one provider loading mode: local `from.source.path`, managed `from.source.ref`, or `from.package`
+- `from.source.version` is required with `from.source.ref` and invalid with `from.source.path` or `from.package`
 - `from.args` are only valid with `from.command`
 - Plain `http://` package URLs are rejected
 - `surfaces.rest`, `surfaces.openapi`, and `surfaces.graphql` are mutually exclusive

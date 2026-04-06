@@ -7,19 +7,22 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func newProviderPluginClient(t *testing.T, prov gestalt.Provider) proto.ProviderPluginClient {
+func newProviderPluginClient[P any, PP interface {
+	*P
+	gestalt.Provider
+}](t *testing.T, prov PP, router *gestalt.Router[P]) proto.ProviderPluginClient {
 	t.Helper()
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	proto.RegisterProviderPluginServer(srv, gestalt.NewProviderServer(prov))
+	proto.RegisterProviderPluginServer(srv, gestalt.NewProviderServer(prov, router))
 
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)

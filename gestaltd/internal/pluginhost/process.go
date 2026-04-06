@@ -34,6 +34,7 @@ type ExecConfig struct {
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
+	Cleanup      func()
 }
 
 type pluginProcess struct {
@@ -46,6 +47,7 @@ type pluginProcess struct {
 	hostLis        net.Listener
 	proxy          *sandbox.ProxyServer
 	sandboxCleanup func()
+	cleanup        func()
 	closeOnce      sync.Once
 	closeErr       error
 }
@@ -130,6 +132,7 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	})
 
 	proc := &pluginProcess{dir: dir}
+	proc.cleanup = cfg.Cleanup
 	if registerHost != nil {
 		hostSocket := filepath.Join(dir, "host.sock")
 		lis, err := net.Listen("unix", hostSocket)
@@ -301,6 +304,9 @@ func (p *pluginProcess) Close() error {
 		}
 		if p.sandboxCleanup != nil {
 			p.sandboxCleanup()
+		}
+		if p.cleanup != nil {
+			p.cleanup()
 		}
 		if p.sandboxTmp != "" {
 			if err := os.RemoveAll(p.sandboxTmp); err != nil {

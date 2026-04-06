@@ -1,33 +1,40 @@
 package pluginpkg
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"gopkg.in/yaml.v3"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
-func ReadStaticCatalog(catalogPath, name string) (*catalog.Catalog, error) {
-	if catalogPath == "" {
-		return nil, nil
-	}
+const StaticCatalogFile = "catalog.yaml"
 
+func StaticCatalogPath(rootDir string) string {
+	if rootDir == "" {
+		return StaticCatalogFile
+	}
+	return filepath.Join(rootDir, StaticCatalogFile)
+}
+
+func StaticCatalogRequired(manifest *pluginmanifestv1.Manifest) bool {
+	return manifest != nil && manifest.Provider != nil && !manifest.Provider.IsManifestBacked()
+}
+
+func ReadStaticCatalog(rootDir, name string) (*catalog.Catalog, error) {
+	catalogPath := StaticCatalogPath(rootDir)
 	data, err := os.ReadFile(catalogPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("read static catalog %q: %w", catalogPath, err)
 	}
 
 	var cat catalog.Catalog
-	if isYAMLFile(catalogPath) {
-		if err := yaml.Unmarshal(data, &cat); err != nil {
-			return nil, fmt.Errorf("parse static catalog YAML %q: %w", catalogPath, err)
-		}
-	} else {
-		if err := json.Unmarshal(data, &cat); err != nil {
-			return nil, fmt.Errorf("parse static catalog JSON %q: %w", catalogPath, err)
-		}
+	if err := decodeStrict(data, ManifestFormatFromPath(catalogPath), "static catalog", &cat); err != nil {
+		return nil, err
 	}
 
 	if cat.Name == "" && name != "" {

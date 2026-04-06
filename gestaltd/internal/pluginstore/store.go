@@ -255,6 +255,19 @@ func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifes
 			return fmt.Errorf("copy %s %s: %w", ref.Description, ref.Path, err)
 		}
 	}
+	if manifest != nil && manifest.Provider != nil {
+		src := pluginpkg.StaticCatalogPath(srcDir)
+		dest := pluginpkg.StaticCatalogPath(destDir)
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return fmt.Errorf("create provider static catalog directory: %w", err)
+		}
+		if err := copyFile(src, dest); err != nil {
+			if os.IsNotExist(err) && !pluginpkg.StaticCatalogRequired(manifest) {
+				return nil
+			}
+			return fmt.Errorf("copy provider static catalog %s: %w", pluginpkg.StaticCatalogFile, err)
+		}
+	}
 	return nil
 }
 

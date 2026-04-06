@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -27,7 +28,7 @@ func mustBuildTestPluginDir(t *testing.T, dir, source, version, content string) 
 		Source:   source,
 		Version:  version,
 		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{StaticCatalogPath: "catalog.yaml"},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -109,7 +110,8 @@ providers:
   example:
     from:
       command: /tmp/provider
-      manifest: ./plugin.yaml
+      source:
+        path: ./plugin.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -134,8 +136,90 @@ providers:
 	if intg.Plugin.ResolvedManifestPath != manifestPath {
 		t.Fatalf("ResolvedManifestPath = %q, want %q", intg.Plugin.ResolvedManifestPath, manifestPath)
 	}
-	if !intg.Plugin.IsDeclarative {
-		t.Fatal("expected manifest-backed command plugin to resolve as declarative")
+	if intg.Plugin.IsDeclarative {
+		t.Fatal("expected manifest-backed command plugin to remain executable")
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTestFile := func(rel string, data []byte, mode os.FileMode) {
+		t.Helper()
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", rel, err)
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			t.Fatalf("WriteFile(%s): %v", rel, err)
+		}
+	}
+
+	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-generated-provider")), 0o644)
+	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(filepath.ToSlash(filepath.Join("provider", "provider.go")), []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/local-generated-provider",
+		Version:     "0.1.0",
+		DisplayName: "Generated Local Provider",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			BaseURL: "https://example.com",
+			Operations: []pluginmanifestv1.ProviderOperation{
+				{Name: "ping", Method: "GET", Path: "/ping"},
+			},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	writeTestFile("plugin.yaml", manifest, 0o644)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider: none
+datastore:
+  provider: sqlite
+  config:
+    path: ./gestalt.db
+providers:
+  example:
+    from:
+      source:
+        path: ./plugin.yaml
+`
+	writeTestFile("config.yaml", []byte(cfg), 0o644)
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	intg := loaded.Integrations["example"]
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
+	}
+	if intg.Plugin.IsDeclarative {
+		t.Fatal("expected executable manifest-backed plugin to remain non-declarative")
+	}
+	if intg.Plugin.ResolvedManifest.Provider == nil || intg.Plugin.ResolvedManifest.Provider.BaseURL != "https://example.com" {
+		t.Fatalf("provider base_url = %#v", intg.Plugin.ResolvedManifest.Provider)
+	}
+	if len(intg.Plugin.ResolvedManifest.Provider.Operations) != 1 || intg.Plugin.ResolvedManifest.Provider.Operations[0].Name != "ping" {
+		t.Fatalf("provider operations = %+v", intg.Plugin.ResolvedManifest.Provider.Operations)
+	}
+	catalogData, err := os.ReadFile(filepath.Join(dir, "catalog.yaml"))
+	if err != nil {
+		t.Fatalf("ReadFile(catalog.yaml): %v", err)
+	}
+	if !strings.Contains(string(catalogData), "generated_op") {
+		t.Fatalf("unexpected catalog contents: %s", catalogData)
 	}
 	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("lockfile should not be created, got err=%v", err)
@@ -178,7 +262,8 @@ providers:
   example:
     from:
       command: /tmp/provider
-      manifest: ./plugin.yaml
+      source:
+        path: ./plugin.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)

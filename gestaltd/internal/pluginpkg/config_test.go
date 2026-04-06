@@ -58,8 +58,7 @@ properties:
 				Version: "0.1.0",
 				Kinds:   []string{pluginmanifestv1.KindProvider},
 				Provider: &pluginmanifestv1.Provider{
-					StaticCatalogPath: "catalog.yaml",
-					ConfigSchemaPath:  tc.schemaPath,
+					ConfigSchemaPath: tc.schemaPath,
 				},
 				Artifacts: []pluginmanifestv1.Artifact{
 					{

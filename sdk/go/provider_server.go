@@ -14,13 +14,21 @@ import (
 // instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedProviderPluginServer
-	provider Provider
+	provider executableProvider
 }
 
-// NewProviderServer wraps a [Provider] in a [ProviderServer] ready to be
-// registered on a gRPC server.
-func NewProviderServer(provider Provider) *ProviderServer {
-	return &ProviderServer{provider: provider}
+// NewProviderServer wraps a [Provider] and typed router in a [ProviderServer]
+// ready to be registered on a gRPC server.
+func NewProviderServer[P any, PP interface {
+	*P
+	Provider
+}](provider PP, router *Router[P]) *ProviderServer {
+	return &ProviderServer{
+		provider: &routedProvider[P, PP]{
+			provider: provider,
+			router:   router,
+		},
+	}
 }
 
 func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
@@ -52,7 +60,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	result, err := s.provider.Execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	result, err := s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
 	}
@@ -66,7 +74,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
-	scp, ok := s.provider.(SessionCatalogProvider)
+	scp, ok := s.provider.sessionCatalogProvider()
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
 	}
@@ -84,7 +92,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
 }
 
-func supportsSessionCatalog(p Provider) bool {
-	_, ok := p.(SessionCatalogProvider)
+func supportsSessionCatalog(p executableProvider) bool {
+	_, ok := p.sessionCatalogProvider()
 	return ok
 }
