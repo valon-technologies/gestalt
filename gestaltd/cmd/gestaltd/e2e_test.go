@@ -169,8 +169,8 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if lock.Version != 2 {
-		t.Fatalf("lock version = %d, want 2", lock.Version)
+	if lock.Version != 1 {
+		t.Fatalf("lock version = %d, want 1", lock.Version)
 	}
 	if len(lock.Providers) != 0 {
 		t.Fatalf("expected no prepared provider entries for local source config, got %+v", lock.Providers)

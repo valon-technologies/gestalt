@@ -24,7 +24,7 @@ const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 2
+	LockVersion          = 1
 )
 
 type Lockfile struct {
