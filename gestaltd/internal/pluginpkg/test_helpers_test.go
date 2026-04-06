@@ -94,6 +94,7 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 	return &manifestWire{
 		Source:  source,
 		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindProvider},
 		Provider: &providerManifestWire{
 			Exec:     &providerExecWire{ArtifactPath: artifactPath},
 			Surfaces: providerManifestSurfacesWire{},

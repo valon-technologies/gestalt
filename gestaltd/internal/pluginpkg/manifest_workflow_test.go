@@ -229,6 +229,26 @@ func TestManifestWorkflow_AllowsSourceArtifactsWithoutDigestsUntilPackaging(t *t
 	}
 }
 
+func TestManifestWorkflow_InfersProviderKindWhenKindsOmitted(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "provider-no-kinds")
+	artifactPath := testArtifactPath("provider")
+	wire := mustProviderManifest("github.com/acme/plugins/provider-no-kinds", "0.1.0", testArtifactOS, testArtifactArch, artifactPath, "")
+	wire.Kinds = nil
+	manifestPath := mustWriteManifestData(t, sourceDir, "plugin.yaml", mustManifestYAML(t, wire))
+	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if len(manifest.Kinds) != 1 || manifest.Kinds[0] != pluginmanifestv1.KindProvider {
+		t.Fatalf("Kinds = %v, want [%q]", manifest.Kinds, pluginmanifestv1.KindProvider)
+	}
+}
+
 func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 	t.Parallel()
 

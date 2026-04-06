@@ -16,6 +16,7 @@ type manifestWire struct {
 	DisplayName string                          `json:"display_name,omitempty" yaml:"display_name,omitempty"`
 	Description string                          `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string                          `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
+	Kinds       []string                        `json:"kinds,omitempty" yaml:"kinds,omitempty"`
 	Provider    *providerManifestWire           `json:"provider,omitempty" yaml:"provider,omitempty"`
 	WebUI       *pluginmanifestv1.WebUIMetadata `json:"webui,omitempty" yaml:"webui,omitempty"`
 	Artifacts   []pluginmanifestv1.Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
@@ -125,11 +126,12 @@ func wireManifestToInternal(wire *manifestWire) *pluginmanifestv1.Manifest {
 		DisplayName: wire.DisplayName,
 		Description: wire.Description,
 		IconFile:    wire.IconFile,
+		Kinds:       append([]string(nil), wire.Kinds...),
 		WebUI:       wire.WebUI,
 		Artifacts:   wire.Artifacts,
 	}
 	if wire.Provider != nil {
-		manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindProvider)
+		appendManifestKind(&manifest.Kinds, pluginmanifestv1.KindProvider)
 		manifest.Provider = &pluginmanifestv1.Provider{
 			ConfigSchemaPath:  wire.Provider.ConfigSchemaPath,
 			Headers:           wire.Provider.Headers,
@@ -197,7 +199,7 @@ func wireManifestToInternal(wire *manifestWire) *pluginmanifestv1.Manifest {
 		}
 	}
 	if wire.WebUI != nil {
-		manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindWebUI)
+		appendManifestKind(&manifest.Kinds, pluginmanifestv1.KindWebUI)
 	}
 	return manifest
 }
@@ -213,6 +215,7 @@ func internalManifestToWire(manifest *pluginmanifestv1.Manifest) *manifestWire {
 		DisplayName: manifest.DisplayName,
 		Description: manifest.Description,
 		IconFile:    manifest.IconFile,
+		Kinds:       append([]string(nil), manifest.Kinds...),
 		WebUI:       manifest.WebUI,
 		Artifacts:   manifest.Artifacts,
 	}
@@ -335,4 +338,13 @@ func manifestDefaultConnectionToWire(name string) string {
 	default:
 		return name
 	}
+}
+
+func appendManifestKind(kinds *[]string, kind string) {
+	for _, existing := range *kinds {
+		if existing == kind {
+			return
+		}
+	}
+	*kinds = append(*kinds, kind)
 }
