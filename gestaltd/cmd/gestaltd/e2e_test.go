@@ -733,12 +733,17 @@ func TestE2EValidateNonMutating(t *testing.T) {
 		t.Fatal("expected no lockfile after non-mutating validate")
 	}
 
-	out, err = exec.Command(gestaltdBin, "validate", "--init", "--config", cfgPath).CombinedOutput()
+	out, err = exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd validate --init: %v\n%s", err, out)
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
-		t.Fatalf("expected lockfile after validate --init: %v", err)
+		t.Fatalf("expected lockfile after init: %v", err)
+	}
+
+	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd validate after init: %v\n%s", err, out)
 	}
 }
 
@@ -1068,8 +1073,8 @@ providers:
 	}
 }
 
-//nolint:paralleltest // Exercises validate --init so the prepared manifest can affect validation.
-func TestE2EValidateInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
+//nolint:paralleltest // Exercises init so the prepared manifest can affect validation.
+func TestE2EInitRejectsUnsupportedManagedPluginFields(t *testing.T) {
 	cases := []struct {
 		name       string
 		setup      func(t *testing.T, dir string) string
@@ -1111,9 +1116,9 @@ providers:
 				t.Fatalf("WriteFile config: %v", err)
 			}
 
-			out, err := exec.Command(gestaltdBin, "validate", "--init", "--config", cfgPath).CombinedOutput()
+			out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 			if err == nil {
-				t.Fatalf("expected validate --init to fail for unsupported managed plugin field, output: %s", out)
+				t.Fatalf("expected init to fail for unsupported managed plugin field, output: %s", out)
 			}
 			if !strings.Contains(string(out), tc.wantError) {
 				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)

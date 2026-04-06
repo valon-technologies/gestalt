@@ -16,7 +16,6 @@ Gestalt ships two CLIs:
 | `gestaltd serve --locked --config PATH` | Start from prepared state only. |
 | `gestaltd init --config PATH` | Prepare packaged plugin artifacts and write lock state. |
 | `gestaltd validate --config PATH` | Validate config without serving. |
-| `gestaltd validate --init --config PATH` | Prepare artifacts first, then validate. |
 | `gestaltd version` | Print the server version. |
 
 ### Plugin Commands
@@ -32,7 +31,7 @@ Gestalt ships two CLIs:
 gestaltd
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
-gestaltd validate --init --config ./config.yaml
+gestaltd validate --config ./config.yaml
 gestaltd plugin package --input ./my-plugin --output ./dist/my-plugin.tar.gz
 gestaltd plugin release --version 0.1.0
 ```

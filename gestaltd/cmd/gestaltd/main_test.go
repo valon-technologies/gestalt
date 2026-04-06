@@ -27,6 +27,7 @@ func TestE2ECLIHelp(t *testing.T) {
 			name:      "validate",
 			args:      []string{"validate", "--help"},
 			wantParts: []string{"gestaltd validate"},
+			notWant:   []string{"--init"},
 		},
 		{
 			name:      "init",

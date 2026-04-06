@@ -343,18 +343,11 @@ func runValidate(args []string) error {
 	fs.Usage = func() { printValidateUsage(fs.Output()) }
 	configPath := fs.String("config", "", "path to config file")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
-	initFirst := fs.Bool("init", false, "run init before validating")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-
-	if *initFirst {
-		if err := initConfigWithArtifactsDir(*configPath, *artifactsDir); err != nil {
-			return err
-		}
 	}
 
 	return validateConfigWithArtifactsDir(*configPath, *artifactsDir)
@@ -421,7 +414,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH] [--init]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
@@ -460,11 +453,11 @@ func printInitUsage(w io.Writer) {
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH] [--init]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
-	writeUsageLine(w, "Non-mutating by default; requires existing lock state. Use --init to")
-	writeUsageLine(w, "hydrate before validating.")
+	writeUsageLine(w, "Non-mutating; requires existing lock state for managed plugins.")
+	writeUsageLine(w, "Run `gestaltd init` first when the config uses prepared artifacts.")
 }
 
 func writeUsageLine(w io.Writer, line string) {
