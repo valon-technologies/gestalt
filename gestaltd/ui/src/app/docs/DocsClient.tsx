@@ -6,39 +6,117 @@ import Nav from "@/components/Nav";
 
 const FALLBACK_ORIGIN = "https://your-gestalt-host";
 
-const sections = [
-  { id: "overview", label: "Overview" },
-  { id: "setup", label: "Set Up The CLI" },
-  { id: "connect", label: "Connect Integrations" },
-  { id: "invoke", label: "Invoke Operations" },
-  { id: "tokens", label: "Manage API Tokens" },
-  { id: "mcp", label: "Use With MCP" },
-  { id: "troubleshooting", label: "Troubleshooting" },
+interface Subsection {
+  id: string;
+  label: string;
+}
+
+interface Section {
+  id: string;
+  label: string;
+  subsections: Subsection[];
+}
+
+const sections: Section[] = [
+  { id: "overview", label: "Overview", subsections: [] },
+  {
+    id: "setup",
+    label: "Set Up The CLI",
+    subsections: [
+      { id: "install", label: "Install" },
+      { id: "point-cli", label: "Point the CLI" },
+      { id: "authenticate", label: "Authenticate" },
+    ],
+  },
+  { id: "connect", label: "Connect Integrations", subsections: [] },
+  {
+    id: "invoke",
+    label: "Invoke Operations",
+    subsections: [{ id: "invoke-http", label: "Invoke over HTTP" }],
+  },
+  { id: "tokens", label: "Manage API Tokens", subsections: [] },
+  { id: "mcp", label: "Use With MCP", subsections: [] },
+  {
+    id: "troubleshooting",
+    label: "Troubleshooting",
+    subsections: [
+      { id: "ts-not-authenticated", label: "Not authenticated" },
+      { id: "ts-multiple-connections", label: "Multiple connections" },
+      { id: "ts-empty-tools", label: "Empty MCP tool list" },
+    ],
+  },
 ];
+
+const allTrackableIds = sections.flatMap((s) => [
+  s.id,
+  ...s.subsections.map((sub) => sub.id),
+]);
+
+function useScrollSpy(ids: string[], offset = 100) {
+  const [activeId, setActiveId] = useState(ids[0] ?? "");
+
+  useEffect(() => {
+    function onScroll() {
+      const atBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 40;
+      if (atBottom) {
+        setActiveId(ids[ids.length - 1] ?? "");
+        return;
+      }
+      let current = ids[0] ?? "";
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= offset) {
+          current = id;
+        }
+      }
+      setActiveId(current);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [ids, offset]);
+
+  return activeId;
+}
 
 export default function DocsClient() {
   const origin = useDeploymentOrigin();
+  const activeId = useScrollSpy(allTrackableIds);
+
+  const activeSection = sections.find(
+    (s) =>
+      s.id === activeId ||
+      s.subsections.some((sub) => sub.id === activeId),
+  );
+  const activeSectionId = activeSection?.id ?? sections[0].id;
+  const activeSubsections = activeSection?.subsections ?? [];
 
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="mx-auto max-w-[1400px] px-6 py-10">
+      <main className="mx-auto max-w-[1400px] px-6 py-16">
         <div className="grid gap-10 xl:grid-cols-[220px_minmax(0,1fr)_240px]">
           <aside className="hidden xl:block">
-            <div className="sticky top-24 rounded-xl border border-alpha bg-base-white/80 p-5 dark:bg-surface/80">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
-                Docs
-              </p>
-              <nav className="mt-4 space-y-1">
-                {sections.map((section) => (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    className="block rounded-md px-3 py-2 text-sm text-muted transition-colors duration-150 hover:bg-alpha-5 hover:text-primary"
-                  >
-                    {section.label}
-                  </a>
-                ))}
+            <div className="sticky top-24">
+              <nav className="space-y-0.5">
+                {sections.map((section) => {
+                  const isActive = section.id === activeSectionId;
+                  return (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      className={`block rounded-md px-3 py-2 text-sm transition-colors duration-150 ${
+                        isActive
+                          ? "bg-alpha-5 font-medium text-primary"
+                          : "text-muted hover:text-primary"
+                      }`}
+                    >
+                      {section.label}
+                    </a>
+                  );
+                })}
               </nav>
             </div>
           </aside>
@@ -46,13 +124,15 @@ export default function DocsClient() {
           <article className="min-w-0">
             <header
               id="overview"
-              className="border-b border-alpha pb-8 animate-fade-in-up"
+              className="scroll-mt-24 border-b border-alpha pb-10 animate-fade-in-up"
             >
-              <p className="text-sm text-muted">Overview</p>
-              <h1 className="mt-3 font-heading text-4xl font-bold tracking-[-0.03em] text-primary sm:text-5xl">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
+                Overview
+              </p>
+              <h1 className="mt-5 font-heading text-4xl font-bold tracking-[-0.03em] text-primary sm:text-5xl">
                 Gestalt User Guide
               </h1>
-              <p className="mt-5 max-w-3xl text-base leading-7 text-secondary">
+              <p className="mt-6 max-w-3xl text-base leading-7 text-secondary">
                 This page covers the user-facing workflows for the Gestalt
                 deployment you are currently using: install the{" "}
                 <code className="font-mono text-sm text-primary">gestalt</code>{" "}
@@ -60,7 +140,7 @@ export default function DocsClient() {
                 integrations, invoke operations, mint API tokens, and attach an
                 MCP-aware client to the same server.
               </p>
-              <div className="mt-6 rounded-xl border border-alpha bg-base-100 p-4 dark:bg-surface">
+              <div className="mt-8 rounded-xl border border-alpha bg-base-100 p-5 dark:bg-surface">
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
                   Deployment URL
                 </p>
@@ -79,7 +159,7 @@ export default function DocsClient() {
               title="Set Up The CLI"
               description="Install the client binary, point it at this deployment, and authenticate once."
             >
-              <Subheading title="Install" />
+              <Subheading id="install" title="Install" />
               <p className="doc-copy">
                 End users only need the{" "}
                 <code className="font-mono text-sm text-primary">gestalt</code>{" "}
@@ -103,7 +183,7 @@ export default function DocsClient() {
                 <code className="font-mono text-sm text-primary">PATH</code>.
               </p>
 
-              <Subheading title="Point the CLI at this deployment" />
+              <Subheading id="point-cli" title="Point the CLI at this deployment" />
               <p className="doc-copy">
                 The CLI needs the base URL for the Gestalt server. Use either
                 the setup wizard or a direct config command.
@@ -142,7 +222,7 @@ export GESTALT_URL=${origin}`}
                 .
               </p>
 
-              <Subheading title="Authenticate" />
+              <Subheading id="authenticate" title="Authenticate" />
               <p className="doc-copy">
                 Browser login is the normal path for interactive use. For
                 scripts, you can also set a Gestalt API token directly.
@@ -200,7 +280,7 @@ gestalt invoke <integration> <operation> --input-file payload.json --select data
                 lists available operations instead of running one.
               </p>
 
-              <Subheading title="Invoke over HTTP" />
+              <Subheading id="invoke-http" title="Invoke over HTTP" />
               <p className="doc-copy">
                 The CLI calls the same HTTP API that the server exposes for
                 direct programmatic access.
@@ -286,7 +366,7 @@ gestalt tokens revoke <token-id>`}
               title="Troubleshooting"
               description="Most user-facing problems come down to the wrong URL, expired auth, or ambiguous connection selection."
             >
-              <Subheading title="The CLI says you are not authenticated" />
+              <Subheading id="ts-not-authenticated" title="The CLI says you are not authenticated" />
               <p className="doc-copy">
                 Run{" "}
                 <code className="font-mono text-sm text-primary">
@@ -299,7 +379,7 @@ gestalt tokens revoke <token-id>`}
                 if you are using a token directly.
               </p>
 
-              <Subheading title="An integration has multiple connections" />
+              <Subheading id="ts-multiple-connections" title="An integration has multiple connections" />
               <p className="doc-copy">
                 Pass{" "}
                 <code className="font-mono text-sm text-primary">
@@ -312,7 +392,7 @@ gestalt tokens revoke <token-id>`}
                 so Gestalt can resolve the correct credentials.
               </p>
 
-              <Subheading title="The MCP endpoint is mounted, but the tool list is empty" />
+              <Subheading id="ts-empty-tools" title="The MCP endpoint is mounted, but the tool list is empty" />
               <p className="doc-copy">
                 That usually means the integration is available in the server
                 config but has not been connected for your current user yet.
@@ -321,23 +401,29 @@ gestalt tokens revoke <token-id>`}
           </article>
 
           <aside className="hidden xl:block">
-            <div className="sticky top-24 space-y-5">
-              <div className="rounded-xl border border-alpha bg-base-white/80 p-5 dark:bg-surface/80">
-                <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
-                  On This Page
-                </p>
-                <nav className="mt-4 space-y-1">
-                  {sections.map((section) => (
-                    <a
-                      key={section.id}
-                      href={`#${section.id}`}
-                      className="block rounded-md px-3 py-2 text-sm text-muted transition-colors duration-150 hover:bg-alpha-5 hover:text-primary"
-                    >
-                      {section.label}
-                    </a>
-                  ))}
-                </nav>
-              </div>
+            <div className="sticky top-24 space-y-6">
+              {activeSubsections.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
+                    On This Page
+                  </p>
+                  <nav className="mt-3 space-y-0.5">
+                    {activeSubsections.map((sub) => (
+                      <a
+                        key={sub.id}
+                        href={`#${sub.id}`}
+                        className={`block border-l-2 py-1.5 pl-3 text-sm transition-colors duration-150 ${
+                          sub.id === activeId
+                            ? "border-gold-600 text-primary dark:border-gold-300"
+                            : "border-transparent text-muted hover:border-base-300 hover:text-primary dark:hover:border-base-600"
+                        }`}
+                      >
+                        {sub.label}
+                      </a>
+                    ))}
+                  </nav>
+                </div>
+              )}
               <div className="rounded-xl border border-alpha bg-base-white/80 p-5 text-sm leading-6 text-muted dark:bg-surface/80">
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
                   Current Host
@@ -376,7 +462,7 @@ function DocSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="border-b border-alpha py-10">
+    <section id={id} className="scroll-mt-24 border-b border-alpha py-12">
       <h2 className="text-3xl font-heading font-bold tracking-[-0.02em] text-primary">
         {title}
       </h2>
@@ -388,9 +474,12 @@ function DocSection({
   );
 }
 
-function Subheading({ title }: { title: string }) {
+function Subheading({ id, title }: { id?: string; title: string }) {
   return (
-    <h3 className="pt-2 text-lg font-semibold tracking-[-0.01em] text-primary">
+    <h3
+      id={id}
+      className="scroll-mt-24 pt-2 text-lg font-semibold tracking-[-0.01em] text-primary"
+    >
       {title}
     </h3>
   );
