@@ -103,6 +103,25 @@ func extractHiddenInputValue(t *testing.T, html, name string) string {
 	return html[start : start+end]
 }
 
+func newNoRedirectClient(t *testing.T, jar http.CookieJar) *http.Client {
+	t.Helper()
+
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("default transport has unexpected type %T", http.DefaultTransport)
+	}
+	transport := baseTransport.Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+
+	return &http.Client{
+		Jar:       jar,
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 // testOAuthHandler adapts a test stub into bootstrap.OAuthHandler for use in
 // server tests. Only the methods actually exercised by each test need non-nil
 // implementations.
@@ -2408,11 +2427,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("decoding start response: %v", err)
 		}
 
-		noRedirect := &http.Client{
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+		noRedirect := newNoRedirectClient(t, nil)
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
 		resp, err := noRedirect.Do(req)
 		if err != nil {
@@ -2515,12 +2530,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cookie jar: %v", err)
 		}
-		noRedirect := &http.Client{
-			Jar: jar,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+		noRedirect := newNoRedirectClient(t, jar)
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
 		resp, err := noRedirect.Do(req)
 		if err != nil {
@@ -3164,11 +3174,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 		t.Fatalf("decoding start response: %v", err)
 	}
 
-	noRedirect := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	noRedirect := newNoRedirectClient(t, nil)
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
 	resp, err := noRedirect.Do(req)
 	if err != nil {
@@ -4277,11 +4283,7 @@ func TestConnectManual(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		noRedirect := &http.Client{
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+		noRedirect := newNoRedirectClient(t, nil)
 
 		connectBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
 		connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", connectBody)
@@ -4722,11 +4724,7 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 		t.Fatalf("decoding start response: %v", err)
 	}
 
-	noRedirect := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	noRedirect := newNoRedirectClient(t, nil)
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=ok&state="+url.QueryEscape(startResult["state"]), nil)
 	resp, err := noRedirect.Do(req)
 	if err != nil {
