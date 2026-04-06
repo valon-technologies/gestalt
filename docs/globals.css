@@ -204,11 +204,20 @@ pre code > span {
   display: none;
 }
 
-.nextra-nav-container nav,
 footer > div {
   width: min(1300px, calc(100% - 2rem)) !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
+}
+
+.nextra-nav-container nav {
+  max-width: 90rem !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  box-sizing: border-box !important;
 }
 
 .nextra-nav-container nav a,
@@ -423,14 +432,12 @@ button[title='Change theme'],
 }
 
 @media (min-width: 768px) {
-  .nextra-nav-container nav,
   footer > div {
     width: min(1300px, calc(100% - 4rem)) !important;
   }
 }
 
 @media (min-width: 1024px) {
-  .nextra-nav-container nav,
   footer > div {
     width: min(1300px, calc(100% - 8rem)) !important;
   }
