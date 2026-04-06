@@ -130,6 +130,13 @@ impl ApiClient {
         self.send_json(Method::POST, path, body)
     }
 
+    pub fn post_form<T>(&self, path: &str, body: &T) -> Result<String>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_form(Method::POST, path, body)
+    }
+
     pub fn delete(&self, path: &str) -> Result<serde_json::Value> {
         self.send(Method::DELETE, path)
     }
@@ -151,6 +158,26 @@ impl ApiClient {
         T: Serialize + ?Sized,
     {
         self.send_request(method, path, Some(body))
+    }
+
+    fn send_form<T>(&self, method: Method, path: &str, body: &T) -> Result<String>
+    where
+        T: Serialize + ?Sized,
+    {
+        let url = format!("{}{}", self.base_url, path);
+        let encoded = serde_urlencoded::to_string(body).context("failed to encode form body")?;
+        let resp = self
+            .client
+            .request(method, &url)
+            .bearer_auth(&self.token)
+            .header(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
+            )
+            .body(encoded)
+            .send()
+            .with_context(|| format!("request to {} failed", url))?;
+        self.handle_text_response(resp)
     }
 
     fn send_request<T>(
@@ -182,9 +209,25 @@ impl ApiClient {
         }
 
         let body = resp.text().context("failed to read response body")?;
+        self.bail_on_error_response(status, &body)?;
 
+        if body.is_empty() {
+            return Ok(serde_json::json!({}));
+        }
+
+        serde_json::from_str(&body).context("failed to parse response JSON")
+    }
+
+    fn handle_text_response(&self, resp: reqwest::blocking::Response) -> Result<String> {
+        let status = resp.status();
+        let body = resp.text().context("failed to read response body")?;
+        self.bail_on_error_response(status, &body)?;
+        Ok(body)
+    }
+
+    fn bail_on_error_response(&self, status: StatusCode, body: &str) -> Result<()> {
         if status.is_client_error() || status.is_server_error() {
-            let message = serde_json::from_str::<serde_json::Value>(&body)
+            let message = serde_json::from_str::<serde_json::Value>(body)
                 .ok()
                 .and_then(|v| extract_error_message(&v))
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
@@ -208,12 +251,7 @@ impl ApiClient {
 
             bail!("{}", message);
         }
-
-        if body.is_empty() {
-            return Ok(serde_json::json!({}));
-        }
-
-        serde_json::from_str(&body).context("failed to parse response JSON")
+        Ok(())
     }
 }
 

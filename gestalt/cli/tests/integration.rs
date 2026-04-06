@@ -215,6 +215,14 @@ fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn cli_command_for_server(home: &Path, server: &Server) -> Command {
+    let mut cmd = cli_command(home);
+    cmd.env("GESTALT_API_KEY", "test-token")
+        .arg("--url")
+        .arg(server.url());
+    cmd
+}
+
 #[test]
 fn test_list_integrations() {
     let mut server = Server::new();
@@ -530,6 +538,13 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
 #[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+        .create();
     let mock = server
         .mock("POST", "/api/v1/auth/start-oauth")
         .match_header("Authorization", "Bearer test-token")
@@ -558,6 +573,13 @@ fn test_connect_includes_connection_and_instance() {
 #[test]
 fn test_connect_omits_null_connection_and_instance() {
     let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+        .create();
     let mock = server
         .mock("POST", "/api/v1/auth/start-oauth")
         .match_header("Authorization", "Bearer test-token")
@@ -581,6 +603,246 @@ fn test_connect_omits_null_connection_and_instance() {
 
     mock.assert();
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"datadog",
+                "display_name":"Datadog",
+                "description":"Metrics and logs",
+                "auth_types":["manual"],
+                "connection_params":{"site":{"description":"Datadog site","default":"datadoghq.com","required":true}},
+                "credential_fields":[{"name":"api_key","label":"API key","description":"Use a personal API key","help_url":"https://docs.example.com/datadog"}]
+            }]"#,
+        )
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection_params":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"connected","integration":"datadog"}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "datadog"])
+        .write_stdin("datadoghq.eu\ndd-key\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Datadog site"))
+        .stderr(predicate::str::contains("API key"))
+        .stderr(predicate::str::contains("Connected datadog."));
+}
+
+#[test]
+fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"manual-svc",
+                "display_name":"Manual Service",
+                "auth_types":["manual"],
+                "connections":[
+                    {"name":"workspace","credential_fields":[{"name":"token","label":"Workspace token"}]},
+                    {"name":"plugin","auth_types":["oauth"]}
+                ]
+            }]"#,
+        )
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection":"workspace","credential":"abc123","integration":"manual-svc"}"#
+                .to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"{
+                "status":"selection_required",
+                "integration":"manual-svc",
+                "selection_url":"/api/v1/auth/pending-connection",
+                "pending_token":"pending-123",
+                "candidates":[
+                    {"id":"site-a","name":"Site A"},
+                    {"id":"site-b","name":"Site B"}
+                ]
+            }"#,
+        )
+        .create();
+    let _select = server
+        .mock("POST", "/api/v1/auth/pending-connection")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header(
+            "content-type",
+            Matcher::Regex("application/x-www-form-urlencoded.*".to_string()),
+        )
+        .match_body(Matcher::Exact(
+            "pending_token=pending-123&candidate_index=1".to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "text/html")
+        .with_body("<html>ok</html>")
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("1\nabc123\n2\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Select a Manual Service connection:",
+        ))
+        .stderr(predicate::str::contains("Workspace token"))
+        .stderr(predicate::str::contains(
+            "Gestalt found more than one manual-svc connection. Choose one to save:",
+        ))
+        .stderr(predicate::str::contains("Connected manual-svc (Site B)"));
+}
+
+#[test]
+fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"[{
+                "name":"github",
+                "display_name":"GitHub",
+                "auth_types":["oauth","manual"],
+                "connection_params":{"site":{"description":"GitHub site","required":true}},
+                "credential_fields":[{"name":"token","label":"Token"}]
+            }]"#,
+        )
+        .create();
+    let _oauth = server
+        .mock("POST", "/api/v1/auth/start-oauth")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"connection_params":{"site":"github.valon.com"},"integration":"github"}"#
+                .to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    let browser_bin = tempfile::tempdir().unwrap();
+    for command in ["open", "xdg-open"] {
+        let path = browser_bin.path().join(command);
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut perms = std::fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&path, perms).unwrap();
+        }
+    }
+
+    let path = std::env::join_paths(
+        std::iter::once(browser_bin.path().to_path_buf()).chain(
+            std::env::var_os("PATH")
+                .into_iter()
+                .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
+        ),
+    )
+    .unwrap();
+
+    cli_command_for_server(home.path(), &server)
+        .env("PATH", path)
+        .args(["integrations", "connect", "github"])
+        .write_stdin("github.valon.com\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("GitHub site"))
+        .stderr(predicate::str::contains(
+            "Opening browser to connect github...",
+        ))
+        .stderr(predicate::str::contains(
+            "If the browser doesn't open, visit: https://example.com/oauth",
+        ));
+}
+
+#[test]
+fn test_manual_connect_falls_back_to_generic_credential_prompt() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+        .create();
+    let _connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"credential":"secret","integration":"manual-svc"}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("secret\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("\nCredential\n"))
+        .stderr(predicate::str::contains("Connected manual-svc."));
+}
+
+#[test]
+fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
+    let mut server = Server::new();
+    let _integrations = server
+        .mock("GET", "/api/v1/integrations")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(200)
+        .with_header("Content-Type", "application/json")
+        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["integrations", "connect", "manual-svc"])
+        .write_stdin("")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "stdin closed while waiting for input",
+        ));
 }
 
 fn catalog_body() -> &'static str {

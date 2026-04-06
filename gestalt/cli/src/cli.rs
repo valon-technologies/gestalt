@@ -124,7 +124,7 @@ pub enum ConfigCommands {
 pub enum IntegrationCommands {
     /// List available integrations
     List,
-    /// Connect an integration via OAuth
+    /// Connect an integration via OAuth or interactive manual auth
     Connect {
         /// Integration name (e.g., github, slack)
         name: String,

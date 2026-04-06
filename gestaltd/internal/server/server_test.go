@@ -4651,8 +4651,13 @@ func TestConnectManual(t *testing.T) {
 
 		var connectResult struct {
 			Status       string `json:"status"`
+			Integration  string `json:"integration"`
 			SelectionURL string `json:"selection_url"`
 			PendingToken string `json:"pending_token"`
+			Candidates   []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"candidates"`
 		}
 		if err := json.NewDecoder(connectResp.Body).Decode(&connectResult); err != nil {
 			t.Fatalf("decode connect result: %v", err)
@@ -4660,11 +4665,20 @@ func TestConnectManual(t *testing.T) {
 		if connectResult.Status != "selection_required" {
 			t.Fatalf("expected selection_required, got %q", connectResult.Status)
 		}
+		if connectResult.Integration != "manual-svc" {
+			t.Fatalf("expected integration %q, got %q", "manual-svc", connectResult.Integration)
+		}
 		if connectResult.SelectionURL != pendingSelectionPath {
 			t.Fatalf("expected selection URL %q, got %q", pendingSelectionPath, connectResult.SelectionURL)
 		}
 		if connectResult.PendingToken == "" {
 			t.Fatal("expected pending token")
+		}
+		if len(connectResult.Candidates) != 2 {
+			t.Fatalf("expected 2 candidates, got %d", len(connectResult.Candidates))
+		}
+		if connectResult.Candidates[0].Name != "Site A" || connectResult.Candidates[1].ID != "site-b" {
+			t.Fatalf("unexpected candidates: %+v", connectResult.Candidates)
 		}
 		if stored != nil {
 			t.Fatal("did not expect final token to be stored before selection")
