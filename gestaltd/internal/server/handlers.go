@@ -963,24 +963,47 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		s.auditHTTPEvent(r.Context(), nil, providerName, "connection.oauth.complete", auditAllowed, auditErr)
 	}()
 
+	writeCallbackError := func(status int, apiMessage, title, pageMessage string) {
+		if requestAcceptsHTML(r) {
+			writeIntegrationOAuthErrorPage(w, status, title, pageMessage)
+			return
+		}
+		writeError(w, status, apiMessage)
+	}
+
 	code := r.URL.Query().Get("code")
 	encodedState := r.URL.Query().Get("state")
 	if code == "" || encodedState == "" {
 		auditErr = errors.New("missing code or state parameter")
-		writeError(w, http.StatusBadRequest, "missing code or state parameter")
+		writeCallbackError(
+			http.StatusBadRequest,
+			"missing code or state parameter",
+			"Connection failed",
+			"The OAuth provider did not return the required callback parameters. Start the connection again from Integrations.",
+		)
 		return
 	}
 
 	if s.stateCodec == nil {
 		auditErr = errors.New("oauth state encryption is not configured")
-		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
+		writeCallbackError(
+			http.StatusInternalServerError,
+			"oauth state encryption is not configured",
+			"Connection failed",
+			"Gestalt could not validate this connection attempt. Contact your administrator and try again.",
+		)
 		return
 	}
 
 	state, err := s.stateCodec.Decode(encodedState, s.now())
 	if err != nil {
 		auditErr = errors.New("invalid or expired oauth state")
-		writeError(w, http.StatusBadRequest, "invalid or expired oauth state")
+		writeCallbackError(
+			http.StatusBadRequest,
+			"invalid or expired oauth state",
+			"Connection expired",
+			"This connection attempt is no longer valid. Start a new connection from Integrations.",
+		)
 		return
 	}
 	providerName = state.Integration
@@ -1010,7 +1033,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		auditErr = errors.New("token exchange failed")
 		slog.ErrorContext(r.Context(), "token exchange failed", "provider", providerName, "error", err)
-		writeError(w, http.StatusBadGateway, "token exchange failed")
+		writeCallbackError(
+			http.StatusBadGateway,
+			"token exchange failed",
+			providerName+" connection failed",
+			"The OAuth provider did not complete the connection. Start the connection again from Integrations.",
+		)
 		return
 	}
 
@@ -1018,7 +1046,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if metaErr != nil {
 		auditErr = errors.New("failed to extract connection metadata from token response")
 		slog.ErrorContext(r.Context(), "connection metadata extraction failed", "provider", providerName, "error", metaErr)
-		writeError(w, http.StatusBadGateway, "failed to extract connection metadata from token response")
+		writeCallbackError(
+			http.StatusBadGateway,
+			"failed to extract connection metadata from token response",
+			providerName+" connection failed",
+			"Gestalt could not finish saving this connection. Start the connection again from Integrations.",
+		)
 		return
 	}
 
@@ -1049,7 +1082,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
-		writeError(w, http.StatusBadGateway, "connection setup failed")
+		writeCallbackError(
+			http.StatusBadGateway,
+			"connection setup failed",
+			providerName+" connection failed",
+			"Gestalt could not finish saving this connection. Start the connection again from Integrations.",
+		)
 		return
 	}
 
