@@ -964,8 +964,13 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}()
 
 	writeCallbackError := func(status int, apiMessage, title, pageMessage string) {
-		if requestAcceptsHTML(r) {
-			writeIntegrationOAuthErrorPage(w, status, title, pageMessage)
+		if strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
+			writePendingConnectionPage(w, status, pendingConnectionPageView{
+				Title:     title,
+				Message:   pageMessage,
+				LinkURL:   "/integrations",
+				LinkLabel: "Open integrations",
+			}, "failed to render oauth error page")
 			return
 		}
 		writeError(w, status, apiMessage)

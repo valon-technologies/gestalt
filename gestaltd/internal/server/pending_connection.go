@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"html/template"
@@ -126,6 +127,18 @@ type pendingConnectionPageView struct {
 	Footer       string
 }
 
+func writePendingConnectionPage(w http.ResponseWriter, status int, view pendingConnectionPageView, renderErr string) {
+	var buf bytes.Buffer
+	if err := pendingConnectionSelectionPage.Execute(&buf, view); err != nil {
+		writeError(w, http.StatusInternalServerError, renderErr)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf.Bytes())
+}
+
 func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []core.DiscoveryCandidate) (string, error) {
 	if s.encryptor == nil {
 		return "", fmt.Errorf("pending connection encryption is not configured")
@@ -205,36 +218,28 @@ func (s *Server) clearPendingConnectionCookie(w http.ResponseWriter) {
 
 func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, state *pendingConnectionState, pendingToken string) {
 	s.setPendingConnectionCookie(w, state)
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pendingConnectionSelectionPage.Execute(w, pendingConnectionPageView{
+	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
 		Title:        "Select a " + state.Token.Integration + " connection",
 		Message:      "Gestalt found more than one candidate. Choose the connection you want to save.",
 		Action:       pendingConnectionPath,
 		PendingToken: pendingToken,
 		Candidates:   state.Candidates,
 		Footer:       "If you did not expect this screen, close this tab and restart the connect flow.",
-	}); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to render pending connection page")
-	}
+	}, "failed to render pending connection page")
 }
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
 	s.clearPendingConnectionCookie(w)
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	linkURL := "/integrations"
 	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
 		linkURL = connectedURL
 	}
-	if err := pendingConnectionSelectionPage.Execute(w, pendingConnectionPageView{
+	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
 		Title:     integration + " connected",
 		Message:   "Your connection has been saved. You can close this tab now.",
 		LinkURL:   linkURL,
 		LinkLabel: "Open integrations",
-	}); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to render success page")
-	}
+	}, "failed to render success page")
 }
 
 func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, error) {
