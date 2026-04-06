@@ -181,9 +181,8 @@ mod tests {
 
         println!();
         println!(
-            "{:<left_width$}    {}",
+            "{:<left_width$}    Full condensed",
             "Borders only",
-            "Full condensed",
             left_width = left_width
         );
 
