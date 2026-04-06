@@ -65,7 +65,7 @@ providers:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers["example"]
+	intg := loaded.Integrations["example"]
 	if intg.DisplayName != "Local Provider" {
 		t.Fatalf("DisplayName = %q", intg.DisplayName)
 	}
@@ -139,7 +139,7 @@ providers:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers["example"]
+	intg := loaded.Integrations["example"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
 	}
@@ -204,14 +204,14 @@ providers:
 	if err != nil {
 		t.Fatalf("Load config: %v", err)
 	}
-	loaded.Providers["missing"] = config.ProviderDef{}
+	loaded.Integrations["missing"] = config.IntegrationDef{}
 
 	lc := NewLifecycle(nil)
 	if err := lc.applyLockedPlugins(cfgPath, "", loaded, false); err != nil {
 		t.Fatalf("applyLockedPlugins: %v", err)
 	}
-	if loaded.Providers["example"].Plugin == nil || loaded.Providers["example"].Plugin.ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Providers["example"].Plugin)
+	if loaded.Integrations["example"].Plugin == nil || loaded.Integrations["example"].Plugin.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Integrations["example"].Plugin)
 	}
 }
 

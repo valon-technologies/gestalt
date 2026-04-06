@@ -13,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
-// Validate loads daemon dependencies and provider factories without
+// Validate loads daemon dependencies and integration factories without
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
@@ -52,7 +52,7 @@ func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
 			continue
 		}
 		if err := cat.ValidateMCPCompat(); err != nil {
-			return fmt.Errorf("provider %q: %w", name, err)
+			return fmt.Errorf("integration %q: %w", name, err)
 		}
 	}
 	return nil
@@ -72,14 +72,14 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}
 
-	names := slices.Sorted(maps.Keys(cfg.Providers))
+	names := slices.Sorted(maps.Keys(cfg.Integrations))
 
 	var errs []error
 	for _, name := range names {
-		intgDef := cfg.Providers[name]
+		intgDef := cfg.Integrations[name]
 		result, err := buildProviderForValidation(ctx, name, intgDef, deps, regStore)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("provider %q: %w", name, err))
+			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
 		}
 		if err := reg.Providers.Register(name, result.Provider); err != nil {
@@ -99,7 +99,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.ProviderDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() || !intg.Plugin.HasResolvedManifest() {
 		return buildProvider(ctx, name, intg, deps, regStore)
 	}
@@ -117,7 +117,7 @@ type preparedProviderStub struct {
 	connectionMode core.ConnectionMode
 }
 
-func newPreparedProviderStub(name string, intg config.ProviderDef) (core.Provider, error) {
+func newPreparedProviderStub(name string, intg config.IntegrationDef) (core.Provider, error) {
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
@@ -153,7 +153,7 @@ func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, 
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
 }
 
-func connectionModeFromPlugin(intg config.ProviderDef) core.ConnectionMode {
+func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
 	if intg.Plugin == nil {
 		return core.ConnectionModeUser
 	}

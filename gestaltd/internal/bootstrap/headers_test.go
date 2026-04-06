@@ -52,7 +52,7 @@ func TestBootstrap_ConfigHeadersOverrideManifestHeaders(t *testing.T) {
 		},
 	}
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
 				IsDeclarative:    true,
@@ -144,7 +144,7 @@ func TestBootstrap_ConfigBaseURLOverridesManifestBaseURL(t *testing.T) {
 		},
 	}
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
 				Source:               &config.PluginSourceDef{Ref: manifest.Source, Version: manifest.Version},
@@ -235,7 +235,7 @@ func TestBootstrap_ManagedParametersInjectHeadersAndHideOpenAPIParams(t *testing
 	testutil.CloseOnCleanup(t, specSrv)
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
 				OpenAPI: specSrv.URL,
@@ -344,7 +344,7 @@ func TestBootstrap_ManagedParametersRewritePathParamsAndHideOpenAPIParams(t *tes
 	testutil.CloseOnCleanup(t, specSrv)
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"sample": {
 			Plugin: &config.PluginDef{
 				OpenAPI: specSrv.URL,

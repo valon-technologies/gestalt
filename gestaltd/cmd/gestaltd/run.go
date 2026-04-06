@@ -154,7 +154,7 @@ func runServer(env *bootstrapEnv) error {
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
-		ProviderDefs:      env.Config.Providers,
+		IntegrationDefs:   env.Config.Integrations,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		APITokenTTL:       apiTokenTTL,
@@ -281,7 +281,7 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 		mcpConnection: make(map[string]string),
 	}
 
-	for name, intg := range cfg.Providers {
+	for name, intg := range cfg.Integrations {
 		if intg.Plugin == nil {
 			continue
 		}
@@ -384,11 +384,11 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"telemetry_provider", cfg.Telemetry.Provider,
 	)
 
-	for name, intg := range cfg.Providers {
+	for name, intg := range cfg.Integrations {
 		if intg.Plugin != nil && intg.Plugin.IsInline() {
-			slog.Info("provider configured", "provider", name, "type", "inline")
+			slog.Info("integration configured", "integration", name, "type", "inline")
 		} else {
-			slog.Info("provider configured", "provider", name, "type", "plugin")
+			slog.Info("integration configured", "integration", name, "type", "plugin")
 		}
 	}
 

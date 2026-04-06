@@ -146,6 +146,39 @@ func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	}
 
 	lockPath := filepath.Join(deployDir, operator.InitLockfileName)
+	lockBytes, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("read lockfile: %v", err)
+	}
+	var rawLock map[string]any
+	if err := json.Unmarshal(lockBytes, &rawLock); err != nil {
+		t.Fatalf("decode lockfile json: %v", err)
+	}
+	if _, ok := rawLock["plugins"]; ok {
+		t.Fatalf("expected lockfile to omit legacy plugins map: %s", lockBytes)
+	}
+	rawProviders, ok := rawLock["providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected lockfile providers object: %s", lockBytes)
+	}
+	if len(rawProviders) != 0 {
+		t.Fatalf("expected local source config to avoid prepared provider entries, got: %s", lockBytes)
+	}
+
+	lock, err := operator.ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if lock.Version != 2 {
+		t.Fatalf("lock version = %d, want 2", lock.Version)
+	}
+	if len(lock.Providers) != 0 {
+		t.Fatalf("expected no prepared provider entries for local source config, got %+v", lock.Providers)
+	}
+	if lock.UI != nil {
+		t.Fatalf("expected no ui lock entry when config has no managed ui plugin")
+	}
+
 	t.Cleanup(func() {
 		_ = os.Chmod(deployDir, 0o755)
 		_ = os.Chmod(cfgPath, 0o644)
@@ -744,7 +777,7 @@ func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this provider to plugin.source",
+			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
 		},
 		{
 			name: "allowed hosts unsupported for inline plugin",
@@ -754,7 +787,7 @@ surfaces:
 surfaces:
   openapi:
     document: https://api.example.test/openapi.json`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this provider to plugin.source",
+			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
 		},
 		{
 			name: "headers unsupported without declarative ops or spec surface",
@@ -787,7 +820,7 @@ surfaces:
       - name: list_items
         method: GET
         path: /items`,
-			wantError: "plugin.response_mapping is only valid for openapi/graphql providers; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
+			wantError: "plugin.response_mapping is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
 		},
 		{
 			name: "multiple api surfaces are rejected",

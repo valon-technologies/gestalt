@@ -167,7 +167,7 @@ func mustGetProvider(t *testing.T, result *bootstrap.Result, name string) core.P
 func bootstrapInlineProvider(t *testing.T, name string, plugin *config.PluginDef) core.Provider {
 	t.Helper()
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		name: {Plugin: plugin},
 	}
 	return mustGetProvider(t, mustBootstrapResult(t, cfg, nil), name)
@@ -199,7 +199,7 @@ func TestInlineMCPOAuth_ConnectionAuthWired(t *testing.T) {
 	mcpSrv := serveMCPOAuthEndpoints(t)
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"alpha": {
 			Plugin: &config.PluginDef{
 				MCPURL: mcpSrv.URL + "/mcp",
@@ -240,7 +240,7 @@ func TestInlineMCPOAuth_SpecLoadedOpenAPI(t *testing.T) {
 	specSrv := serveOpenAPISpec(t)
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"vendor": {
 			Plugin: &config.PluginDef{
 				OpenAPI: specSrv.URL,
@@ -345,7 +345,7 @@ func TestBootstrap_SpecLoadedManifestCombinesOpenAPIAndMCP(t *testing.T) {
 	}
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"hybrid": {
 			Plugin: &config.PluginDef{
 				Source:               &config.PluginSourceDef{Ref: manifest.Source, Version: manifest.Version},
@@ -438,7 +438,7 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 		specSrv := serveOpenAPISpec(t)
 		cfg := validConfig()
 		cfg.Server.BaseURL = "https://gestalt.example.com"
-		cfg.Providers = map[string]config.ProviderDef{
+		cfg.Integrations = map[string]config.IntegrationDef{
 			"sample": {
 				Plugin: &config.PluginDef{
 					OpenAPI:           specSrv.URL,
@@ -520,7 +520,7 @@ func TestInlineOAuth_NamedOpenAPIConnectionAuthWired(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Server.BaseURL = "https://gestalt.example.com"
-		cfg.Providers = map[string]config.ProviderDef{
+		cfg.Integrations = map[string]config.IntegrationDef{
 			"sample": {
 				Plugin: &config.PluginDef{
 					OpenAPI: specSrv.URL,
@@ -572,7 +572,7 @@ func invokeListItemsConnection(t *testing.T, buildPlugin func(apiBase string) *c
 	apiSrv := serveOpenAPIBackend(t, testOpenAPIAccessToken)
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"vendor": {Plugin: buildPlugin(apiSrv.URL)},
 	}
 
@@ -778,7 +778,7 @@ func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 
 		const connName = "api"
 		cfg := validConfig()
-		cfg.Providers = map[string]config.ProviderDef{
+		cfg.Integrations = map[string]config.IntegrationDef{
 			"sample": {
 				Plugin: &config.PluginDef{
 					OpenAPI:           specSrv.URL,
@@ -873,7 +873,7 @@ func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 		testutil.CloseOnCleanup(t, specSrv)
 
 		cfg := validConfig()
-		cfg.Providers = map[string]config.ProviderDef{
+		cfg.Integrations = map[string]config.IntegrationDef{
 			"sample": {
 				Plugin: &config.PluginDef{
 					OpenAPI: specSrv.URL,
@@ -928,7 +928,7 @@ func TestInlineDeclarative_ConfigDisplayOverridesAppliedAfterRestriction(t *test
 	}
 
 	cfg := validConfig()
-	cfg.Providers = map[string]config.ProviderDef{
+	cfg.Integrations = map[string]config.IntegrationDef{
 		"alpha": {
 			DisplayName: "Alpha Display",
 			Description: "Alpha Description",

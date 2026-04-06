@@ -825,7 +825,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.ProviderDefs = map[string]config.ProviderDef{
+		cfg.IntegrationDefs = map[string]config.IntegrationDef{
 			"example": {Plugin: plugin},
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
@@ -989,7 +989,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider(t))
-				cfg.ProviderDefs = map[string]config.ProviderDef{
+				cfg.IntegrationDefs = map[string]config.IntegrationDef{
 					"example": {Plugin: tc.plugin},
 				}
 				cfg.Datastore = &coretesting.StubDatastore{

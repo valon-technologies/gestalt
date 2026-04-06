@@ -26,7 +26,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	manifestRoot := exampleProviderRoot(t)
 	manifest := newExecutableManifest("Example Provider", "A minimal example provider built with the public SDK")
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"example": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -121,7 +121,7 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 	manifest := newExecutableManifest("Manifest Display", "Manifest Description")
 
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"example": {
 				DisplayName: "Config Display",
 				Description: "Config Description",
@@ -246,7 +246,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		Scopes:           []string{"read", "write"},
 	}
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"echoauth": {
 				Plugin: &config.PluginDef{
 					Command: bin,
@@ -309,7 +309,7 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"echonoauth": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -346,7 +346,7 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -403,7 +403,7 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
 				Plugin: &config.PluginDef{
 					Command: bin,
@@ -418,7 +418,7 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected buildProvidersStrict to reject executable plugin without manifest")
 	}
-	if got := err.Error(); got != `bootstrap: provider validation failed: provider "echoext": build external plugin provider "echoext": executable plugins must be manifest-backed` {
+	if got := err.Error(); got != `bootstrap: provider validation failed: integration "echoext": build external plugin provider "echoext": executable plugins must be manifest-backed` {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -471,7 +471,7 @@ func TestHybridPluginMergesCommandAndOpenAPI(t *testing.T) {
 	manifest.Provider.OpenAPI = specSrv.URL
 
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -586,7 +586,7 @@ func TestHybridPluginMergesCommandAndDeclarativeREST(t *testing.T) {
 		},
 	}
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -712,7 +712,7 @@ func TestHybridPluginUsesManifestStaticHeadersForSpecSurface(t *testing.T) {
 		},
 	}
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -827,7 +827,7 @@ func TestHybridPluginUsesManifestManagedParametersForSpecSurface(t *testing.T) {
 		},
 	}
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
 					Command:              bin,
@@ -964,7 +964,7 @@ func TestHybridPluginUsesManifestManagedPathParametersForSpecSurface(t *testing.
 		},
 	}
 	cfg := &config.Config{
-		Providers: map[string]config.ProviderDef{
+		Integrations: map[string]config.IntegrationDef{
 			"hybrid": {
 				Plugin: &config.PluginDef{
 					Command:              bin,

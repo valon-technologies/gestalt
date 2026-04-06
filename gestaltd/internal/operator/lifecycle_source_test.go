@@ -347,8 +347,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
 	}
-	if cfg.Providers["gadget"].Plugin.Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Providers["gadget"].Plugin.Command, executablePath)
+	if cfg.Integrations["gadget"].Plugin.Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Integrations["gadget"].Plugin.Command, executablePath)
 	}
 }
 
@@ -544,7 +544,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if got := assetCount.Load() - assetsBefore; got != 1 {
 		t.Errorf("asset request count during locked load = %d, want 1", got)
 	}
-	if cfg.Providers["alpha"].Plugin.Command != executablePath {
-		t.Errorf("plugin command = %q, want %q", cfg.Providers["alpha"].Plugin.Command, executablePath)
+	if cfg.Integrations["alpha"].Plugin.Command != executablePath {
+		t.Errorf("plugin command = %q, want %q", cfg.Integrations["alpha"].Plugin.Command, executablePath)
 	}
 }

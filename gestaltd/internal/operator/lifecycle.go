@@ -153,8 +153,8 @@ type pluginFingerprintInput struct {
 }
 
 func configHasPluginLoading(cfg *config.Config) bool {
-	for name := range cfg.Providers {
-		plugin := cfg.Providers[name].Plugin
+	for name := range cfg.Integrations {
+		plugin := cfg.Integrations[name].Plugin
 		if plugin.HasManagedArtifacts() || plugin.HasLocalSource() {
 			return true
 		}
@@ -163,8 +163,8 @@ func configHasPluginLoading(cfg *config.Config) bool {
 }
 
 func configHasManagedPlugins(cfg *config.Config) bool {
-	for name := range cfg.Providers {
-		if cfg.Providers[name].Plugin.HasManagedArtifacts() {
+	for name := range cfg.Integrations {
+		if cfg.Integrations[name].Plugin.HasManagedArtifacts() {
 			return true
 		}
 	}
@@ -259,8 +259,8 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	if lock == nil || lock.Version != LockVersion {
 		return false
 	}
-	for name := range cfg.Providers {
-		provider := cfg.Providers[name]
+	for name := range cfg.Integrations {
+		provider := cfg.Integrations[name]
 		if !provider.Plugin.HasManagedArtifacts() {
 			continue
 		}
@@ -350,8 +350,8 @@ func providerEntryMatches(paths initPaths, name string, plugin *config.PluginDef
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
-	for name := range cfg.Providers {
-		provider := cfg.Providers[name]
+	for name := range cfg.Integrations {
+		provider := cfg.Integrations[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -501,8 +501,8 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		}
 	}
 
-	for name := range cfg.Providers {
-		provider := cfg.Providers[name]
+	for name := range cfg.Integrations {
+		provider := cfg.Integrations[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -527,7 +527,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			provider.Description = cmp.Or(provider.Description, manifest.Description)
 		}
 		provider.IconFile = cmp.Or(provider.IconFile, provider.Plugin.ResolvedIconFile)
-		cfg.Providers[name] = provider
+		cfg.Integrations[name] = provider
 	}
 	if cfg.UI.Plugin.HasManagedArtifacts() {
 		if lock.UI == nil {
