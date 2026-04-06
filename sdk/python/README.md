@@ -11,6 +11,24 @@ Python source plugins are developed locally via `from.source.path` and
 released through `gestaltd plugin release` as current-platform executable
 artifacts.
 
+## Regenerating Protobuf Stubs
+
+The checked-in Python protobuf stubs live in `gestalt/gen/v1`.
+
+This is an SDK maintainer workflow. Plugin authors consume the checked-in
+stubs through the `gestalt` package and do not need to regenerate them in
+plugin repositories.
+
+Regenerate them from the repo root with:
+
+```sh
+python3 sdk/python/scripts/generate_stubs.py
+```
+
+The script uses pinned `buf` remote Python plugins so the generated stubs stay
+reproducible while `plugin_pb2.py` tracks the protobuf `7.34.1` runtime floor
+used by this SDK package. `buf` must be available on `PATH`.
+
 ## Publishing
 
 The SDK is published as the `gestalt` package to a private Python index.
