@@ -33,7 +33,7 @@ type Lockfile struct {
 	UI        *LockUIEntry                 `json:"ui,omitempty"`
 }
 
-type LockProviderEntry struct {
+type LockEntry struct {
 	Fingerprint   string `json:"fingerprint"`
 	Source        string `json:"source,omitempty"`
 	Version       string `json:"version,omitempty"`
@@ -41,17 +41,11 @@ type LockProviderEntry struct {
 	ArchiveSHA256 string `json:"archive_sha256,omitempty"`
 	Manifest      string `json:"manifest"`
 	Executable    string `json:"executable,omitempty"`
-}
-
-type LockUIEntry struct {
-	Fingerprint   string `json:"fingerprint"`
-	Source        string `json:"source,omitempty"`
-	Version       string `json:"version,omitempty"`
-	ResolvedURL   string `json:"resolved_url,omitempty"`
-	ArchiveSHA256 string `json:"archive_sha256,omitempty"`
-	Manifest      string `json:"manifest"`
 	AssetRoot     string `json:"asset_root,omitempty"`
 }
+
+type LockProviderEntry = LockEntry
+type LockUIEntry = LockEntry
 
 type Lifecycle struct {
 	sourceResolver pluginsource.Resolver
