@@ -683,8 +683,32 @@ fn test_disconnect_sends_delete_with_connection_and_instance() {
     .create();
 
     let client = create_client(&server);
+    let result = gestalt::commands::integrations::disconnect(
+        &client,
+        "datadog",
+        Some("oauth"),
+        Some("prod"),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_disconnect_normalizes_plugin_connection_name() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/integrations/github?connection=_plugin",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"disconnected"}"#)
+    .create();
+
+    let client = create_client(&server);
     let result =
-        gestalt::commands::integrations::disconnect(&client, "datadog", Some("oauth"), Some("prod"));
+        gestalt::commands::integrations::disconnect(&client, "github", Some("plugin"), None);
 
     mock.assert();
     assert!(result.is_ok());
