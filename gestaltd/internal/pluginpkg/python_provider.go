@@ -144,19 +144,18 @@ func pythonInterpreterCandidates(root string) []string {
 }
 
 func SplitPythonProviderTarget(target string) (module string, attr string, err error) {
-	module, attr, ok := strings.Cut(strings.TrimSpace(target), ":")
+	raw := strings.TrimSpace(target)
+	module, attr, hasAttr := strings.Cut(raw, ":")
 	module = strings.TrimSpace(module)
 	attr = strings.TrimSpace(attr)
 	switch {
-	case !ok:
-		return "", "", fmt.Errorf("must be in module:attribute form")
 	case module == "":
 		return "", "", fmt.Errorf("module is required")
-	case attr == "":
-		return "", "", fmt.Errorf("attribute is required")
 	case !isPythonModulePath(module):
 		return "", "", fmt.Errorf("module must be a dot-separated Python identifier path")
-	case !isPythonIdentifier(attr):
+	case hasAttr && attr == "":
+		return "", "", fmt.Errorf("attribute is required")
+	case hasAttr && !isPythonIdentifier(attr):
 		return "", "", fmt.Errorf("attribute must be a Python identifier")
 	default:
 		return module, attr, nil

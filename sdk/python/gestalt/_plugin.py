@@ -4,6 +4,7 @@ import inspect
 import json
 import pathlib
 import re
+import sys
 import types
 from dataclasses import MISSING
 from typing import Any, Generic, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
@@ -78,19 +79,24 @@ class _Operation:
 
 
 class Plugin:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, module_name: str | None = None) -> None:
         self.name = _slug_name(name)
+        self._module_name = module_name
         self._operations: dict[str, _Operation] = {}
         self._configure_handler: Any = None
 
     @classmethod
     def from_manifest(cls, path: str | pathlib.Path) -> "Plugin":
-        manifest_path = pathlib.Path(path)
-        if not manifest_path.is_absolute() and not manifest_path.exists():
-            caller = inspect.stack()[1].filename
-            manifest_path = pathlib.Path(caller).resolve().parent / manifest_path
+        caller_frame = inspect.currentframe()
+        caller_file = None
+        caller_module_name = None
+        if caller_frame is not None and caller_frame.f_back is not None:
+            caller = caller_frame.f_back
+            caller_file = caller.f_code.co_filename
+            caller_module_name = caller.f_globals.get("__name__")
+        manifest_path = _resolve_manifest_path(path, caller_file)
         name = _derive_name_from_manifest(manifest_path)
-        return cls(name)
+        return cls(name, module_name=caller_module_name)
 
     def configure(self, func: Any) -> Any:
         self._configure_handler = func
@@ -98,8 +104,10 @@ class Plugin:
 
     def operation(
         self,
+        func: Any | None = None,
+        /,
         *,
-        id: str,
+        id: str | None = None,
         method: str = "POST",
         title: str = "",
         description: str = "",
@@ -107,11 +115,10 @@ class Plugin:
         read_only: bool = False,
         visible: bool | None = None,
     ) -> Any:
-        op_id = id.strip()
-        if not op_id:
-            raise ValueError("operation id is required")
-
         def decorator(func: Any) -> Any:
+            op_id = (id or func.__name__).strip()
+            if not op_id:
+                raise ValueError("operation id is required")
             if op_id in self._operations:
                 raise ValueError(f"duplicate operation id {op_id!r}")
 
@@ -130,12 +137,15 @@ class Plugin:
             )
             return func
 
-        return decorator
+        if func is None:
+            return decorator
+        return decorator(func)
 
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
-        if self._configure_handler is None:
+        handler = self._resolve_configure_handler()
+        if handler is None:
             return
-        _maybe_await(self._configure_handler(name, config))
+        _maybe_await(handler(name, config))
 
     def execute(self, operation: str, params: dict[str, Any], request: Request) -> tuple[int, str]:
         op = self._operations.get(operation)
@@ -181,6 +191,51 @@ class Plugin:
         from . import _runtime
 
         _runtime.serve(self)
+
+    def _resolve_configure_handler(self) -> Any:
+        if self._configure_handler is not None:
+            return self._configure_handler
+        if not self._module_name:
+            return None
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+        configure = getattr(module, "configure", None)
+        if callable(configure):
+            self._configure_handler = configure
+        return self._configure_handler
+
+
+_DEFAULT_PLUGINS: dict[str, Plugin] = {}
+
+
+def operation(
+    func: Any | None = None,
+    /,
+    *,
+    id: str | None = None,
+    method: str = "POST",
+    title: str = "",
+    description: str = "",
+    tags: list[str] | None = None,
+    read_only: bool = False,
+    visible: bool | None = None,
+) -> Any:
+    def decorator(func: Any) -> Any:
+        plugin = _module_plugin_for(func)
+        return plugin.operation(
+            id=id,
+            method=method,
+            title=title,
+            description=description,
+            tags=tags,
+            read_only=read_only,
+            visible=visible,
+        )(func)
+
+    if func is None:
+        return decorator
+    return decorator(func)
 
 
 def _inspect_handler(func: Any) -> tuple[Any, bool]:
@@ -440,6 +495,44 @@ def _json_value(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_value(item) for item in value]
     return value
+
+
+def _module_plugin_for(func: Any) -> Plugin:
+    module = sys.modules.get(func.__module__)
+    if module is None:
+        raise RuntimeError(f"module {func.__module__!r} is not loaded")
+    return _module_plugin(module)
+
+
+def _module_plugin(module: types.ModuleType) -> Plugin:
+    existing = getattr(module, "plugin", None)
+    if isinstance(existing, Plugin):
+        if existing._module_name is None:
+            existing._module_name = module.__name__
+        _DEFAULT_PLUGINS[module.__name__] = existing
+        return existing
+
+    plugin = _DEFAULT_PLUGINS.get(module.__name__)
+    if plugin is None:
+        plugin = Plugin(_module_plugin_name(module), module_name=module.__name__)
+        _DEFAULT_PLUGINS[module.__name__] = plugin
+    if not isinstance(getattr(module, "plugin", None), Plugin):
+        setattr(module, "plugin", plugin)
+    return plugin
+
+
+def _module_plugin_name(module: types.ModuleType) -> str:
+    file_path = getattr(module, "__file__", None)
+    if file_path:
+        return _derive_name_from_manifest(pathlib.Path(file_path).resolve().parent / "plugin.yaml")
+    return _slug_name(module.__name__.rsplit(".", 1)[-1])
+
+
+def _resolve_manifest_path(path: str | pathlib.Path, caller_file: str | None) -> pathlib.Path:
+    manifest_path = pathlib.Path(path)
+    if not manifest_path.is_absolute() and not manifest_path.exists() and caller_file:
+        manifest_path = pathlib.Path(caller_file).resolve().parent / manifest_path
+    return manifest_path
 
 
 def _derive_name_from_manifest(path: pathlib.Path) -> str:

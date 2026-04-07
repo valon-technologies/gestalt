@@ -192,13 +192,13 @@ build-backend = "setuptools.build_meta"
 name = "local-python-provider"
 
 [tool.gestalt]
-plugin = "provider:plugin"
-`, "\n")), 0o644)
+plugin = "provider"
+	`, "\n")), 0o644)
 	writeTestFile("provider.py", []byte(`from typing import Optional
 
 import gestalt
 
-plugin = gestalt.Plugin.from_manifest("plugin.yaml")
+PREFIX = ""
 
 
 class BaseInput(gestalt.Model):
@@ -220,9 +220,15 @@ class EchoInput(BaseInput):
     limit: int = 0
 
 
-@plugin.operation(id="echo", method="POST")
+def configure(_name: str, config: dict[str, object]) -> None:
+    global PREFIX
+    PREFIX = str(config.get("prefix", ""))
+
+
+@gestalt.operation(method="POST")
 def echo(input: EchoInput, _req: gestalt.Request) -> dict[str, object]:
     return {
+        "configured_prefix": PREFIX,
         "names": input.names or [],
         "metadata": input.metadata or {},
         "filters_type": type(input.filters).__name__ if input.filters else "",
@@ -232,7 +238,7 @@ def echo(input: EchoInput, _req: gestalt.Request) -> dict[str, object]:
     }
 
 
-@plugin.operation(id="double", method="POST")
+@gestalt.operation(id="times_two", method="POST")
 def double(value: int, _req: gestalt.Request) -> dict[str, object]:
     return {
         "value_type": type(value).__name__,
@@ -240,7 +246,7 @@ def double(value: int, _req: gestalt.Request) -> dict[str, object]:
     }
 
 
-@plugin.operation(id="maybe_filters", method="POST")
+@gestalt.operation(method="POST")
 def maybe_filters(input: Optional[Filters], _req: gestalt.Request) -> dict[str, object]:
     return {
         "filters_type": type(input).__name__ if input else "",
@@ -248,7 +254,7 @@ def maybe_filters(input: Optional[Filters], _req: gestalt.Request) -> dict[str, 
     }
 
 
-@plugin.operation(id="list_items", method="GET", read_only=True)
+@gestalt.operation(method="GET", read_only=True)
 def list_items(_req: gestalt.Request) -> dict[str, object]:
     return {
         "items": [Item(name="Ada"), Item(name="Grace")],
@@ -256,7 +262,7 @@ def list_items(_req: gestalt.Request) -> dict[str, object]:
     }
 
 
-@plugin.operation(id="status_zero", method="POST")
+@gestalt.operation(method="POST")
 def status_zero(_req: gestalt.Request) -> gestalt.Response[dict[str, bool]]:
     return gestalt.Response(status=0, body={"ok": True})
 `), 0o644)
@@ -298,13 +304,14 @@ providers:
 import gestalt
 import provider
 
+provider.plugin.configure_provider("example", {"prefix": "Hello"})
 status, body = provider.plugin.execute("echo", {
     "names": ["Ada", "Grace"],
     "metadata": {"role": "admin"},
     "filters": {"owner": "Ada"},
     "limit": 3,
 }, gestalt.Request())
-double_status, double_body = provider.plugin.execute("double", {
+double_status, double_body = provider.plugin.execute("times_two", {
     "value": 3,
 }, gestalt.Request())
 zero_status, zero_body = provider.plugin.execute("status_zero", {}, gestalt.Request())
@@ -347,6 +354,9 @@ print(json.dumps({
 	catalogText := string(catalogData)
 	if !strings.Contains(catalogText, "id: echo") {
 		t.Fatalf("unexpected catalog contents: %s", catalogData)
+	}
+	if !strings.Contains(catalogText, "id: times_two") || strings.Contains(catalogText, "id: double") {
+		t.Fatalf("catalog did not apply explicit operation id override: %s", catalogData)
 	}
 	if strings.Contains(catalogText, "\n\n") {
 		t.Fatalf("catalog contains unexpected blank lines: %q", catalogText)
@@ -402,6 +412,9 @@ print(json.dumps({
 	}
 	if payload["filters_type"] != "Filters" {
 		t.Fatalf("filters_type = %v, want Filters", payload["filters_type"])
+	}
+	if payload["configured_prefix"] != "Hello" {
+		t.Fatalf("configured_prefix = %v, want Hello", payload["configured_prefix"])
 	}
 	if payload["owner"] != "Ada" {
 		t.Fatalf("owner = %v, want Ada", payload["owner"])

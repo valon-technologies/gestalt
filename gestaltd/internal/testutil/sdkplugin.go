@@ -108,7 +108,6 @@ func (p *Provider) generatedOp(context.Context, struct{}, gestalt.Request) (gest
 }
 
 var Router = gestalt.MustRouter(
-	"generated",
 	gestalt.Register(gestalt.Operation[struct{}, map[string]any]{ID: "generated_op"}, (*Provider).generatedOp),
 )
 `

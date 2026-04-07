@@ -21,7 +21,7 @@ class RuntimeTests(unittest.TestCase):
             (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
                 json.dumps(
                     {
-                        "target": "provider:plugin",
+                        "target": "provider",
                         "plugin_name": "released-plugin",
                     }
                 ),
@@ -38,7 +38,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result, 0)
         load_plugin.assert_called_once_with(
             _runtime.RuntimeArgs(
-                target="provider:plugin",
+                target="provider",
                 plugin_name="released-plugin",
             )
         )

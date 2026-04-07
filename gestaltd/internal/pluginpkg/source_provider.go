@@ -78,7 +78,7 @@ func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch
 	}
 	switch kind {
 	case sourceProviderKindGo:
-		return BuildGoProviderBinary(root, outputPath, goos, goarch)
+		return BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
 	case sourceProviderKindPython:
 		if err := validateSourceProviderReleaseKind(kind, goos, goarch); err != nil {
 			return err

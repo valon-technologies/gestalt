@@ -9,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
+
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 const goProviderPackageTarget = "."
@@ -18,6 +21,7 @@ const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
 var ErrGoToolUnavailable = errors.New("go tool unavailable")
+var goProviderNameSlugPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 //go:embed go_provider_wrapper.go.tmpl
 var goProviderWrapperSource string
@@ -41,7 +45,7 @@ func DetectGoProviderImportPath(root, goos, goarch string) (string, error) {
 	return strings.TrimSpace(importPath), nil
 }
 
-func NewGoProviderWrapper(root, goos, goarch string) (string, func(), error) {
+func NewGoProviderWrapper(root, pluginName, goos, goarch string) (string, func(), error) {
 	importPath, err := DetectGoProviderImportPath(root, goos, goarch)
 	if err != nil {
 		return "", nil, err
@@ -58,7 +62,13 @@ func NewGoProviderWrapper(root, goos, goarch string) (string, func(), error) {
 	}()
 
 	var buf bytes.Buffer
-	if err := goProviderWrapperTemplate.Execute(&buf, struct{ ImportPath string }{ImportPath: importPath}); err != nil {
+	if err := goProviderWrapperTemplate.Execute(&buf, struct {
+		ImportPath string
+		PluginName string
+	}{
+		ImportPath: importPath,
+		PluginName: pluginName,
+	}); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("render Go provider wrapper: %w", err)
 	}
@@ -80,21 +90,22 @@ func BuildGoProviderTempBinary(root, goos, goarch string) (string, func(), error
 		return "", nil, fmt.Errorf("create Go provider temp dir: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
+	pluginName := sourcePluginName(root)
 
 	binaryName := "provider"
 	if goos == "windows" {
 		binaryName += ".exe"
 	}
 	binaryPath := filepath.Join(tempDir, binaryName)
-	if err := BuildGoProviderBinary(root, binaryPath, goos, goarch); err != nil {
+	if err := BuildGoProviderBinary(root, binaryPath, pluginName, goos, goarch); err != nil {
 		cleanup()
 		return "", nil, err
 	}
 	return binaryPath, cleanup, nil
 }
 
-func BuildGoProviderBinary(root, outputPath, goos, goarch string) error {
-	wrapperPath, cleanup, err := NewGoProviderWrapper(root, goos, goarch)
+func BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch string) error {
+	wrapperPath, cleanup, err := NewGoProviderWrapper(root, pluginName, goos, goarch)
 	if err != nil {
 		return err
 	}
@@ -176,4 +187,41 @@ func isMissingGoPackageError(err error) bool {
 		strings.Contains(msg, "no Go files") ||
 		strings.Contains(msg, "build constraints exclude all Go files") ||
 		strings.Contains(msg, "matched no packages")
+}
+
+func sourcePluginName(root string) string {
+	fallback := filepath.Base(filepath.Clean(root))
+	manifestPath, err := FindManifestFile(root)
+	if err != nil {
+		return slugPluginName(fallback)
+	}
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return slugPluginName(fallback)
+	}
+	return sourcePluginManifestName(manifest, fallback)
+}
+
+func sourcePluginManifestName(manifest *pluginmanifestv1.Manifest, fallback string) string {
+	if manifest != nil {
+		if manifest.Source != "" {
+			parts := strings.Split(strings.TrimSpace(manifest.Source), "/")
+			if last := parts[len(parts)-1]; last != "" {
+				return slugPluginName(last)
+			}
+		}
+		if manifest.DisplayName != "" {
+			return slugPluginName(manifest.DisplayName)
+		}
+	}
+	return slugPluginName(fallback)
+}
+
+func slugPluginName(value string) string {
+	cleaned := goProviderNameSlugPattern.ReplaceAllString(strings.TrimSpace(value), "-")
+	cleaned = strings.Trim(cleaned, "-")
+	if cleaned == "" {
+		return "plugin"
+	}
+	return cleaned
 }

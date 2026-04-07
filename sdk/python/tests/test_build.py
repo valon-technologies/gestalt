@@ -34,7 +34,7 @@ class BuildTests(unittest.TestCase):
                 _build.build_plugin_binary(
                     _build.BuildArgs(
                         root=str(root),
-                        target="provider:plugin",
+                        target="provider",
                         output_path=str(output),
                         plugin_name="released-plugin",
                     )
@@ -49,7 +49,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(
             captured["bundle_config"],
             {
-                "target": "provider:plugin",
+                "target": "provider",
                 "plugin_name": "released-plugin",
             },
         )

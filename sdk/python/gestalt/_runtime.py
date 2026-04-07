@@ -7,7 +7,7 @@ from concurrent import futures
 from dataclasses import dataclass
 
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
-from ._plugin import ENV_WRITE_CATALOG, Plugin, Request
+from ._plugin import ENV_WRITE_CATALOG, Plugin, Request, _module_plugin
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
 CURRENT_PROTOCOL_VERSION = 2
@@ -129,14 +129,17 @@ def _load_plugin(args: RuntimeArgs) -> Plugin:
 
     plugin_target = parse_plugin_target(args.target)
     module = importlib.import_module(plugin_target.module_name)
-    plugin = getattr(module, plugin_target.attribute_name, None)
+    if plugin_target.attribute_name is None:
+        plugin = _module_plugin(module)
+    else:
+        plugin = getattr(module, plugin_target.attribute_name, None)
     if not isinstance(plugin, Plugin):
         raise RuntimeError(f"{args.target} did not resolve to a gestalt.Plugin")
     return plugin
 
 
 def _print_usage() -> None:
-    print("usage: python -m gestalt._runtime ROOT MODULE:ATTRIBUTE", file=sys.stderr)
+    print("usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE]", file=sys.stderr)
 
 
 if __name__ == "__main__":

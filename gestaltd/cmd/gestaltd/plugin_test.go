@@ -962,13 +962,9 @@ version = "0.1.0"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-plugin = "provider:plugin"
+plugin = "provider"
 `), 0o644)
-	writeTestFile(t, pluginDir, "provider.py", []byte(`from __future__ import annotations
-
-import gestalt
-
-plugin = gestalt.Plugin.from_manifest("plugin.yaml")
+	writeTestFile(t, pluginDir, "provider.py", []byte(`import gestalt
 
 
 class GreetInput(gestalt.Model):
@@ -979,7 +975,7 @@ class GreetOutput(gestalt.Model):
     message: str
 
 
-@plugin.operation(id="greet", method="GET", read_only=True)
+@gestalt.operation(method="GET", read_only=True)
 def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
     return GreetOutput(message=f"Hello, {input.name}!")
 `), 0o644)
@@ -1011,7 +1007,7 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   target="$4"
   output="$5"
   name="$6"
-  if [ "$target" != "provider:plugin" ]; then
+  if [ "$target" != "provider" ]; then
     echo "unexpected provider target: $target" >&2
     exit 1
   fi

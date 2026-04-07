@@ -90,7 +90,6 @@ var (
     Description: "Return a greeting message",
   }
   Router = gestalt.MustRouter(
-    "my-plugin",
     gestalt.Register(greetOperation, (*Provider).greet),
   )
 )
@@ -128,7 +127,7 @@ You do not write `main.go`. Gestalt synthesizes the executable wrapper automatic
 
 ## Python typed operations
 
-Point `pyproject.toml` at the plugin object that Gestalt should load:
+Point `pyproject.toml` at the module or plugin object that Gestalt should load:
 
 ```toml
 [build-system]
@@ -141,7 +140,7 @@ version = "0.1.0"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-plugin = "provider:plugin"
+plugin = "provider"
 ```
 
 If you install the SDK from a private index, pin `gestalt` to that index with
@@ -150,11 +149,7 @@ If you install the SDK from a private index, pin `gestalt` to that index with
 Then define operations in `provider.py`:
 
 ```python
-from __future__ import annotations
-
 import gestalt
-
-plugin = gestalt.Plugin.from_manifest("plugin.yaml")
 
 
 class GreetInput(gestalt.Model):
@@ -165,27 +160,19 @@ class GreetOutput(gestalt.Model):
     message: str
 
 
-@plugin.configure
-def configure(_name: str, config: dict[str, object]) -> None:
-    plugin.greeting = str(config.get("greeting", "Hello"))
-
-
-@plugin.operation(
-    id="greet",
+@gestalt.operation(
     method="GET",
     description="Return a greeting message",
     read_only=True,
 )
 def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
-    greeting = getattr(plugin, "greeting", "Hello")
-    return GreetOutput(message=f"{greeting}, {input.name}!")
-
-
-if __name__ == "__main__":
-    plugin.serve()
+    return GreetOutput(message=f"Hello, {input.name}!")
 ```
 
-You do not write a launcher script for local development or release. Gestalt loads `provider:plugin` from `[tool.gestalt]`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
+If your plugin needs startup config, define a plain top-level
+`configure(name, config)` function. It does not need a decorator.
+
+You do not write a launcher script for local development or release. Gestalt loads the module declared in `[tool.gestalt].plugin`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
 
 ## Write `plugin.yaml`
 
