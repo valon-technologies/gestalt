@@ -1,33 +1,28 @@
 # Architecture
 
-Most of the time you don't need to think about how Gestalt works internally. You write a config file, start the server, and things run. But if you're operating Gestalt in production — or debugging something that isn't behaving the way you expect — it helps to understand what's actually happening underneath.
-
-This section covers how the server starts up, how it stores and protects credentials, and how requests flow from a caller through to an upstream API. For day-to-day configuration, see [Configuration](/configuration). For operator-facing security guidance, see [Security](/security).
+This section covers the internal design of Gestalt: how the server starts up, how it stores and protects credentials, and how requests flow through to upstream APIs. For day-to-day configuration, see [Configuration](/configuration). For operator-facing security guidance, see [Security](/security).
 
 ## How startup works
 
-When `gestaltd serve` starts, it goes through a specific sequence that matters if you're trying to understand why something fails at boot time.
+When `gestaltd serve` starts, it goes through a specific sequence that matters when you're debugging boot failures.
 
-First, the YAML config file is loaded and any `${ENV_VAR}` placeholders are expanded. If a referenced variable isn't set, Gestalt looks for a corresponding `_FILE` variable and reads the file at that path instead — this is how Docker secrets work. Unknown fields in the YAML are rejected outright, which catches typos early.
+First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded. If a variable isn't set, Gestalt checks for a corresponding `_FILE` variable and reads that file instead (this is how Docker secrets work). Unknown fields are rejected.
 
-Next, Gestalt initializes the secret manager using the `secrets` block. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet at this point. If your secret manager needs credentials (like a Vault token), those have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
+Next, Gestalt initializes the secret manager from the `secrets` block. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet. Credentials for the secret manager itself have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
 
-Once the secret manager is ready, Gestalt walks the rest of the config and resolves every `secret://` reference — in the server block, auth config, datastore config, telemetry, audit, and all provider configs. The `secrets.config` block is explicitly skipped to avoid a circular dependency.
+Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server, auth, datastore, telemetry, audit, and all provider configs. The `secrets.config` block is skipped to avoid a circular dependency.
 
-With secrets resolved, the `server.encryption_key` gets converted into a 32-byte AES key. If the key is a 64-character hex string, it's decoded directly. Anything else goes through Argon2id key derivation. This derived key is what protects all stored tokens.
+With secrets resolved, `server.encryption_key` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
 
-From there, things proceed in a natural order: the auth provider is created, the datastore is initialized (running schema migrations if needed), provider plugins are started, and the HTTP listeners come up. The `/ready` endpoint returns 503 until all providers have finished loading, then flips to 200.
+From there: auth provider, datastore (with schema migrations), provider plugins, then HTTP listeners. The `/ready` endpoint returns 503 until all providers report ready.
 
 ## How requests flow
 
-When a request arrives, the auth middleware runs first. It checks for a `session_token` cookie, then for an `Authorization: Bearer` header. If the bearer token starts with `gst_api_`, it's a Gestalt API token — the server hashes it with SHA-256 and looks up the hash in the `api_tokens` table. Any other bearer value is treated as a raw provider token.
+Auth middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. If the bearer token starts with `gst_api_`, it's hashed with SHA-256 and looked up in the `api_tokens` table. Any other bearer value is treated as a raw provider token.
 
-For operation invocations (calls to `/api/v1/{integration}/{operation}` or through `/mcp`), the request reaches the *broker*. The broker is the central dispatch layer — it resolves the caller's integration token from the datastore, decrypts it, checks whether it needs refreshing, and then hands the request off to the appropriate provider (a plugin over gRPC, a REST or GraphQL upstream, or an MCP server).
-
-The same broker handles both HTTP API calls and MCP tool invocations. From the provider's perspective, the two paths are identical.
+For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's integration token from the datastore, decrypts it, refreshes it if needed, and dispatches to the provider (plugin gRPC, REST, GraphQL, or MCP upstream). The same broker handles both HTTP and MCP calls.
 
 ## Further reading
 
-The [Data Model](/architecture/data-model) page covers the actual database tables Gestalt creates, which fields are encrypted, and how tokens are organized by user, provider, connection, and instance.
-
-The [Security Internals](/architecture/security-internals) page goes deeper on the encryption implementation, token lifecycle (creation through refresh through revocation), and key rotation.
+- [Data Model](/architecture/data-model): database tables, encryption boundaries, token storage granularity
+- [Security Internals](/architecture/security-internals): encryption implementation, token lifecycle, key rotation
