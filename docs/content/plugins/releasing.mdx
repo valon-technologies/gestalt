@@ -71,6 +71,7 @@ provider:
 artifacts:
   - os: linux
     arch: amd64
+    libc: glibc
     path: artifacts/linux/amd64/provider
     sha256: "..."
 ```
@@ -104,6 +105,12 @@ default. Pass `--platform` with a comma-separated list such as
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass
 `--platform all` in CI release jobs to build the full supported platform matrix
 for both Go and Python source plugins.
+
+Pass `--platform` with a comma-separated list such as
+`--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` to build explicit targets.
+
+Pass `--platform all` in CI release jobs to build the full supported platform
+matrix for both Go and Python source plugins.
 
 For non-host Python targets, point Gestalt at a matching interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as

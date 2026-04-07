@@ -653,6 +653,13 @@
           "type": "string",
           "minLength": 1
         },
+        "libc": {
+          "type": "string",
+          "enum": [
+            "glibc",
+            "musl"
+          ]
+        },
         "path": {
           "type": "string",
           "minLength": 1

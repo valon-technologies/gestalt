@@ -25,10 +25,10 @@ const (
 	platformAssetPrefix = "gestalt-plugin-"
 )
 
-type platformAssetMatch int
+type platformAssetMatchKind int
 
 const (
-	noPlatformAssetMatch platformAssetMatch = iota
+	noPlatformAssetMatch platformAssetMatchKind = iota
 	pluginOnlyPlatformAssetMatch
 	versionedPlatformAssetMatch
 )
@@ -141,14 +141,13 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 	if plugin == "" {
 		return releaseAsset{}, fmt.Errorf("plugin name is required")
 	}
-
-	expectedName := platformAssetName(plugin, version)
-	oldName := pluginsource.Source{Plugin: plugin}.AssetName(version)
-
-	if asset, ok := findAssetByName(assets, expectedName); ok {
-		return asset, nil
+	currentLibC := pluginpkg.CurrentRuntimeLibC()
+	for _, expectedName := range candidatePlatformAssetNames(plugin, version, currentLibC) {
+		if asset, ok := findAssetByName(assets, expectedName); ok {
+			return asset, nil
+		}
 	}
-
+	oldName := pluginsource.Source{Plugin: plugin}.AssetName(version)
 	oldAsset, hasOldAsset := findAssetByName(assets, oldName)
 
 	versionedMatches := make([]releaseAsset, 0, 1)
@@ -200,8 +199,25 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 	)
 }
 
-func platformAssetName(plugin, version string) string {
-	return fmt.Sprintf("%s%s_v%s_%s_%s.tar.gz", platformAssetPrefix, plugin, version, runtime.GOOS, runtime.GOARCH)
+func platformAssetName(plugin, version, libc string) string {
+	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, libc))
+}
+
+func candidatePlatformAssetNames(plugin, version, libc string) []string {
+	names := []string{platformAssetName(plugin, version, libc)}
+	if runtime.GOOS == "linux" && libc != "" {
+		names = append(names, fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, "")))
+	}
+	seen := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
 }
 
 func findAssetByName(assets []releaseAsset, name string) (releaseAsset, bool) {
@@ -213,7 +229,7 @@ func findAssetByName(assets []releaseAsset, name string) (releaseAsset, bool) {
 	return releaseAsset{}, false
 }
 
-func matchesPlatformAsset(name, plugin, version string) platformAssetMatch {
+func matchesPlatformAsset(name, plugin, version string) platformAssetMatchKind {
 	stem, ok := trimPlatformArchive(name)
 	if !ok {
 		return noPlatformAssetMatch
@@ -243,16 +259,9 @@ func trimPlatformArchive(name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	for _, goos := range platformAliases(platformOSAliases, runtime.GOOS) {
-		for _, goarch := range platformAliases(platformArchAliases, runtime.GOARCH) {
-			for _, leadSep := range platformSeparators {
-				for _, midSep := range platformSeparators {
-					suffix := leadSep + goos + midSep + goarch
-					if strings.HasSuffix(base, suffix) {
-						return strings.TrimSuffix(base, suffix), true
-					}
-				}
-			}
+	for _, suffix := range platformSuffixCandidates() {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix), true
 		}
 	}
 	return "", false
@@ -263,6 +272,22 @@ func platformAliases(aliasMap map[string][]string, name string) []string {
 		return aliases
 	}
 	return []string{name}
+}
+
+func platformSuffixCandidates() []string {
+	suffixes := make([]string, 0, 8)
+	goosAliases := platformAliases(platformOSAliases, runtime.GOOS)
+	goarchAliases := platformAliases(platformArchAliases, runtime.GOARCH)
+	for _, goos := range goosAliases {
+		for _, goarch := range goarchAliases {
+			for _, leadSep := range platformSeparators {
+				for _, midSep := range platformSeparators {
+					suffixes = append(suffixes, leadSep+goos+midSep+goarch)
+				}
+			}
+		}
+	}
+	return suffixes
 }
 
 // Remote plugin packages are tarball archives today; pluginpkg only reads gzip-compressed tar packages.

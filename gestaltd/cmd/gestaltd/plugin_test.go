@@ -285,7 +285,7 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
@@ -395,14 +395,12 @@ func TestRun_PluginReleaseDefaultsPythonSourcePluginToHostPlatform(t *testing.T)
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	if len(manifest.Artifacts) != 1 {
 		t.Fatalf("artifacts = %+v, want exactly one host-platform artifact", manifest.Artifacts)
 	}
-	if manifest.Artifacts[0].OS != runtime.GOOS || manifest.Artifacts[0].Arch != runtime.GOARCH {
-		t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, runtime.GOOS, runtime.GOARCH)
-	}
+	assertExpectedPythonArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH)
 }
 
 func TestRun_PluginReleaseBuildsPythonSourcePluginForAllPlatforms(t *testing.T) {
@@ -426,14 +424,12 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForAllPlatforms(t *testing.T) 
 	)
 
 	for _, platform := range defaultReleasePlatformsForTest(t) {
-		archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
+		archiveName := expectedPythonArchiveName(testVersion, platform.GOOS, platform.GOARCH)
 		manifest := readReleasedManifest(t, outputDir, archiveName)
 		if len(manifest.Artifacts) != 1 {
 			t.Fatalf("artifacts for %s/%s = %+v, want one artifact", platform.GOOS, platform.GOARCH, manifest.Artifacts)
 		}
-		if manifest.Artifacts[0].OS != platform.GOOS || manifest.Artifacts[0].Arch != platform.GOARCH {
-			t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, platform.GOOS, platform.GOARCH)
-		}
+		assertExpectedPythonArtifactPlatform(t, manifest.Artifacts[0], platform.GOOS, platform.GOARCH)
 	}
 }
 
@@ -458,8 +454,8 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForRequestedPlatforms(t *testi
 		"--output", outputDir,
 	)
 
-	currentArchive := "gestalt-plugin-python-release_v0.0.13-test_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	otherArchive := "gestalt-plugin-python-release_v0.0.13-test_" + otherGOOS + "_" + otherGOARCH + ".tar.gz"
+	currentArchive := expectedPythonArchiveName("0.0.13-test", runtime.GOOS, runtime.GOARCH)
+	otherArchive := expectedPythonArchiveName("0.0.13-test", otherGOOS, otherGOARCH)
 	for _, archiveName := range []string{currentArchive, otherArchive} {
 		extractDir := extractReleasedArchive(t, outputDir, archiveName)
 		manifest := readReleasedManifest(t, outputDir, archiveName)
@@ -1228,6 +1224,31 @@ func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
 		t.Fatalf("parseReleasePlatforms(defaultPlatforms): %v", err)
 	}
 	return platforms
+}
+
+func expectedPythonReleasePlatform(goos, goarch string) releasePlatform {
+	plat := releasePlatform{GOOS: goos, GOARCH: goarch}
+	if runtime.GOOS == "linux" && goos == "linux" {
+		plat.LibC = pluginpkg.CurrentRuntimeLibC()
+	}
+	return plat
+}
+
+func expectedPythonArchiveName(version, goos, goarch string) string {
+	return platformArchiveName("python-release", version, expectedPythonReleasePlatform(goos, goarch))
+}
+
+func assertExpectedPythonArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch string) {
+	t.Helper()
+
+	want := expectedPythonReleasePlatform(goos, goarch)
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
+		t.Fatalf(
+			"artifact platform = %s/%s/%s, want %s/%s/%s",
+			artifact.OS, artifact.Arch, artifact.LibC,
+			want.GOOS, want.GOARCH, want.LibC,
+		)
+	}
 }
 
 func configurePythonReleaseInterpretersForAllPlatforms(t *testing.T, pluginDir string) {

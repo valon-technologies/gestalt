@@ -61,10 +61,10 @@ func pythonProviderExecutionCommand(root, target string) (string, []string, func
 	return interpreter, []string{"-m", pythonRuntimeModule, root, target}, nil, nil
 }
 
-func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) error {
+func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) (string, error) {
 	interpreter, err := DetectPythonInterpreter(sourceDir, goos, goarch)
 	if err != nil {
-		return fmt.Errorf("detect Python release interpreter for %s/%s: %w", goos, goarch, err)
+		return "", fmt.Errorf("detect Python release interpreter for %s/%s: %w", goos, goarch, err)
 	}
 
 	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName, goos, goarch)
@@ -73,9 +73,12 @@ func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("python release build: %w (ensure gestalt and PyInstaller are installed in the selected Python environment)", err)
+		return "", fmt.Errorf("python release build: %w (ensure gestalt and PyInstaller are installed in the selected Python environment)", err)
 	}
-	return nil
+	if goos != "linux" || runtime.GOOS != "linux" {
+		return "", nil
+	}
+	return CurrentRuntimeLibC(), nil
 }
 
 func DetectPythonInterpreter(root, goos, goarch string) (string, error) {

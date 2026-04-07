@@ -60,8 +60,15 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	t.Helper()
 
 	artPath := artifactRelPath("provider")
-	srcDir := filepath.Join(dir, "provider-src")
-	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
+	return buildV2ArchiveForArtifact(t, dir, source, version, artPath, "", binaryContent)
+}
+
+func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath, libc, binaryContent string) string {
+	t.Helper()
+
+	safeName := strings.NewReplacer("/", "-", ".", "_").Replace(artifactPath + "-" + libc + "-" + binaryContent)
+	srcDir := filepath.Join(dir, safeName+"-src")
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artifactPath))), 0755); err != nil {
 		t.Fatalf("create provider src dir: %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
@@ -73,12 +80,13 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 			{
 				OS:     runtime.GOOS,
 				Arch:   runtime.GOARCH,
-				Path:   artPath,
+				LibC:   libc,
+				Path:   artifactPath,
 				SHA256: sha256hex(binaryContent),
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artPath},
+			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 		},
 	}
 
@@ -92,11 +100,11 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
 		t.Fatalf("write provider catalog: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), []byte(binaryContent), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactPath)), []byte(binaryContent), 0755); err != nil {
 		t.Fatalf("write provider artifact: %v", err)
 	}
 
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	archivePath := filepath.Join(dir, safeName+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir provider: %v", err)
 	}
@@ -546,5 +554,92 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}
 	if cfg.Integrations["alpha"].Plugin.Command != executablePath {
 		t.Errorf("plugin command = %q, want %q", cfg.Integrations["alpha"].Plugin.Command, executablePath)
+	}
+}
+
+func TestSourcePluginGitHubResolverPrefersCurrentLinuxLibcAsset(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("linux libc-specific asset selection only applies on linux hosts")
+	}
+	currentLibC := pluginpkg.CurrentRuntimeLibC()
+	if currentLibC == "" {
+		t.Skip("linux libc detection unavailable on this host")
+	}
+
+	src := pluginsource.Source{
+		Host:   pluginsource.HostGitHub,
+		Owner:  testOwner,
+		Repo:   testRepo,
+		Plugin: testPlugin,
+	}
+	dir := t.TempDir()
+	exactPath := artifactRelPath("provider-" + currentLibC)
+	exactArchivePath := buildV2ArchiveForArtifact(t, dir, testSource, testVersion, exactPath, currentLibC, "exact-libc-binary")
+	genericArchivePath := buildV2ArchiveForArtifact(t, dir, testSource, testVersion, artifactRelPath("provider-generic"), "", "generic-binary")
+	exactArchiveData, err := os.ReadFile(exactArchivePath)
+	if err != nil {
+		t.Fatalf("read exact archive: %v", err)
+	}
+	genericArchiveData, err := os.ReadFile(genericArchivePath)
+	if err != nil {
+		t.Fatalf("read generic archive: %v", err)
+	}
+
+	exactAssetName := "gestalt-plugin-" + testPlugin + "_v" + testVersion + "_" + pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, currentLibC) + ".tar.gz"
+	genericAssetName := "gestalt-plugin-" + testPlugin + "_v" + testVersion + "_" + pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, "") + ".tar.gz"
+	releasePath := "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + src.ReleaseTag(testVersion)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case releasePath:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"assets": []map[string]any{
+					{
+						"name":                 genericAssetName,
+						"url":                  "http://" + r.Host + "/generic-dl",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + src.ReleaseTag(testVersion) + "/" + genericAssetName,
+					},
+					{
+						"name":                 exactAssetName,
+						"url":                  "http://" + r.Host + "/exact-dl",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + src.ReleaseTag(testVersion) + "/" + exactAssetName,
+					},
+				},
+			})
+		case "/generic-dl":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(genericArchiveData)
+		case "/exact-dl":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(exactArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := writeConfigYAML(t, dir, testSource, testVersion, artifactsDir)
+
+	lc := NewLifecycle(&ghresolver.GitHubResolver{BaseURL: srv.URL})
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	entry := lock.Providers["alpha"]
+	if entry.ResolvedURL != srv.URL+"/exact-dl" {
+		t.Fatalf("ResolvedURL = %q, want %q", entry.ResolvedURL, srv.URL+"/exact-dl")
+	}
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
+	data, err := os.ReadFile(executablePath)
+	if err != nil {
+		t.Fatalf("read executable: %v", err)
+	}
+	if string(data) != "exact-libc-binary" {
+		t.Fatalf("executable content = %q, want %q", data, "exact-libc-binary")
 	}
 }
