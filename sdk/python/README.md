@@ -8,8 +8,13 @@ It is intended to be used by source plugins discovered through
 same source tree.
 
 Python source plugins are developed locally via `from.source.path` and
-released through `gestaltd plugin release` as current-platform executable
-artifacts.
+released through `gestaltd plugin release` for the host platform by default,
+or for every requested target platform when you pass `--platform`. In CI,
+prefer `--platform all` to build the full supported release matrix.
+
+For non-host targets, configure a matching Python build interpreter with
+`GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
+`.venv-<goos>-<goarch>/`.
 
 ## Regenerating Protobuf Stubs
 

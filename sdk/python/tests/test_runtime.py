@@ -4,7 +4,14 @@ import tempfile
 import unittest
 from unittest import mock
 
-from gestalt import Plugin, Request, _bootstrap, _runtime
+from gestalt import (
+    Catalog,
+    CatalogOperation,
+    Plugin,
+    Request,
+    _bootstrap,
+    _runtime,
+)
 
 
 class ParseRuntimeArgsTests(unittest.TestCase):
@@ -131,6 +138,58 @@ class MainEntrypointTests(unittest.TestCase):
         """Invalid args should return exit code 2."""
         result = _runtime.main(["/only-one-arg"])
         self.assertEqual(result, 2)
+
+    def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
+        """Runtime gRPC servicer should advertise and encode session catalogs."""
+        plugin = Plugin("source-name")
+
+        @plugin.session_catalog
+        def dynamic_catalog(request: Request) -> Catalog:
+            return Catalog(
+                name="session-source",
+                display_name=request.connection_param("tenant"),
+                operations=[CatalogOperation(id="private_search", method="POST")],
+            )
+
+        runtime = _runtime._runtime_imports()
+        servicer = _runtime._provider_servicer(plugin=plugin, runtime=runtime)
+        metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
+        response = servicer.GetSessionCatalog(
+            runtime.plugin_pb2.GetSessionCatalogRequest(
+                token="secret-token",
+                connection_params={"tenant": "acme"},
+            ),
+            mock.Mock(),
+        )
+
+        self.assertTrue(metadata.supports_session_catalog)
+        self.assertEqual(
+            json.loads(response.catalog_json),
+            {
+                "name": "session-source",
+                "displayName": "acme",
+                "operations": [
+                    {
+                        "id": "private_search",
+                        "method": "POST",
+                    }
+                ],
+            },
+        )
+
+    def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
+        """Runtime gRPC servicer should surface UNIMPLEMENTED when no session catalog handler exists."""
+        plugin = Plugin("source-name")
+        runtime = _runtime._runtime_imports()
+        servicer = _runtime._provider_servicer(plugin=plugin, runtime=runtime)
+        context = mock.Mock()
+
+        servicer.GetSessionCatalog(runtime.plugin_pb2.GetSessionCatalogRequest(), context)
+
+        context.abort.assert_called_once_with(
+            runtime.grpc.StatusCode.UNIMPLEMENTED,
+            "provider does not support session catalogs",
+        )
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ func runPlugin(args []string) error {
 }
 
 const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
+const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
 const releaseBinaryPrefix = "gestalt-plugin-"
 const windowsOS = "windows"
@@ -51,10 +52,16 @@ func runPluginRelease(args []string) error {
 	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
 	version := fs.String("version", "", "semantic version string (required)")
 	outputDir := fs.String("output", defaultReleaseOutputDir, "output directory")
-	platforms := fs.String("platform", defaultPlatforms, "comma-separated platforms (os/arch)")
+	platforms := fs.String("platform", "", "comma-separated platforms (os/arch) or 'all'")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	platformFlagExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "platform" {
+			platformFlagExplicit = true
+		}
+	})
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
@@ -90,7 +97,7 @@ func runPluginRelease(args []string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, *platforms)
+	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, *platforms, platformFlagExplicit)
 	if err != nil {
 		return err
 	}
@@ -119,24 +126,26 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, value string) ([]releasePlatform, error) {
+func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, value string, explicit bool) ([]releasePlatform, error) {
 	hasProviderKind := manifestHasKind(manifest, pluginmanifestv1.KindProvider)
 	if !hasProviderKind {
 		return nil, nil
 	}
 
 	providerBuildRequired := releaseRequiresBuildTarget(manifest)
-	if value == defaultPlatforms {
-		currentPlatformOnly, err := pluginpkg.SourceProviderCurrentPlatformOnly(root, runtime.GOOS, runtime.GOARCH)
-		switch {
-		case err == nil && currentPlatformOnly:
-			value = currentReleasePlatform()
-		case err == nil || errors.Is(err, pluginpkg.ErrNoSourceProviderPackage):
-		default:
-			return nil, fmt.Errorf("detect source provider package: %w", err)
-		}
+	if !providerBuildRequired && !explicit {
+		return nil, nil
 	}
 
+	if explicit {
+		var err error
+		value, err = expandReleasePlatformValue(value)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		value = runtime.GOOS + "/" + runtime.GOARCH
+	}
 	platforms, err := parseReleasePlatforms(value)
 	if err != nil {
 		return nil, err
@@ -167,6 +176,18 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 		return nil, fmt.Errorf("no Go or Python provider package found")
 	}
 	return builds, nil
+}
+
+func expandReleasePlatformValue(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	switch {
+	case trimmed == "":
+		return "", fmt.Errorf("--platform requires a comma-separated os/arch list or %q", allPlatformsValue)
+	case strings.EqualFold(trimmed, allPlatformsValue):
+		return defaultPlatforms, nil
+	default:
+		return value, nil
+	}
 }
 
 func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
@@ -322,10 +343,6 @@ func releaseBinaryName(pluginName, goos string) string {
 		return binaryName + windowsExecutableSuffix
 	}
 	return binaryName
-}
-
-func currentReleasePlatform() string {
-	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
 func writeChecksums(dir string, archivePaths []string) error {
@@ -552,18 +569,20 @@ func printPluginUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  release     Cross-compile and build plugin release archives")
+	writeUsageLine(w, "  release     Build plugin release archives")
 }
 
 func printPluginReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Cross-compile a plugin for multiple platforms and produce per-platform")
-	writeUsageLine(w, "tar.gz archives and a checksums file. Run from the plugin source directory.")
+	writeUsageLine(w, "Build a plugin release archive for the host platform by default.")
+	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
+	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
+	writeUsageLine(w, "Run from the plugin source directory.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")
 	writeUsageLine(w, "  --output     Output directory (default: dist/)")
-	writeUsageLine(w, "  --platform   Comma-separated platforms (default: darwin/amd64,darwin/arm64,linux/amd64,linux/arm64)")
+	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch) or all (default: host platform only)")
 }

@@ -362,5 +362,7 @@ gestaltd plugin release --version 1.2.3
 For executable Go plugins, release materializes the executable catalog
 automatically from the provider's typed router before packaging. For Python
 source plugins, release loads the module declared in `[tool.gestalt].plugin`,
-materializes the executable catalog automatically, and builds a current-platform
-executable artifact.
+materializes the executable catalog automatically. Go and Python source plugins
+both build the host-platform artifact by default. Pass `--platform` for an
+explicit target list, or `--platform all` in CI to build the full supported
+release matrix.

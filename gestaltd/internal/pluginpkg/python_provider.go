@@ -18,6 +18,7 @@ const (
 	pythonProjectFile   = "pyproject.toml"
 	pythonRuntimeModule = "gestalt._runtime"
 	pythonBuildModule   = "gestalt._build"
+	pythonEnvVarPrefix  = "GESTALT_PYTHON_"
 )
 
 var ErrNoPythonProviderPackage = errors.New("no Python provider package found")
@@ -53,20 +54,20 @@ func DetectPythonProviderTarget(root string) (string, error) {
 }
 
 func pythonProviderExecutionCommand(root, target string) (string, []string, func(), error) {
-	interpreter, err := DetectPythonInterpreter(root)
+	interpreter, err := DetectPythonInterpreter(root, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", nil, nil, err
 	}
 	return interpreter, []string{"-m", pythonRuntimeModule, root, target}, nil, nil
 }
 
-func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target string) error {
-	interpreter, err := DetectPythonInterpreter(sourceDir)
+func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) error {
+	interpreter, err := DetectPythonInterpreter(sourceDir, goos, goarch)
 	if err != nil {
-		return fmt.Errorf("detect Python release interpreter: %w", err)
+		return fmt.Errorf("detect Python release interpreter for %s/%s: %w", goos, goarch, err)
 	}
 
-	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName)
+	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName, goos, goarch)
 	cmd.Dir = sourceDir
 	cmd.Env = append(os.Environ(), pythonBackendEnv()...)
 	cmd.Stdout = os.Stdout
@@ -77,8 +78,8 @@ func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target string)
 	return nil
 }
 
-func DetectPythonInterpreter(root string) (string, error) {
-	for _, candidate := range pythonInterpreterCandidates(root) {
+func DetectPythonInterpreter(root, goos, goarch string) (string, error) {
+	for _, candidate := range pythonInterpreterCandidates(root, goos, goarch) {
 		if candidate == "" {
 			continue
 		}
@@ -92,7 +93,11 @@ func DetectPythonInterpreter(root string) (string, error) {
 			return resolved, nil
 		}
 	}
-	return "", fmt.Errorf("detect Python interpreter: %w", exec.ErrNotFound)
+	envVar := pythonInterpreterEnvVar(goos, goarch)
+	if goos == runtime.GOOS && goarch == runtime.GOARCH {
+		return "", fmt.Errorf("detect Python interpreter: %w", exec.ErrNotFound)
+	}
+	return "", fmt.Errorf("detect Python interpreter: %w (set %s or provide a target-specific virtualenv)", exec.ErrNotFound, envVar)
 }
 
 func pythonBackendImportPaths() []string {
@@ -126,9 +131,36 @@ func localPythonSDKPath() string {
 	return path
 }
 
-func pythonInterpreterCandidates(root string) []string {
+func pythonInterpreterCandidates(root, goos, goarch string) []string {
+	candidates := []string{
+		os.Getenv(pythonInterpreterEnvVar(goos, goarch)),
+	}
+	suffix := goos + "-" + goarch
+	if goos == "windows" {
+		candidates = append(candidates,
+			filepath.Join(root, ".venv-"+suffix, "Scripts", "python.exe"),
+			filepath.Join(root, "venv-"+suffix, "Scripts", "python.exe"),
+			filepath.Join(root, ".venv", suffix, "Scripts", "python.exe"),
+			filepath.Join(root, "venv", suffix, "Scripts", "python.exe"),
+		)
+	} else {
+		candidates = append(candidates,
+			filepath.Join(root, ".venv-"+suffix, "bin", "python"),
+			filepath.Join(root, "venv-"+suffix, "bin", "python"),
+			filepath.Join(root, ".venv", suffix, "bin", "python"),
+			filepath.Join(root, "venv", suffix, "bin", "python"),
+		)
+	}
+	if goos == runtime.GOOS && goarch == runtime.GOARCH {
+		candidates = append(candidates, pythonGenericInterpreterCandidates(root)...)
+	}
+	return candidates
+}
+
+func pythonGenericInterpreterCandidates(root string) []string {
 	if runtime.GOOS == "windows" {
 		return []string{
+			os.Getenv("GESTALT_PYTHON"),
 			filepath.Join(root, ".venv", "Scripts", "python.exe"),
 			filepath.Join(root, "venv", "Scripts", "python.exe"),
 			"py",
@@ -136,11 +168,17 @@ func pythonInterpreterCandidates(root string) []string {
 		}
 	}
 	return []string{
+		os.Getenv("GESTALT_PYTHON"),
 		filepath.Join(root, ".venv", "bin", "python"),
 		filepath.Join(root, "venv", "bin", "python"),
 		"python3",
 		"python",
 	}
+}
+
+func pythonInterpreterEnvVar(goos, goarch string) string {
+	replacer := strings.NewReplacer("-", "_", ".", "_", "/", "_")
+	return pythonEnvVarPrefix + strings.ToUpper(replacer.Replace(goos)) + "_" + strings.ToUpper(replacer.Replace(goarch))
 }
 
 func SplitPythonProviderTarget(target string) (module string, attr string, err error) {

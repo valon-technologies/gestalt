@@ -281,6 +281,7 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 
 	runPluginReleaseCommand(t, pluginDir,
 		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
 	)
 
@@ -330,7 +331,149 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	}
 }
 
-func TestRun_PluginReleaseRejectsNonCurrentPlatformForPythonSourcePlugin(t *testing.T) {
+func TestRun_PluginReleaseDefaultsGoSourcePluginToHostPlatform(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newGoSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-go-default"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	if len(manifest.Artifacts) != 1 {
+		t.Fatalf("artifacts = %+v, want exactly one host-platform artifact", manifest.Artifacts)
+	}
+	if manifest.Artifacts[0].OS != runtime.GOOS || manifest.Artifacts[0].Arch != runtime.GOARCH {
+		t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+func TestRun_PluginReleaseBuildsGoSourcePluginForAllPlatforms(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newGoSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-go-all"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", allPlatformsValue,
+		"--output", outputDir,
+	)
+
+	for _, platform := range defaultReleasePlatformsForTest(t) {
+		archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
+		manifest := readReleasedManifest(t, outputDir, archiveName)
+		if len(manifest.Artifacts) != 1 {
+			t.Fatalf("artifacts for %s/%s = %+v, want one artifact", platform.GOOS, platform.GOARCH, manifest.Artifacts)
+		}
+		if manifest.Artifacts[0].OS != platform.GOOS || manifest.Artifacts[0].Arch != platform.GOARCH {
+			t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, platform.GOOS, platform.GOARCH)
+		}
+	}
+}
+
+func TestRun_PluginReleaseDefaultsPythonSourcePluginToHostPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-default"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	if len(manifest.Artifacts) != 1 {
+		t.Fatalf("artifacts = %+v, want exactly one host-platform artifact", manifest.Artifacts)
+	}
+	if manifest.Artifacts[0].OS != runtime.GOOS || manifest.Artifacts[0].Arch != runtime.GOARCH {
+		t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+func TestRun_PluginReleaseBuildsPythonSourcePluginForAllPlatforms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	configurePythonReleaseInterpretersForAllPlatforms(t, pluginDir)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-python-all"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", allPlatformsValue,
+		"--output", outputDir,
+	)
+
+	for _, platform := range defaultReleasePlatformsForTest(t) {
+		archiveName := "gestalt-plugin-python-release_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
+		manifest := readReleasedManifest(t, outputDir, archiveName)
+		if len(manifest.Artifacts) != 1 {
+			t.Fatalf("artifacts for %s/%s = %+v, want one artifact", platform.GOOS, platform.GOARCH, manifest.Artifacts)
+		}
+		if manifest.Artifacts[0].OS != platform.GOOS || manifest.Artifacts[0].Arch != platform.GOARCH {
+			t.Fatalf("artifact platform = %s/%s, want %s/%s", manifest.Artifacts[0].OS, manifest.Artifacts[0].Arch, platform.GOOS, platform.GOARCH)
+		}
+	}
+}
+
+func TestRun_PluginReleaseBuildsPythonSourcePluginForRequestedPlatforms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	otherGOOS, otherGOARCH := pythonReleaseOtherPlatform()
+	otherPlatform := otherGOOS + "/" + otherGOARCH
+	writeFakePythonReleaseInterpreter(t, filepath.Join(pluginDir, "cross-python"), otherGOOS, otherGOARCH)
+	t.Setenv(pluginpkgPythonEnvVar(otherGOOS, otherGOARCH), filepath.Join(pluginDir, "cross-python"))
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", "0.0.13-test",
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH+","+otherPlatform,
+		"--output", outputDir,
+	)
+
+	currentArchive := "gestalt-plugin-python-release_v0.0.13-test_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	otherArchive := "gestalt-plugin-python-release_v0.0.13-test_" + otherGOOS + "_" + otherGOARCH + ".tar.gz"
+	for _, archiveName := range []string{currentArchive, otherArchive} {
+		extractDir := extractReleasedArchive(t, outputDir, archiveName)
+		manifest := readReleasedManifest(t, outputDir, archiveName)
+		binaryName := releaseBinaryName("python-release", manifest.Artifacts[0].OS)
+		if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+			t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+		}
+		if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
+			t.Fatalf("expected %s in archive: %v", binaryName, err)
+		}
+	}
+}
+
+func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -339,10 +482,8 @@ func TestRun_PluginReleaseRejectsNonCurrentPlatformForPythonSourcePlugin(t *test
 
 	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
-	otherPlatform := "linux/amd64"
-	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-		otherPlatform = "darwin/arm64"
-	}
+	otherGOOS, otherGOARCH := pythonReleaseOtherPlatform()
+	otherPlatform := otherGOOS + "/" + otherGOARCH
 
 	out, err := runPluginReleaseCommandResult(pluginDir,
 		"--version", "0.0.13-test",
@@ -352,7 +493,7 @@ func TestRun_PluginReleaseRejectsNonCurrentPlatformForPythonSourcePlugin(t *test
 	if err == nil {
 		t.Fatalf("expected error for non-current platform, got output: %s", out)
 	}
-	if !strings.Contains(string(out), "python source plugins can only be released for the current platform") {
+	if !strings.Contains(string(out), pluginpkgPythonEnvVar(otherGOOS, otherGOARCH)) {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -978,6 +1119,20 @@ class GreetOutput(gestalt.Model):
 @gestalt.operation(method="GET", read_only=True)
 def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
     return GreetOutput(message=f"Hello, {input.name}!")
+
+
+@gestalt.session_catalog
+def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
+    return gestalt.Catalog(
+        name="python-release-session",
+        display_name=request.token,
+        operations=[
+            gestalt.CatalogOperation(
+                id="session_greet",
+                method="GET",
+            )
+        ],
+    )
 `), 0o644)
 	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/python-release",
@@ -991,7 +1146,14 @@ def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
 	writeTestFile(t, pluginDir, "plugin.yaml", manifestData, 0o644)
-	writeTestFile(t, pluginDir, filepath.ToSlash(filepath.Join(".venv", "bin", "python")), []byte(`#!/bin/sh
+	writeFakePythonReleaseInterpreter(t, filepath.Join(pluginDir, ".venv", "bin", "python"), runtime.GOOS, runtime.GOARCH)
+	return pluginDir
+}
+
+func writeFakePythonReleaseInterpreter(t *testing.T, path, expectedGOOS, expectedGOARCH string) {
+	t.Helper()
+
+	script := `#!/bin/sh
 set -eu
 
 if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
@@ -999,7 +1161,7 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
     exit 1
   fi
-  if [ "$#" -ne 6 ]; then
+  if [ "$#" -ne 8 ]; then
     echo "unexpected gestalt._build args: $*" >&2
     exit 1
   fi
@@ -1007,12 +1169,18 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   target="$4"
   output="$5"
   name="$6"
+  goos="$7"
+  goarch="$8"
   if [ "$target" != "provider" ]; then
     echo "unexpected provider target: $target" >&2
     exit 1
   fi
   if [ "$name" != "python-release" ]; then
     echo "unexpected plugin name: $name" >&2
+    exit 1
+  fi
+  if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
+    echo "unexpected target platform: $goos/$goarch" >&2
     exit 1
   fi
   output_dir="${output%/*}"
@@ -1041,8 +1209,44 @@ fi
 
 echo "unexpected fake python invocation: $*" >&2
 exit 1
-`), 0o755)
-	return pluginDir
+`
+	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
+}
+
+func pythonReleaseOtherPlatform() (string, string) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		return "darwin", "arm64"
+	}
+	return "linux", "amd64"
+}
+
+func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
+	t.Helper()
+
+	platforms, err := parseReleasePlatforms(defaultPlatforms)
+	if err != nil {
+		t.Fatalf("parseReleasePlatforms(defaultPlatforms): %v", err)
+	}
+	return platforms
+}
+
+func configurePythonReleaseInterpretersForAllPlatforms(t *testing.T, pluginDir string) {
+	t.Helper()
+
+	replacer := strings.NewReplacer("/", "-", "\\", "-")
+	for _, platform := range defaultReleasePlatformsForTest(t) {
+		if platform.GOOS == runtime.GOOS && platform.GOARCH == runtime.GOARCH {
+			continue
+		}
+		interpreterPath := filepath.Join(pluginDir, "python-"+replacer.Replace(platform.GOOS+"-"+platform.GOARCH))
+		writeFakePythonReleaseInterpreter(t, interpreterPath, platform.GOOS, platform.GOARCH)
+		t.Setenv(pluginpkgPythonEnvVar(platform.GOOS, platform.GOARCH), interpreterPath)
+	}
+}
+
+func pluginpkgPythonEnvVar(goos, goarch string) string {
+	replacer := strings.NewReplacer("-", "_", ".", "_", "/", "_")
+	return "GESTALT_PYTHON_" + strings.ToUpper(replacer.Replace(goos)) + "_" + strings.ToUpper(replacer.Replace(goarch))
 }
 
 func pathWithoutGo(t *testing.T) string {
@@ -1101,6 +1305,28 @@ func newCompiledReleaseFixture(t *testing.T, dir string) string {
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeTestFile(t, pluginDir, releaseProviderSchemaPath, []byte(`{"type":"object"}`), 0644)
+	return pluginDir
+}
+
+func newGoSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, releaseTestPluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, releaseTestModule)), 0o644)
+	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeStaticCatalogProviderMain(t, pluginDir)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		},
+	})
 	return pluginDir
 }
 

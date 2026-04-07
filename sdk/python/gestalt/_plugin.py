@@ -1,3 +1,4 @@
+import inspect
 import json
 import pathlib
 import re
@@ -8,7 +9,13 @@ from typing import Any, Final
 import yaml
 
 from ._api import Request
-from ._catalog import build_catalog, write_catalog
+from ._catalog import (
+    Catalog,
+    SessionCatalogProvider,
+    build_catalog,
+    catalog_to_dict,
+    write_catalog,
+)
 from ._operations import (
     OperationDefinition,
     OperationResult,
@@ -20,12 +27,13 @@ from ._operations import (
 DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
 
-class Plugin:
+class Plugin(SessionCatalogProvider):
     def __init__(self, name: str, *, module_name: str | None = None) -> None:
         self.name = _slug_name(name)
         self._module_name = module_name
         self._operations: dict[str, OperationDefinition] = {}
         self._configure_handler: Any = None
+        self._session_catalog_handler: tuple[Any, bool] | None = None
 
     @classmethod
     def from_manifest(
@@ -42,6 +50,10 @@ class Plugin:
 
     def configure(self, func: Any) -> Any:
         self._configure_handler = func
+        return func
+
+    def session_catalog(self, func: Any) -> Any:
+        self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
         return func
 
     def operation(
@@ -84,13 +96,7 @@ class Plugin:
         return decorator(func)
 
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
-        handler = self._configure_handler
-        if handler is None and self._module_name:
-            module = sys.modules.get(self._module_name)
-            if module is not None:
-                candidate = getattr(module, "configure", None)
-                if callable(candidate):
-                    handler = candidate
+        handler = self._resolve_configure_handler()
         if handler is None:
             return
         run_sync(handler(name, config))
@@ -102,19 +108,68 @@ class Plugin:
             request=request,
         )
 
-    def catalog_dict(self) -> dict[str, Any]:
+    def _static_catalog(self) -> Catalog:
         return build_catalog(
             plugin_name=self.name,
             operations=self._operations.values(),
         )
 
+    def catalog_dict(self) -> dict[str, Any]:
+        return catalog_to_dict(self._static_catalog())
+
     def write_catalog(self, path: str | pathlib.Path) -> None:
-        write_catalog(path, catalog=self.catalog_dict())
+        write_catalog(path, catalog=self._static_catalog())
+
+    def supports_session_catalog(self) -> bool:
+        return self._resolve_session_catalog_handler() is not None
+
+    def catalog_for_request(self, request: Request) -> Catalog | dict[str, Any] | None:
+        definition = self._resolve_session_catalog_handler()
+        if definition is None:
+            return None
+
+        handler, takes_request = definition
+        if takes_request:
+            return run_sync(handler(request))
+        return run_sync(handler())
 
     def serve(self) -> None:
         from . import _runtime
 
         _runtime.serve(self)
+
+    def _resolve_configure_handler(self) -> Any:
+        if self._configure_handler is not None:
+            return self._configure_handler
+        if not self._module_name:
+            return None
+
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+
+        configure = getattr(module, "configure", None)
+        if callable(configure):
+            self._configure_handler = configure
+        return self._configure_handler
+
+    def _resolve_session_catalog_handler(self) -> tuple[Any, bool] | None:
+        if self._session_catalog_handler is not None:
+            return self._session_catalog_handler
+        if not self._module_name:
+            return None
+
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+
+        session_catalog = getattr(module, "session_catalog", None)
+        if callable(session_catalog) and getattr(session_catalog, "__module__", None) == module.__name__:
+            self._session_catalog_handler = (
+                session_catalog,
+                _inspect_session_catalog_handler(session_catalog),
+            )
+        return self._session_catalog_handler
 
 
 class _ModulePluginRegistry:
@@ -137,13 +192,11 @@ class _ModulePluginRegistry:
 
         plugin = self._plugins.get(module.__name__)
         if plugin is None:
-            name = _slug_name(module.__name__.rsplit(".", 1)[-1])
-            plugin = Plugin(name, module_name=module.__name__)
+            plugin = Plugin(_module_plugin_name(module), module_name=module.__name__)
             self._plugins[module.__name__] = plugin
 
         if not isinstance(getattr(module, "plugin", None), Plugin):
             setattr(module, "plugin", plugin)
-
         return plugin
 
 
@@ -179,8 +232,42 @@ def operation(
     return decorator(func)
 
 
+def session_catalog(func: Any | None = None, /) -> Any:
+    def decorator(handler: Any) -> Any:
+        plugin = _MODULE_PLUGINS.for_function(handler)
+        return plugin.session_catalog(handler)
+
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
+
+
+def _inspect_session_catalog_handler(func: Any) -> bool:
+    signature = inspect.signature(func)
+    parameters = list(signature.parameters.values())
+    type_hints = inspect.get_annotations(func, eval_str=True)
+
+    if len(parameters) > 1:
+        raise TypeError("session catalog handlers may declare at most one parameter")
+    if not parameters:
+        return False
+
+    annotation = type_hints.get(parameters[0].name, parameters[0].annotation)
+    if annotation not in (inspect.Signature.empty, Request):
+        raise TypeError("session catalog handler parameter must be annotated as gestalt.Request")
+    return True
+
+
+def _module_plugin_name(module: types.ModuleType) -> str:
+    file_path = getattr(module, "__file__", None)
+    if file_path:
+        manifest_path = pathlib.Path(file_path).resolve().parent / "plugin.yaml"
+        return _derive_name_from_manifest(manifest_path)
+    return _slug_name(module.__name__.rsplit(".", 1)[-1])
 
 
 def _derive_name_from_manifest(path: pathlib.Path) -> str:
