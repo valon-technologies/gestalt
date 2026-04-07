@@ -137,6 +137,19 @@ pub enum IntegrationCommands {
         #[arg(long)]
         instance: Option<String>,
     },
+    /// Disconnect an integration
+    Disconnect {
+        /// Integration name (e.g., github, slack)
+        name: String,
+
+        /// Target a specific named connection
+        #[arg(long)]
+        connection: Option<String>,
+
+        /// Target a specific stored instance
+        #[arg(long)]
+        instance: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
