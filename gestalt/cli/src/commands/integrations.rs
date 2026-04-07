@@ -156,6 +156,34 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     Ok(())
 }
 
+pub fn disconnect(
+    client: &ApiClient,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    let normalized_connection = connection.map(normalize_connection_name);
+    let mut path = format!("/api/v1/integrations/{name}");
+    let params: Vec<(&str, &str)> = [
+        ("connection", normalized_connection),
+        ("instance", instance),
+    ]
+    .into_iter()
+    .filter_map(|(key, value)| value.map(|v| (key, v)))
+    .collect();
+    if !params.is_empty() {
+        let query = serde_urlencoded::to_string(&params).context("failed to encode query")?;
+        path = format!("{path}?{query}");
+    }
+
+    client
+        .delete(&path)
+        .with_context(|| format!("failed to disconnect integration '{}'", name))?;
+
+    output::print_success(&format!("Disconnected {}.", name));
+    Ok(())
+}
+
 pub fn connect(
     client: &ApiClient,
     name: &str,

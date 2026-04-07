@@ -38,6 +38,16 @@ fn run() -> anyhow::Result<()> {
                     connection.as_deref(),
                     instance.as_deref(),
                 ),
+                IntegrationCommands::Disconnect {
+                    name,
+                    connection,
+                    instance,
+                } => commands::integrations::disconnect(
+                    &client,
+                    &name,
+                    connection.as_deref(),
+                    instance.as_deref(),
+                ),
             }
         }
         Commands::Invoke {
