@@ -12,7 +12,28 @@ dependencies = [
   "pyyaml==6.0.3",
   "pyinstaller<7",
   "protobuf>=6.33.1,<8",
+  "typing-extensions==4.12.2",
+]
+
+[dependency-groups]
+dev = [
+  "ruff==0.15.9",
+  "ty==0.0.29",
+  "vulture==2.16.0",
 ]
 
 [tool.setuptools.packages.find]
 include = ["gestalt*"]
+
+[tool.ruff]
+target-version = "py310"
+exclude = ["gestalt/gen"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.vulture]
+paths = ["gestalt", "scripts", "tests"]
+exclude = ["gestalt/gen/"]
+ignore_names = ["indentless"]
+min_confidence = 80

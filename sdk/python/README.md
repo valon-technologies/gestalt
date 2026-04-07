@@ -22,7 +22,7 @@ plugin repositories.
 Regenerate them from the repo root with:
 
 ```sh
-python3 sdk/python/scripts/generate_stubs.py
+uv run python sdk/python/scripts/generate_stubs.py
 ```
 
 The script uses pinned `buf` remote Python plugins so the generated stubs stay
@@ -80,3 +80,20 @@ export UV_INDEX_VALON_INTERNAL_PASSWORD=...
 
 That lets `~/src/gestalt-plugins` depend on `gestalt` like any other Python
 package while keeping the SDK off the public package indexes.
+
+## Local SDK Checks
+
+From `sdk/python`, install the SDK plus its dev tooling and run the checks used
+in CI:
+
+```sh
+uv sync --group dev
+uv run ruff check .
+uv run ty check --exclude 'gestalt/gen/**' gestalt scripts tests
+uv run vulture --config pyproject.toml
+uv run python -m unittest discover -s tests
+```
+
+The generated protobuf stubs under `gestalt/gen` are excluded from the static
+analysis tools because they are vendored output rather than hand-maintained SDK
+code.

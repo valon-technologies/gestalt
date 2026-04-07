@@ -1,24 +1,33 @@
+from __future__ import annotations
+
+import os
 import pathlib
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 
-from ._bootstrap import BUNDLED_CONFIG_NAME, parse_plugin_target, write_bundled_plugin_config
+from ._bootstrap import (
+    BUNDLED_CONFIG_NAME,
+    parse_plugin_target,
+    write_bundled_plugin_config,
+)
+
+USAGE = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME"
 
 
 @dataclass(frozen=True)
 class BuildArgs:
-    root: str
+    root: pathlib.Path
     target: str
-    output_path: str
+    output_path: pathlib.Path
     plugin_name: str
 
 
 def main(argv: list[str] | None = None) -> int:
     build_args = _parse_build_args(sys.argv[1:] if argv is None else argv)
     if build_args is None:
-        print("usage: python -m gestalt._build ROOT MODULE:ATTRIBUTE OUTPUT PLUGIN_NAME", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 2
 
     build_plugin_binary(build_args)
@@ -31,16 +40,16 @@ def _parse_build_args(args: list[str]) -> BuildArgs | None:
 
     root, target, output_path, plugin_name = args
     return BuildArgs(
-        root=root,
+        root=pathlib.Path(root),
         target=target,
-        output_path=output_path,
+        output_path=pathlib.Path(output_path),
         plugin_name=plugin_name,
     )
 
 
 def build_plugin_binary(args: BuildArgs) -> None:
-    root_path = pathlib.Path(args.root).resolve()
-    output_path = pathlib.Path(args.output_path).resolve()
+    root_path = args.root.resolve()
+    output_path = args.output_path.resolve()
     plugin_target = parse_plugin_target(args.target)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +81,7 @@ def _pyinstaller_command(
     module_name: str,
     bundle_config_path: pathlib.Path,
 ) -> list[str]:
-    pyinstaller_name = output_path.name.removesuffix(".exe") if sys.platform == "win32" else output_path.name
-    separator = ";" if sys.platform == "win32" else ":"
+    pyinstaller_name = output_path.stem if output_path.suffix == ".exe" else output_path.name
 
     return [
         sys.executable,
@@ -95,7 +103,7 @@ def _pyinstaller_command(
         "--paths",
         str(root_path),
         "--add-data",
-        f"{bundle_config_path}{separator}.",
+        f"{bundle_config_path}{os.pathsep}.",
         str(pathlib.Path(__file__).with_name("_pyinstaller.py")),
     ]
 

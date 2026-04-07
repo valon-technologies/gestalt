@@ -1,0 +1,51 @@
+name: Build Python SDK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/python/**'
+      - 'sdk/proto/**'
+      - '.github/workflows/build-python-sdk.yml'
+  pull_request:
+    paths:
+      - 'sdk/python/**'
+      - 'sdk/proto/**'
+      - '.github/workflows/build-python-sdk.yml'
+
+  workflow_dispatch:
+
+jobs:
+  python-sdk:
+    name: Python SDK Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UV_PYTHON: "3.10"
+    defaults:
+      run:
+        working-directory: sdk/python
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+
+      - name: Install Python
+        run: uv python install 3.10
+
+      - name: Sync SDK environment
+        run: uv sync --frozen --group dev
+
+      - name: Run Ruff
+        run: uv run ruff check .
+
+      - name: Run ty
+        run: uv run ty check --exclude 'gestalt/gen/**' gestalt scripts tests
+
+      - name: Run vulture
+        run: uv run vulture --config pyproject.toml
+
+      - name: Run unit tests
+        run: uv run python -m unittest discover -s tests

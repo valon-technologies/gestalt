@@ -1,12 +1,12 @@
+from __future__ import annotations
+
 import json
 import pathlib
 import tempfile
 import unittest
 from unittest import mock
 
-from gestalt import Plugin
-from gestalt import _bootstrap
-from gestalt import _runtime
+from gestalt import Plugin, Request, _bootstrap, _runtime
 
 
 class RuntimeTests(unittest.TestCase):
@@ -44,6 +44,63 @@ class RuntimeTests(unittest.TestCase):
         )
         serve.assert_called_once_with(plugin)
         self.assertEqual(plugin.name, "released-plugin")
+
+    def test_parse_runtime_args_accepts_explicit_root_and_target(self) -> None:
+        """Explicit runtime invocation should keep the provided source root."""
+        runtime_args = _runtime._parse_runtime_args(["/tmp/plugin", "example.plugin:PLUGIN"])
+
+        self.assertEqual(
+            runtime_args,
+            _runtime.RuntimeArgs(
+                target="example.plugin:PLUGIN",
+                root=pathlib.Path("/tmp/plugin"),
+            ),
+        )
+
+    def test_parse_runtime_args_rejects_invalid_explicit_arguments(self) -> None:
+        """Runtime invocation should reject incomplete explicit arguments."""
+        self.assertIsNone(_runtime._parse_runtime_args(["/tmp/plugin"]))
+
+    def test_write_catalog_if_requested_returns_false_without_env_var(self) -> None:
+        """Catalog export should be skipped when the request env var is absent."""
+        plugin = mock.Mock(spec=Plugin)
+
+        with mock.patch.dict(_runtime.os.environ, {}, clear=True):
+            wrote_catalog = _runtime._write_catalog_if_requested(plugin)
+
+        self.assertFalse(wrote_catalog)
+        plugin.write_catalog.assert_not_called()
+
+    def test_write_catalog_if_requested_writes_catalog_when_env_is_set(self) -> None:
+        """Catalog export should write to the requested path when enabled."""
+        plugin = mock.Mock(spec=Plugin)
+
+        with mock.patch.dict(
+            _runtime.os.environ,
+            {_runtime.ENV_WRITE_CATALOG: "/tmp/catalog.json"},
+            clear=True,
+        ):
+            wrote_catalog = _runtime._write_catalog_if_requested(plugin)
+
+        self.assertTrue(wrote_catalog)
+        plugin.write_catalog.assert_called_once_with("/tmp/catalog.json")
+
+    def test_plugin_from_manifest_uses_display_name(self) -> None:
+        """Manifest-derived plugins should normalize the manifest display name."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = pathlib.Path(tmpdir) / "plugin.yaml"
+            manifest_path.write_text('display_name: "Released Plugin"\n', encoding="utf-8")
+
+            plugin = Plugin.from_manifest(manifest_path)
+
+        self.assertEqual(plugin.name, "Released-Plugin")
+
+    def test_request_connection_param_returns_empty_string_when_missing(self) -> None:
+        """Request helpers should return the configured value or an empty string."""
+        request = Request(connection_params={"region": "us-east-1"})
+
+        self.assertEqual(request.connection_param("region"), "us-east-1")
+        self.assertEqual(request.connection_param("missing"), "")
 
 
 if __name__ == "__main__":
