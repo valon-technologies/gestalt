@@ -92,38 +92,34 @@ class RuntimeTests(unittest.TestCase):
         serve.assert_not_called()
 
     def test_plugin_from_manifest_uses_display_name(self) -> None:
-        """Manifest-derived plugins should normalize the manifest display name."""
+        """Manifest-derived plugins should normalize manifest names across path layouts."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_path = pathlib.Path(tmpdir) / "plugin.yaml"
+            temp_root = pathlib.Path(tmpdir)
+            manifest_path = temp_root / "plugin.yaml"
             manifest_path.write_text('display_name: "Released Plugin"\n', encoding="utf-8")
 
-            plugin = Plugin.from_manifest(manifest_path)
-
-        self.assertEqual(plugin.name, "Released-Plugin")
-
-    def test_plugin_from_manifest_uses_yaml_when_directory_name_ends_with_json(self) -> None:
-        """Directory names should not affect manifest format detection."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_dir = pathlib.Path(tmpdir) / "plugin.json"
+            manifest_dir = temp_root / "plugin.json"
             manifest_dir.mkdir()
             (manifest_dir / "plugin.yaml").write_text(
                 'display_name: "Directory Manifest"\n',
                 encoding="utf-8",
             )
 
-            plugin = Plugin.from_manifest(manifest_dir)
+            ascii_slug_manifest_path = temp_root / "ascii-slug.yaml"
+            ascii_slug_manifest_path.write_text(
+                'display_name: "Crème Brûlée"\n',
+                encoding="utf-8",
+            )
 
-        self.assertEqual(plugin.name, "Directory-Manifest")
-
-    def test_plugin_from_manifest_slug_remains_ascii_only(self) -> None:
-        """Manifest-derived plugin names should preserve the historical ASCII-only slugging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_path = pathlib.Path(tmpdir) / "plugin.yaml"
-            manifest_path.write_text('display_name: "Crème Brûlée"\n', encoding="utf-8")
-
-            plugin = Plugin.from_manifest(manifest_path)
-
-        self.assertEqual(plugin.name, "Cr-me-Br-l-e")
+            cases = [
+                (manifest_path, "Released-Plugin"),
+                (manifest_dir, "Directory-Manifest"),
+                (ascii_slug_manifest_path, "Cr-me-Br-l-e"),
+            ]
+            for manifest_input, expected_name in cases:
+                with self.subTest(manifest_input=str(manifest_input)):
+                    plugin = Plugin.from_manifest(manifest_input)
+                    self.assertEqual(plugin.name, expected_name)
 
     def test_request_connection_param_returns_empty_string_when_missing(self) -> None:
         """Request helpers should return the configured value or an empty string."""
