@@ -92,7 +92,12 @@ Point the `gestalt` client at your running server:
 gestalt init
 ```
 
-The wizard prompts for the server URL and saves it to your local config. You can also set the URL directly:
+The wizard prompts for the server URL and saves it to your local config. It can
+also create a project-local `.gestalt/config.json` file so a specific checkout
+keeps using the same server without changing your machine-wide default. For the
+full client CLI configuration model, see [CLI](/client/cli).
+
+You can also set the global URL directly:
 
 ```sh
 gestalt config set url http://localhost:8080

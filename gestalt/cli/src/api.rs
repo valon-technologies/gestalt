@@ -4,6 +4,8 @@ use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 use serde::Serialize;
+use std::collections::BTreeMap;
+use std::path::Path;
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -11,51 +13,82 @@ use crate::http;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
+pub const PROJECT_CONFIG_DIR: &str = ".gestalt";
+pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 
 pub fn normalize_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
     if trimmed.contains("://") {
         trimmed.to_string()
     } else {
-        format!("https://{trimmed}")
+        let use_http = url::Url::parse(&format!("http://{trimmed}"))
+            .ok()
+            .and_then(|parsed| {
+                parsed.host().map(|host| match host {
+                    url::Host::Domain(domain) => domain.eq_ignore_ascii_case("localhost"),
+                    url::Host::Ipv4(ip) => ip.is_loopback(),
+                    url::Host::Ipv6(ip) => ip.is_loopback(),
+                })
+            })
+            .unwrap_or(false);
+        let scheme = if use_http { "http" } else { "https" };
+        format!("{scheme}://{trimmed}")
     }
 }
 
 pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     if let Some(url) = url_override {
-        return Ok(url.to_string());
+        return Ok(normalize_url(url));
     }
-    if let Ok(url) = std::env::var("GESTALT_URL") {
-        return Ok(url);
+    if let Ok(url) = std::env::var("GESTALT_URL")
+        && !url.trim().is_empty()
+    {
+        return Ok(normalize_url(&url));
     }
-    if let Some(url) = find_project_config_value("url") {
-        return Ok(url);
+    if let Some(url) = find_project_config_value("url")? {
+        return Ok(normalize_url(&url));
     }
-    if let Ok(Some(url)) = ConfigStore::new().and_then(|s| s.get("url")) {
-        return Ok(url);
+    let config_store = ConfigStore::new()?;
+    if let Some(url) = config_store.get("url")? {
+        return Ok(normalize_url(&url));
     }
-    if let Ok(Some(creds)) = CredentialStore::new().and_then(|s| s.load()) {
-        return Ok(creds.api_url);
-    }
-    Ok(DEFAULT_URL.to_string())
+
+    bail!(
+        "no URL configured: use --url, GESTALT_URL, {}, or the user-local config file at {}",
+        PROJECT_CONFIG_FILE,
+        config_store.path().display()
+    )
 }
 
-pub const PROJECT_CONFIG_FILE: &str = ".gestalt.json";
-
-fn find_project_config_value(key: &str) -> Option<String> {
-    let mut dir = std::env::current_dir().ok()?;
+fn find_project_config_value(key: &str) -> Result<Option<String>> {
+    let mut dir = std::env::current_dir().context("failed to determine current directory")?;
     loop {
         let candidate = dir.join(PROJECT_CONFIG_FILE);
-        if candidate.is_file() {
-            let contents = std::fs::read_to_string(&candidate).ok()?;
-            let map: std::collections::BTreeMap<String, String> =
-                serde_json::from_str(&contents).ok()?;
-            return map.get(key).cloned();
+        if let Some(value) = read_project_config_value(&candidate, key)? {
+            return Ok(Some(value));
         }
         if !dir.pop() {
-            return None;
+            return Ok(None);
         }
     }
+}
+
+fn read_project_config_value(path: &Path, key: &str) -> Result<Option<String>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        bail!(
+            "project config path {} exists but is not a file",
+            path.display()
+        );
+    }
+
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read project config {}", path.display()))?;
+    let map: BTreeMap<String, String> = serde_json::from_str(&contents)
+        .with_context(|| format!("failed to parse project config {}", path.display()))?;
+    Ok(map.get(key).cloned())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
