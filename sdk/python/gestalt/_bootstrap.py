@@ -1,8 +1,9 @@
 import json
 import pathlib
 from dataclasses import dataclass
+from typing import Final
 
-BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
+BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
 
 
 @dataclass(frozen=True)

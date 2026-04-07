@@ -1,11 +1,8 @@
-from __future__ import annotations
-
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
 
 EXPECTED_GRPC_IMPORT = "from v1 import plugin_pb2 as v1_dot_plugin__pb2\n"
 RELATIVE_GRPC_IMPORT = "from . import plugin_pb2 as v1_dot_plugin__pb2\n"
