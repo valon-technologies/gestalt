@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import gestalt
 
 plugin = gestalt.Plugin.from_manifest("plugin.yaml")

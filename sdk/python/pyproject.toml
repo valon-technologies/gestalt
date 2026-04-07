@@ -9,6 +9,7 @@ description = "Python SDK for Gestalt executable provider plugins"
 requires-python = ">=3.10"
 dependencies = [
   "grpcio>=1.80.0,<2",
+  "pyyaml==6.0.3",
   "pyinstaller<7",
   "protobuf>=6.33.1,<8",
 ]

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import dataclasses
 import inspect
@@ -9,6 +7,8 @@ import re
 import types
 from dataclasses import MISSING
 from typing import Any, Generic, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
+
+import yaml
 
 ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG"
 
@@ -166,7 +166,16 @@ class Plugin:
     def write_catalog(self, path: str | pathlib.Path) -> None:
         catalog_path = pathlib.Path(path)
         catalog_path.parent.mkdir(parents=True, exist_ok=True)
-        catalog_path.write_text(_yaml_dump(self.catalog_dict()), encoding="utf-8")
+        catalog_path.write_text(
+            yaml.dump(
+                self.catalog_dict(),
+                Dumper=_CatalogDumper,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
 
     def serve(self) -> None:
         from . import _runtime
@@ -475,45 +484,6 @@ def _slug_name(value: str) -> str:
     return cleaned or "plugin"
 
 
-def _yaml_dump(value: Any, indent: int = 0) -> str:
-    return "\n".join(_yaml_lines(value, indent)) + "\n"
-
-
-def _yaml_lines(value: Any, indent: int) -> list[str]:
-    prefix = "  " * indent
-    if isinstance(value, dict):
-        lines: list[str] = []
-        for key, item in value.items():
-            if isinstance(item, (dict, list)):
-                nested = _yaml_lines(item, indent + 1)
-                if nested:
-                    lines.append(f"{prefix}{key}:")
-                    lines.extend(nested)
-                else:
-                    lines.append(f"{prefix}{key}: {_yaml_scalar(item)}")
-            else:
-                lines.append(f"{prefix}{key}: {_yaml_scalar(item)}")
-        return lines
-    if isinstance(value, list):
-        lines: list[str] = []
-        for item in value:
-            if isinstance(item, (dict, list)):
-                nested = _yaml_lines(item, indent + 1)
-                if nested:
-                    first, *rest = nested
-                    lines.append(f"{prefix}- {first.lstrip()}")
-                    lines.extend(rest)
-                else:
-                    lines.append(f"{prefix}- {_yaml_scalar(item)}")
-            else:
-                lines.append(f"{prefix}- {_yaml_scalar(item)}")
-        return lines
-    return [f"{prefix}{_yaml_scalar(value)}"]
-
-
-def _yaml_scalar(value: Any) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "null"
-    return json.dumps(value)
+class _CatalogDumper(yaml.SafeDumper):
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> Any:
+        return super().increase_indent(flow, False)
