@@ -4,6 +4,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod credentials;
+pub mod http;
 pub mod interactive;
 pub mod output;
 pub mod params;

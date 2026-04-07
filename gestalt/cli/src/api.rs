@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
+use crate::http;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
@@ -103,7 +104,10 @@ impl ApiClient {
 
     pub fn new(base_url: &str, token: &str) -> Result<Self> {
         let mut default_headers = header::HeaderMap::new();
-        default_headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+        default_headers.insert(
+            header::ACCEPT,
+            HeaderValue::from_static(http::APPLICATION_JSON),
+        );
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -172,7 +176,7 @@ impl ApiClient {
             .bearer_auth(&self.token)
             .header(
                 header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
+                HeaderValue::from_static(http::APPLICATION_X_WWW_FORM_URLENCODED),
             )
             .body(encoded)
             .send()
