@@ -1,69 +1,51 @@
 # Troubleshooting
 
-## `serve --locked` Says Prepared Artifacts Are Missing Or Stale
+## Startup
 
-Run:
+When `gestaltd serve --locked` reports that prepared artifacts are missing or stale, the lock state has drifted from the current config. Run `gestaltd init --config ./config.yaml` to re-resolve and re-prepare all references, then start the server again with `gestaltd serve --locked --config ./config.yaml`.
 
-```sh
-gestaltd init --config ./config.yaml
-```
+The validation error `server.encryption_key is required` means the config is missing its root deployment secret. Set `server.encryption_key` to a `secret://` reference whenever `auth.provider` is not `none`. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 
-Then start again with:
+If the `/mcp` endpoint is not mounted, the server found no provider that exposes tools. At least one integration must surface operations through inline declarative REST, OpenAPI, GraphQL, upstream MCP, or an MCP-enabled packaged provider before `/mcp` becomes available.
 
-```sh
-gestaltd serve --locked --config ./config.yaml
-```
+When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured providers finish loading and the datastore answers a ping. Check server logs for provider bootstrap errors or datastore connectivity problems.
 
-## `config validation: server.encryption_key is required`
+## Operation invocation
 
-Set `server.encryption_key` whenever `auth.provider` is not `none`.
+A "provider not found" error means the integration key in the request does not match any entry in the `providers` config map. Verify the spelling and confirm the provider loaded without errors at startup.
 
-## `/mcp` Is Not Mounted
+An "operation not found" error means the operation ID does not exist in the provider's catalog. Check that the surface exposes the operation and that `allowed_operations`, if set, includes it.
 
-Check that at least one integration exposes tools. Inline declarative
-operations, OpenAPI, GraphQL, upstream MCP, and MCP-enabled packaged providers
-all qualify.
+A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the web UI or pass a bearer token in the `Authorization` header.
 
-## An Integration Requires An Explicit Connection
+A "no integration token" error means the user has not connected the integration. Complete the OAuth or manual-auth flow for the provider and connection before invoking operations.
 
-This means the integration has more than one possible connection and no default.
-Set one of:
+An "ambiguous instance" error means the user has more than one stored instance for that integration and connection. Pass `_instance` in the HTTP request body or `--instance` in the client CLI to select the correct one.
 
-- `surfaces.*.connection` in the provider config when there is no
-  `connections.default`
-- `_connection` on the invocation request
-- `--connection` in the client CLI
+A "token scope denied" error means the operation requires an OAuth scope that was not granted during the connection flow. Disconnect and reconnect the integration, ensuring all required scopes are approved.
 
-## A Call Fails With An Ambiguous Instance Error
+Token refresh failures indicate that the upstream provider rejected the stored refresh token. The refresh token may have been revoked, expired, or rotated by the provider. Disconnect and reconnect the integration to obtain fresh credentials.
 
-The user has more than one stored instance for that integration and connection.
-Specify:
+## Upstream errors
 
-- `_instance` in the HTTP request
-- `--instance` in the client CLI
+A "timed out" error means the outbound request to the upstream service exceeded the configured timeout. The upstream may be slow or unreachable. Check network connectivity and consider increasing the timeout if the upstream is known to be slow.
 
-## A Managed Path Parameter Still Appears In The Operation
+A "failed to reach" error means the outbound connection could not be established at all. Verify that the upstream host is correct, DNS resolves, and any egress firewall rules or sandbox allowlists permit the connection.
 
-Make sure the operation path actually contains the placeholder.
+## Plugins
 
-Valid:
+When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. For Python source plugins, verify the virtualenv is intact and the module declared in `[tool.gestalt].plugin` is importable. Plugin startup errors appear in the server log with the provider name.
 
-```yaml
-path: /workspaces/{workspace_id}/tickets
-```
+A sandbox 403 means the plugin made an outbound request to a host not listed in `from.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your provider config.
 
-Invalid:
+An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 
-```yaml
-path: /workspaces/tickets
-```
+Rate limit errors from upstream services are passed through to the caller. The plugin does not retry rate-limited requests automatically. Implement backoff in your client or reduce request volume.
 
-## `/ready` Returns `503`
+An invocation depth error means a plugin-to-plugin call chain exceeded the maximum allowed depth. This typically indicates a recursive loop where one provider's operation triggers another that eventually calls back into the first. Break the cycle or restructure the operation flow.
 
-Readiness stays false until:
+## Connections
 
-- providers finish loading
-- the datastore answers a ping
+When an integration requires an explicit connection, the provider has more than one configured connection and no default. Set `surfaces.*.connection` in the provider config when there is no `connections.default`, or pass `_connection` on the invocation request, or use `--connection` in the client CLI.
 
-Check server logs for provider bootstrap errors or datastore connectivity
-problems.
+If a managed path parameter still appears in the operation schema, the operation path template does not contain the expected placeholder. Verify that the path includes the parameter in braces, such as `/workspaces/{workspace_id}/tickets`, rather than omitting it.

@@ -4,50 +4,103 @@ import { Tabs } from 'nextra/components'
 
 Pre-built binaries are published for every release on GitHub.
 
-## Download
+## Server
 
-Download the latest `gestaltd` and `gestalt` binaries for your platform from the [GitHub releases page](https://github.com/valon-technologies/gestalt/releases).
+`gestaltd` is the long-running process that manages authentication and integrations.
 
-## Install
+### Install
 
-Extract the archives and place both binaries on your `PATH`.
-
-<Tabs items={['macOS ARM64', 'macOS AMD64', 'Linux ARM64', 'Linux AMD64']} storageKey="platform">
+<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64']}>
   <Tabs.Tab>
+    Download `gestaltd-macos-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+
     ```sh
-    tar xzf gestaltd_darwin_arm64.tar.gz
-    tar xzf gestalt_darwin_arm64.tar.gz
-    sudo mv gestaltd gestalt /usr/local/bin/
+    tar xzf gestaltd-macos-arm64.tar.gz
+    sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
+    Download `gestaltd-macos-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+
     ```sh
-    tar xzf gestaltd_darwin_amd64.tar.gz
-    tar xzf gestalt_darwin_amd64.tar.gz
-    sudo mv gestaltd gestalt /usr/local/bin/
+    tar xzf gestaltd-macos-amd64.tar.gz
+    sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
+    Download `gestaltd-linux-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+
     ```sh
-    tar xzf gestaltd_linux_arm64.tar.gz
-    tar xzf gestalt_linux_arm64.tar.gz
-    sudo mv gestaltd gestalt /usr/local/bin/
+    tar xzf gestaltd-linux-amd64.tar.gz
+    sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
+    Download `gestaltd-linux-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+
     ```sh
-    tar xzf gestaltd_linux_amd64.tar.gz
-    tar xzf gestalt_linux_amd64.tar.gz
-    sudo mv gestaltd gestalt /usr/local/bin/
+    tar xzf gestaltd-linux-arm64.tar.gz
+    sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
 </Tabs>
 
-## Verify
+### Verify
 
 ```sh
-gestaltd version
-gestalt --help
+gestaltd --version
+```
+
+## Client
+
+`gestalt` is the CLI for communicating with the Gestalt server.
+
+### Install
+
+<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Windows x86_64']}>
+  <Tabs.Tab>
+    Download `gestalt-macos-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    ```sh
+    tar xzf gestalt-macos-arm64.tar.gz
+    sudo mv gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestalt-macos-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    ```sh
+    tar xzf gestalt-macos-amd64.tar.gz
+    sudo mv gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestalt-linux-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    ```sh
+    tar xzf gestalt-linux-amd64.tar.gz
+    sudo mv gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestalt-linux-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    ```sh
+    tar xzf gestalt-linux-arm64.tar.gz
+    sudo mv gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestalt-windows-amd64.zip` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    Extract the archive and place `gestalt.exe` on your `PATH`.
+  </Tabs.Tab>
+</Tabs>
+
+### Verify
+
+```sh
+gestalt --version
 ```
 
 Once both binaries are on your `PATH`, continue to [Getting Started](/getting-started).

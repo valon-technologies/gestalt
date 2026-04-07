@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Observability
 
 Gestalt logs to stdout by default. It exposes `/health` and `/ready` for
@@ -105,19 +107,30 @@ as the `gestaltd_operation_duration_seconds` histogram family.
 
 ### Prometheus Exporter Metadata
 
-| OTel name | Prometheus family | Type | Meaning |
-| --- | --- | --- | --- |
-| — | `target_info` | Gauge | Resource attributes including `service_name` |
+| Prometheus family | Type | Meaning |
+| --- | --- | --- |
+| `target_info` | Gauge | Resource attributes including `service_name` |
 
 ### Broker Operation Metrics
 
 These metrics are recorded around `broker.invoke`.
 
-| OTel instrument | Prometheus family | Type | Meaning |
-| --- | --- | --- | --- |
-| `gestaltd.operation.count` | `gestaltd_operation_count_total` | Counter | Operation invocations |
-| `gestaltd.operation.error_count` | `gestaltd_operation_error_count_total` | Counter | Failed operation invocations |
-| `gestaltd.operation.duration` | `gestaltd_operation_duration_seconds` | Histogram | Operation invocation duration |
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd.operation.count` | Counter | Operation invocations |
+    | `gestaltd.operation.error_count` | Counter | Failed operation invocations |
+    | `gestaltd.operation.duration` | Histogram | Operation invocation duration |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd_operation_count_total` | Counter | Operation invocations |
+    | `gestaltd_operation_error_count_total` | Counter | Failed operation invocations |
+    | `gestaltd_operation_duration_seconds` | Histogram | Operation invocation duration |
+  </Tabs.Tab>
+</Tabs>
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the
 integration key), `gestalt.operation` (the catalog operation id),
@@ -132,10 +145,20 @@ When a request references an unknown provider or operation, `gestaltd` records
 
 These metrics are recorded around integration auth and credential refresh flows.
 
-| OTel instrument | Prometheus family | Type | Meaning |
-| --- | --- | --- | --- |
-| `gestaltd.oauth.callback.count` | `gestaltd_oauth_callback_count_total` | Counter | OAuth callback outcomes |
-| `gestaltd.oauth.token_refresh.count` | `gestaltd_oauth_token_refresh_count_total` | Counter | OAuth token refresh attempts |
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd.oauth.callback.count` | Counter | OAuth callback outcomes |
+    | `gestaltd.oauth.token_refresh.count` | Counter | OAuth token refresh attempts |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd_oauth_callback_count_total` | Counter | OAuth callback outcomes |
+    | `gestaltd_oauth_token_refresh_count_total` | Counter | OAuth token refresh attempts |
+  </Tabs.Tab>
+</Tabs>
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the
 integration key), `gestalt.result` (`success` or `error`), and
@@ -156,11 +179,22 @@ main router. Because the whole router is instrumented once, these metrics cover
 API traffic, health and readiness checks, the embedded admin UI, and scrapes of
 `/metrics` itself.
 
-| OTel instrument | Prometheus family | Type | Meaning |
-| --- | --- | --- | --- |
-| `http.server.request.body.size` | `http_server_request_body_size_bytes` | Histogram | Inbound request body size |
-| `http.server.response.body.size` | `http_server_response_body_size_bytes` | Histogram | Response body size |
-| `http.server.request.duration` | `http_server_request_duration_seconds` | Histogram | End-to-end request duration |
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `http.server.request.body.size` | Histogram | Inbound request body size |
+    | `http.server.response.body.size` | Histogram | Response body size |
+    | `http.server.request.duration` | Histogram | End-to-end request duration |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `http_server_request_body_size_bytes` | Histogram | Inbound request body size |
+    | `http_server_response_body_size_bytes` | Histogram | Response body size |
+    | `http_server_request_duration_seconds` | Histogram | End-to-end request duration |
+  </Tabs.Tab>
+</Tabs>
 
 These metrics use standard OpenTelemetry HTTP server semantic attributes such as
 request method, response status, scheme, host, protocol, and route information
@@ -176,13 +210,26 @@ These come from the OpenTelemetry gRPC client stats handler used for outbound
 gRPC traffic from `gestaltd` to plugin processes. They only apply to
 plugin-backed providers.
 
-| OTel instrument | Prometheus family | Type | Meaning |
-| --- | --- | --- | --- |
-| `rpc.client.duration` | `rpc_client_duration_milliseconds` | Histogram | Outbound plugin RPC duration |
-| `rpc.client.request.size` | `rpc_client_request_size_bytes` | Histogram | Outbound plugin request message size |
-| `rpc.client.response.size` | `rpc_client_response_size_bytes` | Histogram | Inbound plugin response message size |
-| `rpc.client.requests_per_rpc` | `rpc_client_requests_per_rpc` | Histogram | Request messages per RPC |
-| `rpc.client.responses_per_rpc` | `rpc_client_responses_per_rpc` | Histogram | Response messages per RPC |
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `rpc.client.duration` | Histogram | Outbound plugin RPC duration |
+    | `rpc.client.request.size` | Histogram | Outbound plugin request message size |
+    | `rpc.client.response.size` | Histogram | Inbound plugin response message size |
+    | `rpc.client.requests_per_rpc` | Histogram | Request messages per RPC |
+    | `rpc.client.responses_per_rpc` | Histogram | Response messages per RPC |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `rpc_client_duration_milliseconds` | Histogram | Outbound plugin RPC duration |
+    | `rpc_client_request_size_bytes` | Histogram | Outbound plugin request message size |
+    | `rpc_client_response_size_bytes` | Histogram | Inbound plugin response message size |
+    | `rpc_client_requests_per_rpc` | Histogram | Request messages per RPC |
+    | `rpc_client_responses_per_rpc` | Histogram | Response messages per RPC |
+  </Tabs.Tab>
+</Tabs>
 
 These metrics use standard OpenTelemetry gRPC client semantic attributes such as
 `rpc.system=grpc`, `rpc.service`, and `rpc.method`.

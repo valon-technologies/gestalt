@@ -2,27 +2,36 @@
 
 Gestalt publishes a Homebrew tap for macOS and Linux.
 
-## Install
+## Server
+
+`gestaltd` is the long-running process that manages authentication and integrations.
+
+### Install
 
 ```sh
 brew install valon-technologies/gestalt/gestaltd
+```
+
+### Verify
+
+```sh
+gestaltd --version
+```
+
+## Client
+
+`gestalt` is the CLI for communicating with the Gestalt server.
+
+### Install
+
+```sh
 brew install valon-technologies/gestalt/gestalt
 ```
 
-This installs both the `gestaltd` server and the `gestalt` CLI client.
-
-## Upgrade
+### Verify
 
 ```sh
-brew upgrade valon-technologies/gestalt/gestaltd
-brew upgrade valon-technologies/gestalt/gestalt
-```
-
-## Verify
-
-```sh
-gestaltd version
-gestalt --help
+gestalt --version
 ```
 
 Once both binaries are on your `PATH`, continue to [Getting Started](/getting-started).

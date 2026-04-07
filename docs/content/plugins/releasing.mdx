@@ -1,12 +1,12 @@
-# Packaging and Releasing
+# Releasing
 
 Once a provider or UI package works locally, you can publish a release archive
 for distribution. Release archives are self-contained and include a manifest,
 optional executable artifacts, and optional static assets.
 
-## What can be packaged
+## What can be released
 
-Gestalt uses the same packaging system for declarative provider packages, executable provider plugins, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
+Gestalt uses the same release system for declarative provider packages, executable provider plugins, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
 
 ## Source manifests vs release manifests
 
@@ -55,7 +55,7 @@ provider:
 
 ### Release manifest for an executable provider
 
-Packaged executable providers add `provider.exec.artifact_path` plus concrete
+Released executable providers add `provider.exec.artifact_path` plus concrete
 `artifacts` entries:
 
 ```yaml
@@ -86,7 +86,7 @@ webui:
   asset_root: ui/out
 ```
 
-`gestaltd init` prepares the packaged UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI. The built-in admin UI remains available at `/admin` regardless.
+`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI. The built-in admin UI remains available at `/admin` regardless.
 
 ## Build a release
 
@@ -98,21 +98,18 @@ gestaltd plugin release --version 0.1.0
 
 Run this from the plugin source directory. It produces release archives and writes a checksums file.
 
-For executable Go and Python source plugins, release materializes the
+For executable Go and Python source plugins, `plugin release` materializes the
 executable catalog automatically and builds the host-platform artifact by
-default.
+default. Pass `--platform` with a comma-separated list such as
+`--platform linux/amd64,darwin/arm64` to build explicit targets. Pass
+`--platform all` in CI release jobs to build the full supported platform matrix
+for both Go and Python source plugins.
 
-Pass `--platform` with a comma-separated list such as
-`--platform linux/amd64,darwin/arm64` to build explicit targets.
-
-Pass `--platform all` in CI release jobs to build the full supported platform
-matrix for both Go and Python source plugins.
-
-For non-host targets, point Gestalt at a matching interpreter with
+For non-host Python targets, point Gestalt at a matching interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
 `.venv-<goos>-<goarch>/`.
 
-## Reference packages from config
+## Reference releases from config
 
 ### Provider source path
 
@@ -126,9 +123,9 @@ providers:
         path: ./plugins/my-plugin/plugin.yaml
 ```
 
-### Published provider package or plugin
+### Published provider release
 
-Reference a published package by source and version. `gestaltd init` resolves
+Reference a published release by source and version. `gestaltd init` resolves
 the release archive and writes it to lock state:
 
 ```yaml
@@ -144,7 +141,7 @@ This is the recommended approach for production deployments.
 
 ### UI bundle
 
-Reference a packaged UI bundle separately under `ui.plugin`:
+Reference a released UI bundle separately under `ui.plugin`:
 
 ```yaml
 ui:
@@ -155,7 +152,7 @@ ui:
 
 ## Prepared state
 
-When a config references published packages or a packaged UI, run `gestaltd init`
+When a config references published releases or a released UI, run `gestaltd init`
 to resolve and prepare them:
 
 ```sh

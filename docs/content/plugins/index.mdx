@@ -28,6 +28,14 @@ Plugins run in process isolation. They cannot access the datastore, other users'
 
 Gestalt ships first-party SDKs for Go (`sdk/go`) and Python (`sdk/python`). The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow is centered on those two.
 
+## Common pitfalls
+
+Plugins run in process isolation. They cannot access the host datastore, so any state a plugin needs must be passed through the request context or plugin config. Attempting to open the host database from plugin code will fail silently or connect to an unrelated file.
+
+Operation IDs must be unique within a provider. If two surfaces expose the same operation ID, the provider will fail validation at startup. Rename or filter with `allowed_operations` to resolve collisions.
+
+Executable plugins run inside a network sandbox. Outbound requests to hosts not listed in `from.allowed_hosts` are rejected with a 403. Add every upstream domain the plugin contacts to the allowlist in your provider config.
+
 ## Packaging model
 
-The same manifest and release format packages declarative providers (no binary), executable plugins with bundled artifacts, and web UI bundles referenced through `ui.plugin`. See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema, [Writing a Plugin](/plugins/writing-a-plugin) for the end-to-end authoring flow, and [Packaging and Releasing](/plugins/packaging-and-releasing) for release archives.
+The same manifest and release format packages declarative providers (no binary), executable plugins with bundled artifacts, and web UI bundles referenced through `ui.plugin`. See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema, [Writing a Plugin](/plugins/writing-a-plugin) for the end-to-end authoring flow, and [Releasing](/plugins/releasing) for release archives.
