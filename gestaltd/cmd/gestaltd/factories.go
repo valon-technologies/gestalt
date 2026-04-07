@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -162,9 +161,8 @@ func resolveConfigPath(flagValue string) string {
 	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
 		return envPath
 	}
-	projectPath := filepath.Join(".gestaltd", "config.yaml")
-	if _, err := os.Stat(projectPath); err == nil {
-		return projectPath
+	if _, err := os.Stat("config.yaml"); err == nil {
+		return "config.yaml"
 	}
 	if homePath := operator.DefaultLocalConfigPath(); homePath != "" {
 		if _, err := os.Stat(homePath); err == nil {

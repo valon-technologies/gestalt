@@ -8,6 +8,47 @@ import (
 	"testing"
 )
 
+func TestResolveConfigPathLookupOrder(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
+	if err := os.MkdirAll(legacyConfigDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll legacy config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyConfigDir, "config.yaml"), []byte("legacy"), 0o644); err != nil {
+		t.Fatalf("WriteFile legacy config: %v", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("GESTALT_CONFIG", "")
+
+	projectConfigPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(projectConfigPath, []byte("project"), 0o644); err != nil {
+		t.Fatalf("WriteFile project config: %v", err)
+	}
+	if got := resolveConfigPath(""); got != "config.yaml" {
+		t.Fatalf("resolveConfigPath(\"\") with project config = %q, want %q", got, "config.yaml")
+	}
+	if err := os.Remove(projectConfigPath); err != nil {
+		t.Fatalf("Remove project config: %v", err)
+	}
+
+	if got, want := resolveConfigPath(""), filepath.Join(homeDir, ".gestaltd", "config.yaml"); got != want {
+		t.Fatalf("resolveConfigPath(\"\") = %q, want %q", got, want)
+	}
+}
+
 func TestE2ECLIHelp(t *testing.T) {
 	t.Parallel()
 
