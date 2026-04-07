@@ -9,10 +9,21 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final
 
+import grpc
+from google.protobuf import json_format
+
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
-from ._operations import json_body
 from ._plugin import Plugin, _module_plugin
+from ._serialization import json_body
+from .gen.v1 import plugin_pb2 as _plugin_pb2
+from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+
+# Protobuf-generated modules use dynamic descriptors that type checkers cannot
+# resolve. Explicit Any-typed aliases let the rest of the file access message
+# classes without per-line suppressions.
+plugin_pb2: Any = _plugin_pb2
+plugin_pb2_grpc: Any = _plugin_pb2_grpc
 
 ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
@@ -29,24 +40,63 @@ class RuntimeArgs:
     plugin_name: str | None = None
 
 
-@dataclass(frozen=True)
-class _RuntimeImports:
-    grpc: Any
-    json_format: Any
-    plugin_pb2: Any
-    plugin_pb2_grpc: Any
+class _ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
+    def __init__(self, plugin: Plugin) -> None:
+        self._plugin = plugin
+
+    def GetMetadata(self, request: Any, context: Any) -> Any:
+        del request, context
+        return plugin_pb2.ProviderMetadata(
+            min_protocol_version=CURRENT_PROTOCOL_VERSION,
+            max_protocol_version=CURRENT_PROTOCOL_VERSION,
+        )
+
+    def StartProvider(self, request: Any, context: Any) -> Any:
+        del context
+        self._plugin.configure_provider(
+            request.name,
+            _message_to_dict(
+                field_name="config",
+                message=request.config,
+                request=request,
+            ),
+        )
+        return plugin_pb2.StartProviderResponse(
+            protocol_version=CURRENT_PROTOCOL_VERSION
+        )
+
+    def Execute(self, request: Any, context: Any) -> Any:
+        del context
+        try:
+            result = self._plugin.execute(
+                request.operation,
+                _message_to_dict(
+                    field_name="params",
+                    message=request.params,
+                    request=request,
+                ),
+                Request(
+                    token=request.token,
+                    connection_params=dict(request.connection_params),
+                ),
+            )
+        except Exception as error:
+            traceback.print_exception(error)
+            status = HTTPStatus.INTERNAL_SERVER_ERROR
+            body = json_body({"error": str(error)})
+            return plugin_pb2.OperationResult(status=status, body=body)
+        return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
 
 def serve(plugin: Plugin) -> None:
-    runtime = _runtime_imports()
     socket_path = _socket_path_from_env()
     _remove_stale_socket(socket_path)
 
-    server = runtime.grpc.server(
+    server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
     )
-    runtime.plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
-        _provider_servicer(plugin=plugin, runtime=runtime),
+    plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
+        _ProviderServicer(plugin),
         server,
     )
     server.add_insecure_port(f"unix:{socket_path}")
@@ -109,6 +159,8 @@ def _load_plugin(args: RuntimeArgs) -> Plugin:
     if not isinstance(plugin, Plugin):
         raise RuntimeError(f"{args.target} did not resolve to a gestalt.Plugin")
     return plugin
+
+
 def _socket_path_from_env() -> pathlib.Path:
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
@@ -129,59 +181,9 @@ def _register_shutdown_handlers(server: Any) -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
 
-def _provider_servicer(*, plugin: Plugin, runtime: _RuntimeImports) -> Any:
-    class ProviderServicer(runtime.plugin_pb2_grpc.ProviderPluginServicer):
-        def GetMetadata(self, request: Any, context: Any) -> Any:
-            del request, context
-            return runtime.plugin_pb2.ProviderMetadata(
-                min_protocol_version=CURRENT_PROTOCOL_VERSION,
-                max_protocol_version=CURRENT_PROTOCOL_VERSION,
-            )
-
-        def StartProvider(self, request: Any, context: Any) -> Any:
-            del context
-            plugin.configure_provider(
-                request.name,
-                _message_to_dict(
-                    field_name="config",
-                    json_format=runtime.json_format,
-                    message=request.config,
-                    request=request,
-                ),
-            )
-            return runtime.plugin_pb2.StartProviderResponse(
-                protocol_version=CURRENT_PROTOCOL_VERSION
-            )
-
-        def Execute(self, request: Any, context: Any) -> Any:
-            del context
-            try:
-                status, body = plugin.execute(
-                    request.operation,
-                    _message_to_dict(
-                        field_name="params",
-                        json_format=runtime.json_format,
-                        message=request.params,
-                        request=request,
-                    ),
-                    Request(
-                        token=request.token,
-                        connection_params=dict(request.connection_params),
-                    ),
-                )
-            except Exception as error:
-                traceback.print_exception(error)
-                status = HTTPStatus.INTERNAL_SERVER_ERROR
-                body = json_body({"error": str(error)})
-            return runtime.plugin_pb2.OperationResult(status=status, body=body)
-
-    return ProviderServicer()
-
-
 def _message_to_dict(
     *,
     field_name: str,
-    json_format: Any,
     message: Any,
     request: Any,
 ) -> dict[str, Any]:
@@ -194,17 +196,5 @@ def _message_to_dict(
     )
 
 
-def _runtime_imports() -> _RuntimeImports:
-    import grpc
-    from google.protobuf import json_format
-
-    from .gen.v1 import plugin_pb2, plugin_pb2_grpc
-
-    return _RuntimeImports(
-        grpc=grpc,
-        json_format=json_format,
-        plugin_pb2=plugin_pb2,
-        plugin_pb2_grpc=plugin_pb2_grpc,
-    )
 if __name__ == "__main__":
     raise SystemExit(main())
