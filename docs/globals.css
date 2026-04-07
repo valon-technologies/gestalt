@@ -266,12 +266,6 @@ footer > div {
   color: var(--valon-muted) !important;
 }
 
-.nextra-sidebar-footer {
-  border-top: none !important;
-  margin-left: 0 !important;
-  padding-left: 16px !important;
-}
-
 .nextra-sidebar-container a:hover,
 .nextra-sidebar-container button:hover,
 .nextra-toc a:hover,
