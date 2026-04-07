@@ -607,25 +607,18 @@ ui:
 
 `plugin.source` is a managed plugin source address and requires `plugin.version`, which must be valid SemVer without a leading `v`. When `ui` is omitted, `gestaltd` serves the built-in client UI at `/`. When `ui.plugin` is configured, the plugin's assets replace that client UI at `/`. The built-in admin UI remains available at `/admin`. See [Releasing](/plugins/releasing) for the full workflow.
 
-## Validation Rules
+## Validation rules
 
 Structural validation runs at config load time (`init`, `validate`, `serve`). Runtime validation runs only at `serve` time.
 
 ### Structural
 
-- Provider entries are decoded directly; there is no nested `plugin` block
-- Exactly one provider loading mode: local `from.source.path` or managed `from.source.ref`
-- `from.source.version` is required with `from.source.ref` and invalid with `from.source.path`
-- `surfaces.rest`, `surfaces.openapi`, and `surfaces.graphql` are mutually exclusive
-- Only `connections.default` may define `params` or `discovery`
-- All connections in a provider must share the same mode
-- `surfaces.*.connection` must reference a declared connection when present
-- URL templates in spec surfaces and auth URLs must reference required params
-- `ui.plugin.source` is required when `ui.plugin` is configured
-- `ui.plugin.version` is required with `ui.plugin.source`
+Provider entries are decoded directly; there is no nested `plugin` block. Each provider must use exactly one loading mode: local `from.source.path` or managed `from.source.ref`. `from.source.version` is required with `from.source.ref` and invalid with `from.source.path`.
+
+`surfaces.rest`, `surfaces.openapi`, and `surfaces.graphql` are mutually exclusive. `surfaces.*.connection` must reference a declared connection when present. Only `connections.default` may define `params` or `discovery`, and all connections in a provider must share the same mode. URL templates in spec surfaces and auth URLs must reference required params.
+
+`ui.plugin.source` is required when `ui.plugin` is configured, and `ui.plugin.version` is required with `ui.plugin.source`.
 
 ### Runtime
 
-- `auth.provider` is required
-- `datastore.provider` is required
-- `server.encryption_key` is required
+`auth.provider`, `datastore.provider`, and `server.encryption_key` are all required.

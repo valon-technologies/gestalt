@@ -13,8 +13,7 @@ export default {
   client: {
     display: "children",
   },
-  "-- reference": { type: "separator", title: "Reference" },
+  "-- advanced": { type: "separator", title: "Advanced" },
   reference: "Reference",
-  "-- help": { type: "separator", title: "Help" },
   troubleshooting: "Troubleshooting",
 };

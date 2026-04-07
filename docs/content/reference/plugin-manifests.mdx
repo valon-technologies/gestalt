@@ -25,7 +25,7 @@ A manifest defines exactly one of `provider` or `webui`.
 
 This example is a declarative-only provider package. It does not need a binary.
 
-<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+<Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
     source: github.com/acme/plugins/support-api
@@ -105,7 +105,7 @@ Use this style when the provider can be described entirely in YAML, requires no 
 
 This example shows a provider package with a config schema, an executable entrypoint, OpenAPI and upstream MCP surfaces, managed parameters, allowed operation aliases, and multiple connections.
 
-<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+<Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
     source: github.com/acme/plugins/support
@@ -255,7 +255,7 @@ Use this when a provider issues user credentials first, but the final stored
 connection still needs one discovered identifier such as a site, tenant, or
 workspace.
 
-<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+<Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
     provider:
@@ -317,7 +317,7 @@ with `from: discovery` are satisfied from that metadata instead of user input.
 
 ## Web UI manifest
 
-<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+<Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
     source: github.com/acme/plugins/gestalt-ui
