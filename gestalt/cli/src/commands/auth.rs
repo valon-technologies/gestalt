@@ -198,7 +198,7 @@ fn send_browser_response(
 ) -> std::io::Result<()> {
     let html = build_browser_response_html(title, detail);
     http::write_response(
-        &*stream,
+        stream,
         StatusCode::OK,
         http::TEXT_HTML,
         &html,
