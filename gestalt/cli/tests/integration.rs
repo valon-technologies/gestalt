@@ -671,6 +671,65 @@ fn test_connect_omits_null_connection_and_instance() {
 }
 
 #[test]
+fn test_disconnect_sends_delete_with_connection_and_instance() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/integrations/datadog?connection=oauth&instance=prod",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"disconnected"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result =
+        gestalt::commands::integrations::disconnect(&client, "datadog", Some("oauth"), Some("prod"));
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_disconnect_without_optional_params() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/integrations/slack",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"disconnected"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::integrations::disconnect(&client, "slack", None, None);
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_disconnect_propagates_server_error() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/integrations/nope",
+        StatusCode::NOT_FOUND
+    )
+    .with_body(r#"{"error":"integration not found"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::integrations::disconnect(&client, "nope", None, None);
+
+    assert!(result.is_err());
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(err.contains("integration not found"));
+}
+
+#[test]
 fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let mut server = Server::new();
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
