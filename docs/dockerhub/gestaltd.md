@@ -27,11 +27,10 @@
 
 ## Supported tags
 
-The publish workflows maintain these tag shapes:
+Docker Hub publishes these stable tag shapes:
 
-- `latest`
-- `<version>`
-- `<sha>`
+- `latest` for the latest stable release
+- `<version>` for a specific stable release
 
 The image is published for `linux/amd64` and `linux/arm64`.
 
