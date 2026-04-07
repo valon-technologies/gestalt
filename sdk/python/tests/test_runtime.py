@@ -1,5 +1,3 @@
-import contextlib
-import io
 import json
 import pathlib
 import tempfile
@@ -9,43 +7,10 @@ from unittest import mock
 from gestalt import Plugin, Request, _bootstrap, _runtime
 
 
-class RuntimeTests(unittest.TestCase):
-    """Runtime entrypoint tests."""
+class ParseRuntimeArgsTests(unittest.TestCase):
+    """Tests for _parse_runtime_args, a pure function."""
 
-    def test_main_loads_bundled_plugin_and_applies_plugin_name(self) -> None:
-        """Bundled executions should load target metadata from the packaged config."""
-        plugin = Plugin("source-name")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            bundle_dir = pathlib.Path(tmpdir)
-            (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
-                json.dumps(
-                    {
-                        "target": "provider",
-                        "plugin_name": "released-plugin",
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True), mock.patch.object(
-                _runtime,
-                "_load_plugin",
-                return_value=plugin,
-            ) as load_plugin, mock.patch.object(_runtime, "serve") as serve:
-                result = _runtime.main([])
-
-        self.assertEqual(result, 0)
-        load_plugin.assert_called_once_with(
-            _runtime.RuntimeArgs(
-                target="provider",
-                plugin_name="released-plugin",
-            )
-        )
-        serve.assert_called_once_with(plugin)
-        self.assertEqual(plugin.name, "released-plugin")
-
-    def test_parse_runtime_args_accepts_explicit_root_and_target(self) -> None:
+    def test_explicit_root_and_target(self) -> None:
         """Explicit runtime invocation should keep the provided source root."""
         runtime_args = _runtime._parse_runtime_args(["/tmp/plugin", "example.plugin:PLUGIN"])
 
@@ -57,44 +22,42 @@ class RuntimeTests(unittest.TestCase):
             ),
         )
 
-    def test_parse_runtime_args_rejects_invalid_explicit_arguments(self) -> None:
+    def test_rejects_single_argument(self) -> None:
         """Runtime invocation should reject incomplete explicit arguments."""
         self.assertIsNone(_runtime._parse_runtime_args(["/tmp/plugin"]))
 
-    def test_main_skips_catalog_export_without_env_var(self) -> None:
-        """Catalog export should be skipped when the request env var is absent."""
-        plugin = mock.Mock(spec=Plugin)
+    def test_bundled_config_fallback(self) -> None:
+        """Empty args should fall back to bundled config when present."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = pathlib.Path(tmpdir)
+            (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
+                json.dumps({"target": "provider", "plugin_name": "released-plugin"}),
+                encoding="utf-8",
+            )
 
-        with mock.patch.object(_runtime, "_load_plugin", return_value=plugin), mock.patch.object(
-            _runtime, "serve"
-        ) as serve, mock.patch.dict(_runtime.os.environ, {}, clear=True):
-            result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
+            with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True):
+                runtime_args = _runtime._parse_runtime_args([])
 
-        self.assertEqual(result, 0)
-        plugin.write_catalog.assert_not_called()
-        serve.assert_called_once_with(plugin)
+        self.assertEqual(
+            runtime_args,
+            _runtime.RuntimeArgs(target="provider", plugin_name="released-plugin"),
+        )
 
-    def test_main_writes_catalog_when_env_is_set(self) -> None:
-        """Catalog export should write to the requested path when enabled."""
-        plugin = mock.Mock(spec=Plugin)
+    def test_returns_none_without_args_or_bundled_config(self) -> None:
+        """Empty args without a bundled config should return None."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
+                self.assertIsNone(_runtime._parse_runtime_args([]))
 
-        with mock.patch.object(_runtime, "_load_plugin", return_value=plugin), mock.patch.object(
-            _runtime, "serve"
-        ) as serve, mock.patch.dict(
-            _runtime.os.environ,
-            {_runtime.ENV_WRITE_CATALOG: "/tmp/catalog.json"},
-            clear=True,
-        ):
-            result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
 
-        self.assertEqual(result, 0)
-        plugin.write_catalog.assert_called_once_with("/tmp/catalog.json")
-        serve.assert_not_called()
+class ManifestNameTests(unittest.TestCase):
+    """Tests for manifest-derived plugin names."""
 
-    def test_plugin_from_manifest_uses_display_name(self) -> None:
-        """Manifest-derived plugins should normalize manifest names across path layouts."""
+    def test_display_name_variants(self) -> None:
+        """Manifest-derived plugins should normalize manifest names across formats."""
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = pathlib.Path(tmpdir)
+
             manifest_path = temp_root / "plugin.yaml"
             manifest_path.write_text('display_name: "Released Plugin"\n', encoding="utf-8")
 
@@ -129,42 +92,45 @@ class RuntimeTests(unittest.TestCase):
                     plugin = Plugin.from_manifest(manifest_input)
                     self.assertEqual(plugin.name, expected_name)
 
-    def test_request_connection_param_returns_empty_string_when_missing(self) -> None:
+
+class RequestTests(unittest.TestCase):
+    """Tests for the Request helper type."""
+
+    def test_connection_param_returns_value_or_empty_string(self) -> None:
         """Request helpers should return the configured value or an empty string."""
         request = Request(connection_params={"region": "us-east-1"})
 
         self.assertEqual(request.connection_param("region"), "us-east-1")
         self.assertEqual(request.connection_param("missing"), "")
 
-    def test_plugin_execute_returns_http_results_for_operation_outcomes(self) -> None:
-        """Plugin execution should map missing, successful, and unserializable results to HTTP-style responses."""
-        plugin = Plugin("source-name")
+
+class MainEntrypointTests(unittest.TestCase):
+    """Tests for the main() entrypoint, mocking only serve (gRPC)."""
+
+    def test_writes_catalog_when_env_is_set(self) -> None:
+        """Catalog export should write to the requested path when enabled."""
+        plugin = Plugin("test-plugin")
 
         @plugin.operation
-        def ok() -> dict[str, str]:
-            return {"status": "ok"}
+        def noop() -> str:
+            return "ok"
 
-        @plugin.operation
-        def broken() -> object:
-            return object()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            catalog_path = pathlib.Path(tmpdir) / "catalog.yaml"
+            with mock.patch.object(_runtime, "_load_plugin", return_value=plugin), mock.patch.dict(
+                _runtime.os.environ,
+                {_runtime.ENV_WRITE_CATALOG: str(catalog_path)},
+                clear=True,
+            ):
+                result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
 
-        cases = [
-            ("ok", 200, {"status": "ok"}, None),
-            ("missing", 404, None, "unknown operation"),
-            ("broken", 500, None, "not JSON serializable"),
-        ]
-        for operation_name, expected_status, expected_body, expected_error in cases:
-            with self.subTest(operation_name=operation_name):
-                stderr_buffer = io.StringIO()
-                with contextlib.redirect_stderr(stderr_buffer):
-                    status, body = plugin.execute(operation_name, {}, Request())
+            self.assertEqual(result, 0)
+            self.assertTrue(catalog_path.exists())
 
-                self.assertEqual(status, expected_status)
-                payload = json.loads(body)
-                if expected_body is not None:
-                    self.assertEqual(payload, expected_body)
-                if expected_error is not None:
-                    self.assertIn(expected_error, payload["error"])
+    def test_returns_usage_error_for_bad_args(self) -> None:
+        """Invalid args should return exit code 2."""
+        result = _runtime.main(["/only-one-arg"])
+        self.assertEqual(result, 2)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,8 @@ def field(
 
 @dataclass_transform(field_specifiers=(field,))
 class Model:
+    """Base class for operation input/output types. Subclasses are automatically dataclasses."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if "__dataclass_fields__" not in cls.__dict__:

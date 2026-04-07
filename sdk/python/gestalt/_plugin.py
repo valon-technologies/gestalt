@@ -1,4 +1,3 @@
-import inspect
 import json
 import pathlib
 import re
@@ -7,15 +6,15 @@ import types
 from typing import Any, Final
 
 import yaml
-from yaml.nodes import MappingNode, ScalarNode
 
 from ._api import Request
 from ._catalog import build_catalog, write_catalog
 from ._operations import (
     OperationDefinition,
+    OperationResult,
     execute_operation,
     inspect_handler,
-    maybe_await,
+    run_sync,
 )
 
 DEFAULT_OPERATION_METHOD: Final[str] = "POST"
@@ -29,15 +28,17 @@ class Plugin:
         self._configure_handler: Any = None
 
     @classmethod
-    def from_manifest(cls, path: str | pathlib.Path) -> "Plugin":
-        caller_file, caller_module_name = _caller_context()
+    def from_manifest(
+        cls,
+        path: str | pathlib.Path,
+        *,
+        base_dir: pathlib.Path | None = None,
+    ) -> "Plugin":
         manifest_path = pathlib.Path(path)
-        if not manifest_path.is_absolute() and not manifest_path.exists() and caller_file:
-            manifest_path = pathlib.Path(caller_file).resolve().parent / manifest_path
-        return cls(
-            _derive_name_from_manifest(manifest_path),
-            module_name=caller_module_name,
-        )
+        if not manifest_path.is_absolute():
+            resolved_base = base_dir if base_dir is not None else pathlib.Path.cwd()
+            manifest_path = resolved_base / manifest_path
+        return cls(_derive_name_from_manifest(manifest_path))
 
     def configure(self, func: Any) -> Any:
         self._configure_handler = func
@@ -83,12 +84,18 @@ class Plugin:
         return decorator(func)
 
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
-        handler = self._resolve_configure_handler()
+        handler = self._configure_handler
+        if handler is None and self._module_name:
+            module = sys.modules.get(self._module_name)
+            if module is not None:
+                candidate = getattr(module, "configure", None)
+                if callable(candidate):
+                    handler = candidate
         if handler is None:
             return
-        maybe_await(handler(name, config))
+        run_sync(handler(name, config))
 
-    def execute(self, operation: str, params: dict[str, Any], request: Request) -> tuple[int, str]:
+    def execute(self, operation: str, params: dict[str, Any], request: Request) -> OperationResult:
         return execute_operation(
             self._operations.get(operation),
             params=params,
@@ -108,21 +115,6 @@ class Plugin:
         from . import _runtime
 
         _runtime.serve(self)
-
-    def _resolve_configure_handler(self) -> Any:
-        if self._configure_handler is not None:
-            return self._configure_handler
-        if not self._module_name:
-            return None
-
-        module = sys.modules.get(self._module_name)
-        if module is None:
-            return None
-
-        configure = getattr(module, "configure", None)
-        if callable(configure):
-            self._configure_handler = configure
-        return self._configure_handler
 
 
 class _ModulePluginRegistry:
@@ -145,11 +137,13 @@ class _ModulePluginRegistry:
 
         plugin = self._plugins.get(module.__name__)
         if plugin is None:
-            plugin = Plugin(_module_plugin_name(module), module_name=module.__name__)
+            name = _slug_name(module.__name__.rsplit(".", 1)[-1])
+            plugin = Plugin(name, module_name=module.__name__)
             self._plugins[module.__name__] = plugin
 
         if not isinstance(getattr(module, "plugin", None), Plugin):
             setattr(module, "plugin", plugin)
+
         return plugin
 
 
@@ -189,28 +183,6 @@ def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
 
-def _caller_context() -> tuple[str | None, str | None]:
-    frame = inspect.currentframe()
-    from_manifest_frame = frame.f_back if frame is not None else None
-    caller_frame = from_manifest_frame.f_back if from_manifest_frame is not None else None
-    try:
-        if caller_frame is None:
-            return None, None
-        return caller_frame.f_code.co_filename, caller_frame.f_globals.get("__name__")
-    finally:
-        del frame
-        del from_manifest_frame
-        del caller_frame
-
-
-def _module_plugin_name(module: types.ModuleType) -> str:
-    file_path = getattr(module, "__file__", None)
-    if file_path:
-        manifest_path = pathlib.Path(file_path).resolve().parent / "plugin.yaml"
-        return _derive_name_from_manifest(manifest_path)
-    return _slug_name(module.__name__.rsplit(".", 1)[-1])
-
-
 def _derive_name_from_manifest(path: pathlib.Path) -> str:
     manifest_path = path / "plugin.yaml" if path.is_dir() else path
     fallback_name = manifest_path.parent.name or "plugin"
@@ -222,42 +194,56 @@ def _derive_name_from_manifest(path: pathlib.Path) -> str:
         return _slug_name(fallback_name)
 
     if manifest_format == ".json":
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            return _slug_name(fallback_name)
+        return _name_from_json_manifest(text, fallback_name)
 
-        if not isinstance(data, dict):
-            return _slug_name(fallback_name)
+    return _name_from_yaml_manifest(text, fallback_name)
 
-        source = data.get("source")
-        if isinstance(source, str) and source.strip():
-            return _slug_name(source.rsplit("/", 1)[-1])
 
-        display_name = data.get("display_name")
-        if isinstance(display_name, str) and display_name.strip():
-            return _slug_name(display_name)
-        return _slug_name(fallback_name)
-
+def _name_from_json_manifest(text: str, fallback_name: str) -> str:
     try:
-        document = yaml.compose(text)
-    except yaml.YAMLError:
-        return _slug_name(fallback_name)
-    if not isinstance(document, MappingNode):
+        data = json.loads(text)
+    except json.JSONDecodeError:
         return _slug_name(fallback_name)
 
-    scalar_fields: dict[str, str] = {}
-    for key_node, value_node in document.value:
-        if not isinstance(key_node, ScalarNode) or not isinstance(value_node, ScalarNode):
-            continue
-        scalar_fields[key_node.value] = value_node.value
+    if not isinstance(data, dict):
+        return _slug_name(fallback_name)
 
-    source = scalar_fields.get("source", "").strip()
-    if source:
+    source = data.get("source")
+    if isinstance(source, str) and source.strip():
         return _slug_name(source.rsplit("/", 1)[-1])
 
-    display_name = scalar_fields.get("display_name", "").strip()
-    if display_name:
+    display_name = data.get("display_name")
+    if isinstance(display_name, str) and display_name.strip():
+        return _slug_name(display_name)
+
+    return _slug_name(fallback_name)
+
+
+class _TagIgnoringLoader(yaml.SafeLoader):
+    pass
+
+
+_TagIgnoringLoader.add_multi_constructor(
+    "",
+    lambda loader, suffix, node: loader.construct_scalar(node),
+)
+
+
+def _name_from_yaml_manifest(text: str, fallback_name: str) -> str:
+    try:
+        data = yaml.load(text, Loader=_TagIgnoringLoader)
+    except yaml.YAMLError:
+        return _slug_name(fallback_name)
+
+    if not isinstance(data, dict):
+        return _slug_name(fallback_name)
+
+    source = data.get("source", "")
+    if isinstance(source, str) and source.strip():
+        return _slug_name(source.rsplit("/", 1)[-1])
+
+    display_name = data.get("display_name", "")
+    if isinstance(display_name, str) and display_name.strip():
         return _slug_name(display_name)
 
     return _slug_name(fallback_name)

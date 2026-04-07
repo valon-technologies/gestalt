@@ -1,8 +1,6 @@
 import asyncio
 import dataclasses
 import inspect
-import json
-import pathlib
 import traceback
 import types
 from dataclasses import dataclass
@@ -10,6 +8,7 @@ from http import HTTPStatus
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from ._api import Request, Response
+from ._serialization import json_body
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +23,15 @@ class OperationDefinition:
     handler: Any
     input_type: Any
     takes_request: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OperationResult:
+    status: int
+    body: str
+
+    def __iter__(self) -> Any:
+        return iter((self.status, self.body))
 
 
 def inspect_handler(func: Any) -> tuple[Any, bool]:
@@ -56,7 +64,7 @@ def execute_operation(
     *,
     params: dict[str, Any],
     request: Request,
-) -> tuple[int, str]:
+) -> OperationResult:
     if operation is None:
         return _error_result(HTTPStatus.NOT_FOUND, "unknown operation")
 
@@ -70,7 +78,7 @@ def execute_operation(
         args.append(request)
 
     try:
-        result = maybe_await(operation.handler(*args))
+        result = run_sync(operation.handler(*args))
         if isinstance(result, Response):
             status = HTTPStatus.OK if result.status is None else result.status
             body = result.body
@@ -78,7 +86,7 @@ def execute_operation(
             status = HTTPStatus.OK
             body = result
 
-        return status, json_body(body)
+        return OperationResult(status=status, body=json_body(body))
     except Exception as error:
         traceback.print_exception(error)
         return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
@@ -94,18 +102,15 @@ def decode_input(input_type: Any, params: dict[str, Any]) -> Any:
     return _decode_value(input_type, params)
 
 
-def maybe_await(value: Any) -> Any:
+def run_sync(value: Any) -> Any:
+    """Run an async value synchronously by creating a new event loop."""
     if inspect.isawaitable(value):
         return asyncio.run(value)
     return value
 
 
-def json_body(value: Any) -> str:
-    return json.dumps(_json_value(value), separators=(",", ":"))
-
-
-def _error_result(status: HTTPStatus, message: str) -> tuple[int, str]:
-    return status, json_body({"error": message})
+def _error_result(status: HTTPStatus, message: str) -> OperationResult:
+    return OperationResult(status=status, body=json_body({"error": message}))
 
 
 def _normalize_input_type(annotation: Any) -> Any:
@@ -186,11 +191,12 @@ def _decode_bool(value: Any) -> bool:
         return value
     if isinstance(value, str):
         lowered = value.strip().lower()
-        if lowered in ("1", "true", "yes", "on"):
+        if lowered in ("1", "true"):
             return True
-        if lowered in ("0", "false", "no", "off", ""):
+        if lowered in ("0", "false", ""):
             return False
-    return bool(value)
+        raise TypeError(f"expected boolean-compatible string, got {value!r}")
+    raise TypeError(f"expected bool, got {type(value).__name__}")
 
 
 def _decode_int(value: Any) -> int:
@@ -198,11 +204,9 @@ def _decode_int(value: Any) -> int:
         return int(value)
     if isinstance(value, int):
         return value
-    if isinstance(value, float):
-        if value.is_integer():
-            return int(value)
-        raise TypeError(f"expected integer-compatible value, got {value!r}")
-    return int(value)
+    if isinstance(value, str):
+        return int(value)
+    raise TypeError(f"expected int, got {type(value).__name__}")
 
 
 def _decode_float(value: Any) -> float:
@@ -210,28 +214,15 @@ def _decode_float(value: Any) -> float:
         return float(int(value))
     if isinstance(value, (int, float)):
         return float(value)
-    return float(value)
+    if isinstance(value, str):
+        return float(value)
+    raise TypeError(f"expected float, got {type(value).__name__}")
 
 
 def _decode_str(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value)
-
-
-def _json_value(value: Any) -> Any:
-    if dataclasses.is_dataclass(value):
-        return {
-            field_definition.name: _json_value(getattr(value, field_definition.name))
-            for field_definition in dataclasses.fields(value)
-        }
-    if isinstance(value, pathlib.Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {_json_value(key): _json_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_value(item) for item in value]
-    return value
 
 
 def strip_optional(annotation: Any) -> Any:
