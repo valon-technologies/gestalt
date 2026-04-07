@@ -61,29 +61,35 @@ class RuntimeTests(unittest.TestCase):
         """Runtime invocation should reject incomplete explicit arguments."""
         self.assertIsNone(_runtime._parse_runtime_args(["/tmp/plugin"]))
 
-    def test_write_catalog_if_requested_returns_false_without_env_var(self) -> None:
+    def test_main_skips_catalog_export_without_env_var(self) -> None:
         """Catalog export should be skipped when the request env var is absent."""
         plugin = mock.Mock(spec=Plugin)
 
-        with mock.patch.dict(_runtime.os.environ, {}, clear=True):
-            wrote_catalog = _runtime._write_catalog_if_requested(plugin)
+        with mock.patch.object(_runtime, "_load_plugin", return_value=plugin), mock.patch.object(
+            _runtime, "serve"
+        ) as serve, mock.patch.dict(_runtime.os.environ, {}, clear=True):
+            result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
 
-        self.assertFalse(wrote_catalog)
+        self.assertEqual(result, 0)
         plugin.write_catalog.assert_not_called()
+        serve.assert_called_once_with(plugin)
 
-    def test_write_catalog_if_requested_writes_catalog_when_env_is_set(self) -> None:
+    def test_main_writes_catalog_when_env_is_set(self) -> None:
         """Catalog export should write to the requested path when enabled."""
         plugin = mock.Mock(spec=Plugin)
 
-        with mock.patch.dict(
+        with mock.patch.object(_runtime, "_load_plugin", return_value=plugin), mock.patch.object(
+            _runtime, "serve"
+        ) as serve, mock.patch.dict(
             _runtime.os.environ,
             {_runtime.ENV_WRITE_CATALOG: "/tmp/catalog.json"},
             clear=True,
         ):
-            wrote_catalog = _runtime._write_catalog_if_requested(plugin)
+            result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
 
-        self.assertTrue(wrote_catalog)
+        self.assertEqual(result, 0)
         plugin.write_catalog.assert_called_once_with("/tmp/catalog.json")
+        serve.assert_not_called()
 
     def test_plugin_from_manifest_uses_display_name(self) -> None:
         """Manifest-derived plugins should normalize the manifest display name."""

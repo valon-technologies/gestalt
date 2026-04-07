@@ -31,7 +31,9 @@ class Plugin:
     @classmethod
     def from_manifest(cls, path: str | pathlib.Path) -> Plugin:
         caller_file, caller_module_name = _caller_context()
-        manifest_path = _resolve_manifest_path(path, caller_file)
+        manifest_path = pathlib.Path(path)
+        if not manifest_path.is_absolute() and not manifest_path.exists() and caller_file:
+            manifest_path = pathlib.Path(caller_file).resolve().parent / manifest_path
         return cls(
             _derive_name_from_manifest(manifest_path),
             module_name=caller_module_name,
@@ -207,15 +209,6 @@ def _module_plugin_name(module: types.ModuleType) -> str:
         manifest_path = pathlib.Path(file_path).resolve().parent / "plugin.yaml"
         return _derive_name_from_manifest(manifest_path)
     return _slug_name(module.__name__.rsplit(".", 1)[-1])
-
-
-def _resolve_manifest_path(path: str | pathlib.Path, caller_file: str | None) -> pathlib.Path:
-    manifest_path = pathlib.Path(path)
-    if manifest_path.is_absolute() or manifest_path.exists() or not caller_file:
-        return manifest_path
-    return pathlib.Path(caller_file).resolve().parent / manifest_path
-
-
 def _derive_name_from_manifest(path: pathlib.Path) -> str:
     manifest_path = path / "plugin.yaml" if path.is_dir() else path
     fallback_name = manifest_path.parent.name or "plugin"
@@ -225,25 +218,16 @@ def _derive_name_from_manifest(path: pathlib.Path) -> str:
     except OSError:
         return _slug_name(fallback_name)
 
-    mapping = _load_manifest_mapping(manifest_path, text)
-    if not isinstance(mapping, dict):
-        return _slug_name(fallback_name)
-    return _manifest_name_from_mapping(mapping, fallback=fallback_name)
-
-
-def _load_manifest_mapping(path: pathlib.Path, text: str) -> dict[str, Any] | None:
     try:
         if path.suffix.lower() == ".json":
             data = json.loads(text)
         else:
             data = yaml.safe_load(text)
     except (json.JSONDecodeError, yaml.YAMLError):
-        return None
+        return _slug_name(fallback_name)
+    if not isinstance(data, dict):
+        return _slug_name(fallback_name)
 
-    return data if isinstance(data, dict) else None
-
-
-def _manifest_name_from_mapping(data: dict[str, Any], *, fallback: str) -> str:
     source = data.get("source")
     if isinstance(source, str) and source.strip():
         return _slug_name(source.rsplit("/", 1)[-1])
@@ -252,7 +236,7 @@ def _manifest_name_from_mapping(data: dict[str, Any], *, fallback: str) -> str:
     if isinstance(display_name, str) and display_name.strip():
         return _slug_name(display_name)
 
-    return _slug_name(fallback)
+    return _slug_name(fallback_name)
 
 
 def _slug_name(value: str) -> str:

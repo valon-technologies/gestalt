@@ -60,14 +60,16 @@ def serve(plugin: Plugin) -> None:
 def main(argv: list[str] | None = None) -> int:
     runtime_args = _parse_runtime_args(sys.argv[1:] if argv is None else argv)
     if runtime_args is None:
-        _print_usage()
+        print(USAGE, file=sys.stderr)
         return 2
 
     plugin = _load_plugin(runtime_args)
     if runtime_args.plugin_name:
         plugin.name = runtime_args.plugin_name
 
-    if _write_catalog_if_requested(plugin):
+    catalog_path = os.environ.get(ENV_WRITE_CATALOG)
+    if catalog_path:
+        plugin.write_catalog(catalog_path)
         return 0
 
     serve(plugin)
@@ -82,7 +84,9 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
         root, target = args
         return RuntimeArgs(target=target, root=pathlib.Path(root))
 
-    bundled_config = read_bundled_plugin_config(bundle_root=_bundle_root())
+    bundled_config = read_bundled_plugin_config(
+        bundle_root=pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
+    )
     if bundled_config is None:
         return None
 
@@ -90,10 +94,6 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
         target=bundled_config.target,
         plugin_name=bundled_config.plugin_name,
     )
-
-
-def _bundle_root() -> pathlib.Path:
-    return pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).resolve().parent))
 
 
 def _load_plugin(args: RuntimeArgs) -> Plugin:
@@ -111,21 +111,6 @@ def _load_plugin(args: RuntimeArgs) -> Plugin:
     if not isinstance(plugin, Plugin):
         raise RuntimeError(f"{args.target} did not resolve to a gestalt.Plugin")
     return plugin
-
-
-def _print_usage() -> None:
-    print(USAGE, file=sys.stderr)
-
-
-def _write_catalog_if_requested(plugin: Plugin) -> bool:
-    catalog_path = os.environ.get(ENV_WRITE_CATALOG)
-    if not catalog_path:
-        return False
-
-    plugin.write_catalog(catalog_path)
-    return True
-
-
 def _socket_path_from_env() -> pathlib.Path:
     socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
     if not socket_path:
