@@ -197,14 +197,14 @@ export GESTALT_URL=${origin}`}
                 rows={[
                   [
                     "gestalt init",
-                    "Interactive setup that stores the URL, can create a project-local .gestalt.json, and can start browser login.",
+                    "Interactive setup that stores the URL, can create a project-local .gestalt/config.json, and can start browser login.",
                   ],
                   [
                     "gestalt config set url ...",
                     "Persistent global config for your user account on this machine.",
                   ],
                   [
-                    ".gestalt.json",
+                    ".gestalt/config.json",
                     "Project-local URL override for one checkout or deployment directory.",
                   ],
                   [
@@ -215,7 +215,9 @@ export GESTALT_URL=${origin}`}
               />
               <p className="doc-copy">
                 The optional{" "}
-                <code className="font-mono text-sm text-primary">.gestalt.json</code>{" "}
+                <code className="font-mono text-sm text-primary">
+                  .gestalt/config.json
+                </code>{" "}
                 file stores only the deployment URL. The CLI searches the
                 current directory and then parent directories until it finds the
                 nearest project config.
@@ -225,12 +227,16 @@ export GESTALT_URL=${origin}`}
                 <code className="font-mono text-sm text-primary">--url</code>,{" "}
                 <code className="font-mono text-sm text-primary">GESTALT_URL</code>,
                 project-local{" "}
-                <code className="font-mono text-sm text-primary">.gestalt.json</code>,
-                global CLI config, stored login credentials, then{" "}
+                <code className="font-mono text-sm text-primary">
+                  .gestalt/config.json
+                </code>,{" "}
+                global CLI config, then{" "}
                 <code className="font-mono text-sm text-primary">
                   http://localhost:8080
-                </code>
-                .
+                </code>{" "}
+                when{" "}
+                <code className="font-mono text-sm text-primary">/health</code>{" "}
+                responds.
               </p>
 
               <Subheading id="authenticate" title="Authenticate" />

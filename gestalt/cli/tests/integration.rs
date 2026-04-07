@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use assert_cmd::Command;
@@ -52,6 +52,7 @@ impl EnvGuard {
         let saved = vec![
             ("HOME", std::env::var_os("HOME")),
             ("XDG_CONFIG_HOME", std::env::var_os("XDG_CONFIG_HOME")),
+            ("GESTALT_URL", std::env::var_os("GESTALT_URL")),
             (
                 gestalt::api::ENV_API_KEY,
                 std::env::var_os(gestalt::api::ENV_API_KEY),
@@ -60,9 +61,28 @@ impl EnvGuard {
         unsafe {
             std::env::set_var("HOME", config_root);
             std::env::set_var("XDG_CONFIG_HOME", config_root);
+            std::env::remove_var("GESTALT_URL");
             std::env::remove_var(gestalt::api::ENV_API_KEY);
         }
         Self(saved)
+    }
+}
+
+struct CurrentDirGuard {
+    saved: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn new(path: &Path) -> Self {
+        let saved = std::env::current_dir().unwrap();
+        std::env::set_current_dir(path).unwrap();
+        Self { saved }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.saved).unwrap();
     }
 }
 
@@ -1021,13 +1041,63 @@ fn test_cli_config_set_and_get_json() {
     set_cmd
         .assert()
         .success()
-        .stderr(predicate::str::contains("url = https://localhost:9999"));
+        .stderr(predicate::str::contains("url = http://localhost:9999"));
 
     let mut get_cmd = cli_command(home.path());
     get_cmd.args(["--format", "json", "config", "get", "url"]);
     get_cmd.assert().success().stdout(predicate::str::contains(
-        "\"url\": \"https://localhost:9999\"",
+        "\"url\": \"http://localhost:9999\"",
     ));
+}
+
+#[test]
+fn test_resolve_url_prefers_project_config_file() {
+    let _lock = env_lock();
+    let config_root = TempDir::new().unwrap();
+    let _env = EnvGuard::new(config_root.path());
+    let workspace = TempDir::new().unwrap();
+    let repo_root = workspace.path().join("repo");
+    let nested = repo_root.join("nested");
+
+    std::fs::create_dir_all(repo_root.join(".gestalt")).unwrap();
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(
+        repo_root.join(".gestalt/config.json"),
+        "{\n  \"url\": \"https://project.example.com\"\n}\n",
+    )
+    .unwrap();
+
+    let _cwd = CurrentDirGuard::new(&nested);
+    let resolved = gestalt::api::resolve_url(Some("localhost:9999")).unwrap();
+    assert_eq!(resolved, "http://localhost:9999");
+
+    let resolved = gestalt::api::resolve_url(None).unwrap();
+    assert_eq!(resolved, "https://project.example.com");
+}
+
+#[test]
+fn test_resolve_url_ignores_legacy_project_file_and_uses_global_config() {
+    let _lock = env_lock();
+    let config_root = TempDir::new().unwrap();
+    let _env = EnvGuard::new(config_root.path());
+    let workspace = TempDir::new().unwrap();
+    let repo_root = workspace.path().join("repo");
+    let nested = repo_root.join("nested");
+
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(
+        repo_root.join(".gestalt.json"),
+        "{\n  \"url\": \"https://legacy.example.com\"\n}\n",
+    )
+    .unwrap();
+
+    let mut set_cmd = cli_command(config_root.path());
+    set_cmd.args(["config", "set", "url", "https://global.example.com"]);
+    set_cmd.assert().success();
+
+    let _cwd = CurrentDirGuard::new(&nested);
+    let resolved = gestalt::api::resolve_url(None).unwrap();
+    assert_eq!(resolved, "https://global.example.com");
 }
 
 #[test]
