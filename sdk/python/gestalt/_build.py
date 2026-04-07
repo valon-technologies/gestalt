@@ -12,7 +12,7 @@ from ._bootstrap import (
     write_bundled_plugin_config,
 )
 
-USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME"
+USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME GOOS GOARCH"
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,8 @@ class BuildArgs:
     target: str
     output_path: pathlib.Path
     plugin_name: str
+    goos: str
+    goarch: str
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,15 +36,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _parse_build_args(args: list[str]) -> BuildArgs | None:
-    if len(args) != 4:
+    if len(args) != 6:
         return None
 
-    root, target, output_path, plugin_name = args
+    root, target, output_path, plugin_name, goos, goarch = args
     return BuildArgs(
         root=pathlib.Path(root),
         target=target,
         output_path=pathlib.Path(output_path),
         plugin_name=plugin_name,
+        goos=goos,
+        goarch=goarch,
     )
 
 
@@ -67,6 +71,8 @@ def build_plugin_binary(args: BuildArgs) -> None:
                 output_path=output_path,
                 module_name=plugin_target.module_name,
                 bundle_config_path=bundle_config_path,
+                target_goos=args.goos,
+                target_goarch=args.goarch,
             ),
             cwd=root_path,
             check=True,
@@ -79,10 +85,12 @@ def _pyinstaller_command(
     output_path: pathlib.Path,
     module_name: str,
     bundle_config_path: pathlib.Path,
+    target_goos: str,
+    target_goarch: str,
 ) -> list[str]:
-    pyinstaller_name = output_path.name.removesuffix(".exe") if sys.platform == "win32" else output_path.name
+    pyinstaller_name = output_path.name.removesuffix(".exe") if target_goos == "windows" else output_path.name
 
-    return [
+    command = [
         sys.executable,
         "-m",
         "PyInstaller",
@@ -105,6 +113,18 @@ def _pyinstaller_command(
         f"{bundle_config_path}{os.pathsep}.",
         str(pathlib.Path(__file__).with_name("_pyinstaller.py")),
     ]
+    if sys.platform == "darwin" and target_goos == "darwin":
+        target_arch = _darwin_target_arch(target_goarch)
+        if target_arch:
+            command.extend(["--target-arch", target_arch])
+    return command
+
+
+def _darwin_target_arch(goarch: str) -> str | None:
+    return {
+        "amd64": "x86_64",
+        "arm64": "arm64",
+    }.get(goarch)
 
 
 if __name__ == "__main__":

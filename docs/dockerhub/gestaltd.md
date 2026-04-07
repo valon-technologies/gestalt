@@ -243,7 +243,7 @@ COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 RUN cd ./my-plugin && \
-    gestaltd plugin release --version 0.1.0 && \
+    gestaltd plugin release --version 0.1.0 --platform all && \
     gestaltd init --config ./deploy/config.yaml
 ```
 

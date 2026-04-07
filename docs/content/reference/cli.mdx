@@ -17,7 +17,7 @@
 
 | Command | Purpose |
 | --- | --- |
-| `gestaltd plugin release --version VERSION` | Build and package a plugin release. Go source plugins can target multiple platforms; Python source plugins build a current-platform executable artifact. |
+| `gestaltd plugin release --version VERSION` | Build and package a plugin release. Go and Python source plugins default to the host platform; pass `--platform ...` or `--platform all` for multi-platform builds. |
 
 ## Examples
 
@@ -27,6 +27,7 @@ gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
 gestaltd plugin release --version 0.1.0
+gestaltd plugin release --version 0.1.0 --platform all
 ```
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

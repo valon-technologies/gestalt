@@ -2,7 +2,6 @@ package pluginpkg
 
 import (
 	"errors"
-	"fmt"
 	"runtime"
 )
 
@@ -55,20 +54,15 @@ func SourceProviderExecutionCommand(root, goos, goarch string) (string, []string
 	}
 }
 
-func SourceProviderCurrentPlatformOnly(root, goos, goarch string) (bool, error) {
-	kind, _, err := detectSourceProvider(root, goos, goarch)
-	if err != nil {
-		return false, err
-	}
-	return kind == sourceProviderKindPython, nil
-}
-
 func ValidateSourceProviderRelease(root, goos, goarch string) error {
 	kind, _, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
 		return err
 	}
-	return validateSourceProviderReleaseKind(kind, goos, goarch)
+	if kind == sourceProviderKindPython {
+		_, err = DetectPythonInterpreter(root, goos, goarch)
+	}
+	return err
 }
 
 func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch string) error {
@@ -80,20 +74,10 @@ func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch
 	case sourceProviderKindGo:
 		return BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
 	case sourceProviderKindPython:
-		if err := validateSourceProviderReleaseKind(kind, goos, goarch); err != nil {
-			return err
-		}
-		return BuildPythonProviderBinary(root, outputPath, pluginName, pythonTarget)
+		return BuildPythonProviderBinary(root, outputPath, pluginName, pythonTarget, goos, goarch)
 	default:
 		return ErrNoSourceProviderPackage
 	}
-}
-
-func validateSourceProviderReleaseKind(kind, goos, goarch string) error {
-	if kind == sourceProviderKindPython && (goos != runtime.GOOS || goarch != runtime.GOARCH) {
-		return fmt.Errorf("python source plugins can only be released for the current platform %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-	return nil
 }
 
 func HasSourceProviderPackage(root string) (bool, error) {

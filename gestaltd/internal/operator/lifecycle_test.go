@@ -271,6 +271,21 @@ def list_items(_req: gestalt.Request) -> dict[str, object]:
 @gestalt.operation(method="POST")
 def status_zero(_req: gestalt.Request) -> gestalt.Response[dict[str, bool]]:
     return gestalt.Response(status=0, body={"ok": True})
+
+
+@gestalt.session_catalog
+def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
+    return gestalt.Catalog(
+        name="session-source",
+        display_name=request.token,
+        operations=[
+            gestalt.CatalogOperation(
+                id="private_search",
+                method="POST",
+                read_only=True,
+            )
+        ],
+    )
 `), 0o644)
 	createLocalPythonSDKVenv(t, python3Path, filepath.Join(dir, ".venv"), localPythonSDKPath(t))
 
@@ -329,6 +344,7 @@ maybe_status, maybe_body = provider.plugin.execute("maybe_filters", {
     "owner": "Grace",
 }, gestalt.Request())
 list_status, list_body = provider.plugin.execute("list_items", {}, gestalt.Request())
+session_catalog = provider.plugin.catalog_for_request(gestalt.Request(token="secret-token"))
 print(json.dumps({
     "status": status,
     "body": json.loads(body),
@@ -342,6 +358,18 @@ print(json.dumps({
     "list_body": json.loads(list_body),
     "maybe_status": maybe_status,
     "maybe_body": json.loads(maybe_body),
+    "supports_session_catalog": provider.plugin.supports_session_catalog(),
+    "session_catalog": {
+        "name": session_catalog.name if session_catalog else "",
+        "display_name": session_catalog.display_name if session_catalog else "",
+        "operations": [
+            {
+                "id": operation.id,
+                "read_only": operation.read_only,
+            }
+            for operation in (session_catalog.operations if session_catalog else [])
+        ],
+    },
     "zero_status": zero_status,
     "zero_body": json.loads(zero_body),
 }, sort_keys=True))
@@ -513,6 +541,33 @@ print(json.dumps({
 	}
 	if maybePayload["owner"] != "Grace" {
 		t.Fatalf("maybe owner = %v, want Grace", maybePayload["owner"])
+	}
+	if body["supports_session_catalog"] != true {
+		t.Fatalf("supports_session_catalog = %v, want true", body["supports_session_catalog"])
+	}
+	sessionCatalog, ok := body["session_catalog"].(map[string]any)
+	if !ok {
+		t.Fatalf("session_catalog = %#v, want object", body["session_catalog"])
+	}
+	if sessionCatalog["name"] != "session-source" {
+		t.Fatalf("session catalog name = %v, want session-source", sessionCatalog["name"])
+	}
+	if sessionCatalog["display_name"] != "secret-token" {
+		t.Fatalf("session catalog display_name = %v, want secret-token", sessionCatalog["display_name"])
+	}
+	sessionOps, ok := sessionCatalog["operations"].([]any)
+	if !ok || len(sessionOps) != 1 {
+		t.Fatalf("session catalog operations = %#v, want one item", sessionCatalog["operations"])
+	}
+	sessionOp, ok := sessionOps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("session catalog operation = %#v, want object", sessionOps[0])
+	}
+	if sessionOp["id"] != "private_search" {
+		t.Fatalf("session catalog operation id = %v, want private_search", sessionOp["id"])
+	}
+	if sessionOp["read_only"] != true {
+		t.Fatalf("session catalog operation read_only = %v, want true", sessionOp["read_only"])
 	}
 	if body["zero_status"] != float64(0) {
 		t.Fatalf("zero_status = %v, want 0", body["zero_status"])

@@ -244,9 +244,28 @@ The manifest stays the source of truth for display name, description, auth, the 
     | `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a dynamic catalog that depends on the caller's credentials or runtime state. |
   </Tabs.Tab>
   <Tabs.Tab>
-    Dynamic catalogs are not yet supported in the Python SDK.
+    Register a dynamic session catalog with `@gestalt.session_catalog` to return
+    a per-request `gestalt.Catalog`.
   </Tabs.Tab>
 </Tabs>
+
+For example:
+
+```python
+@gestalt.session_catalog
+def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
+    return gestalt.Catalog(
+        name="my-plugin-session",
+        display_name=request.token,
+        operations=[
+            gestalt.CatalogOperation(
+                id="search_private",
+                method="POST",
+                read_only=True,
+            )
+        ],
+    )
+```
 
 ## Test locally
 
@@ -285,14 +304,14 @@ gestalt invoke my-plugin greet -p name=Gestalt
 gestaltd plugin release --version 0.1.0
 ```
 
-<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
-  <Tabs.Tab>
-    Gestalt materializes the executable catalog automatically during local source-plugin execution and release. Release builds every requested target platform.
-  </Tabs.Tab>
-  <Tabs.Tab>
-    Gestalt materializes the executable catalog automatically during local source-plugin execution and release. Release builds a current-platform executable artifact from the selected Python environment.
-  </Tabs.Tab>
-</Tabs>
+Gestalt materializes the executable catalog automatically during local source-plugin execution and release.
+
+- For Go and Python source plugins, release builds the host platform by
+  default.
+- Pass `--platform` with a comma-separated target list to build explicit
+  platforms.
+- Pass `--platform all` in CI when you want the full supported release matrix.
+- For non-host Python targets, point Gestalt at a matching interpreter with `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as `.venv-<goos>-<goarch>/`.
 
 ## Hybrid providers
 

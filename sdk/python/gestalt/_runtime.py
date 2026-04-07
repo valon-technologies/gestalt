@@ -14,6 +14,7 @@ from google.protobuf import json_format
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
+from ._catalog import catalog_to_json
 from ._plugin import Plugin, _module_plugin
 from ._serialization import json_body
 from .gen.v1 import plugin_pb2 as _plugin_pb2
@@ -40,63 +41,24 @@ class RuntimeArgs:
     plugin_name: str | None = None
 
 
-class _ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
-    def __init__(self, plugin: Plugin) -> None:
-        self._plugin = plugin
-
-    def GetMetadata(self, request: Any, context: Any) -> Any:
-        del request, context
-        return plugin_pb2.ProviderMetadata(
-            min_protocol_version=CURRENT_PROTOCOL_VERSION,
-            max_protocol_version=CURRENT_PROTOCOL_VERSION,
-        )
-
-    def StartProvider(self, request: Any, context: Any) -> Any:
-        del context
-        self._plugin.configure_provider(
-            request.name,
-            _message_to_dict(
-                field_name="config",
-                message=request.config,
-                request=request,
-            ),
-        )
-        return plugin_pb2.StartProviderResponse(
-            protocol_version=CURRENT_PROTOCOL_VERSION
-        )
-
-    def Execute(self, request: Any, context: Any) -> Any:
-        del context
-        try:
-            result = self._plugin.execute(
-                request.operation,
-                _message_to_dict(
-                    field_name="params",
-                    message=request.params,
-                    request=request,
-                ),
-                Request(
-                    token=request.token,
-                    connection_params=dict(request.connection_params),
-                ),
-            )
-        except Exception as error:
-            traceback.print_exception(error)
-            status = HTTPStatus.INTERNAL_SERVER_ERROR
-            body = json_body({"error": str(error)})
-            return plugin_pb2.OperationResult(status=status, body=body)
-        return plugin_pb2.OperationResult(status=result.status, body=result.body)
+@dataclass(frozen=True)
+class _RuntimeImports:
+    grpc: Any
+    json_format: Any
+    plugin_pb2: Any
+    plugin_pb2_grpc: Any
 
 
 def serve(plugin: Plugin) -> None:
+    runtime = _runtime_imports()
     socket_path = _socket_path_from_env()
     _remove_stale_socket(socket_path)
 
-    server = grpc.server(
+    server = runtime.grpc.server(
         futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
     )
-    plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
-        _ProviderServicer(plugin),
+    runtime.plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
+        _provider_servicer(plugin=plugin, runtime=runtime),
         server,
     )
     server.add_insecure_port(f"unix:{socket_path}")
@@ -181,9 +143,84 @@ def _register_shutdown_handlers(server: Any) -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
 
+def _provider_servicer(*, plugin: Plugin, runtime: _RuntimeImports) -> Any:
+    class ProviderServicer(runtime.plugin_pb2_grpc.ProviderPluginServicer):
+        def GetMetadata(self, request: Any, context: Any) -> Any:
+            del request, context
+            return runtime.plugin_pb2.ProviderMetadata(
+                supports_session_catalog=plugin.supports_session_catalog(),
+                min_protocol_version=CURRENT_PROTOCOL_VERSION,
+                max_protocol_version=CURRENT_PROTOCOL_VERSION,
+            )
+
+        def StartProvider(self, request: Any, context: Any) -> Any:
+            del context
+            plugin.configure_provider(
+                request.name,
+                _message_to_dict(
+                    field_name="config",
+                    json_format=runtime.json_format,
+                    message=request.config,
+                    request=request,
+                ),
+            )
+            return runtime.plugin_pb2.StartProviderResponse(
+                protocol_version=CURRENT_PROTOCOL_VERSION
+            )
+
+        def Execute(self, request: Any, context: Any) -> Any:
+            del context
+            try:
+                result = plugin.execute(
+                    request.operation,
+                    _message_to_dict(
+                        field_name="params",
+                        json_format=runtime.json_format,
+                        message=request.params,
+                        request=request,
+                    ),
+                    Request(
+                        token=request.token,
+                        connection_params=dict(request.connection_params),
+                    ),
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                status = HTTPStatus.INTERNAL_SERVER_ERROR
+                body = json_body({"error": str(error)})
+                return runtime.plugin_pb2.OperationResult(status=status, body=body)
+            return runtime.plugin_pb2.OperationResult(status=result.status, body=result.body)
+
+        def GetSessionCatalog(self, request: Any, context: Any) -> Any:
+            if not plugin.supports_session_catalog():
+                return context.abort(runtime.grpc.StatusCode.UNIMPLEMENTED, "provider does not support session catalogs")
+
+            try:
+                catalog = plugin.catalog_for_request(_plugin_request(request))
+            except Exception as error:
+                return context.abort(runtime.grpc.StatusCode.UNKNOWN, f"session catalog: {error}")
+
+            try:
+                raw_catalog = catalog_to_json(catalog)
+            except Exception as error:
+                return context.abort(runtime.grpc.StatusCode.INTERNAL, f"encode session catalog: {error}")
+
+            return runtime.plugin_pb2.GetSessionCatalogResponse(catalog_json=raw_catalog)
+
+    return ProviderServicer()
+
+
+def _plugin_request(request: Any) -> Request:
+    return Request(
+        token=getattr(request, "token", ""),
+        connection_params=dict(getattr(request, "connection_params", {})),
+    )
+
+
 def _message_to_dict(
     *,
     field_name: str,
+    json_format: Any,
     message: Any,
     request: Any,
 ) -> dict[str, Any]:
@@ -193,6 +230,15 @@ def _message_to_dict(
     return json_format.MessageToDict(
         message,
         preserving_proto_field_name=True,
+    )
+
+
+def _runtime_imports() -> _RuntimeImports:
+    return _RuntimeImports(
+        grpc=grpc,
+        json_format=json_format,
+        plugin_pb2=plugin_pb2,
+        plugin_pb2_grpc=plugin_pb2_grpc,
     )
 
 
