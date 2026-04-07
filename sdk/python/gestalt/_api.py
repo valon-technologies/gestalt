@@ -3,12 +3,12 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import MISSING
 from http import HTTPStatus
-from typing import Any, Generic, TypeVar
+from typing import Any, Final, Generic, TypeVar
 
 from typing_extensions import dataclass_transform
 
-FIELD_DESCRIPTION_KEY = "description"
-FIELD_REQUIRED_KEY = "required"
+FIELD_DESCRIPTION_KEY: Final[str] = "description"
+FIELD_REQUIRED_KEY: Final[str] = "required"
 
 T = TypeVar("T")
 

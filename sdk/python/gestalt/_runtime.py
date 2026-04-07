@@ -9,19 +9,19 @@ import traceback
 from concurrent import futures
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Final
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._operations import json_body
 from ._plugin import Plugin, _module_plugin
 
-ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
-ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG"
-CURRENT_PROTOCOL_VERSION = 2
-GRPC_SERVER_MAX_WORKERS = 4
-GRPC_SHUTDOWN_GRACE_SECONDS = 2
-USAGE = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE]"
+ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
+ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
+CURRENT_PROTOCOL_VERSION: Final[int] = 2
+GRPC_SERVER_MAX_WORKERS: Final[int] = 4
+GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
+USAGE: Final[str] = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE]"
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from typing import Final
 
 from ._bootstrap import (
     BUNDLED_CONFIG_NAME,
@@ -13,7 +14,7 @@ from ._bootstrap import (
     write_bundled_plugin_config,
 )
 
-USAGE = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME"
+USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME"
 
 
 @dataclass(frozen=True)

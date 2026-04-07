@@ -6,7 +6,7 @@ import pathlib
 import re
 import sys
 import types
-from typing import Any
+from typing import Any, Final
 
 import yaml
 
@@ -19,7 +19,7 @@ from ._operations import (
     maybe_await,
 )
 
-DEFAULT_OPERATION_METHOD = "POST"
+DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
 
 class Plugin:
