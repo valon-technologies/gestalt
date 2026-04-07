@@ -1,0 +1,23 @@
+# Build from Source
+
+You can compile Gestalt directly from the Git repository. This requires Go 1.26 or later.
+
+## Clone and build
+
+```sh
+git clone https://github.com/valon-technologies/gestalt.git
+cd gestalt
+go install ./cmd/gestaltd
+go install ./cmd/gestalt
+```
+
+Both binaries are installed into `$GOPATH/bin`. Make sure that directory is on your `PATH`.
+
+## Verify
+
+```sh
+gestaltd version
+gestalt --help
+```
+
+Once both binaries are on your `PATH`, continue to [Getting Started](/getting-started).

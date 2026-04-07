@@ -8,20 +8,7 @@ exposed through the HTTP API, web UI, and `/mcp`.
 
 ## How it works
 
-Gestalt works in three stages:
-
-1. Configure platform auth, storage, secrets, providers, and optional MCP
-   naming.
-2. Connect users or shared identities to upstream systems through OAuth or
-   manual auth.
-3. Invoke the same provider catalog through the browser, HTTP API, CLI, or MCP.
-
-## What you can build
-
-- Inline REST providers defined entirely in YAML
-- OpenAPI, GraphQL, and upstream MCP integrations
-- Executable plugins with Go or Python
-- Custom web UI bundles packaged alongside provider releases
+You define providers in a YAML config, connect users or shared identities to upstream systems through OAuth or manual auth, then invoke the same provider catalog through the browser, HTTP API, CLI, or MCP. Providers can be inline REST definitions, OpenAPI or GraphQL specs, upstream MCP servers, or executable plugins written in Go or Python.
 
 ## Start here
 

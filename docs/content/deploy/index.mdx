@@ -1,13 +1,10 @@
+---
+asIndexPage: true
+---
+
 # Deploy
 
-Gestalt publishes two Docker images:
-
-| Image | Purpose |
-| --- | --- |
-| `valontechnologies/gestaltd:latest` | The server. Runs the HTTP API, web UI, and MCP endpoint. |
-| `valontechnologies/gestalt:latest` | The CLI client. Useful in CI pipelines and containerized environments. |
-
-Both images are published for `linux/amd64` and `linux/arm64`.
+The server image `valontechnologies/gestaltd:latest` is published for `linux/amd64` and `linux/arm64`. For the CLI client image, see [Client Docker Image](/client/docker).
 
 ## Production considerations
 
@@ -24,9 +21,13 @@ derived image. See [Configuration](/configuration) for the model and
 
 ## Deployment guides
 
-| Guide | Description |
-| --- | --- |
-| [Docker](/deploy/docker) | Run Gestalt with Docker or Docker Compose. |
-| [Helm](/deploy/helm) | Deploy to Kubernetes with the published Helm chart. |
+See [Docker](/deploy/docker) for Docker and Docker Compose, or [Helm](/deploy/helm) for Kubernetes with the published Helm chart.
 
-Gestalt runs on any container platform that supports a Docker image on port `8080` with environment variables, including Google Cloud Run, AWS App Runner, AWS ECS, Fly.io, Render, and Railway. Use the [Docker](/deploy/docker) guide as the base for any of these platforms.
+Gestalt runs on any container platform that supports a Docker image on port `8080` with environment variables. Use the [Docker](/deploy/docker) guide as the base for any of these:
+
+- [Google Cloud Run](https://cloud.google.com/run/docs/deploying)
+- [AWS App Runner](https://docs.aws.amazon.com/apprunner/latest/dg/service-source-image.html)
+- [AWS ECS](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-service.html)
+- [Fly.io](https://fly.io/docs/launch/deploy/)
+- [Render](https://render.com/docs/deploy-an-image)
+- [Railway](https://docs.railway.com/guides/dockerfiles)

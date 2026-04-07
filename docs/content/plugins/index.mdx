@@ -1,29 +1,14 @@
+---
+asIndexPage: true
+---
+
 # Plugins
 
-Gestalt uses one packaging system for three related extension types:
-
-- executable provider plugins
-- declarative provider packages
-- packaged web UI bundles
-
-This section focuses on the cases where you need to go beyond inline YAML.
+Gestalt uses one packaging system for executable provider plugins, declarative provider packages, and packaged web UI bundles. This section covers the cases where you need to go beyond inline YAML.
 
 ## When you need a plugin
 
-Use inline config when a provider can be described as:
-
-- declarative REST operations
-- an OpenAPI document
-- a GraphQL endpoint
-- an upstream MCP server
-
-Use an executable plugin when the provider needs logic that cannot be expressed
-that way, such as:
-
-- custom request or response shaping
-- multi-step workflows
-- proprietary protocols
-- request-scoped catalogs driven by runtime state
+Use inline config when a provider can be described as declarative REST operations, an OpenAPI document, a GraphQL endpoint, or an upstream MCP server. Use an executable plugin when the provider needs logic that those formats cannot express: custom request or response shaping, multi-step workflows, proprietary protocols, or request-scoped catalogs driven by runtime state.
 
 ## How plugins work
 
@@ -41,28 +26,8 @@ Plugins run in process isolation. They cannot access the datastore, other users'
 
 ## SDK support
 
-Gestalt currently ships first-party SDKs for:
-
-- Go (`sdk/go`)
-- Python (`sdk/python`)
-
-The underlying protocol is gRPC, so other languages are possible, but the
-documented authoring flow today is centered on the Go and Python SDKs.
+Gestalt ships first-party SDKs for Go (`sdk/go`) and Python (`sdk/python`). The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow is centered on those two.
 
 ## Packaging model
 
-The same manifest and release format can package:
-
-- a declarative provider with no executable binary
-- an executable provider plugin with bundled artifacts
-- a web UI bundle referenced through `ui.plugin`
-
-See [Plugin Manifests](/reference/plugin-manifests) for the exact manifest
-syntax.
-
-## Next steps
-
-- [Writing a Plugin](/plugins/writing-a-plugin) walks through building an
-  executable provider plugin with the Go or Python SDK.
-- [Packaging and Releasing](/plugins/packaging-and-releasing) covers provider
-  packages, release archives, and UI bundles.
+The same manifest and release format packages declarative providers (no binary), executable plugins with bundled artifacts, and web UI bundles referenced through `ui.plugin`. See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema, [Writing a Plugin](/plugins/writing-a-plugin) for the end-to-end authoring flow, and [Packaging and Releasing](/plugins/packaging-and-releasing) for release archives.

@@ -1,6 +1,6 @@
 # Security
 
-Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes. This page describes the trust boundaries, cryptographic design, and security-relevant configuration.
+Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes.
 
 ## Trust boundaries
 
@@ -46,14 +46,7 @@ The `server.encryption_key` is the root deployment secret. If the key is a 64-ch
 
 Every encryption operation generates a fresh 12-byte nonce using `crypto/rand`. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
 
-| Data | Storage method |
-| --- | --- |
-| OAuth access tokens | AES-256-GCM encrypted |
-| OAuth refresh tokens | AES-256-GCM encrypted |
-| Pending connection continuations | AES-256-GCM encrypted |
-| OAuth state parameters | AES-256-GCM encrypted (10-minute TTL) |
-| API tokens | SHA-256 hashed (one-way) |
-| User emails, display names | Plaintext |
+Access tokens, refresh tokens, pending connection state, and OAuth state parameters are all encrypted with AES-256-GCM. OAuth state carries a 10-minute TTL. API tokens are stored as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
 
 ## Token lifecycle
 
@@ -122,7 +115,4 @@ providers:
 
 ## Known limitations
 
-- Changing `server.encryption_key` requires re-encrypting all stored tokens. There is no automated key rotation.
-- Platform sessions cannot be explicitly revoked. They expire based on the configured TTL.
-- Rate limiting and CORS must be configured at the reverse proxy layer.
-- Gestalt encrypts tokens at the application level, but the database may store metadata in plaintext. Ensure appropriate database access controls.
+Changing `server.encryption_key` requires re-encrypting all stored tokens; there is no automated key rotation. Platform sessions cannot be explicitly revoked and expire based on the configured TTL. Rate limiting and CORS must be configured at the reverse proxy layer. Gestalt encrypts tokens at the application level, but the database may store metadata in plaintext, so appropriate database access controls are still important.

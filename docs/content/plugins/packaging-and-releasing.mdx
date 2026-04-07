@@ -6,13 +6,7 @@ optional executable artifacts, and optional static assets.
 
 ## What can be packaged
 
-Gestalt uses the same packaging system for:
-
-- declarative provider packages
-- executable provider plugins
-- packaged web UI bundles
-
-Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
+Gestalt uses the same packaging system for declarative provider packages, executable provider plugins, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
 
 ## Source manifests vs release manifests
 
@@ -92,12 +86,7 @@ webui:
   asset_root: ui/out
 ```
 
-Runtime behavior for UI bundles:
-
-- `gestaltd init` prepares the packaged UI and records it in `gestalt.lock.json`
-- `gestaltd serve --locked` serves the prepared asset root at `/`
-- if `ui.plugin` is omitted, Gestalt falls back to the built-in client UI
-- the built-in admin UI remains available at `/admin`
+`gestaltd init` prepares the packaged UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI. The built-in admin UI remains available at `/admin` regardless.
 
 ## Build a release
 

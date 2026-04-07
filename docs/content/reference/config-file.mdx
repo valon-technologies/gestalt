@@ -1,8 +1,6 @@
 # Config File
 
-Authoritative reference for `gestaltd` configuration.
-
-## Top-Level Shape
+Every `gestaltd` deployment reads a single YAML config file. The top-level keys map one-to-one with the subsystems they configure:
 
 ```yaml
 auth: {}
@@ -17,14 +15,9 @@ ui: {}
 
 ## Load Semantics
 
-- `${ENV_VAR}` expansion happens before YAML decode
-- If `${ENV_VAR}` is unset and `ENV_VAR_FILE` is set, Gestalt reads the value from that file path
-- Unknown YAML fields are rejected
-- `server.public.port` defaults to `8080` (via the legacy `server.port` shorthand)
-- `secrets.provider` defaults to `env`
-- `telemetry.provider` defaults to `stdout`
-- Relative paths resolve relative to the config file directory
-- `secret://...` values are resolved during bootstrap, not during YAML parsing
+`${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset but a corresponding `ENV_VAR_FILE` variable exists, Gestalt reads the value from that file path instead. Unknown YAML fields are rejected.
+
+Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
 
 ## `server`
 
@@ -42,34 +35,17 @@ server:
   artifacts_dir: ./state
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `public.host` | No | all interfaces | Host or IP for the public listener. |
-| `public.port` | No | `8080` | Port for the public listener. |
-| `management.host` | No | all interfaces | Host or IP for the optional management listener. |
-| `management.port` | No | — | Port for the optional management listener. When omitted, `/admin` and `/metrics` stay on the public listener. That mode is best kept to local development or other trusted-network deployments. |
-| `port` | No | `8080` | Backward-compatible shorthand for `public.port`. `public.port` takes precedence when both are set. |
-| `base_url` | No | — | Derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. |
-| `encryption_key` | Yes | — | Root deployment secret. Used for encryption and derived session material. |
-| `api_token_ttl` | No | `30d` | Lifetime of newly issued API tokens. Accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). |
-| `artifacts_dir` | No | Config file directory | Writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied. See [Configuration](/configuration). |
+`public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`. The legacy `port` shorthand still works but `public.port` takes precedence.
 
-For production, prefer configuring `server.management` so the operator surface
-leaves the public listener entirely.
+`management.host` and `management.port` bind a separate listener for operator traffic. When `management.port` is omitted, `/admin` and `/metrics` stay on the public listener, a mode best kept to local development or other trusted-network deployments. For production, prefer configuring `server.management` so the operator surface leaves the public listener entirely.
 
-When `server.management` is configured, Gestalt serves:
+`base_url` derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. When unset, the management admin UI omits the `Client UI` link rather than sending operators to a broken same-origin `/`.
 
-- public listener: `/`, `/api/v1/*`, auth routes, and `/mcp`
-- management listener: `/admin`, `/metrics`, `/health`, and `/ready`
+`encryption_key` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
 
-The management listener is intended to be protected by deployment infrastructure
-such as private networking, VPN, or an internal-only reverse proxy. Gestalt does
-not apply its own session or API-token auth to `/metrics` on the management
-listener.
+`api_token_ttl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifacts_dir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
-When `server.base_url` is set, the management admin UI uses that absolute URL
-for its `Client UI` link. When `server.base_url` is unset, the management admin
-UI omits that link rather than sending operators to a broken same-origin `/`.
+When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener.
 
 ## `auth`
 
@@ -91,9 +67,7 @@ auth:
     email: local@example.com
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `email` | No | `local@gestalt.local` | Identity of the single local user. |
+`email` sets the identity of the single local user. It defaults to `local@gestalt.local`.
 
 ### `google`
 
@@ -108,12 +82,7 @@ auth:
       - example.com
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `client_id` | Yes | — | Google OAuth client ID. |
-| `client_secret` | Yes | — | Google OAuth client secret. |
-| `redirect_url` | No | Derived from `server.base_url` | Login callback URL. |
-| `allowed_domains` | No | — | Restrict login to specific email domains. |
+`client_id` and `client_secret` are both required and identify your Google OAuth application. `redirect_url` defaults to a path derived from `server.base_url` when omitted. `allowed_domains` restricts login to specific email domains.
 
 Google checks `email_verified` on every login. Unverified accounts are rejected.
 
@@ -139,18 +108,11 @@ auth:
     display_name: Company SSO
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `issuer_url` | Yes | — | OIDC discovery base URL. |
-| `client_id` | Yes | — | OIDC client ID. |
-| `client_secret` | Conditional | — | OIDC client secret. May be omitted for PKCE-only public clients. |
-| `redirect_url` | No | Derived from `server.base_url` | Login callback URL. |
-| `allowed_domains` | No | — | Email-domain allowlist. |
-| `scopes` | No | `openid`, `email`, `profile` | OIDC scopes to request. |
-| `session_secret` | Yes | — | Secret for signing session tokens. |
-| `session_ttl` | No | `24h` | Session token lifetime. |
-| `pkce` | No | `false` | Enable PKCE for the login flow. |
-| `display_name` | No | `SSO` | Name shown in the login UI. |
+Three fields are required: `issuer_url` (the OIDC discovery base URL), `client_id`, and `session_secret` (used to sign session tokens). `client_secret` may be omitted for PKCE-only public clients.
+
+`redirect_url` defaults to a path derived from `server.base_url`. `allowed_domains` restricts login by email domain. `scopes` defaults to `openid`, `email`, and `profile`.
+
+`session_ttl` controls session token lifetime and defaults to `24h`. Set `pkce` to `true` to enable Proof Key for Code Exchange. `display_name` controls the label shown in the login UI, defaulting to `SSO`.
 
 OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
 
@@ -174,10 +136,7 @@ datastore:
 | `firestore` | `project_id`, `database` | Firestore-backed deployment. |
 | `sqlserver` | `dsn` | SQL Server-backed deployment. |
 
-Gestalt auto-detects and validates the connected backend release series for the
-versioned datastores below. Only MySQL currently uses an explicit `version`
-override because its SQL dialect changes across supported series. For the other
-datastores, a legacy `version` field is ignored for backward compatibility.
+Gestalt auto-detects and validates the connected backend release series for the versioned datastores below. Only MySQL currently uses an explicit `version` override because its SQL dialect changes across supported series. For the other datastores, a legacy `version` field is ignored for backward compatibility.
 
 - `postgres`: `15`, `16`, `17`, `18`
 - `mysql`: `8.0`, `8.4`, `9.6`
@@ -185,10 +144,7 @@ datastores, a legacy `version` field is ignored for backward compatibility.
 - `oracle`: `19c`, `26ai`
 - `sqlserver`: `2017`, `2019`, `2022`
 
-`sqlite` uses the bundled SQLite engine, and `dynamodb` / `firestore` are
-managed services, so those providers do not accept a `version` field. The
-`sqlserver` datastore targets SQL Server 2017, 2019, and 2022. Azure SQL
-Database, Azure SQL Managed Instance, Synapse, and Fabric are not supported.
+`sqlite` uses the bundled SQLite engine, and `dynamodb` / `firestore` are managed services, so those providers do not accept a `version` field. The `sqlserver` datastore targets SQL Server 2017, 2019, and 2022. Azure SQL Database, Azure SQL Managed Instance, Synapse, and Fabric are not supported.
 
 ## `secrets`
 
@@ -210,7 +166,7 @@ secrets:
 
 ## `telemetry`
 
-Controls distributed traces, metrics, and structured logs. Gestalt uses [OpenTelemetry](https://opentelemetry.io) under the hood. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
+Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, metrics, and structured logs. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
 
 ### `stdout`
 
@@ -223,19 +179,9 @@ telemetry:
     service_name: gestaltd
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `format` | No | `text` | `text` or `json`. |
-| `level` | No | `info` | Minimum audit log level for this dedicated stdout audit sink. `warn` keeps denied audit events while suppressing successful ones. |
-| `level` | No | `info` | `debug`, `info`, `warn`, or `error`. |
-| `service_name` | No | `gestaltd` | Service name attached to locally exposed metrics. |
-| `resource_attributes` | No | — | Extra resource attributes attached to local metrics. |
-| `metrics.prometheus.enabled` | No | `true` | Enables the Prometheus scrape endpoint at `/metrics`. |
+Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default provider when `telemetry` is omitted.
 
-Outputs structured logs to standard output. Traces remain disabled, but metrics
-are collected locally and exposed through the Prometheus-compatible `/metrics`
-endpoint. The built-in admin UI at `/admin` reads that same scrape surface.
-This is the default provider when `telemetry` is omitted.
+`format` selects `text` or `json` output and defaults to `text`. `level` sets the minimum log level (`debug`, `info`, `warn`, or `error`) and defaults to `info`. `service_name` is attached to locally exposed metrics and defaults to `gestaltd`. You can attach extra key-value pairs to local metrics through `resource_attributes`. The Prometheus scrape endpoint at `/metrics` is enabled by default and can be toggled with `metrics.prometheus.enabled`.
 
 ### `otlp`
 
@@ -261,24 +207,13 @@ telemetry:
       level: info
 ```
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `endpoint` | No | SDK default | OTLP collector address. |
-| `protocol` | No | `grpc` | `grpc` or `http`. |
-| `service_name` | No | `gestaltd` | OpenTelemetry service name. |
-| `insecure` | No | `false` | Skip TLS verification. |
-| `headers` | No | — | Extra headers on every export request. |
-| `resource_attributes` | No | — | Key-value pairs attached as resource attributes. |
-| `traces.sampling_ratio` | No | `1.0` | Fraction of traces to sample, `0.0` to `1.0`. |
-| `metrics.interval` | No | `60s` | OTLP metric export interval. |
-| `metrics.prometheus.enabled` | No | `true` | Enables the local Prometheus scrape endpoint at `/metrics`. |
-| `logs.exporter` | No | `otlp` | `otlp` exports logs over OTLP, `stdout` keeps logs on standard output. |
-| `logs.level` | No | `info` | Minimum log level for the configured log exporter. |
-| `logs.format` | No | `text` | `text` or `json` when `logs.exporter` is `stdout`. |
+Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI at `/admin` reads that same local scrape surface.
 
-Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy,
-Datadog Agent) while still keeping local `/metrics` available by default. The
-built-in admin UI at `/admin` reads that same local scrape surface.
+`endpoint` sets the OTLP collector address and defaults to the SDK default. `protocol` selects `grpc` (the default) or `http`, and `insecure` skips TLS verification when set to `true`. `headers` adds extra headers on every export request. `service_name` defaults to `gestaltd`, and `resource_attributes` attaches arbitrary key-value pairs as OpenTelemetry resource attributes.
+
+`traces.sampling_ratio` controls the fraction of traces sampled, from `0.0` to `1.0` (default `1.0`). `metrics.interval` sets the OTLP metric export interval, defaulting to `60s`. The local Prometheus scrape endpoint stays enabled by default and can be toggled with `metrics.prometheus.enabled`.
+
+`logs.exporter` controls where logs go: `otlp` (the default) exports them over OTLP, while `stdout` keeps them on standard output. `logs.level` sets the minimum log level, defaulting to `info`. `logs.format` selects `text` or `json` when the exporter is `stdout`.
 
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
@@ -303,9 +238,7 @@ telemetry:
   provider: noop
 ```
 
-Disables all telemetry. Instrumentation points remain but produce zero overhead.
-This disables Prometheus scraping. `/metrics` returns a clear unavailable
-response, and the built-in admin UI shows that metrics are unavailable.
+Disables all telemetry. Instrumentation points remain but produce zero overhead. This disables Prometheus scraping. `/metrics` returns a clear unavailable response, and the built-in admin UI shows that metrics are unavailable.
 
 ### Trace spans
 
@@ -317,18 +250,11 @@ response, and the built-in admin UI shows that metrics are unavailable.
 
 ### Audit logs
 
-Audit records are emitted as structured log entries with `log.type=audit`.
-By default they inherit the normal telemetry log pipeline, but you can override
-that with the top-level `audit:` block below. See
-[Audit Logging](/audit-logging) for the event schema and coverage details, and
-[Observability](/observability) for export options. If you keep
-`audit.provider: inherit`, you can still route audit traffic to a dedicated
-backend by filtering on `log.type=audit` in your collector.
+Audit records are emitted as structured log entries with `log.type=audit`. By default they inherit the normal telemetry log pipeline, but you can override that with the top-level `audit` block below. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `audit.provider: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
 
 ## `audit`
 
-Controls where audit records are written. Audit output defaults to inheriting
-the main telemetry logger.
+Audit output defaults to inheriting the main telemetry logger. Override it here to send audit records to a dedicated sink.
 
 ### `inherit`
 
@@ -337,12 +263,7 @@ audit:
   provider: inherit
 ```
 
-This is the default when `audit` is omitted. Audit records follow the same log
-route as `telemetry`:
-
-- `telemetry.provider: stdout` keeps audit logs on standard output
-- `telemetry.provider: otlp` exports audit logs through the OTLP log pipeline
-- `telemetry.provider: noop` disables audit output unless you override it
+This is the default when `audit` is omitted. Audit records follow the same log route as `telemetry`: when telemetry uses `stdout`, audit logs go to standard output; when telemetry uses `otlp`, audit logs export through the OTLP log pipeline; when telemetry uses `noop`, audit output is disabled unless you override it here.
 
 `audit.config` is not allowed when `audit.provider` is `inherit`.
 
@@ -355,13 +276,7 @@ audit:
     format: json
 ```
 
-Writes audit records to standard output even if the main telemetry pipeline is
-using a different provider.
-
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `format` | No | `text` | `text` or `json`. |
-| `level` | No | `info` | Minimum audit log level for this dedicated stdout audit sink. `warn` keeps denied audit events while suppressing successful ones. |
+Writes audit records to standard output even if the main telemetry pipeline is using a different provider. `format` selects `text` (the default) or `json`. `level` sets the minimum audit log level, defaulting to `info`. Setting it to `warn` keeps denied audit events while suppressing successful ones.
 
 ### `otlp`
 
@@ -379,20 +294,9 @@ audit:
       log.stream: audit
 ```
 
-Exports audit records over OTLP without changing where application logs,
-metrics, or traces go.
+Exports audit records over OTLP without changing where application logs, metrics, or traces go. Use this when you want audit records in a dedicated compliance pipeline while keeping the rest of `gestaltd` on `stdout` or a different OTLP collector.
 
-| Field | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `endpoint` | No | SDK default | OTLP collector address. |
-| `protocol` | No | `grpc` | `grpc` or `http`. |
-| `service_name` | No | `gestaltd` | OpenTelemetry service name for exported audit logs. |
-| `insecure` | No | `false` | Skip TLS verification. |
-| `headers` | No | — | Extra headers on every export request. |
-| `resource_attributes` | No | — | Extra resource attributes attached to audit log exports. |
-
-Use this when you want audit records in a dedicated compliance pipeline while
-keeping the rest of `gestaltd` on `stdout` or a different OTLP collector.
+`endpoint` sets the OTLP collector address and defaults to the SDK default. `protocol` selects `grpc` (the default) or `http`, and `insecure` skips TLS verification when set to `true`. `service_name` defaults to `gestaltd` and is attached to exported audit logs. `headers` adds extra headers on every export request, and `resource_attributes` attaches extra key-value pairs to audit log exports.
 
 ### `noop`
 
@@ -401,13 +305,11 @@ audit:
   provider: noop
 ```
 
-Disables audit output explicitly. `audit.config` is not allowed when
-`audit.provider` is `noop`.
+Disables audit output explicitly. `audit.config` is not allowed when `audit.provider` is `noop`.
 
 ## `providers`
 
-Config uses a top-level `providers:` map. Each provider entry is provider-shaped
-directly: there is no nested `plugin:` block anymore.
+Each entry in the top-level `providers` map is provider-shaped directly; there is no nested `plugin` block.
 
 ```yaml
 providers:
@@ -432,25 +334,17 @@ providers:
       tool_prefix: github_
 ```
 
-The config key is `providers`, but the HTTP API and client CLI still refer to
-these named entries as integrations.
+The config key is `providers`, but the HTTP API and client CLI still refer to these named entries as integrations.
 
 ### Provider fields
 
-| Field | Purpose |
-| --- | --- |
-| `display_name` | UI and API display name override. |
-| `description` | UI and API description override. |
-| `icon_file` | SVG icon path resolved from the config directory. |
-| `config` | Provider-specific config passed into packaged providers. |
-| `from` | Optional packaged/executable source. Omit it for fully inline providers. |
-| `connections` | Named connections. `default` is common but not required if every surface names its connection explicitly. |
-| `headers` | Static headers applied to declarative or spec-backed requests. |
-| `managed_parameters` | Fixed header or path values injected into OpenAPI or GraphQL-backed operations before exposure. |
-| `response_mapping` | Data and pagination mapping for OpenAPI or GraphQL providers. |
-| `allowed_operations` | Surface allowlist plus `alias` and `description` overrides. |
-| `surfaces` | Declarative REST, OpenAPI, GraphQL, and MCP surfaces. |
-| `mcp` | MCP exposure settings such as `enabled` and `tool_prefix`. |
+`display_name`, `description`, and `icon_file` control how the provider appears in the UI and API. `icon_file` is an SVG path resolved from the config directory.
+
+`from` specifies the provider's backing source plugin. Omit it for fully inline providers. `config` passes provider-specific configuration into packaged providers.
+
+`connections` declares named connections. `default` is a common convention but not required if every surface names its connection explicitly. `headers` sets static headers applied to declarative or spec-backed requests. `managed_parameters` injects fixed header or path values into OpenAPI or GraphQL-backed operations before exposure. `response_mapping` configures data and pagination mapping for OpenAPI or GraphQL providers.
+
+`allowed_operations` acts as a surface allowlist and supports `alias` and `description` overrides per operation. `surfaces` declares the provider's declarative REST, OpenAPI, GraphQL, and MCP surfaces. `mcp` controls MCP exposure settings such as `enabled` and `tool_prefix`.
 
 ### `providers.*.from`
 
@@ -462,19 +356,13 @@ from:
     path: ./plugin.yaml
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `source.path` | Load a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. |
-| `source.ref` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
-| `source.version` | Required with `source.ref`. Invalid with `source.path`. |
-| `env` | Extra environment variables for executable providers. |
-| `allowed_hosts` | Optional network allowlist for sandboxed plugin processes. |
+`source.path` loads a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. `source.ref` resolves a versioned plugin source during `init` using the format `github.com/<org>/<repo>/<plugin>`, and requires `source.version`. `source.path` and `source.ref` are mutually exclusive.
 
-`source`, `package`, and `command` define how the provider is loaded. `source.path` and `source.ref` are mutually exclusive. `command` is an optional override within local `source.path` mode.
+`env` passes extra environment variables to executable providers. `allowed_hosts` sets an optional network allowlist for sandboxed plugin processes. `command` is an optional override within local `source.path` mode.
 
 ### Auth shapes inside `connections`
 
-Every connection auth block uses the same shape:
+Every connection auth block uses the same shape.
 
 ```yaml
 connections:
@@ -503,33 +391,19 @@ connections:
         - workspace_id
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `type` | `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
-| `authorization_url` | OAuth authorization endpoint. |
-| `token_url` | OAuth token endpoint. |
-| `client_id`, `client_secret` | OAuth client credentials. |
-| `redirect_url` | Override the derived callback URL. |
-| `client_auth` | How client credentials are sent: `body` (default) or `header`. |
-| `token_exchange` | Token request encoding: `form` (default) or `json`. |
-| `scopes` | OAuth scopes to request. |
-| `scope_param` | Query parameter name for scopes. Defaults to `scope`. Set to `user_scope` for Slack and other providers that use a non-standard parameter. |
-| `scope_separator` | Separator between scope values. Defaults to space. |
-| `pkce` | Enable Proof Key for Code Exchange. |
-| `authorization_params` | Extra query parameters on the authorization request. |
-| `token_params` | Extra parameters on the token exchange request. |
-| `refresh_params` | Extra parameters on the token refresh request. |
-| `accept_header` | `Accept` header for the token endpoint. |
-| `token_metadata` | Fields to extract from the token response and store as connection metadata. |
+`type` selects the auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. For OAuth2 connections, `authorization_url` and `token_url` point to the provider's OAuth endpoints, and `client_id` and `client_secret` supply the client credentials. `redirect_url` overrides the callback URL that would otherwise be derived from `server.base_url`.
 
-`mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates
-authorization URL and token URL resolution to the upstream MCP server.
+`client_auth` controls how credentials are sent to the token endpoint: `body` (the default) or `header`. `token_exchange` selects the token request encoding: `form` (the default) or `json`. `accept_header` sets the `Accept` header for the token endpoint.
+
+`scopes` lists OAuth scopes to request. `scope_param` overrides the query parameter name (defaults to `scope`; set to `user_scope` for Slack and other providers that use a non-standard parameter). `scope_separator` controls the separator between scope values, defaulting to space. Set `pkce` to `true` to enable Proof Key for Code Exchange.
+
+`authorization_params`, `token_params`, and `refresh_params` inject extra parameters into their respective OAuth requests. `token_metadata` lists fields to extract from the token response and store as connection metadata.
+
+`mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates authorization URL and token URL resolution to the upstream MCP server.
 
 #### Manual auth with custom credential fields
 
-For manual-auth connections, you can customize the credential input form with
-`credentials`. Each entry defines a field the user must fill in, with an
-optional label, description, and help URL.
+For manual-auth connections, `credentials` customizes the credential input form. Each entry defines a field the user must fill in, with an optional label, description, and help URL.
 
 Single credential with a custom label:
 
@@ -544,8 +418,7 @@ connections:
           help_url: https://app.example.com/settings/tokens
 ```
 
-Multiple credentials require `auth_mapping` to map each field to an HTTP
-header:
+Multiple credentials require `auth_mapping` to map each field to an HTTP header:
 
 ```yaml
 connections:
@@ -565,13 +438,7 @@ connections:
           DD-APPLICATION-KEY: app_key
 ```
 
-| Field | Notes |
-| --- | --- |
-| `credentials[].name` | Internal identifier for the field. Must be unique, lowercase with underscores. |
-| `credentials[].label` | Display label shown in the UI. Falls back to `name` if omitted. |
-| `credentials[].description` | Hint text shown below the label. Supports inline links via `[text](url)`. |
-| `credentials[].help_url` | Link displayed next to the label for where to find the credential. |
-| `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
+Each credential entry has a `name` (a unique, lowercase-with-underscores identifier) and an optional `label` that the UI displays instead of the raw name. `description` adds hint text below the label and supports inline links via `[text](url)`. `help_url` places a link next to the label pointing to where the credential can be found. `auth_mapping.headers` maps credential field names to HTTP headers and is required when multiple credentials are declared.
 
 `credentials` is required when `auth.type` is `manual`.
 
@@ -597,20 +464,9 @@ connections:
       type: mcp_oauth
 ```
 
-Only `connections.default` may define:
+Only `connections.default` may define `params` and `discovery`.
 
-- `params`
-- `discovery`
-
-Connection modes:
-
-- `none`
-- `user`
-- `identity`
-- `either`
-
-If you omit `connections.default` and use only named connections, every
-configured surface must set its own `connection`.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, `user` requires each user to connect individually, `identity` uses a shared operator credential, and `either` accepts both user and identity connections. If you omit `connections.default` and use only named connections, every configured surface must set its own `connection`.
 
 #### Post-connect discovery
 
@@ -637,8 +493,7 @@ connections:
 
 ### `surfaces`
 
-`surfaces.rest`, `surfaces.openapi`, and `surfaces.graphql` are mutually
-exclusive. `surfaces.mcp` can be added alongside any of them.
+`surfaces.rest`, `surfaces.openapi`, and `surfaces.graphql` are mutually exclusive. `surfaces.mcp` can be added alongside any of them.
 
 #### Declarative REST
 
@@ -655,15 +510,7 @@ surfaces:
         path: /tickets/{ticket_id}
 ```
 
-Each declarative operation accepts:
-
-- `name`
-- `description`
-- `method`
-- `path`
-- `parameters`
-
-Parameter locations can be `query`, `body`, or `path`.
+Each declarative operation accepts `name`, `description`, `method`, `path`, and `parameters`. Parameter locations can be `query`, `body`, or `path`.
 
 #### OpenAPI, GraphQL, and MCP
 
@@ -677,15 +524,7 @@ surfaces:
     connection: mcp
 ```
 
-| Surface field | Purpose |
-| --- | --- |
-| `surfaces.rest.base_url` | Base URL for declarative REST operations. |
-| `surfaces.rest.operations` | Inline declarative REST operations. |
-| `surfaces.openapi.document` | OpenAPI document URL or local file path. |
-| `surfaces.openapi.base_url` | Optional runtime base URL override for OpenAPI. |
-| `surfaces.graphql.url` | GraphQL endpoint URL. |
-| `surfaces.mcp.url` | Upstream MCP endpoint URL. |
-| `surfaces.*.connection` | Connection name for that surface. |
+For REST surfaces, `surfaces.rest.base_url` sets the base URL and `surfaces.rest.operations` declares inline operations. `surfaces.openapi.document` points to an OpenAPI document URL or local file path, and `surfaces.openapi.base_url` provides an optional runtime base URL override. `surfaces.graphql.url` sets the GraphQL endpoint. `surfaces.mcp.url` points to an upstream MCP endpoint. Any surface can set `surfaces.*.connection` to name the connection it should use.
 
 ### Managed parameters
 
@@ -739,8 +578,7 @@ mcp:
 
 ## `egress`
 
-Use `egress` to control outbound requests made through providers and to grant
-operator-managed credentials to specific outbound destinations.
+`egress` controls outbound requests made through providers and grants operator-managed credentials to specific outbound destinations.
 
 ```yaml
 egress:
@@ -756,14 +594,7 @@ egress:
       host: api.github.com
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `default_action` | Global fallback policy. `allow` or `deny`. |
-| `policies` | Static allow or deny rules matched by provider, operation, method, host, path, or subject. |
-| `credentials` | Secret-backed outbound credential grants matched by subject, method, host, or path. |
-
-For credential grants, `auth_style` may be `bearer`, `raw`, `basic`, or
-`none`.
+`default_action` sets the global fallback policy to `allow` or `deny`. `policies` declares static allow or deny rules matched by provider, operation, method, host, path, or subject. `credentials` attaches secret-backed outbound credentials matched by subject, method, host, or path. For credential grants, `auth_style` may be `bearer`, `raw`, `basic`, or `none`.
 
 ## `ui`
 
@@ -774,16 +605,7 @@ ui:
     version: 1.0.0
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `plugin.source` | Managed plugin source address. Requires `version`. |
-| `plugin.version` | Required with `source`. Must be valid SemVer without leading `v`. |
-
-When `ui` is omitted, `gestaltd` serves the built-in client UI at `/`. When
-`ui.plugin` is configured, the plugin's assets replace that client UI at `/`.
-The built-in admin UI remains available at `/admin`. See
-[Packaging and Releasing](/plugins/packaging-and-releasing) for the full
-workflow.
+`plugin.source` is a managed plugin source address and requires `plugin.version`, which must be valid SemVer without a leading `v`. When `ui` is omitted, `gestaltd` serves the built-in client UI at `/`. When `ui.plugin` is configured, the plugin's assets replace that client UI at `/`. The built-in admin UI remains available at `/admin`. See [Packaging and Releasing](/plugins/packaging-and-releasing) for the full workflow.
 
 ## Validation Rules
 

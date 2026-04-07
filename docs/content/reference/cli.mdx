@@ -1,13 +1,8 @@
-# CLI
+# Server CLI
 
-Gestalt ships two CLIs:
+`gestaltd` manages server lifecycle and plugin releases.
 
-- `gestaltd` for server lifecycle and plugin releases
-- `gestalt` for interactive access to a running server
-
-## `gestaltd`
-
-### Server Commands
+## Server commands
 
 | Command | Purpose |
 | --- | --- |
@@ -18,13 +13,13 @@ Gestalt ships two CLIs:
 | `gestaltd validate --config PATH` | Validate config without serving. |
 | `gestaltd version` | Print the server version. |
 
-### Plugin Commands
+## Plugin commands
 
 | Command | Purpose |
 | --- | --- |
 | `gestaltd plugin release --version VERSION` | Build and package a plugin release. Go source plugins can target multiple platforms; Python source plugins build a current-platform executable artifact. |
 
-### Common Examples
+## Examples
 
 ```sh
 gestaltd
@@ -34,99 +29,4 @@ gestaltd validate --config ./config.yaml
 gestaltd plugin release --version 0.1.0
 ```
 
-See [Configuration](/configuration) for the relationship between `init`,
-`serve --locked`, and `validate`.
-
-## `gestalt`
-
-`gestalt` talks to the HTTP API exposed by `gestaltd`.
-
-### Global Flags
-
-| Flag | Purpose |
-| --- | --- |
-| `--url` | Override the server URL. |
-| `--format` | Output format. `json` or `table`. |
-
-### Commands
-
-| Command | Purpose |
-| --- | --- |
-| `gestalt auth login` | Log in through the browser flow. |
-| `gestalt auth logout` | Clear local credentials. |
-| `gestalt auth status` | Show current auth state. |
-| `gestalt init` | Run the interactive setup wizard. |
-| `gestalt config get|set|unset|list` | Manage the local client config. |
-| `gestalt integrations list` | List integrations from the server. |
-| `gestalt integrations connect NAME` | Connect an integration through OAuth or interactive manual auth. |
-| `gestalt invoke INTEGRATION [OPERATION]` | Invoke an operation or list operations when omitted. |
-| `gestalt describe INTEGRATION OPERATION` | Show one operation's parameter contract. |
-| `gestalt tokens create|list|revoke` | Manage Gestalt API tokens. |
-
-### URL Resolution
-
-The `gestalt` client resolves the server URL in this order:
-
-1. `--url`
-2. `GESTALT_URL`
-3. project-local `.gestalt.json`
-4. global CLI config from `gestalt config set url ...`
-5. the saved server URL from stored login credentials
-6. `http://localhost:8080`
-
-For auth, the CLI uses this order:
-
-1. `GESTALT_API_KEY`
-2. stored credentials from `gestalt auth login`
-
-### Project Config File
-
-`gestalt init` can create a `.gestalt.json` file in the current directory.
-This file is a project-local override for the server URL. It is intended for
-cases where one checkout or deployment directory should always point to a
-specific Gestalt server without changing your machine-wide default.
-
-The file currently stores only the URL:
-
-```json
-{
-  "url": "https://gestalt.example.com"
-}
-```
-
-When present, the CLI searches the current directory and then parent
-directories until it finds the nearest `.gestalt.json`.
-
-### Integration Connect Flags
-
-`gestalt integrations connect NAME` supports:
-
-- `--connection`
-- `--instance`
-
-When the selected integration or connection uses manual auth instead of OAuth,
-the CLI now prompts for the required credential fields and connection
-parameters using the same metadata surfaced in the web UI.
-
-### Invoke Flags
-
-`gestalt invoke` supports:
-
-- `-p`, `--param key=value`
-- `--input-file file.json`
-- `--connection`
-- `--instance`
-- `--select`
-
-### Common Examples
-
-```sh
-gestalt --url http://localhost:8080 integrations list
-gestalt --url http://localhost:8080 integrations connect notion --connection MCP
-gestalt --url http://localhost:8080 describe slack chat.postMessage
-gestalt --url http://localhost:8080 invoke slack chat.postMessage \
-  --connection plugin \
-  -p channel=C123 \
-  -p text='hello'
-gestalt --url http://localhost:8080 tokens create --name automation
-```
+See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.
