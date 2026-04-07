@@ -230,13 +230,11 @@ export GESTALT_URL=${origin}`}
                 <code className="font-mono text-sm text-primary">
                   .gestalt/config.json
                 </code>,{" "}
-                user-local CLI config file, then{" "}
+                user-local{" "}
                 <code className="font-mono text-sm text-primary">
-                  http://localhost:8080
-                </code>{" "}
-                when{" "}
-                <code className="font-mono text-sm text-primary">/health</code>{" "}
-                responds.
+                  ~/.config/gestalt/config.json
+                </code>
+                .
               </p>
 
               <Subheading id="authenticate" title="Authenticate" />

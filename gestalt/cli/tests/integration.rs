@@ -60,7 +60,7 @@ impl EnvGuard {
         ];
         unsafe {
             std::env::set_var("HOME", config_root);
-            std::env::set_var("XDG_CONFIG_HOME", config_root);
+            std::env::set_var("XDG_CONFIG_HOME", config_root.join("xdg-config"));
             std::env::remove_var("GESTALT_URL");
             std::env::remove_var(gestalt::api::ENV_API_KEY);
         }

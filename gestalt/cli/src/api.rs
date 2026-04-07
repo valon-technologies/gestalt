@@ -6,7 +6,6 @@ use reqwest::header::{self, HeaderValue};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::time::Duration;
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -52,14 +51,10 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     if let Some(url) = ConfigStore::new()?.get("url")? {
         return Ok(normalize_url(&url));
     }
-    if probe_default_url()? {
-        return Ok(DEFAULT_URL.to_string());
-    }
 
     bail!(
-        "no URL configured: pass --url, set GESTALT_URL, add {}, or run 'gestalt config set url ...'. The default local server at {} was not reachable.",
-        PROJECT_CONFIG_FILE,
-        DEFAULT_URL
+        "no URL configured: use --url, GESTALT_URL, {}, or ~/.config/gestalt/config.json",
+        PROJECT_CONFIG_FILE
     )
 }
 
@@ -92,18 +87,6 @@ fn read_project_config_value(path: &Path, key: &str) -> Result<Option<String>> {
     let map: BTreeMap<String, String> = serde_json::from_str(&contents)
         .with_context(|| format!("failed to parse project config {}", path.display()))?;
     Ok(map.get(key).cloned())
-}
-
-fn probe_default_url() -> Result<bool> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(1))
-        .build()
-        .context("failed to build HTTP client for default URL probe")?;
-    let health_url = format!("{DEFAULT_URL}/health");
-    match client.get(&health_url).send() {
-        Ok(resp) => Ok(resp.status().is_success()),
-        Err(_) => Ok(false),
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
