@@ -125,6 +125,11 @@ func (p *Provider) greet(
 
 You do not write `main.go`. Gestalt synthesizes the executable wrapper automatically for local source execution, packaging, and release.
 
+By default, typed input decode failures return a structured `400` response, and
+unhandled handler errors or panics return a structured `500` response. Return a
+non-2xx `gestalt.Response[...]` explicitly when the operation wants to signal a
+deliberate application-level error.
+
 ## Python typed operations
 
 Point `pyproject.toml` at the module or plugin object that Gestalt should load:
@@ -173,6 +178,11 @@ If your plugin needs startup config, define a plain top-level
 `configure(name, config)` function. It does not need a decorator.
 
 You do not write a launcher script for local development or release. Gestalt loads the module declared in `[tool.gestalt].plugin`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
+
+By default, input decode failures return a structured `400` response, and
+unhandled exceptions return a structured `500` response. Return
+`gestalt.Response(...)` explicitly when the operation wants to signal a
+deliberate application-level error.
 
 ## Write `plugin.yaml`
 

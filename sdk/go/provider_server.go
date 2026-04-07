@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"net/http"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
@@ -53,24 +54,20 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	}, nil
 }
 
-func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
+func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (resp *proto.OperationResult, err error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	result, err := s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
-	}
+	result := protectedOperationResult(req.GetOperation(), func() (*OperationResult, error) {
+		return s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	})
 	if result == nil {
-		return nil, status.Error(codes.Internal, "provider returned nil result")
+		return operationResultProto(operationResult(http.StatusInternalServerError, nilResultMessage)), nil
 	}
-	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
-	}, nil
+	return operationResultProto(result), nil
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
@@ -95,4 +92,14 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 func supportsSessionCatalog(p executableProvider) bool {
 	_, ok := p.sessionCatalogProvider()
 	return ok
+}
+
+func operationResultProto(result *OperationResult) *proto.OperationResult {
+	if result == nil {
+		return nil
+	}
+	return &proto.OperationResult{
+		Status: int32(result.Status),
+		Body:   result.Body,
+	}
 }

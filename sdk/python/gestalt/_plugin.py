@@ -1,17 +1,21 @@
 import asyncio
 import dataclasses
+from http import HTTPStatus
 import inspect
 import json
 import pathlib
 import re
 import sys
+import traceback
 import types
 from dataclasses import MISSING
-from typing import Any, Generic, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
+from typing import Any, Final, Generic, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
 
 import yaml
 
-ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG"
+ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
+ERROR_FIELD: Final[str] = "error"
+UNKNOWN_OPERATION_MESSAGE: Final[str] = "unknown operation"
 
 T = TypeVar("T")
 
@@ -32,7 +36,7 @@ class Response(Generic[T]):
 
 
 def OK(body: T) -> Response[T]:
-    return Response(status=200, body=body)
+    return Response(status=int(HTTPStatus.OK), body=body)
 
 
 def field(
@@ -150,22 +154,28 @@ class Plugin:
     def execute(self, operation: str, params: dict[str, Any], request: Request) -> tuple[int, str]:
         op = self._operations.get(operation)
         if op is None:
-            return 404, json.dumps({"error": "unknown operation"})
+            return _error_result(HTTPStatus.NOT_FOUND, UNKNOWN_OPERATION_MESSAGE)
 
         args: list[Any] = []
         if op.input_type is not None:
-            args.append(_decode_input(op.input_type, params))
+            try:
+                args.append(_decode_input(op.input_type, params))
+            except Exception as err:
+                return _error_result(HTTPStatus.BAD_REQUEST, str(err))
         if op.takes_request:
             args.append(request)
 
-        result = _maybe_await(op.handler(*args))
-        if isinstance(result, Response):
-            status = result.status if result.status is not None else 200
-            body = result.body
-        else:
-            status = 200
-            body = result
-        return status, _json_body(body)
+        try:
+            result = _maybe_await(op.handler(*args))
+            if isinstance(result, Response):
+                status = result.status if result.status is not None else int(HTTPStatus.OK)
+                body = result.body
+            else:
+                status = int(HTTPStatus.OK)
+                body = result
+            return status, _json_body(body)
+        except Exception as err:
+            return _internal_error_result(err)
 
     def catalog_dict(self) -> dict[str, Any]:
         return {
@@ -483,6 +493,15 @@ def _is_optional_type(annotation: Any) -> bool:
 
 def _json_body(value: Any) -> str:
     return json.dumps(_json_value(value), separators=(",", ":"))
+
+
+def _error_result(status: int | HTTPStatus, message: str) -> tuple[int, str]:
+    return int(status), _json_body({ERROR_FIELD: message})
+
+
+def _internal_error_result(err: Exception) -> tuple[int, str]:
+    traceback.print_exc()
+    return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
 
 
 def _json_value(value: Any) -> Any:

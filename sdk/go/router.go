@@ -73,12 +73,12 @@ func Register[P any, In any, Out any](
 		execute: func(ctx context.Context, provider *P, rawParams map[string]any, req Request) (*OperationResult, error) {
 			var input In
 			if err := decodeParams(rawParams, &input); err != nil {
-				return nil, fmt.Errorf("decode params for %q: %w", op.ID, err)
+				return nil, newOperationError(http.StatusBadRequest, fmt.Sprintf("decode params for %q: %v", op.ID, err), err)
 			}
 
 			resp, err := handler(provider, ctx, input, req)
 			if err != nil {
-				return nil, err
+				return nil, newOperationError(http.StatusInternalServerError, err.Error(), err)
 			}
 
 			status := resp.Status
@@ -87,7 +87,7 @@ func Register[P any, In any, Out any](
 			}
 			body, err := json.Marshal(resp.Body)
 			if err != nil {
-				return nil, fmt.Errorf("marshal response for %q: %w", op.ID, err)
+				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
 			}
 			return &OperationResult{Status: status, Body: string(body)}, nil
 		},
@@ -191,19 +191,22 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 // Execute decodes params into the typed input struct and dispatches the named operation.
 func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, params map[string]any, token string) (*OperationResult, error) {
 	if r == nil {
-		return nil, fmt.Errorf("router is nil")
+		return operationResult(http.StatusInternalServerError, routerNilMessage), nil
 	}
 	handler, ok := r.handlers[operation]
 	if !ok {
-		return &OperationResult{
-			Status: http.StatusNotFound,
-			Body:   `{"error":"unknown operation"}`,
-		}, nil
+		return operationResult(http.StatusNotFound, unknownOperationMessage), nil
 	}
-	return handler(ctx, provider, params, Request{
-		Token:            token,
-		ConnectionParams: ConnectionParams(ctx),
+	result := protectedOperationResult(operation, func() (*OperationResult, error) {
+		return handler(ctx, provider, params, Request{
+			Token:            token,
+			ConnectionParams: ConnectionParams(ctx),
+		})
 	})
+	if result == nil {
+		return operationResult(http.StatusInternalServerError, nilResultMessage), nil
+	}
+	return result, nil
 }
 
 func encodeCatalogYAML(cat *Catalog) ([]byte, error) {
