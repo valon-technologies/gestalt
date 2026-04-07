@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import pathlib
+import re
 import sys
 import types
 from typing import Any
@@ -219,7 +220,7 @@ def _derive_name_from_manifest(path: pathlib.Path) -> str:
         return _slug_name(fallback_name)
 
     try:
-        if path.suffix.lower() == ".json":
+        if manifest_path.suffix.lower() == ".json":
             data = json.loads(text)
         else:
             data = yaml.safe_load(text)
@@ -240,18 +241,5 @@ def _derive_name_from_manifest(path: pathlib.Path) -> str:
 
 
 def _slug_name(value: str) -> str:
-    cleaned = []
-    previous_was_separator = False
-
-    for character in value.strip():
-        is_supported = character.isalnum() or character in "._-"
-        if is_supported:
-            cleaned.append(character)
-            previous_was_separator = False
-            continue
-        if previous_was_separator:
-            continue
-        cleaned.append("-")
-        previous_was_separator = True
-
-    return "".join(cleaned).strip("-") or "plugin"
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-")
+    return cleaned or "plugin"

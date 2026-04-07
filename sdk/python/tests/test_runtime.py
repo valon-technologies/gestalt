@@ -101,6 +101,30 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(plugin.name, "Released-Plugin")
 
+    def test_plugin_from_manifest_uses_yaml_when_directory_name_ends_with_json(self) -> None:
+        """Directory names should not affect manifest format detection."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_dir = pathlib.Path(tmpdir) / "plugin.json"
+            manifest_dir.mkdir()
+            (manifest_dir / "plugin.yaml").write_text(
+                'display_name: "Directory Manifest"\n',
+                encoding="utf-8",
+            )
+
+            plugin = Plugin.from_manifest(manifest_dir)
+
+        self.assertEqual(plugin.name, "Directory-Manifest")
+
+    def test_plugin_from_manifest_slug_remains_ascii_only(self) -> None:
+        """Manifest-derived plugin names should preserve the historical ASCII-only slugging."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = pathlib.Path(tmpdir) / "plugin.yaml"
+            manifest_path.write_text('display_name: "Crème Brûlée"\n', encoding="utf-8")
+
+            plugin = Plugin.from_manifest(manifest_path)
+
+        self.assertEqual(plugin.name, "Cr-me-Br-l-e")
+
     def test_request_connection_param_returns_empty_string_when_missing(self) -> None:
         """Request helpers should return the configured value or an empty string."""
         request = Request(connection_params={"region": "us-east-1"})
