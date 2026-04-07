@@ -593,9 +593,8 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
     assert!(!html.contains("CLI login complete"));
     assert!(!html.contains("class=\"pill\""));
 
-    let credentials_path = dirs::config_dir()
+    let credentials_path = gestalt_cli::paths::gestalt_config_dir()
         .unwrap()
-        .join("gestalt")
         .join("credentials.json");
     let credentials: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();

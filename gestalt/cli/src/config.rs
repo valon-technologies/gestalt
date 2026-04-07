@@ -5,15 +5,15 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
+use crate::paths::gestalt_config_dir;
+
 pub struct ConfigStore {
     path: PathBuf,
 }
 
 impl ConfigStore {
     pub fn new() -> Result<Self> {
-        let config_dir = dirs::config_dir()
-            .context("could not determine config directory")?
-            .join("gestalt");
+        let config_dir = gestalt_config_dir()?;
         Ok(Self {
             path: config_dir.join("config.json"),
         })

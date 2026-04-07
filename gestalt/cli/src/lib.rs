@@ -8,3 +8,4 @@ pub mod http;
 pub mod interactive;
 pub mod output;
 pub mod params;
+pub mod paths;

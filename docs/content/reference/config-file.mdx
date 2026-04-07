@@ -164,6 +164,23 @@ secrets:
 | `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `mount_path` defaults to `secret`. |
 | `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `version` defaults to latest. |
 
+### Bootstrap credentials
+
+`secret://` references are resolved through the configured secret manager at startup, but the secret manager's own configuration (`secrets.config`) cannot use `secret://` — it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
+
+Each provider authenticates to its backing service differently:
+
+| Provider | Authentication model |
+| --- | --- |
+| `env` | Reads from process environment. No external auth needed. |
+| `file` | Reads from local filesystem. No external auth needed. |
+| `google_secret_manager` | Uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials). In production, attach a service account or use workload identity. Locally, run `gcloud auth application-default login`. |
+| `aws_secrets_manager` | Uses the [AWS SDK default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html). In production, use an instance profile, ECS task role, or IRSA. Locally, run `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. |
+| `vault` | Requires explicit `address` and `token` in config. Inject the token via `${VAULT_TOKEN}` or `${VAULT_TOKEN_FILE}`. |
+| `azure_key_vault` | Uses [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). In production, use managed identity. Locally, run `az login`. |
+
+For local development, `env` or `file` avoids external dependencies entirely. Switch to a cloud secret manager when deploying to a managed environment where ambient identity is available.
+
 ## `telemetry`
 
 Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, metrics, and structured logs. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
