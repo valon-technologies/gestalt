@@ -22,12 +22,6 @@ Create and revoke API tokens for programmatic access. Each token shows its name,
 
 ![API Tokens](/images/web-tokens.png)
 
-## Admin UI
-
-The admin UI is available at `/admin` on the same server (or on the management listener when `server.management` is configured). It displays Prometheus metrics, request/error rates, latency percentiles, and per-provider traffic distribution. The admin UI does not require Gestalt-level authentication; protect it with network-level controls in production.
-
-![Admin UI](/images/web-admin.png)
-
 ## Authentication
 
 When `auth.provider` is set to `google` or `oidc`, the web UI redirects to your identity provider for login. With `auth.provider: local`, login is automatic. With `auth.provider: none`, every request is anonymous.
