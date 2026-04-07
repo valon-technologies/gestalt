@@ -201,7 +201,7 @@ export GESTALT_URL=${origin}`}
                   ],
                   [
                     "gestalt config set url ...",
-                    "Persistent global config for your user account on this machine.",
+                    "Writes the user-local CLI config file for this machine.",
                   ],
                   [
                     ".gestalt/config.json",
@@ -230,7 +230,7 @@ export GESTALT_URL=${origin}`}
                 <code className="font-mono text-sm text-primary">
                   .gestalt/config.json
                 </code>,{" "}
-                global CLI config, then{" "}
+                user-local CLI config file, then{" "}
                 <code className="font-mono text-sm text-primary">
                   http://localhost:8080
                 </code>{" "}

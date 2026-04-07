@@ -41,10 +41,10 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     if let Some(url) = url_override {
         return Ok(normalize_url(url));
     }
-    if let Ok(url) = std::env::var("GESTALT_URL") {
-        if !url.trim().is_empty() {
-            return Ok(normalize_url(&url));
-        }
+    if let Ok(url) = std::env::var("GESTALT_URL")
+        && !url.trim().is_empty()
+    {
+        return Ok(normalize_url(&url));
     }
     if let Some(url) = find_project_config_value("url")? {
         return Ok(normalize_url(&url));
