@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestResolveConfigPathLookupOrder(t *testing.T) {
+func TestResolveConfigPathFallsBackToDefaultHomeConfig(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := filepath.Join(dir, "home")
 	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
@@ -32,17 +32,6 @@ func TestResolveConfigPathLookupOrder(t *testing.T) {
 
 	t.Setenv("HOME", homeDir)
 	t.Setenv("GESTALT_CONFIG", "")
-
-	projectConfigPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(projectConfigPath, []byte("project"), 0o644); err != nil {
-		t.Fatalf("WriteFile project config: %v", err)
-	}
-	if got := resolveConfigPath(""); got != "config.yaml" {
-		t.Fatalf("resolveConfigPath(\"\") with project config = %q, want %q", got, "config.yaml")
-	}
-	if err := os.Remove(projectConfigPath); err != nil {
-		t.Fatalf("Remove project config: %v", err)
-	}
 
 	if got, want := resolveConfigPath(""), filepath.Join(homeDir, ".gestaltd", "config.yaml"); got != want {
 		t.Fatalf("resolveConfigPath(\"\") = %q, want %q", got, want)

@@ -272,7 +272,7 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 Point a local config at the source plugin. Gestalt will synthesize the executable wrapper and materialize the executable catalog automatically:
 
 ```sh
-gestaltd serve --config .gestaltd/config.yaml
+gestaltd serve --config ./config.yaml
 ```
 
 ```yaml
@@ -280,7 +280,7 @@ providers:
   my-plugin:
     from:
       source:
-        path: ../plugin.yaml
+        path: ./plugin.yaml
     config:
       greeting: Hello
     mcp:

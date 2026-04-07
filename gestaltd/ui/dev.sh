@@ -8,7 +8,7 @@
 #   ./dev.sh [config.yaml]
 #
 # Examples:
-#   ./dev.sh                              # auto-generates ~/.gestaltd-dev/api-<port>/config.yaml
+#   ./dev.sh                              # auto-generates ~/.gestalt/config.yaml
 #   ./dev.sh gestalt.local.yaml           # custom config
 #   API_PORT=9090 ./dev.sh                # custom port
 
