@@ -19,7 +19,7 @@ A manifest defines exactly one of `provider` or `webui`.
 | `icon_file` | Relative path to an SVG icon bundled with the package. |
 | `provider` | Provider metadata and optional declarative surfaces. |
 | `webui` | UI metadata for UI-only packages. |
-| `artifacts` | Packaged executable artifacts keyed by platform. Source manifests used for local development or `plugin release` may omit them for pure executable providers. |
+| `artifacts` | Packaged executable artifacts keyed by platform. Linux artifacts may also set `libc` to distinguish `glibc` and `musl` builds. Source manifests used for local development or `plugin release` may omit them for pure executable providers. |
 
 ## Basic manifest
 
@@ -163,6 +163,7 @@ This example shows a provider package with a config schema, an executable entryp
     artifacts:
       - os: linux
         arch: amd64
+        libc: glibc
         path: artifacts/linux/amd64/provider
         sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ```
@@ -224,13 +225,14 @@ This example shows a provider package with a config schema, an executable entryp
           "tickets.get": { "alias": "get_ticket" }
         }
       },
-      "artifacts": [
-        {
-          "os": "linux",
-          "arch": "amd64",
-          "path": "artifacts/linux/amd64/provider",
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        }
+        "artifacts": [
+          {
+            "os": "linux",
+            "arch": "amd64",
+            "libc": "glibc",
+            "path": "artifacts/linux/amd64/provider",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
       ]
     }
     ```
@@ -364,5 +366,5 @@ automatically from the provider's typed router before packaging. For Python
 source plugins, release loads the module declared in `[tool.gestalt].plugin`,
 materializes the executable catalog automatically. Go and Python source plugins
 both build the host-platform artifact by default. Pass `--platform` for an
-explicit target list, or `--platform all` in CI to build the full supported
-release matrix.
+explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the
+full supported release matrix.

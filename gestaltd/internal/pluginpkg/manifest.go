@@ -150,6 +150,9 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
 				return err
 			}
+			if _, err := NormalizeArtifactLibC(artifact.OS, artifact.LibC); err != nil {
+				return err
+			}
 			if artifact.SHA256 == "" && !sourceMode {
 				return fmt.Errorf("artifact %s sha256 is required", artifact.Path)
 			}
@@ -158,7 +161,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			}
 			artifactPaths[artifact.Path] = struct{}{}
 
-			key := artifact.OS + "/" + artifact.Arch
+			key := PlatformString(artifact.OS, artifact.Arch, artifact.LibC)
 			if _, exists := artifactPlatforms[key]; exists {
 				return fmt.Errorf("duplicate artifact platform %q", key)
 			}
@@ -225,11 +228,23 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
+	currentLibC := CurrentRuntimeLibC()
+	var generic *pluginmanifestv1.Artifact
 	for _, artifact := range manifest.Artifacts {
-		if artifact.OS == runtime.GOOS && artifact.Arch == runtime.GOARCH {
+		if artifact.OS != runtime.GOOS || artifact.Arch != runtime.GOARCH {
+			continue
+		}
+		switch {
+		case runtime.GOOS == "linux" && currentLibC != "" && artifact.LibC == currentLibC:
 			artifact := artifact
 			return &artifact, nil
+		case artifact.LibC == "":
+			artifact := artifact
+			generic = &artifact
 		}
+	}
+	if generic != nil {
+		return generic, nil
 	}
 	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
 }

@@ -45,6 +45,7 @@ const windowsExecutableSuffix = ".exe"
 type releasePlatform struct {
 	GOOS   string
 	GOARCH string
+	LibC   string
 }
 
 func runPluginRelease(args []string) error {
@@ -52,7 +53,7 @@ func runPluginRelease(args []string) error {
 	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
 	version := fs.String("version", "", "semantic version string (required)")
 	outputDir := fs.String("output", defaultReleaseOutputDir, "output directory")
-	platforms := fs.String("platform", "", "comma-separated platforms (os/arch) or 'all'")
+	platforms := fs.String("platform", "", "comma-separated platforms (os/arch[/libc]) or 'all'")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func runPluginRelease(args []string) error {
 		for _, platform := range buildPlatforms {
 			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
-				return fmt.Errorf("build %s/%s: %w", platform.GOOS, platform.GOARCH, err)
+				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH, platform.LibC), err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
@@ -182,7 +183,7 @@ func expandReleasePlatformValue(value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	switch {
 	case trimmed == "":
-		return "", fmt.Errorf("--platform requires a comma-separated os/arch list or %q", allPlatformsValue)
+		return "", fmt.Errorf("--platform requires a comma-separated os/arch[/libc] list or %q", allPlatformsValue)
 	case strings.EqualFold(trimmed, allPlatformsValue):
 		return defaultPlatforms, nil
 	default:
@@ -191,11 +192,26 @@ func expandReleasePlatformValue(value string) (string, error) {
 }
 
 func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
-	plat := platform
-	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, plat.GOOS, plat.GOARCH)
-	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
-		return prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, platform)
-	})
+	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(stagingDir) }()
+
+	manifest, plat, err := prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, platform)
+	if err != nil {
+		return "", err
+	}
+	archivePath := filepath.Join(outputDir, platformArchiveName(pluginName, version, plat))
+	if err := writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat, manifest); err != nil {
+		return "", err
+	}
+	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
+		return "", err
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", archivePath)
+	return archivePath, nil
 }
 
 func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat string, prepare func(stagingDir string) (*pluginmanifestv1.Manifest, error)) (string, error) {
@@ -250,13 +266,22 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 	platforms := make([]releasePlatform, 0, len(parts))
 	for _, part := range parts {
 		plat := strings.TrimSpace(part)
-		pieces := strings.SplitN(plat, "/", 2)
-		if len(pieces) != 2 || pieces[0] == "" || pieces[1] == "" {
-			return nil, fmt.Errorf("invalid platform %q, expected os/arch", plat)
+		pieces := strings.Split(plat, "/")
+		if len(pieces) < 2 || len(pieces) > 3 || pieces[0] == "" || pieces[1] == "" {
+			return nil, fmt.Errorf("invalid platform %q, expected os/arch[/libc]", plat)
+		}
+		libc := ""
+		if len(pieces) == 3 {
+			libc = pieces[2]
+		}
+		normalizedLibC, err := pluginpkg.NormalizeArtifactLibC(pieces[0], libc)
+		if err != nil {
+			return nil, err
 		}
 		platforms = append(platforms, releasePlatform{
 			GOOS:   pieces[0],
 			GOARCH: pieces[1],
+			LibC:   normalizedLibC,
 		})
 	}
 	return platforms, nil
@@ -276,22 +301,35 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	})
 }
 
-func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, platform releasePlatform) (*pluginmanifestv1.Manifest, error) {
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, platform releasePlatform) (*pluginmanifestv1.Manifest, releasePlatform, error) {
 	plat := platform
 	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
-	if err := pluginpkg.BuildSourceProviderReleaseBinary(sourceDir, binaryPath, pluginName, plat.GOOS, plat.GOARCH); err != nil {
-		return nil, err
+	builtLibC, err := pluginpkg.BuildSourceProviderReleaseBinary(sourceDir, binaryPath, pluginName, plat.GOOS, plat.GOARCH)
+	if err != nil {
+		return nil, releasePlatform{}, err
+	}
+	switch {
+	case plat.LibC == "":
+		plat.LibC = builtLibC
+	case builtLibC == "":
+		return nil, releasePlatform{}, fmt.Errorf("requested linux libc %q but the built artifact does not report a libc", plat.LibC)
+	case builtLibC != plat.LibC:
+		return nil, releasePlatform{}, fmt.Errorf("requested linux libc %q but built artifact targets %q", plat.LibC, builtLibC)
 	}
 
 	digest, err := pluginpkg.FileSHA256(binaryPath)
 	if err != nil {
-		return nil, fmt.Errorf("hash binary: %w", err)
+		return nil, releasePlatform{}, fmt.Errorf("hash binary: %w", err)
 	}
 	if err := copyReleasePackageFiles(srcManifest, sourceDir, stagingDir, false); err != nil {
-		return nil, err
+		return nil, releasePlatform{}, err
 	}
-	return buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
+	manifest, err := buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
+	if err != nil {
+		return nil, releasePlatform{}, err
+	}
+	return manifest, plat, nil
 }
 
 func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {
@@ -322,7 +360,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	}
 	manifest.Version = version
 	manifest.Artifacts = []pluginmanifestv1.Artifact{
-		{OS: plat.GOOS, Arch: plat.GOARCH, Path: binaryName, SHA256: digest},
+		{OS: plat.GOOS, Arch: plat.GOARCH, LibC: plat.LibC, Path: binaryName, SHA256: digest},
 	}
 
 	for _, kind := range manifest.Kinds {
@@ -335,6 +373,10 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	}
 
 	return manifest, nil
+}
+
+func platformArchiveName(pluginName, version string, plat releasePlatform) string {
+	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, pluginpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH, plat.LibC))
 }
 
 func releaseBinaryName(pluginName, goos string) string {
@@ -577,12 +619,12 @@ func printPluginReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Build a plugin release archive for the host platform by default.")
-	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
+	writeUsageLine(w, "Pass --platform with a comma-separated os/arch[/libc] list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
 	writeUsageLine(w, "Run from the plugin source directory.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")
 	writeUsageLine(w, "  --output     Output directory (default: dist/)")
-	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch) or all (default: host platform only)")
+	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch[/libc]) or all (default: host platform only)")
 }

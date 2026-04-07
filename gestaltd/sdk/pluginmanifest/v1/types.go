@@ -164,6 +164,7 @@ type CredentialField struct {
 type Artifact struct {
 	OS     string `json:"os" yaml:"os"`
 	Arch   string `json:"arch" yaml:"arch"`
+	LibC   string `json:"libc,omitempty" yaml:"libc,omitempty"`
 	Path   string `json:"path" yaml:"path"`
 	SHA256 string `json:"sha256,omitempty" yaml:"sha256,omitempty"`
 }

@@ -65,18 +65,18 @@ func ValidateSourceProviderRelease(root, goos, goarch string) error {
 	return err
 }
 
-func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch string) error {
+func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch string) (string, error) {
 	kind, pythonTarget, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
-		return err
+		return "", err
 	}
 	switch kind {
 	case sourceProviderKindGo:
-		return BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
+		return "", BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
 	case sourceProviderKindPython:
 		return BuildPythonProviderBinary(root, outputPath, pluginName, pythonTarget, goos, goarch)
 	default:
-		return ErrNoSourceProviderPackage
+		return "", ErrNoSourceProviderPackage
 	}
 }
 
