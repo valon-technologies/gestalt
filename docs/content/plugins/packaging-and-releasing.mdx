@@ -123,7 +123,7 @@ providers:
   my-plugin:
     from:
       source:
-        path: ./plugins/my-plugin/plugin.yaml
+        path: ../plugins/my-plugin/plugin.yaml
 ```
 
 ### Published provider package or plugin
@@ -159,7 +159,7 @@ When a config references published packages or a packaged UI, run `gestaltd init
 to resolve and prepare them:
 
 ```sh
-gestaltd init --config ./config.yaml
+gestaltd init --config .gestaltd/config.yaml
 ```
 
 This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts

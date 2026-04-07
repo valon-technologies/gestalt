@@ -93,6 +93,13 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 
 	homeDir := filepath.Join(t.TempDir(), "home:with#special")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
+	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
+	if err := os.MkdirAll(legacyConfigDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll legacy config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyConfigDir, "config.yaml"), []byte("not: [valid\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile legacy config: %v", err)
+	}
 
 	cmd := exec.Command(gestaltdBin)
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")

@@ -826,6 +826,14 @@ func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	workDir := filepath.Join(dir, "work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll work dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "config.yaml"), []byte("not: [valid\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile legacy project config: %v", err)
+	}
+
 	homeDir := filepath.Join(dir, "home")
 	configDir := filepath.Join(homeDir, ".gestaltd")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -849,6 +857,7 @@ server:
 	}
 
 	cmd := exec.Command(gestaltdBin)
+	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")

@@ -7,12 +7,12 @@ Gestalt is configured from a single YAML file. The [Config File](/reference/conf
 When `--config` is not supplied, `gestaltd` looks for config in this order:
 
 1. `GESTALT_CONFIG`
-2. `./config.yaml`
+2. `.gestaltd/config.yaml`
 3. `~/.gestaltd/config.yaml`
-4. `~/.gestalt/config.yaml`
-5. `/etc/gestalt/config.yaml`
 
 If nothing is found, `gestaltd` generates a default local config at `~/.gestaltd/config.yaml`.
+For project-local server state, prefer `.gestaltd/config.yaml` so Gestalt does not collide with other tools that also use `config.yaml`.
+Container deployment guides can still point at `/etc/gestalt/config.yaml` because they pass that path explicitly with `--config`.
 
 Gestalt expands `${ENV_VAR}` placeholders before YAML decode, falling back to `ENV_VAR_FILE` when the direct variable is unset. Unknown fields are rejected. Relative paths resolve from the config file directory, and `secret://` references are resolved through the configured secret manager at bootstrap.
 
@@ -66,7 +66,7 @@ providers:
           type: none
     surfaces:
       openapi:
-        document: ./openapi/httpbin.yaml
+        document: ../openapi/httpbin.yaml
         connection: public
     allowed_operations:
       get_ip:
@@ -84,7 +84,7 @@ providers:
     display_name: Gmail
     from:
       source:
-        path: ./plugins/gmail/plugin.yaml
+        path: ../plugins/gmail/plugin.yaml
     mcp:
       enabled: true
       tool_prefix: gmail_
@@ -97,7 +97,7 @@ providers:
   support:
     from:
       source:
-        path: ./plugins/support/plugin.yaml
+        path: ../plugins/support/plugin.yaml
     connections:
       mcp:
         mode: user
@@ -105,7 +105,7 @@ providers:
           type: mcp_oauth
     surfaces:
       openapi:
-        document: ./openapi/support.yaml
+        document: ../openapi/support.yaml
       mcp:
         url: https://mcp.support.example.com/mcp
         connection: mcp
@@ -185,20 +185,20 @@ response_mapping:
 For fast local development, run the server directly.
 
 ```sh
-gestaltd serve --config ./config.yaml
+gestaltd serve --config .gestaltd/config.yaml
 ```
 
 For deterministic production startup, prepare locked artifacts first.
 
 ```sh
-gestaltd init --config ./config.yaml
-gestaltd serve --locked --config ./config.yaml
+gestaltd init --config .gestaltd/config.yaml
+gestaltd serve --locked --config .gestaltd/config.yaml
 ```
 
 To validate a config without starting the server, use the validate command.
 
 ```sh
-gestaltd validate --config ./config.yaml
+gestaltd validate --config .gestaltd/config.yaml
 ```
 
 `init` prepares published [plugin](/plugins) sources, packaged UI bundles, and other locked artifacts into writable state. `serve --locked` starts only from that prepared state.
@@ -298,7 +298,7 @@ providers:
           type: mcp_oauth
     surfaces:
       openapi:
-        document: ./openapi/github.yaml
+        document: ../openapi/github.yaml
         connection: api
       mcp:
         url: https://api.githubcopilot.com/mcp/

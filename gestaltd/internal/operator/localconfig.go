@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	localConfigDirName       = ".gestaltd"
-	legacyLocalConfigDirName = ".gestalt"
+	localConfigDirName = ".gestaltd"
 )
 
 func DefaultLocalConfigPath() string {
@@ -20,17 +19,6 @@ func DefaultLocalConfigPath() string {
 		return ""
 	}
 	return filepath.Join(home, localConfigDirName, "config.yaml")
-}
-
-func LocalConfigPaths() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil
-	}
-	return []string{
-		filepath.Join(home, localConfigDirName, "config.yaml"),
-		filepath.Join(home, legacyLocalConfigDirName, "config.yaml"),
-	}
 }
 
 func GenerateDefaultConfig(configDir string) (string, error) {

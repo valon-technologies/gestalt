@@ -18,9 +18,10 @@ config and starts immediately. The server is now running at
 
 ## Add a provider
 
-Create a file called `config.yaml` with a provider definition. This example
+Create a file called `.gestaltd/config.yaml` with a provider definition. This example
 adds [HTTPBin](https://httpbin.org), a public API that requires no
-authentication:
+authentication. Because the config lives under `.gestaltd/`, project-root files
+such as the OpenAPI document are referenced with `../...`:
 
 ```yaml
 server:
@@ -47,7 +48,7 @@ providers:
           type: none
     surfaces:
       openapi:
-        document: ./openapi/httpbin.yaml
+        document: ../openapi/httpbin.yaml
         connection: public
     mcp:
       enabled: true
@@ -81,7 +82,7 @@ paths:
 Start the server with your config:
 
 ```sh
-gestaltd serve --config ./config.yaml
+gestaltd serve --config .gestaltd/config.yaml
 ```
 
 ## Connect the CLI
