@@ -91,6 +91,32 @@ providers:
 	}
 }
 
+func TestInitPathsForDotGestaltdConfigUsesParentArtifactsRoot(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(string(filepath.Separator), "tmp", "project", ".gestaltd", "config.yaml")
+	paths := initPathsForConfigWithArtifactsDir(configPath, "")
+
+	wantConfigDir := filepath.Join(string(filepath.Separator), "tmp", "project", ".gestaltd")
+	wantArtifactsDir := filepath.Join(string(filepath.Separator), "tmp", "project")
+
+	if paths.configDir != wantConfigDir {
+		t.Fatalf("configDir = %q, want %q", paths.configDir, wantConfigDir)
+	}
+	if paths.artifactsDir != wantArtifactsDir {
+		t.Fatalf("artifactsDir = %q, want %q", paths.artifactsDir, wantArtifactsDir)
+	}
+	if paths.lockfilePath != filepath.Join(wantConfigDir, InitLockfileName) {
+		t.Fatalf("lockfilePath = %q, want %q", paths.lockfilePath, filepath.Join(wantConfigDir, InitLockfileName))
+	}
+	if paths.providersDir != filepath.Join(wantArtifactsDir, filepath.FromSlash(PreparedProvidersDir)) {
+		t.Fatalf("providersDir = %q, want %q", paths.providersDir, filepath.Join(wantArtifactsDir, filepath.FromSlash(PreparedProvidersDir)))
+	}
+	if paths.uiDir != filepath.Join(wantArtifactsDir, filepath.FromSlash(PreparedUIDir)) {
+		t.Fatalf("uiDir = %q, want %q", paths.uiDir, filepath.Join(wantArtifactsDir, filepath.FromSlash(PreparedUIDir)))
+	}
+}
+
 func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin(t *testing.T) {
 	t.Parallel()
 

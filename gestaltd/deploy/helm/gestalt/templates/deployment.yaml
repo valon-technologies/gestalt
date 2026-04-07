@@ -53,17 +53,17 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/bin/sh", "-c"]
           args:
-            - cp -r /etc/gestalt-config/. /etc/gestalt/ && /gestaltd init --config /etc/gestalt/config.yaml
+            - cp -r /app/.gestaltd-src/. /app/.gestaltd/ && /gestaltd init --config /app/.gestaltd/config.yaml
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/gestalt-config
+              mountPath: /app/.gestaltd-src
               readOnly: true
             - name: gestalt-state
-              mountPath: /etc/gestalt
+              mountPath: /app/.gestaltd
             - name: tmp
               mountPath: /tmp
       {{- end }}
@@ -84,7 +84,7 @@ spec:
             - serve
             - --locked
             - --config
-            - /etc/gestalt/config.yaml
+            - /app/.gestaltd/config.yaml
           ports:
             - name: http
               containerPort: {{ get $public "port" | default (.Values.config.server.port | default 8080) }}
@@ -113,12 +113,11 @@ spec:
           volumeMounts:
             {{- if .Values.pluginInit.enabled }}
             - name: gestalt-state
-              mountPath: /etc/gestalt
+              mountPath: /app/.gestaltd
               readOnly: true
             {{- else }}
             - name: config
-              mountPath: /etc/gestalt/config.yaml
-              subPath: config.yaml
+              mountPath: /app/.gestaltd
               readOnly: true
             {{- end }}
             - name: data

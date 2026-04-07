@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -161,18 +162,16 @@ func resolveConfigPath(flagValue string) string {
 	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
 		return envPath
 	}
-	if _, err := os.Stat("config.yaml"); err == nil {
-		return "config.yaml"
+	projectPath := filepath.Join(".gestaltd", "config.yaml")
+	if _, err := os.Stat(projectPath); err == nil {
+		return projectPath
 	}
-	for _, p := range operator.LocalConfigPaths() {
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err == nil {
-			return p
+	if homePath := operator.DefaultLocalConfigPath(); homePath != "" {
+		if _, err := os.Stat(homePath); err == nil {
+			return homePath
 		}
 	}
-	return "/etc/gestalt/config.yaml"
+	return operator.DefaultLocalConfigPath()
 }
 
 func logDatastoreWarnings(ds core.Datastore) {

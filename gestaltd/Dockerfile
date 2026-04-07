@@ -31,7 +31,7 @@ ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=build-binary /gestaltd /gestaltd
-RUN mkdir -p /data && chown nobody:nobody /data
+RUN mkdir -p /app/.gestaltd /data && chown -R nobody:nobody /app /data
 LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
@@ -43,4 +43,4 @@ LABEL org.opencontainers.image.title="gestaltd" \
 USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
+CMD ["serve", "--locked", "--config", "/app/.gestaltd/config.yaml", "--artifacts-dir", "/data"]

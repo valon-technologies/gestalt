@@ -72,7 +72,7 @@ helm upgrade --install gestalt \
 
 | Value | Purpose |
 | --- | --- |
-| `config` | Rendered as `/etc/gestalt/config.yaml`. |
+| `config` | Rendered as `/app/.gestaltd/config.yaml`. |
 | `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
 | `persistence` | PVC settings for SQLite or other local state. |
 | `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. Use it when the chart should prepare locked state for published packages, packaged UI bundles, or remote REST and GraphQL upstreams. |
@@ -157,7 +157,7 @@ client UI hostname.
 
 Enable the init container when your config uses `providers.*.from.source.ref`, `ui.plugin.source`, or remote REST/GraphQL upstreams that you want prepared into locked state. The init container copies the rendered config and runs:
 
-`/gestaltd init --config /etc/gestalt/config.yaml`
+`/gestaltd init --config /app/.gestaltd/config.yaml`
 
 The main container then starts in locked mode against the prepared state.
 

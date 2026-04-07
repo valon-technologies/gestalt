@@ -68,7 +68,7 @@ persistence:
     - ReadWriteOnce
   size: 1Gi
 
-# Mounted as /etc/gestalt/config.yaml. The app expands ${ENV_VAR}
+# Mounted as /app/.gestaltd/config.yaml. The app expands ${ENV_VAR}
 # placeholders at startup, so secrets can be injected via extraEnv when
 # you enable OAuth/OIDC or an external datastore below.
 config:

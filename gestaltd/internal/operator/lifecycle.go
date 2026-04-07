@@ -178,12 +178,20 @@ func resolveArtifactsDir(configPath string, cfg *config.Config, override string)
 		dir = cfg.Server.ArtifactsDir
 	}
 	if dir == "" {
-		return filepath.Dir(configPath)
+		return defaultArtifactsDirForConfig(configPath)
 	}
 	if filepath.IsAbs(dir) {
 		return dir
 	}
 	return filepath.Join(filepath.Dir(configPath), dir)
+}
+
+func defaultArtifactsDirForConfig(configPath string) string {
+	configDir := filepath.Dir(configPath)
+	if filepath.Base(configDir) == localConfigDirName {
+		return filepath.Dir(configDir)
+	}
+	return configDir
 }
 
 func initPathsForConfig(configPath string) initPaths {
@@ -193,7 +201,7 @@ func initPathsForConfig(configPath string) initPaths {
 func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPaths {
 	configDir := filepath.Dir(configPath)
 	if artifactsDir == "" {
-		artifactsDir = configDir
+		artifactsDir = defaultArtifactsDirForConfig(configPath)
 	} else if !filepath.IsAbs(artifactsDir) {
 		artifactsDir = filepath.Join(configDir, artifactsDir)
 	}

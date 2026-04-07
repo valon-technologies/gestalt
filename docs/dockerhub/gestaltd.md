@@ -16,10 +16,10 @@
 - Default command:
 
   ```sh
-  /gestaltd serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data
+  /gestaltd serve --locked --config /app/.gestaltd/config.yaml --artifacts-dir /data
   ```
 
-- Default config path: `/etc/gestalt/config.yaml`
+- Default config path: `/app/.gestaltd/config.yaml`
 - Default writable data and artifacts dir: `/data`
 - This image is not zero-config. Mount or bake a config file before starting it.
 - Locked startup is the default. If your config uses `providers.*.from.source.ref`
@@ -48,7 +48,7 @@ If your config does not need prepared artifacts, mount it directly:
 docker run --rm \
   -p 8080:8080 \
   -e GESTALT_ENCRYPTION_KEY=change-me \
-  -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
@@ -104,7 +104,7 @@ docker run --rm \
   -p 8080:8080 \
   -p 127.0.0.1:9090:9090 \
   -e GESTALT_ENCRYPTION_KEY=change-me \
-  -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
@@ -122,22 +122,23 @@ UI hostname; otherwise it omits that link.
 For deterministic production images, run `gestaltd init` before `docker build`
 and copy the prepared state into the image.
 
-For a config at `deploy/config.yaml`, `init` writes:
+For a config at `deploy/.gestaltd/config.yaml`, `init` writes:
 
 ```text
 deploy/
-  config.yaml
-  gestalt.lock.json
-  .gestaltd/providers/...
-  .gestaltd/ui/...
+  .gestaltd/
+    config.yaml
+    gestalt.lock.json
+    providers/...
+    ui/...
 ```
 
 Build the image from that prepared directory:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest
-COPY deploy/ /app/
-CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+COPY deploy/.gestaltd/ /app/.gestaltd/
+CMD ["serve", "--locked", "--config", "/app/.gestaltd/config.yaml"]
 ```
 
 This is the recommended production pattern.
@@ -156,7 +157,7 @@ services:
       - "8080:8080"
       - "127.0.0.1:9090:9090"
     volumes:
-      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - ./.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro
       - gestalt-data:/data
     environment:
       GESTALT_ENCRYPTION_KEY: change-me
@@ -182,7 +183,7 @@ server:
 ```sh
 docker run --rm \
   -p 8080:8080 \
-  -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro" \
   -v /run/secrets/gestalt-encryption-key:/run/secrets/gestalt-encryption-key:ro \
   -e GESTALT_ENCRYPTION_KEY_FILE=/run/secrets/gestalt-encryption-key \
   valontechnologies/gestaltd:latest
@@ -244,7 +245,7 @@ WORKDIR /src
 COPY . .
 RUN cd ./my-plugin && \
     gestaltd plugin release --version 0.1.0 --platform all && \
-    gestaltd init --config ./deploy/config.yaml
+    gestaltd init --config ./deploy/.gestaltd/config.yaml
 ```
 
 ## Caveats

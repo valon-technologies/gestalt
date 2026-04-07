@@ -6,12 +6,12 @@
 docker run --rm \
   -p 8080:8080 \
   -e GESTALT_ENCRYPTION_KEY=change-me \
-  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
 
-Mount a config file at `/etc/gestalt/config.yaml`. The image is not zero-config and will fail to start without one.
+Mount a config file at `/app/.gestaltd/config.yaml`. The image is not zero-config and will fail to start without one.
 
 ## Docker Compose
 
@@ -22,7 +22,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - ./.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro
       - gestalt-data:/data
     environment:
       GESTALT_ENCRYPTION_KEY: change-me
@@ -40,8 +40,8 @@ volumes:
 | Base | Alpine with `ca-certificates` and a shell |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
-| Default command | `serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data` |
-| Config path | `/etc/gestalt/config.yaml` |
+| Default command | `serve --locked --config /app/.gestaltd/config.yaml --artifacts-dir /data` |
+| Config path | `/app/.gestaltd/config.yaml` |
 | Data directory | `/data` |
 | User | `nobody:nobody` |
 
@@ -51,18 +51,19 @@ For the CLI client image, see [Client Docker Image](/client/cli/docker).
 
 For deterministic production deployments, run `gestaltd init` locally to resolve plugins and write lock state, then bake the result into a derived image:
 
-```
+```text
 deploy/
-  config.yaml
-  gestalt.lock.json
-  .gestaltd/providers/...
-  .gestaltd/ui/...
+  .gestaltd/
+    config.yaml
+    gestalt.lock.json
+    providers/...
+    ui/...
 ```
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest
-COPY deploy/ /app/
-CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+COPY deploy/.gestaltd/ /app/.gestaltd/
+CMD ["serve", "--locked", "--config", "/app/.gestaltd/config.yaml"]
 ```
 
 This produces a self-contained image that starts without fetching or resolving anything at runtime.
@@ -77,7 +78,7 @@ Gestalt expands `${VAR}` placeholders in the config before YAML decoding. The im
 ```sh
 docker run --rm \
   -p 8080:8080 \
-  -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/.gestaltd/config.yaml:/app/.gestaltd/config.yaml:ro" \
   -v /run/secrets/encryption-key:/run/secrets/encryption-key:ro \
   -e GESTALT_ENCRYPTION_KEY_FILE=/run/secrets/encryption-key \
   valontechnologies/gestaltd:latest
