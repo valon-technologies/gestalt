@@ -1,9 +1,9 @@
-use std::io::Write;
-
 use anyhow::{Context, Result, bail};
+use reqwest::{StatusCode, header};
 
 use crate::api::{self, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
+use crate::http;
 use crate::output::{self, Format};
 
 const BROWSER_RESPONSE_PAGE: &str = r#"<!doctype html>
@@ -197,12 +197,13 @@ fn send_browser_response(
     detail: &str,
 ) -> std::io::Result<()> {
     let html = build_browser_response_html(title, detail);
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
-        html.len(),
-        html
-    );
-    (&*stream).write_all(response.as_bytes())
+    http::write_response(
+        &*stream,
+        StatusCode::OK,
+        http::TEXT_HTML,
+        &html,
+        &[(header::CACHE_CONTROL.as_str(), http::CACHE_CONTROL_NO_STORE)],
+    )
 }
 
 fn build_browser_response_html(title: &str, detail: &str) -> String {

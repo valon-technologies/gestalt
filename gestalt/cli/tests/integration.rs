@@ -1,18 +1,43 @@
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use assert_cmd::Command;
+use gestalt::http;
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
 use predicates::prelude::*;
-use reqwest::{Method, StatusCode};
+use reqwest::{Method, StatusCode, header};
 use tempfile::TempDir;
 
+const TEST_TOKEN: &str = "test-token";
+
+macro_rules! json_mock {
+    ($server:expr, $method:expr, $path:expr, $status:expr) => {
+        $server
+            .mock($method.as_str(), $path)
+            .with_status(usize::from($status.as_u16()))
+            .with_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    };
+}
+
+macro_rules! authed_json_mock {
+    ($server:expr, $method:expr, $path:expr, $status:expr) => {
+        json_mock!($server, $method, $path, $status).match_header(
+            header::AUTHORIZATION.as_str(),
+            Matcher::Exact(test_bearer()),
+        )
+    };
+}
+
 fn create_client(server: &Server) -> gestalt::api::ApiClient {
-    gestalt::api::ApiClient::new(&server.url(), "test-token").unwrap()
+    gestalt::api::ApiClient::new(&server.url(), TEST_TOKEN).unwrap()
+}
+
+fn test_bearer() -> String {
+    format!("Bearer {TEST_TOKEN}")
 }
 
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -62,7 +87,7 @@ struct LoginFlowState {
 }
 
 struct HttpRequest {
-    method: String,
+    method: Method,
     target: String,
     body: Vec<u8>,
 }
@@ -102,20 +127,20 @@ fn spawn_login_server() -> LoginServer {
 
 fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>, base_url: &str) {
     let request = read_http_request(&mut stream);
-    match (request.method.as_str(), request.target.as_str()) {
-        ("POST", "/api/v1/auth/login") => {
+    match request.target.as_str() {
+        "/api/v1/auth/login" if request.method == Method::POST => {
             let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
             let mut state = state.lock().unwrap();
             state.callback_port = Some(body["callback_port"].as_u64().unwrap() as u16);
             state.expected_state = Some(body["state"].as_str().unwrap().to_string());
             write_http_response(
                 &mut stream,
-                "200 OK",
-                "application/json",
+                StatusCode::OK,
+                http::APPLICATION_JSON,
                 &format!(r#"{{"url":"{base_url}/browser-login"}}"#),
             );
         }
-        ("GET", "/browser-login") => {
+        "/browser-login" if request.method == Method::GET => {
             let (callback_port, expected_state) = {
                 let state = state.lock().unwrap();
                 (
@@ -130,9 +155,12 @@ fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>
                 .text()
                 .unwrap();
             state.lock().unwrap().browser_response_html = Some(html);
-            write_http_response(&mut stream, "200 OK", "text/plain", "ok");
+            write_http_response(&mut stream, StatusCode::OK, http::TEXT_PLAIN, "ok");
         }
-        ("GET", target) if target.starts_with("/api/v1/auth/login/callback?") => {
+        target
+            if request.method == Method::GET
+                && target.starts_with("/api/v1/auth/login/callback?") =>
+        {
             let url = url::Url::parse(&format!("http://localhost{target}")).unwrap();
             let params = url
                 .query_pairs()
@@ -146,8 +174,8 @@ fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>
             );
             write_http_response(
                 &mut stream,
-                "200 OK",
-                "application/json",
+                StatusCode::OK,
+                http::APPLICATION_JSON,
                 r#"{"token":"cli-secret","id":"tok-123"}"#,
             );
         }
@@ -168,7 +196,7 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
             break;
         }
         if let Some((name, value)) = line.split_once(':')
-            && name.eq_ignore_ascii_case("Content-Length")
+            && name.eq_ignore_ascii_case(header::CONTENT_LENGTH.as_str())
         {
             content_length = value.trim().parse().unwrap();
         }
@@ -179,19 +207,14 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
 
     let mut parts = request_line.split_whitespace();
     HttpRequest {
-        method: parts.next().unwrap().to_string(),
+        method: Method::from_bytes(parts.next().unwrap().as_bytes()).unwrap(),
         target: parts.next().unwrap().to_string(),
         body,
     }
 }
 
-fn write_http_response(stream: &mut TcpStream, status: &str, content_type: &str, body: &str) {
-    write!(
-        stream,
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    )
-    .unwrap();
+fn write_http_response(stream: &mut TcpStream, status: StatusCode, content_type: &str, body: &str) {
+    http::write_response(&mut *stream, status, content_type, body, &[]).unwrap();
 }
 
 fn cli_command(home: &Path) -> Command {
@@ -208,7 +231,7 @@ fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
     let dir = tempfile::tempdir().unwrap();
     std::process::Command::new(env!("CARGO_BIN_EXE_gestalt"))
         .current_dir(dir.path())
-        .env("GESTALT_API_KEY", "test-token")
+        .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
         .args(args)
@@ -218,7 +241,7 @@ fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
 
 fn cli_command_for_server(home: &Path, server: &Server) -> Command {
     let mut cmd = cli_command(home);
-    cmd.env("GESTALT_API_KEY", "test-token")
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url());
     cmd
@@ -227,11 +250,7 @@ fn cli_command_for_server(home: &Path, server: &Server) -> Command {
 #[test]
 fn test_list_integrations() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{"name":"github","display_name":"GitHub","description":"GitHub integration"}]"#,
         )
@@ -249,11 +268,7 @@ fn test_list_integrations() {
 #[test]
 fn test_list_tokens() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/tokens")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
         .with_body(
             r#"[{"id":"1","name":"my-token","scopes":"","created_at":"2025-01-01T00:00:00Z"}]"#,
         )
@@ -271,13 +286,9 @@ fn test_list_tokens() {
 #[test]
 fn test_create_token() {
     let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/tokens")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(server, Method::POST, "/api/v1/tokens", StatusCode::CREATED)
+        .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
         .match_body(Matcher::JsonString(r#"{"name":"cli-token"}"#.to_string()))
-        .with_status(201)
-        .with_header("Content-Type", "application/json")
         .with_body(r#"{"id":"2","name":"cli-token","token":"plaintext-secret"}"#)
         .create();
 
@@ -292,11 +303,7 @@ fn test_create_token() {
 #[test]
 fn test_revoke_token() {
     let mut server = Server::new();
-    let mock = server
-        .mock("DELETE", "/api/v1/tokens/42")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(server, Method::DELETE, "/api/v1/tokens/42", StatusCode::OK)
         .with_body(r#"{"status":"revoked"}"#)
         .create();
 
@@ -310,14 +317,15 @@ fn test_revoke_token() {
 #[test]
 fn test_execute_operation() {
     let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/github/search_code")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"results":[]}"#)
-        .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/github/search_code",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .with_body(r#"{"results":[]}"#)
+    .create();
 
     let client = create_client(&server);
     let body = serde_json::json!({"query": "hello"});
@@ -330,12 +338,14 @@ fn test_execute_operation() {
 #[test]
 fn test_error_response() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/tokens")
-        .with_status(401)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"error":"missing authorization header"}"#)
-        .create();
+    let mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/tokens",
+        StatusCode::UNAUTHORIZED
+    )
+    .with_body(r#"{"error":"missing authorization header"}"#)
+    .create();
 
     let client = create_client(&server);
     let result = client.get("/api/v1/tokens");
@@ -346,26 +356,25 @@ fn test_error_response() {
     assert!(err.contains("missing authorization header"));
 
     let home = TempDir::new().unwrap();
-    let _catalog_mock = server
-        .mock(
-            Method::GET.as_str(),
-            "/api/v1/integrations/auth_svc/operations",
-        )
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(usize::from(StatusCode::OK.as_u16()))
-        .with_header("Content-Type", "application/json")
-        .with_body(single_operation_catalog("list_items"))
-        .create();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/auth_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("list_items"))
+    .create();
 
-    let _invoke_mock = server
-        .mock(Method::GET.as_str(), "/api/v1/auth_svc/list_items")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(usize::from(StatusCode::PRECONDITION_FAILED.as_u16()))
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first"}"#,
-        )
-        .create();
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/auth_svc/list_items",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(
+        r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first"}"#,
+    )
+    .create();
 
     cli_command_for_server(home.path(), &server)
         .args(["invoke", "auth_svc", "list_items"])
@@ -380,12 +389,14 @@ fn test_error_response() {
 #[test]
 fn test_error_response_nested_message() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/tokens")
-        .with_status(400)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"error":{"message":"invalid parameter: limit"}}"#)
-        .create();
+    let mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/tokens",
+        StatusCode::BAD_REQUEST
+    )
+    .with_body(r#"{"error":{"message":"invalid parameter: limit"}}"#)
+    .create();
 
     let client = create_client(&server);
     let result = client.get("/api/v1/tokens");
@@ -399,11 +410,12 @@ fn test_error_response_nested_message() {
 #[test]
 fn test_list_operations_formats_parameters() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
         .with_body(
             r#"[{
                 "id": "do_thing",
@@ -456,10 +468,12 @@ fn test_list_operations_formats_parameters() {
 #[test]
 fn test_list_operations_json_format() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
         .with_body(
             r#"[{
                 "id": "do_thing",
@@ -482,10 +496,12 @@ fn test_list_operations_json_format() {
 #[test]
 fn test_list_operations_empty_parameters() {
     let mut server = Server::new();
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
         .with_body(r#"[{"id": "list_items", "description": "Lists items", "method": "GET", "parameters": []}]"#)
         .create();
 
@@ -499,13 +515,14 @@ fn test_list_operations_empty_parameters() {
 #[test]
 fn test_start_oauth() {
     let mut server = Server::new();
-    let mock = server
-        .mock("POST", "/api/v1/auth/start-oauth")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-        .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
 
     let client = create_client(&server);
     let body = serde_json::json!({"integration": "github"});
@@ -570,24 +587,22 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
 #[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
-        .create();
-    let mock = server
-        .mock("POST", "/api/v1/auth/start-oauth")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"connection":"workspace","instance":"team-a","integration":"github"}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-        .create();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+            .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","instance":"team-a","integration":"github"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
 
     let client = create_client(&server);
     let result = gestalt::commands::integrations::connect_with_browser_opener(
@@ -605,24 +620,22 @@ fn test_connect_includes_connection_and_instance() {
 #[test]
 fn test_connect_omits_null_connection_and_instance() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
-        .create();
-    let mock = server
-        .mock("POST", "/api/v1/auth/start-oauth")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"integration":"github"}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-        .create();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+            .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"integration":"github"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
 
     let client = create_client(&server);
     let result = gestalt::commands::integrations::connect_with_browser_opener(
@@ -640,11 +653,7 @@ fn test_connect_omits_null_connection_and_instance() {
 #[test]
 fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{
                 "name":"datadog",
@@ -656,15 +665,16 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
             }]"#,
         )
         .create();
-    let _connect = server
-        .mock("POST", "/api/v1/auth/connect-manual")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+        .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
         .match_body(Matcher::JsonString(
             r#"{"connection_params":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
         ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
         .with_body(r#"{"status":"connected","integration":"datadog"}"#)
         .create();
 
@@ -682,11 +692,7 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
 #[test]
 fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{
                 "name":"manual-svc",
@@ -699,18 +705,19 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
             }]"#,
         )
         .create();
-    let _connect = server
-        .mock("POST", "/api/v1/auth/connect-manual")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"connection":"workspace","credential":"abc123","integration":"manual-svc"}"#
-                .to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"{
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","credential":"abc123","integration":"manual-svc"}"#
+            .to_string(),
+    ))
+    .with_body(
+        r#"{
                 "status":"selection_required",
                 "integration":"manual-svc",
                 "selection_url":"/api/v1/auth/pending-connection",
@@ -720,20 +727,23 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
                     {"id":"site-b","name":"Site B"}
                 ]
             }"#,
-        )
-        .create();
+    )
+    .create();
     let _select = server
-        .mock("POST", "/api/v1/auth/pending-connection")
-        .match_header("Authorization", "Bearer test-token")
+        .mock(Method::POST.as_str(), "/api/v1/auth/pending-connection")
         .match_header(
-            "content-type",
-            Matcher::Regex("application/x-www-form-urlencoded.*".to_string()),
+            header::AUTHORIZATION.as_str(),
+            Matcher::Exact(test_bearer()),
+        )
+        .match_header(
+            header::CONTENT_TYPE.as_str(),
+            Matcher::Regex(format!("{}.*", http::APPLICATION_X_WWW_FORM_URLENCODED)),
         )
         .match_body(Matcher::Exact(
             "pending_token=pending-123&candidate_index=1".to_string(),
         ))
-        .with_status(200)
-        .with_header("Content-Type", "text/html")
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header(header::CONTENT_TYPE.as_str(), http::TEXT_HTML)
         .with_body("<html>ok</html>")
         .create();
 
@@ -756,33 +766,30 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
 #[test]
 fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"[{
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
                 "name":"github",
                 "display_name":"GitHub",
                 "auth_types":["oauth","manual"],
                 "connection_params":{"site":{"description":"GitHub site","required":true}},
                 "credential_fields":[{"name":"token","label":"Token"}]
             }]"#,
-        )
-        .create();
-    let _oauth = server
-        .mock("POST", "/api/v1/auth/start-oauth")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"connection_params":{"site":"github.valon.com"},"integration":"github"}"#
-                .to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-        .create();
+            )
+            .create();
+    let _oauth = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection_params":{"site":"github.valon.com"},"integration":"github"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
 
     let home = tempfile::tempdir().unwrap();
     let browser_bin = tempfile::tempdir().unwrap();
@@ -826,24 +833,22 @@ fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
 #[test]
 fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
-        .create();
-    let _connect = server
-        .mock("POST", "/api/v1/auth/connect-manual")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"credential":"secret","integration":"manual-svc"}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
-        .create();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+            .create();
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"credential":"secret","integration":"manual-svc"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
+    .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -858,13 +863,10 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
 #[test]
 fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
     let mut server = Server::new();
-    let _integrations = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
-        .create();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+            .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -900,23 +902,27 @@ fn single_operation_catalog(id: &str) -> String {
 fn test_invoke_with_connection_and_instance() {
     let mut server = Server::new();
 
-    let _catalog_mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
+    let _catalog_mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
 
-    let invoke_mock = server
-        .mock("POST", "/api/v1/test_svc/do_thing")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"_connection":"workspace","_instance":"team-a","name":"test"}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"ok": true}"#)
-        .create();
+    let invoke_mock = json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/test_svc/do_thing",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"workspace","_instance":"team-a","name":"test"}"#.to_string(),
+    ))
+    .with_body(r#"{"ok": true}"#)
+    .create();
 
     let params = vec![gestalt::params::ParamEntry {
         key: "name".to_string(),
@@ -940,30 +946,27 @@ fn test_invoke_with_connection_and_instance() {
     invoke_mock.assert();
     assert!(result.is_ok());
 
-    let _secondary_catalog_mock = server
-        .mock(
-            Method::GET.as_str(),
-            "/api/v1/integrations/other_svc/operations",
-        )
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(usize::from(StatusCode::OK.as_u16()))
-        .with_header("Content-Type", "application/json")
-        .with_body(single_operation_catalog("check_status"))
-        .create();
+    let _secondary_catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/other_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("check_status"))
+    .create();
 
-    let secondary_invoke_mock = server
-        .mock(Method::POST.as_str(), "/api/v1/other_svc/check_status")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"_connection":"workspace","_instance":"team-a"}"#.to_string(),
-        ))
-        .with_status(usize::from(StatusCode::PRECONDITION_FAILED.as_u16()))
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"{"error":"no token stored for integration \"other_svc\" instance \"team-a\""}"#,
-        )
-        .create();
+    let secondary_invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/other_svc/check_status",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"workspace","_instance":"team-a"}"#.to_string(),
+    ))
+    .with_body(r#"{"error":"no token stored for integration \"other_svc\" instance \"team-a\""}"#)
+    .create();
 
     let err = format!(
         "{:#}",
@@ -992,12 +995,14 @@ fn test_invoke_with_connection_and_instance() {
 fn test_describe_operation() {
     let mut server = Server::new();
 
-    let mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
+    let mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
 
     let client = create_client(&server);
     let result =
@@ -1029,18 +1034,14 @@ fn test_cli_config_set_and_get_json() {
 fn test_cli_integrations_list_table_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
-    let mock = server
-        .mock("GET", "/api/v1/integrations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
         )
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.env("GESTALT_API_KEY", "test-token")
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN)
         .args(["--url", &server.url(), "integrations", "list"]);
     cmd.assert()
         .success()
@@ -1062,28 +1063,30 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
     let input_file = home.path().join("input.json");
     std::fs::write(&input_file, r#"{"count":1,"name":"from-file"}"#).unwrap();
 
-    let _catalog_mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
 
-    let invoke_mock = server
-        .mock("POST", "/api/v1/test_svc/do_thing")
-        .match_header("Authorization", "Bearer test-token")
-        .match_header("Content-Type", "application/json")
-        .match_body(Matcher::JsonString(
-            r#"{"count":42,"name":"override","tags":["one","two"]}"#.to_string(),
-        ))
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(r#"{"result":{"id":"1"}}"#)
-        .create();
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/test_svc/do_thing",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"count":42,"name":"override","tags":["one","two"]}"#.to_string(),
+    ))
+    .with_body(r#"{"result":{"id":"1"}}"#)
+    .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.env("GESTALT_API_KEY", "test-token").args([
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
         "--format",
@@ -1113,32 +1116,34 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
 fn test_cli_invoke_table_keeps_nested_json_inline() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
-    let _catalog_mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
 
-    let invoke_mock = server
-        .mock("GET", "/api/v1/test_svc/do_thing")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(
-            r#"{
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/test_svc/do_thing",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"{
                 "id":"abc123",
                 "status":"ok",
                 "user":{"name":"Amy","email":"amy@example.com"},
                 "labels":["prod","urgent"],
                 "jobs":[{"id":"j1","state":"done"},{"id":"j2","state":"running"}]
             }"#,
-        )
-        .create();
+    )
+    .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.env("GESTALT_API_KEY", "test-token").args([
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
         "invoke",
@@ -1165,13 +1170,14 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
 fn test_cli_invoke_rejects_duplicate_scalar_params() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
-    let _catalog_mock = server
-        .mock("GET", "/api/v1/integrations/test_svc/operations")
-        .match_header("Authorization", "Bearer test-token")
-        .with_status(200)
-        .with_header("Content-Type", "application/json")
-        .with_body(catalog_body())
-        .create();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
 
     let mut cmd = cli_command(home.path());
     cmd.env("GESTALT_API_KEY", "test-token").args([
