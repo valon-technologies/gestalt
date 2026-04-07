@@ -33,9 +33,9 @@ provider:
 ```
 
 For Go source plugins, the provider code lives at the module root. For Python
-source plugins, Gestalt loads the plugin object declared in `[tool.gestalt]`.
-In both cases, Gestalt synthesizes the runnable wrapper for local source
-execution and release packaging.
+source plugins, Gestalt loads the module declared in
+`[tool.gestalt].plugin`. In both cases, Gestalt synthesizes the runnable
+wrapper for local source execution and release packaging.
 
 ### Declarative provider package
 
