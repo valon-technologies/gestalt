@@ -1,6 +1,6 @@
 import gestalt
 
-plugin = gestalt.Plugin.from_manifest("plugin.yaml")
+GREETING = "Hello"
 
 
 class GreetInput(gestalt.Model):
@@ -11,15 +11,15 @@ class GreetOutput(gestalt.Model):
     message: str
 
 
-@plugin.operation(
-    id="greet",
+def configure(_name: str, config: dict[str, object]) -> None:
+    global GREETING
+    GREETING = str(config.get("greeting", "Hello"))
+
+
+@gestalt.operation(
     method="GET",
     description="Return a greeting message",
     read_only=True,
 )
 def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
-    return GreetOutput(message=f"Hello, {input.name}!")
-
-
-if __name__ == "__main__":
-    plugin.serve()
+    return GreetOutput(message=f"{GREETING}, {input.name}!")

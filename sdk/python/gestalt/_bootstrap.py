@@ -8,7 +8,7 @@ BUNDLED_CONFIG_NAME = "gestalt-runtime.json"
 @dataclass(frozen=True)
 class PluginTarget:
     module_name: str
-    attribute_name: str
+    attribute_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -18,9 +18,13 @@ class BundledPluginConfig:
 
 
 def parse_plugin_target(target: str) -> PluginTarget:
-    module_name, _, attribute_name = target.partition(":")
-    if not module_name or not attribute_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module:attribute form")
+    module_name, sep, attribute_name = target.partition(":")
+    module_name = module_name.strip()
+    attribute_name = attribute_name.strip() or None
+    if not module_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
+    if sep and attribute_name is None:
+        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
 
     return PluginTarget(
         module_name=module_name,

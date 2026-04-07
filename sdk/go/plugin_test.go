@@ -20,7 +20,6 @@ type stubOutput struct {
 }
 
 var stubRouter = gestalt.MustRouter(
-	"stub-provider",
 	gestalt.Register(
 		gestalt.Operation[stubInput, stubOutput]{
 			ID:     "test_op",
@@ -31,7 +30,6 @@ var stubRouter = gestalt.MustRouter(
 )
 
 var startableStubRouter = gestalt.MustRouter(
-	"stub-provider",
 	gestalt.Register(
 		gestalt.Operation[stubInput, stubOutput]{
 			ID:     "test_op",
@@ -42,7 +40,6 @@ var startableStubRouter = gestalt.MustRouter(
 )
 
 var sessionCatalogStubRouter = gestalt.MustRouter(
-	"stub-provider",
 	gestalt.Register(
 		gestalt.Operation[stubInput, stubOutput]{
 			ID:     "test_op",

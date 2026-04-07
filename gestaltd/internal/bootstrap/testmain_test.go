@@ -91,7 +91,7 @@ func TestMain(m *testing.M) {
 
 func buildBootstrapTestBinary(dir, target, output string) error {
 	if target == "" {
-		return pluginpkg.BuildGoProviderBinary(dir, output, runtime.GOOS, runtime.GOARCH)
+		return pluginpkg.BuildGoProviderBinary(dir, output, filepath.Base(dir), runtime.GOOS, runtime.GOARCH)
 	}
 	return runGoCommand(dir, "build", "-o", output, target)
 }

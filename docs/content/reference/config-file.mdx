@@ -464,7 +464,7 @@ from:
 
 | Field | Purpose |
 | --- | --- |
-| `source.path` | Load a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from `[tool.gestalt].plugin`. |
+| `source.path` | Load a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from the module or plugin object declared in `[tool.gestalt].plugin`. |
 | `source.ref` | Resolve a versioned plugin source during `init`. Format: `github.com/<org>/<repo>/<plugin>`. |
 | `source.version` | Required with `source.ref`. Invalid with `source.path`. |
 | `env` | Extra environment variables for executable providers. |

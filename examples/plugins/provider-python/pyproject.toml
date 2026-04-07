@@ -8,4 +8,4 @@ version = "0.1.0"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-plugin = "provider:plugin"
+plugin = "provider"

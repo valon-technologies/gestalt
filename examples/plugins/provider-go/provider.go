@@ -54,7 +54,6 @@ var (
 		ReadOnly:    true,
 	}
 	Router = gestalt.MustRouter(
-		"example",
 		gestalt.Register(greetOperation, (*Provider).greet),
 		gestalt.Register(echoOperation, (*Provider).echo),
 		gestalt.Register(statusOperation, (*Provider).status),

@@ -1,4 +1,4 @@
-from ._plugin import Model, OK, Plugin, Request, Response, field
+from ._plugin import Model, OK, Plugin, Request, Response, field, operation
 
 __all__ = [
     "Model",
@@ -7,4 +7,5 @@ __all__ = [
     "Request",
     "Response",
     "field",
+    "operation",
 ]

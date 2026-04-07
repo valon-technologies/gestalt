@@ -29,9 +29,12 @@
 //	func New() *MyProvider { return &MyProvider{} }
 //
 //	var Router = gestalt.MustRouter(
-//		"my-plugin",
 //		gestalt.Register(myOperation, (*MyProvider).myHandler),
 //	)
+//
+// Source-plugin flows derive the executable catalog name from plugin.yaml. Use
+// [MustNamedRouter] only when you need an explicit catalog name outside that
+// manifest-backed flow.
 //
 // See the public example under `examples/plugins/provider-go` and
 // `/docs/plugins/writing-a-plugin` for the full typed authoring flow.

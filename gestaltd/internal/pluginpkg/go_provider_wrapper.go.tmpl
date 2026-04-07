@@ -15,7 +15,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router); err != nil {
+	if err := gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName({{printf "%q" .PluginName}})); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

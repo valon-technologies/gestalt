@@ -126,7 +126,7 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 		t.Fatalf("WriteFile(plugin.yaml): %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-plugin = "provider:plugin"
+plugin = "provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}

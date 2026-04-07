@@ -101,13 +101,22 @@ type Router[P any] struct {
 	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
-// NewRouter constructs a typed router and static catalog from registrations.
-func NewRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
+// NewRouter constructs a typed router from registrations. Source-plugin flows
+// derive the router name from plugin.yaml at build time.
+func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
+	return newRouter("", registrations...)
+}
+
+// NewNamedRouter constructs a typed router with an explicit catalog name.
+func NewNamedRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("router name is required")
 	}
+	return newRouter(name, registrations...)
+}
 
+func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
 	router := &Router[P]{
 		catalog: Catalog{
 			Name:       name,
@@ -131,8 +140,17 @@ func NewRouter[P any](name string, registrations ...Registration[P]) (*Router[P]
 }
 
 // MustRouter panics if [NewRouter] returns an error.
-func MustRouter[P any](name string, registrations ...Registration[P]) *Router[P] {
-	router, err := NewRouter(name, registrations...)
+func MustRouter[P any](registrations ...Registration[P]) *Router[P] {
+	router, err := NewRouter(registrations...)
+	if err != nil {
+		panic(err)
+	}
+	return router
+}
+
+// MustNamedRouter panics if [NewNamedRouter] returns an error.
+func MustNamedRouter[P any](name string, registrations ...Registration[P]) *Router[P] {
+	router, err := NewNamedRouter(name, registrations...)
 	if err != nil {
 		panic(err)
 	}
@@ -145,6 +163,29 @@ func (r *Router[P]) Catalog() *Catalog {
 		return nil
 	}
 	return cloneCatalog(&r.catalog)
+}
+
+// WithName returns a clone of the router with the provided catalog name.
+// Empty names preserve the existing router name.
+func (r *Router[P]) WithName(name string) *Router[P] {
+	if r == nil {
+		return nil
+	}
+	cloned := cloneCatalog(&r.catalog)
+	if cloned == nil {
+		cloned = &Catalog{}
+	}
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		cloned.Name = trimmed
+	}
+	handlers := make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(r.handlers))
+	for opID, handler := range r.handlers {
+		handlers[opID] = handler
+	}
+	return &Router[P]{
+		catalog:  *cloned,
+		handlers: handlers,
+	}
 }
 
 // Execute decodes params into the typed input struct and dispatches the named operation.
