@@ -230,7 +230,7 @@ export GESTALT_URL=${origin}`}
                 <code className="font-mono text-sm text-primary">
                   .gestalt/config.json
                 </code>,{" "}
-                user-local{" "}
+                user-local CLI config file, for example{" "}
                 <code className="font-mono text-sm text-primary">
                   ~/.config/gestalt/config.json
                 </code>

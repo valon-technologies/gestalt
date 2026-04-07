@@ -48,13 +48,15 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     if let Some(url) = find_project_config_value("url")? {
         return Ok(normalize_url(&url));
     }
-    if let Some(url) = ConfigStore::new()?.get("url")? {
+    let config_store = ConfigStore::new()?;
+    if let Some(url) = config_store.get("url")? {
         return Ok(normalize_url(&url));
     }
 
     bail!(
-        "no URL configured: use --url, GESTALT_URL, {}, or ~/.config/gestalt/config.json",
-        PROJECT_CONFIG_FILE
+        "no URL configured: use --url, GESTALT_URL, {}, or the user-local config file at {}",
+        PROJECT_CONFIG_FILE,
+        config_store.path().display()
     )
 }
 

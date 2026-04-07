@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -28,6 +29,10 @@ impl ConfigStore {
 
     pub fn get(&self, key: &str) -> Result<Option<String>> {
         Ok(self.load()?.get(key).cloned())
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     pub fn set(&self, key: &str, value: &str) -> Result<()> {
