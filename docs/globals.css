@@ -267,7 +267,9 @@ footer > div {
 }
 
 .nextra-sidebar-footer {
-  display: none !important;
+  border-top: none !important;
+  margin-left: 0 !important;
+  padding-left: 16px !important;
 }
 
 .nextra-sidebar-container a:hover,
