@@ -8,8 +8,7 @@ from typing import Any, Iterable, get_origin, get_type_hints
 import yaml
 
 from ._api import FIELD_DESCRIPTION_KEY, FIELD_REQUIRED_KEY
-from ._operations import OperationDefinition
-from ._typing_utils import is_optional_type, strip_optional
+from ._operations import OperationDefinition, is_optional_type, strip_optional
 
 
 def build_catalog(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import os
 import pathlib
 import signal
@@ -14,6 +13,7 @@ from typing import Any
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
+from ._operations import json_body
 from ._plugin import Plugin, _module_plugin
 
 ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
@@ -189,7 +189,7 @@ def _provider_servicer(*, plugin: Plugin, runtime: _RuntimeImports) -> Any:
             except Exception as error:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
-                body = _error_body(str(error))
+                body = json_body({"error": str(error)})
             return runtime.plugin_pb2.OperationResult(status=status, body=body)
 
     return ProviderServicer()
@@ -223,11 +223,5 @@ def _runtime_imports() -> _RuntimeImports:
         plugin_pb2=plugin_pb2,
         plugin_pb2_grpc=plugin_pb2_grpc,
     )
-
-
-def _error_body(message: str) -> str:
-    return json.dumps({"error": message}, separators=(",", ":"))
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -6,12 +6,12 @@ import inspect
 import json
 import pathlib
 import traceback
+import types
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from ._api import Request, Response
-from ._typing_utils import strip_optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +108,7 @@ def json_body(value: Any) -> str:
 
 
 def _error_result(status: HTTPStatus, message: str) -> tuple[int, str]:
-    return status, json.dumps({"error": message}, separators=(",", ":"))
+    return status, json_body({"error": message})
 
 
 def _normalize_input_type(annotation: Any) -> Any:
@@ -235,3 +235,19 @@ def _json_value(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_value(item) for item in value]
     return value
+
+
+def strip_optional(annotation: Any) -> Any:
+    origin = get_origin(annotation)
+    if origin not in (Union, types.UnionType):
+        return annotation
+
+    args = [arg for arg in get_args(annotation) if arg is not type(None)]
+    if len(args) == 1:
+        return args[0]
+    return annotation
+
+
+def is_optional_type(annotation: Any) -> bool:
+    origin = get_origin(annotation)
+    return origin in (Union, types.UnionType) and type(None) in get_args(annotation)
