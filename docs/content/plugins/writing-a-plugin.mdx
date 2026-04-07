@@ -132,24 +132,26 @@ deliberate application-level error.
 
 ## Python typed operations
 
-Point `pyproject.toml` at the module or plugin object that Gestalt should load:
+Point `pyproject.toml` at the module that Gestalt should load:
 
 ```toml
-[build-system]
-requires = ["setuptools==82.0.1"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "my-plugin"
 version = "0.1.0"
 dependencies = ["gestalt"]
 
+[tool.uv]
+package = false
+
 [tool.gestalt]
 plugin = "provider"
 ```
 
-If you install the SDK from a private index, pin `gestalt` to that index with
-`uv` rather than relying on PyPI fallback.
+Python source plugins are `uv`-managed apps, not Python packages. You do not
+need a `build-system` table or setuptools config. If you install the SDK from a
+private index, pin `gestalt` to that index with `uv` rather than relying on
+PyPI fallback. If you source the SDK directly from Git instead, declare it in
+`[tool.uv.sources]`.
 
 Then define operations in `provider.py`:
 
