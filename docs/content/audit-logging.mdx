@@ -8,19 +8,9 @@ backend without having to reconstruct behavior from mixed application logs.
 
 ## Coverage
 
-Audit events are emitted for:
+Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, login and logout flows, integration connect and disconnect flows, and API token lifecycle. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
 
-- HTTP operation invocations with `source: http`
-- MCP operation invocations with `source: mcp`
-- Other guarded runtime surfaces that use the invocation guard, such as binding
-  hooks, with a surface-specific `source`
-- Login and logout flows
-- Integration connect and disconnect flows
-- API token create and revoke flows
-
-`gestaltd` resolves the authenticated user ID before emitting session-backed
-audit events, so session requests and API-token requests both produce stable
-`user_id` values when a user identity exists.
+`gestaltd` resolves the authenticated user ID before emitting session-backed audit events, so both session requests and API-token requests produce stable `user_id` values when a user identity exists.
 
 ## Fields
 
@@ -92,21 +82,11 @@ Non-invocation HTTP audit events use explicit operation names:
 
 ## Routing
 
-By default, audit records follow the main `telemetry` log pipeline:
+By default, audit records follow the main telemetry log pipeline. With `telemetry.provider: stdout` they appear in local structured logs; with `telemetry.provider: otlp` they export through the OTLP log pipeline.
 
-- `telemetry.provider: stdout` writes them to local structured logs
-- `telemetry.provider: otlp` exports them through the OTLP log pipeline
+If you need a dedicated audit route, configure the top-level `audit:` block. Set `audit.provider: stdout` to keep audit logs on stdout even when telemetry uses a different provider, `audit.provider: otlp` to export only audit records to a dedicated OTLP collector, or `audit.provider: noop` to disable audit output explicitly.
 
-If you need a dedicated audit route, configure the top-level `audit:` block:
-
-- `audit.provider: stdout` keeps audit logs on stdout even when telemetry uses a different provider
-- `audit.provider: otlp` exports only audit records to a dedicated OTLP collector
-- `audit.provider: noop` disables audit output explicitly
-
-If you keep `audit.provider: inherit`, you can still split audit records
-downstream by filtering on `log.type=audit` in your collector. For the config
-surface itself, see [Config File](/reference/config-file). For export options,
-see [Observability](/observability).
+With the default `audit.provider: inherit`, you can still split audit records downstream by filtering on `log.type=audit` in your collector. See [Config File](/reference/config-file) for the config surface and [Observability](/observability) for export options.
 
 ## Metrics Notes
 
@@ -114,13 +94,4 @@ Audit logs are a good source for invocation-based activity metrics. In
 particular, `source`, `auth_source`, `user_id`, `provider`, `operation`, and
 `allowed` are enough to derive distinct-user activity over guarded invocations.
 
-For DAU, WAU, or MAU built from tool usage, filter to successful top-level
-invocations, for example:
-
-- `allowed = true`
-- `depth = 0`
-- non-empty `user_id`
-
-This produces a clean “users who actually invoked a tool” metric. If you need a
-broader product-activity definition, treat the non-invocation audit events as a
-separate metric family rather than mixing them into invocation counts.
+For DAU, WAU, or MAU built from tool usage, filter to successful top-level invocations where `allowed = true`, `depth = 0`, and `user_id` is non-empty. That produces a clean “users who actually invoked a tool” metric. If you need a broader product-activity definition, treat the non-invocation audit events as a separate metric family rather than mixing them into invocation counts.

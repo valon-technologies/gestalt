@@ -1,232 +1,252 @@
+import { Tabs } from 'nextra/components'
+
 # Writing a Plugin
-
-This guide walks through the full authoring flow for an executable provider plugin with the Go or Python SDK.
-
-You will:
-
-1. Implement the provider and typed operations in Go or Python.
-2. Define static metadata and auth in `plugin.yaml`.
-3. Run the plugin locally with `from.source.path`.
-4. Release it with a single command.
 
 ## Runtime model
 
-Executable plugins are separate processes started by `gestaltd`. The host opens
-a temporary Unix socket, sets `GESTALT_PLUGIN_SOCKET`, and waits for the plugin
-to connect back over gRPC.
+Executable plugins are separate processes started by `gestaltd`. The host opens a temporary Unix socket, sets `GESTALT_PLUGIN_SOCKET`, and waits for the plugin to connect back over gRPC. At startup the plugin receives the configured provider name, the provider `config` block, and the current request context for each invocation.
 
-At startup the plugin receives:
-
-- the configured provider name
-- the provider `config` block
-- the current request context for each invocation
-
-The host still owns auth, token storage, connection selection, and HTTP or MCP
-routing. Plugins do not access the datastore directly.
+The host still owns auth, token storage, connection selection, and HTTP or MCP routing. Plugins do not access the datastore directly.
 
 ## Prerequisites
 
-- Go 1.26 or later for Go plugins
-- Python 3.10 or later for Python plugins
-- A running `gestaltd` instance for testing
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    You need Go 1.26+ and a running `gestaltd` instance for testing.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need Python 3.10+ and a running `gestaltd` instance for testing.
+  </Tabs.Tab>
+</Tabs>
 
 ## Create the project
 
-```sh
-mkdir my-plugin && cd my-plugin
-go mod init example.com/my-plugin
-go get github.com/valon-technologies/gestalt/sdk/go
-```
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    ```sh
+    mkdir my-plugin && cd my-plugin
+    go mod init example.com/my-plugin
+    go get github.com/valon-technologies/gestalt/sdk/go
+    ```
 
-Recommended layout:
+    Recommended layout:
 
-```text
-my-plugin/
-  go.mod
-  plugin.yaml
-  provider.go
-```
+    ```text
+    my-plugin/
+      go.mod
+      plugin.yaml
+      provider.go
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    mkdir my-plugin && cd my-plugin
+    ```
 
-For Python source plugins:
+    Point `pyproject.toml` at the module that Gestalt should load:
 
-```text
-my-plugin/
-  pyproject.toml
-  plugin.yaml
-  provider.py
-```
+    ```toml
+    [project]
+    name = "my-plugin"
+    version = "0.1.0"
+    dependencies = ["gestalt"]
+
+    [tool.uv]
+    package = false
+
+    [tool.gestalt]
+    plugin = "provider"
+    ```
+
+    Python source plugins are `uv`-managed apps, not Python packages. You do not need a `build-system` table or setuptools config. If you install the SDK from a private index, pin `gestalt` to that index with `uv` rather than relying on PyPI fallback. If you source the SDK directly from Git instead, declare it in `[tool.uv.sources]`.
+
+    Recommended layout:
+
+    ```text
+    my-plugin/
+      pyproject.toml
+      plugin.yaml
+      provider.py
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ## Define typed operations
 
-Create a package that holds the provider, typed operation definitions, and router:
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    Create a package that holds the provider, typed operation definitions, and router:
 
-```go
-package provider
+    ```go
+    package provider
 
-import (
-  "context"
-  "fmt"
-  "net/http"
+    import (
+      "context"
+      "fmt"
+      "net/http"
 
-  gestalt "github.com/valon-technologies/gestalt/sdk/go"
-)
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
 
-type Provider struct {
-  greeting string
-}
+    type Provider struct {
+      greeting string
+    }
 
-type GreetInput struct {
-  Name string `json:"name,omitempty" doc:"Name to greet"`
-}
+    type GreetInput struct {
+      Name string `json:"name,omitempty" doc:"Name to greet"`
+    }
 
-type GreetOutput struct {
-  Message string `json:"message"`
-}
+    type GreetOutput struct {
+      Message string `json:"message"`
+    }
 
-var (
-  greetOperation = gestalt.Operation[GreetInput, GreetOutput]{
-    ID:          "greet",
-    Method:      http.MethodGet,
-    Description: "Return a greeting message",
-  }
-  Router = gestalt.MustRouter(
-    gestalt.Register(greetOperation, (*Provider).greet),
-  )
-)
+    var (
+      greetOperation = gestalt.Operation[GreetInput, GreetOutput]{
+        ID:          "greet",
+        Method:      http.MethodGet,
+        Description: "Return a greeting message",
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(greetOperation, (*Provider).greet),
+      )
+    )
 
-func New() *Provider {
-  return &Provider{}
-}
+    func New() *Provider {
+      return &Provider{}
+    }
 
-func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
-  if g, ok := config["greeting"].(string); ok {
-    p.greeting = g
-  }
-  return nil
-}
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+      if g, ok := config["greeting"].(string); ok {
+        p.greeting = g
+      }
+      return nil
+    }
 
-func (p *Provider) greet(
-  _ context.Context,
-  input GreetInput,
-  _ gestalt.Request,
-) (gestalt.Response[GreetOutput], error) {
-  greeting := p.greeting
-  if greeting == "" {
+    func (p *Provider) greet(
+      _ context.Context,
+      input GreetInput,
+      _ gestalt.Request,
+    ) (gestalt.Response[GreetOutput], error) {
+      greeting := p.greeting
+      if greeting == "" {
+        greeting = "Hello"
+      }
+      if input.Name == "" {
+        input.Name = "World"
+      }
+      return gestalt.OK(GreetOutput{
+        Message: fmt.Sprintf("%s, %s!", greeting, input.Name),
+      }), nil
+    }
+    ```
+
+    You do not write `main.go`. Gestalt synthesizes the executable wrapper automatically for local source execution, packaging, and release.
+
+    By default, typed input decode failures return a structured `400` response, and unhandled handler errors or panics return a structured `500` response. Return a non-2xx `gestalt.Response[...]` explicitly when the operation wants to signal a deliberate application-level error.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Define operations in `provider.py`:
+
+    ```python
+    import gestalt
+
     greeting = "Hello"
-  }
-  if input.Name == "" {
-    input.Name = "World"
-  }
-  return gestalt.OK(GreetOutput{
-    Message: fmt.Sprintf("%s, %s!", greeting, input.Name),
-  }), nil
-}
-```
-
-You do not write `main.go`. Gestalt synthesizes the executable wrapper automatically for local source execution, packaging, and release.
-
-By default, typed input decode failures return a structured `400` response, and
-unhandled handler errors or panics return a structured `500` response. Return a
-non-2xx `gestalt.Response[...]` explicitly when the operation wants to signal a
-deliberate application-level error.
-
-## Python typed operations
-
-Point `pyproject.toml` at the module that Gestalt should load:
-
-```toml
-[project]
-name = "my-plugin"
-version = "0.1.0"
-dependencies = ["gestalt"]
-
-[tool.uv]
-package = false
-
-[tool.gestalt]
-plugin = "provider"
-```
-
-Python source plugins are `uv`-managed apps, not Python packages. You do not
-need a `build-system` table or setuptools config. If you install the SDK from a
-private index, pin `gestalt` to that index with `uv` rather than relying on
-PyPI fallback. If you source the SDK directly from Git instead, declare it in
-`[tool.uv.sources]`.
-
-Then define operations in `provider.py`:
-
-```python
-import gestalt
 
 
-class GreetInput(gestalt.Model):
-    name: str = gestalt.field(description="Name to greet", default="World")
+    def configure(name, config):
+        global greeting
+        greeting = config.get("greeting", "Hello")
 
 
-class GreetOutput(gestalt.Model):
-    message: str
+    class GreetInput(gestalt.Model):
+        name: str = gestalt.field(description="Name to greet", default="World")
 
 
-@gestalt.operation(
-    method="GET",
-    description="Return a greeting message",
-    read_only=True,
-)
-def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
-    return GreetOutput(message=f"Hello, {input.name}!")
-```
+    class GreetOutput(gestalt.Model):
+        message: str
 
-If your plugin needs startup config, define a plain top-level
-`configure(name, config)` function. It does not need a decorator.
 
-You do not write a launcher script for local development or release. Gestalt loads the module declared in `[tool.gestalt].plugin`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
+    @gestalt.operation(
+        method="GET",
+        description="Return a greeting message",
+        read_only=True,
+    )
+    def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
+        return GreetOutput(message=f"{greeting}, {input.name}!")
+    ```
 
-By default, input decode failures return a structured `400` response, and
-unhandled exceptions return a structured `500` response. Return
-`gestalt.Response(...)` explicitly when the operation wants to signal a
-deliberate application-level error.
+    The top-level `configure(name, config)` function runs once at startup. It does not need a decorator.
 
-## Write `plugin.yaml`
+    You do not write a launcher script for local development or release. Gestalt loads the module declared in `[tool.gestalt].plugin`, materializes the static catalog automatically, and packages a runnable executable artifact during release.
 
-Static metadata, auth, and passthrough surfaces stay in YAML:
+    By default, input decode failures return a structured `400` response, and unhandled exceptions return a structured `500` response. Return `gestalt.Response(...)` explicitly when the operation wants to signal a deliberate application-level error.
+  </Tabs.Tab>
+</Tabs>
 
-```yaml
-source: github.com/example/plugins/my-plugin
-version: 0.1.0
-display_name: My Plugin
-description: A custom provider plugin
-provider:
-  connections:
-    default:
-      auth:
-        type: none
-```
+## Write the plugin manifest
 
-`plugin.yaml` stays the source of truth for:
+Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt accepts `plugin.yaml`, `plugin.yml`, or `plugin.json`.
 
-- display name and description
-- auth and connection model
-- passthrough API surfaces such as REST, OpenAPI, GraphQL, or MCP
+<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+  <Tabs.Tab>
+    ```yaml
+    source: github.com/example/plugins/my-plugin
+    version: 0.1.0
+    display_name: My Plugin
+    description: A custom provider plugin
+    provider:
+      connections:
+        default:
+          auth:
+            type: none
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "source": "github.com/example/plugins/my-plugin",
+      "version": "0.1.0",
+      "display_name": "My Plugin",
+      "description": "A custom provider plugin",
+      "provider": {
+        "connections": {
+          "default": {
+            "auth": {
+              "type": "none"
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The manifest stays the source of truth for display name, description, auth, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP).
 
 ## Struct tag conventions
 
-The typed router derives catalog parameters from the input struct:
-
-- `json:"name"` sets the parameter name.
-- `json:",omitempty"` makes the parameter optional by default.
-- `doc:"..."` sets the parameter description.
-- `required:"true|false"` overrides the required inference.
-- `default:"..."` sets a scalar default value.
-
-Use plain structs for inputs. Nested structs are emitted as `object` parameters, and slices are emitted as `array`.
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    The typed router derives catalog parameters from the input struct. `json:"name"` sets the parameter name, and `json:",omitempty"` makes the parameter optional by default. Use `doc:"..."` for descriptions, `required:"true|false"` to override the required inference, and `default:"..."` to set a scalar default. Nested structs are emitted as `object` parameters and slices as `array`.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The typed router derives catalog parameters from the input model. Use `gestalt.field(description="...")` for descriptions and `default=...` for default values. Fields without a default are required. Nested models are emitted as `object` parameters and lists as `array`.
+  </Tabs.Tab>
+</Tabs>
 
 ## Optional interfaces
 
-Plugins can still implement:
-
-| Interface | Method | Purpose |
-| --- | --- | --- |
-| `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a dynamic catalog that depends on the caller's credentials or runtime state. |
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    | Interface | Method | Purpose |
+    | --- | --- | --- |
+    | `SessionCatalogProvider` | `CatalogForRequest(ctx, token)` | Return a dynamic catalog that depends on the caller's credentials or runtime state. |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Dynamic catalogs are not yet supported in the Python SDK.
+  </Tabs.Tab>
+</Tabs>
 
 ## Test locally
 
@@ -265,16 +285,15 @@ gestalt invoke my-plugin greet -p name=Gestalt
 gestaltd plugin release --version 0.1.0
 ```
 
-Gestalt materializes the executable catalog automatically during local source-plugin execution and release.
-
-- For Go source plugins, release builds every requested target platform.
-- For Python source plugins, release builds a current-platform executable artifact from the selected Python environment.
+<Tabs items={['Go', 'Python']} storageKey="sdk-lang">
+  <Tabs.Tab>
+    Gestalt materializes the executable catalog automatically during local source-plugin execution and release. Release builds every requested target platform.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Gestalt materializes the executable catalog automatically during local source-plugin execution and release. Release builds a current-platform executable artifact from the selected Python environment.
+  </Tabs.Tab>
+</Tabs>
 
 ## Hybrid providers
 
-Hybrid packages still work the same way:
-
-- `plugin.yaml` can define passthrough surfaces such as `provider.surfaces.openapi`, `provider.surfaces.rest`, `provider.surfaces.graphql`, or `provider.surfaces.mcp`
-- Go-defined typed operations define only the executable helper operations
-
-Do not define the same operation ID in both places.
+`plugin.yaml` can define passthrough surfaces (`provider.surfaces.openapi`, `provider.surfaces.rest`, `provider.surfaces.graphql`, or `provider.surfaces.mcp`) alongside Go- or Python-defined typed operations. The typed operations handle only the executable helper logic. Do not define the same operation ID in both places.

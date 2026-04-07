@@ -1,24 +1,10 @@
 # HTTP API
 
-This page documents the HTTP surface exposed by `gestaltd`.
+`gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
 
-When `server.management` is not configured, every route below is served from the
-public listener. When `server.management` is configured, `/admin`, `/metrics`,
-`/health`, and `/ready` move to the management listener and return `404` on the
-public listener. For production deployments, prefer the split-listener setup so
-the operator surface does not share the public listener.
+## Authentication model
 
-## Authentication Model
-
-Authenticated routes accept:
-
-- the `session_token` cookie
-- or `Authorization: Bearer <token>`
-
-Valid bearer tokens are:
-
-- platform session tokens
-- Gestalt API tokens (`gst_api_...`)
+Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens are platform session tokens and Gestalt API tokens (`gst_api_...`).
 
 ## Unauthenticated Routes
 
@@ -96,12 +82,9 @@ Gestalt:
 6. refreshes OAuth tokens when needed
 7. executes the provider operation
 
-## Parameter Conventions
+## Parameter conventions
 
-- `GET` invocations read parameters from the query string
-- `POST` invocations read parameters from a JSON body
-- `_connection` selects a named connection when an integration exposes more than one
-- `_instance` selects one stored instance for that connection
+`GET` invocations read parameters from the query string; `POST` invocations read parameters from a JSON body. Use `_connection` to select a named connection when an integration exposes more than one, and `_instance` to select one stored instance for that connection.
 
 ## Example
 

@@ -1,0 +1,53 @@
+import { Tabs } from 'nextra/components'
+
+# Binary Releases
+
+Pre-built binaries are published for every release on GitHub.
+
+## Download
+
+Download the latest `gestaltd` and `gestalt` binaries for your platform from the [GitHub releases page](https://github.com/valon-technologies/gestalt/releases).
+
+## Install
+
+Extract the archives and place both binaries on your `PATH`.
+
+<Tabs items={['macOS ARM64', 'macOS AMD64', 'Linux ARM64', 'Linux AMD64']} storageKey="platform">
+  <Tabs.Tab>
+    ```sh
+    tar xzf gestaltd_darwin_arm64.tar.gz
+    tar xzf gestalt_darwin_arm64.tar.gz
+    sudo mv gestaltd gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    tar xzf gestaltd_darwin_amd64.tar.gz
+    tar xzf gestalt_darwin_amd64.tar.gz
+    sudo mv gestaltd gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    tar xzf gestaltd_linux_arm64.tar.gz
+    tar xzf gestalt_linux_arm64.tar.gz
+    sudo mv gestaltd gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    tar xzf gestaltd_linux_amd64.tar.gz
+    tar xzf gestalt_linux_amd64.tar.gz
+    sudo mv gestaltd gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Verify
+
+```sh
+gestaltd version
+gestalt --help
+```
+
+Once both binaries are on your `PATH`, continue to [Getting Started](/getting-started).

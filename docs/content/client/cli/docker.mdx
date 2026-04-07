@@ -1,0 +1,43 @@
+# Docker Image
+
+Gestalt publishes a CLI Docker image for use in CI pipelines and containerized environments.
+
+| Property | Value |
+| --- | --- |
+| Image | `valontechnologies/gestalt:latest` |
+| Platforms | `linux/amd64`, `linux/arm64` |
+| Base | Distroless (`gcr.io/distroless/cc-debian12`) |
+| Entrypoint | `/gestalt` |
+| User | `nonroot:nonroot` |
+
+The image does not include a shell. Configure it with environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `GESTALT_URL` | Base URL of the `gestaltd` server |
+| `GESTALT_API_KEY` | API token for authentication |
+
+## Usage
+
+```sh
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  integrations list
+```
+
+## CI example
+
+```yaml
+jobs:
+  check-integrations:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          docker run --rm \
+            -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
+            -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
+            valontechnologies/gestalt:latest \
+            integrations list --format json
+```

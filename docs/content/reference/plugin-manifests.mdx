@@ -1,19 +1,12 @@
+import { Tabs } from 'nextra/components'
+
 # Plugin Manifests
 
-Gestalt plugins and plugin release archives are described by a manifest file named one of:
+Gestalt plugins and release archives are described by a manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`. YAML is the easiest format to author by hand.
 
-- `plugin.yaml`
-- `plugin.yml`
-- `plugin.json`
+## Top-level shape
 
-YAML is the easiest format to author by hand.
-
-## Top-Level Shape
-
-A manifest can define exactly one of:
-
-- `provider`
-- `webui`
+A manifest defines exactly one of `provider` or `webui`.
 
 ## Common Fields
 
@@ -28,120 +21,223 @@ A manifest can define exactly one of:
 | `webui` | UI metadata for UI-only packages. |
 | `artifacts` | Packaged executable artifacts keyed by platform. Source manifests used for local development or `plugin release` may omit them for pure executable providers. |
 
-## Basic YAML Manifest
+## Basic manifest
 
 This example is a declarative-only provider package. It does not need a binary.
 
-```yaml
-source: github.com/acme/plugins/support-api
-version: 0.1.0
-display_name: Support API
-description: Small ticket API
-icon_file: assets/icon.svg
-provider:
-  connections:
-    default:
-      auth:
-        type: bearer
-        credentials:
-          - name: token
-            label: API Token
-  surfaces:
-    rest:
-      base_url: https://api.support.example.com
-      operations:
-        - name: list_tickets
-          description: Return open tickets
-          method: GET
-          path: /tickets
-        - name: get_ticket
-          description: Return one ticket
-          method: GET
-          path: /tickets/{ticket_id}
-```
+<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+  <Tabs.Tab>
+    ```yaml
+    source: github.com/acme/plugins/support-api
+    version: 0.1.0
+    display_name: Support API
+    description: Small ticket API
+    icon_file: assets/icon.svg
+    provider:
+      connections:
+        default:
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: API Token
+      surfaces:
+        rest:
+          base_url: https://api.support.example.com
+          operations:
+            - name: list_tickets
+              description: Return open tickets
+              method: GET
+              path: /tickets
+            - name: get_ticket
+              description: Return one ticket
+              method: GET
+              path: /tickets/{ticket_id}
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "source": "github.com/acme/plugins/support-api",
+      "version": "0.1.0",
+      "display_name": "Support API",
+      "description": "Small ticket API",
+      "icon_file": "assets/icon.svg",
+      "provider": {
+        "connections": {
+          "default": {
+            "auth": {
+              "type": "bearer",
+              "credentials": [
+                { "name": "token", "label": "API Token" }
+              ]
+            }
+          }
+        },
+        "surfaces": {
+          "rest": {
+            "base_url": "https://api.support.example.com",
+            "operations": [
+              {
+                "name": "list_tickets",
+                "description": "Return open tickets",
+                "method": "GET",
+                "path": "/tickets"
+              },
+              {
+                "name": "get_ticket",
+                "description": "Return one ticket",
+                "method": "GET",
+                "path": "/tickets/{ticket_id}"
+              }
+            ]
+          }
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-Use this style when:
+Use this style when the provider can be described entirely in YAML, requires no custom code, and you want a reusable package that several configs can import.
 
-- the provider can be described entirely in YAML
-- you do not need custom code
-- you want a reusable package that several configs can import
+## Advanced manifest
 
-## Advanced YAML Manifest
+This example shows a provider package with a config schema, an executable entrypoint, OpenAPI and upstream MCP surfaces, managed parameters, allowed operation aliases, and multiple connections.
 
-This example shows a provider package with:
+<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+  <Tabs.Tab>
+    ```yaml
+    source: github.com/acme/plugins/support
+    version: 1.2.3
+    display_name: Support
+    description: Tickets, knowledge base, and MCP workspace tools
+    icon_file: assets/icon.svg
+    provider:
+      config_schema_path: schemas/config.schema.yaml
+      exec:
+        artifact_path: artifacts/linux/amd64/provider
+      headers:
+        X-App-Version: "2026-04-01"
+      managed_parameters:
+        - in: path
+          name: workspace_id
+          value: primary
+      connections:
+        default:
+          mode: user
+          auth:
+            type: oauth2
+            authorization_url: https://accounts.support.example.com/oauth/authorize
+            token_url: https://accounts.support.example.com/oauth/token
+            client_id: ${SUPPORT_CLIENT_ID}
+            client_secret: ${SUPPORT_CLIENT_SECRET}
+            scopes:
+              - tickets.read
+              - tickets.write
+          params:
+            workspace_id:
+              required: true
+              from: discovery
+          discovery:
+            url: https://api.support.example.com/workspaces
+            id_path: id
+            name_path: name
+            metadata:
+              workspace_id: id
+        mcp:
+          mode: user
+          auth:
+            type: mcp_oauth
+      surfaces:
+        openapi:
+          document: openapi.yaml
+        mcp:
+          url: https://mcp.support.example.com/mcp
+          connection: mcp
+      allowed_operations:
+        tickets.list:
+          alias: list_tickets
+        tickets.get:
+          alias: get_ticket
+    artifacts:
+      - os: linux
+        arch: amd64
+        path: artifacts/linux/amd64/provider
+        sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "source": "github.com/acme/plugins/support",
+      "version": "1.2.3",
+      "display_name": "Support",
+      "description": "Tickets, knowledge base, and MCP workspace tools",
+      "icon_file": "assets/icon.svg",
+      "provider": {
+        "config_schema_path": "schemas/config.schema.yaml",
+        "exec": {
+          "artifact_path": "artifacts/linux/amd64/provider"
+        },
+        "headers": {
+          "X-App-Version": "2026-04-01"
+        },
+        "managed_parameters": [
+          { "in": "path", "name": "workspace_id", "value": "primary" }
+        ],
+        "connections": {
+          "default": {
+            "mode": "user",
+            "auth": {
+              "type": "oauth2",
+              "authorization_url": "https://accounts.support.example.com/oauth/authorize",
+              "token_url": "https://accounts.support.example.com/oauth/token",
+              "client_id": "${SUPPORT_CLIENT_ID}",
+              "client_secret": "${SUPPORT_CLIENT_SECRET}",
+              "scopes": ["tickets.read", "tickets.write"]
+            },
+            "params": {
+              "workspace_id": { "required": true, "from": "discovery" }
+            },
+            "discovery": {
+              "url": "https://api.support.example.com/workspaces",
+              "id_path": "id",
+              "name_path": "name",
+              "metadata": { "workspace_id": "id" }
+            }
+          },
+          "mcp": {
+            "mode": "user",
+            "auth": { "type": "mcp_oauth" }
+          }
+        },
+        "surfaces": {
+          "openapi": { "document": "openapi.yaml" },
+          "mcp": {
+            "url": "https://mcp.support.example.com/mcp",
+            "connection": "mcp"
+          }
+        },
+        "allowed_operations": {
+          "tickets.list": { "alias": "list_tickets" },
+          "tickets.get": { "alias": "get_ticket" }
+        }
+      },
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "amd64",
+          "path": "artifacts/linux/amd64/provider",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-- a config schema
-- an executable entrypoint
-- OpenAPI and upstream MCP surfaces
-- managed parameters
-- allowed operation aliases
-- multiple connections
-
-```yaml
-source: github.com/acme/plugins/support
-version: 1.2.3
-display_name: Support
-description: Tickets, knowledge base, and MCP workspace tools
-icon_file: assets/icon.svg
-provider:
-  config_schema_path: schemas/config.schema.yaml
-  exec:
-    artifact_path: artifacts/linux/amd64/provider
-  headers:
-    X-App-Version: "2026-04-01"
-  managed_parameters:
-    - in: path
-      name: workspace_id
-      value: primary
-  connections:
-    default:
-      mode: user
-      auth:
-        type: oauth2
-        authorization_url: https://accounts.support.example.com/oauth/authorize
-        token_url: https://accounts.support.example.com/oauth/token
-        client_id: ${SUPPORT_CLIENT_ID}
-        client_secret: ${SUPPORT_CLIENT_SECRET}
-        scopes:
-          - tickets.read
-          - tickets.write
-      params:
-        workspace_id:
-          required: true
-          from: discovery
-      discovery:
-        url: https://api.support.example.com/workspaces
-        id_path: id
-        name_path: name
-        metadata:
-          workspace_id: id
-    mcp:
-      mode: user
-      auth:
-        type: mcp_oauth
-  surfaces:
-    openapi:
-      document: openapi.yaml
-    mcp:
-      url: https://mcp.support.example.com/mcp
-      connection: mcp
-  allowed_operations:
-    tickets.list:
-      alias: list_tickets
-    tickets.get:
-      alias: get_ticket
-artifacts:
-  - os: linux
-    arch: amd64
-    path: artifacts/linux/amd64/provider
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-```
-
-Use this style when:
-
-- the provider includes executable logic
-- a reusable package should ship its own connection model
-- you want packaged custom code plus spec-backed operations
+Use this style when the provider includes executable logic, should ship its own connection model as a reusable package, or combines custom code with spec-backed operations.
 
 When an executable provider defines helper operations in Go, Gestalt
 materializes that executable catalog automatically during local source-plugin
@@ -159,59 +255,99 @@ Use this when a provider issues user credentials first, but the final stored
 connection still needs one discovered identifier such as a site, tenant, or
 workspace.
 
-```yaml
-provider:
-  connections:
-    default:
-      auth:
-        type: oauth2
-        authorization_url: https://auth.example.com/authorize
-        token_url: https://auth.example.com/token
-      params:
-        workspace_id:
-          required: true
-          description: Workspace identifier discovered after connect
-          from: discovery
-      discovery:
-        url: https://api.example.com/me/workspaces
-        id_path: id
-        name_path: display_name
-        metadata:
-          workspace_id: id
-```
+<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+  <Tabs.Tab>
+    ```yaml
+    provider:
+      connections:
+        default:
+          auth:
+            type: oauth2
+            authorization_url: https://auth.example.com/authorize
+            token_url: https://auth.example.com/token
+          params:
+            workspace_id:
+              required: true
+              description: Workspace identifier discovered after connect
+              from: discovery
+          discovery:
+            url: https://api.example.com/me/workspaces
+            id_path: id
+            name_path: display_name
+            metadata:
+              workspace_id: id
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "provider": {
+        "connections": {
+          "default": {
+            "auth": {
+              "type": "oauth2",
+              "authorization_url": "https://auth.example.com/authorize",
+              "token_url": "https://auth.example.com/token"
+            },
+            "params": {
+              "workspace_id": {
+                "required": true,
+                "description": "Workspace identifier discovered after connect",
+                "from": "discovery"
+              }
+            },
+            "discovery": {
+              "url": "https://api.example.com/me/workspaces",
+              "id_path": "id",
+              "name_path": "display_name",
+              "metadata": { "workspace_id": "id" }
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-Behavior:
-
-- if discovery returns exactly one item, Gestalt merges its mapped metadata into
-  the stored connection automatically
-- if discovery returns multiple items, Gestalt asks the user to choose one
-- if discovery returns zero items, connect fails
+If discovery returns exactly one item, Gestalt merges its mapped metadata into the stored connection automatically. If discovery returns multiple items, Gestalt asks the user to choose one. If discovery returns zero items, connect fails.
 
 `metadata` populates connection metadata, and connection fields marked
 with `from: discovery` are satisfied from that metadata instead of user input.
 
-## Web UI Manifest Example
+## Web UI manifest
 
-```yaml
-source: github.com/acme/plugins/gestalt-ui
-version: 1.0.0
-display_name: Custom UI
-webui:
-  asset_root: ui/out
-```
+<Tabs items={['YAML', 'JSON']} storageKey="manifest-format">
+  <Tabs.Tab>
+    ```yaml
+    source: github.com/acme/plugins/gestalt-ui
+    version: 1.0.0
+    display_name: Custom UI
+    webui:
+      asset_root: ui/out
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "source": "github.com/acme/plugins/gestalt-ui",
+      "version": "1.0.0",
+      "display_name": "Custom UI",
+      "webui": {
+        "asset_root": "ui/out"
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-## Authoring Notes
+## Authoring notes
 
-- Manifest paths must stay inside the package.
-- `source` and `version` are required.
-- A manifest defines either `provider` or `webui`, not both.
-- Declarative-only provider packages do not require `artifacts`.
-- Pure executable source manifests used with `from.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`.
-- Executable provider packages do require `artifacts` plus `provider.exec.artifact_path`.
-- `config_schema_path` validates `providers.*.config`.
-- Config schemas may be written in JSON or YAML.
-- Only `provider.connections.default` may define `params` and `discovery`.
-- `provider.surfaces.rest`, `provider.surfaces.openapi`, and `provider.surfaces.graphql` are mutually exclusive. `provider.surfaces.mcp` may be added alongside any of them.
+Manifest paths must stay inside the package. `source` and `version` are required, and a manifest defines either `provider` or `webui`, not both.
+
+Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `from.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`, but executable provider packages do require both.
+
+`config_schema_path` validates `providers.*.config` and may be written in JSON or YAML. Only `provider.connections.default` may define `params` and `discovery`. The surface types `rest`, `openapi`, and `graphql` are mutually exclusive, but `mcp` may be added alongside any of them.
 
 ## Release
 
