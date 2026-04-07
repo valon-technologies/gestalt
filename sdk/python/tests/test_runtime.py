@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextlib
 import io
 import json
@@ -113,10 +111,18 @@ class RuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            tagged_manifest_path = temp_root / "tagged.yaml"
+            tagged_manifest_path.write_text(
+                "source: !env github.com/acme/plugins/tagged-provider\n"
+                "display_name: !env ${PLUGIN_NAME}\n",
+                encoding="utf-8",
+            )
+
             cases = [
                 (manifest_path, "Released-Plugin"),
                 (manifest_dir, "Directory-Manifest"),
                 (ascii_slug_manifest_path, "Cr-me-Br-l-e"),
+                (tagged_manifest_path, "tagged-provider"),
             ]
             for manifest_input, expected_name in cases:
                 with self.subTest(manifest_input=str(manifest_input)):

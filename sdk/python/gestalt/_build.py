@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import pathlib
 import subprocess
@@ -82,7 +80,7 @@ def _pyinstaller_command(
     module_name: str,
     bundle_config_path: pathlib.Path,
 ) -> list[str]:
-    pyinstaller_name = output_path.stem if output_path.suffix == ".exe" else output_path.name
+    pyinstaller_name = output_path.name.removesuffix(".exe") if sys.platform == "win32" else output_path.name
 
     return [
         sys.executable,

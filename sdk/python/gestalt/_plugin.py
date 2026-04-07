@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import inspect
 import json
 import pathlib
@@ -9,6 +7,7 @@ import types
 from typing import Any, Final
 
 import yaml
+from yaml.nodes import MappingNode, ScalarNode
 
 from ._api import Request
 from ._catalog import build_catalog, write_catalog
@@ -30,7 +29,7 @@ class Plugin:
         self._configure_handler: Any = None
 
     @classmethod
-    def from_manifest(cls, path: str | pathlib.Path) -> Plugin:
+    def from_manifest(cls, path: str | pathlib.Path) -> "Plugin":
         caller_file, caller_module_name = _caller_context()
         manifest_path = pathlib.Path(path)
         if not manifest_path.is_absolute() and not manifest_path.exists() and caller_file:
@@ -130,13 +129,13 @@ class _ModulePluginRegistry:
     def __init__(self) -> None:
         self._plugins: dict[str, Plugin] = {}
 
-    def for_function(self, func: Any) -> Plugin:
+    def for_function(self, func: Any) -> "Plugin":
         module = sys.modules.get(func.__module__)
         if module is None:
             raise RuntimeError(f"module {func.__module__!r} is not loaded")
         return self.for_module(module)
 
-    def for_module(self, module: types.ModuleType) -> Plugin:
+    def for_module(self, module: types.ModuleType) -> "Plugin":
         existing_plugin = getattr(module, "plugin", None)
         if isinstance(existing_plugin, Plugin):
             if existing_plugin._module_name is None:
@@ -186,7 +185,7 @@ def operation(
     return decorator(func)
 
 
-def _module_plugin(module: types.ModuleType) -> Plugin:
+def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
 
@@ -210,31 +209,55 @@ def _module_plugin_name(module: types.ModuleType) -> str:
         manifest_path = pathlib.Path(file_path).resolve().parent / "plugin.yaml"
         return _derive_name_from_manifest(manifest_path)
     return _slug_name(module.__name__.rsplit(".", 1)[-1])
+
+
 def _derive_name_from_manifest(path: pathlib.Path) -> str:
     manifest_path = path / "plugin.yaml" if path.is_dir() else path
     fallback_name = manifest_path.parent.name or "plugin"
+    manifest_format = manifest_path.suffix.lower()
 
     try:
         text = manifest_path.read_text(encoding="utf-8")
     except OSError:
         return _slug_name(fallback_name)
 
-    try:
-        if manifest_path.suffix.lower() == ".json":
+    if manifest_format == ".json":
+        try:
             data = json.loads(text)
-        else:
-            data = yaml.safe_load(text)
-    except (json.JSONDecodeError, yaml.YAMLError):
-        return _slug_name(fallback_name)
-    if not isinstance(data, dict):
+        except json.JSONDecodeError:
+            return _slug_name(fallback_name)
+
+        if not isinstance(data, dict):
+            return _slug_name(fallback_name)
+
+        source = data.get("source")
+        if isinstance(source, str) and source.strip():
+            return _slug_name(source.rsplit("/", 1)[-1])
+
+        display_name = data.get("display_name")
+        if isinstance(display_name, str) and display_name.strip():
+            return _slug_name(display_name)
         return _slug_name(fallback_name)
 
-    source = data.get("source")
-    if isinstance(source, str) and source.strip():
+    try:
+        document = yaml.compose(text)
+    except yaml.YAMLError:
+        return _slug_name(fallback_name)
+    if not isinstance(document, MappingNode):
+        return _slug_name(fallback_name)
+
+    scalar_fields: dict[str, str] = {}
+    for key_node, value_node in document.value:
+        if not isinstance(key_node, ScalarNode) or not isinstance(value_node, ScalarNode):
+            continue
+        scalar_fields[key_node.value] = value_node.value
+
+    source = scalar_fields.get("source", "").strip()
+    if source:
         return _slug_name(source.rsplit("/", 1)[-1])
 
-    display_name = data.get("display_name")
-    if isinstance(display_name, str) and display_name.strip():
+    display_name = scalar_fields.get("display_name", "").strip()
+    if display_name:
         return _slug_name(display_name)
 
     return _slug_name(fallback_name)

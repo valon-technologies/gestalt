@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import dataclasses
 from dataclasses import MISSING
 from http import HTTPStatus
