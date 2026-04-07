@@ -223,10 +223,18 @@ class _TagIgnoringLoader(yaml.SafeLoader):
     pass
 
 
-_TagIgnoringLoader.add_multi_constructor(
-    "",
-    lambda loader, suffix, node: loader.construct_scalar(node),
-)
+def _construct_ignore_tag(loader: yaml.SafeLoader, suffix: str, node: yaml.Node) -> Any:
+    del suffix
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return None
+
+
+_TagIgnoringLoader.add_multi_constructor("", _construct_ignore_tag)
 
 
 def _name_from_yaml_manifest(text: str, fallback_name: str) -> str:
