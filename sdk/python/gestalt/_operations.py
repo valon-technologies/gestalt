@@ -73,18 +73,17 @@ def execute_operation(
 
     try:
         result = maybe_await(operation.handler(*args))
+        if isinstance(result, Response):
+            status = HTTPStatus.OK if result.status is None else result.status
+            body = result.body
+        else:
+            status = HTTPStatus.OK
+            body = result
+
+        return status, json_body(body)
     except Exception as error:
         traceback.print_exception(error)
         return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
-
-    if isinstance(result, Response):
-        status = HTTPStatus.OK if result.status is None else result.status
-        body = result.body
-    else:
-        status = HTTPStatus.OK
-        body = result
-
-    return status, json_body(body)
 
 
 def decode_input(input_type: Any, params: dict[str, Any]) -> Any:

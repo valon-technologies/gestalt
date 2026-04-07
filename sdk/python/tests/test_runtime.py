@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import pathlib
 import tempfile
@@ -127,6 +129,36 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(request.connection_param("region"), "us-east-1")
         self.assertEqual(request.connection_param("missing"), "")
+
+    def test_plugin_execute_returns_http_results_for_operation_outcomes(self) -> None:
+        """Plugin execution should map missing, successful, and unserializable results to HTTP-style responses."""
+        plugin = Plugin("source-name")
+
+        @plugin.operation
+        def ok() -> dict[str, str]:
+            return {"status": "ok"}
+
+        @plugin.operation
+        def broken() -> object:
+            return object()
+
+        cases = [
+            ("ok", 200, {"status": "ok"}, None),
+            ("missing", 404, None, "unknown operation"),
+            ("broken", 500, None, "not JSON serializable"),
+        ]
+        for operation_name, expected_status, expected_body, expected_error in cases:
+            with self.subTest(operation_name=operation_name):
+                stderr_buffer = io.StringIO()
+                with contextlib.redirect_stderr(stderr_buffer):
+                    status, body = plugin.execute(operation_name, {}, Request())
+
+                self.assertEqual(status, expected_status)
+                payload = json.loads(body)
+                if expected_body is not None:
+                    self.assertEqual(payload, expected_body)
+                if expected_error is not None:
+                    self.assertIn(expected_error, payload["error"])
 
 
 if __name__ == "__main__":
