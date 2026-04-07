@@ -266,6 +266,10 @@ footer > div {
   color: var(--valon-muted) !important;
 }
 
+.nextra-sidebar-footer {
+  display: none !important;
+}
+
 .nextra-sidebar-container a:hover,
 .nextra-sidebar-container button:hover,
 .nextra-toc a:hover,
