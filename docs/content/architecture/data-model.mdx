@@ -1,133 +1,125 @@
 # Data Model
 
-Gestalt creates and manages its own tables in the configured datastore. This page documents the schema, what is encrypted, and how tokens are organized.
+Gestalt creates and manages its own tables in whatever datastore you configure. All SQL backends (SQLite, PostgreSQL, MySQL, SQL Server, Oracle) share the same logical schema. MongoDB and DynamoDB use equivalent document structures. Migrations run automatically on startup — you don't need to create anything by hand.
 
-For encryption algorithms and key derivation, see [Security Internals](/architecture/security-internals). For operator guidance on choosing a datastore, see [Configuration](/configuration).
+This page documents what those tables look like, which fields are encrypted, and how tokens are organized. For the encryption mechanics themselves, see [Security Internals](/architecture/security-internals). For choosing a datastore, see [Configuration](/configuration).
 
 ## Tables
 
-All SQL datastores (SQLite, PostgreSQL, MySQL, SQL Server, Oracle) share the same logical schema. MongoDB and DynamoDB use equivalent document structures. Gestalt runs migrations automatically on startup.
-
 ### `users`
 
-Stores user identities created during login.
+Every identity that logs in gets a row in the `users` table. Gestalt creates this automatically during the first successful login.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID |
-| `email` | text, unique | **Plaintext.** The user's email from the identity provider. |
-| `display_name` | text | **Plaintext.** |
+| `id` | text, PK | UUID. |
+| `email` | text, unique | Plaintext. Comes from the identity provider. |
+| `display_name` | text | Plaintext. |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
+
+Emails and display names are stored in plaintext. If your compliance requirements demand encrypted PII at rest, you'll need to handle that at the database layer (e.g., Postgres TDE or disk-level encryption).
 
 ### `integration_tokens`
 
-Stores upstream credentials (OAuth tokens, API keys, manual credentials) for each user's connected integrations.
+This is where the interesting stuff lives. Every time a user connects an integration — whether through OAuth, manual credential entry, or MCP OAuth — the resulting credentials end up here.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID |
+| `id` | text, PK | UUID. |
 | `user_id` | text, FK | References `users.id`. |
-| `integration` | text | The provider name from config (e.g., `github`). |
-| `connection` | text | Named connection within the provider (e.g., `default`, `mcp`). |
-| `instance` | text | User-chosen instance name, for providers with post-connect discovery. |
-| `access_token_encrypted` | text | **Encrypted.** AES-256-GCM. The upstream access token. |
-| `refresh_token_encrypted` | text | **Encrypted.** AES-256-GCM. The upstream refresh token, if provided. |
+| `integration` | text | The provider name from your config (e.g., `github`). |
+| `connection` | text | The named connection within that provider (e.g., `default`, `mcp`). |
+| `instance` | text | A user-chosen or discovery-assigned name, for providers that support multiple accounts. |
+| `access_token_encrypted` | text | **Encrypted.** AES-256-GCM with derived key. |
+| `refresh_token_encrypted` | text | **Encrypted.** AES-256-GCM with derived key. Empty string (still encrypted) if the provider doesn't issue refresh tokens. |
 | `scopes` | text | Plaintext. Space-separated OAuth scopes. |
-| `expires_at` | timestamp | When the access token expires. Null if the provider does not report expiry. |
-| `last_refreshed_at` | timestamp | When the token was last automatically refreshed. |
+| `expires_at` | timestamp | When the access token expires. Null if the provider doesn't report expiry. |
+| `last_refreshed_at` | timestamp | When Gestalt last refreshed this token automatically. |
 | `refresh_error_count` | integer | Consecutive failed refresh attempts. Reset to 0 on success. |
-| `metadata_json` | text | **Plaintext.** Connection-specific metadata from post-connect discovery (e.g., workspace ID, account name). |
+| `metadata_json` | text | Plaintext. Stores connection-specific metadata from post-connect discovery, like a workspace ID or account name. |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
 
-**Unique constraint:** `(user_id, integration, connection, instance)`. Reconnecting the same integration overwrites the existing token via upsert.
+The table has a unique constraint on `(user_id, integration, connection, instance)`. If a user reconnects the same integration, the existing row is overwritten via upsert — the old encrypted tokens are replaced, not versioned.
 
 ### `api_tokens`
 
-Stores Gestalt API tokens (`gst_api_*`) for programmatic access.
+Gestalt API tokens (the `gst_api_*` tokens used for programmatic access) are stored differently from integration tokens. The plaintext is never kept — only a one-way hash.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID |
+| `id` | text, PK | UUID. |
 | `user_id` | text, FK | References `users.id`. |
 | `name` | text | User-provided display name (e.g., `automation`, `cli-token`). |
-| `hashed_token` | text, unique | **Hashed.** SHA-256 of the plaintext token. The plaintext is never stored. |
+| `hashed_token` | text, unique | **SHA-256 hash.** The plaintext token is returned once at creation and never stored. |
 | `scopes` | text | Plaintext. Space-separated provider names this token can access. |
-| `expires_at` | timestamp | Null for non-expiring tokens (e.g., CLI login tokens). |
+| `expires_at` | timestamp | Null for non-expiring tokens (like CLI login tokens). |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
 
 ### `oauth_registrations`
 
-Stores dynamic OAuth client registrations for MCP OAuth connections. Only used when a connection's `auth.type` is `mcp_oauth`.
+When a connection uses `auth.type: mcp_oauth`, the upstream MCP server handles OAuth discovery and client registration dynamically. The registration details are cached here so Gestalt doesn't re-register on every request.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | text, PK | |
-| `auth_server_url` | text | The upstream authorization server URL. |
+| `auth_server_url` | text | The upstream authorization server. |
 | `redirect_uri` | text | The callback URI registered with the upstream server. |
 | `client_id` | text | The dynamically registered client ID. |
-| `client_secret_encrypted` | text | **Encrypted.** AES-256-GCM. The registered client secret. |
+| `client_secret_encrypted` | text | **Encrypted.** AES-256-GCM. |
 | `expires_at` | timestamp | When the registration expires. |
 | `authorization_endpoint` | text | Discovered authorization URL. |
 | `token_endpoint` | text | Discovered token URL. |
 | `scopes_supported` | text | Discovered supported scopes. |
-| `discovered_at` | timestamp | When the server metadata was last fetched. |
+| `discovered_at` | timestamp | |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
 
-**Unique constraint:** `(auth_server_url, redirect_uri)`.
+This table has a unique constraint on `(auth_server_url, redirect_uri)`.
 
-## Encryption boundaries
+## What's encrypted and what isn't
 
-| Data | Storage | Method |
+The short version: credentials are encrypted, everything else is plaintext.
+
+| Data | Where | How |
 | --- | --- | --- |
-| Integration access tokens | `integration_tokens.access_token_encrypted` | AES-256-GCM with derived key |
-| Integration refresh tokens | `integration_tokens.refresh_token_encrypted` | AES-256-GCM with derived key |
-| MCP OAuth client secrets | `oauth_registrations.client_secret_encrypted` | AES-256-GCM with derived key |
-| API tokens | `api_tokens.hashed_token` | One-way SHA-256 hash |
-| User emails, display names | `users.email`, `users.display_name` | Plaintext |
+| Access tokens | `integration_tokens.access_token_encrypted` | AES-256-GCM |
+| Refresh tokens | `integration_tokens.refresh_token_encrypted` | AES-256-GCM |
+| MCP OAuth client secrets | `oauth_registrations.client_secret_encrypted` | AES-256-GCM |
+| API tokens | `api_tokens.hashed_token` | One-way SHA-256 |
+| User emails and names | `users.email`, `users.display_name` | Plaintext |
 | Connection metadata | `integration_tokens.metadata_json` | Plaintext |
 | Scopes | `integration_tokens.scopes`, `api_tokens.scopes` | Plaintext |
 | Timestamps | All `*_at` columns | Plaintext |
 
-All encrypted fields use the same key derived from `server.encryption_key`. There is no per-user or per-provider key separation. Changing the encryption key requires re-encrypting all stored tokens; see [Security — Known limitations](/security#known-limitations).
+All encrypted fields use the same key derived from `server.encryption_key`. There's no per-user or per-provider key separation. If you change the encryption key, you need to re-encrypt every stored token — see [Security — Known limitations](/security#known-limitations).
 
-## Token storage granularity
+## How tokens are organized
 
-Integration tokens are keyed by four dimensions:
+Integration tokens are keyed by four dimensions: user, integration, connection, and instance. This sounds more complex than it is in practice.
 
-| Dimension | Source | Example |
-| --- | --- | --- |
-| `user_id` | The authenticated user | `550e8400-...` |
-| `integration` | The `providers` key in config | `github` |
-| `connection` | The named connection within the provider | `default`, `mcp`, `api` |
-| `instance` | User-chosen or discovery-assigned instance | `workspace-123` |
+The *user* is whoever authenticated. The *integration* is the provider name from your config (`github`, `slack`, etc.). The *connection* is the named connection within that provider — most providers have just `default`, but some have multiple (like `api` and `mcp`). The *instance* distinguishes between multiple accounts within the same connection, which matters for providers with post-connect discovery (e.g., a Slack provider where one user is connected to three different workspaces).
 
-This means a single user can have multiple tokens for the same provider — one per connection, and one per instance within a connection. The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-api) and CLI map directly to these storage keys.
+The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-api) and CLI map directly to these storage keys. When a user passes `--connection mcp` or `--instance workspace-123`, Gestalt looks up the token with those exact values.
 
-### Connection modes and storage
+### Connection modes and what they mean for storage
 
-| Mode | Who stores | Behavior |
-| --- | --- | --- |
-| `none` | Nobody | No token stored. Operations run without upstream credentials. |
-| `user` | Each user individually | Every user must connect. Tokens stored per `user_id`. |
-| `identity` | Operator (once) | A single shared credential stored with a fixed internal user ID. All users share it. |
-| `either` | User or operator | Prefers user token if available, falls back to identity token. |
+The `mode` on a connection controls whose credentials get stored:
 
-Renaming a `providers` key in config is a breaking change — all stored tokens reference the old integration name and will no longer match.
+**`none`** means no credentials are needed at all. The provider works without upstream auth. Nothing is stored.
+
+**`user`** means every user connects individually. Each user's token is stored as a separate row keyed by their `user_id`. This is the most common mode for OAuth-based providers.
+
+**`identity`** uses a single shared credential for the entire deployment. The token is stored with a fixed internal user ID. All users share it, and any user's request resolves to the same token.
+
+**`either`** accepts both. Gestalt prefers a user token if one exists, falling back to the identity token. This is useful when most users should authenticate individually but a shared fallback should exist.
+
+One thing to be aware of: renaming a `providers` key in your config is a breaking change. All stored tokens reference the old integration name, and they won't match after the rename.
 
 ## Sessions
 
-Platform sessions (login via Google, OIDC, or local auth) are not stored in the Gestalt datastore. They are managed through HTTP-only cookies:
+Platform sessions — the login flow through Google, OIDC, or local auth — are not stored in any of these tables. They're managed entirely through HTTP cookies.
 
-| Attribute | Value |
-| --- | --- |
-| Cookie name | `session_token` |
-| `HttpOnly` | `true` |
-| `Secure` | `true` when `server.base_url` uses HTTPS |
-| `SameSite` | `Lax` |
-| TTL | Auth provider default (24 hours), configurable via `session_ttl` for OIDC |
-
-Sessions cannot be explicitly revoked server-side. They expire based on the configured TTL. Logging out clears the client cookie.
+The `session_token` cookie is `HttpOnly`, `Secure` when the base URL uses HTTPS, and `SameSite=Lax`. The default TTL is 24 hours, configurable via `session_ttl` for OIDC. Sessions can't be explicitly revoked server-side; they expire based on the configured TTL, and logging out clears the client cookie.

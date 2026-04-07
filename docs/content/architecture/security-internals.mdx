@@ -1,141 +1,97 @@
 # Security Internals
 
-This page covers the implementation details of Gestalt's cryptographic operations, token lifecycle mechanics, and secret resolution flow. For operator-facing security guidance, see [Security](/security). For the datastore schema and encryption boundaries, see [Data Model](/architecture/data-model).
+This page goes into the implementation details of how Gestalt protects credentials. If you're looking for operator guidance — what settings to configure, what responsibilities you have — see [Security](/security). If you want to know what tables exist and which columns are encrypted, see [Data Model](/architecture/data-model).
 
 ## Key derivation
 
-`server.encryption_key` is converted to a 32-byte AES key at startup:
+Everything starts with `server.encryption_key`. At startup, Gestalt converts this string into a 32-byte AES key using one of two paths.
 
-| Input | Derivation | Use case |
-| --- | --- | --- |
-| 64-character hex string | Hex-decoded directly to 32 bytes | Production. Generate with `openssl rand -hex 32`. |
-| Any other string | Argon2id (3 iterations, 64 MiB, 4 threads, fixed salt `gestalt-derivekey-v1`) | Convenience for development. |
-| Empty string | Error at runtime validation | Not allowed when `auth.provider` is not `none`. |
+If the key is a 64-character hex string, it's hex-decoded directly into 32 bytes. This is the fast path — no computation, no derivation. A 64-character hex key already has 256 bits of entropy, which is the maximum key strength for AES-256. You can generate one with `openssl rand -hex 32`.
 
-The derived key is used for all AES-256-GCM encryption and for signing session material. A 64-character hex key skips Argon2id entirely — if you already have 256 bits of entropy, key stretching adds startup cost without security benefit.
+If the key is anything else — a passphrase, a short string, `dev-only-change-me` — Gestalt runs it through Argon2id to stretch it into a proper 256-bit key. The parameters are 3 iterations, 64 MiB of memory, and 4 threads. This adds a few hundred milliseconds to startup, which is fine, but it means a weak passphrase is still a weak passphrase. Argon2id makes brute-forcing harder, not impossible.
 
-The Argon2id path uses a fixed salt, which means two deployments with the same passphrase produce the same key. Production deployments should always use a unique random hex key.
+One detail worth knowing: the Argon2id path uses a fixed salt (`gestalt-derivekey-v1`). This means two Gestalt deployments using the same passphrase will derive the same key. For production, always generate a unique random hex key.
 
-## AES-256-GCM encryption
+## How encryption works
 
-Every encrypt operation:
+Gestalt uses AES-256-GCM for all credential encryption. GCM is an authenticated encryption mode, which means it protects both confidentiality (nobody can read the token) and integrity (nobody can tamper with the ciphertext without detection).
 
-1. Generates a fresh 12-byte nonce via `crypto/rand`
-2. Encrypts with AES-256-GCM (authenticated encryption)
-3. Prepends the nonce to the ciphertext
-4. Base64-encodes the result for database storage
+Every encryption operation generates a fresh 12-byte nonce using `crypto/rand`, encrypts the plaintext, prepends the nonce to the ciphertext, and base64-encodes the result for storage. Decryption reverses the process: decode, split off the nonce, authenticate and decrypt. If the ciphertext has been tampered with, decryption fails immediately.
 
-Decryption reverses the process: decode base64, split nonce from ciphertext, authenticate and decrypt. Tampered ciphertexts are detected and rejected.
+Access tokens and refresh tokens are encrypted independently — they're separate fields in the database, each with their own nonce. All encrypted fields across all tables use the same derived key. There's no per-user or per-field key separation.
 
-All encrypted fields in the datastore use this same mechanism. There is no per-field or per-user key separation — a single derived key encrypts everything.
+## Integration token lifecycle
 
-## Token lifecycle details
+### Creation
 
-### Integration tokens (OAuth)
+Integration tokens are created when a user connects an integration, either through OAuth or manual credential entry.
 
-**Creation:**
+For OAuth, the flow starts when a user hits the connect button (or runs `gestalt integrations connect`). Gestalt generates an encrypted OAuth state parameter with a 10-minute TTL to prevent state injection attacks. If PKCE is configured, a code verifier is generated and stored alongside the state. The user is redirected to the upstream provider's authorization URL.
 
-1. User initiates OAuth via browser or CLI (`POST /auth/start-oauth`)
-2. Gestalt generates an encrypted OAuth state parameter with a 10-minute TTL and optional PKCE verifier
-3. User is redirected to the upstream provider's authorization URL
-4. Provider redirects back with an authorization code
-5. Gestalt exchanges the code for tokens, optionally with the PKCE verifier
-6. Access token and refresh token are encrypted separately with AES-256-GCM
-7. Tokens are upserted into `integration_tokens` keyed by `(user_id, integration, connection, instance)`
+When the provider redirects back with an authorization code, Gestalt exchanges the code for tokens. The access token and refresh token (if the provider issues one) are each encrypted with AES-256-GCM and stored in the `integration_tokens` table, keyed by user, integration, connection, and instance.
 
-If the provider supports post-connect discovery (multiple resources like workspaces or accounts), Gestalt fetches the resource list after the token exchange. If more than one resource is found, the user selects one, and the selection is stored in `metadata_json`.
+If the provider supports post-connect discovery — meaning the user might have access to multiple resources like workspaces or accounts — Gestalt fetches the resource list after the token exchange. If there's exactly one resource, it's selected automatically. If there are multiple, the user chooses, and the selection is stored in `metadata_json`.
 
-**Manual connections** follow the same storage path — the user-provided credential becomes the `access_token_encrypted` value with an empty refresh token.
+Manual connections are simpler. The user provides a credential (like an API key), and it's stored as the access token with an empty refresh token. Same encryption, same storage path.
 
-**Refresh:**
+### Automatic refresh
 
-Token refresh happens on-demand during operation invocation, not as a background job:
+Token refresh happens on-demand during operation invocation. There is no background refresh job.
 
-1. Before dispatching an operation, the broker checks `expires_at`
-2. If the token expires within 5 minutes and a refresh token exists, refresh is attempted
-3. Concurrent refresh attempts for the same token are deduplicated (singleflight)
-4. On success: new access token (and optionally new refresh token) encrypted and stored, `refresh_error_count` reset to 0
-5. On failure: `refresh_error_count` incremented. If the token is still technically valid, it is used with a warning. If expired, the invocation fails with an error
+When the broker prepares to dispatch an operation, it checks the token's `expires_at` field. If the token expires within 5 minutes and a refresh token exists, the broker attempts a refresh. Concurrent refresh attempts for the same token are deduplicated using a singleflight group — if three requests arrive at the same time for an expiring token, only one refresh call is made.
 
-The `refresh_error_count` persists across requests so operators can detect tokens stuck in a refresh-failure loop.
+On success, the new access token (and new refresh token, if the provider rotated it) is encrypted and written back to the database. The `refresh_error_count` is reset to 0.
 
-**Revocation:**
+On failure, things get more nuanced. The `refresh_error_count` is incremented and persisted. If the access token hasn't actually expired yet (it's within the 5-minute window but still valid), Gestalt uses the existing token and proceeds. If the token has genuinely expired and the refresh failed, the invocation fails with an error. The `refresh_error_count` in the database lets operators detect tokens stuck in a refresh-failure loop.
 
-Integration tokens are deleted (not soft-deleted) via:
+### Revocation
 
-- CLI: `gestalt integrations disconnect NAME [--connection ...] [--instance ...]`
-- HTTP API: `DELETE /api/v1/integrations/{name}[?connection=...&instance=...]`
+Revoking an integration token means deleting it from the database. There's no soft-delete or tombstone.
 
-The encrypted token data is removed from the database. There is no upstream token revocation — Gestalt does not call the provider's revoke endpoint.
+Users can disconnect through the CLI (`gestalt integrations disconnect NAME`), the web UI, or the HTTP API (`DELETE /api/v1/integrations/{name}`). The `--connection` and `--instance` flags narrow which token to remove.
 
-### API tokens
+Gestalt does not call the upstream provider's revoke endpoint. If you need to revoke the token at the provider level (e.g., revoke a GitHub OAuth token), you need to do that separately through the provider's interface.
 
-**Creation:**
+## API token lifecycle
 
-1. 32 random bytes generated via `crypto/rand`
-2. Plaintext formatted as `gst_api_` + hex encoding (total ~73 characters)
-3. SHA-256 hash computed and stored in `api_tokens.hashed_token`
-4. Plaintext returned to the caller exactly once
+API tokens work differently from integration tokens because the plaintext is never stored.
 
-**Validation:**
+### Creation
 
-On each request with a `Bearer gst_api_*` header:
+When a user creates an API token (through the CLI, web UI, or HTTP API), Gestalt generates 32 random bytes via `crypto/rand` and formats them as `gst_api_` followed by the hex encoding. The SHA-256 hash of this plaintext is computed and stored in the `api_tokens` table. The plaintext is returned to the caller exactly once in the response body. After that, it's gone — Gestalt has no way to recover it.
 
-1. Compute SHA-256 hash of the incoming token
-2. Look up the hash in `api_tokens` where `expires_at IS NULL OR expires_at > now()`
-3. If found, resolve the associated user and grant access with the token's scopes
+The default TTL is 30 days, configurable via `server.api_token_ttl`. CLI login tokens (`cli-token`) are created as non-expiring.
 
-**Revocation:**
+### Validation
 
-- Single token: `DELETE /api/v1/tokens/{id}` — deletes the row
-- All tokens: `DELETE /api/v1/tokens` — deletes all rows for the authenticated user
+On each request with a `Bearer gst_api_*` header, Gestalt hashes the incoming token with SHA-256 and looks it up in the `api_tokens` table. If the hash matches and the token hasn't expired, the associated user is resolved and the request proceeds with that user's identity and scopes.
 
-Revocation is immediate. There is no grace period or propagation delay.
+This is a standard hash-based token validation pattern. The hashing is fast (SHA-256, not bcrypt), which is appropriate because the tokens have high entropy (32 random bytes). There's no need for a slow hash when the input space is already 2^256.
 
-### Platform sessions
+### Revocation
 
-Sessions are cookie-based and managed by the auth provider, not stored in the Gestalt datastore:
+Revoking an API token deletes the row from the database. Revocation is immediate — the next request with that token will fail. There's no grace period or cache to flush.
 
-1. User completes the identity provider login flow
-2. Gestalt validates the callback (checks `email_verified` for Google and OIDC)
-3. A session cookie is set with the auth provider's token
-4. The cookie is validated on each subsequent request by the auth provider
-5. Logout clears the cookie (`MaxAge=-1`); there is no server-side session store to invalidate
+`DELETE /api/v1/tokens/{id}` revokes a single token. `DELETE /api/v1/tokens` revokes all tokens for the authenticated user. Both are permanent.
 
-## Secret resolution flow
+## Platform sessions
 
-```
-config.yaml on disk
-  │
-  ├─ ${ENV_VAR} expansion (+ _FILE fallback)
-  │
-  ├─ YAML decode
-  │
-  ├─ Apply defaults (port 8080, secrets: env, telemetry: stdout)
-  │
-  ├─ Structural validation
-  │
-  ├─ Build secret manager from secrets.config
-  │    (secrets.config uses ${ENV_VAR} only, not secret://)
-  │
-  ├─ Resolve secret:// references across all other config sections:
-  │    server, auth.config, datastore.config, telemetry.config,
-  │    audit.config, and all provider configs
-  │
-  ├─ Runtime validation (encryption_key, auth.provider, datastore.provider required)
-  │
-  └─ Proceed to component initialization
-```
+Sessions from the login flow (Google, OIDC, local) are cookie-based and are not stored in the Gestalt datastore. The auth provider manages session state. Gestalt sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie and validates it on each request by calling back to the auth provider.
 
-Secrets are resolved once at startup. If a secret value changes in the external secret manager, Gestalt must be restarted to pick up the new value. There is no runtime secret refresh.
+Sessions cannot be explicitly revoked server-side. They expire based on the configured TTL (24 hours by default for most providers, configurable via `session_ttl` for OIDC). Logging out clears the client cookie, but if someone captured the cookie value, it remains valid until the TTL expires.
+
+## Secret resolution
+
+The [Architecture overview](/architecture) covers the bootstrap sequence. The important detail for security is that `secret://` resolution is a one-shot operation at startup. Gestalt resolves every `secret://` reference, replaces it with the plaintext value in memory, and never consults the secret manager again.
+
+This means if a secret rotates in your secret manager after Gestalt starts, the running process still has the old value. You need to restart Gestalt to pick up changes. There is no runtime secret refresh.
+
+The `secrets.config` block is explicitly excluded from `secret://` resolution to avoid a circular dependency — you can't use the secret manager to fetch credentials for the secret manager. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` for those.
 
 ## Key rotation
 
-There is no automated key rotation. To rotate `server.encryption_key`:
+There is no automated key rotation. Changing `server.encryption_key` means every encrypted value in the database becomes unreadable, because it was encrypted with the old derived key.
 
-1. Stop all Gestalt instances
-2. Decrypt all tokens with the old key and re-encrypt with the new key (requires direct database access and the encryption/decryption logic from `core/crypto`)
-3. Update the config with the new key
-4. Restart
+To rotate the key, you would need to stop all Gestalt instances, decrypt all tokens with the old key, re-encrypt them with the new key, update the config, and restart. This requires direct database access and the encryption logic from `core/crypto`. There is no built-in tool for this.
 
-This is a known limitation. In practice, key rotation is a rare event — the more common operational need is ensuring the key is properly backed up and not accidentally changed.
+In practice, key rotation is rare. The more common operational concern is making sure the key is properly backed up and that it's consistent across all instances in a cluster.
