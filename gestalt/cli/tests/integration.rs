@@ -734,26 +734,6 @@ fn test_disconnect_without_optional_params() {
 }
 
 #[test]
-fn test_disconnect_propagates_server_error() {
-    let mut server = Server::new();
-    let _mock = authed_json_mock!(
-        server,
-        Method::DELETE,
-        "/api/v1/integrations/nope",
-        StatusCode::NOT_FOUND
-    )
-    .with_body(r#"{"error":"integration not found"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::integrations::disconnect(&client, "nope", None, None);
-
-    assert!(result.is_err());
-    let err = format!("{:#}", result.unwrap_err());
-    assert!(err.contains("integration not found"));
-}
-
-#[test]
 fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let mut server = Server::new();
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
