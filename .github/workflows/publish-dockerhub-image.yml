@@ -1,0 +1,134 @@
+name: Publish Docker Hub Image
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Docker Hub image name, for example valontechnologies/gestalt.
+        required: true
+        type: string
+      image-url:
+        description: Public Docker Hub repository URL for OCI labels.
+        required: true
+        type: string
+      dockerfile:
+        description: Dockerfile path relative to the repository root.
+        required: true
+        type: string
+      version-prefix:
+        description: Tag prefix to strip from github.ref_name when rendering the image version.
+        required: true
+        type: string
+      short-description:
+        description: Short Docker Hub repository description.
+        required: true
+        type: string
+      readme-filepath:
+        description: Repository path to the Docker Hub README source file.
+        required: true
+        type: string
+      download-artifact-pattern:
+        description: Optional release artifact pattern to download before docker build.
+        required: false
+        default: ''
+        type: string
+      platforms:
+        description: Target platforms to publish.
+        required: false
+        default: 'linux/amd64,linux/arm64'
+        type: string
+      build-context:
+        description: Docker build context relative to the repository root.
+        required: false
+        default: '.'
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      DOCKERHUB_DESCRIPTION_USERNAME:
+        required: true
+      DOCKERHUB_DESCRIPTION_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Docker Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IMAGE_NAME: ${{ inputs.image-name }}
+      IMAGE_SOURCE: https://github.com/${{ github.repository }}
+      IMAGE_DOCUMENTATION: https://docs.valon.tools
+      IMAGE_URL: ${{ inputs.image-url }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Download release artifacts
+        if: ${{ inputs.download-artifact-pattern != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ${{ inputs.download-artifact-pattern }}
+          path: dist
+          merge-multiple: true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#${{ inputs.version-prefix }}}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute image metadata
+        id: meta
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Build and push image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+        with:
+          context: ${{ inputs.build-context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          platforms: ${{ inputs.platforms }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            GESTALT_VERSION=${{ steps.version.outputs.version }}
+            GESTALT_REVISION=${{ github.sha }}
+            GESTALT_CREATED=${{ steps.meta.outputs.created }}
+            GESTALT_SOURCE=${{ env.IMAGE_SOURCE }}
+            GESTALT_DOCUMENTATION=${{ env.IMAGE_DOCUMENTATION }}
+            GESTALT_URL=${{ env.IMAGE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
+        with:
+          username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
+          repository: ${{ env.IMAGE_NAME }}
+          short-description: ${{ inputs.short-description }}
+          readme-filepath: ${{ inputs.readme-filepath }}

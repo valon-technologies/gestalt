@@ -44,70 +44,16 @@ jobs:
   publish-image:
     name: Publish Docker Image
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      REGISTRY_IMAGE: valontechnologies/gestalt
-      IMAGE_SOURCE: https://github.com/${{ github.repository }}
-      IMAGE_DOCUMENTATION: https://docs.valon.tools
-      IMAGE_URL: https://hub.docker.com/r/valontechnologies/gestalt
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: gestalt-linux-*
-          path: dist
-          merge-multiple: true
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#gestalt/v}" >> "$GITHUB_OUTPUT"
-      - name: Compute image metadata
-        id: meta
-        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-      - name: Build and push image
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: .
-          file: gestalt/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.REGISTRY_IMAGE }}:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY_IMAGE }}:latest
-          build-args: |
-            GESTALT_VERSION=${{ steps.version.outputs.version }}
-            GESTALT_REVISION=${{ github.sha }}
-            GESTALT_CREATED=${{ steps.meta.outputs.created }}
-            GESTALT_SOURCE=${{ env.IMAGE_SOURCE }}
-            GESTALT_DOCUMENTATION=${{ env.IMAGE_DOCUMENTATION }}
-            GESTALT_URL=${{ env.IMAGE_URL }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
-          sbom: true
-          provenance: mode=max
-      - name: Scan CLI image for vulnerabilities
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
-        with:
-          image-ref: ${{ env.REGISTRY_IMAGE }}:${{ steps.version.outputs.version }}
-          format: table
-          exit-code: '1'
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-      - name: Update Docker Hub description
-        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
-        with:
-          username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
-          repository: ${{ env.REGISTRY_IMAGE }}
-          short-description: CLI client for managing Gestalt integrations, authentication, and operations.
-          readme-filepath: docs/dockerhub/gestalt.md
+    uses: ./.github/workflows/publish-dockerhub-image.yml
+    secrets: inherit
+    with:
+      image-name: valontechnologies/gestalt
+      image-url: https://hub.docker.com/r/valontechnologies/gestalt
+      dockerfile: gestalt/Dockerfile
+      version-prefix: 'gestalt/v'
+      short-description: CLI client for managing Gestalt integrations, authentication, and operations.
+      readme-filepath: docs/dockerhub/gestalt.md
+      download-artifact-pattern: 'gestalt-linux-*'
 
   update-formula:
     name: Update Homebrew Formula
