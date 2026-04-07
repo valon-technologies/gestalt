@@ -26,8 +26,44 @@ class Response(Generic[T]):
     body: T
 
 
+def _respond(status: int, body: T) -> Response[T]:
+    return Response(status=status, body=body)
+
+
 def OK(body: T) -> Response[T]:
-    return Response(status=HTTPStatus.OK, body=body)
+    return _respond(HTTPStatus.OK, body)
+
+
+def BadRequest(body: T) -> Response[T]:
+    return _respond(HTTPStatus.BAD_REQUEST, body)
+
+
+def Unauthorized(body: T) -> Response[T]:
+    return _respond(HTTPStatus.UNAUTHORIZED, body)
+
+
+def Forbidden(body: T) -> Response[T]:
+    return _respond(HTTPStatus.FORBIDDEN, body)
+
+
+def NotFound(body: T) -> Response[T]:
+    return _respond(HTTPStatus.NOT_FOUND, body)
+
+
+def Conflict(body: T) -> Response[T]:
+    return _respond(HTTPStatus.CONFLICT, body)
+
+
+def InternalServerError(body: T) -> Response[T]:
+    return _respond(HTTPStatus.INTERNAL_SERVER_ERROR, body)
+
+
+def BadGateway(body: T) -> Response[T]:
+    return _respond(HTTPStatus.BAD_GATEWAY, body)
+
+
+def ServiceUnavailable(body: T) -> Response[T]:
+    return _respond(HTTPStatus.SERVICE_UNAVAILABLE, body)
 
 
 def field(
