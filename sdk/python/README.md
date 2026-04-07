@@ -11,6 +11,13 @@ Python source plugins are developed locally via `from.source.path` and
 released through `gestaltd plugin release` as current-platform executable
 artifacts.
 
+## Authoring
+
+Plugin `configure` handlers and `operation` handlers may be either synchronous
+functions or `async def` coroutines. The SDK awaits coroutine handlers inside
+the plugin runtime, so plugin authors can adopt async I/O without changing the
+overall sync-looking authoring surface.
+
 ## Publishing
 
 The SDK is published as the `gestalt` package to a private Python index.
