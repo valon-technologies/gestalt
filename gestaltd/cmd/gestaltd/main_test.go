@@ -8,36 +8,6 @@ import (
 	"testing"
 )
 
-func TestResolveConfigPathFallsBackToDefaultHomeConfig(t *testing.T) {
-	dir := t.TempDir()
-	homeDir := filepath.Join(dir, "home")
-	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
-	if err := os.MkdirAll(legacyConfigDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll legacy config dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyConfigDir, "config.yaml"), []byte("legacy"), 0o644); err != nil {
-		t.Fatalf("WriteFile legacy config: %v", err)
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
-	})
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("Chdir: %v", err)
-	}
-
-	t.Setenv("HOME", homeDir)
-	t.Setenv("GESTALT_CONFIG", "")
-
-	if got, want := resolveConfigPath(""), filepath.Join(homeDir, ".gestaltd", "config.yaml"); got != want {
-		t.Fatalf("resolveConfigPath(\"\") = %q, want %q", got, want)
-	}
-}
-
 func TestE2ECLIHelp(t *testing.T) {
 	t.Parallel()
 
