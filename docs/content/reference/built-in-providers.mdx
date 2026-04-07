@@ -45,8 +45,4 @@ These components are compiled into the `gestaltd` binary and available at startu
 
 ## Named Providers
 
-No named providers are currently built into the binary. BigQuery, Jira, Slack, and other external plugins are published from the standalone [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins) repository.
-
-## Scope
-
-This page lists only components wired into `cmd/gestaltd`. External plugins live in the separate [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins) repository and are not compiled into the binary.
+No named providers are built into the binary. Integration plugins like BigQuery, Jira, Slack, and others are published separately from [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins) and referenced in your config via `from.source.ref`.

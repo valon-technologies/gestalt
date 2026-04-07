@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-[Install](/install) `gestaltd` and `gestalt` before continuing.
+`gestaltd` and `gestalt` have been installed via the [installation instructions](/install).
 
 ## Run a local server
 
@@ -12,15 +12,11 @@ Start a local Gestalt server with a single command:
 gestaltd
 ```
 
-When no configuration file is provided, `gestaltd` generates a default local
-config and starts immediately. The server is now running at
-`http://localhost:8080`.
+When no configuration file is provided, `gestaltd` generates a default local config and starts immediately. The server is now running at `http://localhost:8080`.
 
 ## Add a provider
 
-Create a file called `config.yaml` with a provider definition. This example
-adds [HTTPBin](https://httpbin.org), a public API that requires no
-authentication:
+Create a file called `config.yaml` with a provider definition. This example adds [HTTPBin](https://httpbin.org), a public API that requires no authentication:
 
 ```yaml
 server:
@@ -92,12 +88,7 @@ Point the `gestalt` client at your running server:
 gestalt init
 ```
 
-The wizard prompts for the server URL and saves it to your local config. It can
-also create a project-local `.gestalt/config.json` file so a specific checkout
-keeps using the same server without changing your machine-wide default. For the
-full client CLI configuration model, see [CLI](/client/cli).
-
-You can also set the global URL directly:
+The wizard prompts for the server URL and saves it to your local config. It can also create a project-local `.gestalt/config.json` so a specific checkout keeps using the same server without changing your machine-wide default. You can also set the URL directly:
 
 ```sh
 gestalt config set url http://localhost:8080
@@ -105,8 +96,7 @@ gestalt config set url http://localhost:8080
 
 ## Call an integration
 
-Once the server is running and the CLI is configured, you can invoke the
-provider through any surface.
+Once the server is running and the CLI is configured, you can invoke the provider through any surface.
 
 **Client CLI**
 
@@ -123,8 +113,7 @@ curl http://localhost:8080/api/v1/httpbin/get_ip
 
 **Web UI**
 
-Open `http://localhost:8080` in a browser to explore and invoke integrations
-interactively.
+Open `http://localhost:8080` in a browser to explore and invoke integrations interactively.
 
 ## Next steps
 
