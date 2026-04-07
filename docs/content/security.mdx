@@ -1,6 +1,6 @@
 # Security
 
-Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes.
+Gestalt sits between callers and upstream APIs. It authenticates users, stores encrypted credentials, and isolates plugin processes. For implementation details — datastore schemas, encryption mechanics, token lifecycle internals, and secret resolution flow — see [Architecture](/architecture).
 
 ## Trust boundaries
 
@@ -115,4 +115,4 @@ providers:
 
 ## Known limitations
 
-Changing `server.encryption_key` requires re-encrypting all stored tokens; there is no automated key rotation. Platform sessions cannot be explicitly revoked and expire based on the configured TTL. Rate limiting and CORS must be configured at the reverse proxy layer. Gestalt encrypts tokens at the application level, but the database may store metadata in plaintext, so appropriate database access controls are still important.
+Changing `server.encryption_key` requires re-encrypting all stored tokens; there is no automated key rotation (see [Security Internals — Key rotation](/architecture/security-internals#key-rotation)). Platform sessions cannot be explicitly revoked and expire based on the configured TTL. Rate limiting and CORS must be configured at the reverse proxy layer. Gestalt encrypts tokens at the application level, but the database may store non-sensitive metadata in plaintext (connection metadata, scopes, timestamps) — see [Data Model — Encryption boundaries](/architecture/data-model#encryption-boundaries) for the full list. Appropriate database access controls are still important.

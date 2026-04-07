@@ -1,0 +1,47 @@
+# Architecture
+
+This section covers the internal design of Gestalt for operators who need to understand what happens beneath the configuration surface: how data is stored, how secrets flow through the system, and how tokens are managed at rest and in transit.
+
+For day-to-day configuration, see [Configuration](/configuration). For security guidance and operator responsibilities, see [Security](/security).
+
+## Bootstrap sequence
+
+When `gestaltd serve` starts, the following happens in order:
+
+1. **Config load.** The YAML file is read and `${ENV_VAR}` placeholders are expanded. If a variable is unset, Gestalt checks for a corresponding `_FILE` variable and reads the file contents. Unknown fields are rejected.
+2. **Secret manager init.** The `secrets` block is used to create the secret manager client. Because the secret manager is not yet available at this point, `secrets.config` cannot use `secret://` references. Use `${ENV_VAR}` for any credentials the secret manager itself needs.
+3. **Secret resolution.** Gestalt walks the entire config struct and replaces any string value starting with `secret://` with the resolved secret. Resolution covers `server`, `auth.config`, `datastore.config`, `telemetry.config`, `audit.config`, and all provider configs. `secrets.config` is explicitly skipped.
+4. **Encryption key derivation.** The resolved `server.encryption_key` is converted to a 32-byte AES key. A 64-character hex string is decoded directly; anything else is derived via Argon2id.
+5. **Auth provider init.** The configured auth provider is created with the derived key material.
+6. **Datastore init and migration.** The configured datastore driver is created, and schema migrations run to ensure the required tables exist. The encryption key is passed to the datastore for token encryption.
+7. **Provider init.** Plugin sources are resolved (or loaded from prepared state if `--locked`), manifests are read, and provider runtimes are started.
+8. **Listener start.** The public listener (and optional management listener) begins accepting requests. `/ready` returns 200 once all providers report ready.
+
+## Request flow
+
+```
+Client request
+  │
+  ├─ Auth middleware: session cookie or Bearer token?
+  │    ├─ session_token cookie → validate with auth provider
+  │    ├─ Bearer gst_api_... → SHA-256 hash lookup in api_tokens table
+  │    └─ Bearer <other> → treat as raw provider token
+  │
+  ├─ Route to handler
+  │    ├─ /api/v1/{integration}/{operation} → Broker
+  │    ├─ /mcp → MCP server (same broker underneath)
+  │    └─ /api/v1/integrations, /tokens, etc. → CRUD handlers
+  │
+  └─ Broker invocation (for operation calls):
+       ├─ Resolve integration token from datastore (decrypt)
+       ├─ Refresh token if expiring within 5 minutes
+       ├─ Dispatch to provider (plugin gRPC, REST, GraphQL, or MCP upstream)
+       └─ Return response to caller
+```
+
+## Component pages
+
+| Page | Covers |
+| --- | --- |
+| [Data Model](/architecture/data-model) | Datastore tables, stored fields, encryption boundaries, token storage granularity |
+| [Security Internals](/architecture/security-internals) | Encryption implementation, token lifecycle details, key derivation, refresh mechanics |
