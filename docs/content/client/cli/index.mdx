@@ -24,6 +24,7 @@ asIndexPage: true
 | `gestalt config get|set|unset|list` | Manage the local client config. |
 | `gestalt integrations list` | List integrations from the server. |
 | `gestalt integrations connect NAME` | Connect an integration through OAuth or interactive manual auth. |
+| `gestalt integrations disconnect NAME` | Disconnect an integration, removing stored credentials. |
 | `gestalt invoke INTEGRATION [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt describe INTEGRATION OPERATION` | Show one operation's parameter contract. |
 | `gestalt tokens create|list|revoke` | Manage Gestalt API tokens. |
@@ -58,9 +59,13 @@ When present, the CLI searches the current directory and then parent directories
 
 `gestalt integrations connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual auth instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
+## Integration disconnect flags
+
+`gestalt integrations disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
+
 ## Invoke flags
 
-`gestalt invoke` accepts `-p`/`--param key=value`, `--input-file file.json`, `--connection`, `--instance`, and `--select`.
+`gestalt invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
 
 ## Examples
 

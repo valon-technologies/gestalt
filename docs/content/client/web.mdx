@@ -4,6 +4,24 @@ Open your Gestalt server's base URL in a browser to access the web client. For a
 
 The web UI lets you browse integrations, connect to upstream services through OAuth or manual auth, invoke operations, and manage API tokens. It uses the same HTTP API and authentication model as the CLI.
 
+## Dashboard
+
+The dashboard shows an overview of the workspace with integration and API token counts.
+
+![Dashboard](/images/web-dashboard.png)
+
+## Integrations
+
+The integrations page lists all configured providers. Connected integrations show a green checkmark. Click the settings icon to manage connections or disconnect.
+
+![Integrations](/images/web-integrations.png)
+
+## API Tokens
+
+Create and revoke API tokens for programmatic access. Each token shows its name, scopes, creation date, and expiry. Tokens prefixed with `gst_api_` are shown once at creation and cannot be retrieved later.
+
+![API Tokens](/images/web-tokens.png)
+
 ## Authentication
 
 When `auth.provider` is set to `google` or `oidc`, the web UI redirects to your identity provider for login. With `auth.provider: local`, login is automatic. With `auth.provider: none`, every request is anonymous.

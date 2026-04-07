@@ -17,9 +17,7 @@ pub struct CredentialStore {
 
 impl CredentialStore {
     pub fn new() -> Result<Self> {
-        let config_dir = dirs::config_dir()
-            .context("could not determine config directory")?
-            .join("gestalt");
+        let config_dir = crate::paths::gestalt_config_dir()?;
         Ok(Self {
             path: config_dir.join("credentials.json"),
         })
