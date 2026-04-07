@@ -2,7 +2,9 @@ package gestalt_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -17,6 +19,14 @@ type stubInput struct{}
 
 type stubOutput struct {
 	Operation string `json:"operation"`
+}
+
+type decodeInput struct {
+	Count int `json:"count"`
+}
+
+type decodeOutput struct {
+	Count int `json:"count"`
 }
 
 var stubRouter = gestalt.MustRouter(
@@ -55,6 +65,18 @@ func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) 
 
 func (p *stubProvider) testOp(_ context.Context, _ stubInput, _ gestalt.Request) (gestalt.Response[stubOutput], error) {
 	return gestalt.OK(stubOutput{Operation: "test_op"}), nil
+}
+
+func (p *stubProvider) decodeOp(_ context.Context, input decodeInput, _ gestalt.Request) (gestalt.Response[decodeOutput], error) {
+	return gestalt.OK(decodeOutput{Count: input.Count}), nil
+}
+
+func (p *stubProvider) errorOp(_ context.Context, _ stubInput, _ gestalt.Request) (gestalt.Response[stubOutput], error) {
+	return gestalt.Response[stubOutput]{}, errors.New("boom")
+}
+
+func (p *stubProvider) panicOp(_ context.Context, _ stubInput, _ gestalt.Request) (gestalt.Response[stubOutput], error) {
+	panic("boom")
 }
 
 type startableStubProvider struct {
@@ -136,23 +158,112 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 func TestProviderServerExecute(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
-	ctx := context.Background()
+	decodeRouter := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[decodeInput, decodeOutput]{
+				ID:     "decode_op",
+				Method: http.MethodPost,
+			},
+			(*stubProvider).decodeOp,
+		),
+	)
+	errorRouter := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[stubInput, stubOutput]{
+				ID:     "error_op",
+				Method: http.MethodPost,
+			},
+			(*stubProvider).errorOp,
+		),
+	)
+	panicRouter := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[stubInput, stubOutput]{
+				ID:     "panic_op",
+				Method: http.MethodPost,
+			},
+			(*stubProvider).panicOp,
+		),
+	)
 
-	params, _ := structpb.NewStruct(map[string]any{"key": "value"})
-	resp, err := client.Execute(ctx, &proto.ExecuteRequest{
-		Operation: "test_op",
-		Params:    params,
-		Token:     "tok",
-	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
+	tests := []struct {
+		name            string
+		router          *gestalt.Router[stubProvider]
+		request         *proto.ExecuteRequest
+		wantStatus      int32
+		wantBody        string
+		wantBodyContain []string
+	}{
+		{
+			name:       "success",
+			router:     stubRouter,
+			wantStatus: http.StatusOK,
+			wantBody:   `{"operation":"test_op"}`,
+			request: &proto.ExecuteRequest{
+				Operation: "test_op",
+				Params: func() *structpb.Struct {
+					params, _ := structpb.NewStruct(map[string]any{"key": "value"})
+					return params
+				}(),
+				Token: "tok",
+			},
+		},
+		{
+			name:       "decode error",
+			router:     decodeRouter,
+			wantStatus: http.StatusBadRequest,
+			wantBodyContain: []string{
+				"decode params for",
+				"decode_op",
+			},
+			request: &proto.ExecuteRequest{
+				Operation: "decode_op",
+				Params: func() *structpb.Struct {
+					params, _ := structpb.NewStruct(map[string]any{"count": "oops"})
+					return params
+				}(),
+			},
+		},
+		{
+			name:       "handler error",
+			router:     errorRouter,
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   `{"error":"boom"}`,
+			request: &proto.ExecuteRequest{
+				Operation: "error_op",
+			},
+		},
+		{
+			name:       "panic",
+			router:     panicRouter,
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   `{"error":"boom"}`,
+			request: &proto.ExecuteRequest{
+				Operation: "panic_op",
+			},
+		},
 	}
-	if resp.GetStatus() != 200 {
-		t.Errorf("Status = %d, want 200", resp.GetStatus())
-	}
-	if resp.GetBody() != `{"operation":"test_op"}` {
-		t.Errorf("Body = %q, want %q", resp.GetBody(), `{"operation":"test_op"}`)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newProviderPluginClient(t, &stubProvider{}, tt.router)
+
+			resp, err := client.Execute(context.Background(), tt.request)
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if resp.GetStatus() != tt.wantStatus {
+				t.Fatalf("Status = %d, want %d", resp.GetStatus(), tt.wantStatus)
+			}
+			if tt.wantBody != "" && resp.GetBody() != tt.wantBody {
+				t.Fatalf("Body = %q, want %q", resp.GetBody(), tt.wantBody)
+			}
+			for _, want := range tt.wantBodyContain {
+				if !strings.Contains(resp.GetBody(), want) {
+					t.Fatalf("Body = %q, want substring %q", resp.GetBody(), want)
+				}
+			}
+		})
 	}
 }
 

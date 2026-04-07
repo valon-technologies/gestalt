@@ -2,6 +2,7 @@ package operator
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -247,6 +248,11 @@ def double(value: int, _req: gestalt.Request) -> dict[str, object]:
 
 
 @gestalt.operation(method="POST")
+def explode(_req: gestalt.Request) -> dict[str, object]:
+    raise RuntimeError("boom")
+
+
+@gestalt.operation(method="POST")
 def maybe_filters(input: Optional[Filters], _req: gestalt.Request) -> dict[str, object]:
     return {
         "filters_type": type(input).__name__ if input else "",
@@ -314,6 +320,10 @@ status, body = provider.plugin.execute("echo", {
 double_status, double_body = provider.plugin.execute("times_two", {
     "value": 3,
 }, gestalt.Request())
+decode_status, decode_body = provider.plugin.execute("times_two", {
+    "value": "oops",
+}, gestalt.Request())
+explode_status, explode_body = provider.plugin.execute("explode", {}, gestalt.Request())
 zero_status, zero_body = provider.plugin.execute("status_zero", {}, gestalt.Request())
 maybe_status, maybe_body = provider.plugin.execute("maybe_filters", {
     "owner": "Grace",
@@ -324,6 +334,10 @@ print(json.dumps({
     "body": json.loads(body),
     "double_status": double_status,
     "double_body": json.loads(double_body),
+    "decode_status": decode_status,
+    "decode_body": json.loads(decode_body),
+    "explode_status": explode_status,
+    "explode_body": json.loads(explode_body),
     "list_status": list_status,
     "list_body": json.loads(list_body),
     "maybe_status": maybe_status,
@@ -393,7 +407,7 @@ print(json.dumps({
 	command := filepath.Join(dir, ".venv", "bin", "python")
 	cmd := exec.Command(command, "exercise.py")
 	cmd.Dir = dir
-	result, err := cmd.CombinedOutput()
+	result, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("exercise.py: %v\n%s", err, result)
 	}
@@ -438,6 +452,27 @@ print(json.dumps({
 	}
 	if doublePayload["value"] != float64(6) {
 		t.Fatalf("double value = %v, want 6", doublePayload["value"])
+	}
+	decodePayload, ok := body["decode_body"].(map[string]any)
+	if !ok {
+		t.Fatalf("decode payload = %#v, want object", body["decode_body"])
+	}
+	if body["decode_status"] != float64(http.StatusBadRequest) {
+		t.Fatalf("decode_status = %v, want %d", body["decode_status"], http.StatusBadRequest)
+	}
+	decodeError, ok := decodePayload["error"].(string)
+	if !ok || !strings.Contains(decodeError, "invalid literal for int()") {
+		t.Fatalf("decode error = %#v, want conversion error", decodePayload["error"])
+	}
+	explodePayload, ok := body["explode_body"].(map[string]any)
+	if !ok {
+		t.Fatalf("explode payload = %#v, want object", body["explode_body"])
+	}
+	if body["explode_status"] != float64(http.StatusInternalServerError) {
+		t.Fatalf("explode_status = %v, want %d", body["explode_status"], http.StatusInternalServerError)
+	}
+	if explodePayload["error"] != "boom" {
+		t.Fatalf("explode error = %v, want boom", explodePayload["error"])
 	}
 	listPayload, ok := body["list_body"].(map[string]any)
 	if !ok {

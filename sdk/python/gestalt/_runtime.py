@@ -1,17 +1,21 @@
 import importlib
+import json
 import os
 import pathlib
 import signal
 import sys
+import traceback
 from concurrent import futures
 from dataclasses import dataclass
+from http import HTTPStatus
+from typing import Final
 
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._plugin import ENV_WRITE_CATALOG, Plugin, Request, _module_plugin
 
-ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET"
-CURRENT_PROTOCOL_VERSION = 2
-GRPC_SERVER_MAX_WORKERS = 4
+ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
+CURRENT_PROTOCOL_VERSION: Final[int] = 2
+GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 
 
 @dataclass(frozen=True)
@@ -60,14 +64,19 @@ def serve(plugin: Plugin) -> None:
                     request.params,
                     preserving_proto_field_name=True,
                 )
-            status, body = plugin.execute(
-                request.operation,
-                params,
-                Request(
-                    token=request.token,
-                    connection_params=dict(request.connection_params),
-                ),
-            )
+            try:
+                status, body = plugin.execute(
+                    request.operation,
+                    params,
+                    Request(
+                        token=request.token,
+                        connection_params=dict(request.connection_params),
+                    ),
+                )
+            except Exception as err:
+                traceback.print_exc()
+                status = int(HTTPStatus.INTERNAL_SERVER_ERROR)
+                body = json.dumps({"error": str(err)}, separators=(",", ":"))
             return plugin_pb2.OperationResult(status=status, body=body)
 
     plugin_pb2_grpc.add_ProviderPluginServicer_to_server(ProviderServicer(), server)
