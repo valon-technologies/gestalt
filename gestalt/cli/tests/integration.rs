@@ -8,6 +8,7 @@ use assert_cmd::Command;
 use gestalt::output::Format;
 use mockito::{Matcher, Server};
 use predicates::prelude::*;
+use reqwest::{Method, StatusCode};
 use tempfile::TempDir;
 
 fn create_client(server: &Server) -> gestalt::api::ApiClient {
@@ -343,6 +344,37 @@ fn test_error_response() {
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("missing authorization header"));
+
+    let home = TempDir::new().unwrap();
+    let _catalog_mock = server
+        .mock(
+            Method::GET.as_str(),
+            "/api/v1/integrations/auth_svc/operations",
+        )
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header("Content-Type", "application/json")
+        .with_body(single_operation_catalog("list_items"))
+        .create();
+
+    let _invoke_mock = server
+        .mock(Method::GET.as_str(), "/api/v1/auth_svc/list_items")
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(usize::from(StatusCode::PRECONDITION_FAILED.as_u16()))
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first"}"#,
+        )
+        .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["invoke", "auth_svc", "list_items"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "failed to invoke auth_svc.list_items: integration \"auth_svc\" is not connected. Connect it first with `gestalt integrations connect auth_svc`",
+        ))
+        .stderr(predicate::str::contains("OAuth first").not());
 }
 
 #[test]
@@ -860,6 +892,10 @@ fn catalog_body() -> &'static str {
     }]"#
 }
 
+fn single_operation_catalog(id: &str) -> String {
+    format!(r#"[{{"id":"{id}"}}]"#)
+}
+
 #[test]
 fn test_invoke_with_connection_and_instance() {
     let mut server = Server::new();
@@ -903,6 +939,53 @@ fn test_invoke_with_connection_and_instance() {
 
     invoke_mock.assert();
     assert!(result.is_ok());
+
+    let _secondary_catalog_mock = server
+        .mock(
+            Method::GET.as_str(),
+            "/api/v1/integrations/other_svc/operations",
+        )
+        .match_header("Authorization", "Bearer test-token")
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header("Content-Type", "application/json")
+        .with_body(single_operation_catalog("check_status"))
+        .create();
+
+    let secondary_invoke_mock = server
+        .mock(Method::POST.as_str(), "/api/v1/other_svc/check_status")
+        .match_header("Authorization", "Bearer test-token")
+        .match_header("Content-Type", "application/json")
+        .match_body(Matcher::JsonString(
+            r#"{"_connection":"workspace","_instance":"team-a"}"#.to_string(),
+        ))
+        .with_status(usize::from(StatusCode::PRECONDITION_FAILED.as_u16()))
+        .with_header("Content-Type", "application/json")
+        .with_body(
+            r#"{"error":"no token stored for integration \"other_svc\" instance \"team-a\""}"#,
+        )
+        .create();
+
+    let err = format!(
+        "{:#}",
+        gestalt::commands::invoke::invoke(
+            &client,
+            "other_svc",
+            "check_status",
+            &[],
+            gestalt::commands::invoke::InvokeOptions {
+                connection: Some("workspace"),
+                instance: Some("team-a"),
+                ..Default::default()
+            },
+            Format::Json,
+        )
+        .unwrap_err()
+    );
+
+    secondary_invoke_mock.assert();
+    assert!(err.contains(
+        "Connect it first with `gestalt integrations connect other_svc --connection workspace --instance team-a`"
+    ));
 }
 
 #[test]

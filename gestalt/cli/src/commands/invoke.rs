@@ -43,15 +43,34 @@ pub fn invoke(
     }
 
     let path = format!("/api/v1/{}/{}", integration, operation);
-    let resp = if param_map.is_empty() {
-        client
-            .get(&path)
-            .with_context(|| format!("failed to invoke {}.{}", integration, operation))?
+    let resp = (if param_map.is_empty() {
+        client.get(&path)
     } else {
-        client
-            .post(&path, &serde_json::Value::Object(param_map))
-            .with_context(|| format!("failed to invoke {}.{}", integration, operation))?
-    };
+        client.post(&path, &serde_json::Value::Object(param_map))
+    })
+    .map_err(|err| {
+        let message = err.to_string();
+        if !message.contains("no token stored for integration") {
+            return err;
+        }
+
+        let mut connect_command = format!("gestalt integrations connect {}", integration);
+        if let Some(connection) = options.connection {
+            connect_command.push_str(" --connection ");
+            connect_command.push_str(connection);
+        }
+        if let Some(instance) = options.instance {
+            connect_command.push_str(" --instance ");
+            connect_command.push_str(instance);
+        }
+
+        anyhow::anyhow!(
+            "integration {:?} is not connected. Connect it first with `{}`",
+            integration,
+            connect_command,
+        )
+    })
+    .with_context(|| format!("failed to invoke {}.{}", integration, operation))?;
 
     let output_value = match options.select {
         Some(sel_path) => output::select_path(&resp, sel_path)?,
