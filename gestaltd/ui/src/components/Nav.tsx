@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clearSession, getUserEmail } from "@/lib/auth";
-import { logout } from "@/lib/api";
+import { getAuthInfo, logout } from "@/lib/api";
 import { DOCS_PATH, LOGIN_PATH } from "@/lib/constants";
 import { useTheme } from "@/hooks/use-theme";
 import { MoonIcon, SunIcon, SunMoonIcon } from "./icons";
@@ -18,8 +19,33 @@ const links = [
 export default function Nav() {
   const pathname = usePathname();
   const email = getUserEmail();
+  const [loginSupported, setLoginSupported] = useState(() => email !== null);
   const { theme, setTheme } = useTheme();
   const ThemeIcon = theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : SunMoonIcon;
+
+  useEffect(() => {
+    if (!email) {
+      setLoginSupported(false);
+      return;
+    }
+
+    let active = true;
+    getAuthInfo()
+      .then((info) => {
+        if (active) {
+          setLoginSupported(info.login_supported);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLoginSupported(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [email]);
 
   async function handleLogout() {
     await logout().catch(() => {});
@@ -68,12 +94,14 @@ export default function Nav() {
           {email && (
             <>
               <span className="text-sm text-faint">{email}</span>
-              <button
-                onClick={handleLogout}
-                className="text-sm text-muted hover:text-primary transition-colors duration-150"
-              >
-                Logout
-              </button>
+              {loginSupported && (
+                <button
+                  onClick={handleLogout}
+                  className="text-sm text-muted hover:text-primary transition-colors duration-150"
+                >
+                  Logout
+                </button>
+              )}
             </>
           )}
         </div>

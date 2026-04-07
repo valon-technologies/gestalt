@@ -15,6 +15,9 @@ pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
 pub const PROJECT_CONFIG_DIR: &str = ".gestalt";
 pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
+pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
+pub const AUTH_LOGIN_PATH: &str = "/api/v1/auth/login";
+pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
 
 pub fn normalize_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');

@@ -2013,31 +2013,69 @@ func TestExecuteOperation_SessionPassthroughAmbiguousInstance(t *testing.T) {
 func TestStartLogin(t *testing.T) {
 	t.Parallel()
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithLoginURL{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
-			loginURL:         "https://auth.example.com/login?state=abc",
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"state":"abc"}`)
-	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("request: %v", err)
+	tests := []struct {
+		name          string
+		loginURL      string
+		publicBaseURL string
+		wantURL       func(serverURL string) string
+	}{
+		{
+			name:     "preserves absolute login URL",
+			loginURL: "https://auth.example.com/login?state=abc",
+			wantURL: func(_ string) string {
+				return "https://auth.example.com/login?state=abc"
+			},
+		},
+		{
+			name:     "resolves relative login URL against request host",
+			loginURL: "/login/callback?state=abc",
+			wantURL: func(serverURL string) string {
+				return serverURL + "/login/callback?state=abc"
+			},
+		},
+		{
+			name:          "resolves relative login URL against configured public base URL",
+			loginURL:      "/login/callback?state=abc",
+			publicBaseURL: "https://gestalt.example.test",
+			wantURL: func(_ string) string {
+				return "https://gestalt.example.test/login/callback?state=abc"
+			},
+		},
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["url"] != "https://auth.example.com/login?state=abc" {
-		t.Fatalf("unexpected url: %q", result["url"])
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = &stubAuthWithLoginURL{
+					StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+					loginURL:         tt.loginURL,
+				}
+				cfg.PublicBaseURL = tt.publicBaseURL
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			body := bytes.NewBufferString(`{"state":"abc"}`)
+			resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+
+			var result map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				t.Fatalf("decoding: %v", err)
+			}
+			if result["url"] != tt.wantURL(ts.URL) {
+				t.Fatalf("unexpected url: %q", result["url"])
+			}
+		})
 	}
 }
 
@@ -3310,6 +3348,9 @@ func TestAuthInfo(t *testing.T) {
 	if body["display_name"] != "Google" {
 		t.Fatalf("expected display_name Google, got %q", body["display_name"])
 	}
+	if body["login_supported"] != true {
+		t.Fatalf("expected login_supported true, got %#v", body["login_supported"])
+	}
 }
 
 func TestAuthInfoFallback(t *testing.T) {
@@ -3340,6 +3381,9 @@ func TestAuthInfoFallback(t *testing.T) {
 	if body["display_name"] != "custom" {
 		t.Fatalf("expected display_name to fall back to name custom, got %q", body["display_name"])
 	}
+	if body["login_supported"] != true {
+		t.Fatalf("expected login_supported true, got %#v", body["login_supported"])
+	}
 }
 
 func TestAuthInfoNoAuth(t *testing.T) {
@@ -3369,6 +3413,9 @@ func TestAuthInfoNoAuth(t *testing.T) {
 	}
 	if body["display_name"] != "none" {
 		t.Fatalf("expected display_name none, got %q", body["display_name"])
+	}
+	if body["login_supported"] != false {
+		t.Fatalf("expected login_supported false, got %#v", body["login_supported"])
 	}
 }
 

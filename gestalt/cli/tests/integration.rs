@@ -121,17 +121,17 @@ struct LoginServer {
 fn spawn_login_server() -> LoginServer {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let login_response_url = format!("{base_url}/browser-login");
     let state = Arc::new(Mutex::new(LoginFlowState::default()));
     let server_state = Arc::clone(&state);
-    let server_url = base_url.clone();
     let handle = std::thread::spawn(move || {
         let mut workers = Vec::new();
         for _ in 0..3 {
             let (stream, _) = listener.accept().unwrap();
             let state = Arc::clone(&server_state);
-            let base_url = server_url.clone();
+            let login_response_url = login_response_url.clone();
             workers.push(std::thread::spawn(move || {
-                handle_login_request(stream, state, &base_url);
+                handle_login_request(stream, state, &login_response_url);
             }));
         }
         for worker in workers {
@@ -145,7 +145,11 @@ fn spawn_login_server() -> LoginServer {
     }
 }
 
-fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>, base_url: &str) {
+fn handle_login_request(
+    mut stream: TcpStream,
+    state: Arc<Mutex<LoginFlowState>>,
+    login_response_url: &str,
+) {
     let request = read_http_request(&mut stream);
     match request.target.as_str() {
         "/api/v1/auth/login" if request.method == Method::POST => {
@@ -157,7 +161,7 @@ fn handle_login_request(mut stream: TcpStream, state: Arc<Mutex<LoginFlowState>>
                 &mut stream,
                 StatusCode::OK,
                 http::APPLICATION_JSON,
-                &format!(r#"{{"url":"{base_url}/browser-login"}}"#),
+                &format!(r#"{{"url":"{login_response_url}"}}"#),
             );
         }
         "/browser-login" if request.method == Method::GET => {
@@ -593,7 +597,7 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
     assert!(!html.contains("CLI login complete"));
     assert!(!html.contains("class=\"pill\""));
 
-    let credentials_path = gestalt_cli::paths::gestalt_config_dir()
+    let credentials_path = gestalt::paths::gestalt_config_dir()
         .unwrap()
         .join("credentials.json");
     let credentials: serde_json::Value =
@@ -601,6 +605,27 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
     assert_eq!(credentials["api_url"], base_url);
     assert_eq!(credentials["api_token"], "cli-secret");
     assert_eq!(credentials["api_token_id"], "tok-123");
+}
+
+#[test]
+fn test_init_skips_login_when_server_auth_is_disabled() {
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"provider":"none","display_name":"none","login_supported":false}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .arg("init")
+        .write_stdin("\n\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Authentication is disabled on this server; skipping login.",
+        ))
+        .stderr(predicate::str::contains("Log in now?").not());
 }
 
 #[test]

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getAuthInfo, startLogin } from "@/lib/api";
 import { isAuthenticated, setUserEmail } from "@/lib/auth";
-import { DOCS_PATH, NONE_PROVIDER, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
+import { DOCS_PATH, DEFAULT_LOCAL_EMAIL } from "@/lib/constants";
 import Button from "@/components/Button";
 
 export default function LoginPage() {
@@ -19,7 +19,7 @@ export default function LoginPage() {
     }
     getAuthInfo()
       .then((info) => {
-        if (info.provider === NONE_PROVIDER) {
+        if (!info.login_supported) {
           setUserEmail(DEFAULT_LOCAL_EMAIL);
           window.location.replace("/");
           return;

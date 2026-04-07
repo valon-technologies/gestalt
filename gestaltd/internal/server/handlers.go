@@ -555,8 +555,9 @@ type loginRequest struct {
 }
 
 type authInfoResponse struct {
-	Provider    string `json:"provider"`
-	DisplayName string `json:"display_name"`
+	Provider       string `json:"provider"`
+	DisplayName    string `json:"display_name"`
+	LoginSupported bool   `json:"login_supported"`
 }
 
 func (s *Server) authProviderName() string {
@@ -579,8 +580,9 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, authInfoResponse{
-		Provider:    provider,
-		DisplayName: displayName,
+		Provider:       provider,
+		DisplayName:    displayName,
+		LoginSupported: s.authEnabled(),
 	})
 }
 
@@ -612,6 +614,12 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
 		return
 	}
+	loginURL, err := s.resolvePublicURL(r, url)
+	if err != nil {
+		auditErr = errors.New("failed to resolve login URL")
+		writeError(w, http.StatusInternalServerError, "failed to resolve login URL")
+		return
+	}
 	if s.encryptor != nil {
 		encoded, encErr := encodeLoginState(s.encryptor, loginState{
 			State:     req.State,
@@ -634,7 +642,37 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auditAllowed = true
 	auditErr = nil
-	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+	writeJSON(w, http.StatusOK, map[string]string{"url": loginURL})
+}
+
+func (s *Server) resolvePublicURL(r *http.Request, raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	if parsed.IsAbs() {
+		return parsed.String(), nil
+	}
+
+	base := s.publicBaseURL
+	if base == "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		base = scheme + "://" + r.Host
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	if baseURL.Path == "" {
+		baseURL.Path = "/"
+	}
+	return baseURL.ResolveReference(parsed).String(), nil
 }
 
 // AuthProviderDisplayName is an optional interface for a human-readable login label.
