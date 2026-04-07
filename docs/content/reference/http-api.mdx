@@ -72,15 +72,7 @@ When you call:
 /api/v1/{integration}/{operation}
 ```
 
-Gestalt:
-
-1. authenticates the caller
-2. resolves the target provider and operation
-3. resolves credentials based on the connection's `mode`
-4. auto-selects an instance when there is exactly one
-5. fails with an ambiguity error when there are multiple instances and none is specified
-6. refreshes OAuth tokens when needed
-7. executes the provider operation
+Gestalt authenticates the caller, resolves the target provider and operation, then resolves credentials based on the connection's `mode`. If the user has exactly one stored instance it is selected automatically; if there are multiple and none is specified, the call fails with an ambiguity error. OAuth tokens are refreshed when needed before the provider operation executes.
 
 ## Parameter conventions
 

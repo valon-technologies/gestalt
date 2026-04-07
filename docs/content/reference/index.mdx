@@ -2,12 +2,24 @@
 asIndexPage: true
 ---
 
+import { Cards } from 'nextra/components'
+
 # Reference
 
-Detailed specifications for every Gestalt surface.
-
-- [Config File](/reference/config-file) covers every YAML field and its validation rules.
-- [Plugin Manifests](/reference/plugin-manifests) documents the manifest schema for provider packages and UI bundles.
-- [HTTP API](/reference/http-api) lists every route, authentication model, and invocation semantic.
-- [CLI](/reference/cli) covers both `gestaltd` and `gestalt` commands, flags, and URL resolution.
-- [Built-in Providers](/reference/built-in-providers) lists auth providers, datastores, secret managers, and telemetry providers compiled into the binary.
+<Cards>
+  <Cards.Card title="Config File" href="/reference/config-file">
+    Every YAML field, validation rules, and load semantics.
+  </Cards.Card>
+  <Cards.Card title="Plugin Manifests" href="/reference/plugin-manifests">
+    Manifest schema for provider packages and UI bundles.
+  </Cards.Card>
+  <Cards.Card title="HTTP API" href="/reference/http-api">
+    Every route, authentication model, and invocation semantic.
+  </Cards.Card>
+  <Cards.Card title="Server CLI" href="/reference/cli">
+    Server lifecycle commands, plugin release, and common examples.
+  </Cards.Card>
+  <Cards.Card title="Built-in Providers" href="/reference/built-in-providers">
+    Auth providers, datastores, secret managers, and telemetry providers.
+  </Cards.Card>
+</Cards>
