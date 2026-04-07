@@ -164,15 +164,12 @@ func resolveConfigPath(flagValue string) string {
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
 	}
-	for _, p := range operator.LocalConfigPaths() {
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err == nil {
-			return p
+	if homePath := operator.DefaultLocalConfigPath(); homePath != "" {
+		if _, err := os.Stat(homePath); err == nil {
+			return homePath
 		}
 	}
-	return "/etc/gestalt/config.yaml"
+	return operator.DefaultLocalConfigPath()
 }
 
 func logDatastoreWarnings(ds core.Datastore) {
