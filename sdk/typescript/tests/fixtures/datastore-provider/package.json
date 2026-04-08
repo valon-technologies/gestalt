@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/datastore-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "datastore",
+      "target": "./datastore.ts#provider"
+    }
+  }
+}

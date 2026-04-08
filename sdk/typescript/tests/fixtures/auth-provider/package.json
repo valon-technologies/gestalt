@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/auth-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "auth",
+      "target": "./auth.ts#provider"
+    }
+  }
+}
