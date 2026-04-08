@@ -94,7 +94,26 @@ type OperationDef struct {
 }
 
 type AuthMappingDef struct {
-	Headers map[string]string `yaml:"headers" json:"headers"`
+	Headers map[string]AuthValueDef `yaml:"headers" json:"headers"`
+	Basic   *BasicAuthMappingDef    `yaml:"basic" json:"basic,omitempty"`
+}
+
+type BasicAuthMappingDef struct {
+	Username AuthValueDef `yaml:"username" json:"username"`
+	Password AuthValueDef `yaml:"password" json:"password"`
+}
+
+type AuthValueDef struct {
+	Value     string            `yaml:"value" json:"value,omitempty"`
+	ValueFrom *AuthValueFromDef `yaml:"valueFrom" json:"valueFrom,omitempty"`
+}
+
+type AuthValueFromDef struct {
+	CredentialFieldRef *CredentialFieldRefDef `yaml:"credentialFieldRef" json:"credentialFieldRef,omitempty"`
+}
+
+type CredentialFieldRefDef struct {
+	Name string `yaml:"name" json:"name"`
 }
 
 type ValueSelectorDef struct {

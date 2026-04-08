@@ -405,9 +405,17 @@ func TestBuildAuthMapping(t *testing.T) {
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
 		AuthMapping: &AuthMappingDef{
-			Headers: map[string]string{
-				"DD-API-KEY":         "api_key",
-				"DD-APPLICATION-KEY": "app_key",
+			Headers: map[string]AuthValueDef{
+				"DD-API-KEY": {
+					ValueFrom: &AuthValueFromDef{
+						CredentialFieldRef: &CredentialFieldRefDef{Name: "api_key"},
+					},
+				},
+				"DD-APPLICATION-KEY": {
+					ValueFrom: &AuthValueFromDef{
+						CredentialFieldRef: &CredentialFieldRefDef{Name: "app_key"},
+					},
+				},
 			},
 		},
 		Operations: map[string]OperationDef{
@@ -455,7 +463,13 @@ func TestBuildAuthMappingMissingField(t *testing.T) {
 		BaseURL:     srv.URL,
 		Auth:        AuthDef{Type: "manual"},
 		AuthMapping: &AuthMappingDef{
-			Headers: map[string]string{"X-Key": "missing_field"},
+			Headers: map[string]AuthValueDef{
+				"X-Key": {
+					ValueFrom: &AuthValueFromDef{
+						CredentialFieldRef: &CredentialFieldRefDef{Name: "missing_field"},
+					},
+				},
+			},
 		},
 		Operations: map[string]OperationDef{
 			"op": {Description: "Op", Method: http.MethodGet, Path: "/op"},
@@ -1000,9 +1014,17 @@ func TestBuildAuthMappingFromConfig(t *testing.T) {
 	conn := config.ConnectionDef{
 		Auth: config.ConnectionAuthDef{
 			AuthMapping: &config.AuthMappingDef{
-				Headers: map[string]string{
-					"X-Api-Key": "api_key",
-					"X-App-Key": "app_key",
+				Headers: map[string]config.AuthValueDef{
+					"X-Api-Key": {
+						ValueFrom: &config.AuthValueFromDef{
+							CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
+						},
+					},
+					"X-App-Key": {
+						ValueFrom: &config.AuthValueFromDef{
+							CredentialFieldRef: &config.CredentialFieldRefDef{Name: "app_key"},
+						},
+					},
 				},
 			},
 		},

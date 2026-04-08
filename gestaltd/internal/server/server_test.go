@@ -1022,6 +1022,40 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				{Name: "secondary_token", Label: "Secondary Token"},
 			},
 		},
+		{
+			name: "declared manual credential fields are exposed without synthetic auth inputs",
+			provider: func(t *testing.T) core.Provider {
+				t.Helper()
+				return &coretesting.StubIntegration{N: "example", DN: "Example"}
+			},
+			plugin: &config.PluginDef{
+				Auth: &config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+					Credentials: []config.CredentialFieldDef{
+						{Name: "api_key", Label: "API Key"},
+					},
+					AuthMapping: &config.AuthMappingDef{
+						Basic: &config.BasicAuthMappingDef{
+							Username: config.AuthValueDef{
+								Value: "org-123",
+							},
+							Password: config.AuthValueDef{
+								ValueFrom: &config.AuthValueFromDef{
+									CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantAuth: []string{"manual"},
+			wantFields: []struct {
+				Name  string `json:"name"`
+				Label string `json:"label"`
+			}{
+				{Name: "api_key", Label: "API Key"},
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -6407,49 +6441,103 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 func TestConnectManual_MultiCredential(t *testing.T) {
 	t.Parallel()
 
-	var stored *core.IntegrationToken
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
-			StubIntegration: coretesting.StubIntegration{N: "multi-key-svc"},
+	cases := []struct {
+		name            string
+		integration     string
+		requestBody     string
+		integrationDefs map[string]config.IntegrationDef
+		wantTokenData   map[string]string
+	}{
+		{
+			name:        "stores named credentials map",
+			integration: "multi-key-svc",
+			requestBody: `{"integration":"multi-key-svc","credentials":{"api_key":"k1","app_key":"k2"}}`,
+			wantTokenData: map[string]string{
+				"api_key": "k1",
+				"app_key": "k2",
+			},
+		},
+		{
+			name:        "single credential input wraps structured auth mapping field",
+			integration: "modern-treasury",
+			requestBody: `{"integration":"modern-treasury","credential":"api-key-abc"}`,
+			integrationDefs: map[string]config.IntegrationDef{
+				"modern-treasury": {
+					Plugin: &config.PluginDef{
+						Auth: &config.ConnectionAuthDef{
+							Type: pluginmanifestv1.AuthTypeManual,
+							Credentials: []config.CredentialFieldDef{
+								{Name: "api_key", Label: "API Key"},
+							},
+							AuthMapping: &config.AuthMappingDef{
+								Basic: &config.BasicAuthMappingDef{
+									Username: config.AuthValueDef{
+										Value: "org-123",
+									},
+									Password: config.AuthValueDef{
+										ValueFrom: &config.AuthValueFromDef{
+											CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantTokenData: map[string]string{
+				"api_key": "api-key-abc",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stored *core.IntegrationToken
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: tc.integration},
+				})
+				cfg.DefaultConnection = map[string]string{tc.integration: config.PluginConnectionName}
+				cfg.IntegrationDefs = tc.integrationDefs
+				cfg.Datastore = &coretesting.StubDatastore{
+					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+						return &core.User{ID: "u1", Email: email}, nil
+					},
+					StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
+						stored = tok
+						return nil
+					},
+				}
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(tc.requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			if stored == nil {
+				t.Fatal("expected StoreToken to be called")
+			}
+
+			var tokenData map[string]string
+			if err := json.Unmarshal([]byte(stored.AccessToken), &tokenData); err != nil {
+				t.Fatalf("stored token is not valid JSON: %v", err)
+			}
+			if !reflect.DeepEqual(tokenData, tc.wantTokenData) {
+				t.Fatalf("token data = %+v, want %+v", tokenData, tc.wantTokenData)
+			}
 		})
-		cfg.DefaultConnection = map[string]string{"multi-key-svc": config.PluginConnectionName}
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			StoreTokenFn: func(_ context.Context, tok *core.IntegrationToken) error {
-				stored = tok
-				return nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"integration":"multi-key-svc","credentials":{"api_key":"k1","app_key":"k2"}}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	if stored == nil {
-		t.Fatal("expected StoreToken to be called")
-	}
-
-	var tokenData map[string]string
-	if err := json.Unmarshal([]byte(stored.AccessToken), &tokenData); err != nil {
-		t.Fatalf("stored token is not valid JSON: %v", err)
-	}
-	if tokenData["api_key"] != "k1" {
-		t.Errorf("api_key = %q, want k1", tokenData["api_key"])
-	}
-	if tokenData["app_key"] != "k2" {
-		t.Errorf("app_key = %q, want k2", tokenData["app_key"])
 	}
 }
 

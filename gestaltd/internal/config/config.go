@@ -371,7 +371,26 @@ type ConnectionAuthDef struct {
 type CredentialFieldDef = pluginmanifestv1.CredentialField
 
 type AuthMappingDef struct {
-	Headers map[string]string `yaml:"headers"`
+	Headers map[string]AuthValueDef `yaml:"headers"`
+	Basic   *BasicAuthMappingDef    `yaml:"basic"`
+}
+
+type BasicAuthMappingDef struct {
+	Username AuthValueDef `yaml:"username"`
+	Password AuthValueDef `yaml:"password"`
+}
+
+type AuthValueDef struct {
+	Value     string            `yaml:"value"`
+	ValueFrom *AuthValueFromDef `yaml:"valueFrom"`
+}
+
+type AuthValueFromDef struct {
+	CredentialFieldRef *CredentialFieldRefDef `yaml:"credentialFieldRef"`
+}
+
+type CredentialFieldRefDef struct {
+	Name string `yaml:"name"`
 }
 
 type ConnectionParamDef = pluginmanifestv1.ProviderConnectionParam
@@ -1173,6 +1192,75 @@ func validateManifestBackedIntegration(name string, plugin *PluginDef) error {
 	}
 	if err := validateExecutableConnectionAuthSupport(name, plugin, effectiveProvider); err != nil {
 		return err
+	}
+	if err := validateConnectionAuthMappings(name, EffectivePluginConnectionDef(plugin, effectiveProvider).Auth, "plugin"); err != nil {
+		return err
+	}
+	declared := declaredManifestBackedConnections(plugin, effectiveProvider)
+	names := make([]string, 0, len(declared))
+	for connName := range declared {
+		if connName == PluginConnectionName {
+			continue
+		}
+		names = append(names, connName)
+	}
+	slices.Sort(names)
+	for _, connName := range names {
+		conn, ok := EffectiveNamedConnectionDef(plugin, effectiveProvider, connName)
+		if !ok {
+			continue
+		}
+		if err := validateConnectionAuthMappings(name, conn.Auth, fmt.Sprintf("connection %q", connName)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateConnectionAuthMappings(integration string, auth ConnectionAuthDef, subject string) error {
+	credentialNames := make(map[string]struct{}, len(auth.Credentials))
+	for _, field := range auth.Credentials {
+		if field.Name != "" {
+			credentialNames[field.Name] = struct{}{}
+		}
+	}
+	if auth.AuthMapping == nil {
+		return nil
+	}
+	for headerName, value := range auth.AuthMapping.Headers {
+		if err := validateAuthValueDef(integration, subject, fmt.Sprintf("auth_mapping.headers[%q]", headerName), value, credentialNames); err != nil {
+			return err
+		}
+	}
+	if auth.AuthMapping.Basic != nil {
+		if err := validateAuthValueDef(integration, subject, "auth_mapping.basic.username", auth.AuthMapping.Basic.Username, credentialNames); err != nil {
+			return err
+		}
+		if err := validateAuthValueDef(integration, subject, "auth_mapping.basic.password", auth.AuthMapping.Basic.Password, credentialNames); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAuthValueDef(integration, subject, path string, value AuthValueDef, credentialNames map[string]struct{}) error {
+	hasValue := value.Value != ""
+	hasValueFrom := value.ValueFrom != nil
+	if hasValue == hasValueFrom {
+		return fmt.Errorf("config validation: integration %q %s %s must set exactly one of value or valueFrom", integration, subject, path)
+	}
+	if hasValue {
+		return nil
+	}
+	if value.ValueFrom.CredentialFieldRef == nil {
+		return fmt.Errorf("config validation: integration %q %s %s.valueFrom must set credentialFieldRef", integration, subject, path)
+	}
+	name := value.ValueFrom.CredentialFieldRef.Name
+	if name == "" {
+		return fmt.Errorf("config validation: integration %q %s %s.valueFrom.credentialFieldRef.name is required", integration, subject, path)
+	}
+	if _, ok := credentialNames[name]; !ok {
+		return fmt.Errorf("config validation: integration %q %s %s.valueFrom.credentialFieldRef references undeclared credential %q", integration, subject, path, name)
 	}
 	return nil
 }

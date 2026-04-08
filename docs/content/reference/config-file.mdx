@@ -536,8 +536,14 @@ connections:
           help_url: https://us5.datadoghq.com/organization-settings/application-keys
       auth_mapping:
         headers:
-          DD-API-KEY: api_key
-          DD-APPLICATION-KEY: app_key
+          DD-API-KEY:
+            valueFrom:
+              credentialFieldRef:
+                name: api_key
+          DD-APPLICATION-KEY:
+            valueFrom:
+              credentialFieldRef:
+                name: app_key
 ```
 
 | Field | Description |
@@ -546,7 +552,30 @@ connections:
 | `credentials[].label` | UI display label. Falls back to `name` when omitted. |
 | `credentials[].description` | Hint text below the label. Supports inline links via `[text](url)`. |
 | `credentials[].help_url` | Link placed next to the label pointing to where the credential can be found. |
-| `auth_mapping.headers` | Maps credential field names to HTTP headers. Required when multiple credentials are declared. |
+| `auth_mapping.headers.<HEADER>.value` | Supplies a static deployer-managed value for a header. |
+| `auth_mapping.headers.<HEADER>.valueFrom.credentialFieldRef.name` | Reads a header value from the named manual credential field. |
+| `auth_mapping.basic.username` / `auth_mapping.basic.password` | Build the Basic auth username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
+
+For Basic auth providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
+
+```yaml
+connections:
+  default:
+    auth:
+      type: manual
+      credentials:
+        - name: api_key
+          label: API Key
+          help_url: https://app.moderntreasury.com/settings/api_keys
+      auth_mapping:
+        basic:
+          username:
+            value: ${MODERN_TREASURY_ORG_ID}
+          password:
+            valueFrom:
+              credentialFieldRef:
+                name: api_key
+```
 
 #### Post-connect discovery
 

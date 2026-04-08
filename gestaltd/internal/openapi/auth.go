@@ -100,7 +100,7 @@ func applyAPIKeySecurityAuth(def *provider.Definition, schemes []namedSecuritySc
 		return false
 	}
 
-	authMapping := &provider.AuthMappingDef{Headers: make(map[string]string, len(schemes))}
+	authMapping := &provider.AuthMappingDef{Headers: make(map[string]provider.AuthValueDef, len(schemes))}
 	credentialFields := make([]provider.CredentialFieldDef, 0, len(schemes))
 	for _, named := range schemes {
 		if named.scheme == nil || named.scheme.Type != secTypeAPIKey || named.scheme.In != secInHeader {
@@ -108,7 +108,11 @@ func applyAPIKeySecurityAuth(def *provider.Definition, schemes []namedSecuritySc
 		}
 		field := credentialFieldForSecurityScheme(named.name, named.scheme)
 		credentialFields = append(credentialFields, field)
-		authMapping.Headers[named.scheme.Name] = field.Name
+		authMapping.Headers[named.scheme.Name] = provider.AuthValueDef{
+			ValueFrom: &provider.AuthValueFromDef{
+				CredentialFieldRef: &provider.CredentialFieldRefDef{Name: field.Name},
+			},
+		}
 	}
 
 	def.Auth.Type = "manual"
