@@ -13,6 +13,7 @@ use crate::http;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
+pub const ENV_URL: &str = "GESTALT_URL";
 pub const PROJECT_CONFIG_DIR: &str = ".gestalt";
 pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
@@ -104,12 +105,12 @@ fn find_configured_url_with_source(
     if let Some(url) = url_override {
         return Ok(Some((normalize_url(url), "--url flag".to_string())));
     }
-    if let Ok(url) = std::env::var("GESTALT_URL")
+    if let Ok(url) = std::env::var(ENV_URL)
         && !url.trim().is_empty()
     {
         return Ok(Some((
             normalize_url(&url),
-            "GESTALT_URL environment variable".to_string(),
+            format!("{ENV_URL} environment variable"),
         )));
     }
     if let Some((url, path)) = find_project_config_value("url")? {
@@ -138,7 +139,8 @@ pub fn describe_server_config(url_override: Option<&str>) -> Option<(String, Str
 fn bail_no_url_configured() -> Result<String> {
     let config_store = ConfigStore::new()?;
     bail!(
-        "no URL configured: use --url, GESTALT_URL, {}, or the user-local config file at {}",
+        "no URL configured: use --url, {}, {}, or the user-local config file at {}",
+        ENV_URL,
         PROJECT_CONFIG_FILE,
         config_store.path().display()
     )

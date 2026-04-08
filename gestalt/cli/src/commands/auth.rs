@@ -340,7 +340,10 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
 
             if server_config.is_none() {
                 eprintln!();
-                eprintln!("Run 'gestalt init' or set GESTALT_URL to configure a server.");
+                eprintln!(
+                    "Run 'gestalt init' or set {} to configure a server.",
+                    api::ENV_URL,
+                );
             } else if !configured {
                 eprintln!();
                 eprintln!(
