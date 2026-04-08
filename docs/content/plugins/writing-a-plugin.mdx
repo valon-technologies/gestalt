@@ -10,18 +10,21 @@ The host still owns auth, token storage, connection selection, and HTTP or MCP r
 
 ## Prerequisites
 
-<Tabs items={['Go', 'Python']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     You need Go 1.26+ and a running `gestaltd` instance for testing.
   </Tabs.Tab>
   <Tabs.Tab>
     You need Python 3.10+ and a running `gestaltd` instance for testing.
   </Tabs.Tab>
+  <Tabs.Tab>
+    You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
+  </Tabs.Tab>
 </Tabs>
 
 ## Create the project
 
-<Tabs items={['Go', 'Python']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     ```sh
     mkdir my-plugin && cd my-plugin
@@ -66,6 +69,24 @@ The host still owns auth, token storage, connection selection, and HTTP or MCP r
     [tool.gestalt]
     plugin = "provider"
     ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    mkdir my-plugin && cd my-plugin
+    cargo init --lib
+    ```
+
+    Recommended layout:
+
+    ```text
+    my-plugin/
+      Cargo.toml
+      plugin.yaml
+      src/
+        lib.rs
+    ```
+
+    Add `gestalt_plugin_sdk`, `serde`, and `schemars` to `Cargo.toml`. The initial Rust SDK release is tagged from `sdk/rust/v*` and is not published to crates.io, so the exact dependency stanza depends on the release channel that ships with the SDK.
   </Tabs.Tab>
 </Tabs>
 
@@ -114,7 +135,9 @@ The manifest stays the source of truth for display name, description, auth, the 
 
 ## Define operations
 
-<Tabs items={['Go', 'Python']}>
+Rust examples below show the intended shape of the first SDK release. Exact helper names may change slightly as the Rust API is finalized.
+
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     ```go
     package provider
@@ -210,6 +233,79 @@ The manifest stays the source of truth for display name, description, auth, the 
 
     The top-level `configure(name, config)` function runs once at startup. It does not need a decorator.
   </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::sync::{Arc, Mutex};
+
+    use gestalt_plugin_sdk as gestalt;
+    use serde::{Deserialize, Serialize};
+
+    pub struct Provider {
+        greeting: Mutex<String>,
+    }
+
+    impl Default for Provider {
+        fn default() -> Self {
+            Self {
+                greeting: Mutex::new("Hello".to_string()),
+            }
+        }
+    }
+
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        async fn configure(
+            &self,
+            _name: &str,
+            config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            let greeting = config
+                .get("greeting")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Hello")
+                .to_string();
+            *self.greeting.lock().expect("lock greeting") = greeting;
+            Ok(())
+        }
+    }
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct GreetInput {
+        #[schemars(description = "Name to greet")]
+        name: Option<String>,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct GreetOutput {
+        message: String,
+    }
+
+    pub fn new() -> Provider {
+        Provider::default()
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<GreetInput, GreetOutput>::new("greet")
+                .method("GET")
+                .description("Return a greeting message")
+                .read_only(true),
+            |provider: Arc<Provider>, input: GreetInput, _request: gestalt::Request| async move {
+                let greeting = provider.greeting.lock().expect("lock greeting").clone();
+                let name = input.name.unwrap_or_else(|| "World".to_string());
+                Ok::<gestalt::Response<GreetOutput>, std::convert::Infallible>(gestalt::ok(
+                    GreetOutput {
+                        message: format!("{greeting}, {name}!"),
+                    },
+                ))
+            },
+        )
+    }
+
+    // Placeholder: the exact export helper may change slightly before the first stable release.
+    gestalt::export_provider!(constructor = new, router = router);
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
@@ -220,7 +316,7 @@ By default, input decode failures return a structured `400` response, and unhand
 
 The router derives catalog parameters from the input type. Fields are required by default unless marked optional. Nested types are emitted as `object` parameters and collections as `array`.
 
-<Tabs items={['Go', 'Python']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     ```go
     type SearchInput struct {
@@ -242,13 +338,33 @@ The router derives catalog parameters from the input type. Fields are required b
 
     Fields without a default are required. Use `gestalt.field(description="...")` for descriptions and `default=...` for default values.
   </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[derive(serde::Deserialize, schemars::JsonSchema)]
+    struct SearchInput {
+        #[schemars(description = "Search query")]
+        query: String,
+        #[serde(default = "default_max_items")]
+        #[schemars(description = "Maximum results")]
+        max_items: u32,
+        #[schemars(description = "Optional filter set")]
+        filters: Option<Filter>,
+    }
+
+    fn default_max_items() -> u32 {
+        10
+    }
+    ```
+
+    Fields are required unless you model them as `Option<T>` or provide a serde default. Use `schemars(description = "...")` for catalog descriptions and serde defaults for scalar defaults.
+  </Tabs.Tab>
 </Tabs>
 
 ## Dynamic catalogs
 
 By default, the operation catalog is static and materialized at startup. If your plugin needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
 
-<Tabs items={['Go', 'Python']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     Implement the `SessionCatalogProvider` interface on your provider:
 
@@ -289,6 +405,38 @@ By default, the operation catalog is static and materialized at startup. If your
         )
     ```
   </Tabs.Tab>
+  <Tabs.Tab>
+    Return a request-scoped catalog from the provider:
+
+    ```rust
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        fn supports_session_catalog(&self) -> bool {
+            true
+        }
+
+        async fn catalog_for_request(
+            &self,
+            request: &gestalt::Request,
+        ) -> gestalt::Result<Option<gestalt::Catalog>> {
+            Ok(Some(gestalt::Catalog {
+                name: "my-plugin-session".to_string(),
+                display_name: request.token.clone(),
+                operations: vec![gestalt::CatalogOperation {
+                    id: "search_private".to_string(),
+                    method: "POST".to_string(),
+                    annotations: Some(gestalt::OperationAnnotations {
+                        read_only_hint: Some(true),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }))
+        }
+    }
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ## Test locally
@@ -324,7 +472,7 @@ gestalt invoke my-plugin greet -p name=Gestalt
 gestaltd plugin release --version 0.0.1-alpha.1
 ```
 
-Gestalt materializes the executable catalog automatically during release. Both Go and Python source plugins build the host-platform artifact by default. Pass `--platform` with a comma-separated target list to build explicit platforms, or `--platform all` in CI to build the full supported release matrix.
+Gestalt materializes the executable catalog automatically during release. Go, Python, and Rust source plugins build the host-platform artifact by default. Pass `--platform` with a comma-separated target list to build explicit platforms, or `--platform all` in CI to build the full supported release matrix.
 
 For non-host Python targets, point Gestalt at a matching interpreter with `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as `.venv-<goos>-<goarch>/`.
 

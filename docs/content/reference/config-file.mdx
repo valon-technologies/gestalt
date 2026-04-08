@@ -440,7 +440,7 @@ provider:
     path: ./plugin.yaml
 ```
 
-Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`.
+Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
 
 | Field | Description |
 | --- | --- |

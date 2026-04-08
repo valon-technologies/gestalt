@@ -77,17 +77,18 @@ Run this from the plugin source directory. It produces release archives and writ
 
 Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
 
-For executable Go and Python source plugins, `plugin release` materializes the
-executable catalog automatically and builds the host-platform artifact by
-default. Pass `--platform` with a comma-separated list such as
-`--platform linux/amd64,darwin/arm64` to build explicit targets. Pass
-`--platform all` in CI release jobs to build the full supported platform matrix
-for both Go and Python source plugins.
+For executable Go, Rust, and Python integration source plugins, `plugin
+release` materializes the executable catalog automatically and builds the
+host-platform artifact by default. Go and Rust auth/datastore source packages
+use the same release flow without catalog generation. Pass `--platform` with a
+comma-separated list such as `--platform linux/amd64,darwin/arm64` to build
+explicit targets. Pass `--platform all` in CI release jobs to build the full
+supported platform matrix for source builds.
 Pass `--platform` with a comma-separated list such as
 `--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` to build explicit targets.
 
 Pass `--platform all` in CI release jobs to build the full supported platform
-matrix for both Go and Python source plugins.
+matrix for source builds.
 
 For non-host Python targets, point Gestalt at a matching interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
