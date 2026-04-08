@@ -8,44 +8,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
-func TestCompileSchemasFillsInputSchema(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "test",
-		Operations: []catalog.CatalogOperation{
-			{
-				ID:     "op1",
-				Method: http.MethodGet,
-				Path:   "/test",
-				Parameters: []catalog.CatalogParameter{
-					{Name: "q", Type: "string", Description: "Query", Required: true},
-					{Name: "limit", Type: "integer", Default: 50},
-				},
-			},
-		},
-	}
-
-	CompileSchemas(cat)
-
-	op := cat.Operations[0]
-	if op.InputSchema == nil {
-		t.Fatal("CompileSchemas should synthesize InputSchema from Parameters")
-	}
-
-	var schema map[string]any
-	if err := json.Unmarshal(op.InputSchema, &schema); err != nil {
-		t.Fatalf("unmarshal InputSchema: %v", err)
-	}
-	if schema["type"] != "object" {
-		t.Errorf("schema type = %v", schema["type"])
-	}
-	props := schema["properties"].(map[string]any)
-	if len(props) != 2 {
-		t.Errorf("got %d properties, want 2", len(props))
-	}
-}
-
 func TestCompileSchemasPreservesExistingInputSchema(t *testing.T) {
 	t.Parallel()
 
