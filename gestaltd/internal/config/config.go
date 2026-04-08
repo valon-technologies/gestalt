@@ -1144,9 +1144,6 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		if strings.TrimSpace(plugin.Source.Auth.Token) == "" {
 			return fmt.Errorf("config validation: %s %q plugin.source.auth.token is required when plugin.source.auth is set", kind, name)
 		}
-		if strings.HasPrefix(plugin.Source.Auth.Token, "secret://") {
-			return fmt.Errorf("config validation: %s %q plugin.source.auth.token does not support secret:// references; use environment expansion instead", kind, name)
-		}
 	}
 
 	if kind != "integration" {

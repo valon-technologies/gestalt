@@ -243,8 +243,30 @@ type preparedCore struct {
 	Deps          Deps
 }
 
-func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+func prepareSecretManager(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
 	sm, err := buildSecretManager(cfg, factories)
+	if err != nil {
+		return nil, err
+	}
+	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
+		_ = closeSecretManager(sm)
+		return nil, err
+	}
+	return sm, nil
+}
+
+// ResolveConfigSecrets resolves secret:// references in config using the
+// configured secrets provider, then closes the temporary secret manager.
+func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	sm, err := prepareSecretManager(ctx, cfg, factories)
+	if err != nil {
+		return err
+	}
+	return closeSecretManager(sm)
+}
+
+func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+	sm, err := prepareSecretManager(ctx, cfg, factories)
 	if err != nil {
 		return nil, err
 	}
@@ -254,10 +276,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeSecretManager(sm)
 		}
 	}()
-
-	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
-		return nil, err
-	}
 
 	tp, err := buildTelemetry(cfg, factories)
 	if err != nil {
@@ -509,6 +527,21 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			}
 		}
 		cfg.Integrations[name] = intg
+	}
+	if cfg.Auth.Provider != nil {
+		if err := resolveStringFields(cfg.Auth.Provider, resolve); err != nil {
+			return err
+		}
+	}
+	if cfg.Datastore.Provider != nil {
+		if err := resolveStringFields(cfg.Datastore.Provider, resolve); err != nil {
+			return err
+		}
+	}
+	if cfg.UI.Plugin != nil {
+		if err := resolveStringFields(cfg.UI.Plugin, resolve); err != nil {
+			return err
+		}
 	}
 
 	// Skip cfg.Secrets.Config to avoid self-referential resolution.

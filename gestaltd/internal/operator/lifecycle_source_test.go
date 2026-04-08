@@ -15,11 +15,15 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -447,15 +451,17 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	yaml := strings.Join([]string{
+	configYAML := strings.Join([]string{
 		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"secrets:",
+		"  provider: test-secrets",
 		"auth:",
 		"  provider:",
 		"    source:",
 		"      ref: " + source,
 		"      version: " + version,
 		"      auth:",
-		"        token: ghp_inline_auth_source_token",
+		"        token: secret://source-token",
 		"  config:",
 		"    client_id: managed-auth-client",
 		"server:",
@@ -464,11 +470,20 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(resolver)
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{"source-token": "ghp_inline_auth_source_token"},
+		}, nil
+	}
+
+	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)

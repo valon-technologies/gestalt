@@ -53,11 +53,17 @@ type LockProviderEntry = LockEntry
 type LockUIEntry = LockEntry
 
 type Lifecycle struct {
-	sourceResolver pluginsource.Resolver
+	sourceResolver       pluginsource.Resolver
+	configSecretResolver func(context.Context, *config.Config) error
 }
 
 func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
 	return &Lifecycle{sourceResolver: sourceResolver}
+}
+
+func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
+	l.configSecretResolver = resolve
+	return l
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
@@ -71,6 +77,9 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 	}
 	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
+		return nil, err
 	}
 
 	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
@@ -136,6 +145,9 @@ func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifacts
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
+	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return nil, nil, err
 	}
@@ -148,6 +160,16 @@ func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifacts
 	}
 
 	return cfg, nil, nil
+}
+
+func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config) error {
+	if l.configSecretResolver == nil {
+		return nil
+	}
+	if err := l.configSecretResolver(ctx, cfg); err != nil {
+		return fmt.Errorf("resolving config secrets: %w", err)
+	}
+	return config.ValidateStructure(cfg)
 }
 
 type initPaths struct {
