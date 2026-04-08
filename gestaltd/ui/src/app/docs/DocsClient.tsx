@@ -658,10 +658,12 @@ function Subheading({ id, title }: { id?: string; title: string }) {
 function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   }
 
   return (
@@ -676,7 +678,7 @@ function CodeBlock({ code }: { code: string }) {
         aria-label="Copy to clipboard"
       >
         {copied ? (
-          <CheckIcon className="h-4 w-4 text-grove-600 dark:text-grove-400" />
+          <CheckIcon className="h-4 w-4 text-grove-600 dark:text-grove-200" />
         ) : (
           <CopyIcon className="h-4 w-4" />
         )}
