@@ -119,7 +119,8 @@ Plugin-level pagination configuration applies to all operations by default. Indi
 | --- | --- | --- |
 | `style` | string | Required. One of `cursor`, `offset`, `page`. |
 | `cursor_param` | string | Query parameter name for the cursor value. |
-| `cursor_path` | string | JSON path to the next-cursor value in the response. |
+| `cursor.source` | string | Value source for the next cursor. One of `body`, `header`. |
+| `cursor.path` | string | Lookup path for the cursor value in the selected source. |
 | `limit_param` | string | Query parameter name for page size. |
 | `default_limit` | int | Default page size when the caller does not specify one. |
 | `results_path` | string | JSON path to the array of results in the response. |
@@ -130,7 +131,9 @@ plugin:
   pagination:
     style: cursor
     cursor_param: starting_after
-    cursor_path: next_cursor
+    cursor:
+      source: body
+      path: next_cursor
     limit_param: limit
     default_limit: 100
     max_pages: 10
@@ -164,8 +167,10 @@ The `response_mapping` block extracts a data array and pagination metadata from 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `data_path` | string | Required. JSON path to the results array. |
-| `pagination.has_more_path` | string | JSON path to a boolean indicating more pages exist. |
-| `pagination.cursor_path` | string | JSON path to the next-page cursor value. |
+| `pagination.has_more.source` | string | Value source for the has-more flag. One of `body`, `header`. |
+| `pagination.has_more.path` | string | Lookup path for the has-more flag in the selected source. |
+| `pagination.cursor.source` | string | Value source for the next-page cursor. One of `body`, `header`. |
+| `pagination.cursor.path` | string | Lookup path for the next-page cursor in the selected source. |
 
 ### Managed Parameters
 
@@ -333,7 +338,9 @@ This manifest shows an integration plugin with an executable entrypoint, multipl
       pagination:
         style: cursor
         cursor_param: starting_after
-        cursor_path: next_cursor
+        cursor:
+          source: body
+          path: next_cursor
         limit_param: limit
         default_limit: 50
         max_pages: 5
@@ -403,7 +410,10 @@ This manifest shows an integration plugin with an executable entrypoint, multipl
         "pagination": {
           "style": "cursor",
           "cursor_param": "starting_after",
-          "cursor_path": "next_cursor",
+          "cursor": {
+            "source": "body",
+            "path": "next_cursor"
+          },
           "limit_param": "limit",
           "default_limit": 50,
           "max_pages": 5
